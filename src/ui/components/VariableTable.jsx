@@ -13,10 +13,6 @@ const VariableIcon = (p) => (
     <path d="M9 9l6 6M9 15l6-6"/>
   </Icon>
 );
-const BoltIcon = (p) => (
-  <Icon {...p}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></Icon>
-);
-
 const COL_GRID = '1.2fr 74px 1.3fr 1.3fr 76px 30px';
 
 /**
@@ -68,7 +64,7 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onOpenSmart 
         gap: 7, padding: '5px 10px',
         background: 'var(--gb-surface-canvas)',
         borderBottom: '1px solid var(--gb-border-subtle)',
-        fontSize: 8.5, fontWeight: 700, textTransform: 'uppercase',
+        fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
         letterSpacing: 0.5, color: 'var(--gb-text-muted)',
       }}>
         <div>Variable</div>
@@ -91,7 +87,7 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onOpenSmart 
         const label = v.status === 'ok' ? 'OK' : hasSmart ? 'FALLBACK' : 'MISS';
         const tagIcon = v.status === 'ok'
           ? <I.check />
-          : hasSmart ? <BoltIcon /> : <I.alert />;
+          : hasSmart ? <I.bolt /> : <I.alert />;
         const isMissNoFallback = v.status === 'miss' && !hasSmart;
 
         return (
@@ -101,7 +97,7 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onOpenSmart 
               display: 'grid', gridTemplateColumns: COL_GRID,
               gap: 7, padding: '6px 10px', alignItems: 'center',
               borderBottom: i < vars.length - 1 ? '1px solid var(--gb-border-subtle)' : 'none',
-              fontSize: 10.5,
+              fontSize: 10,
               background: isMissNoFallback ? 'var(--gb-warning-tint-soft)' : 'transparent',
             }}
           >

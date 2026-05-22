@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Icon } from '../icons.jsx';
+import { ColorButton } from './ColorButton.jsx';
 
 /* ──────────────────────────────────────────────────────────────
    RichTextEditor — contenteditable rich-text surface with a
@@ -330,42 +331,21 @@ export function RichTextEditor({
             if (url) exec('createLink', url);
           })} />
           <Sep sz={sz} />
-          {/* Text color — A with a colored underbar tracking the choice */}
-          <label title="Text color" style={{
-            width: sz.btnW, height: sz.btnH, borderRadius: 4, cursor: 'pointer',
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--gb-text-secondary)', position: 'relative',
-          }}>
-            <span style={{ fontSize: 11, fontWeight: 800, lineHeight: 1 }}>A</span>
-            <span style={{
-              position: 'absolute', bottom: 3, left: 5, right: 5, height: 3,
-              borderRadius: 1, background: textColor,
-            }} />
-            <input
-              type="color" value={textColor}
-              onMouseDown={saveSelection}
-              onChange={e => { setTextColor(e.target.value); exec('foreColor', e.target.value); }}
-              style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
-            />
-          </label>
-          {/* Highlight — A wrapped in the chosen background color */}
-          <label title="Highlight color" style={{
-            width: sz.btnW, height: sz.btnH, borderRadius: 4, cursor: 'pointer',
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            position: 'relative',
-          }}>
-            <span style={{
-              fontSize: 10.5, fontWeight: 800, lineHeight: 1,
-              padding: '1px 3px', borderRadius: 2,
-              background: bgColor, color: '#1a1a1a',
-            }}>A</span>
-            <input
-              type="color" value={bgColor}
-              onMouseDown={saveSelection}
-              onChange={e => { setBgColor(e.target.value); exec('hiliteColor', e.target.value); }}
-              style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
-            />
-          </label>
+          <ColorButton
+            title="Text color"
+            value={textColor}
+            width={sz.btnW} height={sz.btnH}
+            onMouseDown={saveSelection}
+            onChange={(c) => { setTextColor(c); exec('foreColor', c); }}
+          />
+          <ColorButton
+            variant="fill"
+            title="Highlight color"
+            value={bgColor}
+            width={sz.btnW} height={sz.btnH}
+            onMouseDown={saveSelection}
+            onChange={(c) => { setBgColor(c); exec('hiliteColor', c); }}
+          />
           {/* Remove highlight only (leaves bold/italic/color intact) */}
           <TBtn sz={sz} icon={<Ic.noHi />} title="Remove highlight" onMouseDown={md(() => exec('hiliteColor', 'transparent'))} />
           <TBtn sz={sz} icon={<Ic.clear />} title="Clear all formatting" onMouseDown={md(() => exec('removeFormat'))} />

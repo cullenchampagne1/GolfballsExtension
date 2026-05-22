@@ -73,12 +73,16 @@
   async function resolveAllVarsAsync(vars, toField, doc = document) {
     const resolved = {};
     for (const [name, def] of Object.entries(vars || {})) {
+      let raw;
       if (def.type === 'builtin' && def.builtin === 'recommended_replacement') {
-        try { resolved[name] = await getRecommendedReplacement(doc); }
-        catch { resolved[name] = ''; }
+        try { raw = await getRecommendedReplacement(doc); }
+        catch { raw = ''; }
       } else {
-        resolved[name] = resolveVar(name, def, doc);
+        raw = resolveVar(name, def, doc);
       }
+      // Apply smart options (fallback → transform → format) so every
+      // downstream renderer gets the final string verbatim.
+      resolved[name] = applySmart(raw, def);
     }
 
     let toEmail = '';
@@ -100,6 +104,114 @@
     } catch {}
 
     return { resolved, toEmail };
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // SMART OPTIONS — fallback, transform, format, conditional
+  // ═══════════════════════════════════════════════════════
+
+  /** Apply a transform tag (matches TRANSFORMS in SmartModal.jsx). */
+  function applyTransform(v, kind) {
+    if (typeof v !== 'string' || !v) return v;
+    switch (kind) {
+      case 'upper':      return v.toUpperCase();
+      case 'lower':      return v.toLowerCase();
+      case 'titleCase':  return v.replace(/\b[a-z]/g, (c) => c.toUpperCase());
+      case 'capitalize': return v.charAt(0).toUpperCase() + v.slice(1);
+      case 'trim':       return v.trim();
+      case 'firstWord':  return v.trim().split(/\s+/)[0] || '';
+      default:           return v;
+    }
+  }
+
+  /** Parse the decimal-precision out of a pattern like "$#,##0.00". */
+  function _decimalsFromPattern(pattern) {
+    const m = pattern && pattern.match(/\.(0+)/);
+    return m ? m[1].length : null;
+  }
+
+  /** Apply a format descriptor — number / currency / date / percent. */
+  function applyFormat(v, format) {
+    if (!format || !format.type || format.type === 'none') return v;
+    const pattern = format.pattern || '';
+    if (format.type === 'number' || format.type === 'currency' || format.type === 'percent') {
+      const n = parseFloat(String(v).replace(/[^0-9.\-]/g, ''));
+      if (!Number.isFinite(n)) return v;
+      const decimals = _decimalsFromPattern(pattern);
+      const opts = decimals != null
+        ? { minimumFractionDigits: decimals, maximumFractionDigits: decimals }
+        : {};
+      if (format.type === 'currency') {
+        return n.toLocaleString(undefined, { style: 'currency', currency: 'USD', ...opts });
+      }
+      if (format.type === 'percent') {
+        // 0–1 → multiply; >1 assumed already a percent.
+        const pct = (n >= -1 && n <= 1) ? n * 100 : n;
+        return pct.toLocaleString(undefined, opts) + '%';
+      }
+      return n.toLocaleString(undefined, opts);
+    }
+    if (format.type === 'date') {
+      const d = new Date(v);
+      if (Number.isNaN(d.getTime())) return v;
+      if (!pattern) return d.toLocaleDateString();
+      const pad = (n) => String(n).padStart(2, '0');
+      return pattern
+        .replace(/yyyy/g, d.getFullYear())
+        .replace(/MM/g,   pad(d.getMonth() + 1))
+        .replace(/dd/g,   pad(d.getDate()))
+        .replace(/HH/g,   pad(d.getHours()))
+        .replace(/mm/g,   pad(d.getMinutes()))
+        .replace(/ss/g,   pad(d.getSeconds()));
+    }
+    return v;
+  }
+
+  /** fallback → transform → format. Empty + no fallback returns ''. */
+  function applySmart(value, def) {
+    const smart = def && def.smart;
+    if (!smart) return value;
+    let v = value;
+    if ((v === '' || v == null) && typeof smart.fallback === 'string' && smart.fallback.length > 0) {
+      v = smart.fallback;
+    }
+    if (smart.transform) v = applyTransform(v, smart.transform);
+    if (smart.format)    v = applyFormat(v, smart.format);
+    return v;
+  }
+
+  /**
+   * Pre-process a template string: for any variable with smart.conditional
+   * that resolves to an empty value, remove the surrounding sentence (or
+   * paragraph / line, per smart.conditionalScope) so the body doesn't leak
+   * an empty placeholder.
+   *
+   * Call BEFORE running the template through `.replace(/\{\{...\}\}/g, ...)`.
+   */
+  function dropConditional(template, vars, resolved) {
+    if (!template || !vars) return template || '';
+    let out = String(template);
+    for (const [name, def] of Object.entries(vars)) {
+      const smart = def && def.smart;
+      if (!smart || !smart.conditional) continue;
+      const val = resolved ? resolved[name] : '';
+      if (val != null && String(val).length > 0) continue;
+      const placeholder = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const scope = smart.conditionalScope || 'sentence';
+      let rx;
+      if (scope === 'paragraph') {
+        // Drop the paragraph (run between blank lines) containing the placeholder.
+        rx = new RegExp(`[^\\n]*\\{\\{\\s*${placeholder}\\s*\\}\\}[^\\n]*(\\n\\n|\\n?$)`, 'g');
+      } else if (scope === 'line') {
+        rx = new RegExp(`[^\\n]*\\{\\{\\s*${placeholder}\\s*\\}\\}[^\\n]*\\n?`, 'g');
+      } else {
+        // Sentence: from the prior boundary (.!?¶ start) up to and including
+        // the next sentence-ending punctuation.
+        rx = new RegExp(`(?:^|(?<=[.!?\\n]))\\s*[^.!?\\n]*\\{\\{\\s*${placeholder}\\s*\\}\\}[^.!?\\n]*[.!?]?\\s*`, 'g');
+      }
+      out = out.replace(rx, '');
+    }
+    return out;
   }
 
   // ═══════════════════════════════════════════════════════

@@ -1,19 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
-import { motion } from 'motion/react';
-import { T } from '../shared.jsx';
 import { I, Icon } from '../icons.jsx';
 import { Btn } from './Btn.jsx';
-import { IconBtn } from './IconBtn.jsx';
 import { Field } from './Field.jsx';
 import { Input } from './Input.jsx';
 import { Dropdown } from './Dropdown.jsx';
 import { Tag } from './Tag.jsx';
 import { Dot } from './Dot.jsx';
 import { KindPickerGrid } from './KindPickerGrid.jsx';
+import { CompactModal } from './CompactModal.jsx';
+import { ModalHeader } from './ModalHeader.jsx';
+import { ModalFooter } from './ModalFooter.jsx';
 
-/* ── Kind icons ──────────────────────────────────────────────── */
-const BoltIcon    = (p) => <Icon {...p}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></Icon>;
+/* ── Kind icons (BoltIcon comes from I.bolt) ───────────────────── */
 const PickerIcon  = (p) => <Icon {...p}><path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/></Icon>;
 const RegexIcon   = (p) => <Icon {...p}><circle cx="12" cy="12" r="3"/><path d="M12 5v6M12 12v6M6 12h12"/></Icon>;
 const VariableIcon= (p) => <Icon {...p}><path d="M5 4 a14 14 0 000 16M19 4a14 14 0 010 16"/><path d="M9 9l6 6M9 15l6-6"/></Icon>;
@@ -25,7 +23,7 @@ export const SOURCE_KINDS = {
 };
 
 const KIND_OPTIONS = {
-  builtin: { icon: <BoltIcon />,  label: 'Built-in', desc: 'Pre-defined from the page context' },
+  builtin: { icon: <I.bolt />,  label: 'Built-in', desc: 'Pre-defined from the page context' },
   dom:     { icon: <I.search />,  label: 'DOM',      desc: 'CSS selector — or pick from page' },
   regex:   { icon: <RegexIcon />, label: 'Regex',    desc: 'Capture group from an email field' },
   literal: { icon: <I.edit />,    label: 'Literal',  desc: 'Fixed string' },
@@ -178,65 +176,14 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
 
   const canAdd = !!name && !!config;
 
-  // Portal to <body> so the overlay covers the whole window rather than
-  // being clipped inside the editor pane.
-  return createPortal(
-    <motion.div
-      key="add-var-backdrop"
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      transition={T.base}
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0,
-        background: 'var(--gb-backdrop)',
-        backdropFilter: 'blur(6px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 2147483000, padding: 24,
-      }}
-    >
-      <motion.div
-        key="add-var-sheet"
-        initial={{ scale: 0.95, y: -10 }}
-        animate={{ scale: 1, y: 0 }}
-        exit={{ scale: 0.95, y: -10 }}
-        transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-        onClick={e => e.stopPropagation()}
-        style={{
-          width: 560, maxHeight: 'calc(100vh - 48px)',
-          background: 'var(--gb-surface-canvas)',
-          border: '1px solid var(--gb-border-default)',
-          borderRadius: 'var(--gb-r-xl)',
-          boxShadow: 'var(--gb-shadow-modal)',
-          display: 'flex', flexDirection: 'column',
-          overflow: 'hidden',
-        }}
-      >
-        {/* ── Header ─────────────────────────────────────────── */}
-        <div style={{
-          padding: '14px 18px',
-          background: 'var(--gb-fill-inverse-strong)',
-          borderBottom: '1px solid var(--gb-border-subtle)',
-          display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
-        }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: 'var(--gb-r-md)', flexShrink: 0,
-            background: 'var(--gb-brand-tint-medium)',
-            border: '1px solid var(--gb-brand-tint-border)',
-            color: 'var(--gb-brand-label)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <I.plus size={14} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>
-              New variable
-            </div>
-            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>
-              Resolves against the active page
-            </div>
-          </div>
-          <IconBtn size="sm" icon={<I.close />} onClick={onClose} />
-        </div>
+  return (
+    <CompactModal size={560} onClose={onClose}>
+      <ModalHeader
+        icon={<I.plus />}
+        title="New variable"
+        subtitle="Resolves against the active page"
+        onClose={onClose}
+      />
 
         {/* ── Body ───────────────────────────────────────────── */}
         <div style={{ flex: 1, overflow: 'auto', padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -270,7 +217,7 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
               <Dropdown
                 value={config}
                 placeholder="Select a field…"
-                leading={<BoltIcon />}
+                leading={<I.bolt />}
                 searchable
                 options={BUILTIN_PATHS[typeId] || BUILTIN_PATHS.order}
                 onChange={setConfig}
@@ -400,7 +347,7 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
                   {name || 'variable_name'}
                 </span>
                 <span style={{ padding: '0 5px', borderLeft: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'inline-flex', alignItems: 'center', opacity: 0.55 }}>
-                  <BoltIcon size={9} />
+                  <I.bolt size={9} />
                 </span>
               </span>
               {' → '}
@@ -411,13 +358,7 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
           </div>
         </div>
 
-        {/* ── Footer ─────────────────────────────────────────── */}
-        <div style={{
-          padding: 12,
-          background: 'var(--gb-fill-inverse-strong)',
-          borderTop: '1px solid var(--gb-border-subtle)',
-          display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0,
-        }}>
+        <ModalFooter>
           <div style={{ flex: 1, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
             Smart options can be set after creating.
           </div>
@@ -426,13 +367,14 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
             variant="primary"
             icon={<I.plus />}
             disabled={!canAdd}
-            onClick={() => onAdd?.({ name, kind, config })}
+            onClick={() => onAdd?.({
+              name, kind, config,
+              ...(kind === 'regex' ? { source: regexField } : {}),
+            })}
           >
             Add variable
           </Btn>
-        </div>
-      </motion.div>
-    </motion.div>,
-    document.body,
+        </ModalFooter>
+    </CompactModal>
   );
 }
