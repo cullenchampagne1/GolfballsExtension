@@ -1,18 +1,16 @@
 import React, { useState } from 'react';
-import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'motion/react';
-import { T, TINT } from '../shared.jsx';
 import { I, Icon } from '../icons.jsx';
 import { Btn } from './Btn.jsx';
-import { IconBtn } from './IconBtn.jsx';
-import { Dot } from './Dot.jsx';
 import { Callout } from './Callout.jsx';
 import { Field } from './Field.jsx';
 import { Input } from './Input.jsx';
 import { Dropdown } from './Dropdown.jsx';
 import { Switch } from './Switch.jsx';
+import { Tabs } from './Tabs.jsx';
+import { CompactModal } from './CompactModal.jsx';
+import { ModalHeader } from './ModalHeader.jsx';
+import { ModalFooter } from './ModalFooter.jsx';
 
-const BoltIcon   = (p) => <Icon {...p}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></Icon>;
 const CaseIcon   = (p) => <Icon {...p}><path d="M4 7V4h16v3"/><path d="M9 20h6M12 4v16"/></Icon>;
 const IfElseIcon = (p) => <Icon {...p}><path d="M5 4v16M19 4v16M5 12h14"/></Icon>;
 const FilterIcon = (p) => <Icon {...p}><path d="M22 3H2l8 9.5V19l4 2v-8.5z"/></Icon>;
@@ -30,7 +28,7 @@ const Mono = ({ children }) => (
 );
 
 const TABS = [
-  { id: 'fallback',    icon: BoltIcon,   label: 'Fallback',    hint: 'Use a default if unresolved' },
+  { id: 'fallback',    icon: I.bolt,     label: 'Fallback',    hint: 'Use a default if unresolved' },
   { id: 'transform',   icon: CaseIcon,   label: 'Transform',   hint: 'Reshape the value' },
   { id: 'conditional', icon: IfElseIcon, label: 'Conditional', hint: 'Drop sentence if missing' },
   { id: 'format',      icon: FilterIcon, label: 'Format',      hint: 'Number / date / currency' },
@@ -96,98 +94,26 @@ export function SmartModal({ variable, onClose, onSave }) {
     v !== null && v !== undefined && v !== '' && v !== false,
   ).length;
 
-  // Portal to <body> so the overlay covers the whole window rather than
-  // being clipped inside the editor pane.
-  return createPortal(
-    <motion.div
-      key="smart-backdrop"
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      transition={T.base}
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0,
-        background: 'var(--gb-backdrop)',
-        backdropFilter: 'blur(8px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 2147483000,
-      }}
-    >
-      <motion.div
-        key="smart-sheet"
-        initial={{ scale: 0.95, y: -10 }}
-        animate={{ scale: 1, y: 0 }}
-        exit={{ scale: 0.95, y: -10 }}
-        transition={{ type: 'spring', stiffness: 420, damping: 34 }}
-        onClick={e => e.stopPropagation()}
-        style={{
-          width: 560,
-          background: 'var(--gb-surface-canvas)',
-          border: '1px solid var(--gb-border-default)',
-          borderRadius: 'var(--gb-r-xl)',
-          boxShadow: 'var(--gb-shadow-modal)',
-          overflow: 'hidden',
-          display: 'flex', flexDirection: 'column',
-        }}
-      >
-        {/* ── Header ─────────────────────────────────────────── */}
-        <div style={{
-          padding: '12px 16px',
-          background: 'var(--gb-fill-inverse-strong)',
-          borderBottom: '1px solid var(--gb-border-subtle)',
-          display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0,
-        }}>
-          <div style={{
-            width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0,
-            background: 'var(--gb-warning-tint-medium)',
-            border: '1px solid var(--gb-warning-tint-border)',
-            color: 'var(--gb-warning-fg)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <BoltIcon size={14} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>
-              Smart options
-            </div>
-            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', marginTop: 1 }}>
-              {`{{${variable.name}}}`}
-            </div>
-          </div>
-          <IconBtn size="sm" icon={<I.close />} onClick={onClose} />
-        </div>
+  return (
+    <CompactModal size={560} onClose={onClose}>
+      <ModalHeader
+        tone="warning"
+        icon={<I.bolt />}
+        title="Smart options"
+        subtitle={`{{${variable.name}}}`}
+        onClose={onClose}
+      />
 
-        {/* ── Tab rail ───────────────────────────────────────── */}
-        <div style={{
-          display: 'flex', padding: '0 16px',
-          background: 'var(--gb-fill-subtle)',
-          borderBottom: '1px solid var(--gb-border-subtle)',
-          flexShrink: 0,
-        }}>
-          {TABS.map(({ id, icon: TabIcon, label }) => {
-            const active  = tab === id;
-            const enabled = isTabEnabled(id);
-            return (
-              <button
-                key={id}
-                onClick={() => setTab(id)}
-                style={{
-                  padding: '11px 13px', background: 'transparent',
-                  color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
-                  border: 'none', cursor: 'pointer',
-                  fontFamily: 'var(--gb-font-sans)', fontSize: 11.5, fontWeight: 600,
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  borderBottom: active ? '2px solid var(--gb-brand-label)' : '2px solid transparent',
-                  marginBottom: -1,
-                  transition: 'color var(--gb-anim)',
-                }}
-              >
-                <TabIcon size={11} />
-                {label}
-                {enabled && <Dot tone="brand" glow size={4} />}
-              </button>
-            );
-          })}
-        </div>
+      {/* ── Tab rail ───────────────────────────────────────── */}
+        <Tabs
+          value={tab}
+          onChange={setTab}
+          options={TABS.map(({ id, icon: TabIcon, label }) => ({
+            id, label,
+            icon: <TabIcon />,
+            dot: isTabEnabled(id),
+          }))}
+        />
 
         {/* ── Body ───────────────────────────────────────────── */}
         <div style={{ padding: 18, minHeight: 220, flex: 1, overflow: 'auto' }}>
@@ -203,7 +129,7 @@ export function SmartModal({ variable, onClose, onSave }) {
                 <Input
                   value={smart.fallback || ''}
                   placeholder="e.g. pending · unknown · 0"
-                  leading={<BoltIcon />}
+                  leading={<I.bolt />}
                   onChange={v => upd({ fallback: v })}
                 />
               </Field>
@@ -216,7 +142,7 @@ export function SmartModal({ variable, onClose, onSave }) {
                   fontSize: 11, color: 'var(--gb-text-tertiary)',
                   display: 'flex', alignItems: 'center', gap: 7,
                 }}>
-                  <BoltIcon size={11} style={{ color: 'var(--gb-warning-fg)', flexShrink: 0 }} />
+                  <I.bolt size={11} style={{ color: 'var(--gb-warning-fg)', flexShrink: 0 }} />
                   Preview: when missing, the body shows{' '}
                   <span style={{ fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-warning-fg)', fontWeight: 600 }}>
                     "{smart.fallback}"
@@ -343,21 +269,13 @@ export function SmartModal({ variable, onClose, onSave }) {
           )}
         </div>
 
-        {/* ── Footer ─────────────────────────────────────────── */}
-        <div style={{
-          padding: 12,
-          background: 'var(--gb-fill-inverse-strong)',
-          borderTop: '1px solid var(--gb-border-subtle)',
-          display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0,
-        }}>
+        <ModalFooter>
           <div style={{ flex: 1, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
             {activeOptionCount} option{activeOptionCount !== 1 ? 's' : ''} active
           </div>
           <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
           <Btn variant="primary" icon={<I.check />} onClick={() => onSave?.(smart)}>Save</Btn>
-        </div>
-      </motion.div>
-    </motion.div>,
-    document.body,
+        </ModalFooter>
+    </CompactModal>
   );
 }

@@ -32,8 +32,36 @@ const $ = id => document.getElementById(id);
 const show = id => $(id).classList.remove('hidden');
 const hide = id => $(id).classList.add('hidden');
 
-function renderStr(str, vars) {
-  return (str || '').replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? `{{${k}}}`);
+// Drop sentences containing unresolved variables that opted in to
+// smart.conditional, so an empty placeholder doesn't leak into the output.
+// Mirrors `dropConditional` in content/variable-resolution.js — duplicated
+// here because popup.js runs in a separate context from the content scripts.
+function _dropConditional(text, defs, resolved) {
+  if (!text || !defs) return text || '';
+  let out = String(text);
+  for (const [name, def] of Object.entries(defs)) {
+    const smart = def && def.smart;
+    if (!smart || !smart.conditional) continue;
+    const val = resolved ? resolved[name] : '';
+    if (val != null && String(val).length > 0) continue;
+    const placeholder = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const scope = smart.conditionalScope || 'sentence';
+    let rx;
+    if (scope === 'paragraph') {
+      rx = new RegExp(`[^\\n]*\\{\\{\\s*${placeholder}\\s*\\}\\}[^\\n]*(\\n\\n|\\n?$)`, 'g');
+    } else if (scope === 'line') {
+      rx = new RegExp(`[^\\n]*\\{\\{\\s*${placeholder}\\s*\\}\\}[^\\n]*\\n?`, 'g');
+    } else {
+      rx = new RegExp(`[^.!?\\n]*\\{\\{\\s*${placeholder}\\s*\\}\\}[^.!?\\n]*[.!?]?\\s*`, 'g');
+    }
+    out = out.replace(rx, '');
+  }
+  return out;
+}
+
+function renderStr(str, vars, defs) {
+  const text = defs ? _dropConditional(str, defs, vars) : (str || '');
+  return text.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? `{{${k}}}`);
 }
 function buildMailto(to, subject, body) {
   return `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
@@ -292,8 +320,8 @@ function renderInfo(tpl) {
     sendBtn.innerHTML = `${icons[mode]} ${labels[mode]}`;
 
     sendBtn.onclick = () => {
-      const subject  = renderStr(tpl.subject, resolvedVars);
-      const rawBody  = renderStr(tpl.body,    resolvedVars); // The HTML version
+      const subject  = renderStr(tpl.subject, resolvedVars, tpl.vars);
+      const rawBody  = renderStr(tpl.body,    resolvedVars, tpl.vars); // The HTML version
       
       // Convert HTML to plain text specifically for Outlook mailto links
       const plainBody = toPlainText(rawBody);

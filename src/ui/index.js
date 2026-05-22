@@ -23,6 +23,7 @@ export { Textarea } from './components/Textarea.jsx';
 export { RichTextEditor } from './components/RichTextEditor.jsx';
 export { Dropdown } from './components/Dropdown.jsx';
 export { ColorField } from './components/ColorField.jsx';
+export { ColorButton } from './components/ColorButton.jsx';
 export { Field } from './components/Field.jsx';
 export { Switch } from './components/Switch.jsx';
 export { PillTag } from './components/PillTag.jsx';
@@ -31,6 +32,7 @@ export { Slider } from './components/Slider.jsx';
 export { RangeSlider } from './components/RangeSlider.jsx';
 export { SwitchTag } from './components/SwitchTag.jsx';
 export { Segmented } from './components/Segmented.jsx';
+export { Tabs } from './components/Tabs.jsx';
 
 export { Callout } from './components/Callout.jsx';
 export { ModalShell } from './components/ModalShell.jsx';

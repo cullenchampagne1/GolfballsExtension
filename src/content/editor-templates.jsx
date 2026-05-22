@@ -40,6 +40,7 @@ function convertVars(tpl) {
       name:     v.name,
       kind:     v.kind || 'literal',
       config:   v.config || '',
+      ...(v.source ? { source: v.source } : {}),
       resolved: v.resolved ?? null,
       status:   v.status  || 'miss',
       smart:    v.smart   || {},
@@ -66,15 +67,21 @@ function convertVars(tpl) {
       kind   = 'literal';
       config = v.value || v.selector || '';
     }
-    return { name, kind, config, resolved: null, status: 'miss', smart: v.smart || {} };
+    return {
+      name, kind, config,
+      ...(v.type === 'regex' ? { source: v.source || 'body' } : {}),
+      resolved: null, status: 'miss', smart: v.smart || {},
+    };
   });
 }
 
-/* New-format variable → stored definition (also the resolver's input shape). */
+/* New-format variable → stored definition (also the resolver's input shape).
+   Regex carries `source` (body|subject|from|html) so the resolver knows
+   which inbound field to scan. */
 function varDef(v) {
-  if (v.kind === 'builtin')                  return { type: 'builtin',  builtin:  v.config };
-  if (v.kind === 'dom') return { type: 'selector', selector: v.config };
-  if (v.kind === 'regex')                    return { type: 'regex',    pattern:  v.config };
+  if (v.kind === 'builtin') return { type: 'builtin',  builtin:  v.config };
+  if (v.kind === 'dom')     return { type: 'selector', selector: v.config };
+  if (v.kind === 'regex')   return { type: 'regex',    pattern:  v.config, source: v.source || 'body' };
   return { type: 'literal', value: v.config };
 }
 
@@ -159,7 +166,20 @@ function TemplateEditor({ tpl, onDelete }) {
   const [toFieldValue, setToFieldValue] = useState(
     (tpl.toField && (tpl.toField.value || tpl.toField.selector)) || '',
   );
+  const [presetTaskId,   setPresetTaskId]   = useState(tpl.presetTaskId || '');
+  const [presetTaskOpts, setPresetTaskOpts] = useState([]);
   const recipOpt = meta.recipientOptions[recipientIdx] || meta.recipientOptions[0];
+
+  // Load task templates (account "Auto-Create Task on Send" picker).
+  useEffect(() => {
+    chrome.storage.local.get('noteTemplates', ({ noteTemplates }) => {
+      const tasks = (noteTemplates || []).filter(t => t.subType === 'task');
+      setPresetTaskOpts([
+        { id: '', label: '— none —' },
+        ...tasks.map(t => ({ id: t.id, label: t.name || 'Untitled task' })),
+      ]);
+    });
+  }, []);
 
   // Switching template type resets recipient + rules (each type's options
   // differ, and stale rule data would be written to the wrong storage key).
@@ -175,8 +195,12 @@ function TemplateEditor({ tpl, onDelete }) {
     setVars(vs => vs.map(v => v.name === smartFor.name ? { ...v, smart } : v));
     setSmartFor(null);
   };
-  const handleAddVar    = ({ name, kind, config }) => {
-    setVars(vs => [...vs, { name, kind, config, resolved: null, status: 'miss', smart: {} }]);
+  const handleAddVar    = ({ name, kind, config, source }) => {
+    setVars(vs => [...vs, {
+      name, kind, config,
+      ...(source ? { source } : {}),
+      resolved: null, status: 'miss', smart: {},
+    }]);
     setShowAdd(false);
   };
   const handleDeleteVar = name => setVars(vs => vs.filter(v => v.name !== name));
@@ -196,6 +220,9 @@ function TemplateEditor({ tpl, onDelete }) {
       type: typeId,
       name: name.trim() || 'Untitled',
       enabled, subject, body,
+      // Only account templates persist a presetTaskId — other types
+      // explicitly clear it so type-switching doesn't strand stale data.
+      presetTaskId: typeId === 'account' ? (presetTaskId || '') : undefined,
       updatedAt: Date.now(),
     };
     // Recipient selection → stored toField.
@@ -231,7 +258,7 @@ function TemplateEditor({ tpl, onDelete }) {
       if (typeof window.__gbSaveTemplate === 'function') window.__gbSaveTemplate(buildTemplate());
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [typeId, name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [typeId, name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Live resolution ────────────────────────────────────────
      The editor window has no page DOM, so it asks the order /
@@ -289,7 +316,7 @@ function TemplateEditor({ tpl, onDelete }) {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ flex: '0 1 auto', minWidth: 0, fontSize: 14, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ flex: '0 1 auto', minWidth: 0, fontSize: 13, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {name || 'New Template'}
             </span>
             <Tag tone="neutral" size="xs" mono style={{ flexShrink: 0 }}>{typeId.toUpperCase()}</Tag>
@@ -325,6 +352,24 @@ function TemplateEditor({ tpl, onDelete }) {
               mono={recipOpt.toType === 'selector'}
               placeholder={recipOpt.toType === 'literal' ? 'name@example.com' : '.customer-email'}
               onChange={setToFieldValue}
+            />
+          </Field>
+        </div>
+      )}
+
+      {/* ── Auto-Create Task on Send (account templates only) ── */}
+      {typeId === 'account' && (
+        <div style={S.mb12}>
+          <Field
+            label="Auto-create task on send"
+            hint="Picks from your saved task templates — fires when this email opens in Outlook"
+          >
+            <Dropdown
+              size="sm"
+              value={presetTaskId}
+              options={presetTaskOpts}
+              onChange={setPresetTaskId}
+              placeholder="— none —"
             />
           </Field>
         </div>

@@ -3,18 +3,31 @@ import { sizeIcon, FloatingPanelContext } from '../shared.jsx';
 import { I } from '../icons.jsx';
 import { IconBtn } from './IconBtn.jsx';
 
+/* Icon-tile tone presets. `brand` and `neutral` cover the old
+   `accent: true|false` flag; `warning` is for cautionary modals (e.g.
+   SmartModal's smart-options bolt). */
+const TONES = {
+  brand:   { bg: 'var(--gb-brand-tint-medium)',   bd: 'var(--gb-brand-tint-border)',   fg: 'var(--gb-brand-label)' },
+  warning: { bg: 'var(--gb-warning-tint-medium)', bd: 'var(--gb-warning-tint-border)', fg: 'var(--gb-warning-fg)' },
+  neutral: { bg: 'var(--gb-fill-subtle)',         bd: 'var(--gb-border-default)',      fg: 'var(--gb-text-tertiary)' },
+};
+
 /**
  * ModalHeader — icon tile + title/subtitle + optional right slot + close.
  *
- * Props: icon, title, subtitle, right, accent (default true), onClose.
+ * Props: icon, title, subtitle, right,
+ *   tone 'brand' (default) | 'warning' | 'neutral',
+ *   accent (legacy, default true → 'brand'; false → 'neutral'),
+ *   onClose.
  *
  * When rendered inside a FloatingPanel the header auto-wires itself: it
  * becomes the drag handle, and the close button falls back to the panel's
  * animated dismiss when no explicit `onClose` is given.
  */
-export function ModalHeader({ icon, title, subtitle, right, accent = true, onClose }) {
+export function ModalHeader({ icon, title, subtitle, right, tone, accent = true, onClose }) {
   const panel = useContext(FloatingPanelContext);
   const handleClose = onClose || panel?.requestClose;
+  const t = TONES[tone || (accent ? 'brand' : 'neutral')] || TONES.brand;
 
   // Inside a FloatingPanel, dragging starts from the header — but not when
   // the pointer goes down on a button (the close control).
@@ -37,9 +50,7 @@ export function ModalHeader({ icon, title, subtitle, right, accent = true, onClo
       {icon && (
         <div style={{
           width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0,
-          background: accent ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)',
-          border: '1px solid ' + (accent ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'),
-          color: accent ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
+          background: t.bg, border: `1px solid ${t.bd}`, color: t.fg,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           {sizeIcon(icon, 15)}

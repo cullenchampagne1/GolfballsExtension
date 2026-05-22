@@ -1,9 +1,5 @@
 import React from 'react';
-import { Icon } from '../icons.jsx';
-
-const BoltIcon = (p) => (
-  <Icon {...p}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></Icon>
-);
+import { I } from '../icons.jsx';
 
 const PALETTE = {
   ok:       { bg: 'var(--gb-brand-tint-soft)',   bd: 'var(--gb-brand-tint-border)',   fg: 'var(--gb-brand-label)' },
@@ -83,7 +79,7 @@ export function BodyVar({ v, onOpenSmart, size = 'md' }) {
         onMouseEnter={e => (e.currentTarget.style.opacity = 1)}
         onMouseLeave={e => (e.currentTarget.style.opacity = hasSmart ? 1 : 0.55)}
       >
-        <BoltIcon size={s.boltIcon} />
+        <I.bolt size={s.boltIcon} />
       </span>
     </span>
   );
