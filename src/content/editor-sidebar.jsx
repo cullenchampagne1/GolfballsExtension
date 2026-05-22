@@ -39,6 +39,21 @@ const TYPE_META_NOTE = {
 const TYPE_ORDER_TPL  = ['order', 'account', 'case'];
 const TYPE_ORDER_NOTE = ['note', 'task', 'call_log'];
 
+/* Picker palette for folder accents — tokens, so themes track. The id
+   is what gets persisted on `folder.color`; default = 'brand'. */
+const FOLDER_COLORS = [
+  { id: 'brand',   color: 'var(--gb-brand-label)'   },
+  { id: 'info',    color: 'var(--gb-info-fg)'       },
+  { id: 'warning', color: 'var(--gb-warning-fg)'    },
+  { id: 'success', color: 'var(--gb-success-fg)'    },
+  { id: 'error',   color: 'var(--gb-error-fg)'      },
+  { id: 'neutral', color: 'var(--gb-text-tertiary)' },
+];
+function folderColor(folder) {
+  const id = folder?.color || 'brand';
+  return (FOLDER_COLORS.find((c) => c.id === id) || FOLDER_COLORS[0]).color;
+}
+
 const FolderIcon = (p) => <Icon {...p}><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></Icon>;
 const PenIcon    = (p) => <Icon {...p}><path d="M17 3a2.85 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5z"/></Icon>;
 const CogIcon    = (p) => <Icon {...p}><path d="M10.3 4.3c.4-1.7 2.9-1.7 3.3 0a1.7 1.7 0 002.6 1.1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 001 2.5c1.8.5 1.8 3 0 3.4a1.7 1.7 0 00-1 2.6c.9 1.5-.9 3.3-2.4 2.4a1.7 1.7 0 00-2.6 1c-.4 1.8-2.9 1.8-3.3 0a1.7 1.7 0 00-2.6-1c-1.5.9-3.3-.8-2.4-2.4a1.7 1.7 0 00-1-2.6c-1.8-.4-1.8-2.9 0-3.4a1.7 1.7 0 001-2.5c-.9-1.6.9-3.3 2.4-2.4 1 .6 2.3.1 2.6-1.1z"/><circle cx="12" cy="12" r="3"/></Icon>;
@@ -134,10 +149,12 @@ function TemplateRow({ tpl, isNote, type, active, onClick, onMove, folders, onDr
       style={{
         position: 'relative',
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: '6px 8px 6px 14px',
+        padding: '6px 8px 6px 12px',
         borderRadius: 'var(--gb-r-sm)',
         border: '1px solid ' + (active ? 'var(--gb-brand-tint-border)' : 'transparent'),
-        borderLeft: `3px solid ${meta.color}`,
+        // Thin 2px type stripe — matches spec accents (Callout uses 3px,
+        // rows are quieter).
+        borderLeft: `2px solid ${meta.color}`,
         cursor: 'grab', userSelect: 'none',
       }}
     >
@@ -239,12 +256,13 @@ function groupByType(tpls, isNote) {
 }
 
 /* ── Collapsible folder — drop target for template drags ────────── */
-function FolderGroup({ folder, tpls, isNote, currentId, onOpen, onMove, onRename, onDelete, folders, defaultOpen, onDragStart, onDragEnd, dragging }) {
+function FolderGroup({ folder, tpls, isNote, currentId, onOpen, onMove, onRename, onDelete, onColor, folders, defaultOpen, onDragStart, onDragEnd }) {
   const [open, setOpen] = useState(defaultOpen);
   const [menuOpen, setMenuOpen] = useState(false);
   const [hot, setHot] = useState(false);  // drop-target highlight
   const btnRef = useRef(null);
   const grouped = useMemo(() => groupByType(tpls, isNote), [tpls, isNote]);
+  const accent = folderColor(folder);
 
   function onDragOver(e) {
     if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
@@ -292,7 +310,7 @@ function FolderGroup({ folder, tpls, isNote, currentId, onOpen, onMove, onRename
         <motion.span animate={{ rotate: open ? 90 : 0 }} transition={T.base} style={{ display: 'inline-flex', color: 'var(--gb-text-muted)' }}>
           <I.chevr size={9} />
         </motion.span>
-        <FolderIcon size={12} style={{ color: 'var(--gb-brand-label)', flexShrink: 0 }} />
+        <FolderIcon size={12} style={{ color: accent, flexShrink: 0 }} />
         <span style={{
           flex: 1, fontSize: 11.5, fontWeight: 700,
           color: 'var(--gb-text-primary)',
@@ -304,6 +322,28 @@ function FolderGroup({ folder, tpls, isNote, currentId, onOpen, onMove, onRename
           <AnimatePresence>
             {menuOpen && (
               <ActionMenu onClose={() => setMenuOpen(false)} anchorRef={btnRef}>
+                <div style={{ padding: '4px 8px 2px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--gb-text-muted)' }}>
+                  Color
+                </div>
+                <div style={{ display: 'flex', gap: 4, padding: '2px 8px 6px' }}>
+                  {FOLDER_COLORS.map((c) => {
+                    const sel = (folder.color || 'brand') === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        title={c.id}
+                        onClick={() => { onColor(folder, c.id); }}
+                        style={{
+                          width: 16, height: 16, borderRadius: '50%',
+                          background: c.color,
+                          border: sel ? '2px solid var(--gb-text-primary)' : '1px solid var(--gb-border-default)',
+                          cursor: 'pointer', padding: 0, flexShrink: 0,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '2px 6px 4px' }} />
                 <MenuItem onClick={() => { onRename(folder); setMenuOpen(false); }}>
                   <I.edit size={11} /> Rename
                 </MenuItem>
@@ -423,6 +463,11 @@ function TemplateSidebar() {
     (isNote ? setNoteFolders : setTplFolders)(next);
     saveKey(folderKey, next);
   }
+  function setFolderColor(folder, colorId) {
+    const next = folders.map((f) => (f.id === folder.id ? { ...f, color: colorId } : f));
+    (isNote ? setNoteFolders : setTplFolders)(next);
+    saveKey(folderKey, next);
+  }
   function deleteFolder(folder) {
     if (!window.confirm(`Delete folder "${folder.name}"? Templates inside move to Uncategorized.`)) return;
     const nextFolders = folders.filter((f) => f.id !== folder.id);
@@ -517,12 +562,16 @@ function TemplateSidebar() {
           ]}
         />
         <Input size="sm" value={search} onChange={setSearch} placeholder="Search…" leading={<I.search />} />
+        {/* Both buttons share the row equally via flex:1. `full` would set
+            each to 100% width → overflow + clipping in a 240–280px sidebar. */}
         <div style={{ display: 'flex', gap: 6 }}>
-          <Btn variant="dashed" size="sm" icon={<I.plus />} full onClick={newTpl}>
-            New {isNote ? 'note' : 'template'}
+          <Btn variant="dashed" size="sm" icon={<I.plus />} onClick={newTpl}
+               style={{ flex: 1, minWidth: 0 }}>
+            {isNote ? 'Note' : 'Template'}
           </Btn>
-          <Btn variant="dashed" size="sm" icon={<FolderIcon />} full onClick={newFolder}>
-            New folder
+          <Btn variant="dashed" size="sm" icon={<FolderIcon />} onClick={newFolder}
+               style={{ flex: 1, minWidth: 0 }}>
+            Folder
           </Btn>
         </div>
       </div>
@@ -544,7 +593,7 @@ function TemplateSidebar() {
                 key={folder.id}
                 folder={folder} tpls={tpls} isNote={isNote} currentId={currentId}
                 onOpen={openTpl} onMove={moveById}
-                onRename={renameFolder} onDelete={deleteFolder}
+                onRename={renameFolder} onDelete={deleteFolder} onColor={setFolderColor}
                 folders={folders}
                 defaultOpen={tpls.some((t) => t.id === currentId)}
                 onDragStart={(id) => (draggingId.current = id)}
