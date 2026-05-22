@@ -34,12 +34,12 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete }) {
       border: '1px solid var(--gb-border-default)',
       borderRadius: 'var(--gb-r-lg)',
       overflow: 'hidden',
-      background: 'var(--gb-surface-1)',
+      background: 'var(--gb-surface-canvas)',
     }}>
       {/* Panel header */}
       <div style={{
         padding: '10px 14px',
-        background: 'var(--gb-surface-2)',
+        background: 'var(--gb-surface-modal)',
         borderBottom: '1px solid var(--gb-border-subtle)',
         display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap',
       }}>
@@ -64,7 +64,7 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete }) {
       <div style={{
         display: 'grid', gridTemplateColumns: COL_GRID,
         gap: 10, padding: '7px 14px',
-        background: 'var(--gb-surface-2)',
+        background: 'var(--gb-surface-canvas)',
         borderBottom: '1px solid var(--gb-border-subtle)',
         fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
         letterSpacing: 1, color: 'var(--gb-text-muted)',
@@ -156,7 +156,7 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete }) {
       {/* Add-variable footer row */}
       <div style={{
         padding: 10,
-        background: 'var(--gb-surface-2)',
+        background: 'var(--gb-surface-modal)',
         borderTop: '1px solid var(--gb-border-subtle)',
       }}>
         <Btn variant="dashed" size="sm" icon={<I.plus />} full onClick={onAdd}>
