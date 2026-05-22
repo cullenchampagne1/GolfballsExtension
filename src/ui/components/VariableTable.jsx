@@ -13,7 +13,9 @@ const VariableIcon = (p) => (
     <path d="M9 9l6 6M9 15l6-6"/>
   </Icon>
 );
-const COL_GRID = '1.2fr 74px 1.3fr 1.3fr 76px 30px';
+// Variable name needs the most room — chip + bolt + ellipsis room.
+// Kind pill is content-width; source/resolved share the remainder.
+const COL_GRID = '2fr 70px 1.1fr 1.1fr 70px 28px';
 
 /**
  * VariableTable — 6-column grid showing all variables for a template.
