@@ -69,21 +69,39 @@ function ensureStyle() {
     .gb-rte-content p:last-child { margin-bottom: 0; }
     .gb-rte-content a { color: var(--gb-brand-label); }
     .gb-rte-content ul, .gb-rte-content ol { margin: 0 0 8px; padding-left: 22px; }
-    /* Matches the design-spec Chip (components-reference.jsx:219 / Chip.jsx):
-       clean inline pill, weight 500, no bolt/divider. Click still opens the
-       smart-options submenu via onChipClick. */
+    /* Matches BodyVar.jsx (size 'md') — the canonical body-content
+       variable chip: two-part pill with name + clickable lightning bolt,
+       divider between. Brand-colored at rest (resolution state isn't
+       known at chip-render time inside contenteditable). */
     .gb-rte-chip {
-      display: inline-flex; align-items: center;
-      padding: 3px 8px; margin: 0 1px;
-      border-radius: var(--gb-r-sm);
-      background: var(--gb-brand-tint-soft);
+      display: inline-flex; align-items: stretch; vertical-align: baseline;
+      margin: 0 1px; border-radius: var(--gb-r-sm); overflow: hidden;
       border: 1px solid var(--gb-brand-tint-border);
-      color: var(--gb-brand-label);
-      font-family: var(--gb-font-mono); font-size: 0.9em; font-weight: 500;
-      line-height: 1.4; vertical-align: baseline;
-      white-space: nowrap; user-select: all; cursor: pointer;
+      background: var(--gb-brand-tint-soft);
+      line-height: 1.4;
+      user-select: all;
     }
-    .gb-rte-chip:hover { background: var(--gb-brand-tint-medium); }
+    .gb-rte-chip-name {
+      padding: 1px 7px;
+      font-family: var(--gb-font-mono);
+      font-size: 12px; font-weight: 600;
+      color: var(--gb-brand-label);
+      cursor: default;
+    }
+    .gb-rte-chip-bolt {
+      padding: 0 5px;
+      border-left: 1px solid var(--gb-brand-tint-border);
+      color: var(--gb-brand-label);
+      display: inline-flex; align-items: center;
+      cursor: pointer;
+      opacity: 0.55;
+      transition: opacity .12s, background .12s;
+    }
+    .gb-rte-chip-bolt svg { display: block; }
+    .gb-rte-chip:hover .gb-rte-chip-bolt {
+      opacity: 1;
+      background: color-mix(in srgb, var(--gb-brand-label) 13%, transparent);
+    }
     .gb-rte-ph {
       position: absolute; pointer-events: none;
       color: var(--gb-text-ghost);
@@ -91,9 +109,13 @@ function ensureStyle() {
   (document.head || document.documentElement).appendChild(el);
 }
 
-/* ── {{var}} ↔ chip conversion ─────────────────────────────────── */
+/* ── {{var}} ↔ chip conversion ──────────────────────────────────
+   Each chip is a two-part pill: the name and a clickable lightning
+   "smart options" button, divider between — mirrors BodyVar. */
+const CHIP_BOLT =
+  '<span class="gb-rte-chip-bolt"><svg viewBox="0 0 24 24" width="9" height="9" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>';
 function chipHTML(name) {
-  return `<span class="gb-rte-chip" contenteditable="false">{{${name}}}</span>`;
+  return `<span class="gb-rte-chip" contenteditable="false"><span class="gb-rte-chip-name">{{${name}}}</span>${CHIP_BOLT}</span>`;
 }
 function highlightVars(html) {
   return String(html || '').replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, n) => chipHTML(n.trim()));
@@ -102,7 +124,9 @@ function stripChips(html) {
   const tmp = document.createElement('div');
   tmp.innerHTML = html || '';
   tmp.querySelectorAll('.gb-rte-chip').forEach(s => {
-    s.replaceWith(document.createTextNode(s.textContent || ''));
+    // Extract from the name span so the bolt SVG never leaks into storage.
+    const nameEl = s.querySelector('.gb-rte-chip-name');
+    s.replaceWith(document.createTextNode((nameEl || s).textContent || ''));
   });
   return tmp.innerHTML;
 }
@@ -241,12 +265,13 @@ export function RichTextEditor({
     if (singleLine && e.key === 'Enter') e.preventDefault();
   }
 
-  // Clicking a {{variable}} chip opens its smart-options modal.
+  // Clicking a {{variable}} chip (name or bolt) opens its smart-options modal.
   function onClickContent(e) {
     if (!onChipClick) return;
     const chip = e.target?.closest?.('.gb-rte-chip');
     if (!chip) return;
-    const name = (chip.textContent || '').replace(/[{}]/g, '').trim();
+    const nameEl = chip.querySelector('.gb-rte-chip-name');
+    const name   = ((nameEl || chip).textContent || '').replace(/[{}]/g, '').trim();
     if (name) onChipClick(name);
   }
 

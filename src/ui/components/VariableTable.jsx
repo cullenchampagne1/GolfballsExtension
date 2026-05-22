@@ -4,7 +4,7 @@ import { Dot } from './Dot.jsx';
 import { Btn } from './Btn.jsx';
 import { IconBtn } from './IconBtn.jsx';
 import { KindPill } from './KindPill.jsx';
-import { Chip } from './Chip.jsx';
+import { BodyVar } from './BodyVar.jsx';
 import { I, Icon } from '../icons.jsx';
 
 const VariableIcon = (p) => (
@@ -105,33 +105,11 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onOpenSmart 
               background: isMissNoFallback ? 'var(--gb-warning-tint-soft)' : 'transparent',
             }}
           >
-            {/* Name — design-spec Chip + bolt affordance. Click → SmartModal. */}
-            <button
-              type="button"
-              title="Smart options — fallback, transform, formatting"
-              onClick={() => onOpenSmart?.(v)}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0,
-                background: 'transparent', border: 'none', padding: 0,
-                font: 'inherit',
-                cursor: onOpenSmart ? 'pointer' : 'default', textAlign: 'left',
-              }}
-            >
-              <Chip code style={{
-                // Table-density override of the spec's 11px / 3px×8px chip.
-                fontSize: 10, fontWeight: 500, padding: '1px 6px',
-                minWidth: 0, overflow: 'hidden',
-              }}>
-                <span style={{
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  display: 'inline-block', maxWidth: '100%',
-                }}>{`{{${v.name}}}`}</span>
-              </Chip>
-              <BoltIcon size={10} style={{
-                color: hasSmart ? 'var(--gb-warning-fg)' : 'var(--gb-text-ghost)',
-                flexShrink: 0,
-              }} />
-            </button>
+            {/* Name — the canonical BodyVar chip at table density.
+                Bolt is BodyVar's own clickable smart-options button. */}
+            <div style={{ minWidth: 0, display: 'flex' }}>
+              <BodyVar v={v} size="sm" onOpenSmart={onOpenSmart} />
+            </div>
 
             {/* Kind */}
             <div><KindPill kind={v.kind} /></div>
