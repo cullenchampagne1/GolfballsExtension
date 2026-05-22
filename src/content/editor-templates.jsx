@@ -3,9 +3,9 @@ import { createRoot } from 'react-dom/client';
 import { AnimatePresence } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import {
-  Btn, IconBtn, Tag, Dot,
+  Btn, IconBtn, Tag,
   Input, Dropdown, Field,
-  SwitchTag, Callout, SectionLabel, Card,
+  SwitchTag, SectionLabel, Card,
   I, Icon,
   BodyVar, SmartModal, AddVariableModal,
   VariableTable, OrderRules, CaseRules, AccountRules,
@@ -365,17 +365,7 @@ function TemplateEditor({ tpl, onDelete }) {
           </div>
           <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meta.desc}</div>
         </div>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0, fontSize: 10, fontWeight: 600, color: 'var(--gb-text-muted)', whiteSpace: 'nowrap' }}>
-          <Dot tone="brand" size={5} glow /> Saved automatically
-        </span>
         <Btn variant="danger" size="sm" icon={<I.trash />} onClick={onDelete}>Delete</Btn>
-      </div>
-
-      {/* ── Callout ── */}
-      <div style={S.mb12}>
-        <Callout tone={meta.callout.tone} title={meta.callout.title} icon={<RTE.bolt />} style={{ padding: '8px 12px', fontSize: 11 }}>
-          {meta.callout.body}
-        </Callout>
       </div>
 
       {/* ── Meta row ── */}
