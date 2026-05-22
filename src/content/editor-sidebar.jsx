@@ -3,56 +3,71 @@ import { createRoot } from 'react-dom/client';
 import { AnimatePresence, motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import {
-  Btn, IconBtn, Tag, Dot, Input, Segmented, I, Icon, T,
+  Btn, IconBtn, Tag, Input, Segmented, I, Icon, T,
 } from '../ui/index.js';
 
 /* ────────────────────────────────────────────────────────────────
    editor-sidebar.jsx
-   Mounts into #sidebar-react (an empty div inserted next to the legacy
-   sidebar markup). Owns the full sidebar visual: tabs, search, folders,
-   template rows, signature button.
+   Mounts into #sidebar-react. Owns the full sidebar visual: tabs,
+   search, folders (with per-type sub-sections + disabled at the
+   bottom), drag-and-drop into folders, signature button.
 
-   Legacy editor.js stays the source of truth for actions — clicking a
-   row calls window.openTemplate(id), New calls window.newTemplate(), etc.
-   The sidebar subscribes to chrome.storage.onChanged so any CRUD done
-   elsewhere immediately reflects here.
+   Legacy editor.js stays the source of truth for actions — clicking
+   a row calls window.openTemplate(id), New calls window.newTemplate(),
+   etc. The sidebar subscribes to chrome.storage.onChanged so any CRUD
+   done elsewhere immediately reflects here.
 ──────────────────────────────────────────────────────────────── */
 
-/* ── Per-template icons ─────────────────────────────────────────── */
-const TYPE_ICON = {
-  order:   (p) => <Icon {...p}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></Icon>,
-  account: (p) => <Icon {...p}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></Icon>,
-  case:    (p) => <Icon {...p}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></Icon>,
-  note:    (p) => <Icon {...p}><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></Icon>,
+/* ── Per-type metadata: icon + color stripe + section label.
+      Color is the left-border accent shown on each template row. */
+const TYPE_META_TPL = {
+  order:   { label: 'Order',   color: 'var(--gb-brand-label)',
+             icon: (p) => <Icon {...p}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></Icon> },
+  account: { label: 'Account', color: 'var(--gb-info-fg)',
+             icon: (p) => <Icon {...p}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></Icon> },
+  case:    { label: 'Case',    color: 'var(--gb-warning-fg)',
+             icon: (p) => <Icon {...p}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></Icon> },
 };
+const TYPE_META_NOTE = {
+  note:     { label: 'Note',     color: 'var(--gb-text-tertiary)',
+              icon: (p) => <Icon {...p}><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></Icon> },
+  task:     { label: 'Task',     color: 'var(--gb-brand-label)',
+              icon: (p) => <Icon {...p}><polyline points="20 6 9 17 4 12"/></Icon> },
+  call_log: { label: 'Call log', color: 'var(--gb-info-fg)',
+              icon: (p) => <Icon {...p}><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.13.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0122 16.92z"/></Icon> },
+};
+const TYPE_ORDER_TPL  = ['order', 'account', 'case'];
+const TYPE_ORDER_NOTE = ['note', 'task', 'call_log'];
+
 const FolderIcon = (p) => <Icon {...p}><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></Icon>;
 const PenIcon    = (p) => <Icon {...p}><path d="M17 3a2.85 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5z"/></Icon>;
 const CogIcon    = (p) => <Icon {...p}><path d="M10.3 4.3c.4-1.7 2.9-1.7 3.3 0a1.7 1.7 0 002.6 1.1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 001 2.5c1.8.5 1.8 3 0 3.4a1.7 1.7 0 00-1 2.6c.9 1.5-.9 3.3-2.4 2.4a1.7 1.7 0 00-2.6 1c-.4 1.8-2.9 1.8-3.3 0a1.7 1.7 0 00-2.6-1c-1.5.9-3.3-.8-2.4-2.4a1.7 1.7 0 00-1-2.6c-1.8-.4-1.8-2.9 0-3.4a1.7 1.7 0 001-2.5c-.9-1.6.9-3.3 2.4-2.4 1 .6 2.3.1 2.6-1.1z"/><circle cx="12" cy="12" r="3"/></Icon>;
 
 /* ── Storage helpers ────────────────────────────────────────────── */
 const STORAGE_KEYS = ['templates', 'noteTemplates', 'templateFolders', 'noteFolders'];
-function loadAll() {
-  return new Promise((res) => chrome.storage.local.get(STORAGE_KEYS, res));
-}
-function saveFolders(key, folders) {
-  chrome.storage.local.set({ [key]: folders });
-}
-function saveTpls(key, tpls) {
-  chrome.storage.local.set({ [key]: tpls });
+function loadAll() { return new Promise((res) => chrome.storage.local.get(STORAGE_KEYS, res)); }
+function saveKey(key, value) { chrome.storage.local.set({ [key]: value }); }
+
+/* DataTransfer MIME — kept unique so we don't trample other drags. */
+const DRAG_MIME = 'application/x-gb-tpl';
+
+/* Tab-aware "what type is this row?" */
+function rowType(t, isNote) {
+  if (isNote) return t.subType || 'note';
+  const x = t.type || 'order';
+  return x === 'email' ? 'order' : x;
 }
 
 /* ── Tiny popover for the per-folder / per-row action menu ──────── */
-function ActionMenu({ open, onClose, anchorRef, children }) {
+function ActionMenu({ onClose, anchorRef, children }) {
   const ref = useRef(null);
   useEffect(() => {
-    if (!open) return undefined;
     const onDown = (e) => {
       if (!ref.current?.contains(e.target) && !anchorRef.current?.contains(e.target)) onClose();
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
-  }, [open, onClose, anchorRef]);
-  if (!open) return null;
+  }, [onClose, anchorRef]);
   return (
     <motion.div
       ref={ref}
@@ -94,38 +109,50 @@ function MenuItem({ children, onClick, danger }) {
   );
 }
 
-/* ── Single template row ────────────────────────────────────────── */
-function TemplateRow({ tpl, isNote, active, onClick, onMove, folders }) {
+/* ── Single template row — draggable, colored left stripe by type.
+      Disabled rows render darker + dimmer and sit below enabled siblings. */
+function TemplateRow({ tpl, isNote, type, active, onClick, onMove, folders, onDragStart, onDragEnd }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const btnRef = useRef(null);
-  const TypeIcon = isNote ? TYPE_ICON.note : (TYPE_ICON[tpl.type] || TYPE_ICON.order);
+  const meta = (isNote ? TYPE_META_NOTE : TYPE_META_TPL)[type] || (isNote ? TYPE_META_NOTE.note : TYPE_META_TPL.order);
+  const TypeIcon = meta.icon;
   const disabled = tpl.enabled === false;
 
   return (
     <motion.div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData(DRAG_MIME, tpl.id);
+        e.dataTransfer.effectAllowed = 'move';
+        onDragStart?.(tpl.id);
+      }}
+      onDragEnd={() => onDragEnd?.()}
       onClick={onClick}
       whileHover={{ background: 'var(--gb-fill-soft)' }}
-      animate={{ background: active ? 'var(--gb-brand-tint-soft)' : 'transparent' }}
+      animate={{ background: active ? 'var(--gb-brand-tint-soft)' : (disabled ? 'var(--gb-surface-base)' : 'transparent') }}
       transition={T.base}
       style={{
         position: 'relative',
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: '6px 10px 6px 22px',
+        padding: '6px 8px 6px 14px',
         borderRadius: 'var(--gb-r-sm)',
         border: '1px solid ' + (active ? 'var(--gb-brand-tint-border)' : 'transparent'),
-        cursor: 'pointer', userSelect: 'none',
-        opacity: disabled ? 0.55 : 1,
+        borderLeft: `3px solid ${meta.color}`,
+        cursor: 'grab', userSelect: 'none',
       }}
     >
-      <TypeIcon size={11} style={{ color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)', flexShrink: 0 }} />
+      <TypeIcon size={11} style={{ color: disabled ? 'var(--gb-text-ghost)' : (active ? 'var(--gb-brand-label)' : meta.color), flexShrink: 0, opacity: disabled ? 0.55 : 1 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           fontSize: 11.5, fontWeight: 600,
-          color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+          color: disabled
+            ? 'var(--gb-text-ghost)'
+            : (active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)'),
+          textDecoration: disabled ? 'line-through' : 'none',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>{tpl.name || 'Untitled'}</div>
         {!isNote && (
-          <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>
+          <div style={{ fontSize: 9.5, color: disabled ? 'var(--gb-text-ghost)' : 'var(--gb-text-muted)', marginTop: 1 }}>
             {(tpl.rules || []).length} rule{(tpl.rules || []).length !== 1 ? 's' : ''} ·{' '}
             {Object.keys(tpl.vars || {}).length} var{Object.keys(tpl.vars || {}).length !== 1 ? 's' : ''}
           </div>
@@ -136,7 +163,7 @@ function TemplateRow({ tpl, isNote, active, onClick, onMove, folders }) {
         <IconBtn size="xs" icon={<I.more />} onClick={() => setMenuOpen((v) => !v)} />
         <AnimatePresence>
           {menuOpen && (
-            <ActionMenu open onClose={() => setMenuOpen(false)} anchorRef={btnRef}>
+            <ActionMenu onClose={() => setMenuOpen(false)} anchorRef={btnRef}>
               <div style={{ padding: '4px 8px 2px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--gb-text-muted)' }}>
                 Move to folder
               </div>
@@ -156,102 +183,177 @@ function TemplateRow({ tpl, isNote, active, onClick, onMove, folders }) {
   );
 }
 
-/* ── Collapsible folder row + its children ──────────────────────── */
-function FolderGroup({ folder, tpls, isNote, currentId, onOpen, onMove, onRename, onDelete, folders, defaultOpen }) {
-  const [open, setOpen] = useState(defaultOpen);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const btnRef = useRef(null);
-  const isUncategorized = folder.id === '__uncat';
+/* ── Per-type sub-section (Order / Account / Case ...). Enabled rows
+      first, then disabled rows below. */
+function TypeSection({ type, isNote, tpls, currentId, onOpen, onMove, folders, onDragStart, onDragEnd }) {
+  if (!tpls.length) return null;
+  const meta = (isNote ? TYPE_META_NOTE : TYPE_META_TPL)[type];
+  if (!meta) return null;
+  const enabled  = tpls.filter((t) => t.enabled !== false);
+  const disabled = tpls.filter((t) => t.enabled === false);
 
   return (
-    <div style={{ marginBottom: 2 }}>
+    <div style={{ marginBottom: 6 }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '6px 10px 3px',
+        fontSize: 9, fontWeight: 800, letterSpacing: 0.8,
+        textTransform: 'uppercase', color: meta.color, opacity: 0.85,
+      }}>
+        <span style={{ width: 5, height: 5, borderRadius: '50%', background: meta.color }} />
+        {meta.label}
+        <span style={{ color: 'var(--gb-text-muted)', fontWeight: 600 }}>· {tpls.length}</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {enabled.map((t) => (
+          <TemplateRow
+            key={t.id} tpl={t} isNote={isNote} type={type}
+            active={t.id === currentId}
+            onClick={() => onOpen(t)} onMove={(fid) => onMove(t, fid)}
+            folders={folders} onDragStart={onDragStart} onDragEnd={onDragEnd}
+          />
+        ))}
+        {disabled.map((t) => (
+          <TemplateRow
+            key={t.id} tpl={t} isNote={isNote} type={type}
+            active={t.id === currentId}
+            onClick={() => onOpen(t)} onMove={(fid) => onMove(t, fid)}
+            folders={folders} onDragStart={onDragStart} onDragEnd={onDragEnd}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* Group an array of tpls into a Map<type, tpl[]> in render order. */
+function groupByType(tpls, isNote) {
+  const order = isNote ? TYPE_ORDER_NOTE : TYPE_ORDER_TPL;
+  const out = new Map(order.map((k) => [k, []]));
+  for (const t of tpls) {
+    const k = rowType(t, isNote);
+    if (!out.has(k)) out.set(k, []);
+    out.get(k).push(t);
+  }
+  return out;
+}
+
+/* ── Collapsible folder — drop target for template drags ────────── */
+function FolderGroup({ folder, tpls, isNote, currentId, onOpen, onMove, onRename, onDelete, folders, defaultOpen, onDragStart, onDragEnd, dragging }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [hot, setHot] = useState(false);  // drop-target highlight
+  const btnRef = useRef(null);
+  const grouped = useMemo(() => groupByType(tpls, isNote), [tpls, isNote]);
+
+  function onDragOver(e) {
+    if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (!hot) setHot(true);
+  }
+  function onDragLeave(e) {
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    setHot(false);
+  }
+  function onDrop(e) {
+    const id = e.dataTransfer.getData(DRAG_MIME);
+    setHot(false);
+    if (!id) return;
+    e.preventDefault();
+    onMove(id, folder.id);
+    setOpen(true);  // auto-expand to reveal where the row landed
+  }
+
+  return (
+    <motion.div
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      animate={{
+        background: hot ? 'var(--gb-brand-tint-soft)' : 'transparent',
+        boxShadow: hot ? 'inset 0 0 0 1px var(--gb-brand-tint-border)' : 'none',
+      }}
+      transition={T.base}
+      style={{ borderRadius: 'var(--gb-r-md)', marginBottom: 3, padding: 1 }}
+    >
       {/* Folder header */}
       <motion.div
         onClick={() => setOpen((v) => !v)}
-        whileHover={isUncategorized ? undefined : { background: 'var(--gb-fill-soft)' }}
+        whileHover={{ background: 'var(--gb-fill-soft)' }}
         transition={T.base}
         style={{
           position: 'relative',
           display: 'flex', alignItems: 'center', gap: 6,
-          padding: '5px 10px', borderRadius: 'var(--gb-r-sm)',
+          padding: '6px 10px', borderRadius: 'var(--gb-r-sm)',
           cursor: 'pointer', userSelect: 'none',
         }}
       >
-        <motion.span
-          animate={{ rotate: open ? 90 : 0 }}
-          transition={T.base}
-          style={{ display: 'inline-flex', color: 'var(--gb-text-muted)' }}
-        >
+        <motion.span animate={{ rotate: open ? 90 : 0 }} transition={T.base} style={{ display: 'inline-flex', color: 'var(--gb-text-muted)' }}>
           <I.chevr size={9} />
         </motion.span>
-        <FolderIcon size={11} style={{ color: isUncategorized ? 'var(--gb-text-muted)' : 'var(--gb-brand-label)', flexShrink: 0 }} />
+        <FolderIcon size={12} style={{ color: 'var(--gb-brand-label)', flexShrink: 0 }} />
         <span style={{
-          flex: 1, fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3,
-          textTransform: 'uppercase',
-          color: 'var(--gb-text-tertiary)',
+          flex: 1, fontSize: 11.5, fontWeight: 700,
+          color: 'var(--gb-text-primary)',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>{folder.name}</span>
         <span style={{ fontSize: 9.5, fontWeight: 600, color: 'var(--gb-text-muted)' }}>{tpls.length}</span>
-        {!isUncategorized && (
-          <div ref={btnRef} style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
-            <IconBtn size="xs" icon={<I.more />} onClick={() => setMenuOpen((v) => !v)} />
-            <AnimatePresence>
-              {menuOpen && (
-                <ActionMenu open onClose={() => setMenuOpen(false)} anchorRef={btnRef}>
-                  <MenuItem onClick={() => { onRename(folder); setMenuOpen(false); }}>
-                    <I.edit size={11} /> Rename
-                  </MenuItem>
-                  <MenuItem danger onClick={() => { onDelete(folder); setMenuOpen(false); }}>
-                    <I.trash size={11} /> Delete folder
-                  </MenuItem>
-                </ActionMenu>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
+        <div ref={btnRef} style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+          <IconBtn size="xs" icon={<I.more />} onClick={() => setMenuOpen((v) => !v)} />
+          <AnimatePresence>
+            {menuOpen && (
+              <ActionMenu onClose={() => setMenuOpen(false)} anchorRef={btnRef}>
+                <MenuItem onClick={() => { onRename(folder); setMenuOpen(false); }}>
+                  <I.edit size={11} /> Rename
+                </MenuItem>
+                <MenuItem danger onClick={() => { onDelete(folder); setMenuOpen(false); }}>
+                  <I.trash size={11} /> Delete folder
+                </MenuItem>
+              </ActionMenu>
+            )}
+          </AnimatePresence>
+        </div>
       </motion.div>
 
-      {/* Children — spring-animated height collapse */}
       <AnimatePresence initial={false}>
         {open && tpls.length > 0 && (
           <motion.div
             key="children"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
+            initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
             style={{ overflow: 'hidden' }}
           >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 1, paddingTop: 2 }}>
-              {tpls.map((t) => (
-                <TemplateRow
-                  key={t.id}
-                  tpl={t} isNote={isNote}
-                  active={t.id === currentId}
-                  onClick={() => onOpen(t)}
-                  onMove={(fid) => onMove(t, fid)}
+            <div style={{ padding: '2px 0 4px 6px' }}>
+              {[...grouped.entries()].map(([type, list]) => (
+                <TypeSection
+                  key={type} type={type} isNote={isNote} tpls={list}
+                  currentId={currentId} onOpen={onOpen}
+                  onMove={(t, fid) => onMove(t.id, fid)}
                   folders={folders.filter((f) => f.id !== folder.id)}
+                  onDragStart={onDragStart} onDragEnd={onDragEnd}
                 />
               ))}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
   );
 }
 
 /* ── Root ───────────────────────────────────────────────────────── */
 function TemplateSidebar() {
-  const [tab,           setTab]           = useState('templates');
-  const [templates,     setTemplates]     = useState([]);
-  const [notes,         setNotes]         = useState([]);
-  const [tplFolders,    setTplFolders]    = useState([]);
-  const [noteFolders,   setNoteFolders]   = useState([]);
-  const [search,        setSearch]        = useState('');
-  const [currentId,     setCurrentId]     = useState(null);
+  const [tab,         setTab]         = useState('templates');
+  const [templates,   setTemplates]   = useState([]);
+  const [notes,       setNotes]       = useState([]);
+  const [tplFolders,  setTplFolders]  = useState([]);
+  const [noteFolders, setNoteFolders] = useState([]);
+  const [search,      setSearch]      = useState('');
+  const [currentId,   setCurrentId]   = useState(null);
+  const draggingId = useRef(null);
+  const [, force] = useState(0);
 
-  // Load from storage + subscribe to changes so legacy CRUD reflects here.
   useEffect(() => {
     let alive = true;
     loadAll().then((d) => {
@@ -272,19 +374,17 @@ function TemplateSidebar() {
   }, []);
 
   const isNote = tab === 'notes';
-  const allItems = isNote ? notes : templates;
-  const folders  = isNote ? noteFolders : tplFolders;
-  const tplsKey  = isNote ? 'noteTemplates' : 'templates';
+  const allItems  = isNote ? notes : templates;
+  const folders   = isNote ? noteFolders : tplFolders;
+  const tplsKey   = isNote ? 'noteTemplates' : 'templates';
   const folderKey = isNote ? 'noteFolders' : 'templateFolders';
 
-  // Filter by search (name match).
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return allItems;
     return allItems.filter((t) => (t.name || '').toLowerCase().includes(q));
   }, [allItems, search]);
 
-  // Group by folderId. Templates with no folderId → Uncategorized.
   const groups = useMemo(() => {
     const byId = new Map(folders.map((f) => [f.id, []]));
     const uncat = [];
@@ -293,7 +393,10 @@ function TemplateSidebar() {
       if (fid && byId.has(fid)) byId.get(fid).push(t);
       else uncat.push(t);
     }
-    return { uncat, folders: folders.map((f) => ({ folder: f, tpls: byId.get(f.id) || [] })) };
+    return {
+      uncat,
+      folders: folders.map((f) => ({ folder: f, tpls: byId.get(f.id) || [] })),
+    };
   }, [filtered, folders]);
 
   /* ── Actions — wire to existing editor.js globals ─────────────── */
@@ -311,14 +414,14 @@ function TemplateSidebar() {
     if (!name) return;
     const next = [...folders, { id: 'f_' + Date.now().toString(36), name: name.trim() }];
     (isNote ? setNoteFolders : setTplFolders)(next);
-    saveFolders(folderKey, next);
+    saveKey(folderKey, next);
   }
   function renameFolder(folder) {
     const name = window.prompt('Rename folder:', folder.name);
     if (!name) return;
     const next = folders.map((f) => (f.id === folder.id ? { ...f, name: name.trim() } : f));
     (isNote ? setNoteFolders : setTplFolders)(next);
-    saveFolders(folderKey, next);
+    saveKey(folderKey, next);
   }
   function deleteFolder(folder) {
     if (!window.confirm(`Delete folder "${folder.name}"? Templates inside move to Uncategorized.`)) return;
@@ -326,13 +429,14 @@ function TemplateSidebar() {
     const nextTpls = allItems.map((t) => (t.folderId === folder.id ? { ...t, folderId: undefined } : t));
     (isNote ? setNoteFolders : setTplFolders)(nextFolders);
     (isNote ? setNotes : setTemplates)(nextTpls);
-    saveFolders(folderKey, nextFolders);
-    saveTpls(tplsKey, nextTpls);
+    saveKey(folderKey, nextFolders);
+    saveKey(tplsKey, nextTpls);
   }
-  function moveTpl(tpl, folderId) {
-    const next = allItems.map((t) => (t.id === tpl.id ? { ...t, folderId: folderId || undefined } : t));
+  /** Move by id (used by both the row menu and drop handlers). */
+  function moveById(id, folderId) {
+    const next = allItems.map((t) => (t.id === id ? { ...t, folderId: folderId || undefined } : t));
     (isNote ? setNotes : setTemplates)(next);
-    saveTpls(tplsKey, next);
+    saveKey(tplsKey, next);
   }
   function openSignature() {
     if (typeof window.__gbOpenSignature === 'function') window.__gbOpenSignature();
@@ -343,14 +447,38 @@ function TemplateSidebar() {
     else document.getElementById('btn-settings')?.click();
   }
 
-  // Track active selection from the legacy global so highlight syncs.
+  /* Drop on the bottom Uncategorized region → clear folderId. */
+  const [uncatHot, setUncatHot] = useState(false);
+  function uncatDragOver(e) {
+    if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (!uncatHot) setUncatHot(true);
+  }
+  function uncatDragLeave(e) {
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    setUncatHot(false);
+  }
+  function uncatDrop(e) {
+    const id = e.dataTransfer.getData(DRAG_MIME);
+    setUncatHot(false);
+    if (!id) return;
+    e.preventDefault();
+    moveById(id, null);
+  }
+
+  // Sync selection from legacy editor.js' globals so the active row tracks.
   useEffect(() => {
     const i = setInterval(() => {
-      const id = window.currentId || window.currentNoteId || null;
-      if (id !== currentId) setCurrentId(id);
+      const id = isNote ? window.currentNoteId : window.currentId;
+      if (id && id !== currentId) setCurrentId(id);
     }, 300);
     return () => clearInterval(i);
-  }, [currentId]);
+  }, [currentId, isNote]);
+
+  const uncatGroups = groupByType(groups.uncat, isNote);
+  const hasFolders  = folders.length > 0;
+  const hasUncat    = groups.uncat.length > 0;
 
   return (
     <div style={{
@@ -360,7 +488,7 @@ function TemplateSidebar() {
       color: 'var(--gb-text-secondary)',
     }}>
 
-      {/* ── Brand header ─────────────────────────────────────────── */}
+      {/* Brand header */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '12px 12px 10px', borderBottom: '1px solid var(--gb-border-subtle)',
@@ -377,7 +505,7 @@ function TemplateSidebar() {
         <IconBtn size="sm" icon={<CogIcon />} onClick={openSettings} title="Settings" />
       </div>
 
-      {/* ── Controls: tabs + search + new ────────────────────────── */}
+      {/* Controls: tabs + search + new template + new folder */}
       <div style={{ padding: '10px 10px 8px', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
         <Segmented
           value={tab}
@@ -388,22 +516,18 @@ function TemplateSidebar() {
             { id: 'notes',     label: `Notes · ${notes.length}` },
           ]}
         />
-        <Input
-          size="sm"
-          value={search}
-          onChange={setSearch}
-          placeholder="Search…"
-          leading={<I.search />}
-        />
+        <Input size="sm" value={search} onChange={setSearch} placeholder="Search…" leading={<I.search />} />
         <div style={{ display: 'flex', gap: 6 }}>
           <Btn variant="dashed" size="sm" icon={<I.plus />} full onClick={newTpl}>
             New {isNote ? 'note' : 'template'}
           </Btn>
-          <Btn variant="ghost" size="sm" icon={<FolderIcon />} onClick={newFolder} title="New folder" />
+          <Btn variant="dashed" size="sm" icon={<FolderIcon />} full onClick={newFolder}>
+            New folder
+          </Btn>
         </div>
       </div>
 
-      {/* ── Folder/template list ─────────────────────────────────── */}
+      {/* Folder + uncategorized list */}
       <div style={{
         flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden',
         padding: '4px 8px 12px',
@@ -414,42 +538,76 @@ function TemplateSidebar() {
             initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
             transition={T.base}
           >
-            {/* Uncategorized — always visible if it has content (or no folders exist) */}
-            {(groups.uncat.length > 0 || folders.length === 0) && (
-              <FolderGroup
-                folder={{ id: '__uncat', name: 'Uncategorized' }}
-                tpls={groups.uncat}
-                isNote={isNote}
-                currentId={currentId}
-                onOpen={openTpl}
-                onMove={moveTpl}
-                onRename={() => {}}
-                onDelete={() => {}}
-                folders={folders}
-                defaultOpen
-              />
-            )}
+            {/* Folders first */}
             {groups.folders.map(({ folder, tpls }) => (
               <FolderGroup
                 key={folder.id}
                 folder={folder} tpls={tpls} isNote={isNote} currentId={currentId}
-                onOpen={openTpl} onMove={moveTpl}
+                onOpen={openTpl} onMove={moveById}
                 onRename={renameFolder} onDelete={deleteFolder}
                 folders={folders}
                 defaultOpen={tpls.some((t) => t.id === currentId)}
+                onDragStart={(id) => (draggingId.current = id)}
+                onDragEnd={() => (draggingId.current = null)}
               />
             ))}
+
+            {/* Uncategorized flows flat at the bottom — no folder wrapper.
+                The whole block is itself a drop target. */}
+            {(hasUncat || !hasFolders) && (
+              <motion.div
+                onDragOver={uncatDragOver}
+                onDragLeave={uncatDragLeave}
+                onDrop={uncatDrop}
+                animate={{
+                  background: uncatHot ? 'var(--gb-brand-tint-soft)' : 'transparent',
+                  boxShadow: uncatHot ? 'inset 0 0 0 1px var(--gb-brand-tint-border)' : 'none',
+                }}
+                transition={T.base}
+                style={{
+                  marginTop: hasFolders ? 12 : 0,
+                  paddingTop: hasFolders ? 8 : 0,
+                  borderTop: hasFolders ? '1px solid var(--gb-border-subtle)' : 'none',
+                  borderRadius: 'var(--gb-r-md)',
+                }}
+              >
+                {hasFolders && (
+                  <div style={{
+                    fontSize: 9, fontWeight: 700, letterSpacing: 0.8,
+                    textTransform: 'uppercase', color: 'var(--gb-text-muted)',
+                    padding: '4px 10px 6px',
+                  }}>
+                    Uncategorized
+                  </div>
+                )}
+                {[...uncatGroups.entries()].map(([type, list]) => (
+                  <TypeSection
+                    key={type} type={type} isNote={isNote} tpls={list}
+                    currentId={currentId} onOpen={openTpl}
+                    onMove={(t, fid) => moveById(t.id, fid)}
+                    folders={folders}
+                    onDragStart={(id) => (draggingId.current = id)}
+                    onDragEnd={() => (draggingId.current = null)}
+                  />
+                ))}
+                {!hasUncat && hasFolders && (
+                  <div style={{
+                    padding: 10, fontSize: 10.5, color: 'var(--gb-text-muted)',
+                    textAlign: 'center', fontStyle: 'italic',
+                  }}>
+                    Drop a {isNote ? 'note' : 'template'} here to un-file it
+                  </div>
+                )}
+              </motion.div>
+            )}
+
             {allItems.length === 0 && (
-              <div style={{
-                padding: 24, textAlign: 'center', fontSize: 11, color: 'var(--gb-text-muted)',
-              }}>
+              <div style={{ padding: 24, textAlign: 'center', fontSize: 11, color: 'var(--gb-text-muted)' }}>
                 No {isNote ? 'notes' : 'templates'} yet.
               </div>
             )}
             {allItems.length > 0 && filtered.length === 0 && (
-              <div style={{
-                padding: 16, textAlign: 'center', fontSize: 11, color: 'var(--gb-text-muted)',
-              }}>
+              <div style={{ padding: 16, textAlign: 'center', fontSize: 11, color: 'var(--gb-text-muted)' }}>
                 No matches for "{search}"
               </div>
             )}
@@ -457,7 +615,7 @@ function TemplateSidebar() {
         </AnimatePresence>
       </div>
 
-      {/* ── Pinned signature button ──────────────────────────────── */}
+      {/* Pinned signature button */}
       <div style={{
         padding: 10, borderTop: '1px solid var(--gb-border-subtle)', flexShrink: 0,
         background: 'var(--gb-surface-base)',
@@ -477,7 +635,6 @@ function mount() {
   host.__gbSidebarMounted = true;
   ensureTheme();
   createRoot(host).render(<TemplateSidebar />);
-  // Flag for legacy editor.js so it knows it doesn't own the sidebar.
   window.__gbReactSidebar = true;
 }
 
