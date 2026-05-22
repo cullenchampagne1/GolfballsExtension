@@ -4,7 +4,6 @@ import { Btn } from './Btn.jsx';
 import { CompactModal } from './CompactModal.jsx';
 import { ModalHeader } from './ModalHeader.jsx';
 import { ModalFooter } from './ModalFooter.jsx';
-import { Callout } from './Callout.jsx';
 import { RichTextEditor } from './RichTextEditor.jsx';
 
 const PenIcon = (p) => (
@@ -50,7 +49,10 @@ export function SignatureModal({ onClose }) {
   }
 
   return (
-    <CompactModal size="compact" onClose={onClose}>
+    // 680px wide — matches the old editor's signature card (backup/editor.js).
+    // A signature is email content: the renderer needs width. "Compact" here
+    // means small text + tight chrome, not a narrow modal.
+    <CompactModal size={680} onClose={onClose}>
       <ModalHeader
         icon={<PenIcon />}
         title="Email Signature"
@@ -60,7 +62,7 @@ export function SignatureModal({ onClose }) {
 
       {/* Body scrolls within CompactModal's height cap; header/footer pin. */}
       <div style={{
-        padding: 14, display: 'flex', flexDirection: 'column', gap: 10,
+        padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 8,
         flex: 1, minHeight: 0, overflow: 'auto',
       }}>
         {loaded ? (
@@ -68,20 +70,19 @@ export function SignatureModal({ onClose }) {
             size="sm"
             initialHtml={initial}
             onChange={html => { htmlRef.current = html; }}
-            minHeight={140}
+            minHeight={200}
             placeholder="Name, title, phone, company — formatted how you like it."
           />
         ) : (
           <div style={{
-            minHeight: 140, borderRadius: 'var(--gb-r-md)',
+            minHeight: 200, borderRadius: 'var(--gb-r-md)',
             border: '1px solid var(--gb-border-default)',
             background: 'var(--gb-surface-canvas)',
           }} />
         )}
-        <Callout tone="info">
-          Keep it lightweight — inline images can render inconsistently in some
-          recipient inboxes when relayed through Power Automate.
-        </Callout>
+        <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>
+          Keep it lightweight — inline images can render inconsistently when relayed through Power Automate.
+        </div>
       </div>
 
       <ModalFooter>

@@ -25,11 +25,11 @@ import { Icon } from '../icons.jsx';
 const SIZES = {
   sm: {
     btnW: 22, btnH: 21, icon: 11, sepH: 13, toolbarPad: '3px 5px',
-    pad: '10px 11px', font: 11, minHeight: 120,
-    slPad: '6px 9px', slFont: 11.5,
+    pad: '10px 12px', font: 10.5, minHeight: 120,
+    slPad: '6px 9px', slFont: 11,
     varH: 21, varFont: 10, varIcon: 9,
-    phFull: { top: 11, left: 12, font: 11 },
-    phLine: { top: 6,  left: 10, font: 11.5 },
+    phFull: { top: 10, left: 13, font: 10.5 },
+    phLine: { top: 6,  left: 10, font: 11 },
   },
   md: {
     btnW: 26, btnH: 24, icon: 12, sepH: 14, toolbarPad: '4px 6px',
