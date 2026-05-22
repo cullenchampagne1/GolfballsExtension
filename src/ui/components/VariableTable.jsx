@@ -4,6 +4,7 @@ import { Dot } from './Dot.jsx';
 import { Btn } from './Btn.jsx';
 import { IconBtn } from './IconBtn.jsx';
 import { KindPill } from './KindPill.jsx';
+import { Chip } from './Chip.jsx';
 import { I, Icon } from '../icons.jsx';
 
 const VariableIcon = (p) => (
@@ -104,7 +105,7 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onOpenSmart 
               background: isMissNoFallback ? 'var(--gb-warning-tint-soft)' : 'transparent',
             }}
           >
-            {/* Name — click to open smart options */}
+            {/* Name — design-spec Chip + bolt affordance. Click → SmartModal. */}
             <button
               type="button"
               title="Smart options — fallback, transform, formatting"
@@ -112,23 +113,20 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onOpenSmart 
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0,
                 background: 'transparent', border: 'none', padding: 0,
-                // Buttons don't inherit font — without this the name renders
-                // at the UA default (~13px), dwarfing the rest of the row.
                 font: 'inherit',
                 cursor: onOpenSmart ? 'pointer' : 'default', textAlign: 'left',
               }}
             >
-              <span style={{
-                fontFamily: 'var(--gb-font-mono)',
-                fontSize: 10.5,
-                color: 'var(--gb-brand-label)',
-                fontWeight: 600,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              <Chip code style={{
+                // Table-density override of the spec's 11px / 3px×8px chip.
+                fontSize: 10, fontWeight: 500, padding: '1px 6px',
+                minWidth: 0, overflow: 'hidden',
               }}>
-                {`{{${v.name}}}`}
-              </span>
-              {/* Always shown — the affordance to open the smart-options
-                  submenu. Amber once rules exist, muted otherwise. */}
+                <span style={{
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  display: 'inline-block', maxWidth: '100%',
+                }}>{`{{${v.name}}}`}</span>
+              </Chip>
               <BoltIcon size={10} style={{
                 color: hasSmart ? 'var(--gb-warning-fg)' : 'var(--gb-text-ghost)',
                 flexShrink: 0,
