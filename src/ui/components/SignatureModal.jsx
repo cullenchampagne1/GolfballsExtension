@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
-import { motion } from 'motion/react';
-import { T } from '../shared.jsx';
 import { I, Icon } from '../icons.jsx';
 import { Btn } from './Btn.jsx';
-import { ModalShell } from './ModalShell.jsx';
+import { CompactModal } from './CompactModal.jsx';
 import { ModalHeader } from './ModalHeader.jsx';
 import { ModalFooter } from './ModalFooter.jsx';
+import { Callout } from './Callout.jsx';
 import { RichTextEditor } from './RichTextEditor.jsx';
 
 const PenIcon = (p) => (
@@ -17,6 +15,9 @@ const PenIcon = (p) => (
  * SignatureModal — edits the global email signature stored at
  * chrome.storage.local.emailSignature. The signature HTML is appended
  * to every email sent through Direct Send / Power Automate.
+ *
+ * Built on CompactModal — a small, focused dialog rather than a full
+ * 560px modal. Mount it inside an <AnimatePresence>.
  *
  * Props:
  *   onClose () => void
@@ -48,76 +49,46 @@ export function SignatureModal({ onClose }) {
     });
   }
 
-  // Portal to <body> so the overlay escapes the editor pane's layout /
-  // any transformed ancestor and covers the whole window.
-  return createPortal(
-    <motion.div
-      key="sig-backdrop"
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      transition={T.base}
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 2147483000,
-        background: 'var(--gb-backdrop)', backdropFilter: 'blur(6px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
-      }}
-    >
-      <div onClick={e => e.stopPropagation()}>
-        {/* Match the sibling editor modals (AddVariableModal / SmartModal):
-            560px wide, clamped to the viewport, height-capped with a
-            scrolling body — so it stays proportionate in the 860×700
-            editor popup window. */}
-        <ModalShell
-          width="min(560px, calc(100vw - 48px))"
-          style={{ maxHeight: 'calc(100vh - 48px)' }}
-        >
-          <ModalHeader
-            icon={<PenIcon />}
-            title="Email Signature"
-            subtitle="Appended to every email sent via Direct Send"
-            onClose={onClose}
+  return (
+    <CompactModal size="compact" onClose={onClose}>
+      <ModalHeader
+        icon={<PenIcon />}
+        title="Email Signature"
+        subtitle="Appended to every outgoing email"
+        onClose={onClose}
+      />
+
+      {/* Body scrolls within CompactModal's height cap; header/footer pin. */}
+      <div style={{
+        padding: 14, display: 'flex', flexDirection: 'column', gap: 10,
+        flex: 1, minHeight: 0, overflow: 'auto',
+      }}>
+        {loaded ? (
+          <RichTextEditor
+            size="sm"
+            initialHtml={initial}
+            onChange={html => { htmlRef.current = html; }}
+            minHeight={140}
+            placeholder="Name, title, phone, company — formatted how you like it."
           />
-
+        ) : (
           <div style={{
-            padding: 16, display: 'flex', flexDirection: 'column', gap: 8,
-            flex: 1, minHeight: 0, overflow: 'auto',
-          }}>
-            <div style={{
-              fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
-              letterSpacing: 0.8, color: 'var(--gb-text-muted)',
-            }}>
-              Signature content
-            </div>
-            {loaded ? (
-              <RichTextEditor
-                initialHtml={initial}
-                onChange={html => { htmlRef.current = html; }}
-                minHeight={150}
-                placeholder="Type your signature — name, title, phone, etc."
-              />
-            ) : (
-              <div style={{
-                minHeight: 150, borderRadius: 'var(--gb-r-md)',
-                border: '1px solid var(--gb-border-default)',
-                background: 'var(--gb-surface-canvas)',
-              }} />
-            )}
-            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>
-              Keep it lightweight — inline images may render inconsistently in some
-              recipient inboxes when relayed through Power Automate.
-            </div>
-          </div>
-
-          <ModalFooter>
-            <div style={{ flex: 1 }} />
-            <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
-            <Btn variant="primary" icon={<I.check />} onClick={save}>
-              Save signature
-            </Btn>
-          </ModalFooter>
-        </ModalShell>
+            minHeight: 140, borderRadius: 'var(--gb-r-md)',
+            border: '1px solid var(--gb-border-default)',
+            background: 'var(--gb-surface-canvas)',
+          }} />
+        )}
+        <Callout tone="info">
+          Keep it lightweight — inline images can render inconsistently in some
+          recipient inboxes when relayed through Power Automate.
+        </Callout>
       </div>
-    </motion.div>,
-    document.body,
+
+      <ModalFooter>
+        <span style={{ flex: 1 }} />
+        <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
+        <Btn variant="primary" icon={<I.check />} onClick={save}>Save</Btn>
+      </ModalFooter>
+    </CompactModal>
   );
 }
