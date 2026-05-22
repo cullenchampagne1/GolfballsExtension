@@ -1020,10 +1020,16 @@ $('btn-cancel-pick').addEventListener('click', () => {
 });
 
 chrome.storage.onChanged.addListener((changes) => {
+  // Keep our in-memory arrays in sync with storage so changes from the
+  // React sidebar (folder moves, etc.) don't get clobbered on our next
+  // saveTemplates() call.
+  if (changes.templates)     templates     = changes.templates.newValue || [];
+  if (changes.noteTemplates) noteTemplates = changes.noteTemplates.newValue || [];
+
   if (!changes.pickResult) return;
-  
+
   const { fieldId, selector, text } = changes.pickResult.newValue;
-  $('pick-overlay').classList.remove('visible'); 
+  $('pick-overlay').classList.remove('visible');
   applyPick(fieldId, selector, text);
 });
 

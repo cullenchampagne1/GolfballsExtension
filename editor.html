@@ -25,6 +25,9 @@ body {
   border-right: 1px solid var(--gb-border-standard,#2a2a2a);
   display: flex; flex-direction: column; overflow: hidden;
 }
+/* React TemplateSidebar owns the visible sidebar. Legacy children stay in
+   DOM (so editor.js's element queries don't throw) but render nothing. */
+#sidebar > *:not(#sidebar-react) { display: none !important; }
 
 .sb-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 12px 10px; border-bottom: 1px solid var(--gb-border-standard,#2a2a2a); flex-shrink: 0; }
 .sb-brand  { font-size: 10px; font-weight: 700; color: var(--gb-text-muted,#888888); letter-spacing: 1px; text-transform: uppercase; }
@@ -857,6 +860,9 @@ textarea::-webkit-scrollbar-thumb:hover { background: var(--gb-text-muted,#88888
 </div>
 
 <div id="sidebar">
+  <!-- React owns the sidebar; legacy children stay in DOM (hidden via CSS
+       below) so editor.js's queries don't throw. -->
+  <div id="sidebar-react" style="flex:1; display:flex; flex-direction:column; min-height:0; overflow:hidden;"></div>
   <div class="sb-head">
     <div>
       <div class="sb-brand">Golfballs.com</div>
@@ -1318,5 +1324,6 @@ textarea::-webkit-scrollbar-thumb:hover { background: var(--gb-text-muted,#88888
 <script src="editor.js"></script>
 <script src="react-dist/content/editor-settings.js"></script>
 <script src="react-dist/content/editor-templates.js"></script>
+<script src="react-dist/content/editor-sidebar.js"></script>
 </body>
 </html>
