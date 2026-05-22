@@ -9,7 +9,6 @@ import { Input } from './Input.jsx';
 import { Dropdown } from './Dropdown.jsx';
 import { Tag } from './Tag.jsx';
 import { Dot } from './Dot.jsx';
-import { Callout } from './Callout.jsx';
 import { KindPickerGrid } from './KindPickerGrid.jsx';
 
 /* ── Kind icons ──────────────────────────────────────────────── */
@@ -45,6 +44,7 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
   const [kind,       setKind]       = useState(SOURCE_KINDS[typeId]?.[0] ?? 'literal');
   const [config,     setConfig]     = useState('');
   const [picking,    setPicking]    = useState(false);
+  const [pickText,   setPickText]   = useState('');
   const [regexField, setRegexField] = useState('body');
 
   // Reset kind when typeId changes
@@ -52,7 +52,36 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
     setKind(SOURCE_KINDS[typeId]?.[0] ?? 'literal');
     setConfig('');
     setPicking(false);
+    setPickText('');
   }, [typeId]);
+
+  // Wire pick mode: listen for pickResult in storage while picking is active
+  useEffect(() => {
+    if (!picking) return;
+    function onChanged(changes) {
+      if (!changes.pickResult) return;
+      const result = changes.pickResult.newValue;
+      if (result && result.fieldId === 'pick_addvar') {
+        setConfig(result.selector || '');
+        setPickText(result.text   || '');
+        setPicking(false);
+      }
+    }
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
+  }, [picking]);
+
+  function startPick() {
+    setPicking(true);
+    setConfig('');
+    setPickText('');
+    chrome.runtime.sendMessage({ action: 'startPick', fieldId: 'pick_addvar' });
+  }
+
+  function cancelPick() {
+    setPicking(false);
+    chrome.runtime.sendMessage({ action: 'cancelPick' });
+  }
 
   const kindOptions = (SOURCE_KINDS[typeId] || []).map(id => ({
     id,
@@ -150,7 +179,7 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
             <KindPickerGrid
               options={kindOptions}
               value={kind}
-              onChange={(id) => { setKind(id); setConfig(''); setPicking(false); }}
+              onChange={(id) => { setKind(id); setConfig(''); setPicking(false); setPickText(''); }}
             />
           </div>
 
@@ -193,27 +222,94 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
           )}
 
           {kind === 'pick' && (
-            <>
-              <Btn
-                variant={picking ? 'tinted' : 'primary'}
-                size="lg"
-                icon={<PickerIcon />}
-                full
-                onClick={() => setPicking(p => !p)}
-              >
-                {picking ? 'Picking… click any element on the page' : 'Pick element from page'}
-              </Btn>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+              {/* ── Idle: no selector captured yet ── */}
+              {!picking && !config && (
+                <Btn variant="primary" size="lg" icon={<PickerIcon />} full onClick={startPick}>
+                  Pick element from page
+                </Btn>
+              )}
+
+              {/* ── Active: waiting for user to click ── */}
               {picking && (
-                <Callout tone="brand">
-                  Switch to your order page and click the element you want. The extension will capture its selector and bring you back here.
-                </Callout>
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={T.base}
+                  style={{
+                    padding: '14px 16px',
+                    background: 'var(--gb-brand-tint-soft)',
+                    border: '1px solid var(--gb-brand-tint-border)',
+                    borderRadius: 'var(--gb-r-md)',
+                    display: 'flex', flexDirection: 'column', gap: 10,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Dot tone="brand" glow size={7} />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-brand-label)' }}>
+                      Waiting for pick…
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--gb-text-secondary)', lineHeight: 1.6 }}>
+                    Switch to your order tab and click any element on the page. The extension will capture its selector and return you here automatically.
+                  </div>
+                  <div>
+                    <Btn variant="ghost" size="sm" onClick={cancelPick}>
+                      Cancel
+                    </Btn>
+                  </div>
+                </motion.div>
               )}
-              {!picking && (
-                <Field label="Captured selector">
-                  <Input value={config} placeholder="(none yet — use the picker above)" mono />
-                </Field>
+
+              {/* ── Result: selector captured ── */}
+              {config && !picking && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={T.base}
+                  style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+                >
+                  <div style={{
+                    padding: '10px 12px',
+                    background: 'var(--gb-fill-subtle)',
+                    border: '1px solid var(--gb-border-subtle)',
+                    borderRadius: 'var(--gb-r-sm)',
+                    display: 'flex', flexDirection: 'column', gap: 6,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Dot tone="brand" glow size={5} />
+                      <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8, color: 'var(--gb-text-muted)' }}>
+                        Captured selector
+                      </span>
+                    </div>
+                    <div style={{
+                      fontFamily: 'var(--gb-font-mono)', fontSize: 10.5,
+                      color: 'var(--gb-brand-label)', wordBreak: 'break-all', lineHeight: 1.5,
+                    }}>
+                      {config}
+                    </div>
+                    {pickText && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                        <Tag tone="brand" size="xs" icon={<I.check />}>LIVE</Tag>
+                        <span style={{
+                          fontFamily: 'var(--gb-font-mono)', fontSize: 10.5,
+                          color: 'var(--gb-text-secondary)',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          "{pickText}"
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <Btn variant="ghost" size="sm" icon={<PickerIcon />} onClick={startPick}>
+                      Pick again
+                    </Btn>
+                  </div>
+                </motion.div>
               )}
-            </>
+            </div>
           )}
 
           {kind === 'regex' && (
