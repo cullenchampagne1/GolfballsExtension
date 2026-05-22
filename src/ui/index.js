@@ -30,6 +30,7 @@ export { Checkbox } from './components/Checkbox.jsx';
 export { Slider } from './components/Slider.jsx';
 export { RangeSlider } from './components/RangeSlider.jsx';
 export { SwitchTag } from './components/SwitchTag.jsx';
+export { Segmented } from './components/Segmented.jsx';
 
 export { Callout } from './components/Callout.jsx';
 export { ModalShell } from './components/ModalShell.jsx';
