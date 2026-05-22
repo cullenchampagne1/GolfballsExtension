@@ -192,32 +192,69 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
 
           {kind === 'dom' && (
             <>
-              <Field label="CSS selector" hint="First matching element's .textContent is used">
-                <Input
-                  value={config}
-                  placeholder=".order-total .amount"
-                  mono
-                  leading={<I.search />}
-                  onChange={e => setConfig(e.target.value)}
-                />
-              </Field>
-              <div style={{
-                padding: '10px 12px',
-                background: 'var(--gb-fill-subtle)',
-                border: '1px solid var(--gb-border-subtle)',
-                borderRadius: 'var(--gb-r-sm)',
-                fontSize: 11, color: 'var(--gb-text-tertiary)',
-                display: 'flex', alignItems: 'center', gap: 9,
-              }}>
-                <Dot tone={config ? 'brand' : 'muted'} glow={!!config} size={6} />
-                <span style={{ flex: 1 }}>
-                  {config
-                    ? <><strong style={{ color: 'var(--gb-brand-label)' }}>1 match</strong> found on the active page</>
-                    : 'Enter a selector to test it live'
-                  }
-                </span>
-                {config && <Tag tone="brand" size="xs">$1,247.50</Tag>}
-              </div>
+              {!picking && (
+                <>
+                  <Field label="CSS selector" hint="First matching element's .textContent is used">
+                    <Input
+                      value={config}
+                      placeholder=".order-total .amount"
+                      mono
+                      leading={<I.search />}
+                      onChange={e => setConfig(e.target.value)}
+                    />
+                  </Field>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{
+                      flex: 1, padding: '10px 12px',
+                      background: 'var(--gb-fill-subtle)',
+                      border: '1px solid var(--gb-border-subtle)',
+                      borderRadius: 'var(--gb-r-sm)',
+                      fontSize: 11, color: 'var(--gb-text-tertiary)',
+                      display: 'flex', alignItems: 'center', gap: 9,
+                    }}>
+                      <Dot tone={config ? 'brand' : 'muted'} glow={!!config} size={6} />
+                      <span style={{ flex: 1 }}>
+                        {config
+                          ? <><strong style={{ color: 'var(--gb-brand-label)' }}>1 match</strong> found on the active page</>
+                          : 'Enter a selector to test it live'
+                        }
+                      </span>
+                      {config && <Tag tone="brand" size="xs">$1,247.50</Tag>}
+                    </div>
+                    <Btn variant="ghost" size="sm" icon={<PickerIcon />} onClick={startPick}>
+                      Pick from page
+                    </Btn>
+                  </div>
+                </>
+              )}
+
+              {picking && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={T.base}
+                  style={{
+                    padding: '14px 16px',
+                    background: 'var(--gb-brand-tint-soft)',
+                    border: '1px solid var(--gb-brand-tint-border)',
+                    borderRadius: 'var(--gb-r-md)',
+                    display: 'flex', flexDirection: 'column', gap: 10,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Dot tone="brand" glow size={7} />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-brand-label)' }}>
+                      Waiting for pick…
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--gb-text-secondary)', lineHeight: 1.6 }}>
+                    Switch to your order tab and click any element. The selector will be captured automatically.
+                  </div>
+                  <div>
+                    <Btn variant="ghost" size="sm" onClick={cancelPick}>Cancel</Btn>
+                  </div>
+                </motion.div>
+              )}
             </>
           )}
 
