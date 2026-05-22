@@ -1,0 +1,109 @@
+/**
+ * theme.css — loaded by popup.html and editor.html via <link>.
+ * Defines both the canonical --gb-* variables and the --c-* shorthands
+ * used throughout the extension's own page CSS.
+ * Mirrors theme.js exactly; keep both in sync when adding variables.
+ */
+
+:root {
+  --anim: .2s cubic-bezier(.4,0,.2,1);
+
+  /* ── Theme ───────────────────────────── */
+  --gb-brand:              #6e901d;
+  --gb-brand-dark:         #5f7d18;
+  --gb-brand-border:       #4a6b14;
+  --gb-brand-surface:      #131f0a;
+  --gb-brand-text:         #d8eeaa;
+  --gb-brand-label:        #7db82a;
+  --gb-brand-accent:       #a4ce52;
+  --gb-brand-rgb:          110, 144, 29;
+  --gb-brand-label-rgb:    125, 184, 42;
+
+  /* ── Surfaces ────────────────────────── */
+  --gb-surface-deep:       #0d0d0d;
+  --gb-surface-base:       #111111;
+  --gb-surface-raised:     #1a1a1a;
+  --gb-surface-hover:      #1e1e1e;
+  --gb-surface-float:      #222222;
+  --gb-surface-elevated:   #171717;
+
+  /* ── Borders ─────────────────────────── */
+  --gb-border-subtle:      #1c1c1c;
+  --gb-border-standard:    #333333;
+  --gb-border-strong:      #444444;
+
+  /* ── Text ────────────────────────────── */
+  --gb-text-primary:       #ffffff;
+  --gb-text-secondary:     #cccccc;
+  --gb-text-muted:         #888888;
+  --gb-text-ghost:         #555555;
+
+  /* ── Status ──────────────────────────── */
+  --gb-error:              #c86060;
+  --gb-error-surface:      #1f0a0a;
+  --gb-error-rgb:          200, 96, 96;
+  --gb-success:            #38b000;
+  --gb-success-surface:    #0a1f0e;
+  --gb-success-rgb:        56, 176, 0;
+  --gb-warning:            #e0a030;
+
+  /* ── Admin toolbar ───────────────────── */
+  --gb-admin-btn:          #008000;
+  --gb-admin-btn-saved:    #004b23;
+  --gb-admin-rgb:          6, 146, 24;
+  --gb-admin-saved-rgb:    89, 218, 89;
+
+  /* ── Overlays ────────────────────────── */
+  --gb-backdrop:           rgba(0,0,0,0.85);
+  --gb-backdrop-heavy:     rgba(0,0,0,0.95);
+  --gb-tooltip-bg:         rgba(10,10,10,0.93);
+  --gb-fraud-rgb:          220, 38, 38;
+
+  /* ── Page-injected buttons (copy, toolbar) ───────────────────────────── */
+  /* Separate from brand so they blend with the native admin page style.   */
+  --gb-page-btn:          #008000;
+  --gb-page-btn-dark:     #004b23;
+  --gb-page-btn-saved:    #004b23;
+  --gb-page-btn-saving:   #2a2a2a;
+  --gb-page-btn-text:     #d4ffdc;
+  --gb-page-btn-border:   #026e23;
+  --gb-page-btn-rgb:      0, 128, 0;
+  --gb-page-btn-saved-rgb:0, 75, 35;
+
+  /* ── Legacy aliases ──────────────────── */
+  --gb-brand-text-active:  var(--gb-brand-text);
+  --gb-surface-void:       var(--gb-surface-deep);
+  --gb-surface-mid:        var(--gb-surface-base);
+  --gb-border-base:        var(--gb-border-subtle);
+  --gb-border-muted:       var(--gb-border-standard);
+  --gb-text-tertiary:      var(--gb-text-secondary);
+  --gb-text-faint:         var(--gb-text-ghost);
+  --gb-error-icon-bg:      var(--gb-error-surface);
+  --gb-error-border:       var(--gb-error-surface);
+  --gb-success-bright:     var(--gb-success);
+  --gb-success-icon-bg:    var(--gb-success-surface);
+  --gb-success-border:     var(--gb-success-surface);
+  --gb-admin-btn-border:   var(--gb-admin-btn-saved);
+  /* admin → page alias for backward compat */
+  --gb-admin-btn:          var(--gb-page-btn);
+  --gb-admin-btn-saved:    var(--gb-page-btn-saved);
+  --gb-admin-rgb:          var(--gb-page-btn-rgb);
+  --gb-admin-saved-rgb:    var(--gb-page-btn-saved-rgb);
+
+  /* ── Page shorthand aliases (popup.html / editor.html) ── */
+  --c-bg:       var(--gb-surface-base);
+  --c-s1:       var(--gb-surface-elevated);
+  --c-s2:       var(--gb-surface-raised);
+  --c-s3:       var(--gb-surface-hover);
+  --c-bd:       var(--gb-surface-float);
+  --c-bd2:      var(--gb-border-muted);
+  --c-tx:       var(--gb-text-secondary);
+  --c-tm:       var(--gb-text-tertiary);
+  --c-td:       var(--gb-text-muted);
+  --c-green:    var(--gb-brand-label);
+  --c-green-dk: var(--gb-brand);
+  --c-green-gl: rgba(var(--gb-brand-label-rgb), 0.15);
+  --c-red:      var(--gb-error);
+  --c-red-bg:   rgba(var(--gb-error-rgb), 0.1);
+  --c-brand-txt:var(--gb-brand-text);
+}
