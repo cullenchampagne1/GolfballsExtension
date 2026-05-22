@@ -210,8 +210,6 @@ function EditorPane({ body, align, setAlign, marks, setMarks }) {
         </div>
         <Sep />
         <TBtn icon={<RTE.list />} /><TBtn icon={<RTE.listNum />} /><TBtn icon={<RTE.quote />} /><TBtn icon={<RTE.link />} />
-        <div style={{ flex: 1 }} />
-        <Tag tone="warning" size="xs" icon={<RTE.bolt />}>Smart opts</Tag>
       </div>
       <div style={{ padding: '16px 20px 20px', background: 'var(--gb-surface-canvas)', color: 'var(--gb-text-secondary)', textAlign: align, minHeight: 160 }}>
         {body}
