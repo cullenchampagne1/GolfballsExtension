@@ -56,8 +56,6 @@ const Ic = {
   alignR:    p => <Icon {...p}><line x1="21" y1="10" x2="7" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="21" y1="18" x2="7" y2="18"/></Icon>,
   bolt:      p => <Icon {...p}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></Icon>,
   clear:     p => <Icon {...p}><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13"/></Icon>,
-  // Highlight frame with a diagonal slash — "no fill / clear highlight".
-  noHi:      p => <Icon {...p}><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="5" x2="21" y2="19"/></Icon>,
 };
 
 /* ── Injected stylesheet (chips, placeholder, content defaults) ── */
@@ -346,9 +344,7 @@ export function RichTextEditor({
             onMouseDown={saveSelection}
             onChange={(c) => { setBgColor(c); exec('hiliteColor', c); }}
           />
-          {/* Remove highlight only (leaves bold/italic/color intact) */}
-          <TBtn sz={sz} icon={<Ic.noHi />} title="Remove highlight" onMouseDown={md(() => exec('hiliteColor', 'transparent'))} />
-          <TBtn sz={sz} icon={<Ic.clear />} title="Clear all formatting" onMouseDown={md(() => exec('removeFormat'))} />
+          <TBtn sz={sz} icon={<Ic.clear />} title="Clear formatting" onMouseDown={md(() => exec('removeFormat'))} />
 
           {variables.length > 0 && (
             <>
