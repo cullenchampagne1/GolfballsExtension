@@ -304,13 +304,8 @@ function TemplateEditor({ tpl, onDelete }) {
   return (
     <div style={{ fontFamily: 'var(--gb-font-sans)', color: 'var(--gb-text-secondary)' }}>
 
-      {/* ── Type tabs — design-spec Segmented (inline, content-width) ── */}
-      <div style={{ marginBottom: 12 }}>
-        <Segmented value={typeId} onChange={changeType} options={TYPE_OPTIONS} />
-      </div>
-
       {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <div style={{ width: 28, height: 28, borderRadius: 'var(--gb-r-sm)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {React.cloneElement(meta.icon, { size: 13 })}
         </div>
@@ -325,6 +320,11 @@ function TemplateEditor({ tpl, onDelete }) {
           <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meta.desc}</div>
         </div>
         <Btn variant="danger" size="sm" icon={<I.trash />} onClick={onDelete}>Delete</Btn>
+      </div>
+
+      {/* ── Type tabs — sit under the title so the header reads first ── */}
+      <div style={{ marginBottom: 12 }}>
+        <Segmented value={typeId} onChange={changeType} options={TYPE_OPTIONS} />
       </div>
 
       {/* ── Meta row ── */}
