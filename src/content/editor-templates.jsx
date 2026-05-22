@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AnimatePresence } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
@@ -80,7 +80,7 @@ function convertVars(tpl) {
       kind   = 'literal';
       config = v.value || v.selector || '';
     }
-    return { name, kind, config, resolved: null, status: 'miss', smart: {} };
+    return { name, kind, config, resolved: null, status: 'miss', smart: v.smart || {} };
   });
 }
 
@@ -235,24 +235,19 @@ function EmptyState() {
 /* ────────────────────────────────────────────────────────────
    Template editor — compact for ~700px panel
 ──────────────────────────────────────────────────────────── */
-function TemplateEditor({ tpl, onSave, onDelete }) {
+function TemplateEditor({ tpl, onDelete }) {
   const typeId = tpl.type === 'email' ? 'order' : (tpl.type || 'order');
   const meta   = TYPE_META[typeId] || TYPE_META.order;
 
   const [vars,     setVars]     = useState(() => convertVars(tpl));
   const [enabled,  setEnabled]  = useState(tpl.enabled !== false);
+  const [name,     setName]     = useState(tpl.name || '');
+  const [ruleData, setRuleData] = useState(null);
   const [align,    setAlign]    = useState('left');
   const [marks,    setMarks]    = useState({ bold: false, italic: false, underline: false, strike: false });
   const [smartFor, setSmartFor] = useState(null);
   const [showAdd,  setShowAdd]  = useState(false);
   const [recipient, setRecipient] = useState(meta.recipientOptions[0]);
-
-  useEffect(() => {
-    setVars(convertVars(tpl));
-    setEnabled(tpl.enabled !== false);
-    setSmartFor(null);
-    setShowAdd(false);
-  }, [tpl.id]);
 
   const handleSaveSmart = smart => {
     setVars(vs => vs.map(v => v.name === smartFor.name ? { ...v, smart } : v));
@@ -263,6 +258,49 @@ function TemplateEditor({ tpl, onSave, onDelete }) {
     setShowAdd(false);
   };
   const handleDeleteVar = name => setVars(vs => vs.filter(v => v.name !== name));
+
+  /* ── Auto-save ──────────────────────────────────────────────
+     No Save button: the editor merges its state onto the opened
+     template and persists (debounced) on every change. Fields the
+     React editor doesn't yet own (subject, body, type, toField …)
+     pass through untouched via the {...tpl} spread. */
+  function buildTemplate() {
+    const next = { ...tpl, name: name.trim() || 'Untitled', enabled, updatedAt: Date.now() };
+    if (typeId === 'case') {
+      next.caseVars = vars;
+    } else {
+      const obj = {};
+      vars.forEach((v) => {
+        const base = (tpl.vars && tpl.vars[v.name]) ? { ...tpl.vars[v.name] } : {};
+        if (v.kind === 'builtin')    { base.type = 'builtin';  base.builtin  = v.config; }
+        else if (v.kind === 'dom')   { base.type = 'selector'; base.selector = v.config; }
+        else if (v.kind === 'regex') { base.type = 'regex';    base.pattern  = v.config; }
+        else                         { base.type = 'literal';  base.value    = v.config; }
+        base.smart = v.smart || {};
+        obj[v.name] = base;
+      });
+      next.vars = obj;
+      next.varOrder = vars.map((v) => v.name);
+    }
+    // Rules only overwrite storage once the user actually edits them.
+    if (ruleData != null) {
+      if (typeId === 'account')   next.accountConditions = ruleData;
+      else if (typeId === 'case') next.caseRules = ruleData.map((r) => ({ field: r.left, op: r.op, value: r.right }));
+      else                        next.rules = ruleData.map((r) => ({ selector: r.left, operator: r.op, value: r.right }));
+    }
+    return next;
+  }
+
+  const skipSave  = useRef(true);
+  const saveTimer = useRef(0);
+  useEffect(() => {
+    if (skipSave.current) { skipSave.current = false; return undefined; }
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      if (typeof window.__gbSaveTemplate === 'function') window.__gbSaveTemplate(buildTemplate());
+    }, 500);
+    return () => clearTimeout(saveTimer.current);
+  }, [name, enabled, vars, ruleData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const RulesComp = typeId === 'order' ? OrderRules : typeId === 'case' ? CaseRules : AccountRules;
 
@@ -284,15 +322,17 @@ function TemplateEditor({ tpl, onSave, onDelete }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ flex: '0 1 auto', minWidth: 0, fontSize: 14, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {tpl.name || 'New Template'}
+              {name || 'New Template'}
             </span>
             <Tag tone="neutral" size="xs" mono style={{ flexShrink: 0 }}>{typeId.toUpperCase()}</Tag>
             <SwitchTag on={enabled} label={enabled ? 'Enabled' : 'Disabled'} onClick={() => setEnabled(e => !e)} size="sm" style={{ flexShrink: 0 }} />
           </div>
           <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meta.desc}</div>
         </div>
-        <Btn variant="danger"  size="sm" icon={<I.trash />} onClick={onDelete}>Delete</Btn>
-        <Btn variant="primary" size="sm" icon={<I.check />} onClick={onSave}>Save</Btn>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0, fontSize: 10, fontWeight: 600, color: 'var(--gb-text-muted)', whiteSpace: 'nowrap' }}>
+          <Dot tone="brand" size={5} glow /> Saved automatically
+        </span>
+        <Btn variant="danger" size="sm" icon={<I.trash />} onClick={onDelete}>Delete</Btn>
       </div>
 
       {/* ── Callout ── */}
@@ -305,7 +345,7 @@ function TemplateEditor({ tpl, onSave, onDelete }) {
       {/* ── Meta row ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8, marginBottom: 12 }}>
         <Field label="Template name">
-          <Input value={tpl.name || ''} placeholder="e.g. Charge Error Follow-Up" size="sm" />
+          <Input value={name} placeholder="e.g. Charge Error Follow-Up" size="sm" onChange={setName} />
         </Field>
         <Field label="Recipient (to)">
           <Dropdown
@@ -325,6 +365,7 @@ function TemplateEditor({ tpl, onSave, onDelete }) {
               : typeId === 'case' ? tpl.caseRules
                 : tpl.rules
           }
+          onChange={setRuleData}
         />
       </div>
 
@@ -374,7 +415,6 @@ function TemplateEditorRoot() {
     <TemplateEditor
       key={tpl.id}
       tpl={tpl}
-      onSave={()   => { if (typeof window.saveTemplate   === 'function') window.saveTemplate(); }}
       onDelete={() => { if (typeof window.deleteTemplate === 'function') window.deleteTemplate(); }}
     />
   );
