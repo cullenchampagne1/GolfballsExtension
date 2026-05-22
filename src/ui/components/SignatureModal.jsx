@@ -63,7 +63,14 @@ export function SignatureModal({ onClose }) {
       }}
     >
       <div onClick={e => e.stopPropagation()}>
-        <ModalShell width={620}>
+        {/* Match the sibling editor modals (AddVariableModal / SmartModal):
+            560px wide, clamped to the viewport, height-capped with a
+            scrolling body — so it stays proportionate in the 860×700
+            editor popup window. */}
+        <ModalShell
+          width="min(560px, calc(100vw - 48px))"
+          style={{ maxHeight: 'calc(100vh - 48px)' }}
+        >
           <ModalHeader
             icon={<PenIcon />}
             title="Email Signature"
@@ -71,7 +78,10 @@ export function SignatureModal({ onClose }) {
             onClose={onClose}
           />
 
-          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{
+            padding: 16, display: 'flex', flexDirection: 'column', gap: 8,
+            flex: 1, minHeight: 0, overflow: 'auto',
+          }}>
             <div style={{
               fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
               letterSpacing: 0.8, color: 'var(--gb-text-muted)',
@@ -82,12 +92,12 @@ export function SignatureModal({ onClose }) {
               <RichTextEditor
                 initialHtml={initial}
                 onChange={html => { htmlRef.current = html; }}
-                minHeight={170}
+                minHeight={150}
                 placeholder="Type your signature — name, title, phone, etc."
               />
             ) : (
               <div style={{
-                minHeight: 200, borderRadius: 'var(--gb-r-md)',
+                minHeight: 150, borderRadius: 'var(--gb-r-md)',
                 border: '1px solid var(--gb-border-default)',
                 background: 'var(--gb-surface-canvas)',
               }} />
