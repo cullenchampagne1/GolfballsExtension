@@ -83,7 +83,7 @@ function varDef(v) {
 ──────────────────────────────────────────────────────────── */
 const TYPE_META = {
   order: {
-    icon: <RTE.doc />,
+    icon: <RTE.doc />, label: 'Order',
     desc: 'Shown in the popup on order pages. Variables resolve against live page DOM.',
     recipientOptions: [
       { label: 'Smart detect',   toType: 'auto' },
@@ -92,7 +92,7 @@ const TYPE_META = {
     ],
   },
   case: {
-    icon: <RTE.inbox />,
+    icon: <RTE.inbox />, label: 'Case',
     desc: 'Shown in the case email modal. Matches From / Subject / Body of the inbound email.',
     recipientOptions: [
       { label: 'Reply to sender', toType: 'auto' },
@@ -101,7 +101,7 @@ const TYPE_META = {
     ],
   },
   account: {
-    icon: <RTE.user />,
+    icon: <RTE.user />, label: 'Account',
     desc: "Shown in the popup on account pages. Variables pull from the contact's Solr record.",
     recipientOptions: [
       { label: 'Contact email', toType: 'auto' },
@@ -109,6 +109,43 @@ const TYPE_META = {
     ],
   },
 };
+
+/* TypeTabs — segmented control to switch the current template's type.
+   Replaces the legacy <select id="f-tpl-type"> dropdown. */
+function TypeTabs({ value, onChange }) {
+  return (
+    <div style={{
+      display: 'flex', gap: 4, padding: 3, marginBottom: 12,
+      background: 'var(--gb-fill-subtle)',
+      border: '1px solid var(--gb-border-subtle)',
+      borderRadius: 'var(--gb-r-md)',
+    }}>
+      {Object.entries(TYPE_META).map(([id, m]) => {
+        const active = id === value;
+        return (
+          <button
+            key={id}
+            type="button"
+            onClick={() => onChange(id)}
+            style={{
+              flex: 1, padding: '6px 10px', borderRadius: 'var(--gb-r-sm)',
+              border: '1px solid ' + (active ? 'var(--gb-border-subtle)' : 'transparent'),
+              cursor: active ? 'default' : 'pointer',
+              background: active ? 'var(--gb-surface-canvas)' : 'transparent',
+              color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
+              fontFamily: 'var(--gb-font-sans)', fontSize: 11, fontWeight: 600,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              transition: 'all .12s',
+            }}
+          >
+            {React.cloneElement(m.icon, { size: 12 })}
+            {m.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 /* Map a stored toField → the recipient option index for a given type. */
 function recipientIndexFor(typeId, toField) {
@@ -136,8 +173,9 @@ function EmptyState() {
    Template editor — compact for ~700px panel
 ──────────────────────────────────────────────────────────── */
 function TemplateEditor({ tpl, onDelete }) {
-  const typeId = tpl.type === 'email' ? 'order' : (tpl.type || 'order');
-  const meta   = TYPE_META[typeId] || TYPE_META.order;
+  const initialType = tpl.type === 'email' ? 'order' : (tpl.type || 'order');
+  const [typeId, setTypeId] = useState(initialType);
+  const meta = TYPE_META[typeId] || TYPE_META.order;
 
   const [vars,     setVars]     = useState(() => convertVars(tpl));
   const [enabled,  setEnabled]  = useState(tpl.enabled !== false);
@@ -148,11 +186,21 @@ function TemplateEditor({ tpl, onDelete }) {
   const [resolvedMap, setResolvedMap] = useState({});
   const [smartFor, setSmartFor] = useState(null);
   const [showAdd,  setShowAdd]  = useState(false);
-  const [recipientIdx,  setRecipientIdx]  = useState(() => recipientIndexFor(typeId, tpl.toField));
+  const [recipientIdx,  setRecipientIdx]  = useState(() => recipientIndexFor(initialType, tpl.toField));
   const [toFieldValue, setToFieldValue] = useState(
     (tpl.toField && (tpl.toField.value || tpl.toField.selector)) || '',
   );
   const recipOpt = meta.recipientOptions[recipientIdx] || meta.recipientOptions[0];
+
+  // Switching template type resets recipient + rules (each type's options
+  // differ, and stale rule data would be written to the wrong storage key).
+  function changeType(newId) {
+    if (newId === typeId) return;
+    setTypeId(newId);
+    setRecipientIdx(0);
+    setToFieldValue('');
+    setRuleData(null);
+  }
 
   const handleSaveSmart = smart => {
     setVars(vs => vs.map(v => v.name === smartFor.name ? { ...v, smart } : v));
@@ -176,6 +224,7 @@ function TemplateEditor({ tpl, onDelete }) {
   function buildTemplate() {
     const next = {
       ...tpl,
+      type: typeId,
       name: name.trim() || 'Untitled',
       enabled, subject, body,
       updatedAt: Date.now(),
@@ -213,7 +262,7 @@ function TemplateEditor({ tpl, onDelete }) {
       if (typeof window.__gbSaveTemplate === 'function') window.__gbSaveTemplate(buildTemplate());
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [typeId, name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Live resolution ────────────────────────────────────────
      The editor window has no page DOM, so it asks the order /
@@ -258,6 +307,9 @@ function TemplateEditor({ tpl, onDelete }) {
 
   return (
     <div style={{ fontFamily: 'var(--gb-font-sans)', color: 'var(--gb-text-secondary)' }}>
+
+      {/* ── Type tabs — switches template type ── */}
+      <TypeTabs value={typeId} onChange={changeType} />
 
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>

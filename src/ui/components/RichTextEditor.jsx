@@ -82,14 +82,16 @@ function ensureStyle() {
       user-select: all;
     }
     .gb-rte-chip-name {
-      padding: 1px 7px;
+      padding: 0 6px;
       font-family: var(--gb-font-mono);
-      font-size: 12px; font-weight: 600;
+      /* Match surrounding text — chip total height ≈ RTE line-height,
+         so chips no longer push the line taller than other text. */
+      font-size: inherit; font-weight: 600;
       color: var(--gb-brand-label);
       cursor: default;
     }
     .gb-rte-chip-bolt {
-      padding: 0 5px;
+      padding: 0 4px;
       border-left: 1px solid var(--gb-brand-tint-border);
       color: var(--gb-brand-label);
       display: inline-flex; align-items: center;
@@ -97,7 +99,7 @@ function ensureStyle() {
       opacity: 0.55;
       transition: opacity .12s, background .12s;
     }
-    .gb-rte-chip-bolt svg { display: block; }
+    .gb-rte-chip-bolt svg { display: block; width: 0.9em; height: 0.9em; }
     .gb-rte-chip:hover .gb-rte-chip-bolt {
       opacity: 1;
       background: color-mix(in srgb, var(--gb-brand-label) 13%, transparent);
@@ -169,9 +171,13 @@ export function RichTextEditor({
 
   const ref        = useRef(null);
   const savedRange = useRef(null);
-  const [marks,   setMarks]   = useState({});
-  const [empty,   setEmpty]   = useState(true);
-  const [varMenu, setVarMenu] = useState(false);
+  const [marks,     setMarks]     = useState({});
+  const [empty,     setEmpty]     = useState(true);
+  const [varMenu,   setVarMenu]   = useState(false);
+  // Last-picked text + highlight colors — drive the toolbar swatches so
+  // the buttons reflect the current choice instead of a static muted color.
+  const [textColor, setTextColor] = useState('#7db82a');
+  const [bgColor,   setBgColor]   = useState('#fff170');
 
   /* Load content once on mount. */
   useEffect(() => {
@@ -215,7 +221,13 @@ export function RichTextEditor({
       sel.removeAllRanges();
       sel.addRange(savedRange.current);
     }
-    try { document.execCommand(cmd, false, value ?? null); } catch { /* noop */ }
+    try {
+      // styleWithCSS makes foreColor / hiliteColor write inline `style=`
+      // attrs instead of legacy <font> tags — without it, hiliteColor is
+      // a no-op in Chrome.
+      document.execCommand('styleWithCSS', false, true);
+      document.execCommand(cmd, false, value ?? null);
+    } catch { /* noop */ }
     saveSelection();
     refreshMarks();
     setEmpty(!ref.current.textContent.trim());
@@ -316,17 +328,39 @@ export function RichTextEditor({
             if (url) exec('createLink', url);
           })} />
           <Sep sz={sz} />
+          {/* Text color — A with a colored underbar tracking the choice */}
           <label title="Text color" style={{
             width: sz.btnW, height: sz.btnH, borderRadius: 4, cursor: 'pointer',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--gb-text-tertiary)', position: 'relative',
+            color: 'var(--gb-text-secondary)', position: 'relative',
           }}>
-            <span style={{ fontSize: 11, fontWeight: 800 }}>A</span>
-            <span style={{ position: 'absolute', bottom: 3, left: 6, right: 6, height: 3, borderRadius: 1, background: 'currentColor' }} />
+            <span style={{ fontSize: 11, fontWeight: 800, lineHeight: 1 }}>A</span>
+            <span style={{
+              position: 'absolute', bottom: 3, left: 5, right: 5, height: 3,
+              borderRadius: 1, background: textColor,
+            }} />
             <input
-              type="color" defaultValue="#7db82a"
+              type="color" value={textColor}
               onMouseDown={saveSelection}
-              onInput={e => exec('foreColor', e.target.value)}
+              onChange={e => { setTextColor(e.target.value); exec('foreColor', e.target.value); }}
+              style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
+            />
+          </label>
+          {/* Highlight — A wrapped in the chosen background color */}
+          <label title="Highlight color" style={{
+            width: sz.btnW, height: sz.btnH, borderRadius: 4, cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            position: 'relative',
+          }}>
+            <span style={{
+              fontSize: 10.5, fontWeight: 800, lineHeight: 1,
+              padding: '1px 3px', borderRadius: 2,
+              background: bgColor, color: '#1a1a1a',
+            }}>A</span>
+            <input
+              type="color" value={bgColor}
+              onMouseDown={saveSelection}
+              onChange={e => { setBgColor(e.target.value); exec('hiliteColor', e.target.value); }}
               style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
             />
           </label>
