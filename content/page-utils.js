@@ -98,17 +98,22 @@ let pickActive = false;
    * updates the floating tooltip with its text content and CSS selector.
    * @param {MouseEvent} e - The mouseover event.
    */
+  let _hoverTimer = null;
   function onHover(e) {
     if (isPickerUI(e.target)) return;
     if (hoveredEl) hoveredEl.classList.remove('__gb-hover');
     hoveredEl = e.target;
     hoveredEl.classList.add('__gb-hover');
+    const txt = getTextOf(hoveredEl).slice(0, 80);
     const tip = document.getElementById('__gb-tip');
     if (tip) {
-      const txt = getTextOf(hoveredEl).slice(0, 60);
       tip.textContent = `"${txt}" · ${generateSelector(hoveredEl)}`;
       tip.style.setProperty('display', 'block', 'important');
     }
+    clearTimeout(_hoverTimer);
+    _hoverTimer = setTimeout(() => {
+      chrome.runtime.sendMessage({ action: 'pickHover', text: txt });
+    }, 80);
   }
 
   /**

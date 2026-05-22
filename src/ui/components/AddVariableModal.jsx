@@ -41,30 +41,34 @@ const KIND_OPTIONS = {
 export function AddVariableModal({ typeId, onClose, onAdd }) {
   const [name,       setName]       = useState('');
   const [kind,       setKind]       = useState(SOURCE_KINDS[typeId]?.[0] ?? 'literal');
-  const [config,     setConfig]     = useState('');
-  const [picking,      setPicking]    = useState(false);
-  const [pickText,     setPickText]   = useState('');
+  const [config,       setConfig]       = useState('');
+  const [picking,      setPicking]      = useState(false);
+  const [hoverText,    setHoverText]    = useState('');
   const [liveResolved, setLiveResolved] = useState(null);
-  const [regexField,   setRegexField] = useState('body');
+  const [regexField,   setRegexField]   = useState('body');
 
   // Reset kind when typeId changes
   useEffect(() => {
     setKind(SOURCE_KINDS[typeId]?.[0] ?? 'literal');
     setConfig('');
     setPicking(false);
-    setPickText('');
+    setHoverText('');
   }, [typeId]);
 
-  // Wire pick mode: listen for pickResult in storage while picking is active
+  // Listen for pick result + real-time hover text while pick mode is active
   useEffect(() => {
-    if (!picking) return;
+    if (!picking) { setHoverText(''); return; }
     function onChanged(changes) {
-      if (!changes.pickResult) return;
-      const result = changes.pickResult.newValue;
-      if (result && result.fieldId === 'pick_addvar') {
-        setConfig(result.selector || '');
-        setPickText(result.text   || '');
-        setPicking(false);
+      if (changes.pickResult) {
+        const result = changes.pickResult.newValue;
+        if (result && result.fieldId === 'pick_addvar') {
+          setConfig(result.selector || '');
+          setPicking(false);
+          setHoverText('');
+        }
+      }
+      if (changes.pickHover) {
+        setHoverText(changes.pickHover.newValue?.text || '');
       }
     }
     chrome.storage.onChanged.addListener(onChanged);
@@ -73,8 +77,7 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
 
   function startPick() {
     setPicking(true);
-    setConfig('');
-    setPickText('');
+    setHoverText('');
     chrome.runtime.sendMessage({ action: 'startPick', fieldId: 'pick_addvar' });
   }
 
@@ -207,73 +210,50 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
 
           {kind === 'dom' && (
             <>
-              {!picking && (
-                <>
-                  <Field label="CSS selector" hint="First matching element's .textContent is used">
-                    <Input
-                      value={config}
-                      placeholder=".order-total .amount"
-                      mono
-                      leading={<I.search />}
-                      onChange={v => setConfig(v)}
-                    />
-                  </Field>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{
-                      flex: 1, padding: '10px 12px',
-                      background: 'var(--gb-fill-subtle)',
-                      border: '1px solid var(--gb-border-subtle)',
-                      borderRadius: 'var(--gb-r-sm)',
-                      fontSize: 11, color: 'var(--gb-text-tertiary)',
-                      display: 'flex', alignItems: 'center', gap: 9,
-                    }}>
-                      <Dot tone={liveResolved ? 'brand' : config ? 'warning' : 'muted'} glow={!!liveResolved} size={6} />
-                      <span style={{ flex: 1 }}>
-                        {liveResolved
-                          ? <><strong style={{ color: 'var(--gb-brand-label)' }}>1 match</strong> on the active page</>
-                          : config
-                            ? <span style={{ color: 'var(--gb-warning-fg)' }}>No match on the active page</span>
-                            : 'Enter a selector to test it live'
-                        }
-                      </span>
-                      {liveResolved && (
-                        <Tag tone="brand" size="xs">{liveResolved}</Tag>
-                      )}
-                    </div>
-                    <Btn variant="tinted" size="sm" icon={<PickerIcon />} onClick={startPick}>
-                      Pick from page
-                    </Btn>
-                  </div>
-                </>
-              )}
-
-              {picking && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={T.base}
-                  style={{
-                    padding: '14px 16px',
-                    background: 'var(--gb-brand-tint-soft)',
-                    border: '1px solid var(--gb-brand-tint-border)',
-                    borderRadius: 'var(--gb-r-md)',
-                    display: 'flex', flexDirection: 'column', gap: 10,
-                  }}
+              <Field label="CSS selector" hint="First matching element's .textContent is used">
+                <Input
+                  value={config}
+                  placeholder=".order-total .amount"
+                  mono
+                  leading={<I.search />}
+                  onChange={v => setConfig(v)}
+                />
+              </Field>
+              <div style={{ display: 'flex', alignItems: 'stretch', gap: 8 }}>
+                <div style={{
+                  flex: 1, padding: '8px 10px',
+                  background: 'var(--gb-fill-subtle)',
+                  border: '1px solid ' + (picking ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-subtle)'),
+                  borderRadius: 'var(--gb-r-sm)',
+                  fontSize: 11, display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <Dot
+                    tone={picking ? 'brand' : liveResolved ? 'brand' : config ? 'warning' : 'muted'}
+                    glow={picking || !!liveResolved}
+                    size={6}
+                  />
+                  <span style={{ flex: 1, color: 'var(--gb-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {picking
+                      ? hoverText
+                        ? <span style={{ color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 10.5 }}>"{hoverText}"</span>
+                        : <span style={{ fontStyle: 'italic' }}>Hover an element on the page…</span>
+                      : liveResolved
+                        ? <><strong style={{ color: 'var(--gb-brand-label)' }}>1 match</strong> · <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 10.5 }}>{liveResolved}</span></>
+                        : config
+                          ? <span style={{ color: 'var(--gb-warning-fg)' }}>No match on active page</span>
+                          : 'Enter a selector or pick from page'
+                    }
+                  </span>
+                </div>
+                <Btn
+                  variant={picking ? 'ghost' : 'tinted'}
+                  size="sm"
+                  icon={<PickerIcon />}
+                  onClick={picking ? cancelPick : startPick}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Dot tone="brand" glow size={7} />
-                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-brand-label)' }}>
-                      Waiting for pick…
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--gb-text-secondary)', lineHeight: 1.6 }}>
-                    Switch to your order tab and click any element. The selector will be captured automatically.
-                  </div>
-                  <div>
-                    <Btn variant="ghost" size="sm" onClick={cancelPick}>Cancel</Btn>
-                  </div>
-                </motion.div>
-              )}
+                  {picking ? 'Cancel' : 'Pick from page'}
+                </Btn>
+              </div>
             </>
           )}
 

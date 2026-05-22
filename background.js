@@ -548,6 +548,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
 
+  // ── Hover preview during pick mode ────────────────────────────
+  if (msg.action === 'pickHover') {
+    chrome.storage.local.set({ pickHover: { text: msg.text, ts: Date.now() } });
+    return false;
+  }
+
   // ── Keepalive ping — prevents service worker from going idle during campaign delays ──
   if (msg.action === 'ping') {
     sendResponse({ ok: true });
