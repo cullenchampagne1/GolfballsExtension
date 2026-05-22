@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { T, TINT } from '../shared.jsx';
 import { I, Icon } from '../icons.jsx';
@@ -81,7 +82,9 @@ export function SmartModal({ variable, onClose, onSave }) {
     v !== null && v !== undefined && v !== '' && v !== false,
   ).length;
 
-  return (
+  // Portal to <body> so the overlay covers the whole window rather than
+  // being clipped inside the editor pane.
+  return createPortal(
     <motion.div
       key="smart-backdrop"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -92,7 +95,7 @@ export function SmartModal({ variable, onClose, onSave }) {
         background: 'var(--gb-backdrop)',
         backdropFilter: 'blur(8px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 200,
+        zIndex: 2147483000,
       }}
     >
       <motion.div
@@ -187,7 +190,7 @@ export function SmartModal({ variable, onClose, onSave }) {
                   value={smart.fallback || ''}
                   placeholder="e.g. pending · unknown · 0"
                   leading={<BoltIcon />}
-                  onChange={e => upd({ fallback: e.target.value })}
+                  onChange={v => upd({ fallback: v })}
                 />
               </Field>
               {typeof smart.fallback === 'string' && smart.fallback.length > 0 && (
@@ -334,6 +337,7 @@ export function SmartModal({ variable, onClose, onSave }) {
           <Btn variant="primary" icon={<I.check />} onClick={() => onSave?.(smart)}>Save</Btn>
         </div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body,
   );
 }

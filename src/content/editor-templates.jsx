@@ -163,6 +163,10 @@ function TemplateEditor({ tpl, onDelete }) {
     setShowAdd(false);
   };
   const handleDeleteVar = name => setVars(vs => vs.filter(v => v.name !== name));
+  const openSmartByName = name => {
+    const v = vars.find(x => x.name === name);
+    if (v) setSmartFor(v);
+  };
 
   /* ── Auto-save ──────────────────────────────────────────────
      No Save button: the editor merges its state onto the opened
@@ -322,6 +326,7 @@ function TemplateEditor({ tpl, onDelete }) {
           singleLine
           initialHtml={subject}
           onChange={setSubject}
+          onChipClick={openSmartByName}
           variables={vars}
           placeholder="Email subject line"
         />
@@ -333,9 +338,10 @@ function TemplateEditor({ tpl, onDelete }) {
         <RichTextEditor
           initialHtml={body}
           onChange={setBody}
+          onChipClick={openSmartByName}
           variables={vars}
           minHeight={180}
-          placeholder="Write the email body — format with the toolbar, insert variables from the menu."
+          placeholder="Write the email body — format with the toolbar, insert variables from the menu. Click a variable chip to set fallbacks, transforms, or formatting."
         />
       </div>
 

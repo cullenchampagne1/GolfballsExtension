@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import { T } from '../shared.jsx';
 import { I, Icon } from '../icons.jsx';
@@ -47,14 +48,16 @@ export function SignatureModal({ onClose }) {
     });
   }
 
-  return (
+  // Portal to <body> so the overlay escapes the editor pane's layout /
+  // any transformed ancestor and covers the whole window.
+  return createPortal(
     <motion.div
       key="sig-backdrop"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={T.base}
       onClick={onClose}
       style={{
-        position: 'fixed', inset: 0, zIndex: 220,
+        position: 'fixed', inset: 0, zIndex: 2147483000,
         background: 'var(--gb-backdrop)', backdropFilter: 'blur(6px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
       }}
@@ -104,6 +107,7 @@ export function SignatureModal({ onClose }) {
           </ModalFooter>
         </ModalShell>
       </div>
-    </motion.div>
+    </motion.div>,
+    document.body,
   );
 }
