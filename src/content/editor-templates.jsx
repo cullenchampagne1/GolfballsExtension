@@ -3,11 +3,12 @@ import { createRoot } from 'react-dom/client';
 import { AnimatePresence } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import {
-  Btn, IconBtn, Tag,
+  Btn, Tag,
   Input, Dropdown, Field,
-  SwitchTag, SectionLabel, Card,
+  SwitchTag,
   I, Icon,
-  BodyVar, SmartModal, AddVariableModal,
+  SmartModal, AddVariableModal, SignatureModal,
+  RichTextEditor,
   VariableTable, OrderRules, CaseRules, AccountRules,
 } from '../ui/index.js';
 
@@ -18,26 +19,11 @@ import {
    so this component adds NO extra horizontal padding.
 ───────────────────────────────────────────────────────────── */
 
-/* ── Extra icons ──────────────────────────────────────────── */
+/* ── Template-type icons ──────────────────────────────────── */
 const RTE = {
-  bold:      p => <Icon {...p}><path d="M6 4h8a4 4 0 014 4 4 4 0 01-4 4H6z"/><path d="M6 12h9a4 4 0 014 4 4 4 0 01-4 4H6z"/></Icon>,
-  italic:    p => <Icon {...p}><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></Icon>,
-  underline: p => <Icon {...p}><path d="M6 3v7a6 6 0 0012 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></Icon>,
-  strike:    p => <Icon {...p}><path d="M16 4H9a3 3 0 00-2.83 4M14 12a4 4 0 010 8H6"/><line x1="4" y1="12" x2="20" y2="12"/></Icon>,
-  text:      p => <Icon {...p}><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></Icon>,
-  paint:     p => <Icon {...p}><path d="M19 7v4H5V7"/><rect x="3" y="11" width="18" height="10" rx="2"/></Icon>,
-  listNum:   p => <Icon {...p}><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4M4 10h2M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></Icon>,
-  fontSize:  p => <Icon {...p}><polyline points="4 7 4 4 20 4 20 7"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="9" y1="20" x2="15" y2="20"/></Icon>,
-  alignL:    p => <Icon {...p}><line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/></Icon>,
-  alignC:    p => <Icon {...p}><line x1="18" y1="10" x2="6" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="18" y1="18" x2="6" y2="18"/></Icon>,
-  alignR:    p => <Icon {...p}><line x1="21" y1="10" x2="7" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="21" y1="18" x2="7" y2="18"/></Icon>,
-  list:      p => <Icon {...p}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></Icon>,
-  link:      p => <Icon {...p}><path d="M10 13a5 5 0 007 0l4-4a5 5 0 00-7-7l-1 1"/><path d="M14 11a5 5 0 00-7 0l-4 4a5 5 0 007 7l1-1"/></Icon>,
-  quote:     p => <Icon {...p}><path d="M3 7c0-2 1-3 3-3v3c0 1 1 2 1 3v2H3zM14 7c0-2 1-3 3-3v3c0 1 1 2 1 3v2h-5z"/></Icon>,
-  bolt:      p => <Icon {...p}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></Icon>,
-  doc:       p => <Icon {...p}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></Icon>,
-  inbox:     p => <Icon {...p}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></Icon>,
-  user:      p => <Icon {...p}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></Icon>,
+  doc:   p => <Icon {...p}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></Icon>,
+  inbox: p => <Icon {...p}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></Icon>,
+  user:  p => <Icon {...p}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></Icon>,
 };
 
 /* ────────────────────────────────────────────────────────────
@@ -93,137 +79,43 @@ function varDef(v) {
 }
 
 /* ────────────────────────────────────────────────────────────
-   Render a text string with {{varname}} tokens as BodyVar chips
-──────────────────────────────────────────────────────────── */
-function renderTokens(text, vars, onOpenSmart) {
-  if (!text) return null;
-  const parts = String(text).split(/({{[^}]+}})/g);
-  return parts.map((part, i) => {
-    const m = part.match(/^{{([^}]+)}}$/);
-    if (m) {
-      const name   = m[1].trim();
-      const varObj = vars.find(v => v.name === name) || { name, status: 'miss', smart: {} };
-      return <BodyVar key={i} v={varObj} onOpenSmart={onOpenSmart} />;
-    }
-    return <React.Fragment key={i}>{part}</React.Fragment>;
-  });
-}
-
-/* ────────────────────────────────────────────────────────────
-   Convert stored HTML body to paragraphs with BodyVar chips
-──────────────────────────────────────────────────────────── */
-function renderBodyHtml(html, vars, onOpenSmart) {
-  if (!html) return <span style={{ color: 'var(--gb-text-ghost)', fontSize: 11 }}>No body yet — add content above.</span>;
-
-  // Strip HTML tags to get paragraphs
-  const tmp = document.createElement('div');
-  tmp.innerHTML = html;
-  const blocks = [];
-
-  // Collect paragraphs / line breaks
-  const nodes = tmp.childNodes.length ? tmp.childNodes : [tmp];
-  nodes.forEach(node => {
-    const txt = node.textContent || '';
-    if (txt.trim()) blocks.push(txt.trim());
-  });
-
-  if (!blocks.length) {
-    const plain = tmp.textContent.trim();
-    if (!plain) return <span style={{ color: 'var(--gb-text-ghost)', fontSize: 11 }}>Empty body.</span>;
-    return <p style={{ margin: '0 0 8px', fontSize: 11.5, lineHeight: 1.6 }}>{renderTokens(plain, vars, onOpenSmart)}</p>;
-  }
-
-  return blocks.map((block, i) => (
-    <p key={i} style={{ margin: i < blocks.length - 1 ? '0 0 8px' : 0, fontSize: 11.5, lineHeight: 1.6 }}>
-      {renderTokens(block, vars, onOpenSmart)}
-    </p>
-  ));
-}
-
-/* ────────────────────────────────────────────────────────────
    Type metadata
 ──────────────────────────────────────────────────────────── */
 const TYPE_META = {
   order: {
     icon: <RTE.doc />,
     desc: 'Shown in the popup on order pages. Variables resolve against live page DOM.',
-    callout: { tone: 'info',  title: 'Smart triggers', body: 'Activates when auto-match rules pass on an order page.' },
-    recipientOptions: ['Smart detect', 'Pick from page', 'Fixed email'],
+    recipientOptions: [
+      { label: 'Smart detect',   toType: 'auto' },
+      { label: 'Pick from page', toType: 'selector' },
+      { label: 'Fixed email',    toType: 'literal' },
+    ],
   },
   case: {
     icon: <RTE.inbox />,
     desc: 'Shown in the case email modal. Matches From / Subject / Body of the inbound email.',
-    callout: { tone: 'brand', title: 'Case reply template', body: 'Match rules and variables both run against the inbound email.' },
-    recipientOptions: ['Reply to sender', 'Pick from case', 'Fixed email'],
+    recipientOptions: [
+      { label: 'Reply to sender', toType: 'auto' },
+      { label: 'Pick from case',  toType: 'selector' },
+      { label: 'Fixed email',     toType: 'literal' },
+    ],
   },
   account: {
     icon: <RTE.user />,
     desc: "Shown in the popup on account pages. Variables pull from the contact's Solr record.",
-    callout: { tone: 'info',  title: 'Account conditions', body: "Variables pull from the contact's live Solr record." },
-    recipientOptions: ['Contact email', 'Account email', 'Fixed email'],
+    recipientOptions: [
+      { label: 'Contact email', toType: 'auto' },
+      { label: 'Fixed email',   toType: 'literal' },
+    ],
   },
 };
 
-/* ────────────────────────────────────────────────────────────
-   Compact RTE toolbar + body surface
-──────────────────────────────────────────────────────────── */
-function TBtn({ icon, label, active, onClick, mono }) {
-  return (
-    <button onClick={onClick} style={{
-      height: 24, padding: '0 5px', borderRadius: 4,
-      background: active ? 'var(--gb-brand-tint-medium)' : 'transparent',
-      color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
-      border: 'none', cursor: 'pointer',
-      display: 'inline-flex', alignItems: 'center', gap: 3,
-      fontFamily: mono ? 'var(--gb-font-mono)' : 'inherit',
-      fontSize: 10.5, fontWeight: 600,
-    }}>
-      {icon && React.cloneElement(icon, { size: 11 })}
-      {label && <span>{label}</span>}
-    </button>
-  );
-}
-const Sep = () => <div style={{ width: 1, height: 14, background: 'var(--gb-border-subtle)', margin: '0 3px' }} />;
-
-function EditorPane({ body, align, setAlign, marks, setMarks }) {
-  const toggle = k => setMarks(m => ({ ...m, [k]: !m[k] }));
-  return (
-    <div style={{ border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'var(--gb-surface-canvas)' }}>
-      <div style={{ padding: '5px 8px', background: 'var(--gb-surface-modal)', borderBottom: '1px solid var(--gb-border-subtle)', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-        <TBtn label="Para" /><TBtn label="Geist" mono /><TBtn label="12px" mono icon={<RTE.fontSize />} />
-        <Sep />
-        <TBtn icon={<RTE.bold />}      active={marks.bold}      onClick={() => toggle('bold')} />
-        <TBtn icon={<RTE.italic />}    active={marks.italic}    onClick={() => toggle('italic')} />
-        <TBtn icon={<RTE.underline />} active={marks.underline} onClick={() => toggle('underline')} />
-        <TBtn icon={<RTE.strike />}    active={marks.strike}    onClick={() => toggle('strike')} />
-        <Sep />
-        <button title="Text color" style={{ height: 24, padding: '0 5px', borderRadius: 4, background: 'transparent', color: 'var(--gb-text-tertiary)', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-          <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-            <RTE.text size={11} />
-            <span style={{ position: 'absolute', bottom: -1, left: 0, right: 0, height: 2, background: 'var(--gb-brand-label)', borderRadius: 1 }} />
-          </span>
-          <I.chevd size={8} style={{ opacity: .6 }} />
-        </button>
-        <button title="Highlight" style={{ height: 24, padding: '0 5px', borderRadius: 4, background: 'transparent', color: 'var(--gb-text-tertiary)', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-          <RTE.paint size={11} />
-          <I.chevd size={8} style={{ opacity: .6 }} />
-        </button>
-        <Sep />
-        <div style={{ display: 'inline-flex', padding: 1, borderRadius: 4, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)' }}>
-          {[{ id: 'left', icon: <RTE.alignL /> }, { id: 'center', icon: <RTE.alignC /> }, { id: 'right', icon: <RTE.alignR /> }].map(o => (
-            <button key={o.id} onClick={() => setAlign(o.id)} style={{ width: 20, height: 18, borderRadius: 3, background: align === o.id ? 'var(--gb-brand-tint-medium)' : 'transparent', color: align === o.id ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-              {React.cloneElement(o.icon, { size: 9 })}
-            </button>
-          ))}
-        </div>
-        <Sep />
-        <TBtn icon={<RTE.list />} /><TBtn icon={<RTE.listNum />} /><TBtn icon={<RTE.quote />} /><TBtn icon={<RTE.link />} />
-      </div>
-      <div style={{ padding: '16px 20px 20px', background: 'var(--gb-surface-canvas)', color: 'var(--gb-text-secondary)', textAlign: align, minHeight: 160 }}>
-        {body}
-      </div>
-    </div>
-  );
+/* Map a stored toField → the recipient option index for a given type. */
+function recipientIndexFor(typeId, toField) {
+  const opts = (TYPE_META[typeId] || TYPE_META.order).recipientOptions;
+  const t = (toField && toField.type) || 'auto';
+  const i = opts.findIndex(o => o.toType === t);
+  return i >= 0 ? i : 0;
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -250,13 +142,17 @@ function TemplateEditor({ tpl, onDelete }) {
   const [vars,     setVars]     = useState(() => convertVars(tpl));
   const [enabled,  setEnabled]  = useState(tpl.enabled !== false);
   const [name,     setName]     = useState(tpl.name || '');
+  const [subject,  setSubject]  = useState(tpl.subject || '');
+  const [body,     setBody]     = useState(tpl.body || '');
   const [ruleData, setRuleData] = useState(null);
   const [resolvedMap, setResolvedMap] = useState({});
-  const [align,    setAlign]    = useState('left');
-  const [marks,    setMarks]    = useState({ bold: false, italic: false, underline: false, strike: false });
   const [smartFor, setSmartFor] = useState(null);
   const [showAdd,  setShowAdd]  = useState(false);
-  const [recipient, setRecipient] = useState(meta.recipientOptions[0]);
+  const [recipientIdx,  setRecipientIdx]  = useState(() => recipientIndexFor(typeId, tpl.toField));
+  const [toFieldValue, setToFieldValue] = useState(
+    (tpl.toField && (tpl.toField.value || tpl.toField.selector)) || '',
+  );
+  const recipOpt = meta.recipientOptions[recipientIdx] || meta.recipientOptions[0];
 
   const handleSaveSmart = smart => {
     setVars(vs => vs.map(v => v.name === smartFor.name ? { ...v, smart } : v));
@@ -271,10 +167,19 @@ function TemplateEditor({ tpl, onDelete }) {
   /* ── Auto-save ──────────────────────────────────────────────
      No Save button: the editor merges its state onto the opened
      template and persists (debounced) on every change. Fields the
-     React editor doesn't yet own (subject, body, type, toField …)
-     pass through untouched via the {...tpl} spread. */
+     React editor doesn't own (type, presetTaskId …) pass through
+     untouched via the {...tpl} spread. */
   function buildTemplate() {
-    const next = { ...tpl, name: name.trim() || 'Untitled', enabled, updatedAt: Date.now() };
+    const next = {
+      ...tpl,
+      name: name.trim() || 'Untitled',
+      enabled, subject, body,
+      updatedAt: Date.now(),
+    };
+    // Recipient selection → stored toField.
+    if (recipOpt.toType === 'literal')       next.toField = { type: 'literal',  value: toFieldValue };
+    else if (recipOpt.toType === 'selector') next.toField = { type: 'selector', selector: toFieldValue };
+    else                                     next.toField = { type: 'auto' };
     if (typeId === 'case') {
       next.caseVars = vars;
     } else {
@@ -304,7 +209,7 @@ function TemplateEditor({ tpl, onDelete }) {
       if (typeof window.__gbSaveTemplate === 'function') window.__gbSaveTemplate(buildTemplate());
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [name, enabled, vars, ruleData]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Live resolution ────────────────────────────────────────
      The editor window has no page DOM, so it asks the order /
@@ -369,19 +274,34 @@ function TemplateEditor({ tpl, onDelete }) {
       </div>
 
       {/* ── Meta row ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 8, marginBottom: recipOpt.toType === 'auto' ? 12 : 8 }}>
         <Field label="Template name">
           <Input value={name} placeholder="e.g. Charge Error Follow-Up" size="sm" onChange={setName} />
         </Field>
         <Field label="Recipient (to)">
           <Dropdown
             size="sm"
-            value={recipient}
-            options={meta.recipientOptions.map((o) => ({ id: o, label: o }))}
-            onChange={setRecipient}
+            value={recipientIdx}
+            options={meta.recipientOptions.map((o, i) => ({ id: i, label: o.label }))}
+            onChange={(id) => setRecipientIdx(id)}
           />
         </Field>
       </div>
+
+      {/* ── Conditional recipient value ── */}
+      {recipOpt.toType !== 'auto' && (
+        <div style={S.mb12}>
+          <Field label={recipOpt.toType === 'literal' ? 'Fixed recipient email' : 'Recipient selector (CSS)'}>
+            <Input
+              value={toFieldValue}
+              size="sm"
+              mono={recipOpt.toType === 'selector'}
+              placeholder={recipOpt.toType === 'literal' ? 'name@example.com' : '.customer-email'}
+              onChange={setToFieldValue}
+            />
+          </Field>
+        </div>
+      )}
 
       {/* ── Rules — imports the template's saved rules/conditions ── */}
       <div style={S.mb14}>
@@ -398,24 +318,36 @@ function TemplateEditor({ tpl, onDelete }) {
       {/* ── Subject ── */}
       <div style={S.mb12}>
         <span style={S.label}>Subject</span>
-        <div style={{ padding: '7px 10px', background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)', fontSize: 12, color: 'var(--gb-text-primary)', fontWeight: 600, lineHeight: 1.5, minHeight: 32 }}>
-          {renderTokens(tpl.subject || '', displayVars, setSmartFor)}
-        </div>
+        <RichTextEditor
+          singleLine
+          initialHtml={subject}
+          onChange={setSubject}
+          variables={vars}
+          placeholder="Email subject line"
+        />
       </div>
 
       {/* ── Body ── */}
       <div style={S.mb12}>
         <span style={S.label}>Email body</span>
-        <EditorPane
-          body={renderBodyHtml(tpl.body || '', displayVars, setSmartFor)}
-          align={align} setAlign={setAlign}
-          marks={marks} setMarks={setMarks}
+        <RichTextEditor
+          initialHtml={body}
+          onChange={setBody}
+          variables={vars}
+          minHeight={180}
+          placeholder="Write the email body — format with the toolbar, insert variables from the menu."
         />
       </div>
 
       {/* ── Variables ── */}
       <div style={S.mb12}>
-        <VariableTable typeId={typeId} vars={displayVars} onAdd={() => setShowAdd(true)} onDelete={handleDeleteVar} />
+        <VariableTable
+          typeId={typeId}
+          vars={displayVars}
+          onAdd={() => setShowAdd(true)}
+          onDelete={handleDeleteVar}
+          onOpenSmart={setSmartFor}
+        />
       </div>
 
       <AnimatePresence>
@@ -429,20 +361,32 @@ function TemplateEditor({ tpl, onDelete }) {
 /* ── Root ───────────────────────────────────────────────── */
 function TemplateEditorRoot() {
   const [tpl, setTpl] = useState(null);
+  const [showSig, setShowSig] = useState(false);
 
   useEffect(() => {
-    window.__gbOpenTemplate = template => setTpl({ ...template });
-    return () => { delete window.__gbOpenTemplate; };
+    window.__gbOpenTemplate  = template => setTpl({ ...template });
+    window.__gbOpenSignature = () => setShowSig(true);
+    return () => {
+      delete window.__gbOpenTemplate;
+      delete window.__gbOpenSignature;
+    };
   }, []);
 
-  if (!tpl) return <EmptyState />;
-
   return (
-    <TemplateEditor
-      key={tpl.id}
-      tpl={tpl}
-      onDelete={() => { if (typeof window.deleteTemplate === 'function') window.deleteTemplate(); }}
-    />
+    <>
+      {tpl ? (
+        <TemplateEditor
+          key={tpl.id}
+          tpl={tpl}
+          onDelete={() => { if (typeof window.deleteTemplate === 'function') window.deleteTemplate(); }}
+        />
+      ) : (
+        <EmptyState />
+      )}
+      <AnimatePresence>
+        {showSig && <SignatureModal key="sig" onClose={() => setShowSig(false)} />}
+      </AnimatePresence>
+    </>
   );
 }
 

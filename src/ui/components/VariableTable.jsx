@@ -23,12 +23,13 @@ const COL_GRID = '1.2fr 74px 1.3fr 1.3fr 76px 30px';
  * Columns: name · kind · source config · resolved value · status · delete.
  *
  * Props:
- *   typeId   'order'|'case'|'account'
- *   vars     Variable[]
- *   onAdd    () => void    — fires when the dashed Add row is clicked
- *   onDelete (name) => void
+ *   typeId      'order'|'case'|'account'
+ *   vars        Variable[]
+ *   onAdd       () => void      — fires when the dashed Add row is clicked
+ *   onDelete    (name) => void
+ *   onOpenSmart (variable) => void — opens the smart-options modal
  */
-export function VariableTable({ typeId, vars = [], onAdd, onDelete }) {
+export function VariableTable({ typeId, vars = [], onAdd, onDelete, onOpenSmart }) {
   return (
     <div style={{
       border: '1px solid var(--gb-border-default)',
@@ -103,8 +104,17 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete }) {
               background: isMissNoFallback ? 'var(--gb-warning-tint-soft)' : 'transparent',
             }}
           >
-            {/* Name */}
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+            {/* Name — click to open smart options */}
+            <button
+              type="button"
+              title="Smart options — fallback, transform, formatting"
+              onClick={() => onOpenSmart?.(v)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0,
+                background: 'transparent', border: 'none', padding: 0,
+                cursor: onOpenSmart ? 'pointer' : 'default', textAlign: 'left',
+              }}
+            >
               <span style={{
                 fontFamily: 'var(--gb-font-mono)',
                 color: 'var(--gb-brand-label)',
@@ -114,7 +124,7 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete }) {
                 {`{{${v.name}}}`}
               </span>
               {hasSmart && <BoltIcon size={10} style={{ color: 'var(--gb-warning-fg)', flexShrink: 0 }} />}
-            </div>
+            </button>
 
             {/* Kind */}
             <div><KindPill kind={v.kind} /></div>

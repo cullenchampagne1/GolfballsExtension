@@ -4285,6 +4285,11 @@ function toPlainText(html) {
 let _signatureEditorOpen = false;
 
 function openSignatureEditor() {
+  // Prefer the React signature modal when the template editor bundle is loaded.
+  if (typeof window.__gbOpenSignature === 'function') {
+    window.__gbOpenSignature();
+    return;
+  }
   if (_signatureEditorOpen) return;
   _signatureEditorOpen = true;
 

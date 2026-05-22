@@ -20,6 +20,7 @@ export { NumberDisplay } from './components/NumberDisplay.jsx';
 
 export { Input } from './components/Input.jsx';
 export { Textarea } from './components/Textarea.jsx';
+export { RichTextEditor } from './components/RichTextEditor.jsx';
 export { Dropdown } from './components/Dropdown.jsx';
 export { ColorField } from './components/ColorField.jsx';
 export { Field } from './components/Field.jsx';
@@ -53,6 +54,7 @@ export { ConditionCard } from './components/ConditionCard.jsx';
 export { VariableTable } from './components/VariableTable.jsx';
 export { SmartModal } from './components/SmartModal.jsx';
 export { AddVariableModal, SOURCE_KINDS } from './components/AddVariableModal.jsx';
+export { SignatureModal } from './components/SignatureModal.jsx';
 
 /* ── Type-specific rule composites ──────────────────────────── */
 export { OrderRules } from './components/template-rules/OrderRules.jsx';
