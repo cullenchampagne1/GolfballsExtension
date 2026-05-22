@@ -112,18 +112,27 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onOpenSmart 
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0,
                 background: 'transparent', border: 'none', padding: 0,
+                // Buttons don't inherit font — without this the name renders
+                // at the UA default (~13px), dwarfing the rest of the row.
+                font: 'inherit',
                 cursor: onOpenSmart ? 'pointer' : 'default', textAlign: 'left',
               }}
             >
               <span style={{
                 fontFamily: 'var(--gb-font-mono)',
+                fontSize: 10.5,
                 color: 'var(--gb-brand-label)',
                 fontWeight: 600,
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               }}>
                 {`{{${v.name}}}`}
               </span>
-              {hasSmart && <BoltIcon size={10} style={{ color: 'var(--gb-warning-fg)', flexShrink: 0 }} />}
+              {/* Always shown — the affordance to open the smart-options
+                  submenu. Amber once rules exist, muted otherwise. */}
+              <BoltIcon size={10} style={{
+                color: hasSmart ? 'var(--gb-warning-fg)' : 'var(--gb-text-ghost)',
+                flexShrink: 0,
+              }} />
             </button>
 
             {/* Kind */}

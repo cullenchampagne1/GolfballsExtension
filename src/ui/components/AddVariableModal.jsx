@@ -31,6 +31,66 @@ const KIND_OPTIONS = {
   literal: { icon: <I.edit />,    label: 'Literal',  desc: 'Fixed string' },
 };
 
+/* Built-in variable paths offered per template type. order/case resolve via
+   the smart detectors; account pulls from the page's contact/account fields
+   (see smartPageVariables in content/smart-detection.js). */
+const BUILTIN_PATHS = {
+  order: [
+    { id: 'email',                   label: 'Customer email' },
+    { id: 'order_number',            label: 'Order number' },
+    { id: 'payment_link',            label: 'Payment link' },
+    { id: 'oos_item',                label: 'Out-of-stock item(s)' },
+    { id: 'recommended_replacement', label: 'Recommended replacement' },
+  ],
+  case: [
+    { id: 'email',        label: 'Sender email' },
+    { id: 'order_number', label: 'Order number' },
+    { id: 'payment_link', label: 'Payment link' },
+  ],
+  account: [
+    { id: 'firstName',      label: 'First name',           group: 'Contact' },
+    { id: 'lastName',       label: 'Last name',            group: 'Contact' },
+    { id: 'middleInit',     label: 'Middle initial',       group: 'Contact' },
+    { id: 'fullName',       label: 'Full name',            group: 'Contact' },
+    { id: 'jobTitle',       label: 'Job title',            group: 'Contact' },
+    { id: 'contactEmail',   label: 'Contact email',        group: 'Contact' },
+    { id: 'phoneNumber',    label: 'Phone number',         group: 'Contact' },
+    { id: 'zipCode',        label: 'Zip code',             group: 'Contact' },
+    { id: 'contactId',      label: 'Contact ID',           group: 'Contact' },
+    { id: 'linkedIn',       label: 'LinkedIn URL',         group: 'Contact' },
+    { id: 'companyName',    label: 'Company name',         group: 'Account' },
+    { id: 'accountName',    label: 'Account name',         group: 'Account' },
+    { id: 'accountId',      label: 'Account ID',           group: 'Account' },
+    { id: 'webAddress',     label: 'Web address',          group: 'Account' },
+    { id: 'mainAddress',    label: 'Address',              group: 'Account' },
+    { id: 'mainCity',       label: 'City',                 group: 'Account' },
+    { id: 'mainState',      label: 'State',                group: 'Account' },
+    { id: 'mainZip',        label: 'Postal code',          group: 'Account' },
+    { id: 'mainCountry',    label: 'Country',              group: 'Account' },
+    { id: 'salesRep',       label: 'Sales rep',            group: 'Account' },
+    { id: 'userType',       label: 'User type',            group: 'Account' },
+    { id: 'createdBy',      label: 'Created by',           group: 'Account' },
+    { id: 'creditApproved', label: 'Credit approved date', group: 'Account' },
+    { id: 'creditReqs',     label: 'Credit requirements',  group: 'Account' },
+    { id: 'orderCount',     label: 'Order count',          group: 'Stats' },
+    { id: 'totalRevenue',   label: 'Total revenue',        group: 'Stats' },
+    { id: 'ytdRevenue',     label: 'YTD revenue',          group: 'Stats' },
+    { id: 'priorYearRev',   label: 'Prior-year revenue',   group: 'Stats' },
+    { id: 'avgOrderSize',   label: 'Avg order size',       group: 'Stats' },
+    { id: 'lastOrderDate',  label: 'Last order date',      group: 'Stats' },
+    { id: 'creationDate',   label: 'Creation date',        group: 'Stats' },
+    { id: 'nextTaskName',   label: 'Next task',            group: 'Tasks' },
+    { id: 'nextTaskDue',    label: 'Next task due',        group: 'Tasks' },
+  ],
+};
+
+/* Inbound-email field a regex runs against. */
+const REGEX_FIELDS = [
+  { id: 'body',    label: 'Email body' },
+  { id: 'subject', label: 'Subject line' },
+  { id: 'from',    label: 'From address' },
+];
+
 /**
  * AddVariableModal — centered 560px modal for creating a new variable.
  *
@@ -200,14 +260,21 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
             <KindPickerGrid
               options={kindOptions}
               value={kind}
-              onChange={(id) => { setKind(id); setConfig(''); setPicking(false); setPickText(''); }}
+              onChange={(id) => { setKind(id); setConfig(''); setPicking(false); setHoverText(''); }}
             />
           </div>
 
           {/* Kind-specific config */}
           {kind === 'builtin' && (
-            <Field label="Built-in path" hint="Type-ahead from the page's available fields">
-              <Dropdown value={config || 'Select a field…'} leading={<BoltIcon />} />
+            <Field label="Built-in path" hint="Pre-defined value resolved from the page context">
+              <Dropdown
+                value={config}
+                placeholder="Select a field…"
+                leading={<BoltIcon />}
+                searchable
+                options={BUILTIN_PATHS[typeId] || BUILTIN_PATHS.order}
+                onChange={setConfig}
+              />
             </Field>
           )}
 
@@ -264,7 +331,7 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
             <>
               <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8 }}>
                 <Field label="From field">
-                  <Dropdown value={regexField} />
+                  <Dropdown value={regexField} options={REGEX_FIELDS} onChange={setRegexField} />
                 </Field>
                 <Field label="Regex (capture group 1 used)">
                   <Input

@@ -45,6 +45,20 @@ const TRANSFORMS = [
   { id: 'firstWord',  label: 'First word only',  example: '"Marcus Chen" → "Marcus"' },
 ];
 
+const SCOPE_OPTIONS = [
+  { id: 'sentence',  label: 'Sentence containing the variable' },
+  { id: 'paragraph', label: 'Paragraph' },
+  { id: 'line',      label: 'Line' },
+];
+
+const FORMAT_TYPES = [
+  { id: 'none',     label: 'None' },
+  { id: 'number',   label: 'Number' },
+  { id: 'currency', label: 'Currency' },
+  { id: 'date',     label: 'Date' },
+  { id: 'percent',  label: 'Percent' },
+];
+
 /**
  * SmartModal — tab-based modal for configuring a variable's smart behaviors.
  * Tabs: Fallback · Transform · Conditional · Format.
@@ -218,9 +232,6 @@ export function SmartModal({ variable, onClose, onSave }) {
               <div style={{ fontSize: 11.5, color: 'var(--gb-text-tertiary)', lineHeight: 1.55 }}>
                 Reshape the resolved value before insertion. Useful for normalizing messy sources.
               </div>
-              <Field label="Transform">
-                <Dropdown value={smart.transform || 'None'} />
-              </Field>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {TRANSFORMS.map(({ id, label, example }) => {
                   const active = smart.transform === id;
@@ -281,7 +292,11 @@ export function SmartModal({ variable, onClose, onSave }) {
                 </div>
               </div>
               <Field label="Scope">
-                <Dropdown value={smart.conditionalScope || 'Sentence containing the variable'} />
+                <Dropdown
+                  value={smart.conditionalScope || 'sentence'}
+                  options={SCOPE_OPTIONS}
+                  onChange={v => upd({ conditionalScope: v })}
+                />
               </Field>
             </div>
           )}
@@ -290,13 +305,18 @@ export function SmartModal({ variable, onClose, onSave }) {
           {tab === 'format' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <Field label="Format type">
-                <Dropdown value={smart.format?.type || 'None'} />
+                <Dropdown
+                  value={smart.format?.type || 'none'}
+                  options={FORMAT_TYPES}
+                  onChange={v => upd({ format: v === 'none' ? null : { ...(smart.format || {}), type: v } })}
+                />
               </Field>
               <Field label="Pattern" hint="Use ICU-style tokens">
                 <Input
                   value={smart.format?.pattern || ''}
                   placeholder="$#,##0.00  ·  yyyy-MM-dd  ·  #,###"
                   mono
+                  onChange={v => upd({ format: { ...(smart.format || {}), pattern: v } })}
                 />
               </Field>
               <div style={{
