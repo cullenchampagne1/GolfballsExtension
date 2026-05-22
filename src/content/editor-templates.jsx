@@ -324,6 +324,7 @@ function TemplateEditor({ tpl, onDelete }) {
         <span style={S.label}>Subject</span>
         <RichTextEditor
           singleLine
+          size="sm"
           initialHtml={subject}
           onChange={setSubject}
           onChipClick={openSmartByName}
@@ -332,15 +333,16 @@ function TemplateEditor({ tpl, onDelete }) {
         />
       </div>
 
-      {/* ── Body ── */}
+      {/* ── Body — compact 'sm' editor to fit the ~700px panel ── */}
       <div style={S.mb12}>
         <span style={S.label}>Email body</span>
         <RichTextEditor
+          size="sm"
           initialHtml={body}
           onChange={setBody}
           onChipClick={openSmartByName}
           variables={vars}
-          minHeight={180}
+          minHeight={150}
           placeholder="Write the email body — format with the toolbar, insert variables from the menu. Click a variable chip to set fallbacks, transforms, or formatting."
         />
       </div>

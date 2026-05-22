@@ -13,9 +13,33 @@ import { Icon } from '../icons.jsx';
      variables    [{name}]— available variables for the insert menu
      singleLine   bool    — one-line mode: no toolbar, Enter disabled,
                             emits plain text (for the subject field)
-     minHeight    number  — body min-height (full mode)
+     size         'sm'|'md' — overall density. 'sm' = compact toolbar,
+                            tighter padding, smaller text. Default 'md'.
+     minHeight    number  — body min-height override (full mode); when
+                            omitted, falls back to the size's default
      placeholder  string
 ─────────────────────────────────────────────────────────────── */
+
+/* ── Density presets — every size-dependent measurement lives here so
+      'sm' and 'md' stay in lockstep. ──────────────────────────── */
+const SIZES = {
+  sm: {
+    btnW: 22, btnH: 21, icon: 11, sepH: 13, toolbarPad: '3px 5px',
+    pad: '10px 11px', font: 11, minHeight: 120,
+    slPad: '6px 9px', slFont: 11.5,
+    varH: 21, varFont: 10, varIcon: 9,
+    phFull: { top: 11, left: 12, font: 11 },
+    phLine: { top: 6,  left: 10, font: 11.5 },
+  },
+  md: {
+    btnW: 26, btnH: 24, icon: 12, sepH: 14, toolbarPad: '4px 6px',
+    pad: '14px', font: 11.5, minHeight: 160,
+    slPad: '7px 10px', slFont: 12,
+    varH: 24, varFont: 10.5, varIcon: 10,
+    phFull: { top: 14, left: 14, font: 11.5 },
+    phLine: { top: 7,  left: 10, font: 12 },
+  },
+};
 
 /* ── Toolbar icons ──────────────────────────────────────────── */
 const Ic = {
@@ -87,27 +111,32 @@ function normalizeInitial(html) {
 }
 
 /* ── Toolbar primitives ─────────────────────────────────────── */
-function TBtn({ icon, active, onMouseDown, title }) {
+function TBtn({ icon, active, onMouseDown, title, sz }) {
   return (
     <button
       type="button" title={title} onMouseDown={onMouseDown}
       style={{
-        width: 26, height: 24, borderRadius: 4, border: 'none', cursor: 'pointer',
+        width: sz.btnW, height: sz.btnH, borderRadius: 4, border: 'none', cursor: 'pointer',
         background: active ? 'var(--gb-brand-tint-medium)' : 'transparent',
         color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
       }}
     >
-      {React.cloneElement(icon, { size: 12 })}
+      {React.cloneElement(icon, { size: sz.icon })}
     </button>
   );
 }
-const Sep = () => <div style={{ width: 1, height: 14, background: 'var(--gb-border-subtle)', margin: '0 3px' }} />;
+const Sep = ({ sz }) => (
+  <div style={{ width: 1, height: sz.sepH, background: 'var(--gb-border-subtle)', margin: '0 3px' }} />
+);
 
 export function RichTextEditor({
   initialHtml, onChange, onChipClick, variables = [], singleLine = false,
-  minHeight = 160, placeholder = '',
+  size = 'md', minHeight, placeholder = '',
 }) {
+  const sz       = SIZES[size] || SIZES.md;
+  const bodyMinH = minHeight != null ? minHeight : sz.minHeight;
+
   const ref        = useRef(null);
   const savedRange = useRef(null);
   const [marks,   setMarks]   = useState({});
@@ -173,7 +202,7 @@ export function RichTextEditor({
     }
     document.execCommand(
       'insertHTML', false,
-      `<span class="gb-rte-chip" contenteditable="false">{{${name}}}</span> `,
+      `<span class="gb-rte-chip" contenteditable="false">{{${name}}}</span> `,
     );
     saveSelection();
     setEmpty(false);
@@ -237,30 +266,30 @@ export function RichTextEditor({
       {!singleLine && (
         <div style={{
           position: 'relative',
-          padding: '4px 6px',
+          padding: sz.toolbarPad,
           background: 'var(--gb-surface-modal)',
           borderBottom: '1px solid var(--gb-border-subtle)',
           borderRadius: 'var(--gb-r-md) var(--gb-r-md) 0 0',
           display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1,
         }}>
-          <TBtn icon={<Ic.bold />}      active={marks.bold}      title="Bold"           onMouseDown={md(() => exec('bold'))} />
-          <TBtn icon={<Ic.italic />}    active={marks.italic}    title="Italic"         onMouseDown={md(() => exec('italic'))} />
-          <TBtn icon={<Ic.underline />} active={marks.underline} title="Underline"      onMouseDown={md(() => exec('underline'))} />
-          <TBtn icon={<Ic.strike />}    active={marks.strike}    title="Strikethrough"  onMouseDown={md(() => exec('strikeThrough'))} />
-          <Sep />
-          <TBtn icon={<Ic.alignL />} title="Align left"   onMouseDown={md(() => exec('justifyLeft'))} />
-          <TBtn icon={<Ic.alignC />} title="Align center" onMouseDown={md(() => exec('justifyCenter'))} />
-          <TBtn icon={<Ic.alignR />} title="Align right"  onMouseDown={md(() => exec('justifyRight'))} />
-          <Sep />
-          <TBtn icon={<Ic.ul />} title="Bullet list"   onMouseDown={md(() => exec('insertUnorderedList'))} />
-          <TBtn icon={<Ic.ol />} title="Numbered list" onMouseDown={md(() => exec('insertOrderedList'))} />
-          <TBtn icon={<Ic.link />} title="Insert link"  onMouseDown={md(() => {
+          <TBtn sz={sz} icon={<Ic.bold />}      active={marks.bold}      title="Bold"           onMouseDown={md(() => exec('bold'))} />
+          <TBtn sz={sz} icon={<Ic.italic />}    active={marks.italic}    title="Italic"         onMouseDown={md(() => exec('italic'))} />
+          <TBtn sz={sz} icon={<Ic.underline />} active={marks.underline} title="Underline"      onMouseDown={md(() => exec('underline'))} />
+          <TBtn sz={sz} icon={<Ic.strike />}    active={marks.strike}    title="Strikethrough"  onMouseDown={md(() => exec('strikeThrough'))} />
+          <Sep sz={sz} />
+          <TBtn sz={sz} icon={<Ic.alignL />} title="Align left"   onMouseDown={md(() => exec('justifyLeft'))} />
+          <TBtn sz={sz} icon={<Ic.alignC />} title="Align center" onMouseDown={md(() => exec('justifyCenter'))} />
+          <TBtn sz={sz} icon={<Ic.alignR />} title="Align right"  onMouseDown={md(() => exec('justifyRight'))} />
+          <Sep sz={sz} />
+          <TBtn sz={sz} icon={<Ic.ul />} title="Bullet list"   onMouseDown={md(() => exec('insertUnorderedList'))} />
+          <TBtn sz={sz} icon={<Ic.ol />} title="Numbered list" onMouseDown={md(() => exec('insertOrderedList'))} />
+          <TBtn sz={sz} icon={<Ic.link />} title="Insert link"  onMouseDown={md(() => {
             const url = window.prompt('Link URL:', 'https://');
             if (url) exec('createLink', url);
           })} />
-          <Sep />
+          <Sep sz={sz} />
           <label title="Text color" style={{
-            width: 26, height: 24, borderRadius: 4, cursor: 'pointer',
+            width: sz.btnW, height: sz.btnH, borderRadius: 4, cursor: 'pointer',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
             color: 'var(--gb-text-tertiary)', position: 'relative',
           }}>
@@ -273,7 +302,7 @@ export function RichTextEditor({
               style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
             />
           </label>
-          <TBtn icon={<Ic.clear />} title="Clear formatting" onMouseDown={md(() => exec('removeFormat'))} />
+          <TBtn sz={sz} icon={<Ic.clear />} title="Clear formatting" onMouseDown={md(() => exec('removeFormat'))} />
 
           {variables.length > 0 && (
             <>
@@ -282,14 +311,14 @@ export function RichTextEditor({
                 type="button"
                 onMouseDown={e => { e.preventDefault(); saveSelection(); setVarMenu(v => !v); }}
                 style={{
-                  height: 24, padding: '0 7px', borderRadius: 4, border: 'none', cursor: 'pointer',
+                  height: sz.varH, padding: '0 7px', borderRadius: 4, border: 'none', cursor: 'pointer',
                   background: varMenu ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)',
                   color: 'var(--gb-brand-label)',
                   display: 'inline-flex', alignItems: 'center', gap: 4,
-                  fontSize: 10.5, fontWeight: 700,
+                  fontSize: sz.varFont, fontWeight: 700,
                 }}
               >
-                <Ic.bolt size={10} /> Variable
+                <Ic.bolt size={sz.varIcon} /> Variable
               </button>
               {varMenu && (
                 <VarMenu variables={variables} onPick={insertVariable} onClose={() => setVarMenu(false)} />
@@ -303,8 +332,9 @@ export function RichTextEditor({
       <div style={{ position: 'relative' }}>
         {empty && placeholder && (
           <span className="gb-rte-ph" style={{
-            top: singleLine ? 7 : 14, left: singleLine ? 10 : 14,
-            fontSize: singleLine ? 12 : 11.5,
+            top:  singleLine ? sz.phLine.top  : sz.phFull.top,
+            left: singleLine ? sz.phLine.left : sz.phFull.left,
+            fontSize: singleLine ? sz.phLine.font : sz.phFull.font,
           }}>{placeholder}</span>
         )}
         <div
@@ -320,9 +350,9 @@ export function RichTextEditor({
           onMouseUp={() => { saveSelection(); refreshMarks(); }}
           onBlur={saveSelection}
           style={{
-            padding: singleLine ? '7px 10px' : '14px',
-            minHeight: singleLine ? 'auto' : minHeight,
-            fontSize: singleLine ? 12 : 11.5,
+            padding: singleLine ? sz.slPad : sz.pad,
+            minHeight: singleLine ? 'auto' : bodyMinH,
+            fontSize: singleLine ? sz.slFont : sz.font,
             fontWeight: singleLine ? 600 : 400,
             lineHeight: 1.6,
             color: 'var(--gb-text-primary)',
