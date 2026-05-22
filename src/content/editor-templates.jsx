@@ -5,7 +5,7 @@ import { ensureTheme } from '../lib/theme.js';
 import {
   Btn, Tag,
   Input, Dropdown, Field,
-  SwitchTag,
+  SwitchTag, Segmented,
   I, Icon,
   SmartModal, AddVariableModal, SignatureModal,
   RichTextEditor,
@@ -110,42 +110,11 @@ const TYPE_META = {
   },
 };
 
-/* TypeTabs — segmented control to switch the current template's type.
-   Replaces the legacy <select id="f-tpl-type"> dropdown. */
-function TypeTabs({ value, onChange }) {
-  return (
-    <div style={{
-      display: 'flex', gap: 4, padding: 3, marginBottom: 12,
-      background: 'var(--gb-fill-subtle)',
-      border: '1px solid var(--gb-border-subtle)',
-      borderRadius: 'var(--gb-r-md)',
-    }}>
-      {Object.entries(TYPE_META).map(([id, m]) => {
-        const active = id === value;
-        return (
-          <button
-            key={id}
-            type="button"
-            onClick={() => onChange(id)}
-            style={{
-              flex: 1, padding: '6px 10px', borderRadius: 'var(--gb-r-sm)',
-              border: '1px solid ' + (active ? 'var(--gb-border-subtle)' : 'transparent'),
-              cursor: active ? 'default' : 'pointer',
-              background: active ? 'var(--gb-surface-canvas)' : 'transparent',
-              color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
-              fontFamily: 'var(--gb-font-sans)', fontSize: 11, fontWeight: 600,
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              transition: 'all .12s',
-            }}
-          >
-            {React.cloneElement(m.icon, { size: 12 })}
-            {m.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+/* Type-tab options — feeds the design-spec Segmented control at the top
+   of the template editor. */
+const TYPE_OPTIONS = Object.entries(TYPE_META).map(([id, m]) => ({
+  id, label: m.label, icon: m.icon,
+}));
 
 /* Map a stored toField → the recipient option index for a given type. */
 function recipientIndexFor(typeId, toField) {
@@ -308,8 +277,10 @@ function TemplateEditor({ tpl, onDelete }) {
   return (
     <div style={{ fontFamily: 'var(--gb-font-sans)', color: 'var(--gb-text-secondary)' }}>
 
-      {/* ── Type tabs — switches template type ── */}
-      <TypeTabs value={typeId} onChange={changeType} />
+      {/* ── Type tabs — design-spec Segmented (inline, content-width) ── */}
+      <div style={{ marginBottom: 12 }}>
+        <Segmented value={typeId} onChange={changeType} options={TYPE_OPTIONS} />
+      </div>
 
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
