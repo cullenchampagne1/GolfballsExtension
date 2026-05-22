@@ -834,7 +834,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 function createEditorWindow() {
   chrome.windows.create({
     url: chrome.runtime.getURL('editor.html'),
-    type: 'popup', width: 860, height: 700
+    type: 'popup', width: 1200, height: 820
   }, (win) => {
     editorWindowId = win.id;
     chrome.tabs.query({ windowId: win.id }, (tabs) => {

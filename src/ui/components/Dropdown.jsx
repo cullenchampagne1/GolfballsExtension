@@ -3,6 +3,17 @@ import { motion, AnimatePresence } from 'motion/react';
 import { T, inputBaseStyle } from '../shared.jsx';
 import { I } from '../icons.jsx';
 
+/* Hide the menu's scrollbar (Chrome needs a ::-webkit rule) while keeping it
+   scrollable. Injected once, shared by every Dropdown. */
+const SCROLLBAR_STYLE_ID = '__gb-dd-noscroll';
+function ensureScrollbarStyle() {
+  if (typeof document === 'undefined' || document.getElementById(SCROLLBAR_STYLE_ID)) return;
+  const el = document.createElement('style');
+  el.id = SCROLLBAR_STYLE_ID;
+  el.textContent = '.gb-dd-list::-webkit-scrollbar{width:0;height:0;display:none}';
+  (document.head || document.documentElement).appendChild(el);
+}
+
 /**
  * Dropdown — select control with an animated menu.
  *
@@ -26,6 +37,8 @@ export function Dropdown({
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
+
+  useEffect(() => { ensureScrollbarStyle(); }, []);
 
   const selected = options.find((o) => o.id === value);
 
@@ -113,7 +126,7 @@ export function Dropdown({
                 />
               </div>
             )}
-            <div style={{ maxHeight: 240, overflowY: 'auto', padding: 4, scrollbarWidth: 'thin' }}>
+            <div className="gb-dd-list" style={{ maxHeight: 240, overflowY: 'auto', padding: 4, scrollbarWidth: 'none' }}>
               {filtered.length === 0 ? (
                 <div style={{ padding: '10px 8px', fontSize: 11.5, color: 'var(--gb-text-muted)', textAlign: 'center' }}>
                   No matches
