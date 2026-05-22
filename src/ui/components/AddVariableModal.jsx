@@ -18,17 +18,16 @@ const RegexIcon   = (p) => <Icon {...p}><circle cx="12" cy="12" r="3"/><path d="
 const VariableIcon= (p) => <Icon {...p}><path d="M5 4 a14 14 0 000 16M19 4a14 14 0 010 16"/><path d="M9 9l6 6M9 15l6-6"/></Icon>;
 
 export const SOURCE_KINDS = {
-  order:   ['builtin', 'dom', 'pick', 'regex', 'literal'],
+  order:   ['builtin', 'dom', 'regex', 'literal'],
   case:    ['builtin', 'regex', 'literal'],
   account: ['builtin', 'dom', 'regex', 'literal'],
 };
 
 const KIND_OPTIONS = {
-  builtin: { icon: <BoltIcon />,   label: 'Built-in', desc: 'Pre-defined from the page context' },
-  dom:     { icon: <I.search />,   label: 'DOM',      desc: 'CSS selector against the page' },
-  pick:    { icon: <PickerIcon />, label: 'Pick',     desc: 'Click an element on the page' },
-  regex:   { icon: <RegexIcon />,  label: 'Regex',    desc: 'Capture group from an email field' },
-  literal: { icon: <I.edit />,     label: 'Literal',  desc: 'Fixed string' },
+  builtin: { icon: <BoltIcon />,  label: 'Built-in', desc: 'Pre-defined from the page context' },
+  dom:     { icon: <I.search />,  label: 'DOM',      desc: 'CSS selector — or pick from page' },
+  regex:   { icon: <RegexIcon />, label: 'Regex',    desc: 'Capture group from an email field' },
+  literal: { icon: <I.edit />,    label: 'Literal',  desc: 'Fixed string' },
 };
 
 /**
@@ -43,9 +42,10 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
   const [name,       setName]       = useState('');
   const [kind,       setKind]       = useState(SOURCE_KINDS[typeId]?.[0] ?? 'literal');
   const [config,     setConfig]     = useState('');
-  const [picking,    setPicking]    = useState(false);
-  const [pickText,   setPickText]   = useState('');
-  const [regexField, setRegexField] = useState('body');
+  const [picking,      setPicking]    = useState(false);
+  const [pickText,     setPickText]   = useState('');
+  const [liveResolved, setLiveResolved] = useState(null);
+  const [regexField,   setRegexField] = useState('body');
 
   // Reset kind when typeId changes
   useEffect(() => {
@@ -83,6 +83,22 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
     chrome.runtime.sendMessage({ action: 'cancelPick' });
   }
 
+  // Live DOM resolution: query the order page whenever the selector changes
+  useEffect(() => {
+    if (kind !== 'dom' || !config || picking) { setLiveResolved(null); return; }
+    if (typeof window.__gbResolveVars !== 'function') return;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      Promise.resolve(window.__gbResolveVars({ __preview: { type: 'selector', selector: config } }))
+        .then(res => {
+          if (cancelled) return;
+          const val = res?.resolved?.__preview;
+          setLiveResolved(val ? String(val) : null);
+        });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [kind, config, picking]); // eslint-disable-line
+
   const kindOptions = (SOURCE_KINDS[typeId] || []).map(id => ({
     id,
     ...KIND_OPTIONS[id],
@@ -91,13 +107,12 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
   const previewResolved = (
     kind === 'literal' ? (config || '— empty —')
     : kind === 'builtin' ? (config ? '(live value)' : '— select a path —')
-    : kind === 'dom'     ? (config ? '(live value)' : '— enter a selector —')
-    : kind === 'pick'    ? (config ? '(live value)' : '— click an element on the page —')
+    : kind === 'dom'     ? (liveResolved || (config ? '(querying…)' : '— enter a selector —'))
     : kind === 'regex'   ? (config ? '(first capture group)' : '— enter a regex —')
     : '—'
   );
 
-  const canAdd = !!name && (kind === 'literal' ? !!config : !!config || kind === 'pick');
+  const canAdd = !!name && !!config;
 
   return (
     <motion.div
@@ -167,7 +182,7 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
               placeholder="e.g. customer_first"
               leading={<VariableIcon />}
               mono
-              onChange={e => setName(e.target.value.replace(/\s/g, '_'))}
+              onChange={v => setName(v.replace(/\s/g, '_'))}
             />
           </Field>
 
@@ -200,7 +215,7 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
                       placeholder=".order-total .amount"
                       mono
                       leading={<I.search />}
-                      onChange={e => setConfig(e.target.value)}
+                      onChange={v => setConfig(v)}
                     />
                   </Field>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -212,16 +227,20 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
                       fontSize: 11, color: 'var(--gb-text-tertiary)',
                       display: 'flex', alignItems: 'center', gap: 9,
                     }}>
-                      <Dot tone={config ? 'brand' : 'muted'} glow={!!config} size={6} />
+                      <Dot tone={liveResolved ? 'brand' : config ? 'warning' : 'muted'} glow={!!liveResolved} size={6} />
                       <span style={{ flex: 1 }}>
-                        {config
-                          ? <><strong style={{ color: 'var(--gb-brand-label)' }}>1 match</strong> found on the active page</>
-                          : 'Enter a selector to test it live'
+                        {liveResolved
+                          ? <><strong style={{ color: 'var(--gb-brand-label)' }}>1 match</strong> on the active page</>
+                          : config
+                            ? <span style={{ color: 'var(--gb-warning-fg)' }}>No match on the active page</span>
+                            : 'Enter a selector to test it live'
                         }
                       </span>
-                      {config && <Tag tone="brand" size="xs">$1,247.50</Tag>}
+                      {liveResolved && (
+                        <Tag tone="brand" size="xs">{liveResolved}</Tag>
+                      )}
                     </div>
-                    <Btn variant="ghost" size="sm" icon={<PickerIcon />} onClick={startPick}>
+                    <Btn variant="tinted" size="sm" icon={<PickerIcon />} onClick={startPick}>
                       Pick from page
                     </Btn>
                   </div>
@@ -258,97 +277,6 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
             </>
           )}
 
-          {kind === 'pick' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-              {/* ── Idle: no selector captured yet ── */}
-              {!picking && !config && (
-                <Btn variant="primary" size="lg" icon={<PickerIcon />} full onClick={startPick}>
-                  Pick element from page
-                </Btn>
-              )}
-
-              {/* ── Active: waiting for user to click ── */}
-              {picking && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={T.base}
-                  style={{
-                    padding: '14px 16px',
-                    background: 'var(--gb-brand-tint-soft)',
-                    border: '1px solid var(--gb-brand-tint-border)',
-                    borderRadius: 'var(--gb-r-md)',
-                    display: 'flex', flexDirection: 'column', gap: 10,
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Dot tone="brand" glow size={7} />
-                    <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-brand-label)' }}>
-                      Waiting for pick…
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--gb-text-secondary)', lineHeight: 1.6 }}>
-                    Switch to your order tab and click any element on the page. The extension will capture its selector and return you here automatically.
-                  </div>
-                  <div>
-                    <Btn variant="ghost" size="sm" onClick={cancelPick}>
-                      Cancel
-                    </Btn>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* ── Result: selector captured ── */}
-              {config && !picking && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={T.base}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
-                >
-                  <div style={{
-                    padding: '10px 12px',
-                    background: 'var(--gb-fill-subtle)',
-                    border: '1px solid var(--gb-border-subtle)',
-                    borderRadius: 'var(--gb-r-sm)',
-                    display: 'flex', flexDirection: 'column', gap: 6,
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Dot tone="brand" glow size={5} />
-                      <span style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8, color: 'var(--gb-text-muted)' }}>
-                        Captured selector
-                      </span>
-                    </div>
-                    <div style={{
-                      fontFamily: 'var(--gb-font-mono)', fontSize: 10.5,
-                      color: 'var(--gb-brand-label)', wordBreak: 'break-all', lineHeight: 1.5,
-                    }}>
-                      {config}
-                    </div>
-                    {pickText && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                        <Tag tone="brand" size="xs" icon={<I.check />}>LIVE</Tag>
-                        <span style={{
-                          fontFamily: 'var(--gb-font-mono)', fontSize: 10.5,
-                          color: 'var(--gb-text-secondary)',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>
-                          "{pickText}"
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <Btn variant="ghost" size="sm" icon={<PickerIcon />} onClick={startPick}>
-                      Pick again
-                    </Btn>
-                  </div>
-                </motion.div>
-              )}
-            </div>
-          )}
-
           {kind === 'regex' && (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 8 }}>
@@ -361,7 +289,7 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
                     placeholder="order\s+(ORD-\d+)"
                     mono
                     leading={<RegexIcon />}
-                    onChange={e => setConfig(e.target.value)}
+                    onChange={v => setConfig(v)}
                   />
                 </Field>
               </div>
@@ -393,7 +321,7 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
               <Input
                 value={config}
                 placeholder="e.g. Customer Service Team"
-                onChange={e => setConfig(e.target.value)}
+                onChange={v => setConfig(v)}
               />
             </Field>
           )}

@@ -87,7 +87,7 @@ function convertVars(tpl) {
 /* New-format variable → stored definition (also the resolver's input shape). */
 function varDef(v) {
   if (v.kind === 'builtin')                  return { type: 'builtin',  builtin:  v.config };
-  if (v.kind === 'dom' || v.kind === 'pick') return { type: 'selector', selector: v.config };
+  if (v.kind === 'dom') return { type: 'selector', selector: v.config };
   if (v.kind === 'regex')                    return { type: 'regex',    pattern:  v.config };
   return { type: 'literal', value: v.config };
 }
