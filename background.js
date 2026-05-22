@@ -566,14 +566,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!paUrl) { sendResponse({ ok: false, error: 'No Power Automate URL configured.' }); return true; }
     (async () => {
       try {
-        // Inline remote <img> sources as base64 data URIs so the images
-        // are self-contained and survive email delivery — recipients no
-        // longer depend on their client fetching external / hotlink-
-        // protected / relative URLs (the cause of "half-broken" images).
+        // Pull every <img> out of the body into inline CID attachments and
+        // rewrite each tag to src="cid:…". Outlook ignores base64 data: URIs
+        // and external/hotlink-protected URLs, so CID attachments are the
+        // only form that renders reliably. The PA flow forwards the
+        // per-email `attachments` array to its send action.
         if (payload && Array.isArray(payload.emails)) {
           for (const em of payload.emails) {
             if (em && typeof em.htmlBody === 'string') {
-              em.htmlBody = await inlineEmailImages(em.htmlBody);
+              const r = await extractEmailImages(em.htmlBody);
+              em.htmlBody = r.html;
+              if (r.attachments.length) {
+                em.attachments = [...(em.attachments || []), ...r.attachments];
+              }
             }
           }
         }
@@ -863,11 +868,12 @@ chrome.windows.onRemoved.addListener((windowId) => {
 });
 
 
-// ── Email image inlining ──────────────────────────────────────────────────────
-// Outgoing emails reference images by URL. External / hotlink-protected /
-// relative URLs frequently fail to load in the recipient's inbox ("half-broken"
-// images). Before a Power Automate send we fetch each remote image and rewrite
-// its <img src> to a self-contained base64 data URI.
+// ── Email image → inline CID attachments ──────────────────────────────────────
+// Outlook ignores base64 data: URIs and frequently blocks external image URLs,
+// so images only render reliably when sent as inline CID attachments. Before a
+// Power Automate send we pull every <img> out of the body, build an attachment
+// for each, and rewrite the tag to src="cid:<id>". The PA flow forwards the
+// per-email `attachments` array into its send action.
 
 const GB_MAX_IMG_BYTES = 3 * 1024 * 1024; // skip images larger than 3 MB
 
@@ -882,58 +888,100 @@ function gbBufToBase64(buf) {
   return btoa(binary);
 }
 
-/**
- * Rewrites every remote <img src> in an HTML string to a base64 data URI.
- * Best-effort: any image that can't be fetched keeps its original src, and a
- * failure never blocks the send. data:/cid: sources and unresolvable relative
- * paths are left untouched.
- * @param {string} html
- * @returns {Promise<string>}
- */
-async function inlineEmailImages(html) {
-  if (!html || typeof html !== 'string' || html.indexOf('<img') === -1) return html;
+/** Best-guess file extension for an image MIME type. */
+function gbExtFor(type) {
+  const t = (type || '').toLowerCase();
+  if (t.includes('png'))                 return 'png';
+  if (t.includes('jpeg') || t.includes('jpg')) return 'jpg';
+  if (t.includes('gif'))                 return 'gif';
+  if (t.includes('webp'))                return 'webp';
+  if (t.includes('svg'))                 return 'svg';
+  if (t.includes('bmp'))                 return 'bmp';
+  return 'img';
+}
 
-  // Collect unique src values from <img> tags.
-  const urls   = new Set();
-  const imgRe  = /<img\b[^>]*>/gi;
-  const srcRe  = /\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')/i;
+/**
+ * Pulls every embeddable <img> out of an HTML string. Returns the rewritten
+ * HTML (each handled tag becomes src="cid:<id>") plus an `attachments` array of
+ * inline images: { name, contentType, contentBytes (base64), contentId,
+ * isInline }. Best-effort — an image that can't be processed keeps its original
+ * src and is left out of `attachments`; a failure never blocks the send.
+ * Handles base64 data: URIs and http(s) URLs; relative / blob: / cid: are left
+ * untouched.
+ * @param {string} html
+ * @returns {Promise<{ html: string, attachments: Array }>}
+ */
+async function extractEmailImages(html) {
+  const result = { html, attachments: [] };
+  if (!html || typeof html !== 'string' || html.indexOf('<img') === -1) return result;
+
+  // Collect unique <img> src values.
+  const urls  = new Set();
+  const imgRe = /<img\b[^>]*>/gi;
+  const srcRe = /\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')/i;
   let m;
   while ((m = imgRe.exec(html))) {
     const sm = m[0].match(srcRe);
     const url = sm && (sm[1] || sm[2] || '').trim();
     if (url) urls.add(url);
   }
-  if (!urls.size) return html;
+  if (!urls.size) return result;
 
-  // Fetch + convert each remote image.
-  const map = {};
+  // Resolve each src to raw image bytes.
+  const found = [];
   await Promise.all([...urls].map(async (raw) => {
-    if (/^data:/i.test(raw)) return;                  // already inline
-    let fetchUrl = raw.replace(/&amp;/gi, '&');       // un-escape HTML entities
-    if (fetchUrl.startsWith('//')) fetchUrl = 'https:' + fetchUrl;
-    if (!/^https?:\/\//i.test(fetchUrl)) return;      // relative / blob: / cid: — can't resolve here
     try {
-      const resp = await fetch(fetchUrl, { referrerPolicy: 'no-referrer' });
-      if (!resp.ok) { console.warn('[GB PA] image fetch failed', resp.status, fetchUrl); return; }
-      const type = resp.headers.get('content-type') || 'image/png';
-      if (!/^image\//i.test(type)) return;            // not an image
-      const buf = await resp.arrayBuffer();
-      if (buf.byteLength > GB_MAX_IMG_BYTES) { console.warn('[GB PA] image too large, left as URL', fetchUrl); return; }
-      map[raw] = `data:${type};base64,${gbBufToBase64(buf)}`;
+      let contentType = '';
+      let base64 = '';
+      if (/^data:/i.test(raw)) {
+        const dm = raw.match(/^data:([^;,]*);base64,([\s\S]*)$/i);
+        if (!dm) return;                                // non-base64 data URI — skip
+        contentType = dm[1] || 'image/png';
+        if (!/^image\//i.test(contentType)) return;
+        base64 = dm[2].replace(/\s/g, '');
+      } else if (/^cid:/i.test(raw)) {
+        return;                                         // already an inline ref
+      } else {
+        let fetchUrl = raw.replace(/&amp;/gi, '&');
+        if (fetchUrl.startsWith('//')) fetchUrl = 'https:' + fetchUrl;
+        if (!/^https?:\/\//i.test(fetchUrl)) return;    // relative / blob: — can't resolve here
+        const resp = await fetch(fetchUrl, { referrerPolicy: 'no-referrer' });
+        if (!resp.ok) { console.warn('[GB PA] image fetch failed', resp.status, fetchUrl); return; }
+        contentType = resp.headers.get('content-type') || 'image/png';
+        if (!/^image\//i.test(contentType)) return;
+        const buf = await resp.arrayBuffer();
+        if (buf.byteLength > GB_MAX_IMG_BYTES) { console.warn('[GB PA] image too large, skipped', fetchUrl); return; }
+        base64 = gbBufToBase64(buf);
+      }
+      if (base64) found.push({ raw, contentType, base64 });
     } catch (e) {
-      console.warn('[GB PA] image inline error', fetchUrl, e.message);
+      console.warn('[GB PA] image extract error', e.message);
     }
   }));
 
-  const origs = Object.keys(map);
-  if (!origs.length) return html;
+  if (!found.length) return result;
 
-  // Replace longest URLs first so a shorter URL can't corrupt a longer one
-  // that contains it as a substring.
+  // Assign stable Content-IDs and build the attachment list.
+  const replace = {};
+  found.forEach((img, i) => {
+    const id = `gbimg${i + 1}`;
+    replace[img.raw] = `cid:${id}`;
+    result.attachments.push({
+      name:         `${id}.${gbExtFor(img.contentType)}`,
+      contentType:  img.contentType,
+      contentBytes: img.base64,
+      contentId:    id,
+      isInline:     true,
+    });
+  });
+
+  // Replace longest src strings first so a shorter one can't corrupt a longer
+  // one that contains it as a substring.
   let out = html;
-  origs.sort((a, b) => b.length - a.length);
-  for (const orig of origs) out = out.split(orig).join(map[orig]);
-  return out;
+  Object.keys(replace).sort((a, b) => b.length - a.length)
+    .forEach((orig) => { out = out.split(orig).join(replace[orig]); });
+  result.html = out;
+  return result;
 }
 
 
