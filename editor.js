@@ -1216,6 +1216,25 @@ async function saveTemplate() {
 }
 
 /**
+ * Auto-save bridge for the React template editor. Receives a fully-merged
+ * template object, upserts it into the templates array by id, and persists
+ * it silently — there is no Save button; the editor saves on every change.
+ * @param {object} tpl Complete template object built by the React editor.
+ * @returns {Promise<void>}
+ */
+async function applyTemplatePatch(tpl) {
+  if (!tpl || !tpl.id) return;
+  currentId = tpl.id;
+  const idx = templates.findIndex(t => t.id === tpl.id);
+  if (idx >= 0) templates[idx] = tpl; else templates.push(tpl);
+  await saveTemplates();
+  const titleEl = document.getElementById('ed-title');
+  if (titleEl) titleEl.textContent = tpl.name || 'Untitled';
+  renderSidebar();
+}
+window.__gbSaveTemplate = applyTemplatePatch;
+
+/**
  * Deletes the currently selected email template after user confirmation,
  * persists the change, and returns the editor to the list view.
  * @returns {Promise<void>}

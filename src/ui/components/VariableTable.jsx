@@ -16,7 +16,7 @@ const BoltIcon = (p) => (
   <Icon {...p}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></Icon>
 );
 
-const COL_GRID = '180px 90px 1.4fr 1.2fr 90px 56px';
+const COL_GRID = '1.2fr 74px 1.3fr 1.3fr 76px 30px';
 
 /**
  * VariableTable — 6-column grid showing all variables for a template.
@@ -38,13 +38,13 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete }) {
     }}>
       {/* Panel header */}
       <div style={{
-        padding: '10px 14px',
+        padding: '7px 10px',
         background: 'var(--gb-surface-modal)',
         borderBottom: '1px solid var(--gb-border-subtle)',
-        display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap',
+        display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap',
       }}>
-        <VariableIcon size={13} style={{ color: 'var(--gb-brand-label)' }} />
-        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>
+        <VariableIcon size={12} style={{ color: 'var(--gb-brand-label)' }} />
+        <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-primary)' }}>
           Variables
         </span>
         <Tag tone="brand" size="xs">{vars.filter(v => v.status === 'ok').length} resolved</Tag>
@@ -54,8 +54,8 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete }) {
           </Tag>
         )}
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
-          Live · against active page
+        <span style={{ fontSize: 9.5, color: 'var(--gb-text-muted)' }}>
+          Live
         </span>
         <Dot tone="brand" glow size={5} />
       </div>
@@ -63,11 +63,11 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete }) {
       {/* Column headers */}
       <div style={{
         display: 'grid', gridTemplateColumns: COL_GRID,
-        gap: 10, padding: '7px 14px',
+        gap: 7, padding: '5px 10px',
         background: 'var(--gb-surface-canvas)',
         borderBottom: '1px solid var(--gb-border-subtle)',
-        fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
-        letterSpacing: 1, color: 'var(--gb-text-muted)',
+        fontSize: 8.5, fontWeight: 700, textTransform: 'uppercase',
+        letterSpacing: 0.5, color: 'var(--gb-text-muted)',
       }}>
         <div>Variable</div>
         <div>Kind</div>
@@ -97,9 +97,9 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete }) {
             key={v.name}
             style={{
               display: 'grid', gridTemplateColumns: COL_GRID,
-              gap: 10, padding: '8px 14px', alignItems: 'center',
+              gap: 7, padding: '6px 10px', alignItems: 'center',
               borderBottom: i < vars.length - 1 ? '1px solid var(--gb-border-subtle)' : 'none',
-              fontSize: 11.5,
+              fontSize: 10.5,
               background: isMissNoFallback ? 'var(--gb-warning-tint-soft)' : 'transparent',
             }}
           >
@@ -121,7 +121,7 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete }) {
 
             {/* Source config */}
             <div style={{
-              fontFamily: 'var(--gb-font-mono)', fontSize: 10.5,
+              fontFamily: 'var(--gb-font-mono)', fontSize: 9.5,
               color: 'var(--gb-text-tertiary)',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>
@@ -155,7 +155,7 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete }) {
 
       {/* Add-variable footer row */}
       <div style={{
-        padding: 10,
+        padding: 8,
         background: 'var(--gb-surface-modal)',
         borderTop: '1px solid var(--gb-border-subtle)',
       }}>
