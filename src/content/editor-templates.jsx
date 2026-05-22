@@ -84,6 +84,14 @@ function convertVars(tpl) {
   });
 }
 
+/* New-format variable → stored definition (also the resolver's input shape). */
+function varDef(v) {
+  if (v.kind === 'builtin')                  return { type: 'builtin',  builtin:  v.config };
+  if (v.kind === 'dom' || v.kind === 'pick') return { type: 'selector', selector: v.config };
+  if (v.kind === 'regex')                    return { type: 'regex',    pattern:  v.config };
+  return { type: 'literal', value: v.config };
+}
+
 /* ────────────────────────────────────────────────────────────
    Render a text string with {{varname}} tokens as BodyVar chips
 ──────────────────────────────────────────────────────────── */
@@ -243,6 +251,7 @@ function TemplateEditor({ tpl, onDelete }) {
   const [enabled,  setEnabled]  = useState(tpl.enabled !== false);
   const [name,     setName]     = useState(tpl.name || '');
   const [ruleData, setRuleData] = useState(null);
+  const [resolvedMap, setResolvedMap] = useState({});
   const [align,    setAlign]    = useState('left');
   const [marks,    setMarks]    = useState({ bold: false, italic: false, underline: false, strike: false });
   const [smartFor, setSmartFor] = useState(null);
@@ -272,12 +281,7 @@ function TemplateEditor({ tpl, onDelete }) {
       const obj = {};
       vars.forEach((v) => {
         const base = (tpl.vars && tpl.vars[v.name]) ? { ...tpl.vars[v.name] } : {};
-        if (v.kind === 'builtin')    { base.type = 'builtin';  base.builtin  = v.config; }
-        else if (v.kind === 'dom')   { base.type = 'selector'; base.selector = v.config; }
-        else if (v.kind === 'regex') { base.type = 'regex';    base.pattern  = v.config; }
-        else                         { base.type = 'literal';  base.value    = v.config; }
-        base.smart = v.smart || {};
-        obj[v.name] = base;
+        obj[v.name] = { ...base, ...varDef(v), smart: v.smart || {} };
       });
       next.vars = obj;
       next.varOrder = vars.map((v) => v.name);
@@ -302,6 +306,32 @@ function TemplateEditor({ tpl, onDelete }) {
     return () => clearTimeout(saveTimer.current);
   }, [name, enabled, vars, ruleData]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* ── Live resolution ────────────────────────────────────────
+     The editor window has no page DOM, so it asks the order /
+     account tab (via editor.js' __gbResolveVars bridge) to resolve
+     each variable, then overlays the values onto the table. */
+  const varSig = vars.map((v) => `${v.name} ${v.kind} ${v.config}`).join('');
+  useEffect(() => {
+    if (typeof window.__gbResolveVars !== 'function' || vars.length === 0) {
+      setResolvedMap({});
+      return undefined;
+    }
+    let cancelled = false;
+    const obj = {};
+    vars.forEach((v) => { obj[v.name] = varDef(v); });
+    Promise.resolve(window.__gbResolveVars(obj)).then((res) => {
+      if (cancelled) return;
+      const resolved = (res && res.resolved) || {};
+      const map = {};
+      vars.forEach((v) => {
+        const val = resolved[v.name];
+        map[v.name] = { resolved: val ? String(val) : null, status: val ? 'ok' : 'miss' };
+      });
+      setResolvedMap(map);
+    });
+    return () => { cancelled = true; };
+  }, [varSig]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const RulesComp = typeId === 'order' ? OrderRules : typeId === 'case' ? CaseRules : AccountRules;
 
   const S = { // compact spacing constants
@@ -310,6 +340,12 @@ function TemplateEditor({ tpl, onDelete }) {
     mb14: { marginBottom: 14 },
     label: { fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .8, color: 'var(--gb-text-muted)', marginBottom: 4, display: 'block' },
   };
+
+  // Overlay live-resolved values onto the variable definitions for display.
+  const displayVars = vars.map((v) => {
+    const r = resolvedMap[v.name];
+    return r ? { ...v, resolved: r.resolved, status: r.status } : v;
+  });
 
   return (
     <div style={{ fontFamily: 'var(--gb-font-sans)', color: 'var(--gb-text-secondary)' }}>
@@ -373,7 +409,7 @@ function TemplateEditor({ tpl, onDelete }) {
       <div style={S.mb12}>
         <span style={S.label}>Subject</span>
         <div style={{ padding: '7px 10px', background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)', fontSize: 12, color: 'var(--gb-text-primary)', fontWeight: 600, lineHeight: 1.5, minHeight: 32 }}>
-          {renderTokens(tpl.subject || '', vars, setSmartFor)}
+          {renderTokens(tpl.subject || '', displayVars, setSmartFor)}
         </div>
       </div>
 
@@ -381,7 +417,7 @@ function TemplateEditor({ tpl, onDelete }) {
       <div style={S.mb12}>
         <span style={S.label}>Email body</span>
         <EditorPane
-          body={renderBodyHtml(tpl.body || '', vars, setSmartFor)}
+          body={renderBodyHtml(tpl.body || '', displayVars, setSmartFor)}
           align={align} setAlign={setAlign}
           marks={marks} setMarks={setMarks}
         />
@@ -389,7 +425,7 @@ function TemplateEditor({ tpl, onDelete }) {
 
       {/* ── Variables ── */}
       <div style={S.mb12}>
-        <VariableTable typeId={typeId} vars={vars} onAdd={() => setShowAdd(true)} onDelete={handleDeleteVar} />
+        <VariableTable typeId={typeId} vars={displayVars} onAdd={() => setShowAdd(true)} onDelete={handleDeleteVar} />
       </div>
 
       <AnimatePresence>

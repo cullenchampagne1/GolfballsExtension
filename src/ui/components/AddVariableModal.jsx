@@ -19,9 +19,9 @@ const RegexIcon   = (p) => <Icon {...p}><circle cx="12" cy="12" r="3"/><path d="
 const VariableIcon= (p) => <Icon {...p}><path d="M5 4 a14 14 0 000 16M19 4a14 14 0 010 16"/><path d="M9 9l6 6M9 15l6-6"/></Icon>;
 
 export const SOURCE_KINDS = {
-  order:   ['builtin', 'dom', 'pick', 'literal'],
+  order:   ['builtin', 'dom', 'pick', 'regex', 'literal'],
   case:    ['builtin', 'regex', 'literal'],
-  account: ['builtin', 'literal'],
+  account: ['builtin', 'dom', 'regex', 'literal'],
 };
 
 const KIND_OPTIONS = {

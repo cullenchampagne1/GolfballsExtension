@@ -1154,6 +1154,36 @@ function refreshHints() {
   });
 }
 
+/**
+ * Resolves a set of variables against the live order/account tab and returns
+ * the content script's resolved-value map. Used by the React template editor
+ * to populate its variable table with live values — the editor window itself
+ * has no access to the page DOM.
+ * @param {object} varsObj { name: { type, builtin|selector|pattern|value } }
+ * @returns {Promise<{ resolved: object, toEmail?: string }>}
+ */
+function resolveVarsLive(varsObj) {
+  return new Promise((resolve) => {
+    if (!orderTabId || !varsObj || Object.keys(varsObj).length === 0) {
+      resolve({ resolved: {} });
+      return;
+    }
+    chrome.scripting.executeScript({ target: { tabId: orderTabId }, files: [
+      'theme.js', 'libs/flatpickr.js', 'content/notifications.js', 'content/calendar.js',
+      'content/smart-detection.js', 'content/variable-resolution.js', 'content/logo-extractor.js',
+      'content/charge-modal.js', 'content/order-edit-modal.js', 'content/page-utils.js', 'content/main.js'
+    ] }, () => {
+      void chrome.runtime.lastError;
+      chrome.tabs.sendMessage(
+        orderTabId,
+        { action: 'resolveVars', vars: varsObj, toField: { type: 'auto' } },
+        (result) => { void chrome.runtime.lastError; resolve(result || { resolved: {} }); },
+      );
+    });
+  });
+}
+window.__gbResolveVars = resolveVarsLive;
+
 // ═══════════════════════════════════════════════════════════════
 // EMAIL TEMPLATE: SAVE / DELETE
 // ═══════════════════════════════════════════════════════════════
