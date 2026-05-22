@@ -564,39 +564,48 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'paAutomate') {
     const { paUrl, payload } = msg;
     if (!paUrl) { sendResponse({ ok: false, error: 'No Power Automate URL configured.' }); return true; }
-    // Power Automate direct-trigger URLs return 202 Accepted with no JSON body.
-    // Treat any 2xx as success — don't require a parseable response body.
-    fetch(paUrl, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
-    })
-      .then(r => {
+    (async () => {
+      try {
+        // Inline remote <img> sources as base64 data URIs so the images
+        // are self-contained and survive email delivery — recipients no
+        // longer depend on their client fetching external / hotlink-
+        // protected / relative URLs (the cause of "half-broken" images).
+        if (payload && Array.isArray(payload.emails)) {
+          for (const em of payload.emails) {
+            if (em && typeof em.htmlBody === 'string') {
+              em.htmlBody = await inlineEmailImages(em.htmlBody);
+            }
+          }
+        }
+        // PA direct-trigger URLs return 202 Accepted with no JSON body.
+        // Treat any 2xx as success — don't require a parseable body.
+        const r = await fetch(paUrl, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(payload),
+        });
         if (r.ok) {
-          return r.text().then(text => {
-            try {
-              const data = JSON.parse(text);
-              if (typeof data.ok === 'boolean') {
-                sendResponse({ ok: data.ok, sent: data.sent, failed: data.failed, results: data.results });
-              } else {
-                sendResponse({ ok: true, results: [{ status: 'sent' }] });
-              }
-            } catch {
-              // Empty / non-JSON body — PA accepted the request (202)
+          const text = await r.text();
+          try {
+            const data = JSON.parse(text);
+            if (typeof data.ok === 'boolean') {
+              sendResponse({ ok: data.ok, sent: data.sent, failed: data.failed, results: data.results });
+            } else {
               sendResponse({ ok: true, results: [{ status: 'sent' }] });
             }
-          });
+          } catch {
+            sendResponse({ ok: true, results: [{ status: 'sent' }] });
+          }
         } else {
-          return r.text().then(body => {
-            console.warn('[GB PA] HTTP error', r.status, body.slice(0, 200));
-            sendResponse({ ok: false, error: `HTTP ${r.status}` });
-          });
+          const body = await r.text();
+          console.warn('[GB PA] HTTP error', r.status, body.slice(0, 200));
+          sendResponse({ ok: false, error: `HTTP ${r.status}` });
         }
-      })
-      .catch(e => {
+      } catch (e) {
         console.warn('[GB PA] Request failed:', e.message);
         sendResponse({ ok: false, error: e.message });
-      });
+      }
+    })();
     return true;
   }
 
@@ -852,6 +861,80 @@ function createEditorWindow() {
 chrome.windows.onRemoved.addListener((windowId) => {
   if (windowId === editorWindowId) editorWindowId = null;
 });
+
+
+// ── Email image inlining ──────────────────────────────────────────────────────
+// Outgoing emails reference images by URL. External / hotlink-protected /
+// relative URLs frequently fail to load in the recipient's inbox ("half-broken"
+// images). Before a Power Automate send we fetch each remote image and rewrite
+// its <img src> to a self-contained base64 data URI.
+
+const GB_MAX_IMG_BYTES = 3 * 1024 * 1024; // skip images larger than 3 MB
+
+/** ArrayBuffer → base64 string (chunked to stay within the call-stack limit). */
+function gbBufToBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+/**
+ * Rewrites every remote <img src> in an HTML string to a base64 data URI.
+ * Best-effort: any image that can't be fetched keeps its original src, and a
+ * failure never blocks the send. data:/cid: sources and unresolvable relative
+ * paths are left untouched.
+ * @param {string} html
+ * @returns {Promise<string>}
+ */
+async function inlineEmailImages(html) {
+  if (!html || typeof html !== 'string' || html.indexOf('<img') === -1) return html;
+
+  // Collect unique src values from <img> tags.
+  const urls   = new Set();
+  const imgRe  = /<img\b[^>]*>/gi;
+  const srcRe  = /\bsrc\s*=\s*(?:"([^"]*)"|'([^']*)')/i;
+  let m;
+  while ((m = imgRe.exec(html))) {
+    const sm = m[0].match(srcRe);
+    const url = sm && (sm[1] || sm[2] || '').trim();
+    if (url) urls.add(url);
+  }
+  if (!urls.size) return html;
+
+  // Fetch + convert each remote image.
+  const map = {};
+  await Promise.all([...urls].map(async (raw) => {
+    if (/^data:/i.test(raw)) return;                  // already inline
+    let fetchUrl = raw.replace(/&amp;/gi, '&');       // un-escape HTML entities
+    if (fetchUrl.startsWith('//')) fetchUrl = 'https:' + fetchUrl;
+    if (!/^https?:\/\//i.test(fetchUrl)) return;      // relative / blob: / cid: — can't resolve here
+    try {
+      const resp = await fetch(fetchUrl, { referrerPolicy: 'no-referrer' });
+      if (!resp.ok) { console.warn('[GB PA] image fetch failed', resp.status, fetchUrl); return; }
+      const type = resp.headers.get('content-type') || 'image/png';
+      if (!/^image\//i.test(type)) return;            // not an image
+      const buf = await resp.arrayBuffer();
+      if (buf.byteLength > GB_MAX_IMG_BYTES) { console.warn('[GB PA] image too large, left as URL', fetchUrl); return; }
+      map[raw] = `data:${type};base64,${gbBufToBase64(buf)}`;
+    } catch (e) {
+      console.warn('[GB PA] image inline error', fetchUrl, e.message);
+    }
+  }));
+
+  const origs = Object.keys(map);
+  if (!origs.length) return html;
+
+  // Replace longest URLs first so a shorter URL can't corrupt a longer one
+  // that contains it as a substring.
+  let out = html;
+  origs.sort((a, b) => b.length - a.length);
+  for (const orig of origs) out = out.split(orig).join(map[orig]);
+  return out;
+}
 
 
 // ── Graph OAuth PKCE helpers ──────────────────────────────────────────────────
