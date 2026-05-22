@@ -69,27 +69,21 @@ function ensureStyle() {
     .gb-rte-content p:last-child { margin-bottom: 0; }
     .gb-rte-content a { color: var(--gb-brand-label); }
     .gb-rte-content ul, .gb-rte-content ol { margin: 0 0 8px; padding-left: 22px; }
+    /* Matches the design-spec Chip (components-reference.jsx:219 / Chip.jsx):
+       clean inline pill, weight 500, no bolt/divider. Click still opens the
+       smart-options submenu via onChipClick. */
     .gb-rte-chip {
-      display: inline-flex; align-items: stretch; vertical-align: baseline;
-      margin: 0 1px; border-radius: 4px; overflow: hidden;
+      display: inline-flex; align-items: center;
+      padding: 3px 8px; margin: 0 1px;
+      border-radius: var(--gb-r-sm);
       background: var(--gb-brand-tint-soft);
       border: 1px solid var(--gb-brand-tint-border);
       color: var(--gb-brand-label);
-      font-family: var(--gb-font-mono); font-size: 0.9em; font-weight: 600;
-      line-height: 1.5;
+      font-family: var(--gb-font-mono); font-size: 0.9em; font-weight: 500;
+      line-height: 1.4; vertical-align: baseline;
       white-space: nowrap; user-select: all; cursor: pointer;
     }
     .gb-rte-chip:hover { background: var(--gb-brand-tint-medium); }
-    .gb-rte-chip-name { padding: 0 5px; }
-    .gb-rte-chip-bolt {
-      display: inline-flex; align-items: center; padding: 0 4px;
-      border-left: 1px solid var(--gb-brand-tint-border);
-      opacity: 0.55; transition: opacity .12s, background .12s;
-    }
-    .gb-rte-chip-bolt svg { display: block; }
-    .gb-rte-chip:hover .gb-rte-chip-bolt {
-      opacity: 1; background: var(--gb-brand-tint-medium);
-    }
     .gb-rte-ph {
       position: absolute; pointer-events: none;
       color: var(--gb-text-ghost);
@@ -97,15 +91,9 @@ function ensureStyle() {
   (document.head || document.documentElement).appendChild(el);
 }
 
-/* ── {{var}} ↔ chip conversion ──────────────────────────────────
-   Each chip is a tiny two-part pill: the name on the left, a bolt
-   "submenu" affordance on the right (divider + lightning icon).
-   Clicking anywhere on the chip opens the variable's smart options.
-   Filled SVG — crisper than stroke at 9px. */
-const CHIP_BOLT =
-  '<span class="gb-rte-chip-bolt"><svg viewBox="0 0 24 24" width="9" height="9" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>';
+/* ── {{var}} ↔ chip conversion ─────────────────────────────────── */
 function chipHTML(name) {
-  return `<span class="gb-rte-chip" contenteditable="false"><span class="gb-rte-chip-name">{{${name}}}</span>${CHIP_BOLT}</span>`;
+  return `<span class="gb-rte-chip" contenteditable="false">{{${name}}}</span>`;
 }
 function highlightVars(html) {
   return String(html || '').replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, n) => chipHTML(n.trim()));
@@ -114,9 +102,7 @@ function stripChips(html) {
   const tmp = document.createElement('div');
   tmp.innerHTML = html || '';
   tmp.querySelectorAll('.gb-rte-chip').forEach(s => {
-    // Extract from the name span so the bolt SVG never leaks into storage.
-    const nameEl = s.querySelector('.gb-rte-chip-name');
-    s.replaceWith(document.createTextNode((nameEl || s).textContent || ''));
+    s.replaceWith(document.createTextNode(s.textContent || ''));
   });
   return tmp.innerHTML;
 }
@@ -255,13 +241,12 @@ export function RichTextEditor({
     if (singleLine && e.key === 'Enter') e.preventDefault();
   }
 
-  // Clicking a {{variable}} chip (name or bolt) opens its smart-options modal.
+  // Clicking a {{variable}} chip opens its smart-options modal.
   function onClickContent(e) {
     if (!onChipClick) return;
     const chip = e.target?.closest?.('.gb-rte-chip');
     if (!chip) return;
-    const nameEl = chip.querySelector('.gb-rte-chip-name');
-    const name   = ((nameEl || chip).textContent || '').replace(/[{}]/g, '').trim();
+    const name = (chip.textContent || '').replace(/[{}]/g, '').trim();
     if (name) onChipClick(name);
   }
 
