@@ -1,0 +1,121 @@
+import React, { useState } from 'react';
+import { motion } from 'motion/react';
+
+/* ───────────────────────────────────────────────────────────────
+   shared.jsx — primitives shared across the component library:
+   Motion transition presets, the async-action hook, the input
+   shell, status tint families, and the spinner.
+
+   Colors are always --gb-* tokens. Motion transitions can't take
+   var(), so the --gb-anim* timings are mirrored here as JS values.
+─────────────────────────────────────────────────────────────── */
+
+/**
+ * Context published by FloatingPanel. ModalHeader reads it so that, inside
+ * a FloatingPanel, the header becomes the drag handle and its close button
+ * drives the panel's animated dismiss.
+ */
+export const FloatingPanelContext = React.createContext(null);
+
+/** JS mirror of the --gb-anim* CSS tokens, for Motion `transition`. */
+export const T = {
+  fast:   { duration: 0.12, ease: [0.4, 0, 0.2, 1] },
+  base:   { duration: 0.18, ease: [0.4, 0, 0.2, 1] },
+  bounce: { duration: 0.28, ease: [0.34, 1.4, 0.64, 1] },
+};
+
+/** Error shake — keyframes + easing, matches the spec's gb-shake. */
+export const SHAKE = [0, -4, 4, -4, 4, 0];
+export const SHAKE_T = { duration: 0.35, ease: [0.36, 0.07, 0.19, 0.97] };
+
+/**
+ * Status tint families. Each tone maps to its --gb-{tone}-* set:
+ *   fg     text/icon color      soft   8%  tint background
+ *   bg     15% tint background  strong 25% tint background
+ *   bd     30% tint border
+ */
+export const TINT = {
+  neutral: { fg: 'var(--gb-text-tertiary)', bg: 'var(--gb-fill-subtle)',         soft: 'var(--gb-fill-faint)',        strong: 'var(--gb-fill-soft)',           bd: 'var(--gb-border-default)' },
+  brand:   { fg: 'var(--gb-brand-label)',   bg: 'var(--gb-brand-tint-medium)',   soft: 'var(--gb-brand-tint-soft)',   strong: 'var(--gb-brand-tint-strong)',   bd: 'var(--gb-brand-tint-border)' },
+  error:   { fg: 'var(--gb-error-fg)',      bg: 'var(--gb-error-tint-medium)',   soft: 'var(--gb-error-tint-soft)',   strong: 'var(--gb-error-tint-strong)',   bd: 'var(--gb-error-tint-border)' },
+  warning: { fg: 'var(--gb-warning-fg)',    bg: 'var(--gb-warning-tint-medium)', soft: 'var(--gb-warning-tint-soft)', strong: 'var(--gb-warning-tint-strong)', bd: 'var(--gb-warning-tint-border)' },
+  success: { fg: 'var(--gb-success-fg)',    bg: 'var(--gb-success-tint-medium)', soft: 'var(--gb-success-tint-soft)', strong: 'var(--gb-success-tint-strong)', bd: 'var(--gb-success-tint-border)' },
+  info:    { fg: 'var(--gb-info-fg)',       bg: 'var(--gb-info-tint-medium)',    soft: 'var(--gb-info-tint-soft)',    strong: 'var(--gb-info-tint-strong)',    bd: 'var(--gb-info-tint-border)' },
+};
+
+/**
+ * Clone an icon element with a resolved pixel size. Non-elements
+ * (already-sized nodes, strings) pass straight through.
+ */
+export function sizeIcon(icon, size) {
+  return React.isValidElement(icon) ? React.cloneElement(icon, { size }) : icon;
+}
+
+/**
+ * Async-action state machine shared by Btn and IconBtn.
+ *
+ * If the click handler returns a Promise, the control drives itself
+ * idle → loading → success | error → idle. A `state` prop, when not
+ * 'idle', overrides the internal state for manual control.
+ *
+ * @returns {[string, (onClick:Function, e:Event) => void]}
+ */
+export function useAsyncState(stateProp = 'idle') {
+  const [auto, setAuto] = useState('idle');
+  const effective = stateProp !== 'idle' ? stateProp : auto;
+
+  const run = (onClick, event) => {
+    if (effective === 'loading' || !onClick) return;
+    const result = onClick(event);
+    if (result && typeof result.then === 'function') {
+      setAuto('loading');
+      result
+        .then(() => setAuto('success'), () => setAuto('error'))
+        .finally(() => setTimeout(() => setAuto('idle'), 1200));
+    }
+  };
+
+  return [effective, run];
+}
+
+/** Spinning ring — the gb-spin keyframe, expressed with Motion. */
+export function Spinner({ size = 12 }) {
+  return (
+    <motion.span
+      style={{
+        width: size, height: size, borderRadius: '50%',
+        border: '2px solid currentColor', borderTopColor: 'transparent',
+        display: 'block', flexShrink: 0,
+      }}
+      animate={{ rotate: [0, 360] }}
+      transition={{ duration: 0.8, ease: 'linear', repeat: Infinity }}
+    />
+  );
+}
+
+/** Shared visual shell for Input / Textarea / Dropdown. */
+export function inputBaseStyle({ focused, error, size = 'md' }) {
+  const heights = { sm: 28, md: 32, lg: 36 };
+  const fontSizes = { sm: 11.5, md: 12, lg: 13 };
+  return {
+    background: 'var(--gb-surface-2)',
+    border: '1px solid ' + (
+      focused ? 'var(--gb-brand-label)'
+        : error ? 'var(--gb-error)'
+          : 'var(--gb-border-default)'
+    ),
+    borderRadius: 'var(--gb-r-md)',
+    boxShadow: focused ? 'var(--gb-focus-ring)' : 'none',
+    height: heights[size],
+    fontSize: fontSizes[size],
+    fontFamily: 'var(--gb-font-sans)',
+    fontWeight: 500,
+    color: 'var(--gb-text-primary)',
+    transition: 'border-color var(--gb-anim-fast), box-shadow var(--gb-anim-fast)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '0 10px',
+    boxSizing: 'border-box',
+  };
+}

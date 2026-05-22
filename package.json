@@ -1,0 +1,22 @@
+{
+  "name": "golfballs-extension",
+  "private": true,
+  "version": "3.3.0",
+  "type": "module",
+  "description": "Build tooling for incrementally migrating the extension to React.",
+  "scripts": {
+    "dev": "vite",
+    "build": "node build.js",
+    "watch": "node build.js --watch"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.0"
+  },
+  "dependencies": {
+    "motion": "^12.40.0",
+    "react": "^18.3.1",
+    "react-beautiful-color": "^2.1.0",
+    "react-dom": "^18.3.1"
+  }
+}

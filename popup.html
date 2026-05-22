@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Golfballs Templates</title>
+<link rel="stylesheet" href="theme.css">
+<script src="theme-init.js"></script>
+<script src="theme.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root { --anim: .2s cubic-bezier(.4,0,.2,1); }
+
+html, body {
+  width: 320px; 
+  min-height: 340px;      /* Changed from height: 390px */
+  height: fit-content;    /* Added */
+  overflow: hidden; 
+  margin: 0; 
+  padding: 0;
+  background: #111111;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: rgba(255,255,255,.8);
+}
+
+#popup-root {
+  width: 320px; 
+  min-height: 340px;      /* Changed from height: 390px */
+  height: fit-content;    /* Added */
+  display: flex; 
+  flex-direction: column;
+  background: #111111; 
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.08);
+  position: relative;
+}
+
+/* ── Header ── */
+.hdr {
+  background: rgba(0,0,0,.4);
+  padding: 11px 13px; display: flex; align-items: center; gap: 9px;
+  flex-shrink: 0; border-bottom: 1px solid rgba(255,255,255,.06); position: relative;
+}
+.hdr-icon {
+  width: 28px; height: 28px; 
+  background: rgba(var(--gb-brand-label-rgb, 125,184,42), .15); 
+  border-radius: 7px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  color: var(--gb-brand-label, #7db82a);
+  border: 1px solid rgba(var(--gb-brand-label-rgb, 125,184,42), .3);
+}
+.hdr-icon svg { width: 14px; height: 14px; display: block; }
+.hdr-title { font-size: 13px; font-weight: 700; color: #fff; }
+.hdr-sub   { font-size: 10px; color: rgba(255,255,255,.5); margin-top: 1px; font-weight: 500; }
+.hdr-manage {
+  margin-left: auto; background: rgba(255,255,255,.05); color: rgba(255,255,255,.8);
+  border: 1px solid rgba(255,255,255,.1); border-radius: 6px; padding: 5px 9px;
+  font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+  display: flex; align-items: center; gap: 4px; transition: all .2s;
+  font-family: inherit;
+}
+.hdr-manage:hover { background: rgba(255,255,255,.12); color: #fff; border-color: rgba(255,255,255,.2); }
+.hdr-manage svg { width: 10px; height: 10px; }
+
+/* ── Body ── */
+.body { padding: 12px 13px 6px; flex-shrink: 0; overflow: hidden; position: relative; }
+
+.loading { display: flex; align-items: center; gap: 9px; color: rgba(255,255,255,.5); font-size: 12px; font-weight: 500; padding: 6px 0; }
+.spin {
+  width: 12px; height: 12px;
+  border: 2px solid rgba(var(--gb-brand-label-rgb, 125,184,42), .2);
+  border-top-color: var(--gb-brand-label, #7db82a);
+  border-radius: 50%; animation: spin .8s linear infinite; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse-red { 0%,100% { opacity:1; } 50% { opacity:.5; } }
+@keyframes shake-field {
+  0%,100% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+@keyframes badge-pop {
+  0%   { transform: scale(0.4); }
+  65%  { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+#view-main:not(.hidden) { display: flex; flex-direction: column; height: 100%; }
+.top-section { flex-shrink: 0; }
+.bottom-section { flex-shrink: 0; padding-top: 14px; padding-bottom: 12px; }
+
+/* ── Dropdown ── */
+.dropdown-wrap { position: relative; margin-bottom: 10px; z-index: 100; }
+.dropdown-btn {
+  width: 100%; background: rgba(0,0,0,.3);
+  border: 1px solid rgba(255,255,255,.1); border-radius: 8px;
+  padding: 8px 32px 8px 11px; font-size: 12.5px; font-weight: 500;
+  color: #fff; cursor: pointer; text-align: left;
+  display: flex; align-items: center; gap: 8px; position: relative;
+  transition: all .15s; box-sizing: border-box; font-family: inherit;
+}
+.dropdown-btn:hover { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.2); }
+.dropdown-btn.open {
+  border-color: var(--gb-brand-label, #7db82a); background: rgba(255,255,255,.05);
+  box-shadow: 0 0 0 2px rgba(var(--gb-brand-label-rgb, 125,184,42),.15);
+}
+.dropdown-btn .match-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.dropdown-btn .btn-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dropdown-chevron {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  color: rgba(255,255,255,.4); pointer-events: none;
+  transition: transform .22s cubic-bezier(.34,1.56,.64,1), color .2s;
+}
+.dropdown-btn.open .dropdown-chevron { transform: translateY(-50%) rotate(180deg); color: var(--gb-brand-label, #7db82a); }
+
+.dropdown-menu {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  background: var(--gb-surface-elevated, #171717); border: 1px solid rgba(255,255,255,.1);
+  border-radius: 9px; z-index: 9999; max-height: 160px; overflow-y: auto; overflow-x: hidden;
+  scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.1) transparent;
+  opacity: 0; transform: translateY(-5px) scaleY(.95); transform-origin: top center;
+  pointer-events: none; transition: opacity .16s ease, transform .18s cubic-bezier(.34,1.4,.64,1);
+  box-shadow: 0 10px 30px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.03);
+}
+.dropdown-menu::-webkit-scrollbar { width: 4px; }
+.dropdown-menu::-webkit-scrollbar-track { background: transparent; }
+.dropdown-menu::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 4px; }
+.dropdown-menu::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.25); }
+.dropdown-menu.open { opacity: 1; transform: translateY(0) scaleY(1); pointer-events: auto; }
+
+.dropdown-option {
+  display: flex; align-items: center; gap: 9px; padding: 8px 11px; cursor: pointer;
+  font-size: 12.5px; border-bottom: 1px solid rgba(255,255,255,.05); transition: background .1s;
+}
+.dropdown-option:last-child { border-bottom: none; }
+.dropdown-option:hover    { background: rgba(255,255,255,.08); color: #fff; }
+.dropdown-option.selected { background: rgba(var(--gb-brand-label-rgb, 125,184,42),.15); }
+.dropdown-option .match-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.match-dot.green {
+  background: var(--gb-brand-label, #7db82a);
+  box-shadow: 0 0 5px rgba(var(--gb-brand-label-rgb, 125,184,42),.65), 0 0 10px rgba(var(--gb-brand-label-rgb, 125,184,42),.2);
+}
+.match-dot.gray { background: rgba(255,255,255,.2); }
+.opt-name { flex: 1; font-weight: 500; color: var(--gb-text-secondary, #cccccc); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dropdown-option.selected .opt-name { color: var(--gb-brand-label, #7db82a); font-weight: 600; }
+.opt-matched-label {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
+  color: var(--gb-brand-label, #7db82a); background: rgba(var(--gb-brand-label-rgb, 125,184,42),.15);
+  border: 1px solid rgba(var(--gb-brand-label-rgb, 125,184,42),.3); border-radius: 4px;
+  padding: 1px 5px; flex-shrink: 0;
+}
+.opt-var-tag {
+  font-size: 9px; font-weight: 700; color: var(--gb-brand-label, #7db82a);
+  background: rgba(var(--gb-brand-label-rgb, 125,184,42),.1);
+  border: 1px solid rgba(var(--gb-brand-label-rgb, 125,184,42),.25);
+  border-radius: 3px; padding: 1px 5px; flex-shrink: 0; letter-spacing: .2px;
+}
+
+.section-label {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px;
+  color: rgba(255,255,255,.4); margin-bottom: 6px;
+}
+
+.info-grid { display: grid; gap: 4px; margin-bottom: 10px; }
+.info-row  { display: flex; align-items: flex-start; gap: 7px; min-width: 0; }
+.info-key  {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  color: rgba(255,255,255,.4); min-width: 55px; flex-shrink: 0; padding-top: 1px;
+}
+.info-val  {
+  font-size: 11.5px; color: rgba(255,255,255,.7); font-weight: 500;
+  display: block; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.info-val.ok   { color: var(--gb-brand-label, #7db82a); font-weight: 600; }
+.info-val.warn { color: var(--gb-error, #c86060); font-style: italic; }
+
+hr { border: none; border-top: 1px solid rgba(255,255,255,.06); margin: 8px 0 8px; }
+
+/* ── Primary Buttons ── */
+.btn-send {
+  width: 100%; background: var(--gb-brand-dark, #5f7d18); color: var(--gb-brand-text, #d8eeaa);
+  border: 1px solid rgba(var(--gb-brand-label-rgb, 125,184,42),.4); border-radius: 8px;
+  padding: 9px 0; font-size: 12.5px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  transition: all .2s; font-family: inherit; position: relative;
+}
+.btn-send:hover:not(:disabled) {
+  background: var(--gb-brand, #6e901d); color: #fff;
+  border-color: var(--gb-brand-label, #7db82a);
+}
+.btn-send:active:not(:disabled) { transform: scale(.98); }
+.btn-send:disabled {
+  opacity: 0.5; cursor: not-allowed; border-color: rgba(255,255,255,.1); background: rgba(0,0,0,.3); color: rgba(255,255,255,.5);
+}
+.btn-send svg { width: 13px; height: 13px; }
+
+/* ── Secondary Buttons ── */
+.btn-charge, .btn-order-edit, .btn-watch-add, .btn-watch-show {
+  width: 100% !important; background: rgba(0,0,0,.3); color: rgba(255,255,255,.7);
+  border: 1px solid rgba(255,255,255,.1) !important; border-radius: 8px !important;
+  padding: 7px 0 !important; font-size: 11.5px !important; font-weight: 500; cursor: pointer;
+  display: flex !important; align-items: center !important; justify-content: center !important; gap: 6px;
+  transition: all .2s; font-family: inherit;
+  position: relative; box-sizing: border-box !important; margin: 0 !important;
+}
+.btn-charge     { margin-top: 7px !important; }
+.btn-order-edit { margin-top: 6px !important; }
+#btn-task-list  { margin-top: 6px !important; }
+#btn-submit-proof { margin-top: 6px !important; }
+
+.btn-charge:hover:not(:disabled), .btn-order-edit:hover:not(:disabled), .btn-watch-add:hover:not(:disabled) {
+  background: rgba(255,255,255,.05); color: #fff; border-color: rgba(255,255,255,.2);
+}
+.btn-charge:active:not(:disabled), .btn-order-edit:active:not(:disabled), .btn-watch-add:active:not(:disabled), .btn-watch-show:active:not(:disabled) { 
+  transform: scale(.98); 
+}
+.btn-charge:disabled, .btn-order-edit:disabled, .btn-watch-add:disabled {
+  opacity: 0.5; cursor: not-allowed;
+}
+.btn-charge svg { width: 12px; height: 12px; }
+.btn-order-edit svg, .btn-watch-add svg, .btn-watch-show svg { width: 11px; height: 11px; }
+
+/* Specific Button Tints */
+.btn-charge.ready {
+  background: rgba(var(--gb-brand-label-rgb, 125,184,42), .15); color: var(--gb-brand-label, #7db82a);
+  border-color: rgba(var(--gb-brand-label-rgb, 125,184,42), .3);
+}
+.btn-charge.ready:hover:not(:disabled) { 
+  background: rgba(var(--gb-brand-label-rgb, 125,184,42), .25); color: #fff; 
+}
+.btn-charge.refund { 
+  background: rgba(var(--gb-error-rgb, 200,96,96), .15); color: var(--gb-error, #c86060); 
+  border-color: rgba(var(--gb-error-rgb, 200,96,96), .3); 
+}
+.btn-charge.refund:hover:not(:disabled) { 
+  background: rgba(var(--gb-error-rgb, 200,96,96), .25); color: #fff; 
+}
+
+.btn-row-watch { display: flex; gap: 6px; margin-top: 6px; }
+.btn-watch-add, .btn-watch-show { margin-top: 0; flex: 1; }
+
+.btn-watch-show.has-critical {
+  background: rgba(var(--gb-error-rgb, 200,96,96), .1);
+  color: var(--gb-error, #c86060);
+  border-color: rgba(var(--gb-error-rgb, 200,96,96), .3);
+  animation: pulse-red 2s ease-in-out infinite;
+}
+.btn-watch-show.has-critical:hover {
+  background: rgba(var(--gb-error-rgb, 200,96,96), .2); color: #fff; animation: none;
+}
+
+.watch-badge {
+  min-width: 14px; height: 14px;
+  background: var(--gb-brand-label, #7db82a);
+  color: #111; font-size: 8px; font-weight: 900; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center; padding: 0 4px;
+  position: absolute; top: -5px; right: -4px;
+  box-shadow: 0 0 0 2px #111; transition: background .25s;
+}
+.watch-badge.critical { background: var(--gb-error, #c86060); color: #fff; }
+.watch-badge.hidden { display: none; }
+.watch-badge.pop { animation: badge-pop .32s cubic-bezier(.34,1.56,.64,1) both; }
+
+/* ── Empty State ── */
+.empty { text-align: center; padding: 18px 10px; color: rgba(255,255,255,.5); font-size: 12px; line-height: 1.7; }
+.empty-icon {
+  width: 34px; height: 34px; background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.1); border-radius: 9px;
+  display: flex; align-items: center; justify-content: center; margin: 0 auto 9px;
+}
+.empty-icon svg { width: 16px; height: 16px; color: rgba(255,255,255,.6); }
+.empty strong { color: #fff; display: block; margin-bottom: 3px; font-size: 12.5px; font-weight: 700; }
+.btn-new-empty {
+  margin-top: 10px; background: var(--gb-brand-dark, #5f7d18); color: var(--gb-brand-text, #d8eeaa);
+  border: 1px solid rgba(var(--gb-brand-label-rgb, 125,184,42),.4); border-radius: 7px;
+  padding: 7px 16px; font-size: 11.5px; font-weight: 700; cursor: pointer;
+  transition: all .2s; font-family: inherit;
+}
+.btn-new-empty:hover { background: var(--gb-brand, #6e901d); color: #fff; border-color: var(--gb-brand-label, #7db82a); }
+
+/* ── Nested Modal (Add to Watch List) ── */
+.gb-modal-overlay {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,.6); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  display: flex; align-items: flex-end;
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s ease; z-index: 600;
+}
+.gb-modal-overlay.open { opacity: 1; pointer-events: auto; }
+
+.gb-modal-panel {
+  width: 100%;
+  background: rgba(17,17,17,.95);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(255,255,255,.1);
+  border-radius: 14px 14px 0 0;
+  transform: translateY(100%);
+  transition: transform .3s cubic-bezier(.34,1.25,.64,1);
+  overflow: hidden;
+  box-shadow: 0 -10px 44px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.03);
+}
+.gb-modal-overlay.open .gb-modal-panel { transform: translateY(0); }
+
+.gb-modal-drag {
+  width: 30px; height: 3px; border-radius: 2px;
+  background: rgba(255,255,255,.2);
+  margin: 9px auto 0;
+}
+
+.gb-modal-header {
+  padding: 8px 13px 9px;
+  display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.gb-modal-title {
+  font-size: 12.5px; font-weight: 700; color: #fff;
+  flex: 1; display: flex; align-items: center; gap: 6px;
+}
+.gb-modal-title svg { width: 12px; height: 12px; color: var(--gb-brand-label, #7db82a); flex-shrink: 0; }
+.gb-modal-close {
+  width: 22px; height: 22px; border-radius: 6px; border: none;
+  background: rgba(255,255,255,.05); color: rgba(255,255,255,.8);
+  border: 1px solid rgba(255,255,255,.1);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all .15s; flex-shrink: 0;
+}
+.gb-modal-close:hover { background: rgba(255,255,255,.15); color: #fff; }
+.gb-modal-close svg { width: 10px; height: 10px; }
+
+.gb-modal-body { padding: 11px 13px 13px; }
+
+/* ── Add Modal Form ── */
+.wl-form-field { margin-bottom: 9px; }
+.wl-form-label {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .55px;
+  color: rgba(255,255,255,.5); margin-bottom: 4px; display: block;
+}
+.wl-form-req { color: var(--gb-error, #c86060); margin-left: 2px; }
+.wl-form-input {
+  width: 100%; background: rgba(0,0,0,.3);
+  border: 1px solid rgba(255,255,255,.1); border-radius: 7px;
+  padding: 7px 10px; font-size: 12px; color: #fff;
+  font-family: inherit; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.wl-form-input:focus {
+  border-color: var(--gb-brand-label, #7db82a);
+  box-shadow: 0 0 0 2px rgba(var(--gb-brand-label-rgb, 125,184,42),.15);
+}
+.wl-form-input:disabled { opacity: 0.5; cursor: default; }
+.wl-form-input.error {
+  border-color: var(--gb-error, #c86060);
+  box-shadow: 0 0 0 2px rgba(var(--gb-error-rgb, 200,96,96),.15);
+  animation: shake-field .38s ease;
+}
+.wl-form-input::placeholder { color: rgba(255,255,255,.3); }
+.wl-reason-input { resize: none; height: 60px; line-height: 1.5; }
+
+.wl-form-actions { display: flex; gap: 7px; margin-top: 11px; }
+
+.wl-btn-cancel {
+  flex: 0 0 72px; background: rgba(255,255,255,.05); color: rgba(255,255,255,.8);
+  border: 1px solid rgba(255,255,255,.1); border-radius: 7px;
+  padding: 8px 0; font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: all .15s; font-family: inherit;
+}
+.wl-btn-cancel:hover { background: rgba(255,255,255,.12); color: #fff; }
+
+.wl-btn-confirm {
+  flex: 1; background: var(--gb-brand-dark, #5f7d18); color: var(--gb-brand-text, #d8eeaa);
+  border: 1px solid rgba(var(--gb-brand-label-rgb, 125,184,42),.4); border-radius: 7px;
+  padding: 8px 0; font-size: 11.5px; font-weight: 700; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+  transition: all .2s; font-family: inherit;
+}
+.wl-btn-confirm:hover { background: var(--gb-brand, #6e901d); border-color: var(--gb-brand-label, #7db82a); color: #fff; }
+.wl-btn-confirm:active { transform: scale(.98); }
+.wl-btn-confirm svg { width: 11px; height: 11px; }
+
+.err { background: rgba(var(--gb-error-rgb, 200,96,96), .15); border: 1px solid rgba(var(--gb-error-rgb, 200,96,96), .3); color: var(--gb-error, #c86060); padding: 6px 10px; border-radius: 6px; font-size: 11.5px; margin-bottom: 10px; display: flex; gap: 6px; }
+
+.hidden { display: none !important; }
+
+/* ── Submit Proof modal ── */
+.sp-overlay {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(0,0,0,.7); backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  animation: gbFadeIn .18s ease;
+}
+.sp-card {
+  background: var(--gb-surface, #1a1a1a);
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 16px;
+  width: calc(100vw - 20px); max-width: 420px;
+  max-height: 88vh; display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0,0,0,.9);
+  animation: gbModalUp .28s cubic-bezier(.34,1.4,.64,1);
+}
+.sp-hdr {
+  padding: 14px 16px 12px; flex-shrink: 0;
+  background: rgba(0,0,0,.35); border-bottom: 1px solid rgba(255,255,255,.07);
+  display: flex; align-items: center; gap: 10px;
+}
+.sp-hdr-icon {
+  width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+  background: rgba(var(--gb-brand-label-rgb,125,184,42),.12);
+  border: 1px solid rgba(var(--gb-brand-label-rgb,125,184,42),.25);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--gb-brand-label, #7db82a);
+}
+.sp-hdr-icon svg { width: 14px; height: 14px; }
+.sp-hdr-text h3 { margin: 0; font-size: 13px; font-weight: 700; color: #fff; }
+.sp-hdr-text p  { margin: 2px 0 0; font-size: 10px; color: rgba(255,255,255,.4); }
+.sp-close {
+  margin-left: auto; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+  border-radius: 6px; color: rgba(255,255,255,.6); cursor: pointer;
+  padding: 5px 10px; font: 600 11px/1 inherit; display: flex; align-items: center; gap: 4px;
+  transition: all .15s;
+}
+.sp-close:hover { background: rgba(255,255,255,.12); color: #fff; }
+.sp-close svg { width: 9px; height: 9px; }
+.sp-body { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.sp-dropzone {
+  border: 2px dashed rgba(var(--gb-brand-label-rgb,125,184,42),.25);
+  border-radius: 10px; padding: 22px 16px; text-align: center; cursor: pointer;
+  transition: all .18s; background: rgba(var(--gb-brand-label-rgb,125,184,42),.03);
+  position: relative;
+}
+.sp-dropzone:hover, .sp-dropzone.drag-over {
+  border-color: var(--gb-brand-label, #7db82a);
+  background: rgba(var(--gb-brand-label-rgb,125,184,42),.08);
+}
+.sp-dropzone input[type=file] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.sp-dropzone-icon { color: var(--gb-brand-label, #7db82a); margin-bottom: 6px; }
+.sp-dropzone-icon svg { width: 28px; height: 28px; }
+.sp-dropzone-label { font-size: 12px; font-weight: 600; color: rgba(255,255,255,.7); }
+.sp-dropzone-sub   { font-size: 10px; color: rgba(255,255,255,.35); margin-top: 2px; }
+.sp-file-preview {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(255,255,255,.05); border-radius: 8px; padding: 9px 12px;
+}
+.sp-file-thumb { width: 44px; height: 44px; border-radius: 6px; object-fit: contain;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); }
+.sp-file-thumb-icon { width: 44px; height: 44px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); color: rgba(255,255,255,.4); }
+.sp-file-thumb-icon svg { width: 22px; height: 22px; }
+.sp-file-info { flex: 1; min-width: 0; }
+.sp-file-name { font-size: 12px; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sp-file-size { font-size: 10px; color: rgba(255,255,255,.4); margin-top: 1px; }
+.sp-file-clear { background: none; border: none; color: rgba(255,255,255,.3); cursor: pointer; padding: 4px; border-radius: 4px; transition: all .15s; }
+.sp-file-clear:hover { color: #c86060; background: rgba(200,96,96,.1); }
+.sp-file-clear svg { width: 13px; height: 13px; }
+.sp-field { display: flex; flex-direction: column; gap: 4px; }
+.sp-row2  { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.sp-label { font-size: 10px; font-weight: 700; letter-spacing: .3px; text-transform: uppercase; color: rgba(255,255,255,.38); }
+.sp-input, .sp-select {
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+  border-radius: 7px; color: #fff; font: 500 12px/1 inherit; padding: 0 10px;
+  outline: none; transition: border-color .15s, background .15s; box-sizing: border-box; width: 100%;
+  height: 32px;
+}
+.sp-input:focus, .sp-select:focus { border-color: var(--gb-brand-label,#7db82a); background: rgba(255,255,255,.1); }
+.sp-select option { background: #1a1a1a; }
+.sp-input.readonly { color: rgba(255,255,255,.45); }
+.sp-input::placeholder { color: rgba(255,255,255,.25); }
+.sp-footer {
+  padding: 11px 16px; flex-shrink: 0;
+  border-top: 1px solid rgba(255,255,255,.07); background: rgba(0,0,0,.28);
+  display: flex; gap: 8px; align-items: center;
+}
+.sp-hint { flex: 1; font-size: 10px; color: rgba(255,255,255,.28); }
+.sp-btn-cancel {
+  background: transparent; border: 1px solid rgba(255,255,255,.12);
+  border-radius: 7px; color: rgba(255,255,255,.5); cursor: pointer;
+  padding: 7px 13px; font: 600 11px/1 inherit; transition: all .15s;
+}
+.sp-btn-cancel:hover { background: rgba(255,255,255,.06); color: #fff; }
+.sp-btn-submit {
+  background: linear-gradient(180deg,var(--gb-brand,#6e901d) 0%,var(--gb-brand-dark,#5f7d18) 100%);
+  color: var(--gb-brand-text,#d8eeaa); border: 1px solid var(--gb-brand-border,rgba(125,184,42,.4));
+  border-radius: 7px; cursor: pointer; padding: 7px 16px; font: 600 12px/1 inherit;
+  display: flex; align-items: center; gap: 6px; transition: all .18s;
+}
+.sp-btn-submit:hover:not(:disabled) { filter: brightness(1.12); }
+.sp-btn-submit:disabled { opacity: .4; pointer-events: none; }
+.sp-btn-submit svg { width: 12px; height: 12px; }
+.sp-error { font-size: 11px; color: #c86060; background: rgba(200,96,96,.08); border: 1px solid rgba(200,96,96,.18); border-radius: 6px; padding: 6px 10px; }
+
+</style>
+</head>
+<body>
+<div id="popup-root">
+
+<div class="hdr">
+  <div class="hdr-icon">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+    </svg>
+  </div>
+  <div>
+    <div class="hdr-title">Email Templates</div>
+    <div class="hdr-sub">Golfballs.com</div>
+  </div>
+  <button class="hdr-manage" id="btn-manage">
+    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+    Manage
+  </button>
+</div>
+
+<div class="body">
+  <div id="view-loading" class="loading">
+    <div class="spin"></div> Scanning page…
+  </div>
+
+  <div id="view-empty" class="hidden empty">
+    <div class="empty-icon">
+      <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+      </svg>
+    </div>
+    <strong>No templates yet</strong>
+    Open the manager to create your first template.
+    <br><button class="btn-new-empty" id="btn-new-empty">+ New Template</button>
+  </div>
+
+  <div id="view-main" class="hidden">
+    <div class="top-section">
+      <div id="err-box" class="err hidden">
+        <span>&#9888;</span>
+        <span id="err-text"></span>
+      </div>
+
+      <div class="section-label">Template</div>
+
+      <div class="dropdown-wrap" id="dropdown-wrap">
+        <button class="dropdown-btn" id="dropdown-btn">
+          <span class="match-dot gray" id="active-dot"></span>
+          <span class="btn-label" id="active-label">Select a template…</span>
+          <svg class="dropdown-chevron" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </button>
+        <div class="dropdown-menu" id="dropdown-menu"></div>
+      </div>
+
+      <button class="btn-charge" id="btn-charge" disabled>
+        <svg fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>
+        </svg>
+        <span id="btn-charge-label">Charge Card</span>
+      </button>
+
+      <button class="btn-order-edit" id="btn-order-edit">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        </svg>
+        Order Edit
+      </button>
+
+      <div class="btn-row-watch">
+        <button class="btn-watch-add" id="btn-watch-add" disabled>
+          <svg fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          <span id="btn-watch-add-label">Watch Order</span>
+        </button>
+        <button class="btn-watch-show" id="btn-watch-show">
+          <svg fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+          Watch List
+          <span class="watch-badge hidden" id="watch-badge">0</span>
+        </button>
+      </div>
+
+      <button class="btn-order-edit" id="btn-task-list">
+        <svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+        </svg>
+        My Tasks
+        <span id="btn-task-list-badge" style="display:none;background:rgba(125,184,42,.2);color:var(--gb-brand-label,#7db82a);border:1px solid rgba(125,184,42,.25);padding:1px 6px;border-radius:10px;font-size:9px;margin-left:4px;font-weight:700;"></span>
+      </button>
+
+      <button class="btn-order-edit" id="btn-crm-search">
+        <svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        CRM Search
+      </button>
+
+      <button class="btn-order-edit" id="btn-submit-proof">
+        <svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+        </svg>
+        Submit Proof
+      </button>
+    </div>
+
+    <div class="bottom-section">
+      <div id="vars-loading" class="loading hidden">
+        <div class="spin"></div> Resolving variables...
+      </div>
+      
+      <div class="info-grid" id="info-grid"></div>
+
+      <hr>
+
+      <button class="btn-send" id="btn-send" disabled>
+        <svg fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+        </svg>
+        Open in Outlook
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="gb-modal-overlay" id="modal-watch-add">
+  <div class="gb-modal-panel">
+    <div class="gb-modal-drag"></div>
+    <div class="gb-modal-header">
+      <div class="gb-modal-title">
+        <svg id="wl-modal-icon-svg" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+        <span id="wl-modal-title-text">Watch Order</span>
+      </div>
+      <button class="gb-modal-close" id="modal-add-close">
+        <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="gb-modal-body">
+      <div class="wl-form-field">
+        <label class="wl-form-label" id="wl-add-entity-label">Order #</label>
+        <input class="wl-form-input" id="wl-add-order-id" type="text" disabled placeholder="—">
+      </div>
+      <div class="wl-form-field">
+        <label class="wl-form-label">Reason <span class="wl-form-req">*</span></label>
+        <textarea class="wl-form-input wl-reason-input" id="wl-add-reason" placeholder="What needs attention on this order?"></textarea>
+      </div>
+      <div class="wl-form-actions">
+        <button class="wl-btn-cancel" id="wl-add-cancel">Cancel</button>
+        <button class="wl-btn-confirm" id="wl-add-confirm">
+          <svg id="wl-confirm-icon-svg" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          Add to Watch List
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="popup.js"></script>
+
+<!-- ── Submit Proof Modal ──────────────────────────────────────────────────── -->
+<div class="sp-overlay hidden" id="sp-overlay">
+  <div class="sp-card">
+    <div class="sp-hdr">
+      <div class="sp-hdr-icon">
+        <svg fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+        </svg>
+      </div>
+      <div class="sp-hdr-text">
+        <h3>Submit Proof Request</h3>
+        <p id="sp-context-label">Loading context…</p>
+      </div>
+      <button class="sp-close" id="sp-close">
+        <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        Close
+      </button>
+    </div>
+
+    <div class="sp-body" id="sp-body">
+
+      <!-- File drop zone -->
+      <div class="sp-dropzone" id="sp-dropzone">
+        <input type="file" id="sp-file-input" accept="image/*,.pdf,.ai,.eps,.psd,.png,.jpg,.jpeg,.gif,.svg">
+        <div class="sp-dropzone-icon">
+          <svg fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+            <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+            <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+          </svg>
+        </div>
+        <div class="sp-dropzone-label">Drop file here or click to browse</div>
+        <div class="sp-dropzone-sub">PNG, JPG, PDF, AI, EPS, PSD — any proof file</div>
+      </div>
+
+      <!-- File preview (hidden until file selected) -->
+      <div class="sp-file-preview hidden" id="sp-file-preview">
+        <div id="sp-file-thumb-wrap"></div>
+        <div class="sp-file-info">
+          <div class="sp-file-name" id="sp-file-name">—</div>
+          <div class="sp-file-size" id="sp-file-size">—</div>
+        </div>
+        <button class="sp-file-clear" id="sp-file-clear" title="Remove file">
+          <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Loading dropdowns -->
+      <div class="sp-field" id="sp-loading-row" style="display:flex;align-items:center;gap:6px;">
+        <div class="spin" style="width:14px;height:14px;flex-shrink:0;"></div>
+        <span style="font-size:11px;color:rgba(255,255,255,.4);">Loading sales reps &amp; artists…</span>
+      </div>
+
+      <!-- Fields -->
+      <div id="sp-fields" class="hidden" style="display:flex;flex-direction:column;gap:10px;">
+        <div class="sp-field">
+          <label class="sp-label">Proof Name *</label>
+          <input class="sp-input" id="sp-proof-name" type="text" placeholder="e.g. Acme Corp Logo Proof">
+        </div>
+
+        <div class="sp-row2">
+          <div class="sp-field">
+            <label class="sp-label">Order ID</label>
+            <input class="sp-input" id="sp-order-id" type="text" placeholder="N/A">
+          </div>
+          <div class="sp-field">
+            <label class="sp-label" id="sp-contact-lbl">Contact ID</label>
+            <input class="sp-input readonly" id="sp-contact-id" type="text" readonly>
+          </div>
+        </div>
+
+        <div class="sp-row2">
+          <div class="sp-field">
+            <label class="sp-label">Sales Rep</label>
+            <select class="sp-select" id="sp-rep"></select>
+          </div>
+          <div class="sp-field">
+            <label class="sp-label">Artist</label>
+            <select class="sp-select" id="sp-artist"></select>
+          </div>
+        </div>
+
+        <div class="sp-row2">
+          <div class="sp-field">
+            <label class="sp-label">Status</label>
+            <select class="sp-select" id="sp-status">
+              <option value="1">New</option>
+              <option value="2">In Progress</option>
+              <option value="3">Approved</option>
+              <option value="4">Revision</option>
+            </select>
+          </div>
+          <div class="sp-field">
+            <label class="sp-label">Logo Type</label>
+            <select class="sp-select" id="sp-logo-type">
+              <option value="Ball">Ball</option>
+              <option value="Box">Box</option>
+              <option value="Bag">Bag</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="sp-field">
+          <label class="sp-label">Notes</label>
+          <input class="sp-input" id="sp-notes" type="text" placeholder="Optional notes for the art team">
+        </div>
+
+        <div id="sp-error" class="sp-error hidden"></div>
+      </div>
+
+    </div>
+
+    <div class="sp-footer">
+      <div class="sp-hint" id="sp-result-hint"></div>
+      <button class="sp-btn-cancel" id="sp-cancel">Cancel</button>
+      <button class="sp-btn-submit" id="sp-submit" disabled>
+        <svg fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+        </svg>
+        Submit Proof
+      </button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

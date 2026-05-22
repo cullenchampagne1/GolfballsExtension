@@ -1,0 +1,174 @@
+import React, { useState } from 'react';
+import {
+  FloatingPanel, ModalHeader, ModalFooter, Field, Input, Btn, I,
+  NumberDisplay, inputBaseStyle,
+} from '../ui/index.js';
+
+/* ───────────────────────────────────────────────────────────────
+   MarginCalc — margin & profit calculator, rebuilt on the design
+   system. First modal migrated from vanilla JS to React.
+
+   Math ported verbatim from content/margin-calculator-modal.js:
+   enter any two values and the rest auto-calculate.
+─────────────────────────────────────────────────────────────── */
+
+function parseVal(str) {
+  const n = parseFloat(String(str).replace(/[^0-9.-]+/g, ''));
+  return Number.isNaN(n) ? null : n;
+}
+
+function formatVal(v) {
+  if (v === null || v === undefined) return '';
+  return Number.isInteger(v) ? String(v) : String(parseFloat(v.toFixed(4)));
+}
+
+// totalProfit is a number (not a formatted string) — it feeds NumberDisplay,
+// which tweens it. Every other field holds the raw input string.
+const BLANK = { cost: '', price: '', margin: '', markup: '', profit: '', qty: '1', totalProfit: 0 };
+
+/**
+ * Given the field that changed, recompute the dependent fields. Pure — the
+ * source field itself is never overwritten, so partial input ("1.") survives.
+ */
+function recalc(source, draft) {
+  const next = { ...draft };
+  let c = parseVal(next.cost);
+  let p = parseVal(next.price);
+  let pr = parseVal(next.profit);
+  let mrg = parseVal(next.margin);
+  let mkp = parseVal(next.markup);
+
+  const qStr = next.qty.trim();
+  let q = parseVal(qStr);
+  if (qStr === '') q = 1;
+  if (q === null) q = 0;
+
+  if (source === 'cost' || source === 'price') {
+    if (c !== null && p !== null) {
+      pr = p - c;
+      mrg = p !== 0 ? (pr / p) * 100 : 0;
+      mkp = c !== 0 ? (pr / c) * 100 : 0;
+      next.profit = formatVal(pr);
+      next.margin = formatVal(mrg);
+      next.markup = formatVal(mkp);
+    }
+  } else if (source === 'margin' && mrg !== null) {
+    if (c !== null) {
+      p = mrg >= 100 ? 0 : c / (1 - mrg / 100);
+      pr = p - c;
+      mkp = c !== 0 ? (pr / c) * 100 : 0;
+      next.price = formatVal(p);
+      next.profit = formatVal(pr);
+      next.markup = formatVal(mkp);
+    } else if (p !== null) {
+      c = p * (1 - mrg / 100);
+      pr = p - c;
+      mkp = c !== 0 ? (pr / c) * 100 : 0;
+      next.cost = formatVal(c);
+      next.profit = formatVal(pr);
+      next.markup = formatVal(mkp);
+    }
+  } else if (source === 'markup' && mkp !== null && c !== null) {
+    pr = c * (mkp / 100);
+    p = c + pr;
+    mrg = p !== 0 ? (pr / p) * 100 : 0;
+    next.price = formatVal(p);
+    next.profit = formatVal(pr);
+    next.margin = formatVal(mrg);
+  } else if (source === 'profit' && pr !== null && c !== null) {
+    p = c + pr;
+    mrg = p !== 0 ? (pr / p) * 100 : 0;
+    mkp = c !== 0 ? (pr / c) * 100 : 0;
+    next.price = formatVal(p);
+    next.margin = formatVal(mrg);
+    next.markup = formatVal(mkp);
+  }
+  // 'qty' just flows through to the always-on total-profit recompute
+
+  const latestPr = parseVal(next.profit);
+  next.totalProfit = latestPr !== null ? latestPr * q : 0;
+  return next;
+}
+
+/** $ / % adornment — modal-local, too trivial to be a shared component. */
+const sym = (ch) => <span style={{ fontWeight: 700, color: 'var(--gb-text-muted)' }}>{ch}</span>;
+
+/**
+ * Props: shortcut (footer hint string) · onClosed (real unmount) ·
+ * bindClose (receives the animated-close fn for the keyboard toggle).
+ */
+export function MarginCalc({ shortcut, onClosed, bindClose }) {
+  const [v, setV] = useState(BLANK);
+  const onField = (field) => (val) => setV((prev) => recalc(field, { ...prev, [field]: val }));
+  const selectAll = (e) => e.target.select();
+
+  return (
+    <FloatingPanel width={520} backdrop onClose={onClosed} bindClose={bindClose}>
+      <ModalHeader
+        icon={<I.calc />}
+        title="Margin Calculator"
+        subtitle="Enter any two values to auto-calculate the rest"
+      />
+
+      <div style={{ padding: '20px 20px 6px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <Field label="Item Cost">
+            <Input size="lg" mono inputMode="decimal" placeholder="0.00" autoFocus
+              leading={sym('$')} value={v.cost} onChange={onField('cost')} onFocus={selectAll} />
+          </Field>
+          <Field label="Selling Price">
+            <Input size="lg" mono inputMode="decimal" placeholder="0.00"
+              leading={sym('$')} value={v.price} onChange={onField('price')} onFocus={selectAll} />
+          </Field>
+        </div>
+
+        <div style={{ height: 1, background: 'var(--gb-border-subtle)' }} />
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <Field label="Gross Margin">
+            <Input size="lg" mono inputMode="decimal" placeholder="0.00"
+              trailing={sym('%')} value={v.margin} onChange={onField('margin')} onFocus={selectAll} />
+          </Field>
+          <Field label="Markup">
+            <Input size="lg" mono inputMode="decimal" placeholder="0.00"
+              trailing={sym('%')} value={v.markup} onChange={onField('markup')} onFocus={selectAll} />
+          </Field>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '0.62fr 1fr 1fr', gap: 14 }}>
+          <Field label="Qty">
+            <Input size="lg" mono inputMode="numeric" placeholder="1"
+              value={v.qty} onChange={onField('qty')} />
+          </Field>
+          <Field label="Unit Profit">
+            <Input size="lg" mono inputMode="decimal" placeholder="0.00"
+              leading={sym('$')} value={v.profit} onChange={onField('profit')} onFocus={selectAll} />
+          </Field>
+          <Field label="Total Profit">
+            {/* read-only result — counts up/down as the inputs change */}
+            <div style={{ ...inputBaseStyle({ size: 'lg' }), cursor: 'default' }}>
+              {sym('$')}
+              <NumberDisplay
+                value={v.totalProfit}
+                decimals={2}
+                style={{
+                  flex: 1, minWidth: 0,
+                  fontFamily: 'var(--gb-font-mono)', fontWeight: 600,
+                  color: 'var(--gb-brand-label)',
+                }}
+              />
+            </div>
+          </Field>
+        </div>
+      </div>
+
+      <ModalFooter>
+        <Btn variant="ghost" size="sm" onClick={() => setV(BLANK)}>Clear all</Btn>
+        <span style={{ flex: 1 }} />
+        {shortcut && (
+          <span style={{ fontSize: 10.5, color: 'var(--gb-text-ghost)' }}>{shortcut} to toggle</span>
+        )}
+      </ModalFooter>
+    </FloatingPanel>
+  );
+}

@@ -1,0 +1,90 @@
+{
+  "manifest_version": 3,
+  "name": "Golfballs.com",
+  "version": "3.3",
+  "description": "Helper utilities for the golfballs.com website.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "tabs",
+    "clipboardWrite",
+    "webNavigation",
+    "identity",
+    "downloads"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "http://s.customizationapps.com/*",
+    "https://www.icustomize.com/*",
+    "https://graph.microsoft.com/*",
+    "https://login.microsoftonline.com/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["charge.html", "charge.js", "editor.html", "editor.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.golfballs.com/*"],
+      "js": ["content/call-log-early.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    },
+    {
+      "matches": ["*://*.golfballs.com/*"],
+      "js": [
+        "theme.js",
+        "libs/flatpickr.js",
+        "content/notifications.js",
+        "content/calendar.js",
+        "content/smart-detection.js",
+        "content/variable-resolution.js",
+        "content/logo-extractor.js",
+        "content/charge-modal.js",
+        "content/order-edit-modal.js",
+        "content/page-utils.js",
+        "content/email-preview.js",
+        "content/text-preview.js",
+        "content/watchlist-modal.js",
+        "content/crm-query-builder.js",
+        "content/crm-task-buttons.js",
+        "content/campaign-editor.js",
+        "content/task-list-modal.js",
+        "content/phone-finder.js",
+        "content/call-log-panel.js",
+        "react-dist/content/margin-calc.js",
+        "content/crm-search-modal.js",
+        "content/crm-create-contact-modal.js",
+        "content/main.js"
+      ],
+      "all_frames": false
+    },
+    {
+      "matches": ["*://admin.icustomize.com/*"],
+      "js": [
+        "theme.js",
+        "libs/flatpickr.js",
+        "iframe/note-sender.js",
+        "iframe/date-utils.js",
+        "iframe/calendar-bridge.js",
+        "iframe/toolbar.js"
+      ],
+      "css": ["theme.css", "libs/dark.css"],
+      "all_frames": true
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  }
+}
