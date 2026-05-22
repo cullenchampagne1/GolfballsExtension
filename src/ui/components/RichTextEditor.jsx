@@ -51,8 +51,9 @@ function ensureStyle() {
       border: 1px solid var(--gb-brand-tint-border);
       color: var(--gb-brand-label);
       font-family: var(--gb-font-mono); font-size: 0.9em; font-weight: 600;
-      white-space: nowrap; user-select: all;
+      white-space: nowrap; user-select: all; cursor: pointer;
     }
+    .gb-rte-chip:hover { background: var(--gb-brand-tint-medium); }
     .gb-rte-ph {
       position: absolute; pointer-events: none;
       color: var(--gb-text-ghost);
@@ -104,7 +105,7 @@ function TBtn({ icon, active, onMouseDown, title }) {
 const Sep = () => <div style={{ width: 1, height: 14, background: 'var(--gb-border-subtle)', margin: '0 3px' }} />;
 
 export function RichTextEditor({
-  initialHtml, onChange, variables = [], singleLine = false,
+  initialHtml, onChange, onChipClick, variables = [], singleLine = false,
   minHeight = 160, placeholder = '',
 }) {
   const ref        = useRef(null);
@@ -208,6 +209,15 @@ export function RichTextEditor({
     if (singleLine && e.key === 'Enter') e.preventDefault();
   }
 
+  // Clicking a {{variable}} chip opens its smart-options modal.
+  function onClickContent(e) {
+    if (!onChipClick) return;
+    const chip = e.target?.closest?.('.gb-rte-chip');
+    if (!chip) return;
+    const name = (chip.textContent || '').replace(/[{}]/g, '').trim();
+    if (name) onChipClick(name);
+  }
+
   function onInput() {
     setEmpty(!ref.current.textContent.trim());
     saveSelection();
@@ -305,6 +315,7 @@ export function RichTextEditor({
           onInput={onInput}
           onPaste={onPaste}
           onKeyDown={onKeyDown}
+          onClick={onClickContent}
           onKeyUp={() => { saveSelection(); refreshMarks(); }}
           onMouseUp={() => { saveSelection(); refreshMarks(); }}
           onBlur={saveSelection}

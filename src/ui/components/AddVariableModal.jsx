@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import { T } from '../shared.jsx';
 import { I, Icon } from '../icons.jsx';
@@ -117,7 +118,9 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
 
   const canAdd = !!name && !!config;
 
-  return (
+  // Portal to <body> so the overlay covers the whole window rather than
+  // being clipped inside the editor pane.
+  return createPortal(
     <motion.div
       key="add-var-backdrop"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -128,7 +131,7 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
         background: 'var(--gb-backdrop)',
         backdropFilter: 'blur(6px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: 200, padding: 24,
+        zIndex: 2147483000, padding: 24,
       }}
     >
       <motion.div
@@ -362,6 +365,7 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
           </Btn>
         </div>
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body,
   );
 }
