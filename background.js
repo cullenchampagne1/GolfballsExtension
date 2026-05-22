@@ -962,16 +962,21 @@ async function extractEmailImages(html) {
   if (!found.length) return result;
 
   // Assign stable Content-IDs and build the attachment list.
+  // @odata.type MUST be the first property: Graph types each attachment by
+  // reading @odata.type before its properties. If contentBytes (a
+  // fileAttachment-only field) is read first, Graph rejects it as not
+  // existing on the base Attachment type → 400 BadRequest.
   const replace = {};
   found.forEach((img, i) => {
     const id = `gbimg${i + 1}`;
     replace[img.raw] = `cid:${id}`;
     result.attachments.push({
-      name:         `${id}.${gbExtFor(img.contentType)}`,
-      contentType:  img.contentType,
-      contentBytes: img.base64,
-      contentId:    id,
-      isInline:     true,
+      '@odata.type': '#microsoft.graph.fileAttachment',
+      name:          `${id}.${gbExtFor(img.contentType)}`,
+      contentType:   img.contentType,
+      contentBytes:  img.base64,
+      contentId:     id,
+      isInline:      true,
     });
   });
 
