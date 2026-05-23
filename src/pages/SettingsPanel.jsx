@@ -469,7 +469,6 @@ function DevSettingRow({ def, value, onChange }) {
         {isAction && (
           <Btn
             size="sm"
-            variant="primary"
             icon={def.buttonIcon && I[def.buttonIcon] ? React.createElement(I[def.buttonIcon]) : undefined}
             onClick={() => def.runner?.()}
           >

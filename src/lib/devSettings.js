@@ -58,7 +58,7 @@ export const DEV_SETTINGS = [
   {
     key:     'playground.open',
     label:   'Modal playground',
-    desc:    'Opens a blank in-extension page (transparent grid background) for previewing and iterating on modals without needing the production website to be reachable.',
+    desc:    'Blank in-extension surface for previewing modals.',
     type:    'action',
     buttonLabel: 'Open playground',
     buttonIcon:  'bolt',
