@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { I, Icon } from '../icons.jsx';
@@ -76,6 +76,9 @@ export function SmartPopover({ variable, anchor, onSave, onClose }) {
   const popoverRef = useRef(null);
   const [tab, setTab]   = useState('fallback');
   const [smart, setSmart] = useState(variable?.smart || {});
+  // Per-instance id keeps multiple SmartPopovers from colliding on
+  // the shared layoutId for the active-tab indicator.
+  const groupId = useId();
 
   // Reset when the variable changes (user clicked a different chip while
   // the previous popover was still open).
@@ -222,11 +225,28 @@ export function SmartPopover({ variable, anchor, onSave, onClose }) {
                 display: 'flex', flexDirection: 'column',
                 alignItems: 'center', justifyContent: 'center', gap: 2,
                 color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
-                borderBottom: active ? '2px solid var(--gb-brand-label)' : '2px solid transparent',
+                // Underline is the sliding indicator (motion below). Reserve
+                // the 2px so the row height doesn't jump when the tab
+                // changes — the actual stroke is the layoutId pill.
+                borderBottom: '2px solid transparent',
                 transition: 'color 140ms ease, background 140ms ease',
                 fontFamily: 'inherit',
               }}
             >
+              {/* Sliding active underline — springs between tabs via shared
+                  layoutId, the same pattern Segmented uses. */}
+              {active && (
+                <motion.span
+                  layoutId={`smartpop-tab-${groupId}`}
+                  transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.85 }}
+                  style={{
+                    position: 'absolute',
+                    left: 0, right: 0, bottom: -1,
+                    height: 2,
+                    background: 'var(--gb-brand-label)',
+                  }}
+                />
+              )}
               <TabIcon size={12} />
               <span style={{
                 fontSize: 8.5, fontWeight: 700, textTransform: 'uppercase',

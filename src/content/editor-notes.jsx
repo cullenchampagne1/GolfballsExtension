@@ -56,11 +56,6 @@ const PRIORITY_OPTIONS = [
   { id: '3', label: 'Low' },
 ];
 
-const CALL_DIRECTION_OPTIONS = [
-  { id: '0', label: 'Outbound' },
-  { id: '1', label: 'Inbound' },
-];
-
 /* CRM enum IDs ported verbatim from legacy editor.html. */
 const CALL_CATEGORY_OPTIONS = [
   { id: '0',  label: 'Select' },
@@ -415,40 +410,19 @@ function CallLogPanel({ data, set }) {
       <SectionLabel>Call details</SectionLabel>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
         <Field label="Direction">
-          {/* Inline pill-segmented control matching the design's
-              Outbound/Inbound switcher. Two options, narrow space. */}
-          <div style={{
-            display: 'flex', gap: 4, padding: 2,
-            background: 'var(--gb-fill-inverse-medium)',
-            border: '1px solid var(--gb-border-default)',
-            borderRadius: 'var(--gb-r-md)',
-            height: 32,
-          }}>
-            {[
+          {/* Shared Segmented control — the active pill springs between
+              options instead of snapping like the bespoke inline pill
+              this replaced. Same component the subtype + email type
+              switchers use. */}
+          <Segmented
+            value={String(data.callDirection ?? 0)}
+            onChange={(v) => set({ callDirection: parseInt(v, 10) })}
+            options={[
               { id: '0', label: 'Outbound', icon: <NIcons.outbound /> },
               { id: '1', label: 'Inbound',  icon: <NIcons.inbound /> },
-            ].map((o) => {
-              const active = String(data.callDirection ?? 0) === o.id;
-              return (
-                <button
-                  key={o.id}
-                  type="button"
-                  onClick={() => set({ callDirection: parseInt(o.id, 10) })}
-                  style={{
-                    flex: 1, padding: '0 9px', borderRadius: 5,
-                    background: active ? 'var(--gb-brand-tint-medium)' : 'transparent',
-                    color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
-                    border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                    fontSize: 11, fontWeight: 600,
-                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                  }}
-                >
-                  {React.cloneElement(o.icon, { size: 11 })}
-                  {o.label}
-                </button>
-              );
-            })}
-          </div>
+            ]}
+            full
+          />
         </Field>
         <Field label="Category">
           <Dropdown
