@@ -278,3 +278,32 @@
   --gb-anim:        .18s cubic-bezier(.4,0,.2,1);
   --gb-anim-bounce: .28s cubic-bezier(.34,1.4,.64,1);
 }
+
+/* ════════════════════════════════════════════════════════════
+   Toast entry keyframes — needed by the notification_handoff
+   toast family (PillToast / ActionToast / StepToast / etc.).
+════════════════════════════════════════════════════════════ */
+@keyframes gb-toast-in-top {
+  from { opacity: 0; transform: translateY(-12px) scale(.97); }
+  to   { opacity: 1; transform: translateY(0)     scale(1); }
+}
+@keyframes gb-toast-in-right {
+  from { opacity: 0; transform: translateX(12px) scale(.97); }
+  to   { opacity: 1; transform: translateX(0)    scale(1); }
+}
+@keyframes gb-toast-in-left {
+  from { opacity: 0; transform: translateX(-12px) scale(.97); }
+  to   { opacity: 1; transform: translateX(0)     scale(1); }
+}
+@keyframes gb-toast-out {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(12px); }
+}
+@keyframes gb-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes gb-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .55; }
+}

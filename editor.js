@@ -48,9 +48,16 @@ const esc  = s => (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/
  * @param {boolean} [isError=false] - When true renders the toast in red.
  */
 function toast(msg = 'Saved', isError = false) {
+  // Prefer the React PillToast manager (mounted by editor-toasts.js) so
+  // the legacy and React UIs surface the same bottom-right notifications.
+  if (window.__gbToast) {
+    return isError ? window.__gbToast.error(msg) : window.__gbToast.success(msg);
+  }
   const t   = $('toast');
+  if (!t) return;
   const dot = t.querySelector('.toast-dot');
-  $('toast-msg').textContent = msg;
+  const msgEl = $('toast-msg');
+  if (msgEl) msgEl.textContent = msg;
   if (dot) dot.style.background = isError ? 'var(--gb-error)' : 'var(--gb-brand-label)';
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2400);
@@ -4460,42 +4467,71 @@ window.gbMigrateVariations = async function gbMigrateVariations() {
     chrome.storage.local.get('templates', r),
   );
   // Rule: trailing "Variation N" or "Variation #N" — both forms exist in
-  // legitimate variation naming, so the # is optional. The migration only
-  // moves a child onto a parent when an exact-name parent of the same
-  // type exists.
+  // legitimate variation naming, so the # is optional.
   const VAR_RX = /^(.+?)\s+Variation\s+#?(\d+)\s*$/i;
-  const byKey = new Map();
-  tpls.forEach((t) => byKey.set(`${t.type || 'order'}::${(t.name || '').trim()}`, t));
 
-  const moved  = [];
-  const remove = new Set();
-
-  for (const child of tpls) {
-    const m = (child.name || '').match(VAR_RX);
+  // Pass 1: bucket every "X Variation N" template by (type, baseName). Each
+  // bucket holds { tpl, n } entries; non-variation templates are left alone.
+  const buckets = new Map(); // key → [{ tpl, n }]
+  for (const tpl of tpls) {
+    const m = (tpl.name || '').match(VAR_RX);
     if (!m) continue;
     const baseName = m[1].trim();
-    const parent   = byKey.get(`${child.type || 'order'}::${baseName}`);
-    if (!parent || parent.id === child.id) continue;
-    parent.variations = parent.variations || [];
-    parent.variations.push({
-      id:      child.id,
-      label:   `Variation ${m[2]}`,
-      subject: child.subject || '',
-      body:    child.body || '',
-    });
-    remove.add(child.id);
-    moved.push(`${baseName} ← variation ${m[2]}`);
+    const key = `${tpl.type || 'order'}::${baseName}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push({ tpl, n: parseInt(m[2], 10) });
+  }
+  // Also index existing non-variation templates by (type, name) so we can
+  // attach buckets to a real parent when one exists.
+  const parents = new Map();
+  for (const tpl of tpls) {
+    if (VAR_RX.test(tpl.name || '')) continue;
+    parents.set(`${tpl.type || 'order'}::${(tpl.name || '').trim()}`, tpl);
   }
 
-  if (!moved.length) {
+  const moved   = [];
+  const remove  = new Set();
+  const adopted = new Set();
+
+  for (const [key, group] of buckets) {
+    group.sort((a, b) => a.n - b.n);            // lowest variation number first
+    const [, baseName] = key.split('::');
+    let parent = parents.get(key);
+
+    // No real parent → promote the lowest-numbered variation to be the
+    // parent. Rename it to the base, then port the rest. Catches the
+    // "orphan variations" case where every match in a bucket has a number.
+    if (!parent && group.length > 0) {
+      const promoted = group.shift();
+      parent = promoted.tpl;
+      parent.name = baseName;
+      adopted.add(parent.id);
+    }
+    if (!parent) continue;
+
+    for (const { tpl: child, n } of group) {
+      if (child.id === parent.id) continue;
+      parent.variations = parent.variations || [];
+      parent.variations.push({
+        id:      child.id,
+        label:   `Variation ${n}`,
+        subject: child.subject || '',
+        body:    child.body    || '',
+      });
+      remove.add(child.id);
+      moved.push(`${baseName} ← variation ${n}`);
+    }
+  }
+
+  if (!moved.length && !adopted.size) {
     console.log('[gb-migrate] No variation siblings found. Nothing to do.');
-    return { moved: 0 };
+    return { moved: 0, promoted: 0 };
   }
 
   const next = tpls.filter((t) => !remove.has(t.id));
   await new Promise((r) => chrome.storage.local.set({ templates: next }, r));
-  console.log(`[gb-migrate] Ported ${moved.length} variation(s):`);
+  console.log(`[gb-migrate] Ported ${moved.length} variation(s); promoted ${adopted.size} orphan parent(s):`);
   moved.forEach((m) => console.log('  •', m));
   console.log('[gb-migrate] Reload the editor to see the new structure.');
-  return { moved: moved.length, details: moved };
+  return { moved: moved.length, promoted: adopted.size, details: moved };
 };

@@ -495,6 +495,7 @@ function TemplateSidebar() {
     const next = [...folders, { id: 'f_' + Date.now().toString(36), name: name.trim() }];
     (isNote ? setNoteFolders : setTplFolders)(next);
     saveKey(folderKey, next);
+    window.__gbToast?.success(`Folder "${name.trim()}" created`);
   }
   async function renameFolder(folder) {
     const name = await notify.prompt('Rename folder', {
@@ -505,6 +506,7 @@ function TemplateSidebar() {
     const next = folders.map((f) => (f.id === folder.id ? { ...f, name: name.trim() } : f));
     (isNote ? setNoteFolders : setTplFolders)(next);
     saveKey(folderKey, next);
+    window.__gbToast?.success(`Folder renamed`);
   }
   function setFolderColor(folder, colorId) {
     const next = folders.map((f) => (f.id === folder.id ? { ...f, color: colorId } : f));
@@ -523,6 +525,7 @@ function TemplateSidebar() {
     (isNote ? setNotes : setTemplates)(nextTpls);
     saveKey(folderKey, nextFolders);
     saveKey(tplsKey, nextTpls);
+    window.__gbToast?.success(`Folder "${folder.name}" deleted`);
   }
   /** Move by id (used by both the row menu and drop handlers). */
   function moveById(id, folderId) {

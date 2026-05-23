@@ -35,6 +35,7 @@ export { SwitchTag } from './components/SwitchTag.jsx';
 export { Segmented } from './components/Segmented.jsx';
 export { Tabs } from './components/Tabs.jsx';
 export { SettingNotificationHost, useSettingNotification } from './components/SettingNotification.jsx';
+export { PillToast } from './components/PillToast.jsx';
 
 export { Callout } from './components/Callout.jsx';
 export { ModalShell } from './components/ModalShell.jsx';
