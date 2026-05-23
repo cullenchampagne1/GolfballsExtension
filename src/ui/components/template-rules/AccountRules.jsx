@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { Btn } from '../Btn.jsx';
 import { IconBtn } from '../IconBtn.jsx';
 import { SectionLabel } from '../SectionLabel.jsx';
@@ -6,6 +7,11 @@ import { Dropdown } from '../Dropdown.jsx';
 import { Input } from '../Input.jsx';
 import { Card } from '../Card.jsx';
 import { I } from '../../icons.jsx';
+
+const ROW_TRANSITION = { duration: 0.22, ease: [0.32, 0.72, 0, 1] };
+const ROW_INITIAL    = { opacity: 0, y: -6, scale: 0.97 };
+const ROW_ANIMATE    = { opacity: 1, y: 0,  scale: 1 };
+const ROW_EXIT       = { opacity: 0, scale: 0.94, transition: { duration: 0.14 } };
 
 /* ───────────────────────────────────────────────────────────────
    AccountRules — Solr-record conditions for account templates.
@@ -92,56 +98,67 @@ export function AccountRules({ initial, onChange }) {
         <div style={emptyStyle}>No conditions — add one to target specific accounts.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {conds.map((c) => {
-            const type = fieldType(c.field);
-            const ops = ACC_OPS[type] || ACC_OPS.text;
-            // self-heal saved data whose op no longer fits the field's type
-            const op = ops.some((o) => o[0] === c.op) ? c.op : ops[0][0];
-            const noVal = NO_VAL_OPS.includes(op);
-            const isRel = op === 'rel_before' || op === 'rel_after';
-            const isDate = op === 'before' || op === 'after';
+          <AnimatePresence mode="popLayout" initial={false}>
+            {conds.map((c) => {
+              const type = fieldType(c.field);
+              const ops = ACC_OPS[type] || ACC_OPS.text;
+              // self-heal saved data whose op no longer fits the field's type
+              const op = ops.some((o) => o[0] === c.op) ? c.op : ops[0][0];
+              const noVal = NO_VAL_OPS.includes(op);
+              const isRel = op === 'rel_before' || op === 'rel_after';
+              const isDate = op === 'before' || op === 'after';
 
-            return (
-              <Card key={c._id} padding={8}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Dropdown
-                    size="sm" value={c.field} options={FIELD_OPTIONS}
-                    onChange={(v) => changeField(c._id, v)}
-                    style={{ width: 156, flexShrink: 0 }}
-                  />
-                  <Dropdown
-                    size="sm" value={op} options={opOptions(type)}
-                    onChange={(v) => edit(c._id, { op: v })}
-                    style={{ width: 130, flexShrink: 0 }}
-                  />
-                  {noVal ? (
-                    <div style={{ flex: 1 }} />
-                  ) : isRel ? (
-                    <>
-                      <Input
-                        size="sm" mono value={c.num || ''} placeholder="1"
-                        onChange={(v) => edit(c._id, { num: v })}
-                        style={{ width: 60, flexShrink: 0 }}
+              return (
+                <motion.div
+                  key={c._id}
+                  layout
+                  initial={ROW_INITIAL}
+                  animate={ROW_ANIMATE}
+                  exit={ROW_EXIT}
+                  transition={ROW_TRANSITION}
+                >
+                  <Card padding={8}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Dropdown
+                        size="sm" value={c.field} options={FIELD_OPTIONS}
+                        onChange={(v) => changeField(c._id, v)}
+                        style={{ width: 156, flexShrink: 0 }}
                       />
                       <Dropdown
-                        size="sm" value={c.unit || 'days'} options={UNIT_OPTIONS}
-                        onChange={(v) => edit(c._id, { unit: v })}
-                        style={{ flex: 1, minWidth: 0 }}
+                        size="sm" value={op} options={opOptions(type)}
+                        onChange={(v) => edit(c._id, { op: v })}
+                        style={{ width: 130, flexShrink: 0 }}
                       />
-                    </>
-                  ) : (
-                    <Input
-                      size="sm" mono value={c.val || ''}
-                      placeholder={isDate ? 'YYYY-MM-DD or {{var}}' : 'value or {{var}}…'}
-                      onChange={(v) => edit(c._id, { val: v })}
-                      style={{ flex: 1, minWidth: 0 }}
-                    />
-                  )}
-                  <IconBtn size="sm" icon={<I.trash />} danger onClick={() => del(c._id)} />
-                </div>
-              </Card>
-            );
-          })}
+                      {noVal ? (
+                        <div style={{ flex: 1 }} />
+                      ) : isRel ? (
+                        <>
+                          <Input
+                            size="sm" mono value={c.num || ''} placeholder="1"
+                            onChange={(v) => edit(c._id, { num: v })}
+                            style={{ width: 60, flexShrink: 0 }}
+                          />
+                          <Dropdown
+                            size="sm" value={c.unit || 'days'} options={UNIT_OPTIONS}
+                            onChange={(v) => edit(c._id, { unit: v })}
+                            style={{ flex: 1, minWidth: 0 }}
+                          />
+                        </>
+                      ) : (
+                        <Input
+                          size="sm" mono value={c.val || ''}
+                          placeholder={isDate ? 'YYYY-MM-DD or {{var}}' : 'value or {{var}}…'}
+                          onChange={(v) => edit(c._id, { val: v })}
+                          style={{ flex: 1, minWidth: 0 }}
+                        />
+                      )}
+                      <IconBtn size="sm" icon={<I.trash />} danger onClick={() => del(c._id)} />
+                    </div>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
         </div>
       )}
     </div>
