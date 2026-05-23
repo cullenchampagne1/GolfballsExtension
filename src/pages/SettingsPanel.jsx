@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   SectionLabel, Card, Callout, Btn, Input, Dropdown, Field,
   FeatureSpotlight, ExpandableFeature, ColorSpotlight, Switch, Dot, I,
+  CollapsibleChecklist,
 } from '../ui/index.js';
 import {
   THEME_VARIANTS, THEME_COLORS, DEFAULT_THEME,
@@ -12,6 +13,9 @@ import {
   FEATURE_FLAGS, FEATURE_DEFAULTS, loadFlags, saveFlags,
   KEYBOARD_SHORTCUTS_DEFAULTS, loadKeyboardShortcuts, saveKeyboardShortcuts,
 } from '../lib/flags.js';
+import {
+  CUSTOM_PAGE_SECTIONS, loadCustomPages, saveCustomPages, emptyCustomPages,
+} from '../lib/customPages.js';
 
 /* ───────────────────────────────────────────────────────────────
    SettingsPanel — the fully-featured Manage → Settings page.
@@ -288,6 +292,7 @@ export function SettingsPanel() {
   const [theme, setTheme] = useState(DEFAULT_THEME);
   const [flags, setFlags] = useState(FEATURE_DEFAULTS);
   const [shortcuts, setShortcuts] = useState(KEYBOARD_SHORTCUTS_DEFAULTS);
+  const [customPages, setCustomPages] = useState(emptyCustomPages);
   const [refreshKey, setRefreshKey] = useState(0);
   const [paStatus, setPaStatus] = useState(null);
 
@@ -295,7 +300,17 @@ export function SettingsPanel() {
     loadTheme().then((t) => { setTheme(t); applyTheme(t); });
     loadFlags().then(setFlags);
     loadKeyboardShortcuts().then(setShortcuts);
+    loadCustomPages().then(setCustomPages);
   }, [refreshKey]);
+
+  /* Update one section's selection + persist. The customPages shape is
+     { [sectionId]: [pageId, …] }, so we replace the section's array
+     wholesale on every change — same pattern as setFlagValue. */
+  function setSectionSelection(sectionId, ids) {
+    const next = { ...customPages, [sectionId]: ids };
+    setCustomPages(next);
+    saveCustomPages(next);
+  }
 
   const commitTheme = (next) => { setTheme(next); applyTheme(next); saveTheme(next); };
   const pickVariant = (variant) => {
@@ -424,6 +439,58 @@ export function SettingsPanel() {
               </span>
             </div>
           </ExpandableFeature>
+        </div>
+      </section>
+
+      {/* Custom Pages — pick which internal site pages the extension
+          should replace with custom overrides. Each section is a
+          CollapsibleChecklist with its own tri-state select-all; the
+          section-level header here also drives a master select-all
+          that flips every page across every section. */}
+      <section>
+        {(() => {
+          const allItems = CUSTOM_PAGE_SECTIONS.flatMap((s) =>
+            s.items.map((it) => ({ sec: s.id, id: it.id })));
+          const totalPicked = allItems.reduce(
+            (n, { sec, id }) => n + ((customPages[sec] || []).includes(id) ? 1 : 0), 0,
+          );
+          const allOn = totalPicked === allItems.length && allItems.length > 0;
+          const masterToggle = () => {
+            const next = {};
+            for (const s of CUSTOM_PAGE_SECTIONS) {
+              next[s.id] = allOn ? [] : s.items.map((it) => it.id);
+            }
+            setCustomPages(next);
+            saveCustomPages(next);
+          };
+          return (
+            <SectionLabel
+              action={
+                <Btn variant="ghost" size="xs" onClick={masterToggle}>
+                  {allOn ? 'Deselect all' : 'Select all'}
+                </Btn>
+              }
+            >
+              Custom Pages
+            </SectionLabel>
+          );
+        })()}
+        <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: -4, marginBottom: 10, lineHeight: 1.5 }}>
+          Pick which internal site pages the extension replaces with a custom UI. Anything left unchecked falls through to the original page.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {CUSTOM_PAGE_SECTIONS.map((section) => (
+            <CollapsibleChecklist
+              key={section.id}
+              icon={<I.cog />}
+              title={section.label}
+              items={section.items}
+              selected={customPages[section.id] || []}
+              onChange={(ids) => setSectionSelection(section.id, ids)}
+              columns={2}
+              defaultOpen={false}
+            />
+          ))}
         </div>
       </section>
 
