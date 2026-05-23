@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import {
-  Btn, Dropdown, Dot, Tag, KeyVal, Field, Textarea,
+  Btn, Dropdown, Dot, Tag, KeyVal, SectionLabel, Field, Textarea,
   Spinner, I, T, inputBaseStyle,
 } from '../ui';
 
@@ -641,111 +641,109 @@ function MainView({
   const hasTemplates = templates.length > 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
 
-      {/* TEMPLATE — dropdown or empty pill */}
-      {hasTemplates ? (
-        <Dropdown
-          size="sm"
-          value={selectedId}
-          options={dropdownOptions}
-          searchable={templates.length > 6}
-          leading={<Dot tone={isMatched ? 'brand' : 'muted'} size={7} glow={isMatched} />}
-          onChange={onSelect}
-        />
-      ) : (
-        <div style={{
-          fontSize: 11, color: 'var(--gb-text-muted)', lineHeight: 1.5,
-          padding: '8px 10px',
-          background: 'var(--gb-fill-subtle)',
-          border: '1px dashed var(--gb-border-default)',
-          borderRadius: 'var(--gb-r-md)',
-        }}>
-          No templates for this page type.
-        </div>
-      )}
+      {/* ── TOP SECTION ─ template dropdown + all action buttons ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
 
-      {/* ACTIONS */}
-      {flags.chargeEnabled && (
-        <Btn full size="sm"
-          variant={chargeReady ? 'tinted' : 'secondary'}
-          status={isRefund ? 'error' : 'brand'}
-          disabled={!chargeReady}
-          icon={<I.card />}
-          onClick={onCharge}>
-          {chargeLabel}
-        </Btn>
-      )}
-      {flags.orderEditEnabled && (
-        <Btn full size="sm"
-          disabled={!pageInfo.messageId}
-          icon={<I.edit />}
-          onClick={onOrderEdit}>
-          Order Edit
-        </Btn>
-      )}
+        {/* Template label + dropdown / empty pill */}
+        <SectionLabel divider={false} style={{ marginBottom: 2 }}>Template</SectionLabel>
+        {hasTemplates ? (
+          <Dropdown
+            size="sm"
+            value={selectedId}
+            options={dropdownOptions}
+            searchable={templates.length > 6}
+            leading={<Dot tone={isMatched ? 'brand' : 'muted'} size={7} glow={isMatched} />}
+            onChange={onSelect}
+          />
+        ) : (
+          <div style={{
+            fontSize: 11, color: 'var(--gb-text-muted)', lineHeight: 1.5,
+            padding: '8px 10px',
+            background: 'var(--gb-fill-subtle)',
+            border: '1px dashed var(--gb-border-default)',
+            borderRadius: 'var(--gb-r-md)',
+          }}>
+            No templates for this page type.
+          </div>
+        )}
 
-      {/* WATCH PAIR — side-by-side row */}
-      {flags.watchListEnabled && (
-        <div style={{ display: 'flex', gap: 6 }}>
+        {/* Action stack — matches original popup order:
+            Charge → Order Edit → Watch + Watch List row → Tasks → CRM Search → Submit Proof */}
+        {flags.chargeEnabled && (
           <Btn full size="sm"
-            disabled={watchAddDisabled}
-            icon={<I.eye />}
-            onClick={onOpenWatchAdd}>
-            {WL_ENTITY[knownType ? pageType : 'order'].btn}
+            variant={chargeReady ? 'tinted' : 'secondary'}
+            status={isRefund ? 'error' : 'brand'}
+            disabled={!chargeReady}
+            icon={<I.card />}
+            onClick={onCharge}>
+            {chargeLabel}
           </Btn>
+        )}
+        {flags.orderEditEnabled && (
           <Btn full size="sm"
-            variant={watchHasCrit && watchCount > 0 ? 'tinted' : 'secondary'}
-            status="error"
-            icon={<Ic.watch />}
-            iconRight={watchCount > 0
-              ? <Tag tone={watchHasCrit ? 'error' : 'brand'} size="xs" pulse={watchHasCrit}>{watchCount > 99 ? '99+' : watchCount}</Tag>
-              : null}
-            onClick={onWatchListShow}>
-            Watch List
+            disabled={!pageInfo.messageId}
+            icon={<I.edit />}
+            onClick={onOrderEdit}>
+            Order Edit
           </Btn>
-        </div>
-      )}
+        )}
+        {flags.watchListEnabled && (
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Btn full size="sm"
+              disabled={watchAddDisabled}
+              icon={<I.eye />}
+              onClick={onOpenWatchAdd}>
+              {WL_ENTITY[knownType ? pageType : 'order'].btn}
+            </Btn>
+            <Btn full size="sm"
+              variant={watchHasCrit && watchCount > 0 ? 'tinted' : 'secondary'}
+              status="error"
+              icon={<Ic.watch />}
+              iconRight={watchCount > 0
+                ? <Tag tone={watchHasCrit ? 'error' : 'brand'} size="xs" pulse={watchHasCrit}>{watchCount > 99 ? '99+' : watchCount}</Tag>
+                : null}
+              onClick={onWatchListShow}>
+              Watch List
+            </Btn>
+          </div>
+        )}
+        {flags.taskListEnabled && (
+          <Btn full size="sm" icon={<Ic.checkbox />} onClick={onTaskList}>My Tasks</Btn>
+        )}
+        {flags.crmSearchEnabled && (
+          <Btn full size="sm" icon={<I.search />} onClick={onCrmSearch}>CRM Search</Btn>
+        )}
+        {flags.submitProofEnabled && (
+          <Btn full size="sm"
+            disabled={proofDisabled}
+            icon={<Ic.paperclip />}
+            onClick={onOpenProof}>
+            Submit Proof
+          </Btn>
+        )}
+      </div>
 
-      {/* TOOLS — full-width stack */}
-      {flags.taskListEnabled && (
-        <Btn full size="sm" icon={<Ic.checkbox />} onClick={onTaskList}>My Tasks</Btn>
-      )}
-      {flags.crmSearchEnabled && (
-        <Btn full size="sm" icon={<I.search />} onClick={onCrmSearch}>CRM Search</Btn>
-      )}
-      {flags.submitProofEnabled && (
-        <Btn full size="sm"
-          disabled={proofDisabled}
-          icon={<Ic.paperclip />}
-          onClick={onOpenProof}>
-          Submit Proof
-        </Btn>
-      )}
-
-      {/* RESOLVED — KeyVal rows, only when a template is loaded */}
-      {hasTemplates && (
-        <div style={{ marginTop: 4 }}>
-          {resolving ? (
+      {/* ── BOTTOM SECTION ─ resolved info + hairline + send button ── */}
+      <div style={{ paddingTop: 14 }}>
+        {hasTemplates && (
+          resolving ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 11.5, padding: '4px 0' }}>
               <Spinner size={11} /> Resolving variables…
             </div>
           ) : (
-            <>
+            <div>
               <KeyVal k="To" v={resolvedTo || 'Not found'} tone={canSend ? 'ok' : 'error'} />
               {Object.entries(resolvedVars).map(([name, val]) => (
                 <KeyVal key={name} k={name} v={val ? String(val).slice(0, 40) : 'Not found'} tone={val ? 'default' : 'error'} />
               ))}
-            </>
-          )}
-        </div>
-      )}
+            </div>
+          )
+        )}
 
-      {/* PRIMARY SEND — always rendered; disabled when no template / no recipient */}
-      <div style={{
-        borderTop: '1px solid var(--gb-border-subtle)',
-        paddingTop: 10, marginTop: 4,
-      }}>
+        <hr style={{ border: 0, borderTop: '1px solid var(--gb-border-subtle)', margin: '10px 0' }} />
+
         <Btn
           full
           variant="primary"
