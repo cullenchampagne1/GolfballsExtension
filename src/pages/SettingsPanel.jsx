@@ -27,17 +27,6 @@ const ICON_MAP = {
 };
 const getIcon = (name) => ICON_MAP[name] || <I.cog />;
 
-/* Each variant's BASELINE brand-label — mirrors src/ui/theme.css. The
-   preview overrides --gb-brand-label inline so the user's saved color
-   override on <html> doesn't leak in and make every card show the same
-   green. */
-const VARIANT_BASE_BRAND = {
-  dark:     '#8fce2e',
-  midnight: '#a3e030',
-  light:    '#4d6b14',
-  cream:    '#5a7a14',
-};
-
 /* Card hover/active transitions go through a CSS class — not motion's
    whileHover — because motion can't smoothly interpolate `var()` color
    tokens. The artifact was a transient "dark flash" in light theme and
@@ -61,7 +50,6 @@ function ensureVariantCardStyle() {
 /* ── Variant Card ────────────────────────────────────────────── */
 function VariantCard({ variant, active, onClick }) {
   useEffect(() => { ensureVariantCardStyle(); }, []);
-  const baseBrand = VARIANT_BASE_BRAND[variant.id] || VARIANT_BASE_BRAND.dark;
   return (
     <div
       className="gb-variant-card"
@@ -79,10 +67,10 @@ function VariantCard({ variant, active, onClick }) {
       <div
         data-theme={variant.id}
         style={{
-          // Force the preview's brand back to the variant's baseline so
-          // the user's custom brand override doesn't paint every card the
-          // same color.
-          '--gb-brand-label': baseBrand,
+          // No --gb-brand-label override — the brand swatch picks up the
+          // user's themed brand color (set on <html> via applyTheme), so
+          // each card previews how THEIR brand would look against that
+          // variant's surface/text tokens.
           height: 38, borderRadius: 'var(--gb-r-sm)', padding: '0 8px',
           background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)',
           display: 'flex', alignItems: 'center', gap: 6,
