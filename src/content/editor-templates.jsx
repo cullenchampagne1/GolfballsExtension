@@ -5,7 +5,7 @@ import { ensureTheme } from '../lib/theme.js';
 import {
   Btn, Tag,
   Input, Dropdown, Field, IconBtn,
-  SwitchTag, Segmented,
+  SwitchTag, Segmented, FeatureSpotlight,
   I, Icon, Dot,
   SmartPopover, SignatureModal,
   RichTextEditor,
@@ -548,16 +548,17 @@ function TemplateEditor({ tpl, onDelete }) {
       )}
 
       {/* ── Reply mode (non-case only — case templates always thread).
-          xs SwitchTag pill matches the feature-flag spotlight style in
-          settings — minimal chrome, single click target. */}
+          Uses the shared FeatureSpotlight (xs) so it matches the
+          settings page's flag rows 1:1 instead of being a one-off pill. */}
       {typeId !== 'case' && (
-        <div style={{ ...S.mb12, display: 'flex' }}>
-          <SwitchTag
+        <div style={S.mb12}>
+          <FeatureSpotlight
             size="xs"
             on={replyMode}
-            label="Reply mode"
             icon={<I.mail />}
-            onClick={() => setReplyMode((r) => !r)}
+            name="Reply to most recent email"
+            desc="Threads this template as a reply instead of sending as a new message."
+            onChange={(on) => setReplyMode(on)}
           />
         </div>
       )}
