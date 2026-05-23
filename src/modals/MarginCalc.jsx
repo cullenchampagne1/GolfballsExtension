@@ -125,50 +125,50 @@ export function MarginCalc({ shortcut, onClosed, bindClose }) {
   const showLowMargin = minMargin > 0 && marginNum !== null && marginNum > 0 && marginNum < minMargin;
 
   return (
-    <FloatingPanel width={520} backdrop onClose={onClosed} bindClose={bindClose}>
+    <FloatingPanel width={360} backdrop onClose={onClosed} bindClose={bindClose}>
       <ModalHeader
         icon={<I.calc />}
         title="Margin Calculator"
-        subtitle="Enter any two values to auto-calculate the rest"
+        subtitle="Enter any two values"
       />
 
-      <div style={{ padding: '20px 20px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <div style={{ padding: '12px 12px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <Field label="Item Cost">
-            <Input size="lg" mono inputMode="decimal" placeholder="0.00" autoFocus
+            <Input size="sm" mono inputMode="decimal" placeholder="0.00" autoFocus
               leading={sym('$')} value={v.cost} onChange={onField('cost')} onFocus={selectAll} />
           </Field>
           <Field label="Selling Price">
-            <Input size="lg" mono inputMode="decimal" placeholder="0.00"
+            <Input size="sm" mono inputMode="decimal" placeholder="0.00"
               leading={sym('$')} value={v.price} onChange={onField('price')} onFocus={selectAll} />
           </Field>
         </div>
 
-        <div style={{ height: 1, background: 'var(--gb-border-subtle)' }} />
+        <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '2px 0' }} />
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <Field label="Gross Margin">
-            <Input size="lg" mono inputMode="decimal" placeholder="0.00"
+            <Input size="sm" mono inputMode="decimal" placeholder="0.00"
               trailing={sym('%')} value={v.margin} onChange={onField('margin')} onFocus={selectAll} />
           </Field>
           <Field label="Markup">
-            <Input size="lg" mono inputMode="decimal" placeholder="0.00"
+            <Input size="sm" mono inputMode="decimal" placeholder="0.00"
               trailing={sym('%')} value={v.markup} onChange={onField('markup')} onFocus={selectAll} />
           </Field>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '0.62fr 1fr 1fr', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '0.55fr 1fr 1fr', gap: 8 }}>
           <Field label="Qty">
-            <Input size="lg" mono inputMode="numeric" placeholder="1"
+            <Input size="sm" mono inputMode="numeric" placeholder="1"
               value={v.qty} onChange={onField('qty')} />
           </Field>
           <Field label="Unit Profit">
-            <Input size="lg" mono inputMode="decimal" placeholder="0.00"
+            <Input size="sm" mono inputMode="decimal" placeholder="0.00"
               leading={sym('$')} value={v.profit} onChange={onField('profit')} onFocus={selectAll} />
           </Field>
           <Field label="Total Profit">
             {/* read-only result — counts up/down as the inputs change */}
-            <div style={{ ...inputBaseStyle({ size: 'lg' }), cursor: 'default' }}>
+            <div style={{ ...inputBaseStyle({ size: 'sm' }), cursor: 'default' }}>
               {sym('$')}
               <NumberDisplay
                 value={v.totalProfit}
