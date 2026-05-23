@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { T, TINT, sizeIcon } from '../shared.jsx';
 
 const SIZES = {
+  xs: { fontSize: 9.5,  padding: '2px 6px',  gap: 5, switchW: 18, switchH: 10, knob: 6,  iconSize: 8 },
   sm: { fontSize: 10.5, padding: '3px 7px',  gap: 6, switchW: 22, switchH: 12, knob: 8,  iconSize: 9 },
   md: { fontSize: 11.5, padding: '4px 9px',  gap: 7, switchW: 26, switchH: 14, knob: 10, iconSize: 10 },
   lg: { fontSize: 12.5, padding: '5px 11px', gap: 8, switchW: 30, switchH: 16, knob: 12, iconSize: 11 },
@@ -12,7 +13,7 @@ const SIZES = {
  * SwitchTag — a tag with an embedded switch. Inline feature flags,
  * per-row enable controls.
  *
- * Props: on, label, icon, size 'sm'|'md'|'lg',
+ * Props: on, label, icon, size 'xs'|'sm'|'md'|'lg',
  *   tone 'neutral'|'brand'|'warning'|'error' (auto: off→neutral, on→brand),
  *   onClick.
  */
