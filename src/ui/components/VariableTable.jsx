@@ -12,7 +12,12 @@ import { IconBtn } from './IconBtn.jsx';
 import { KindPill } from './KindPill.jsx';
 import { BodyVar } from './BodyVar.jsx';
 import { InlineVariableForm } from './InlineVariableForm.jsx';
+import { useSettingNotification } from './SettingNotification.jsx';
 import { I, Icon } from '../icons.jsx';
+
+// Sentinel returned by the rename prompt's "Delete" extraAction. Compared
+// with === so the caller knows the user picked Delete vs typing a name.
+const DELETE_SENTINEL = Symbol('delete-variable');
 
 const VariableIcon = (p) => (
   <Icon {...p}>
@@ -20,12 +25,13 @@ const VariableIcon = (p) => (
     <path d="M9 9l6 6M9 15l6-6"/>
   </Icon>
 );
-// 5 columns: variable | kind | source | resolved | actions (edit+delete).
+// 5 columns: variable | kind | source | resolved | actions (single edit).
 // Status column dropped — BodyVar's chip color already encodes status
 // (green=ok, yellow=fallback, red=miss), so the dedicated tag was
-// redundant. Variable column tightened so the Kind pill (which can show
-// long labels like "constant") has room to breathe without truncating.
-const COL_GRID = '1.2fr 84px 1fr 1.3fr 60px';
+// redundant. The actions column holds just one edit button now (Delete
+// moved into the rename prompt), so it's been tightened to a 28px slot.
+// Reclaimed space goes to Source + Resolved, which were getting cramped.
+const COL_GRID = '1.2fr 84px 1.1fr 1.4fr 28px';
 
 /**
  * VariableTable — 5-column grid showing all variables for a template.
@@ -46,23 +52,30 @@ const COL_GRID = '1.2fr 84px 1fr 1.3fr 60px';
  */
 export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOpenSmart }) {
   const [adding, setAdding] = useState(false);
+  const notify = useSettingNotification();
 
-  // Rename via browser's native prompt. Validates that the new name is
-  // non-empty, distinct from the old name, a legal JS-ish identifier (the
-  // resolver assumes \w+), and not already in use by another variable.
-  // Anything invalid → alert() and bail. Cheap to use, no modal chrome to
-  // maintain.
-  const renameVariable = (variable) => {
-    const next = window.prompt(`Rename variable "${variable.name}"`, variable.name);
-    if (next == null) return;
-    const newName = next.trim();
+  // Open the rename prompt with a "Delete" tertiary action. This is the
+  // SINGLE entry point for both rename and delete — collapsing two icon
+  // buttons into one and giving the user a confirmation step before
+  // destructive deletion. Validates the new name and re-prompts on
+  // collision so the user keeps their typed value.
+  const renameVariable = async (variable) => {
+    const result = await notify.prompt(`Rename variable`, {
+      title: `"${variable.name}"`,
+      defaultValue: variable.name,
+      confirmLabel: 'Rename',
+      extraAction: { label: 'Delete', tone: 'danger', value: DELETE_SENTINEL },
+    });
+    if (result === DELETE_SENTINEL) { onDelete?.(variable.name); return; }
+    if (result == null) return;
+    const newName = String(result).trim();
     if (!newName || newName === variable.name) return;
     if (!/^\w+$/.test(newName)) {
-      window.alert('Variable name must contain only letters, numbers, and underscores.');
+      notify.notify('Variable name must contain only letters, numbers, and underscores.', { tone: 'warning' });
       return;
     }
     if (vars.some((v) => v.name === newName && v.name !== variable.name)) {
-      window.alert(`A variable named "${newName}" already exists.`);
+      notify.notify(`A variable named "${newName}" already exists.`, { tone: 'warning' });
       return;
     }
     onEdit?.({ oldName: variable.name, newName }, variable);
@@ -179,18 +192,17 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
               }
             </div>
 
-            {/* Actions — rename + delete, share the column.
-                Rename uses a native prompt (see renameVariable). Changing
-                kind is unsupported by design — delete and re-add instead. */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+            {/* Actions — single edit button that opens the rename prompt;
+                the prompt itself surfaces a Delete option as its tertiary
+                action. One button per row keeps the actions column slim
+                and the destructive action gated behind a confirm step. */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <IconBtn
                 size="sm"
                 icon={<I.edit />}
-                variant="ghost"
-                tooltip="Rename"
+                tooltip="Rename or delete"
                 onClick={() => renameVariable(v)}
               />
-              <IconBtn size="sm" icon={<I.trash />} danger onClick={() => onDelete?.(v.name)} />
             </div>
           </motion.div>
         );
