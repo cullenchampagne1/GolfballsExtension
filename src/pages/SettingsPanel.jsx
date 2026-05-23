@@ -16,6 +16,11 @@ import {
 import {
   CUSTOM_PAGE_SECTIONS, loadCustomPages, saveCustomPages, emptyCustomPages,
 } from '../lib/customPages.js';
+import {
+  PRESET_SCOPES, gatherScopes, applyScopes, normalizePreset, presetScopeIds,
+} from '../lib/presetScopes.js';
+import { Checkbox } from '../ui/components/Checkbox.jsx';
+import { Tag } from '../ui/components/Tag.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    SettingsPanel — the fully-featured Manage → Settings page.
@@ -240,12 +245,19 @@ function ModalBtn({ icon, label, meta, metaTone, onClick }) {
   );
 }
 
-/* ── User Presets Manager ────────────────────────────────────── */
+/* ── User Presets Manager ──────────────────────────────────────
+   Save snapshot bundles of the extension's storage. Each save lets
+   the user pick which scopes to include (Settings, Email Templates,
+   Note Templates, or all). Load merges scopes back: arrays merge by
+   id (same id = replace, new id = append) so sharing a preset with
+   a friend ADDS templates to their library instead of wiping it. */
 function UserPresetsManager({ onPresetLoad }) {
   const [presets, setPresets] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [presetName, setPresetName] = useState('');
+  // Default: full state — every scope checked.
+  const [chosenScopes, setChosenScopes] = useState(() => new Set(PRESET_SCOPES.map((s) => s.id)));
   const fileInputRef = useRef(null);
 
   useEffect(() => { loadUserPresets(); }, []);
@@ -257,31 +269,60 @@ function UserPresetsManager({ onPresetLoad }) {
     } catch { setPresets([]); }
   }
 
+  function toggleScope(id) {
+    setChosenScopes((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  }
+  const allChecked  = chosenScopes.size === PRESET_SCOPES.length;
+  const someChecked = chosenScopes.size > 0 && !allChecked;
+  const toggleAll = () => setChosenScopes(allChecked
+    ? new Set()
+    : new Set(PRESET_SCOPES.map((s) => s.id)));
+
+  function openSaveDialog() {
+    // Reset to full-state each time the dialog opens — the most common
+    // intent is "back up everything I have right now".
+    setChosenScopes(new Set(PRESET_SCOPES.map((s) => s.id)));
+    setPresetName('');
+    setShowSaveDialog(true);
+  }
+
   async function handleSave() {
-    if (!presetName.trim()) return;
-    const theme = await loadTheme();
-    const flags = await loadFlags();
+    if (!presetName.trim() || chosenScopes.size === 0) return;
+    const scopes = await gatherScopes([...chosenScopes]);
     const id = 'up_' + Date.now();
-    const newPreset = { id, name: presetName.trim(), colors: theme.colors || {}, variant: theme.variant, featureFlags: flags, createdAt: Date.now() };
+    const newPreset = {
+      id, name: presetName.trim(), createdAt: Date.now(),
+      scopes,
+    };
     const updated = [...presets, newPreset];
     setPresets(updated);
     await chrome.storage.local.set({ userPresets: updated });
     setPresetName(''); setShowSaveDialog(false); setSelectedId(id);
+    window.__gbToast?.success(`Saved "${newPreset.name}"`);
   }
 
   async function handleLoad() {
     if (!selectedId) return;
-    const preset = presets.find(p => p.id === selectedId);
-    if (!preset) return;
-    const newTheme = { variant: preset.variant || 'dark', colors: preset.colors || {} };
-    applyTheme(newTheme); saveTheme(newTheme);
-    if (preset.featureFlags) saveFlags(preset.featureFlags);
+    const raw = presets.find((p) => p.id === selectedId);
+    if (!raw) return;
+    const preset = normalizePreset(raw);
+    const { applied } = await applyScopes(preset.scopes);
     onPresetLoad?.();
+    const labels = applied
+      .map((id) => PRESET_SCOPES.find((s) => s.id === id)?.label)
+      .filter(Boolean);
+    window.__gbToast?.success(
+      labels.length ? `Loaded ${labels.join(' · ')}` : 'Preset had nothing to load',
+    );
   }
 
   async function handleDelete() {
     if (!selectedId) return;
-    const updated = presets.filter(p => p.id !== selectedId);
+    const updated = presets.filter((p) => p.id !== selectedId);
     setPresets(updated);
     await chrome.storage.local.set({ userPresets: updated });
     setSelectedId(null);
@@ -289,7 +330,7 @@ function UserPresetsManager({ onPresetLoad }) {
 
   function handleExport() {
     if (!selectedId) return;
-    const preset = presets.find(p => p.id === selectedId);
+    const preset = presets.find((p) => p.id === selectedId);
     if (!preset) return;
     const blob = new Blob([JSON.stringify(preset, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -304,40 +345,124 @@ function UserPresetsManager({ onPresetLoad }) {
     try {
       const obj = JSON.parse(await file.text());
       if (!obj.name) throw new Error('Invalid');
-      obj.id = 'up_' + Date.now(); obj.createdAt = Date.now();
-      const updated = [...presets, obj];
+      // Stamp a fresh id so two imports of the same file don't collide.
+      const normalized = normalizePreset({ ...obj, id: 'up_' + Date.now(), createdAt: Date.now() });
+      const updated = [...presets, normalized];
       setPresets(updated);
       await chrome.storage.local.set({ userPresets: updated });
-    } catch (err) { console.error('Import failed:', err); }
+      setSelectedId(normalized.id);
+      window.__gbToast?.success(`Imported "${normalized.name}"`);
+    } catch (err) {
+      console.error('Import failed:', err);
+      window.__gbToast?.error('Import failed — not a valid preset file');
+    }
     e.target.value = '';
   }
 
   const hasPresets = presets.length > 0;
-  const dropdownOptions = presets.map(p => ({ id: p.id, label: `${p.name} (${new Date(p.createdAt).toLocaleDateString()})` }));
+  const dropdownOptions = presets.map((p) => {
+    const ids = presetScopeIds(p);
+    const tail = ids.length ? ` · ${ids.length} scope${ids.length === 1 ? '' : 's'}` : '';
+    return { id: p.id, label: `${p.name} (${new Date(p.createdAt).toLocaleDateString()})${tail}` };
+  });
+  const selectedScopeIds = selectedId
+    ? presetScopeIds(presets.find((p) => p.id === selectedId))
+    : [];
 
   return (
     <div>
       <SectionLabel>User Presets</SectionLabel>
       <AnimatePresence>
         {showSaveDialog && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={T.base} style={{ overflow: 'hidden', marginBottom: 12 }}>
-            <div style={{ display: 'flex', gap: 8, padding: 12, background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', borderRadius: 'var(--gb-r-md)' }}>
-              <Input value={presetName} onChange={(e) => setPresetName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSave()} placeholder="Name this preset..." autoFocus size="sm" style={{ flex: 1 }} />
-              <Btn variant="primary" size="sm" icon={<I.check />} onClick={handleSave}>Save</Btn>
-              <Btn variant="ghost" size="sm" onClick={() => setShowSaveDialog(false)}>Cancel</Btn>
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={T.base}
+            style={{ overflow: 'hidden', marginBottom: 12 }}
+          >
+            <div style={{
+              padding: 12,
+              background: 'var(--gb-brand-tint-soft)',
+              border: '1px solid var(--gb-brand-tint-border)',
+              borderRadius: 'var(--gb-r-md)',
+              display: 'flex', flexDirection: 'column', gap: 10,
+            }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Input
+                  value={presetName}
+                  onChange={(e) => setPresetName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+                  placeholder="Name this preset…"
+                  autoFocus size="sm"
+                  style={{ flex: 1 }}
+                />
+                <Btn
+                  variant="primary" size="sm" icon={<I.check />}
+                  disabled={!presetName.trim() || chosenScopes.size === 0}
+                  onClick={handleSave}
+                >
+                  Save
+                </Btn>
+                <Btn variant="ghost" size="sm" onClick={() => setShowSaveDialog(false)}>Cancel</Btn>
+              </div>
+              {/* Scope picker — uppercase eyebrow + master "Full state"
+                  checkbox + one row per scope with its description. */}
+              <div style={{
+                padding: 10,
+                background: 'var(--gb-surface-1)',
+                border: '1px solid var(--gb-border-default)',
+                borderRadius: 'var(--gb-r-sm)',
+                display: 'flex', flexDirection: 'column', gap: 8,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <Checkbox
+                    size="sm"
+                    checked={allChecked}
+                    indeterminate={someChecked}
+                    onChange={toggleAll}
+                  />
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-primary)' }}>
+                    Full state
+                  </span>
+                  <span style={{ fontSize: 10, color: 'var(--gb-text-muted)' }}>
+                    {chosenScopes.size} of {PRESET_SCOPES.length} included
+                  </span>
+                </div>
+                <div style={{ height: 1, background: 'var(--gb-border-subtle)' }} />
+                {PRESET_SCOPES.map((s) => (
+                  <Checkbox
+                    key={s.id}
+                    size="sm"
+                    checked={chosenScopes.has(s.id)}
+                    label={s.label}
+                    hint={s.desc}
+                    onChange={() => toggleScope(s.id)}
+                  />
+                ))}
+              </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <Dropdown size="sm" value={selectedId} placeholder={hasPresets ? 'Select a preset...' : 'No saved presets'} options={dropdownOptions} onChange={setSelectedId} disabled={!hasPresets} style={{ flex: 1 }} />
+        <Dropdown size="sm" value={selectedId} placeholder={hasPresets ? 'Select a preset…' : 'No saved presets'} options={dropdownOptions} onChange={setSelectedId} disabled={!hasPresets} style={{ flex: 1 }} />
         <Btn variant="primary" size="sm" onClick={handleLoad} disabled={!selectedId}>Load</Btn>
-        <Btn variant="secondary" size="sm" onClick={() => setShowSaveDialog(true)}>Save</Btn>
+        <Btn variant="secondary" size="sm" onClick={openSaveDialog}>Save</Btn>
         <Btn variant="secondary" size="sm" onClick={handleExport} disabled={!selectedId}>Export</Btn>
         <Btn variant="secondary" size="sm" onClick={handleDelete} disabled={!selectedId}><I.trash size={12} /></Btn>
         <input ref={fileInputRef} type="file" accept=".json" onChange={handleImport} style={{ display: 'none' }} />
         <Btn variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>Import</Btn>
       </div>
+      {/* Tag row — at a glance, what's in the selected preset. */}
+      {selectedScopeIds.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
+          {selectedScopeIds.map((id) => {
+            const def = PRESET_SCOPES.find((s) => s.id === id);
+            return def ? <Tag key={id} tone="brand" size="xs">{def.label}</Tag> : null;
+          })}
+        </div>
+      )}
     </div>
   );
 }
