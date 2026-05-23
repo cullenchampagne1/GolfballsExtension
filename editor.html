@@ -339,7 +339,9 @@ textarea::-webkit-scrollbar-thumb:hover { background: var(--gb-text-muted,#88888
 #ed-settings {
   padding: 20px 0 60px;
   max-width: 680px;
-  margin: 0;
+  /* Center like .ed-form does — without `auto`, wider windows leave the
+     settings pane pinned left while the template editor stays centered. */
+  margin: 0 auto;
 }
 
 .settings-hdr {

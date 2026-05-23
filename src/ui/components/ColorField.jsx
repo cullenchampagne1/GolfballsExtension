@@ -1,20 +1,26 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { AnimatePresence } from 'motion/react';
 import { inputBaseStyle } from '../shared.jsx';
+import { ColorPickerPopover } from './ColorPicker.jsx';
 
 const SWATCH = { sm: 18, md: 22, lg: 26 };
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
 /**
- * ColorField — a hex color control: a swatch that opens the native color
- * picker, plus a typeable hex input. Compose inside <Field> for a label.
+ * ColorField — a hex color control: a swatch that opens the design-system
+ * ColorPicker popover, plus a typeable hex input. Compose inside <Field>
+ * for a label.
  *
- * Props: value (hex string), onChange(hex), size 'sm'|'md'|'lg', disabled.
+ * Props: value (hex string), onChange(hex), size 'sm'|'md'|'lg', disabled,
+ *   swatches (optional preset palette).
  * Invalid hex shows the text in the error color; the swatch falls back safely.
  */
-export function ColorField({ value = '#000000', onChange, size = 'md', disabled, style }) {
+export function ColorField({ value = '#000000', onChange, size = 'md', disabled, swatches, style }) {
   const [focused, setFocused] = useState(false);
+  const [open, setOpen] = useState(false);
   const valid = HEX_RE.test(value);
   const swatch = SWATCH[size] || SWATCH.md;
+  const anchorRef = useRef(null);
 
   return (
     <div
@@ -23,29 +29,23 @@ export function ColorField({ value = '#000000', onChange, size = 'md', disabled,
         paddingLeft: 5,
         gap: 8,
         opacity: disabled ? 0.5 : 1,
+        position: 'relative',
         ...style,
       }}
     >
-      <label
+      <button
+        ref={anchorRef}
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
         style={{
-          width: swatch, height: swatch, flexShrink: 0,
-          borderRadius: 'var(--gb-r-sm)', position: 'relative', overflow: 'hidden',
+          width: swatch, height: swatch, flexShrink: 0, padding: 0,
+          borderRadius: 'var(--gb-r-sm)', overflow: 'hidden',
           background: valid ? value : 'var(--gb-fill-subtle)',
           border: '1px solid var(--gb-border-strong)',
           cursor: disabled ? 'not-allowed' : 'pointer',
         }}
-      >
-        <input
-          type="color"
-          disabled={disabled}
-          value={valid ? value : '#000000'}
-          onChange={(e) => onChange?.(e.target.value)}
-          style={{
-            position: 'absolute', inset: 0, width: '100%', height: '100%',
-            opacity: 0, padding: 0, border: 'none', cursor: 'inherit',
-          }}
-        />
-      </label>
+      />
       <input
         value={value}
         disabled={disabled}
@@ -61,6 +61,18 @@ export function ColorField({ value = '#000000', onChange, size = 'md', disabled,
           color: valid ? 'var(--gb-text-primary)' : 'var(--gb-error)',
         }}
       />
+      <AnimatePresence>
+        {open && (
+          <ColorPickerPopover
+            value={valid ? value : '#000000'}
+            onChange={onChange}
+            anchorRef={anchorRef}
+            onClose={() => setOpen(false)}
+            align="left"
+            swatches={swatches}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
