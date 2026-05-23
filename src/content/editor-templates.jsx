@@ -3,9 +3,9 @@ import { createRoot } from 'react-dom/client';
 import { AnimatePresence, motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import {
-  Btn, Tag, Callout,
+  Btn, Tag,
   Input, Dropdown, Field, IconBtn,
-  Switch, SwitchTag, Segmented,
+  SwitchTag, Segmented,
   I, Icon, Dot,
   SmartPopover, SignatureModal,
   RichTextEditor,
@@ -548,28 +548,17 @@ function TemplateEditor({ tpl, onDelete }) {
       )}
 
       {/* ── Reply mode (non-case only — case templates always thread).
-          Compact inline row so it doesn't compete with the Field-style
-          blocks above. */}
+          xs SwitchTag pill matches the feature-flag spotlight style in
+          settings — minimal chrome, single click target. */}
       {typeId !== 'case' && (
-        <div style={{
-          ...S.mb12,
-          display: 'flex', alignItems: 'center', gap: 10,
-          padding: '8px 10px',
-          background: 'var(--gb-fill-faint)',
-          border: '1px solid var(--gb-border-subtle)',
-          borderRadius: 'var(--gb-r-md)',
-        }}>
-          <Switch size="sm" on={replyMode} onChange={setReplyMode} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>
-              Reply to most recent email
-            </div>
-            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>
-              {replyMode
-                ? 'Threads this template as a reply on the latest message.'
-                : 'Sends as a standalone new message.'}
-            </div>
-          </div>
+        <div style={{ ...S.mb12, display: 'flex' }}>
+          <SwitchTag
+            size="xs"
+            on={replyMode}
+            label="Reply mode"
+            icon={<I.mail />}
+            onClick={() => setReplyMode((r) => !r)}
+          />
         </div>
       )}
 
@@ -585,23 +574,6 @@ function TemplateEditor({ tpl, onDelete }) {
 
       {/* ── Rules — imports the template's saved rules/conditions ── */}
       <div style={S.mb14}>
-        {/* Smart Triggers explainer — dismissible per-user. The copy
-            varies by template type so each gets its own persistId. */}
-        {typeId === 'order' && (
-          <Callout persistId="callout-rules-order" tone="info" icon={<I.bolt />} title="Smart Triggers" style={{ marginBottom: 8 }}>
-            Add a rule and this template auto-fires when the order page matches. Click <strong>Pick</strong> next to a selector to grab an element straight off the active tab.
-          </Callout>
-        )}
-        {typeId === 'account' && (
-          <Callout persistId="callout-rules-account" tone="info" icon={<I.bolt />} title="Account Conditions" style={{ marginBottom: 8 }}>
-            Conditions filter which accounts this template applies to. Combine fields like order count, last contact, or sales rep.
-          </Callout>
-        )}
-        {typeId === 'case' && (
-          <Callout persistId="callout-rules-case" tone="info" icon={<I.bolt />} title="Case Reply Template" style={{ marginBottom: 8 }}>
-            Match rules check the inbound email's <strong>subject</strong>, <strong>body</strong>, <strong>from</strong>, or <strong>to</strong>. Use the Recommended Case Tags above to suggest identifiers when the case is processed.
-          </Callout>
-        )}
         <RulesComp
           initial={
             typeId === 'account' ? tpl.accountConditions
@@ -702,11 +674,6 @@ function TemplateEditor({ tpl, onDelete }) {
       {/* ── Variables — VariableTable manages its own inline add form
            now, so we just pass the create callback directly. ── */}
       <div style={S.mb12}>
-        <Callout persistId={`callout-vars-${typeId}`} tone="neutral" icon={<I.bolt />} title="Variable types" style={{ marginBottom: 8 }}>
-          <strong>Built-in</strong> reads a known page value. <strong>DOM</strong> grabs text from a CSS selector. <strong>Literal</strong> is fixed text.
-          {typeId === 'case' && <> <strong>Regex</strong> extracts from the inbound email; set group + scope to refine.</>}
-          {' '}Edit name/kind via the pencil icon to keep smart options.
-        </Callout>
         <VariableTable
           typeId={typeId}
           vars={displayVars}
