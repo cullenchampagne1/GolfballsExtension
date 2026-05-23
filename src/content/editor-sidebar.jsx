@@ -692,20 +692,20 @@ function TemplateSidebar() {
           ]}
         />
         <Input size="sm" value={search} onChange={setSearch} placeholder="Search…" leading={<I.search />} />
-        {/* Template button takes the row; Folder is icon-only so the
-            primary action (new template) reads at a glance and we
-            recover the horizontal space the redundant "Folder" label
-            was eating in this narrow sidebar. */}
+        {/* Template button takes the row; Folder is icon-only but
+            keeps the dashed brand-tinted Btn styling so the two read
+            as a matched pair — just without the redundant label. */}
         <div style={{ display: 'flex', gap: 6 }}>
           <Btn variant="dashed" size="sm" icon={<I.plus />} onClick={newTpl}
                style={{ flex: 1, minWidth: 0 }}>
             {isNote ? 'Note' : 'Template'}
           </Btn>
-          <IconBtn
-            size="sm"
+          <Btn
+            variant="dashed" size="sm"
             icon={<FolderIcon />}
-            tooltip="New folder"
             onClick={newFolder}
+            title="New folder"
+            style={{ flexShrink: 0, padding: '0 9px' }}
           />
         </div>
       </div>
