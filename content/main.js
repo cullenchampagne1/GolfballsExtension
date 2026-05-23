@@ -358,7 +358,8 @@ window.__gbContentReady = true;
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
     chrome.storage.local.get('keyboardShortcuts', ({ keyboardShortcuts }) => {
-      const key = (keyboardShortcuts?.crmNewContact || 'q').toLowerCase();
+      const raw = keyboardShortcuts?.crmNewContact;
+      const key = (raw === undefined ? 'q' : raw).toLowerCase();
       if (!key || e.key.toLowerCase() !== key) return;
       e.preventDefault();
       if (typeof window.__gbShowCrmCreateContactModal === 'function') {

@@ -634,11 +634,12 @@ function __gbShowCrmCreateContactModal() {
 
   setTimeout(() => inpFirst.focus(), 60);
 
-  // KB hint
+  // KB hint (hidden when the shortcut is disabled via empty string).
   chrome.storage.local.get('keyboardShortcuts', ({ keyboardShortcuts }) => {
-    const letter = (keyboardShortcuts?.crmNewContact || 'q').toUpperCase();
+    const raw = keyboardShortcuts?.crmNewContact;
+    const letter = (raw === undefined ? 'q' : raw).toUpperCase();
     const hint = document.getElementById('__gb-ccm-kb-hint');
-    if (hint) hint.textContent = `Ctrl+${letter}`;
+    if (hint) hint.textContent = letter ? `Ctrl+${letter}` : '';
   });
 
   // ── Close ──────────────────────────────────────────────────────────────────

@@ -1906,7 +1906,9 @@ if (!window.__gbTaskListModalLoaded) {
   // ── Configurable keyboard shortcut (default Ctrl+X) ─────────────────────────
   (function registerTaskListShortcut() {
     chrome.storage.local.get('keyboardShortcuts', ({ keyboardShortcuts }) => {
-      const key = (keyboardShortcuts?.taskList || 'x').toLowerCase();
+      const raw = keyboardShortcuts?.taskList;
+      const key = (raw === undefined ? 'x' : raw).toLowerCase();
+      if (!key) return;
       document.addEventListener('keydown', e => {
         if (!e.ctrlKey || e.shiftKey || e.altKey) return;
         if (e.key.toLowerCase() !== key) return;
