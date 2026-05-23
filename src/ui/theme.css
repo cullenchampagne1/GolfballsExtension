@@ -280,6 +280,18 @@
 }
 
 /* ════════════════════════════════════════════════════════════
+   Thin themed scrollbar — opt-in via `.gb-thin-scroll`. Applied to
+   the React-mounted sidebar list, settings page body, etc. Legacy
+   #editor / #tpl-list scrollbars in editor.html stay on their own
+   styling because they may need different proportions.
+════════════════════════════════════════════════════════════ */
+.gb-thin-scroll { scrollbar-width: thin; scrollbar-color: var(--gb-border-default) transparent; }
+.gb-thin-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+.gb-thin-scroll::-webkit-scrollbar-track { background: transparent; }
+.gb-thin-scroll::-webkit-scrollbar-thumb { background: var(--gb-border-default); border-radius: 6px; }
+.gb-thin-scroll::-webkit-scrollbar-thumb:hover { background: var(--gb-border-strong); }
+
+/* ════════════════════════════════════════════════════════════
    Toast entry keyframes — needed by the notification_handoff
    toast family (PillToast / ActionToast / StepToast / etc.).
 ════════════════════════════════════════════════════════════ */
