@@ -483,25 +483,17 @@ export function TemplateEditor({ tpl, onDelete }) {
 
       {/* ── Type tabs + sender picker on the same row.
           Left: order/case/account Segmented.
-          Right: a second Segmented for which sender the Power Automate
-          flow should use. The shuffle slot is part of the same switcher
-          so picking it visually replaces the active sender — internally
-          it persists as senderRandomize=true. The pair is disabled when
-          the Direct Send via Power Automate feature flag is off, but
-          the value is still persisted so flipping the flag back on
-          later doesn't lose the user's preference. */}
+          Right (only when Direct Send via Power Automate is on): a second
+          Segmented for which sender the PA flow should use. The shuffle
+          slot is part of the same switcher so picking it visually replaces
+          the active sender — internally it persists as senderRandomize=true.
+          When PA is off the entire right-side switcher is hidden (not just
+          dimmed) — the value is still persisted so flipping the flag back
+          on later doesn't lose the user's preference. */}
       <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
         <Segmented value={typeId} onChange={changeType} options={TYPE_OPTIONS} />
         <div style={{ flex: 1 }} />
-        <div
-          title={paEnabled ? '' : 'Enable Direct Send via Power Automate in Settings to use sender accounts'}
-          style={{
-            display: 'inline-flex',
-            opacity: paEnabled ? 1 : 0.45,
-            pointerEvents: paEnabled ? 'auto' : 'none',
-            transition: 'opacity 160ms ease',
-          }}
-        >
+        {paEnabled && (
           <Segmented
             value={senderRandomize ? '__random' : senderAccount}
             onChange={(v) => {
@@ -513,7 +505,7 @@ export function TemplateEditor({ tpl, onDelete }) {
               { id: '__random', label: 'Random', icon: <I.shuffle /> },
             ]}
           />
-        </div>
+        )}
       </div>
 
       {/* ── Meta row ── */}
@@ -584,9 +576,12 @@ export function TemplateEditor({ tpl, onDelete }) {
       )}
 
       {/* ── Reply mode (non-case only — case templates always thread).
-          Uses the shared FeatureSpotlight (xs) so it matches the
-          settings page's flag rows 1:1 instead of being a one-off pill. */}
-      {typeId !== 'case' && (
+          Only shown when Direct Send via Power Automate is enabled, since
+          that's the only path where the reply-mode toggle is meaningful
+          (PA's flow threads the reply; without PA, every send is a fresh
+          mailto regardless of this flag). Persisted value is preserved
+          when PA toggles off so the preference isn't lost. */}
+      {typeId !== 'case' && paEnabled && (
         <div style={S.mb12}>
           <FeatureSpotlight
             size="xs"
