@@ -190,6 +190,21 @@
 ════════════════════════════════════════════════════════════ */
 :root {
 
+  /* ─── Legacy aliases · so editor.html / popup.html / etc. inherit
+         theme switches without rewriting their CSS. Custom properties
+         resolve lazily, so these always track the active variant. ── */
+  --gb-surface-base:     var(--gb-surface-canvas);
+  --gb-surface-raised:   var(--gb-surface-1);
+  --gb-surface-hover:    var(--gb-surface-2);
+  --gb-surface-float:    var(--gb-surface-3);
+  --gb-surface-elevated: var(--gb-surface-modal);
+  --gb-surface-mid:      var(--gb-surface-canvas);
+  --gb-surface-void:     var(--gb-surface-deep);
+  --gb-border-standard:  var(--gb-border-default);
+  --gb-border-muted:     var(--gb-border-default);
+  --gb-border-base:      var(--gb-border-subtle);
+  --gb-text-faint:       var(--gb-text-ghost);
+
   /* ─── Type ─────────────────────────────── */
   --gb-font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
   --gb-font-mono: 'Geist Mono', 'SF Mono', Menlo, monospace;
