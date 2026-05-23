@@ -49,7 +49,6 @@ export const DEV_SETTINGS = [
     min:     0,
     max:     50,
     step:    1,
-    unit:    'templates',
   },
 
   /* ── Per-button context-ignore knobs ──────────────────────────
