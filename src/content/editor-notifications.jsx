@@ -28,7 +28,7 @@ function GlobalBridge() {
 
 function EditorNotifications() {
   return (
-    <SettingNotificationHost placement="centered">
+    <SettingNotificationHost placement="top">
       <GlobalBridge />
     </SettingNotificationHost>
   );

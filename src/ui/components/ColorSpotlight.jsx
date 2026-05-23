@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { AnimatePresence } from 'motion/react';
 import { I } from '../icons.jsx';
+import { ColorPickerPopover } from './ColorPicker.jsx';
 
 /**
  * ColorSpotlight — full-height swatch + name + hex input + reset.
@@ -8,6 +10,9 @@ import { I } from '../icons.jsx';
  * swatch column, transparent past it). A background is painted across the
  * element's whole box by the browser, so the color always fills top-to-bottom
  * — no flex-stretch or percentage-height child that can leave a sliver.
+ *
+ * Clicking the swatch opens the design-system ColorPicker popover (no native
+ * OS picker). Drag the popover's hue + S/V controls to update live.
  *
  * Props: value, defaultValue, name, desc, varName, onChange,
  *   size 'sm'|'md'|'lg' (default 'md').
@@ -21,9 +26,11 @@ const SIZES = {
 export function ColorSpotlight({ value, defaultValue, name, desc, varName, onChange, size = 'md' }) {
   const s = SIZES[size] || SIZES.md;
   const [inputValue, setInputValue] = useState(value);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const swatchRef = useRef(null);
   const modified = value !== defaultValue;
 
-  React.useEffect(() => {
+  useEffect(() => {
     setInputValue(value?.toUpperCase() || '');
   }, [value]);
 
@@ -44,21 +51,21 @@ export function ColorSpotlight({ value, defaultValue, name, desc, varName, onCha
         border: '1px solid ' + (modified ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'),
         borderRadius: 'var(--gb-r-lg)',
         boxShadow: modified ? '0 0 0 4px var(--gb-brand-tint-soft)' : 'none',
-        overflow: 'hidden',
+        overflow: 'visible',  // let the popover escape the card bounds
         transition: 'border-color var(--gb-anim), box-shadow var(--gb-anim)',
       }}
     >
-      {/* Clickable swatch region — sits over the colored part of the gradient. */}
-      <label style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: s.sw, cursor: 'pointer' }}>
-        <input
-          type="color"
-          value={value}
-          onChange={(e) => onChange?.(e.target.value)}
-          style={{
-            position: 'absolute', inset: 0, width: '100%', height: '100%',
-            opacity: 0, cursor: 'pointer', border: 'none', padding: 0,
-          }}
-        />
+      {/* Clickable swatch region — opens the design-system color popover. */}
+      <button
+        ref={swatchRef}
+        type="button"
+        onClick={() => setPickerOpen((v) => !v)}
+        style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0, width: s.sw,
+          padding: 0, background: 'transparent', border: 'none',
+          cursor: 'pointer',
+        }}
+      >
         {modified && (
           <span style={{
             position: 'absolute', bottom: 6, right: 6,
@@ -68,7 +75,20 @@ export function ColorSpotlight({ value, defaultValue, name, desc, varName, onCha
             textTransform: 'uppercase', backdropFilter: 'blur(4px)',
           }}>EDITED</span>
         )}
-      </label>
+      </button>
+
+      {/* Popover anchored to the swatch — fixed position relative to the card. */}
+      <AnimatePresence>
+        {pickerOpen && (
+          <ColorPickerPopover
+            value={value || '#000000'}
+            onChange={onChange}
+            anchorRef={swatchRef}
+            onClose={() => setPickerOpen(false)}
+            align="left"
+          />
+        )}
+      </AnimatePresence>
 
       {/* Body — offset past the swatch column. */}
       <div style={{
