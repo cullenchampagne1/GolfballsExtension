@@ -4442,10 +4442,11 @@ window.gbMigrateVariations = async function gbMigrateVariations() {
   const { templates: tpls = [] } = await new Promise((r) =>
     chrome.storage.local.get('templates', r),
   );
-  // Strict rule: the suffix must be a literal "Variation #N" (with the
-  // hash). Plain "Variation N" — without the hash — frequently shows up
-  // as part of legitimate standalone names and produces false positives.
-  const VAR_RX = /^(.+?)\s+Variation\s+#(\d+)\s*$/i;
+  // Rule: trailing "Variation N" or "Variation #N" — both forms exist in
+  // legitimate variation naming, so the # is optional. The migration only
+  // moves a child onto a parent when an exact-name parent of the same
+  // type exists.
+  const VAR_RX = /^(.+?)\s+Variation\s+#?(\d+)\s*$/i;
   const byKey = new Map();
   tpls.forEach((t) => byKey.set(`${t.type || 'order'}::${(t.name || '').trim()}`, t));
 
