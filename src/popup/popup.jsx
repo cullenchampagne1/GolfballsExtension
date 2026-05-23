@@ -3,9 +3,9 @@ import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
-import { loadDevSettings, STORAGE_KEY as DEV_KEY } from '../lib/devSettings.js';
+import { useDevSettings } from '../lib/devSettings.js';
 import {
-  Btn, Dropdown, Dot, Tag, KeyVal, SectionLabel, Field, Textarea,
+  Btn, Dropdown, Dot, KeyVal, SectionLabel, Field, Textarea,
   Spinner, I, T, inputBaseStyle,
 } from '../ui';
 
@@ -161,10 +161,18 @@ function PopupApp() {
   const [pageInfo, setPageInfo] = useState({});
   const [flags, setFlags] = useState({});
   const [watchList, setWatchList] = useState([]);
-  // Dev knob — when true, the page-type filter is bypassed and every
-  // order/account template shows. Variables stay unmatched (no point
-  // round-tripping to content scripts that may not be on a GB page).
-  const [ignorePageContext, setIgnorePageContext] = useState(false);
+
+  // ── dev settings — live-subscribed so every toggle reflects instantly ──
+  // Single hook covers every devSettings knob this popup reads (ignore-context
+  // bools, forceMatchedCount, etc.). The hook handles storage.onChanged so we
+  // never need a manual subscription here.
+  const [devSettings] = useDevSettings();
+  const ignorePageContext = !!devSettings['popup.ignorePageContext'];
+  const ignoreCharge      = !!devSettings['popup.ignoreContext.charge'];
+  const ignoreOrderEdit   = !!devSettings['popup.ignoreContext.orderEdit'];
+  const ignoreWatch       = !!devSettings['popup.ignoreContext.watch'];
+  const ignoreProof       = !!devSettings['popup.ignoreContext.submitProof'];
+  const forceMatchedCount = Math.max(0, Math.floor(devSettings['popup.forceMatchedCount'] || 0));
 
   // ── selected template + resolved data ──
   const [selectedId, setSelectedId] = useState(null);
@@ -188,23 +196,26 @@ function PopupApp() {
         catch { res(); }
       });
 
-      const [data, devSettings] = await Promise.all([
-        storageGet(['templates', 'watchList', 'featureFlags']),
-        loadDevSettings(),
-      ]);
+      const data = await storageGet(['templates', 'watchList', 'featureFlags']);
       const tpls = (data.templates || []).filter((t) => t.enabled !== false && t.type !== 'case');
       const mergedFlags = {
         chargeEnabled: true, orderEditEnabled: true, submitProofEnabled: true,
         taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true,
         ...(data.featureFlags || {}),
       };
-      const ignoreCtx = !!devSettings['popup.ignorePageContext'];
+      // Read ignorePageContext directly from storage on init so we can branch
+      // before kicking off the content-script probe. The useDevSettings hook
+      // takes over for live updates after this.
+      const initialDev = await new Promise((res) => {
+        try { chrome.storage.local.get('devSettings', (d) => res(d.devSettings || {})); }
+        catch { res({}); }
+      });
+      const ignoreCtx = !!initialDev['popup.ignorePageContext'];
       if (cancelled) return;
       setTab(currentTab);
       setAllTemplates(tpls);
       setWatchList(data.watchList || []);
       setFlags(mergedFlags);
-      setIgnorePageContext(ignoreCtx);
 
       if (tpls.length === 0) { setStage('empty'); return; }
 
@@ -263,18 +274,6 @@ function PopupApp() {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /* ── live-sync the ignore-context dev toggle ── */
-  useEffect(() => {
-    if (!chrome?.storage?.onChanged) return;
-    const onChanged = (changes, area) => {
-      if (area !== 'local' || !changes[DEV_KEY]) return;
-      const next = changes[DEV_KEY].newValue || {};
-      setIgnorePageContext(!!next['popup.ignorePageContext']);
-    };
-    chrome.storage.onChanged.addListener(onChanged);
-    return () => chrome.storage.onChanged.removeListener(onChanged);
   }, []);
 
   /* ── narrow templates to those relevant for this page type ── */
@@ -362,12 +361,22 @@ function PopupApp() {
   if (stage === 'empty')   return <Shell onManage={openManager}><EmptyState onCreate={openManager} /></Shell>;
 
   const tpl = visibleTemplates.find((t) => t.id === selectedId);
+
+  // Dev knob — force the first N templates into the matched set so the
+  // "matched" styling can be tested without a real page match. Union with
+  // the actual matchedIds (the real one wins when both fire).
+  const effectiveMatchedIds = (() => {
+    if (forceMatchedCount <= 0) return matchedIds;
+    const forced = visibleTemplates.slice(0, forceMatchedCount).map((t) => t.id);
+    return Array.from(new Set([...matchedIds, ...forced]));
+  })();
+
   return (
     <>
       <Shell onManage={openManager}>
         <MainView
           templates={visibleTemplates}
-          matchedIds={matchedIds}
+          matchedIds={effectiveMatchedIds}
           selectedId={selectedId}
           onSelect={setSelectedId}
           tpl={tpl}
@@ -378,6 +387,10 @@ function PopupApp() {
           flags={flags}
           watchList={watchList}
           tab={tab}
+          ignoreCharge={ignoreCharge}
+          ignoreOrderEdit={ignoreOrderEdit}
+          ignoreWatch={ignoreWatch}
+          ignoreProof={ignoreProof}
           onOpenWatchAdd={() => setWatchModalOpen(true)}
           onOpenProof={() => setProofModalOpen(true)}
         />
@@ -527,6 +540,7 @@ function EmptyState({ onCreate }) {
 function MainView({
   templates, matchedIds, selectedId, onSelect, tpl,
   resolving, resolvedVars, resolvedTo, pageInfo, flags, watchList, tab,
+  ignoreCharge, ignoreOrderEdit, ignoreWatch, ignoreProof,
   onOpenWatchAdd, onOpenProof,
 }) {
   // ── derived button states ──
@@ -551,12 +565,22 @@ function MainView({
     isRefund                   ? `Refund  ($${Math.abs(diff).toFixed(2)})` :
                                  `Charge Card  ($${diff.toFixed(2)})`;
 
-  const watchAddDisabled = !(knownType && entityId);
+  // Per-button context-ignore dev knobs collapse the disabled state so the
+  // button always renders enabled; clicking still fires the same message (the
+  // content-script handler is responsible for failing softly).
+  const chargeDisabledReal    = !chargeReady;
+  const orderEditDisabledReal = !pageInfo.messageId;
+  const watchAddDisabledReal  = !(knownType && entityId);
+
+  const chargeDisabled    = ignoreCharge    ? false : chargeDisabledReal;
+  const orderEditDisabled = ignoreOrderEdit ? false : orderEditDisabledReal;
+  const watchAddDisabled  = ignoreWatch     ? false : watchAddDisabledReal;
 
   const watchCount = watchList.length;
   const watchHasCrit = watchList.some((i) => (Date.now() - i.addedAt) >= 6 * 3600000);
 
-  const proofDisabled = !(knownType && (pageInfo.contactId || pageInfo.accountId || pageInfo.orderNo));
+  const proofDisabledReal = !(knownType && (pageInfo.contactId || pageInfo.accountId || pageInfo.orderNo));
+  const proofDisabled = ignoreProof ? false : proofDisabledReal;
 
   // ── template dropdown options ──
   // Matched templates pinned to top; "matched" tag on the row label so the
@@ -721,7 +745,7 @@ function MainView({
           <Btn full size="sm"
             variant={chargeReady ? 'tinted' : 'secondary'}
             status={isRefund ? 'error' : 'brand'}
-            disabled={!chargeReady}
+            disabled={chargeDisabled}
             icon={<I.card />}
             onClick={onCharge}>
             {chargeLabel}
@@ -729,7 +753,7 @@ function MainView({
         )}
         {flags.orderEditEnabled && (
           <Btn full size="sm"
-            disabled={!pageInfo.messageId}
+            disabled={orderEditDisabled}
             icon={<I.edit />}
             onClick={onOrderEdit}>
             Order Edit
@@ -748,9 +772,9 @@ function MainView({
               variant={watchHasCrit && watchCount > 0 ? 'tinted' : 'secondary'}
               status="error"
               icon={<Ic.watch />}
-              iconRight={watchCount > 0
-                ? <Tag tone={watchHasCrit ? 'error' : 'brand'} size="xs" pulse={watchHasCrit}>{watchCount > 99 ? '99+' : watchCount}</Tag>
-                : null}
+              badge={watchCount}
+              badgeTone={watchHasCrit ? 'error' : 'brand'}
+              badgePulse={watchHasCrit}
               onClick={onWatchListShow}
               style={{ flex: 1, minWidth: 0, width: 'auto' }}>
               Watch List

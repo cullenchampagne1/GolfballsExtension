@@ -64,6 +64,24 @@ function resolveVariant(variant, status) {
   }
 }
 
+// Badge sizing tracks button size — small buttons get a tighter pill so the
+// badge stays proportional and doesn't dominate the button face.
+const BADGE_SIZES = {
+  xs: { height: 13, minWidth: 13, font: 8.5,  padX: 4, offsetY: -5, offsetX: -5 },
+  sm: { height: 15, minWidth: 15, font: 9,    padX: 4, offsetY: -6, offsetX: -6 },
+  md: { height: 17, minWidth: 17, font: 9.5,  padX: 5, offsetY: -7, offsetX: -7 },
+  lg: { height: 19, minWidth: 19, font: 10,   padX: 6, offsetY: -8, offsetX: -8 },
+};
+
+const BADGE_TONES = {
+  brand:   { bg: 'var(--gb-brand-label)', fg: 'var(--gb-text-on-brand)' },
+  error:   { bg: 'var(--gb-error)',       fg: '#fff' },
+  warning: { bg: 'var(--gb-warning)',     fg: '#1a1a1a' },
+  success: { bg: 'var(--gb-success)',     fg: '#0a0a0a' },
+  info:    { bg: 'var(--gb-info)',        fg: '#0a0a0a' },
+  neutral: { bg: 'var(--gb-text-tertiary)', fg: 'var(--gb-surface-canvas)' },
+};
+
 /**
  * Btn — the single button primitive.
  *
@@ -74,10 +92,18 @@ function resolveVariant(variant, status) {
  *   state    'idle'|'loading'|'success'|'error'  — manual async-state override
  *   icon, iconRight  ReactElement   ·  children, full, disabled
  *   onClick  sync, or async — a returned Promise drives loading → success/error → idle
+ *   badge    number | string | ReactNode   — floating top-right tag. Numbers
+ *            >99 render as "99+". 0 / null / undefined hide the badge.
+ *   badgeTone 'brand'|'error'|'warning'|'success'|'info'|'neutral' (default 'brand')
+ *   badgePulse  loop a soft opacity pulse — use for urgent / critical counts
+ *   badgeRing   render a ring around the badge in the button's background
+ *               color so it visually "lifts off" the button (default true)
  */
 export function Btn({
   variant = 'secondary', size = 'md', status, state = 'idle',
-  icon, iconRight, children, full, disabled, onClick, style, ...rest
+  icon, iconRight, children, full, disabled, onClick, style,
+  badge, badgeTone = 'brand', badgePulse, badgeRing = true,
+  ...rest
 }) {
   const [effState, run] = useAsyncState(state);
   const s = SIZES[size] || SIZES.md;
@@ -90,6 +116,14 @@ export function Btn({
       : effState === 'success' ? <I.check size={s.iconSize} />
         : effState === 'error' ? <I.alert size={s.iconSize} />
           : icon ? sizeIcon(icon, s.iconSize) : null;
+
+  // Normalize the badge: numbers honor the 99+ cap, strings/nodes pass through.
+  // 0 / null / undefined / '' all hide the badge.
+  const badgeValue = (() => {
+    if (badge === 0 || badge === null || badge === undefined || badge === '') return null;
+    if (typeof badge === 'number') return badge > 99 ? '99+' : String(badge);
+    return badge;
+  })();
 
   return (
     <motion.button
@@ -136,6 +170,57 @@ export function Btn({
       {iconRight && effState === 'idle' && (
         <span style={{ display: 'flex' }}>{sizeIcon(iconRight, s.iconSize)}</span>
       )}
+      {badgeValue != null && <BtnBadge value={badgeValue} size={size} tone={badgeTone} pulse={badgePulse} ring={badgeRing} />}
     </motion.button>
+  );
+}
+
+/**
+ * BtnBadge — floating top-right pill. Pops on mount, swaps with a pop on
+ * value-change (keyed in AnimatePresence by the rendered string), opacity-
+ * pulses while `pulse` is on. Opt-in `ring` paints a 2px outline in the
+ * surrounding background so the badge reads as "lifted off" the button.
+ */
+function BtnBadge({ value, size, tone, pulse, ring }) {
+  const b = BADGE_SIZES[size] || BADGE_SIZES.md;
+  const t = BADGE_TONES[tone] || BADGE_TONES.brand;
+  return (
+    <span
+      style={{
+        position: 'absolute', top: b.offsetY, right: b.offsetX,
+        pointerEvents: 'none', display: 'flex', zIndex: 1,
+      }}
+    >
+      <AnimatePresence initial={true} mode="popLayout">
+        <motion.span
+          key={String(value)}
+          initial={{ opacity: 0, scale: 0.4 }}
+          animate={pulse
+            ? { opacity: [1, 0.55, 1], scale: 1 }
+            : { opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.4 }}
+          transition={pulse
+            ? { scale: T.bounce, opacity: { duration: 1.5, repeat: Infinity, ease: 'easeInOut' } }
+            : T.bounce}
+          style={{
+            background: t.bg,
+            color: t.fg,
+            height: b.height,
+            minWidth: b.minWidth,
+            padding: `0 ${b.padX}px`,
+            borderRadius: b.height / 2,
+            fontSize: b.font,
+            fontWeight: 800,
+            lineHeight: 1,
+            letterSpacing: 0.2,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: ring ? '0 0 0 2px var(--gb-surface-canvas)' : 'none',
+            fontFamily: 'var(--gb-font-sans)',
+          }}
+        >
+          {value}
+        </motion.span>
+      </AnimatePresence>
+    </span>
   );
 }
