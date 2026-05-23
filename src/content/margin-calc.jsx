@@ -38,19 +38,36 @@ if (!window.__gbMarginCalcLoaded) {
     });
   };
 
-  // Configurable Ctrl+<key> toggle, gated on the feature flag.
-  chrome.storage.local.get(['keyboardShortcuts', 'featureFlags'], ({ keyboardShortcuts, featureFlags }) => {
+  // Configurable Ctrl+<key> (or Cmd+<key> on macOS) toggle, gated on the
+  // feature flag. The keybind + flag are cached in module-local refs so
+  // the keydown handler can run fully synchronously — that's required to
+  // preventDefault before a page-script handler can swallow the event.
+  // Live updates via storage.onChanged keep the cache fresh without a
+  // page reload.
+  const state = { key: 'm', enabled: true };
+  function applyConfig({ keyboardShortcuts, featureFlags }) {
     const raw = keyboardShortcuts?.marginCalc;
-    const key = (raw === undefined ? 'm' : raw).toLowerCase();
-    if (!key) return;
-    document.addEventListener('keydown', (e) => {
-      if (!e.ctrlKey || e.shiftKey || e.altKey) return;
-      if (e.key.toLowerCase() !== key) return;
-      if (featureFlags?.marginCalcEnabled === false) return;
-      const tag = document.activeElement?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
-      e.preventDefault();
-      window.__gbShowMarginCalcModal();
-    });
+    state.key = (raw === undefined ? 'm' : raw).toLowerCase();
+    state.enabled = featureFlags?.marginCalcEnabled !== false;
+  }
+  chrome.storage.local.get(['keyboardShortcuts', 'featureFlags'], applyConfig);
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    if (changes.keyboardShortcuts || changes.featureFlags) {
+      chrome.storage.local.get(['keyboardShortcuts', 'featureFlags'], applyConfig);
+    }
   });
+  // capture:true so we beat any page-script handler that might swallow
+  // Ctrl+M (or whatever the user has bound).
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    if (e.shiftKey || e.altKey) return;
+    if (!state.enabled || !state.key) return;
+    if (e.key.toLowerCase() !== state.key) return;
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+    e.preventDefault();
+    e.stopPropagation();
+    window.__gbShowMarginCalcModal();
+  }, { capture: true });
 }
