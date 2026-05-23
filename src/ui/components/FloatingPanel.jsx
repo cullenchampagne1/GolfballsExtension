@@ -75,7 +75,10 @@ export function FloatingPanel({ children, width = 480, backdrop = true, onClose,
                 maxHeight: 'calc(100vh - 32px)',
                 background: 'var(--gb-surface-canvas)',
                 border: '1px solid var(--gb-border-default)',
-                borderRadius: 'var(--gb-r-xl)',
+                // r-lg (10px) keeps narrow FloatingPanels (~360px) reading
+                // as a tight tool window rather than the pill-rounded
+                // r-xl (14px) which over-softens at smaller widths.
+                borderRadius: 'var(--gb-r-lg)',
                 boxShadow: 'var(--gb-shadow-modal)',
                 overflow: 'hidden',
                 display: 'flex', flexDirection: 'column',

@@ -36,6 +36,11 @@ export { Segmented } from './components/Segmented.jsx';
 export { Tabs } from './components/Tabs.jsx';
 export { SettingNotificationHost, useSettingNotification } from './components/SettingNotification.jsx';
 export { PillToast } from './components/PillToast.jsx';
+export { ActionToast } from './components/ActionToast.jsx';
+export { StepToast } from './components/StepToast.jsx';
+export { TrayToast } from './components/TrayToast.jsx';
+export { EdgeToast } from './components/EdgeToast.jsx';
+export { ToastHost, useToast } from './components/ToastHost.jsx';
 
 export { Callout } from './components/Callout.jsx';
 export { ModalShell } from './components/ModalShell.jsx';
