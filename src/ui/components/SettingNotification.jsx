@@ -93,7 +93,10 @@ function NotificationCard({ active, dismiss }) {
       fontFamily: 'var(--gb-font-sans)',
     }}>
       <div style={{
-        display: 'flex', alignItems: 'flex-start', gap: 9,
+        // Center-align so single-line title/message sits flush with the
+        // 24px icon tile. Multi-line content still wraps below the icon —
+        // alignItems applies to the cross-axis baseline, not the wrap.
+        display: 'flex', alignItems: 'center', gap: 9,
         padding: '10px 10px 9px',
       }}>
         <div style={{

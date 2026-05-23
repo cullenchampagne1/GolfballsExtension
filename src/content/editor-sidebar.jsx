@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import {
@@ -85,27 +86,57 @@ function rowType(t, isNote) {
 }
 
 /* ── Tiny popover for the per-folder / per-row action menu ──────── */
+const MENU_W = 168;
 function ActionMenu({ onClose, anchorRef, children }) {
   const ref = useRef(null);
+
+  // Position from the anchor's viewport rect. Recompute on resize; close
+  // on outside scroll so the menu doesn't float when the list scrolls.
+  // Portal-to-body escapes every parent stacking context (motion's layout
+  // transform on TemplateRow was elevating rows above an inline menu).
+  const [pos, setPos] = useState(null);
+  useEffect(() => {
+    function update() {
+      const el = anchorRef?.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, left: r.right - MENU_W });
+    }
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [anchorRef]);
+
   useEffect(() => {
     const onDown = (e) => {
       if (!ref.current?.contains(e.target) && !anchorRef.current?.contains(e.target)) onClose();
     };
+    const onScroll = (e) => {
+      if (ref.current?.contains(e.target)) return;
+      onClose();
+    };
     document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      window.removeEventListener('scroll', onScroll, true);
+    };
   }, [onClose, anchorRef]);
-  return (
+
+  if (!pos) return null;
+  return createPortal(
     <motion.div
       ref={ref}
       initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
       transition={T.base}
       onClick={(e) => e.stopPropagation()}
       style={{
-        // Sits above motion's layout-animated rows (layoutId can elevate
-        // their stacking). 2147483400 is below the global notification
-        // host (2147483600) so a confirm still wins over a kebab menu.
-        position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 2147483400,
-        minWidth: 150,
+        // Fixed in viewport so layout transforms on rows can't paint over
+        // it. Z below the notification host (2147483600) and the color
+        // popover (2147483500) so confirms still appear on top.
+        position: 'fixed', top: pos.top, left: pos.left,
+        zIndex: 2147483400,
+        width: MENU_W,
         background: 'var(--gb-surface-modal)',
         border: '1px solid var(--gb-border-default)',
         borderRadius: 'var(--gb-r-md)',
@@ -114,7 +145,8 @@ function ActionMenu({ onClose, anchorRef, children }) {
       }}
     >
       {children}
-    </motion.div>
+    </motion.div>,
+    document.body,
   );
 }
 function MenuItem({ children, onClick, danger }) {
