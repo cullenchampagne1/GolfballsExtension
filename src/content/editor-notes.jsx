@@ -631,6 +631,12 @@ function NoteEditorRoot() {
 
   useEffect(() => {
     window.__gbOpenNote = (template) => setTpl({ ...template });
+    // Race-recovery: same pattern as editor-templates — editor.js init
+    // may have already called openNoteTemplate before this mount.
+    const initial = typeof window.__gbCurrentNote === 'function'
+      ? window.__gbCurrentNote()
+      : null;
+    if (initial) setTpl({ ...initial });
     return () => { delete window.__gbOpenNote; };
   }, []);
 
