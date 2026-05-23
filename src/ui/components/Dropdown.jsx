@@ -41,6 +41,14 @@ export function Dropdown({
   // close on outside scroll (so it doesn't float when ancestors scroll).
   // Portal-to-body lets the menu escape `overflow: hidden` parents like
   // the InlineVariableForm wrapper or a modal body.
+  //
+  // `pos.maxListHeight` is the available room between the trigger's bottom
+  // edge and the viewport's bottom edge, minus an 8px margin so the menu
+  // never sits flush against the window chrome. Capped at 240px (the
+  // historical max) so existing surfaces don't suddenly grow huge menus.
+  // Critical in the toolbar popup where the viewport is only ~340px tall —
+  // without this clamp the menu spills past the popup's bottom edge and
+  // gets clipped by Chrome.
   const [pos, setPos] = useState(null);
   useEffect(() => {
     if (!open) { setPos(null); return undefined; }
@@ -48,7 +56,9 @@ export function Dropdown({
       const el = rootRef.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      setPos({ top: r.bottom + 4, left: r.left, width: r.width });
+      const top = r.bottom + 4;
+      const maxListHeight = Math.max(80, Math.min(240, window.innerHeight - top - 8));
+      setPos({ top, left: r.left, width: r.width, maxListHeight });
     }
     update();
     const onScroll = (e) => {
@@ -168,7 +178,7 @@ export function Dropdown({
                 />
               </div>
             )}
-            <div className="gb-dd-list" style={{ maxHeight: 240, overflowY: 'auto', padding: 4, scrollbarWidth: 'none' }}>
+            <div className="gb-dd-list" style={{ maxHeight: pos.maxListHeight, overflowY: 'auto', padding: 4, scrollbarWidth: 'none' }}>
               {filtered.length === 0 ? (
                 <div style={{ padding: '10px 8px', fontSize: 11.5, color: 'var(--gb-text-muted)', textAlign: 'center' }}>
                   No matches
