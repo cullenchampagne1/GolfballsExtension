@@ -40,6 +40,51 @@ export const DEV_SETTINGS = [
     type:    'bool',
     default: false,
   },
+  {
+    key:     'popup.forceMatchedCount',
+    label:   'Popup: force matched count',
+    desc:    'Force the first N templates in the popup dropdown to render with the matched-template styling (brand dot + Matched group). 0 = off.',
+    type:    'number',
+    default: 0,
+    min:     0,
+    max:     50,
+    step:    1,
+    unit:    'templates',
+  },
+
+  /* ── Per-button context-ignore knobs ──────────────────────────
+     Each one bypasses the disabled state of a specific popup button
+     so it always renders enabled, regardless of page context. Clicking
+     fires the same message it would on a real page — the content-script
+     handler is responsible for failing softly. */
+  {
+    key:     'popup.ignoreContext.charge',
+    label:   'Popup: ignore context — Charge Card',
+    desc:    'Keeps the Charge Card button enabled even with no order context.',
+    type:    'bool',
+    default: false,
+  },
+  {
+    key:     'popup.ignoreContext.orderEdit',
+    label:   'Popup: ignore context — Order Edit',
+    desc:    'Keeps the Order Edit button enabled even with no message id.',
+    type:    'bool',
+    default: false,
+  },
+  {
+    key:     'popup.ignoreContext.watch',
+    label:   'Popup: ignore context — Watch Order',
+    desc:    'Keeps the Watch button enabled even with no detected entity (order / contact / account).',
+    type:    'bool',
+    default: false,
+  },
+  {
+    key:     'popup.ignoreContext.submitProof',
+    label:   'Popup: ignore context — Submit Proof',
+    desc:    'Keeps the Submit Proof button enabled even with no order / contact / account context.',
+    type:    'bool',
+    default: false,
+  },
 ];
 
 export const STORAGE_KEY = 'devSettings';
