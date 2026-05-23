@@ -97,6 +97,14 @@ function varDef(v) {
 /* ────────────────────────────────────────────────────────────
    Type metadata
 ──────────────────────────────────────────────────────────── */
+/* Configured sender accounts for Direct Send via Power Automate. The
+   flow keys off the persisted id; labels are display-only. Two slots are
+   provisioned today — adding more is a one-line change here. */
+const SENDER_OPTIONS = [
+  { id: 'golfballs',     label: 'golfballs.com' },
+  { id: 'prioritylogo',  label: 'prioritylogo.com' },
+];
+
 const TYPE_META = {
   order: {
     icon: <TYPE_ICONS.order />, label: 'Order',
@@ -186,6 +194,11 @@ function TemplateEditor({ tpl, onDelete }) {
   // Default to reply mode for new templates — matches legacy editor's
   // "checked unless explicitly 'standalone'" load behavior.
   const [replyMode,      setReplyMode]      = useState(tpl.replyMode !== 'standalone');
+  // Sender account — only meaningful when Direct Send via Power Automate is
+  // on (the flow chooses which "from" address to use). Two accounts are
+  // currently provisioned; senderRandomize=true picks per send.
+  const [senderAccount,   setSenderAccount]   = useState(tpl.senderAccount   || 'golfballs');
+  const [senderRandomize, setSenderRandomize] = useState(!!tpl.senderRandomize);
   // caseTags is only saved for case templates. null = "user hasn't
   // touched it yet" — same `ruleData` pattern, prevents writing an
   // empty array over the saved value on initial mount.
@@ -227,6 +240,23 @@ function TemplateEditor({ tpl, onDelete }) {
         ...tasks.map(t => ({ id: t.id, label: t.name || 'Untitled task' })),
       ]);
     });
+  }, []);
+
+  // Feature flags — only `replyWithTemplateEnabled` (Direct Send via
+  // Power Automate) is consumed here. Live-updated so flipping the
+  // flag in settings immediately gates the sender picker.
+  const [paEnabled, setPaEnabled] = useState(false);
+  useEffect(() => {
+    chrome.storage.local.get('featureFlags', ({ featureFlags }) => {
+      setPaEnabled(!!(featureFlags && featureFlags.replyWithTemplateEnabled));
+    });
+    function onChanged(changes) {
+      if (!changes.featureFlags) return;
+      const v = changes.featureFlags.newValue;
+      setPaEnabled(!!(v && v.replyWithTemplateEnabled));
+    }
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
   }, []);
 
   // Recipient DOM picker — fires when user clicks the Pick button on
@@ -341,6 +371,11 @@ function TemplateEditor({ tpl, onDelete }) {
       // user opens them inside an existing case), so we omit the field
       // for case to match the legacy editor's behavior.
       replyMode: typeId === 'case' ? undefined : (replyMode ? 'reply' : 'standalone'),
+      // Sender account fields are only meaningful for the Power Automate
+      // direct-send path; persist them regardless so flipping the flag
+      // back on later doesn't lose the user's choice.
+      senderAccount,
+      senderRandomize,
       updatedAt: Date.now(),
     };
     // Recipient selection → stored toField.
@@ -380,7 +415,7 @@ function TemplateEditor({ tpl, onDelete }) {
       if (typeof window.__gbSaveTemplate === 'function') window.__gbSaveTemplate(buildTemplate());
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId, replyMode, caseTagsData, variations]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId, replyMode, senderAccount, senderRandomize, caseTagsData, variations]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Type changes bypass the 500ms debounce — the sidebar's row-teleport
      spring is keyed on tpl.type, so we save the new type immediately and
@@ -447,9 +482,43 @@ function TemplateEditor({ tpl, onDelete }) {
         onDelete={onDelete}
       />
 
-      {/* ── Type tabs — sit under the title so the header reads first ── */}
-      <div style={{ marginBottom: 12 }}>
+      {/* ── Type tabs + sender picker on the same row.
+          Left: order/case/account Segmented switcher.
+          Right: which sender the Power Automate flow should use, plus a
+          shuffle toggle to randomize per send. The pair is disabled when
+          the Direct Send via Power Automate feature flag is off — the
+          value is still persisted so flipping the flag back on later
+          doesn't lose the user's preference. */}
+      <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
         <Segmented value={typeId} onChange={changeType} options={TYPE_OPTIONS} />
+        <div style={{ flex: 1 }} />
+        <div
+          title={paEnabled ? '' : 'Enable Direct Send via Power Automate in Settings to use sender accounts'}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            opacity: paEnabled ? 1 : 0.45,
+            pointerEvents: paEnabled ? 'auto' : 'none',
+            transition: 'opacity 160ms ease',
+          }}
+        >
+          <Dropdown
+            size="sm"
+            value={senderAccount}
+            options={SENDER_OPTIONS}
+            onChange={setSenderAccount}
+            disabled={!paEnabled}
+            style={{ minWidth: 150 }}
+          />
+          <IconBtn
+            size="sm"
+            variant="ghost"
+            active={senderRandomize}
+            icon={<I.shuffle />}
+            tooltip={senderRandomize ? 'Randomize per send (on)' : 'Randomize per send'}
+            onClick={() => setSenderRandomize((r) => !r)}
+            disabled={!paEnabled}
+          />
+        </div>
       </div>
 
       {/* ── Meta row ── */}
