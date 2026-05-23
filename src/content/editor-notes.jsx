@@ -4,7 +4,7 @@ import { ensureTheme } from '../lib/theme.js';
 import {
   Btn, IconBtn, Tag, Dot,
   Input, Textarea, Dropdown, Field,
-  SwitchTag,
+  SwitchTag, Segmented,
   Callout, SectionLabel, Card,
   BodyVar,
   I, Icon,
@@ -27,7 +27,6 @@ const NIcons = {
   note:    (p) => <Icon {...p}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></Icon>,
   task:    (p) => <Icon {...p}><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></Icon>,
   phone:   (p) => <Icon {...p}><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.13.9.37 1.77.71 2.6a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.48-1.28a2 2 0 012.11-.45c.83.34 1.7.58 2.6.71A2 2 0 0122 16.92z"/></Icon>,
-  spark:   (p) => <Icon {...p}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></Icon>,
   clock:   (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></Icon>,
   cal:     (p) => <Icon {...p}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></Icon>,
   inbound: (p) => <Icon {...p}><polyline points="7 17 17 7"/><polyline points="7 7 17 7 17 17"/></Icon>,
@@ -58,14 +57,15 @@ const SUBTYPES = {
     surface: 'Contact pages',
     callout: <>Call log templates appear in the <strong style={{ color: 'var(--gb-text-secondary)' }}>Quick Log</strong> panel on contact pages. Clicking pre-fills + submits a call log without leaving the page.</>,
   },
-  opportunity: {
-    label: 'Opportunity',
-    icon: <NIcons.spark />,
-    surface: 'Coming soon',
-    disabled: true,
-    callout: <>Opportunity templates will let you create CRM opportunities from a single click. This subtype is reserved — UI lands once the feature ships.</>,
-  },
+  // Opportunity subtype is reserved for a future feature; keeping it out
+  // of the editor for now since exposing a non-functional tab adds noise.
+  // Re-add via SUBTYPES when the CRM-side implementation lands.
 };
+
+// Drives the shared Segmented switcher — same shape the email editor uses.
+const SUBTYPE_OPTIONS = Object.entries(SUBTYPES).map(([id, m]) => ({
+  id, label: m.label, icon: m.icon,
+}));
 
 const PRIORITY_OPTIONS = [
   { id: '1', label: 'High' },
@@ -558,34 +558,6 @@ function CallLogPanel({ data, set }) {
   );
 }
 
-function OpportunityPanel() {
-  return (
-    <div style={{
-      padding: 28,
-      background: 'var(--gb-fill-subtle)',
-      border: '1px dashed var(--gb-border-default)',
-      borderRadius: 'var(--gb-r-md)',
-      textAlign: 'center',
-    }}>
-      <div style={{
-        width: 36, height: 36, borderRadius: 'var(--gb-r-md)',
-        background: 'var(--gb-brand-tint-medium)',
-        border: '1px solid var(--gb-brand-tint-border)',
-        color: 'var(--gb-brand-label)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        margin: '0 auto 10px',
-      }}>
-        <NIcons.spark size={16} />
-      </div>
-      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>
-        Opportunity templates · coming soon
-      </div>
-      <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 4, lineHeight: 1.5, maxWidth: 380, margin: '4px auto 0' }}>
-        Create CRM opportunities from a single click. Reserved — the editor UI shows up once the feature ships.
-      </div>
-    </div>
-  );
-}
 
 /* ── EmptyState shown when no template is selected. */
 function EmptyState() {
@@ -633,10 +605,9 @@ function NoteEditor({ tpl, onDelete }) {
   const set = (patch) => setData((d) => ({ ...d, ...patch }));
 
   const t = SUBTYPES[subType] || SUBTYPES.note;
-  const Panel = subType === 'note'    ? NotePanel
-              : subType === 'task'    ? TaskPanel
-              : subType === 'call_log'? CallLogPanel
-              :                         OpportunityPanel;
+  const Panel = subType === 'task' ? TaskPanel
+              : subType === 'call_log' ? CallLogPanel
+              : NotePanel;
 
   /* Storage shape — mirrors legacy collectNoteTemplate. Fields not
      relevant to the active subtype are explicitly undefined so the
@@ -692,85 +663,53 @@ function NoteEditor({ tpl, onDelete }) {
   }, [subType]);
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--gb-surface-canvas)', padding: '18px 16px 40px' }}>
-      <div style={{ maxWidth: 720, margin: '0 auto' }}>
+    <div style={{ fontFamily: 'var(--gb-font-sans)', color: 'var(--gb-text-secondary)' }}>
 
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: 'var(--gb-r-sm)',
-            background: 'var(--gb-brand-tint-medium)',
-            border: '1px solid var(--gb-brand-tint-border)',
-            color: 'var(--gb-brand-label)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            {React.cloneElement(t.icon, { size: 13 })}
-          </div>
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>
-              <h1 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -0.2 }}>
-                {data.name || 'Untitled'}
-              </h1>
-              <Tag tone="neutral" size="xs" mono>{t.label.toUpperCase()}</Tag>
-              <SwitchTag size="xs" on={enabled} label={enabled ? 'Enabled' : 'Disabled'} onClick={() => setEnabled((e) => !e)} />
-            </div>
-            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 2 }}>
-              Shows on: <span style={{ color: 'var(--gb-text-tertiary)', fontWeight: 600 }}>{t.surface}</span>
-            </div>
-          </div>
-          {/* Only Delete — Save isn't here because we auto-save. */}
-          <IconBtn size="sm" icon={<I.trash />} danger title="Delete" onClick={onDelete} />
-        </div>
-
-        {/* Subtype pill switcher */}
+      {/* ── Header — same shape as TemplateEditor so the two editors read
+          as siblings: 28px brand icon tile · title · type tag · enable
+          switch · description line · danger Delete button. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
         <div style={{
-          display: 'flex', gap: 3, padding: 2,
-          background: 'var(--gb-surface-1)',
-          border: '1px solid var(--gb-border-default)',
-          borderRadius: 'var(--gb-r-sm)',
-          marginBottom: 12, width: 'fit-content',
+          width: 28, height: 28, borderRadius: 'var(--gb-r-sm)', flexShrink: 0,
+          background: 'var(--gb-brand-tint-medium)',
+          border: '1px solid var(--gb-brand-tint-border)',
+          color: 'var(--gb-brand-label)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          {Object.entries(SUBTYPES).map(([id, info]) => {
-            const active = subType === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => { if (!info.disabled) setSubType(id); }}
-                disabled={info.disabled}
-                style={{
-                  padding: '5px 11px', borderRadius: 5,
-                  fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
-                  background: active ? 'var(--gb-brand-tint-medium)' : 'transparent',
-                  color:      active ? 'var(--gb-brand-label)'      : 'var(--gb-text-tertiary)',
-                  border: 'none', cursor: info.disabled ? 'not-allowed' : 'pointer',
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  opacity: info.disabled ? 0.55 : 1,
-                }}
-              >
-                {React.cloneElement(info.icon, { size: 11 })}
-                {info.label}
-                {info.disabled && (
-                  <Tag tone="warning" size="xs" style={{ marginLeft: 3 }}>SOON</Tag>
-                )}
-              </button>
-            );
-          })}
+          {React.cloneElement(t.icon, { size: 13 })}
         </div>
-
-        {/* Per-subtype callout — short, functional description of where the
-            subtype's buttons appear in the extension. Different copy than
-            the earlier "tips" callouts; these tell the user what the
-            template DOES at click time. */}
-        <div style={{ marginBottom: 12 }}>
-          <Callout tone={subType === 'opportunity' ? 'warning' : 'info'} title={`${t.label} templates`} icon={<I.bolt />}>
-            {t.callout}
-          </Callout>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ flex: '0 1 auto', minWidth: 0, fontSize: 13, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -0.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {data.name || 'New Note Template'}
+            </span>
+            <Tag tone="neutral" size="xs" mono style={{ flexShrink: 0 }}>{t.label.toUpperCase()}</Tag>
+            <SwitchTag on={enabled} label={enabled ? 'Enabled' : 'Disabled'} onClick={() => setEnabled((e) => !e)} size="sm" style={{ flexShrink: 0 }} />
+          </div>
+          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            Shows on: <span style={{ color: 'var(--gb-text-tertiary)', fontWeight: 600 }}>{t.surface}</span>
+          </div>
         </div>
-
-        {/* Subtype panel */}
-        <Panel data={data} set={set} />
+        <Btn variant="danger" size="sm" icon={<I.trash />} onClick={onDelete}>Delete</Btn>
       </div>
+
+      {/* ── Subtype tabs — Segmented gives the brand pill a layoutId
+          spring (no "teleport" between options). Same component the
+          email editor uses for its order/case/account picker. */}
+      <div style={{ marginBottom: 12 }}>
+        <Segmented value={subType} onChange={setSubType} options={SUBTYPE_OPTIONS} />
+      </div>
+
+      {/* ── Per-subtype callout — short, functional description of where
+          the subtype's buttons appear in the extension. */}
+      <div style={{ marginBottom: 12 }}>
+        <Callout tone="info" title={`${t.label} templates`} icon={<I.bolt />}>
+          {t.callout}
+        </Callout>
+      </div>
+
+      {/* ── Subtype panel ── */}
+      <Panel data={data} set={set} />
     </div>
   );
 }
@@ -800,7 +739,9 @@ function mount() {
   const host = document.getElementById('ed-note-form');
   if (!host || host.__gbNotesMounted) return;
   host.__gbNotesMounted = true;
-  host.style.padding = '0'; // NoteEditor manages its own padding
+  // Match editor-templates so the top gap and centered 750px column
+  // are identical across the two editors.
+  host.style.padding = '40px 0 48px';
   ensureTheme();
   createRoot(host).render(<NoteEditorRoot />);
 }
