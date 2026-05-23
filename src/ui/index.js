@@ -68,7 +68,6 @@ export { SmartModal } from './components/SmartModal.jsx';
 export { SmartPopover } from './components/SmartPopover.jsx';
 export { AddVariableModal, SOURCE_KINDS, BUILTIN_PATHS, REGEX_FIELDS } from './components/AddVariableModal.jsx';
 export { InlineVariableForm } from './components/InlineVariableForm.jsx';
-export { EditVariableModal } from './components/EditVariableModal.jsx';
 export { SignatureModal } from './components/SignatureModal.jsx';
 
 /* ── Type-specific rule composites ──────────────────────────── */

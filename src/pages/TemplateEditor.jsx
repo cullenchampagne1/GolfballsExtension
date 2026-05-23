@@ -335,14 +335,11 @@ export function TemplateEditor({ tpl, onDelete }) {
       resolved: null, status: 'miss', smart: {},
     }]);
   };
-  const handleEditVar = ({ oldName, newName, newKind }, variable) => {
-    setVars(vs => vs.map(v => {
-      if (v.name !== oldName) return v;
-      // Preserve smart options, only update name and kind.
-      // Reset config to '' when kind changes — user must re-enter.
-      const config = newKind !== variable.kind ? '' : v.config;
-      return { ...v, name: newName, kind: newKind, config };
-    }));
+  const handleEditVar = ({ oldName, newName }) => {
+    // Rename only — VariableTable no longer offers kind-change because each
+    // kind stores config in a different shape (path vs regex vs literal), so
+    // the only sane way to "change kind" is to delete + re-add.
+    setVars(vs => vs.map(v => v.name === oldName ? { ...v, name: newName } : v));
   };
   const handleDeleteVar = name => setVars(vs => vs.filter(v => v.name !== name));
   const openSmartByName = (name, anchor) => {
