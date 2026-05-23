@@ -4,7 +4,7 @@ import { ensureTheme } from '../lib/theme.js';
 import {
   Btn, IconBtn, Tag, Dot,
   Input, Textarea, Dropdown, Field,
-  Switch, SwitchTag,
+  SwitchTag,
   Callout, SectionLabel, Card,
   BodyVar,
   I, Icon,
@@ -29,7 +29,6 @@ const NIcons = {
   phone:   (p) => <Icon {...p}><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.13.9.37 1.77.71 2.6a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.48-1.28a2 2 0 012.11-.45c.83.34 1.7.58 2.6.71A2 2 0 0122 16.92z"/></Icon>,
   spark:   (p) => <Icon {...p}><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></Icon>,
   clock:   (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></Icon>,
-  flag:    (p) => <Icon {...p}><path d="M4 22V4M4 4h13l-2 5 2 5H4"/></Icon>,
   cal:     (p) => <Icon {...p}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></Icon>,
   inbound: (p) => <Icon {...p}><polyline points="7 17 17 7"/><polyline points="7 7 17 7 17 17"/></Icon>,
   outbound:(p) => <Icon {...p}><polyline points="17 7 7 17"/><polyline points="17 17 7 17 7 7"/></Icon>,
@@ -265,7 +264,8 @@ function NotePanel({ data, set }) {
 
       <SectionLabel>Automation</SectionLabel>
       <Card padding={11}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        {/* Single inline row: icon · label · input · unit · tail hint. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
             width: 28, height: 28, borderRadius: 'var(--gb-r-sm)', flexShrink: 0,
             background: 'var(--gb-brand-tint-medium)',
@@ -275,29 +275,25 @@ function NotePanel({ data, set }) {
           }}>
             <NIcons.cal size={13} />
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)', marginBottom: 2 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>
               Push dates forward
             </div>
-            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginBottom: 8, lineHeight: 1.45 }}>
-              Auto-shifts Approval and Commitment dates by this many days when the button is clicked.
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Input
-                size="sm" mono
-                value={data.daysOut == null ? '' : String(data.daysOut)}
-                placeholder="0"
-                onChange={(v) => {
-                  const n = parseInt(v.replace(/[^0-9]/g, ''), 10);
-                  set({ daysOut: isNaN(n) || n < 0 ? null : n });
-                }}
-                style={{ width: 70 }}
-              />
-              <span style={{ fontSize: 11, color: 'var(--gb-text-tertiary)' }}>days out</span>
-              <span style={{ flex: 1 }} />
-              <span style={{ fontSize: 10, color: 'var(--gb-text-ghost)' }}>0 = no push</span>
+            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>
+              Auto-shifts Approval and Commitment dates when clicked.
             </div>
           </div>
+          <Input
+            size="sm" mono
+            value={data.daysOut == null ? '' : String(data.daysOut)}
+            placeholder="0"
+            onChange={(v) => {
+              const n = parseInt(v.replace(/[^0-9]/g, ''), 10);
+              set({ daysOut: isNaN(n) || n < 0 ? null : n });
+            }}
+            style={{ width: 64, flexShrink: 0 }}
+          />
+          <span style={{ fontSize: 11, color: 'var(--gb-text-tertiary)', flexShrink: 0 }}>days</span>
         </div>
       </Card>
     </>
@@ -481,17 +477,40 @@ function CallLogPanel({ data, set }) {
         </Field>
       </div>
 
-      {/* Voicemail toggle */}
-      <Card padding={10} style={{ marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <NIcons.mic size={13} style={{ color: data.callVoicemail ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)' }}>Left voicemail</div>
-            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>Logs the call with a voicemail flag.</div>
+      {/* Voicemail toggle — full-row spotlight: the card itself tints
+          brand-green when active so the on-state reads at a glance,
+          matching the xs SwitchTag pattern from the header. */}
+      <div
+        onClick={() => set({ callVoicemail: !data.callVoicemail })}
+        style={{
+          marginBottom: 14, padding: 10,
+          borderRadius: 'var(--gb-r-md)',
+          background: data.callVoicemail ? 'var(--gb-brand-tint-soft)' : 'var(--gb-surface-1)',
+          border: '1px solid ' + (data.callVoicemail ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'),
+          display: 'flex', alignItems: 'center', gap: 9,
+          cursor: 'pointer', userSelect: 'none',
+          transition: 'background 140ms ease, border-color 140ms ease',
+        }}
+      >
+        <NIcons.mic size={13} style={{ color: data.callVoicemail ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }} />
+        <div style={{ flex: 1 }}>
+          <div style={{
+            fontSize: 12, fontWeight: 600,
+            color: data.callVoicemail ? 'var(--gb-brand-label)' : 'var(--gb-text-primary)',
+          }}>
+            Left voicemail
           </div>
-          <Switch size="sm" on={!!data.callVoicemail} onChange={(on) => set({ callVoicemail: on })} />
+          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>
+            Logs the call with a voicemail flag.
+          </div>
         </div>
-      </Card>
+        <SwitchTag
+          size="xs"
+          on={!!data.callVoicemail}
+          label={data.callVoicemail ? 'Voicemail' : 'No voicemail'}
+          onClick={(e) => { e.stopPropagation(); set({ callVoicemail: !data.callVoicemail }); }}
+        />
+      </div>
 
       <SectionLabel>Content</SectionLabel>
       <div style={{ marginBottom: 8 }}>
@@ -696,7 +715,6 @@ function NoteEditor({ tpl, onDelete }) {
               <SwitchTag size="xs" on={enabled} label={enabled ? 'Enabled' : 'Disabled'} onClick={() => setEnabled((e) => !e)} />
             </div>
             <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 2 }}>
-              <NIcons.flag size={9} style={{ verticalAlign: 'middle', marginRight: 4 }} />
               Shows on: <span style={{ color: 'var(--gb-text-tertiary)', fontWeight: 600 }}>{t.surface}</span>
             </div>
           </div>
