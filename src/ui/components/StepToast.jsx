@@ -38,7 +38,6 @@ export function StepToast({
       borderRadius: 'var(--gb-r-lg)',
       boxShadow: 'var(--gb-shadow-popover)',
       overflow: 'hidden',
-      animation: 'gb-toast-in-top .35s cubic-bezier(.34,1.4,.64,1) both',
     }}>
       {/* Header — spinner + title + close */}
       <div style={{

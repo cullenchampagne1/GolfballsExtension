@@ -42,7 +42,6 @@ export function PillToast({ tone = 'success', message, onDismiss, size = 'md' })
       border: '1px solid var(--gb-border-default)',
       borderRadius: 'var(--gb-r-pill)',
       boxShadow: 'var(--gb-shadow-popover)',
-      animation: 'gb-toast-in-top .35s cubic-bezier(.34,1.4,.64,1) both',
     }}>
       <Dot tone={tone} glow size={s.dot} />
       <span style={{
