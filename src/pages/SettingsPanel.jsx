@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  SectionLabel, Card, Btn, Input, Dropdown, Field,
+  SectionLabel, Card, Callout, Btn, Input, Dropdown, Field,
   FeatureSpotlight, ExpandableFeature, ColorSpotlight, Switch, Dot, I,
 } from '../ui/index.js';
 import {
@@ -404,25 +404,14 @@ export function SettingsPanel() {
               />
             </Field>
 
-            <div style={{
-              marginTop: 12, padding: 11,
-              background: 'var(--gb-warning-tint-soft)',
-              border: '1px solid var(--gb-warning-tint-border)',
-              borderLeft: '3px solid var(--gb-warning)',
-              borderRadius: 'var(--gb-r-sm)',
-              fontSize: 11, color: 'var(--gb-text-tertiary)', lineHeight: 1.55,
-            }}>
-              <div style={{
-                fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase',
-                letterSpacing: 0.8, color: 'var(--gb-warning-fg)', marginBottom: 4,
-              }}>
-                Set up in Power Automate
-              </div>
-              <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
-                <li>Create <b style={{ color: 'var(--gb-text-secondary)' }}>New flow</b> → <b style={{ color: 'var(--gb-text-secondary)' }}>When an HTTP request is received</b></li>
-                <li>Add a <b style={{ color: 'var(--gb-text-secondary)' }}>Send an email (V2)</b> action</li>
-                <li>Save and paste the generated URL above</li>
-              </ol>
+            <div style={{ marginTop: 12 }}>
+              <Callout tone="warning" title="Set up in Power Automate">
+                <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
+                  <li>Create <b style={{ color: 'var(--gb-text-secondary)' }}>New flow</b> → <b style={{ color: 'var(--gb-text-secondary)' }}>When an HTTP request is received</b></li>
+                  <li>Add a <b style={{ color: 'var(--gb-text-secondary)' }}>Send an email (V2)</b> action</li>
+                  <li>Save and paste the generated URL above</li>
+                </ol>
+              </Callout>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
@@ -462,9 +451,7 @@ export function SettingsPanel() {
           >
             {/* Notifications */}
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8, color: 'var(--gb-text-muted)', marginBottom: 7 }}>
-                Notifications
-              </div>
+              <SectionLabel divider={false} style={{ marginBottom: 7 }}>Notifications</SectionLabel>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
                 <NotifBtn tone="brand"   label="Info"    onClick={() => fireNotification('info', 'Info — everything looks normal', 4000)} />
                 <NotifBtn tone="success" label="Success" onClick={() => fireNotification('success', 'Success — action completed', 4000)} />
@@ -475,9 +462,7 @@ export function SettingsPanel() {
 
             {/* Modals */}
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 0.8, color: 'var(--gb-text-muted)', marginBottom: 7 }}>
-                Modals
-              </div>
+              <SectionLabel divider={false} style={{ marginBottom: 7 }}>Modals</SectionLabel>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
                 <ModalBtn icon={<I.card />} label="Charge Card"             meta="+$12.50 due" metaTone="brand" onClick={() => fireModal('charge')} />
                 <ModalBtn icon={<I.card />} label="Charge — Refund state"   meta="−$12.50"     metaTone="error" onClick={() => fireModal('charge-refund')} />
@@ -490,17 +475,9 @@ export function SettingsPanel() {
               </div>
             </div>
 
-            <div style={{
-              padding: '8px 11px',
-              background: 'var(--gb-fill-subtle)',
-              border: '1px solid var(--gb-border-subtle)',
-              borderRadius: 'var(--gb-r-sm)',
-              fontSize: 10.5, color: 'var(--gb-text-muted)',
-              display: 'flex', alignItems: 'center', gap: 7,
-            }}>
-              <I.alert size={11} style={{ color: 'var(--gb-brand-label)' }} />
+            <Callout tone="neutral" icon={<I.alert />}>
               API calls inside modals will fail gracefully — UI is fully visible.
-            </div>
+            </Callout>
           </ExpandableFeature>
         </section>
       )}

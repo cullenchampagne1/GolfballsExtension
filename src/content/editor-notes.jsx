@@ -2,10 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import {
-  Btn, IconBtn, Tag, Dot,
+  Btn, IconBtn, Dot,
   Input, Textarea, Dropdown, Field,
-  SwitchTag, Segmented,
-  FeatureSpotlight,
+  Segmented,
+  FeatureSpotlight, EditorHeader,
+  TYPE_ICONS,
   SectionLabel, Card,
   BodyVar,
   I, Icon,
@@ -23,11 +24,9 @@ import {
      → per-subtype callout → subtype panel.
 ───────────────────────────────────────────────────────────── */
 
-/* ── Icons (only the design-specific ones — rest come from I) */
+/* Panel-internal decoration icons. Type icons (note/task/call_log) come
+   from the shared TYPE_ICONS map — see `src/ui/typeIcons.jsx`. */
 const NIcons = {
-  note:    (p) => <Icon {...p}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></Icon>,
-  task:    (p) => <Icon {...p}><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></Icon>,
-  phone:   (p) => <Icon {...p}><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.13.9.37 1.77.71 2.6a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.48-1.28a2 2 0 012.11-.45c.83.34 1.7.58 2.6.71A2 2 0 0122 16.92z"/></Icon>,
   clock:   (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></Icon>,
   cal:     (p) => <Icon {...p}><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></Icon>,
   inbound: (p) => <Icon {...p}><polyline points="7 17 17 7"/><polyline points="7 7 17 7 17 17"/></Icon>,
@@ -36,28 +35,11 @@ const NIcons = {
 };
 
 /* ── Subtype metadata: matches backup/editor.js shape so saved
-       tpl.subType values round-trip without translation. Each carries
-       its own short callout copy describing where the subtype's
-       buttons appear in the broader extension. */
+       tpl.subType values round-trip without translation. */
 const SUBTYPES = {
-  note: {
-    label: 'Note',
-    icon: <NIcons.note />,
-    surface: 'Order pages',
-    callout: <>Note templates appear as quick-action buttons next to the <strong style={{ color: 'var(--gb-text-secondary)' }}>Add</strong> button on order pages. Clicking auto-fills + submits.</>,
-  },
-  task: {
-    label: 'Task',
-    icon: <NIcons.task />,
-    surface: 'Contact + Account pages',
-    callout: <>Task templates appear as one-click buttons on the <strong style={{ color: 'var(--gb-text-secondary)' }}>Contact</strong> and <strong style={{ color: 'var(--gb-text-secondary)' }}>Account</strong> pages. Clicking creates the task in the CRM immediately.</>,
-  },
-  call_log: {
-    label: 'Call Log',
-    icon: <NIcons.phone />,
-    surface: 'Contact pages',
-    callout: <>Call log templates appear in the <strong style={{ color: 'var(--gb-text-secondary)' }}>Quick Log</strong> panel on contact pages. Clicking pre-fills + submits a call log without leaving the page.</>,
-  },
+  note:     { label: 'Note',     icon: <TYPE_ICONS.note />,     surface: 'Order pages' },
+  task:     { label: 'Task',     icon: <TYPE_ICONS.task />,     surface: 'Contact + Account pages' },
+  call_log: { label: 'Call Log', icon: <TYPE_ICONS.call_log />, surface: 'Contact pages' },
   // Opportunity subtype is reserved for a future feature; keeping it out
   // of the editor for now since exposing a non-functional tab adds noise.
   // Re-add via SUBTYPES when the CRM-side implementation lands.
@@ -214,7 +196,7 @@ function NotePanel({ data, set }) {
             size="sm"
             value={data.name}
             placeholder="e.g. Proof Requested"
-            leading={<NIcons.note />}
+            leading={<TYPE_ICONS.note />}
             onChange={(v) => set({ name: v })}
           />
         </Field>
@@ -314,7 +296,7 @@ function TaskPanel({ data, set }) {
             size="sm"
             value={data.name}
             placeholder="e.g. Follow Up"
-            leading={<NIcons.task />}
+            leading={<TYPE_ICONS.task />}
             onChange={(v) => set({ name: v })}
           />
         </Field>
@@ -424,7 +406,7 @@ function CallLogPanel({ data, set }) {
             size="sm"
             value={data.name}
             placeholder="e.g. Promo Follow-Up"
-            leading={<NIcons.phone />}
+            leading={<TYPE_ICONS.call_log />}
             onChange={(v) => set({ name: v })}
           />
         </Field>
@@ -546,7 +528,7 @@ function EmptyState() {
       padding: 60, textAlign: 'center', color: 'var(--gb-text-muted)',
       fontSize: 13, fontFamily: 'var(--gb-font-sans)',
     }}>
-      <NIcons.note size={32} style={{ color: 'var(--gb-text-ghost)', marginBottom: 12 }} />
+      <TYPE_ICONS.note size={32} style={{ color: 'var(--gb-text-ghost)', marginBottom: 12 }} />
       <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--gb-text-secondary)', marginBottom: 4 }}>
         No note template selected
       </div>
@@ -645,33 +627,16 @@ function NoteEditor({ tpl, onDelete }) {
   return (
     <div style={{ fontFamily: 'var(--gb-font-sans)', color: 'var(--gb-text-secondary)' }}>
 
-      {/* ── Header — same shape as TemplateEditor so the two editors read
-          as siblings: 28px brand icon tile · title · type tag · enable
-          switch · description line · danger Delete button. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <div style={{
-          width: 28, height: 28, borderRadius: 'var(--gb-r-sm)', flexShrink: 0,
-          background: 'var(--gb-brand-tint-medium)',
-          border: '1px solid var(--gb-brand-tint-border)',
-          color: 'var(--gb-brand-label)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          {React.cloneElement(t.icon, { size: 13 })}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ flex: '0 1 auto', minWidth: 0, fontSize: 13, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -0.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {data.name || 'New Note Template'}
-            </span>
-            <Tag tone="neutral" size="xs" mono style={{ flexShrink: 0 }}>{t.label.toUpperCase()}</Tag>
-            <SwitchTag on={enabled} label={enabled ? 'Enabled' : 'Disabled'} onClick={() => setEnabled((e) => !e)} size="sm" style={{ flexShrink: 0 }} />
-          </div>
-          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            Shows on: <span style={{ color: 'var(--gb-text-tertiary)', fontWeight: 600 }}>{t.surface}</span>
-          </div>
-        </div>
-        <Btn variant="danger" size="sm" icon={<I.trash />} onClick={onDelete}>Delete</Btn>
-      </div>
+      {/* ── Header — shared EditorHeader, identical to TemplateEditor's. */}
+      <EditorHeader
+        icon={t.icon}
+        title={data.name || 'New Note Template'}
+        typeLabel={t.label.toUpperCase()}
+        enabled={enabled}
+        onToggle={() => setEnabled((e) => !e)}
+        desc={<>Shows on: <span style={{ color: 'var(--gb-text-tertiary)', fontWeight: 600 }}>{t.surface}</span></>}
+        onDelete={onDelete}
+      />
 
       {/* ── Subtype tabs — Segmented gives the brand pill a layoutId
           spring (no "teleport" between options). Same component the
