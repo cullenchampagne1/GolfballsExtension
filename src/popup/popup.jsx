@@ -262,12 +262,14 @@ function PopupApp() {
     setPageInfo(info);
     setMatchedIds(info.matchedTemplateIds || []);
 
+    // Always go to main — action buttons (charge / watch / tasks / etc.) are
+    // page-context driven, not template-driven, so they should stay visible
+    // even when no template matches the current page type. The template
+    // section in MainView shows its own "no matches" state when empty.
     const pageType = info.pageType || 'other';
     const visible =
       pageType === 'order'   ? tpls.filter((t) => t.type === 'order' || t.type === 'email' || !t.type) :
       (pageType === 'account' || pageType === 'contact') ? tpls.filter((t) => t.type === 'account') : [];
-
-    if (visible.length === 0) { setStage('empty'); return; }
 
     const matched = info.matchedTemplateIds || [];
     const initial = matched.find((id) => visible.some((t) => t.id === id)) || visible[0]?.id || null;
@@ -636,23 +638,38 @@ function MainView({
     return { icon: <I.send />, label: 'Open in Outlook' };
   })();
 
-  if (templates.length === 0) return <EmptyState onCreate={() => { try { chrome.runtime.sendMessage({ action: 'openEditor' }); } catch {} }} />;
+  const hasTemplates = templates.length > 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-      {/* TEMPLATE */}
-      <section>
-        <SectionLabel>Template</SectionLabel>
-        <Dropdown
-          size="sm"
-          value={selectedId}
-          options={dropdownOptions}
-          searchable={templates.length > 6}
-          leading={<Dot tone={isMatched ? 'brand' : 'muted'} size={7} glow={isMatched} />}
-          onChange={onSelect}
-        />
-      </section>
+      {/* TEMPLATE — only when there are templates matching this page type */}
+      {hasTemplates ? (
+        <section>
+          <SectionLabel>Template</SectionLabel>
+          <Dropdown
+            size="sm"
+            value={selectedId}
+            options={dropdownOptions}
+            searchable={templates.length > 6}
+            leading={<Dot tone={isMatched ? 'brand' : 'muted'} size={7} glow={isMatched} />}
+            onChange={onSelect}
+          />
+        </section>
+      ) : (
+        <section>
+          <SectionLabel>Template</SectionLabel>
+          <div style={{
+            fontSize: 11, color: 'var(--gb-text-muted)', lineHeight: 1.5,
+            padding: '8px 10px',
+            background: 'var(--gb-fill-subtle)',
+            border: '1px dashed var(--gb-border-default)',
+            borderRadius: 'var(--gb-r-md)',
+          }}>
+            No templates for this page type.
+          </div>
+        </section>
+      )}
 
       {/* ACTIONS — order page only */}
       {(flags.chargeEnabled || flags.orderEditEnabled) && (
@@ -733,38 +750,41 @@ function MainView({
         </section>
       )}
 
-      {/* RESOLVED CONTEXT */}
-      <section>
-        <SectionLabel>Resolved</SectionLabel>
-        {resolving ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 11.5, padding: '4px 0' }}>
-            <Spinner size={11} /> Resolving variables…
-          </div>
-        ) : (
-          <div>
-            <KeyVal k="To" v={resolvedTo || 'Not found'} tone={canSend ? 'ok' : 'error'} />
-            {Object.entries(resolvedVars).map(([name, val]) => (
-              <KeyVal key={name} k={name} v={val ? String(val).slice(0, 40) : 'Not found'} tone={val ? 'default' : 'error'} />
-            ))}
-          </div>
-        )}
-      </section>
+      {/* RESOLVED CONTEXT + PRIMARY SEND — only meaningful with a template */}
+      {hasTemplates && (
+        <>
+          <section>
+            <SectionLabel>Resolved</SectionLabel>
+            {resolving ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 11.5, padding: '4px 0' }}>
+                <Spinner size={11} /> Resolving variables…
+              </div>
+            ) : (
+              <div>
+                <KeyVal k="To" v={resolvedTo || 'Not found'} tone={canSend ? 'ok' : 'error'} />
+                {Object.entries(resolvedVars).map(([name, val]) => (
+                  <KeyVal key={name} k={name} v={val ? String(val).slice(0, 40) : 'Not found'} tone={val ? 'default' : 'error'} />
+                ))}
+              </div>
+            )}
+          </section>
 
-      {/* PRIMARY SEND */}
-      <div style={{
-        borderTop: '1px solid var(--gb-border-subtle)',
-        paddingTop: 12,
-      }}>
-        <Btn
-          full
-          variant="primary"
-          size="md"
-          disabled={!canSend || resolving}
-          icon={sendMode?.icon}
-          onClick={onSend}>
-          {sendMode?.label || 'Open in Outlook'}
-        </Btn>
-      </div>
+          <div style={{
+            borderTop: '1px solid var(--gb-border-subtle)',
+            paddingTop: 12,
+          }}>
+            <Btn
+              full
+              variant="primary"
+              size="md"
+              disabled={!canSend || resolving}
+              icon={sendMode?.icon}
+              onClick={onSend}>
+              {sendMode?.label || 'Open in Outlook'}
+            </Btn>
+          </div>
+        </>
+      )}
     </div>
   );
 }
