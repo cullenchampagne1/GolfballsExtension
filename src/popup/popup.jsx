@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import { useDevSettings } from '../lib/devSettings.js';
 import {
-  Btn, Dropdown, Dot, KeyVal, SectionLabel, Field, Textarea,
+  Btn, Dropdown, Dot, Tag, KeyVal, SectionLabel, Field, Textarea,
   Spinner, I, T, inputBaseStyle,
 } from '../ui';
 
@@ -834,15 +834,15 @@ function MainView({
                   searchable={templates.length > 6}
                   leading={<Dot tone={isMatched ? 'brand' : 'muted'} size={7} glow={isMatched} />}
                   onChange={onSelect}
-                  /* Hard-clamp the menu height to a value that always
-                     fits inside the 340px popup with breathing room.
-                     We don't rely on the Dropdown's auto-clamp here
+                  /* Hard-clamp the menu height so it always fits inside
+                     the 340px popup with visible bottom padding. We
+                     don't rely on the Dropdown's auto-clamp here
                      because Chrome's popup auto-resize can fire after
                      the menu opens, leaving the menu sized against a
-                     stale viewport. 180px = 340 minus header (55) -
-                     padding (14) - section label (12) - trigger (28) -
-                     offset (4) - shadow (30) - bottom safety (17). */
-                  maxHeight={180}
+                     stale viewport. 160px gives ~36px of breathing room
+                     below the menu so it never butts against the
+                     popup's bottom edge. */
+                  maxHeight={160}
                 />
               ) : (
                 <div style={{
@@ -952,9 +952,11 @@ function MainView({
                   </div>
                 ) : (
                   <div>
-                    <KeyVal k="To" v={resolvedTo || 'Not found'} tone={hasRecipient ? 'ok' : 'error'} />
+                    <KeyVal k="To" v={resolvedTo || <Tag tone="error" size="xs">Not found</Tag>} tone={hasRecipient ? 'ok' : 'error'} />
                     {Object.entries(resolvedVars).map(([name, val]) => (
-                      <KeyVal key={name} k={name} v={val ? String(val).slice(0, 40) : 'Not found'} tone={val ? 'default' : 'error'} />
+                      <KeyVal key={name} k={name}
+                        v={val ? String(val).slice(0, 40) : <Tag tone="error" size="xs">Not found</Tag>}
+                        tone={val ? 'default' : 'error'} />
                     ))}
                   </div>
                 )
