@@ -33,6 +33,13 @@ export const DEV_SETTINGS = [
     step:    50,
     unit:    'ms',
   },
+  {
+    key:     'popup.ignorePageContext',
+    label:   'Popup: ignore page context',
+    desc:    'Show all order + account templates in the popup regardless of the current page. Variables resolve as unmatched.',
+    type:    'bool',
+    default: false,
+  },
 ];
 
 export const STORAGE_KEY = 'devSettings';
