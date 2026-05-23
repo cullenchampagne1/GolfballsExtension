@@ -1394,16 +1394,18 @@ async function init() {
   bindCustomDropdowns(document);
   renderSidebar();
   
+  // No auto-open on init. The React editors render an EmptyState until
+  // the user picks a row from the sidebar — that keeps the sidebar's
+  // "active" highlight always in sync with what the editor is showing.
+  // (The previous auto-open created a desync: currentId was set on the
+  // first template before the sidebar rendered, but the row's active
+  // shading didn't paint, AND the click-to-reopen guard then blocked
+  // the user's first click.)
   if (templates.length === 0) {
-    newTemplate();
-    ['email','order_number','payment_link','oos_item','recommended_replacement'].forEach(name => { 
-      vars[name] = { type: 'builtin', builtin: name }; 
-      varOrder.push(name); 
+    ['email','order_number','payment_link','oos_item','recommended_replacement'].forEach(name => {
+      vars[name] = { type: 'builtin', builtin: name };
+      varOrder.push(name);
     });
-    renderVars(); 
-    renderVarChips();
-  } else { 
-    openTemplate(templates[0].id); 
   }
 }
 
@@ -2035,9 +2037,15 @@ async function loadUserPreset(id) {
   // Re-render features so toggles reflect loaded flags
   const feat = document.getElementById('settings-features');
   if (feat) { feat.remove(); renderFeaturesSection(document.getElementById('settings-groups')); }
-  // Re-open first template if any, else show empty state
-  if (templates.length > 0) openTemplate(templates[0].id);
-  else animateView('ed-empty');
+  // Return to the empty state — the sidebar shows the imported preset's
+  // templates and the user picks one. (Auto-opening templates[0] caused
+  // sidebar/editor desync.)
+  currentId = null;
+  show('ed-empty');
+  hide('ed-form');
+  hide('ed-note-form');
+  hide('ed-settings');
+  animateView('ed-empty');
 }
 
 /**

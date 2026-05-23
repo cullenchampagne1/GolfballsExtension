@@ -506,7 +506,6 @@ function TemplateEditor({ tpl, onDelete }) {
           }}
         >
           <Segmented
-            size="sm"
             value={senderRandomize ? '__random' : senderAccount}
             onChange={(v) => {
               if (v === '__random') setSenderRandomize(true);
