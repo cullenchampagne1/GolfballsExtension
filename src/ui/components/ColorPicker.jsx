@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 
 /* ────────────────────────────────────────────────────────────────
@@ -65,6 +66,7 @@ const clamp01 = (n) => Math.max(0, Math.min(1, n));
 const TRIGGER_SIZES = { sm: 20, md: 26, lg: 32 };
 
 /* ── popover ────────────────────────────────────────────────────── */
+const POPOVER_W = 212;
 export function ColorPickerPopover({
   value = '#000000', onChange, swatches, anchorRef, onClose, align = 'left', offset = 6,
 }) {
@@ -73,6 +75,31 @@ export function ColorPickerPopover({
   // committing every keystroke as a color change.
   const [hexInput, setHexInput] = useState(value);
   useEffect(() => { setHexInput(value); }, [value]);
+
+  // Position the portaled popover from the anchor's viewport rect. Updates
+  // on scroll/resize so the popover stays attached when the page moves.
+  // Portal-to-body is required because the popover otherwise gets clipped
+  // by sibling cards in the same stacking context (visible in the settings
+  // page where multiple ColorSpotlights stack vertically).
+  const [pos, setPos] = useState(null);
+  useEffect(() => {
+    function update() {
+      const el = anchorRef?.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setPos({
+        top:  r.bottom + offset,
+        left: align === 'right' ? r.right - POPOVER_W : r.left,
+      });
+    }
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [anchorRef, align, offset]);
 
   // Outside click + Esc close. (Anchor click is part of "inside.")
   useEffect(() => {
@@ -120,7 +147,8 @@ export function ColorPickerPopover({
     commit(rgbToHex(hsvToRgb({ h, s: hsv.s || 1, v: hsv.v || 1 })));
   }
 
-  return (
+  if (!pos) return null;
+  return createPortal(
     <motion.div
       ref={ref}
       initial={{ opacity: 0, y: -4, scale: 0.97 }}
@@ -128,9 +156,10 @@ export function ColorPickerPopover({
       exit={{ opacity: 0, y: -4, scale: 0.97 }}
       transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
       style={{
-        position: 'absolute', top: `calc(100% + ${offset}px)`,
-        [align]: 0, zIndex: 200,
-        width: 212, padding: 10,
+        position: 'fixed',
+        top: pos.top, left: pos.left,
+        zIndex: 2147483500,
+        width: POPOVER_W, padding: 10,
         display: 'flex', flexDirection: 'column', gap: 9,
         background: 'var(--gb-surface-modal)',
         border: '1px solid var(--gb-border-default)',
@@ -245,7 +274,8 @@ export function ColorPickerPopover({
           ))}
         </div>
       )}
-    </motion.div>
+    </motion.div>,
+    document.body,
   );
 }
 
