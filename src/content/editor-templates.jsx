@@ -98,17 +98,19 @@ function varDef(v) {
    Type metadata
 ──────────────────────────────────────────────────────────── */
 /* Configured sender accounts for Direct Send via Power Automate. The
-   flow keys off the persisted id; labels are display-only. Two slots are
-   provisioned today — adding more is a one-line change here. */
+   flow keys off the persisted id; labels are display-only. Adding more
+   accounts is a one-line change here. The `randomize` slot is special —
+   it's the same UI affordance as picking a single account, just stored
+   separately as a boolean so the flow can pick per send. */
 const SENDER_OPTIONS = [
-  { id: 'golfballs',     label: 'golfballs.com' },
-  { id: 'prioritylogo',  label: 'prioritylogo.com' },
+  { id: 'golfballs',    label: 'golfballs.com' },
+  { id: 'prioritylogo', label: 'prioritylogo.com' },
 ];
 
 const TYPE_META = {
   order: {
     icon: <TYPE_ICONS.order />, label: 'Order',
-    desc: 'Shown in the popup on order pages. Variables resolve against live page DOM.',
+    desc: 'Shown in the popup on order pages.',
     recipientOptions: [
       { label: 'Smart detect',   toType: 'auto' },
       { label: 'Pick from page', toType: 'selector' },
@@ -126,7 +128,7 @@ const TYPE_META = {
   },
   account: {
     icon: <TYPE_ICONS.account />, label: 'Account',
-    desc: "Shown in the popup on account pages. Variables pull from the contact's Solr record.",
+    desc: 'Shown in the popup on account pages.',
     recipientOptions: [
       { label: 'Contact email', toType: 'auto' },
       { label: 'Fixed email',   toType: 'literal' },
@@ -483,40 +485,37 @@ function TemplateEditor({ tpl, onDelete }) {
       />
 
       {/* ── Type tabs + sender picker on the same row.
-          Left: order/case/account Segmented switcher.
-          Right: which sender the Power Automate flow should use, plus a
-          shuffle toggle to randomize per send. The pair is disabled when
-          the Direct Send via Power Automate feature flag is off — the
-          value is still persisted so flipping the flag back on later
-          doesn't lose the user's preference. */}
+          Left: order/case/account Segmented.
+          Right: a second Segmented for which sender the Power Automate
+          flow should use. The shuffle slot is part of the same switcher
+          so picking it visually replaces the active sender — internally
+          it persists as senderRandomize=true. The pair is disabled when
+          the Direct Send via Power Automate feature flag is off, but
+          the value is still persisted so flipping the flag back on
+          later doesn't lose the user's preference. */}
       <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
         <Segmented value={typeId} onChange={changeType} options={TYPE_OPTIONS} />
         <div style={{ flex: 1 }} />
         <div
           title={paEnabled ? '' : 'Enable Direct Send via Power Automate in Settings to use sender accounts'}
           style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
+            display: 'inline-flex',
             opacity: paEnabled ? 1 : 0.45,
             pointerEvents: paEnabled ? 'auto' : 'none',
             transition: 'opacity 160ms ease',
           }}
         >
-          <Dropdown
+          <Segmented
             size="sm"
-            value={senderAccount}
-            options={SENDER_OPTIONS}
-            onChange={setSenderAccount}
-            disabled={!paEnabled}
-            style={{ minWidth: 150 }}
-          />
-          <IconBtn
-            size="sm"
-            variant="ghost"
-            active={senderRandomize}
-            icon={<I.shuffle />}
-            tooltip={senderRandomize ? 'Randomize per send (on)' : 'Randomize per send'}
-            onClick={() => setSenderRandomize((r) => !r)}
-            disabled={!paEnabled}
+            value={senderRandomize ? '__random' : senderAccount}
+            onChange={(v) => {
+              if (v === '__random') setSenderRandomize(true);
+              else { setSenderRandomize(false); setSenderAccount(v); }
+            }}
+            options={[
+              ...SENDER_OPTIONS,
+              { id: '__random', label: 'Random', icon: <I.shuffle /> },
+            ]}
           />
         </div>
       </div>
@@ -753,6 +752,15 @@ function TemplateEditorRoot() {
   useEffect(() => {
     window.__gbOpenTemplate  = template => setTpl({ ...template });
     window.__gbOpenSignature = () => setShowSig(true);
+    // Race-recovery: editor.js init() runs before this mount and may
+    // have already called openTemplate() to auto-load the first
+    // template — but our bridge wasn't installed yet, so the template
+    // never reached React. Ask editor.js for whatever it considers
+    // "currently open" and load it now.
+    const initial = typeof window.__gbCurrentTemplate === 'function'
+      ? window.__gbCurrentTemplate()
+      : null;
+    if (initial) setTpl({ ...initial });
     return () => {
       delete window.__gbOpenTemplate;
       delete window.__gbOpenSignature;

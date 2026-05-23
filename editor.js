@@ -1272,6 +1272,22 @@ async function applyTemplatePatch(tpl) {
 window.__gbSaveTemplate = applyTemplatePatch;
 
 /**
+ * Getter the React TemplateEditor calls on mount to pick up whatever
+ * template editor.js's init() auto-opened before the bridge existed.
+ *
+ * Race condition: editor.js loads + runs init() before the React
+ * bundles register window.__gbOpenTemplate. init() calls openTemplate
+ * (which sets currentId and runs the bridge — but the bridge is a
+ * no-op because it's not installed yet). When React mounts later it
+ * has no template, but openTemplate's early-return guard
+ * (`currentId === id && !ed-form.hidden`) blocks the user's first
+ * click on that same template. Asking us for the current template at
+ * mount time bypasses the race entirely.
+ */
+window.__gbCurrentTemplate = () => templates.find(t => t.id === currentId) || null;
+window.__gbCurrentNote     = () => noteTemplates.find(t => t.id === currentNoteId) || null;
+
+/**
  * Auto-save bridge for the React note-template editor. Same shape as
  * applyTemplatePatch but writes into noteTemplates[].
  * @param {object} tpl Complete note template object from the React editor.
