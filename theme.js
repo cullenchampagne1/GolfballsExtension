@@ -106,16 +106,26 @@
     el.textContent = cssText;
   }
 
+  // Two storage keys exist:
+  //   gbTheme = { variant, colors } — the React Settings panel writes here
+  //   themeColors = flat colors object — the legacy settings panel wrote
+  //                 here; nothing writes it any more but old user data
+  //                 may still carry it.
+  // Read both; gbTheme.colors wins if present.
+  function pickColors(d) {
+    if (d && d.gbTheme && d.gbTheme.colors && Object.keys(d.gbTheme.colors).length > 0) return d.gbTheme.colors;
+    if (d && d.themeColors && Object.keys(d.themeColors).length > 0) return d.themeColors;
+    return {};
+  }
+
   // 1. Apply defaults synchronously — no FOUC.
   applyStyleText(buildCss({}));
 
   // 2. Re-apply with saved overrides.
   if (typeof chrome !== 'undefined' && chrome.storage) {
-    chrome.storage.local.get('themeColors', function (data) {
-      var ov = data && data.themeColors;
-      if (ov && Object.keys(ov).length > 0) {
-        applyStyleText(buildCss(ov));
-      }
+    chrome.storage.local.get(['gbTheme', 'themeColors'], function (data) {
+      var ov = pickColors(data);
+      if (Object.keys(ov).length > 0) applyStyleText(buildCss(ov));
     });
   }
 
@@ -129,13 +139,15 @@
   }
 
   // 4. Live-update for extension pages (popup, editor) via storage change.
-  //    broadcastThemeToTabs() only reaches content scripts; storage.onChanged
-  //    fires in every extension context the instant the settings panel saves.
+  //    Watches BOTH keys so flipping the theme in React Settings (gbTheme)
+  //    or any leftover legacy writer (themeColors) reaches us.
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
     chrome.storage.onChanged.addListener(function (changes, area) {
-      if (area === 'local' && changes.themeColors) {
-        applyStyleText(buildCss(changes.themeColors.newValue || {}));
-      }
+      if (area !== 'local') return;
+      if (!changes.gbTheme && !changes.themeColors) return;
+      chrome.storage.local.get(['gbTheme', 'themeColors'], function (data) {
+        applyStyleText(buildCss(pickColors(data)));
+      });
     });
   }
 })();
