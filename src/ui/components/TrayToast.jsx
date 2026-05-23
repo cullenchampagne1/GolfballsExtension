@@ -44,7 +44,6 @@ export function TrayToast({ items = [], onDismiss, size = 'md' }) {
   return (
     <div style={{
       pointerEvents: 'auto',
-      animation: 'gb-toast-in-right .35s cubic-bezier(.34,1.4,.64,1) both',
     }}>
       {!open ? (
         /* Collapsed pill */

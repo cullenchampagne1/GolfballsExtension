@@ -70,17 +70,22 @@ const TOAST_REGISTRY = [
   { group: 'Step',   id: 'step-animated', label: 'Animated', tone: 'brand',
     run: (t) => {
       const steps = ['Render', 'Generate PDF', 'Upload', 'Notify'];
-      // Fire the toast at step 0, then advance every 1.2s by dismissing
-      // and re-firing — the manager doesn't support imperative update yet,
-      // and a refire is simpler than threading the API through deeply.
+      // Fire once, then mutate the existing toast's `currentStep` via
+      // update(id, patch) so the toast stays mounted between ticks. Without
+      // update() we'd dismiss+re-fire per step, causing a fresh entry
+      // animation each tick that reads as the toast jittering in repeatedly.
+      const id = t.step({ title: 'Submitting proof…', steps, currentStep: 0 });
       let cur = 0;
-      const fireAt = (i) => t.step({ title: 'Submitting proof…', steps, currentStep: i });
-      let id = fireAt(0);
       const timer = setInterval(() => {
         cur += 1;
-        t.dismiss(id);
-        if (cur >= steps.length) { clearInterval(timer); return; }
-        id = fireAt(cur);
+        if (cur >= steps.length) {
+          clearInterval(timer);
+          // Show the final "all done" state briefly, then dismiss.
+          t.update(id, { currentStep: steps.length, title: 'Submitted' });
+          setTimeout(() => t.dismiss(id), 1500);
+          return;
+        }
+        t.update(id, { currentStep: cur });
       }, 1200);
     },
   },
@@ -212,13 +217,25 @@ function PlaygroundSurface() {
   // The same constant feeds the Segmented switcher in the test pane.
   const [placement, setPlacement] = useState('top-right');
 
+  // Collapsed variant groups in the Notifications pane. Default: all
+  // closed so the pane reads as a compact accordion instead of a long
+  // scroll. Open a group by clicking its header.
+  const [openGroups, setOpenGroups] = useState(() => new Set());
+  const toggleGroup = (g) => setOpenGroups((s) => {
+    const next = new Set(s);
+    if (next.has(g)) next.delete(g); else next.add(g);
+    return next;
+  });
+
   const launch = (entry) => {
     if (entry.wired) { setMounted(entry.id); return; }
     notify.notify(`${entry.label} modal — coming soon`, { tone: 'info' });
   };
 
   // Wrap a registry entry's `run` so every fire inherits the current
-  // placement selection (edge toasts excepted — they override).
+  // placement selection (edge toasts excepted — they override). dismiss /
+  // update / dismissAll pass through unchanged so step demos can advance
+  // an existing toast id without re-mounting.
   const fireToast = (entry) => {
     if (!toast) return;
     const proxied = {
@@ -235,6 +252,11 @@ function PlaygroundSurface() {
       warning: (m, o = {}) => toast.warning(m, { placement, ...o }),
       error:   (m, o = {}) => toast.error(m,   { placement, ...o }),
       brand:   (m, o = {}) => toast.brand(m,   { placement, ...o }),
+      // Imperative APIs forward verbatim — placement is already baked in
+      // on the original fire so updates don't need to re-apply it.
+      dismiss:    toast.dismiss,
+      update:     toast.update,
+      dismissAll: toast.dismissAll,
     };
     entry.run(proxied);
   };
@@ -365,27 +387,65 @@ function PlaygroundSurface() {
           />
         </div>
 
-        {/* Variant groups */}
-        {toastGroups.map(([group, entries]) => (
-          <div key={group} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div style={{
-              fontSize: 9, fontWeight: 700, textTransform: 'uppercase',
-              letterSpacing: 0.8, color: 'var(--gb-text-muted)',
-            }}>{group}</div>
-            {entries.map((entry) => (
-              <Btn
-                key={entry.id}
-                size="sm"
-                full
-                variant="secondary"
-                onClick={() => fireToast(entry)}
-                style={{ justifyContent: 'flex-start' }}
+        {/* Variant groups — collapsible accordion. Header is the row;
+            body slides open on click. Height-collapse + opacity exit
+            keeps the pane compact when most groups are closed. */}
+        {toastGroups.map(([group, entries]) => {
+          const open = openGroups.has(group);
+          return (
+            <div key={group} style={{ display: 'flex', flexDirection: 'column' }}>
+              <div
+                onClick={() => toggleGroup(group)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  cursor: 'pointer', userSelect: 'none',
+                  padding: '3px 2px',
+                  fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                  letterSpacing: 0.6, color: 'var(--gb-text-tertiary)',
+                }}
               >
-                {entry.label}
-              </Btn>
-            ))}
-          </div>
-        ))}
+                <motion.span
+                  animate={{ rotate: open ? 90 : 0 }}
+                  transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
+                  style={{ display: 'flex', color: 'var(--gb-text-muted)' }}
+                >
+                  <I.chevr size={10} />
+                </motion.span>
+                <span style={{ flex: 1 }}>{group}</span>
+                <span style={{
+                  fontSize: 9, fontWeight: 600, color: 'var(--gb-text-muted)',
+                  fontVariantNumeric: 'tabular-nums',
+                }}>{entries.length}</span>
+              </div>
+              <AnimatePresence initial={false}>
+                {open && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 4, paddingLeft: 4 }}>
+                      {entries.map((entry) => (
+                        <Btn
+                          key={entry.id}
+                          size="sm"
+                          full
+                          variant="secondary"
+                          onClick={() => fireToast(entry)}
+                          style={{ justifyContent: 'flex-start' }}
+                        >
+                          {entry.label}
+                        </Btn>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          );
+        })}
 
         {/* Dismiss-all utility */}
         <Btn

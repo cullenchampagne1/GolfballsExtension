@@ -47,7 +47,6 @@ export function ActionToast({
       borderRadius: s.radius,
       boxShadow: 'var(--gb-shadow-popover)',
       overflow: 'hidden',
-      animation: 'gb-toast-in-right .35s cubic-bezier(.34,1.4,.64,1) both',
     }}>
       <div style={{ padding: s.padTop, display: 'flex', alignItems: 'flex-start', gap: s.topGap }}>
         <div style={{

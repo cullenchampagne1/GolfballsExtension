@@ -68,31 +68,20 @@ const PLACEMENTS = {
   'top-edge':   { top: 0,  left: '50%', transform: 'translateX(-50%)', alignItems: 'center', flexDirection: 'column' },
 };
 
-/** Render a single toast inside the manager's exit-animation wrapper. */
-function ToastWrapper({ entry, dismiss }) {
-  const onDismiss = () => dismiss(entry.id);
-  const props = { ...entry.props, onDismiss };
-  let node;
+/** Render a single toast's body. Pure switch — no animation wrapper here;
+ *  the AnimatePresence motion.div lives at the call site so its key sits
+ *  on a direct AnimatePresence child (custom-component children sometimes
+ *  swallow the exit callback in Motion's reconciliation). */
+function ToastBody({ entry, dismiss }) {
+  const props = { ...entry.props, onDismiss: () => dismiss(entry.id) };
   switch (entry.kind) {
-    case 'pill':   node = <PillToast   {...props} />; break;
-    case 'action': node = <ActionToast {...props} />; break;
-    case 'step':   node = <StepToast   {...props} />; break;
-    case 'tray':   node = <TrayToast   {...props} />; break;
-    case 'edge':   node = <EdgeToast   {...props} />; break;
-    default: return null;
+    case 'pill':   return <PillToast   {...props} />;
+    case 'action': return <ActionToast {...props} />;
+    case 'step':   return <StepToast   {...props} />;
+    case 'tray':   return <TrayToast   {...props} />;
+    case 'edge':   return <EdgeToast   {...props} />;
+    default:       return null;
   }
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: -8, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -8, scale: 0.96, transition: { duration: 0.18 } }}
-      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-      style={{ pointerEvents: 'auto' }}
-    >
-      {node}
-    </motion.div>
-  );
 }
 
 /** Public hook. Returns null outside a host (callers should null-check). */
@@ -122,6 +111,14 @@ export function ToastHost({ children, maxPerPlacement = MAX_PER_PLACEMENT, insta
 
   const dismiss = useCallback((id) => {
     setStack((s) => s.filter((t) => t.id !== id));
+  }, []);
+
+  // Mutate an existing toast's props in place. Use this for progress
+  // updates (StepToast advancing through steps) so the toast stays
+  // mounted — dismiss+re-fire causes a fresh mount + entry animation on
+  // every update which reads as a re-floating, fighting toast.
+  const update = useCallback((id, patch) => {
+    setStack((s) => s.map((t) => (t.id === id ? { ...t, props: { ...t.props, ...patch } } : t)));
   }, []);
 
   const push = useCallback((kind, props = {}) => {
@@ -162,10 +159,11 @@ export function ToastHost({ children, maxPerPlacement = MAX_PER_PLACEMENT, insta
     warning: (message, opts = {}) => push('pill', { message, tone: 'warning', ...opts }),
     error:   (message, opts = {}) => push('pill', { message, tone: 'error',   ...opts }),
     brand:   (message, opts = {}) => push('pill', { message, tone: 'brand',   ...opts }),
-    // Imperative dismiss
+    // Imperative dismiss + mutate-in-place
     dismiss,
+    update,
     dismissAll: () => setStack([]),
-  }), [push, dismiss]);
+  }), [push, dismiss, update]);
 
   // Install the global shim. First mounted host wins so content scripts
   // get a stable reference; later mounts (e.g. a popup opening on top of
@@ -211,9 +209,22 @@ export function ToastHost({ children, maxPerPlacement = MAX_PER_PLACEMENT, insta
                   ...p,
                 }}
               >
-                <AnimatePresence initial={false}>
+                <AnimatePresence initial={false} mode="popLayout">
                   {entries.map((entry) => (
-                    <ToastWrapper key={entry.id} entry={entry} dismiss={dismiss} />
+                    <motion.div
+                      key={entry.id}
+                      layout
+                      initial={{ opacity: 0, scale: 0.85, y: -12 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{
+                        opacity: 0, scale: 0.85, y: -8,
+                        transition: { duration: 0.18, ease: [0.4, 0, 0.2, 1] },
+                      }}
+                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                      style={{ pointerEvents: 'auto' }}
+                    >
+                      <ToastBody entry={entry} dismiss={dismiss} />
+                    </motion.div>
                   ))}
                 </AnimatePresence>
               </div>

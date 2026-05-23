@@ -45,7 +45,6 @@ export function EdgeToast({ tone = 'brand', message, onDismiss, size = 'md' }) {
       borderTop: `2px solid ${c}`,
       borderRadius: '0 0 var(--gb-r-md) var(--gb-r-md)',
       boxShadow: '0 6px 24px rgba(0,0,0,.3)',
-      animation: 'gb-toast-in-top .25s cubic-bezier(.34,1.4,.64,1) both',
     }}>
       <span style={{
         width: s.dot, height: s.dot, borderRadius: '50%',

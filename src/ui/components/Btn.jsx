@@ -14,21 +14,36 @@ const SIZES = {
   lg: { fontSize: 13,   padding: '0 16px', height: 36, gap: 7, iconSize: 13, radius: 'var(--gb-r-lg)' },
 };
 
+// All status families that any DS surface might pass. Missing a row here
+// crashes any consumer that does STATUS[key].bg without a fallback (e.g.
+// ActionToast forwards `status={tone}` directly when rendering its CTA).
 const STATUS = {
   brand:   { bg: 'var(--gb-brand-tint-medium)',   hover: 'var(--gb-brand-tint-strong)' },
   error:   { bg: 'var(--gb-error-tint-medium)',   hover: 'var(--gb-error-tint-strong)' },
   warning: { bg: 'var(--gb-warning-tint-medium)', hover: 'var(--gb-warning-tint-strong)' },
+  success: { bg: 'var(--gb-success-tint-medium)', hover: 'var(--gb-success-tint-strong)' },
+  info:    { bg: 'var(--gb-info-tint-medium)',    hover: 'var(--gb-info-tint-strong)'    },
 };
 const STATUS_FG = {
-  brand: 'var(--gb-brand-label)', error: 'var(--gb-error-fg)', warning: 'var(--gb-warning-fg)',
+  brand:   'var(--gb-brand-label)',
+  error:   'var(--gb-error-fg)',
+  warning: 'var(--gb-warning-fg)',
+  success: 'var(--gb-success-fg)',
+  info:    'var(--gb-info-fg)',
 };
 const STATUS_BD = {
-  brand: 'var(--gb-brand-tint-border)', error: 'var(--gb-error-tint-border)', warning: 'var(--gb-warning-tint-border)',
+  brand:   'var(--gb-brand-tint-border)',
+  error:   'var(--gb-error-tint-border)',
+  warning: 'var(--gb-warning-tint-border)',
+  success: 'var(--gb-success-tint-border)',
+  info:    'var(--gb-info-tint-border)',
 };
 
 /** Resolve variant + status into a base style and a Motion hover delta. */
 function resolveVariant(variant, status) {
-  const key = status || 'brand';
+  // Unknown status keys fall back to 'brand' rather than crashing the
+  // tinted variant's lookup. Same defensive pattern Tag/Dot/etc. use.
+  const key = (status && STATUS[status]) ? status : 'brand';
   switch (variant) {
     case 'primary':
       return {
