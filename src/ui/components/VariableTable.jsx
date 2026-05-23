@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
-import { AnimatePresence } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
+
+const ROW_TRANSITION = { duration: 0.22, ease: [0.32, 0.72, 0, 1] };
+const ROW_INITIAL    = { opacity: 0, y: -6, scale: 0.985 };
+const ROW_ANIMATE    = { opacity: 1, y: 0,  scale: 1 };
+const ROW_EXIT       = { opacity: 0, scale: 0.94, transition: { duration: 0.14 } };
 import { Tag } from './Tag.jsx';
 import { Dot } from './Dot.jsx';
 import { Btn } from './Btn.jsx';
@@ -80,7 +85,9 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onOpenSmart 
         <div />
       </div>
 
-      {/* Rows */}
+      {/* Rows — wrapped in popLayout AnimatePresence so add/delete shift
+          neighbors smoothly instead of snapping. */}
+      <AnimatePresence mode="popLayout" initial={false}>
       {vars.map((v, i) => {
         const hasSmart = !!(v.smart && (
           (typeof v.smart.fallback === 'string' && v.smart.fallback.length > 0)
@@ -96,8 +103,13 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onOpenSmart 
         const isMissNoFallback = v.status === 'miss' && !hasSmart;
 
         return (
-          <div
+          <motion.div
             key={v.name}
+            layout
+            initial={ROW_INITIAL}
+            animate={ROW_ANIMATE}
+            exit={ROW_EXIT}
+            transition={ROW_TRANSITION}
             style={{
               display: 'grid', gridTemplateColumns: COL_GRID,
               gap: 7, padding: '6px 10px', alignItems: 'center',
@@ -145,9 +157,10 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onOpenSmart 
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <IconBtn size="sm" icon={<I.trash />} danger onClick={() => onDelete?.(v.name)} />
             </div>
-          </div>
+          </motion.div>
         );
       })}
+      </AnimatePresence>
 
       {/* Inline add-variable form — slides into the table when the
           dashed Add button is clicked. Replaces the legacy modal. */}

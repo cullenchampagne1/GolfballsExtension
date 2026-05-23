@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import { I, Icon } from '../icons.jsx';
 import { Btn } from './Btn.jsx';
 import { Field } from './Field.jsx';
@@ -123,6 +123,11 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
 
   return (
     <motion.div
+      // `layout` keeps the surrounding table reflowing as the form's
+      // height changes (e.g., when the user switches kinds and the
+      // config block grows). Initial/exit use a tight opacity+y so the
+      // height auto-measure is the only motion on the opening edge.
+      layout
       initial={{ height: 0, opacity: 0 }}
       animate={{ height: 'auto', opacity: 1 }}
       exit={{ height: 0, opacity: 0 }}
@@ -177,99 +182,111 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
           />
         </div>
 
-        {/* Kind-specific config */}
-        {kind === 'builtin' && (
-          <Field label="Built-in path" hint="Pre-defined value from the page context">
-            <Dropdown
-              size="sm"
-              value={config}
-              placeholder="Select a field…"
-              leading={<I.bolt />}
-              searchable
-              options={BUILTIN_PATHS[typeId] || BUILTIN_PATHS.order}
-              onChange={setConfig}
-            />
-          </Field>
-        )}
-
-        {kind === 'dom' && (
-          <>
-            <Field label="CSS selector" hint="First matching element's text is used">
-              <Input
-                size="sm"
-                value={config}
-                placeholder=".order-total .amount"
-                mono
-                leading={<I.search />}
-                onChange={setConfig}
-              />
-            </Field>
-            <div style={{ display: 'flex', alignItems: 'stretch', gap: 6 }}>
-              <div style={{
-                flex: 1, padding: '6px 9px',
-                background: 'var(--gb-fill-subtle)',
-                border: '1px solid ' + (picking ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-subtle)'),
-                borderRadius: 'var(--gb-r-sm)',
-                fontSize: 10.5, display: 'flex', alignItems: 'center', gap: 7,
-              }}>
-                <Dot
-                  tone={picking ? 'brand' : liveResolved ? 'brand' : config ? 'warning' : 'muted'}
-                  glow={picking || !!liveResolved}
-                  size={5}
+        {/* Kind-specific config — keyed on kind so swapping fades the old
+            config out and the new one in, instead of snapping. */}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={kind}
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
+            style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
+          >
+            {kind === 'builtin' && (
+              <Field label="Built-in path" hint="Pre-defined value from the page context">
+                <Dropdown
+                  size="sm"
+                  value={config}
+                  placeholder="Select a field…"
+                  leading={<I.bolt />}
+                  searchable
+                  options={BUILTIN_PATHS[typeId] || BUILTIN_PATHS.order}
+                  onChange={setConfig}
                 />
-                <span style={{ flex: 1, color: 'var(--gb-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {picking
-                    ? hoverText
-                      ? <span style={{ color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 10 }}>"{hoverText}"</span>
-                      : <span style={{ fontStyle: 'italic' }}>Hover an element on the page…</span>
-                    : liveResolved
-                      ? <><strong style={{ color: 'var(--gb-brand-label)' }}>1 match</strong> · <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 10 }}>{liveResolved}</span></>
-                      : config
-                        ? <span style={{ color: 'var(--gb-warning-fg)' }}>No match on active page</span>
-                        : 'Enter a selector or pick'
-                  }
-                </span>
+              </Field>
+            )}
+
+            {kind === 'dom' && (
+              <>
+                <Field label="CSS selector" hint="First matching element's text is used">
+                  <Input
+                    size="sm"
+                    value={config}
+                    placeholder=".order-total .amount"
+                    mono
+                    leading={<I.search />}
+                    onChange={setConfig}
+                  />
+                </Field>
+                <div style={{ display: 'flex', alignItems: 'stretch', gap: 6 }}>
+                  <div style={{
+                    flex: 1, padding: '6px 9px',
+                    background: 'var(--gb-fill-subtle)',
+                    border: '1px solid ' + (picking ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-subtle)'),
+                    borderRadius: 'var(--gb-r-sm)',
+                    fontSize: 10.5, display: 'flex', alignItems: 'center', gap: 7,
+                  }}>
+                    <Dot
+                      tone={picking ? 'brand' : liveResolved ? 'brand' : config ? 'warning' : 'muted'}
+                      glow={picking || !!liveResolved}
+                      size={5}
+                    />
+                    <span style={{ flex: 1, color: 'var(--gb-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {picking
+                        ? hoverText
+                          ? <span style={{ color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 10 }}>"{hoverText}"</span>
+                          : <span style={{ fontStyle: 'italic' }}>Hover an element on the page…</span>
+                        : liveResolved
+                          ? <><strong style={{ color: 'var(--gb-brand-label)' }}>1 match</strong> · <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 10 }}>{liveResolved}</span></>
+                          : config
+                            ? <span style={{ color: 'var(--gb-warning-fg)' }}>No match on active page</span>
+                            : 'Enter a selector or pick'
+                      }
+                    </span>
+                  </div>
+                  <Btn
+                    variant={picking ? 'ghost' : 'tinted'}
+                    size="sm"
+                    icon={<PickerIcon />}
+                    onClick={picking ? cancelPick : startPick}
+                  >
+                    {picking ? 'Cancel' : 'Pick'}
+                  </Btn>
+                </div>
+              </>
+            )}
+
+            {kind === 'regex' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 6 }}>
+                <Field label="From field">
+                  <Dropdown size="sm" value={regexField} options={REGEX_FIELDS} onChange={setRegexField} />
+                </Field>
+                <Field label="Regex (capture 1)">
+                  <Input
+                    size="sm"
+                    value={config}
+                    placeholder="order\\s+(ORD-\\d+)"
+                    mono
+                    leading={<RegexIcon />}
+                    onChange={setConfig}
+                  />
+                </Field>
               </div>
-              <Btn
-                variant={picking ? 'ghost' : 'tinted'}
-                size="sm"
-                icon={<PickerIcon />}
-                onClick={picking ? cancelPick : startPick}
-              >
-                {picking ? 'Cancel' : 'Pick'}
-              </Btn>
-            </div>
-          </>
-        )}
+            )}
 
-        {kind === 'regex' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 6 }}>
-            <Field label="From field">
-              <Dropdown size="sm" value={regexField} options={REGEX_FIELDS} onChange={setRegexField} />
-            </Field>
-            <Field label="Regex (capture 1)">
-              <Input
-                size="sm"
-                value={config}
-                placeholder="order\\s+(ORD-\\d+)"
-                mono
-                leading={<RegexIcon />}
-                onChange={setConfig}
-              />
-            </Field>
-          </div>
-        )}
-
-        {kind === 'literal' && (
-          <Field label="Fixed value" hint="Used verbatim every time">
-            <Input
-              size="sm"
-              value={config}
-              placeholder="e.g. Customer Service Team"
-              onChange={setConfig}
-            />
-          </Field>
-        )}
+            {kind === 'literal' && (
+              <Field label="Fixed value" hint="Used verbatim every time">
+                <Input
+                  size="sm"
+                  value={config}
+                  placeholder="e.g. Customer Service Team"
+                  onChange={setConfig}
+                />
+              </Field>
+            )}
+          </motion.div>
+        </AnimatePresence>
 
         {/* Preview */}
         <div style={{

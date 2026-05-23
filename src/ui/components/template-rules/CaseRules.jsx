@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { Btn } from '../Btn.jsx';
 import { IconBtn } from '../IconBtn.jsx';
 import { Input } from '../Input.jsx';
@@ -6,6 +7,11 @@ import { Dropdown } from '../Dropdown.jsx';
 import { Card } from '../Card.jsx';
 import { SectionLabel } from '../SectionLabel.jsx';
 import { I } from '../../icons.jsx';
+
+const ROW_TRANSITION = { duration: 0.22, ease: [0.32, 0.72, 0, 1] };
+const ROW_INITIAL    = { opacity: 0, y: -6, scale: 0.97 };
+const ROW_ANIMATE    = { opacity: 1, y: 0,  scale: 1 };
+const ROW_EXIT       = { opacity: 0, scale: 0.94, transition: { duration: 0.14 } };
 
 const FIELD_OPTIONS = ['subject', 'body', 'from', 'to'].map((o) => ({ id: o, label: o }));
 const OP_OPTIONS = [
@@ -57,16 +63,27 @@ export function CaseRules({ initial, onChange }) {
         <div style={emptyStyle}>No match rules — add one to match inbound emails.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {rules.map((r) => (
-            <Card key={r._id} padding={8}>
-              <div style={{ display: 'grid', gridTemplateColumns: '108px 138px 1fr 26px', gap: 6, alignItems: 'center' }}>
-                <Dropdown size="sm" value={r.left} options={FIELD_OPTIONS} onChange={(v) => edit(r._id, { left: v })} />
-                <Dropdown size="sm" value={r.op} options={OP_OPTIONS} onChange={(v) => edit(r._id, { op: v })} />
-                <Input size="sm" mono value={r.right} placeholder="keyword or pattern" onChange={(v) => edit(r._id, { right: v })} />
-                <IconBtn size="sm" icon={<I.trash />} danger onClick={() => del(r._id)} />
-              </div>
-            </Card>
-          ))}
+          <AnimatePresence mode="popLayout" initial={false}>
+            {rules.map((r) => (
+              <motion.div
+                key={r._id}
+                layout
+                initial={ROW_INITIAL}
+                animate={ROW_ANIMATE}
+                exit={ROW_EXIT}
+                transition={ROW_TRANSITION}
+              >
+                <Card padding={8}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '108px 138px 1fr 26px', gap: 6, alignItems: 'center' }}>
+                    <Dropdown size="sm" value={r.left} options={FIELD_OPTIONS} onChange={(v) => edit(r._id, { left: v })} />
+                    <Dropdown size="sm" value={r.op} options={OP_OPTIONS} onChange={(v) => edit(r._id, { op: v })} />
+                    <Input size="sm" mono value={r.right} placeholder="keyword or pattern" onChange={(v) => edit(r._id, { right: v })} />
+                    <IconBtn size="sm" icon={<I.trash />} danger onClick={() => del(r._id)} />
+                  </div>
+                </Card>
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       )}
     </div>

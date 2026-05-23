@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { Btn } from '../Btn.jsx';
 import { IconBtn } from '../IconBtn.jsx';
 import { Input } from '../Input.jsx';
@@ -6,6 +7,14 @@ import { Dropdown } from '../Dropdown.jsx';
 import { Card } from '../Card.jsx';
 import { SectionLabel } from '../SectionLabel.jsx';
 import { I } from '../../icons.jsx';
+
+/* Shared list-row animation — `popLayout` pops the exiting element out
+   of the flex flow so the remaining rows shift up smoothly via `layout`
+   instead of the parent's gap collapsing in one frame. */
+const ROW_TRANSITION = { duration: 0.22, ease: [0.32, 0.72, 0, 1] };
+const ROW_INITIAL    = { opacity: 0, y: -6, scale: 0.97 };
+const ROW_ANIMATE    = { opacity: 1, y: 0,  scale: 1 };
+const ROW_EXIT       = { opacity: 0, scale: 0.94, transition: { duration: 0.14 } };
 
 /* Operator ids match backup/editor.js so saved `rules` import 1:1. */
 const OP_OPTIONS = [
@@ -59,29 +68,40 @@ export function OrderRules({ initial, onChange }) {
         <div style={emptyStyle}>No match rules — add one to auto-trigger this template.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {rules.map((r) => {
-            const noVal = NO_VAL.includes(r.op);
-            return (
-              <Card key={r._id} padding={8}>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: noVal ? '1fr 132px 26px' : '1fr 132px 1fr 26px',
-                  gap: 6, alignItems: 'center',
-                }}>
-                  <Input
-                    size="sm" mono value={r.left} leading={<I.search />}
-                    placeholder="page.url or .selector"
-                    onChange={(v) => edit(r._id, { left: v })}
-                  />
-                  <Dropdown size="sm" value={r.op} options={OP_OPTIONS} onChange={(v) => edit(r._id, { op: v })} />
-                  {!noVal && (
-                    <Input size="sm" mono value={r.right} placeholder="value" onChange={(v) => edit(r._id, { right: v })} />
-                  )}
-                  <IconBtn size="sm" icon={<I.trash />} danger onClick={() => del(r._id)} />
-                </div>
-              </Card>
-            );
-          })}
+          <AnimatePresence mode="popLayout" initial={false}>
+            {rules.map((r) => {
+              const noVal = NO_VAL.includes(r.op);
+              return (
+                <motion.div
+                  key={r._id}
+                  layout
+                  initial={ROW_INITIAL}
+                  animate={ROW_ANIMATE}
+                  exit={ROW_EXIT}
+                  transition={ROW_TRANSITION}
+                >
+                  <Card padding={8}>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: noVal ? '1fr 132px 26px' : '1fr 132px 1fr 26px',
+                      gap: 6, alignItems: 'center',
+                    }}>
+                      <Input
+                        size="sm" mono value={r.left} leading={<I.search />}
+                        placeholder="page.url or .selector"
+                        onChange={(v) => edit(r._id, { left: v })}
+                      />
+                      <Dropdown size="sm" value={r.op} options={OP_OPTIONS} onChange={(v) => edit(r._id, { op: v })} />
+                      {!noVal && (
+                        <Input size="sm" mono value={r.right} placeholder="value" onChange={(v) => edit(r._id, { right: v })} />
+                      )}
+                      <IconBtn size="sm" icon={<I.trash />} danger onClick={() => del(r._id)} />
+                    </div>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
         </div>
       )}
     </div>
