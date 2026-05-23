@@ -62,7 +62,7 @@ export function BodyVar({ v, onOpenSmart, size = 'md' }) {
           the state's fg color (works with var(--...) refs, unlike `#fg+22`
           which produced invalid CSS in the original). */}
       <span
-        onClick={(e) => { e.stopPropagation(); onOpenSmart?.(v); }}
+        onClick={(e) => { e.stopPropagation(); onOpenSmart?.(v, e.currentTarget); }}
         title={hasSmart ? 'Edit smart options' : 'Add smart options'}
         style={{
           padding: s.boltPad,

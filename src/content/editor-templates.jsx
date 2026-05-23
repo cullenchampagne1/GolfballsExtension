@@ -7,7 +7,7 @@ import {
   Input, Dropdown, Field, IconBtn,
   Switch, SwitchTag, Segmented,
   I, Icon, Dot,
-  SmartModal, SignatureModal,
+  SmartPopover, SignatureModal,
   RichTextEditor,
   VariableTable, OrderRules, CaseRules, AccountRules, CaseTagsEditor,
 } from '../ui/index.js';
@@ -171,7 +171,10 @@ function TemplateEditor({ tpl, onDelete }) {
   const [body,     setBody]     = useState(tpl.body || '');
   const [ruleData, setRuleData] = useState(null);
   const [resolvedMap, setResolvedMap] = useState({});
-  const [smartFor, setSmartFor] = useState(null);
+  // Smart-options popover state: holds the variable being edited AND the
+  // DOM element it was anchored from (bolt span in the table or chip in
+  // the rich text editor). Both must be set for the popover to render.
+  const [smartTarget, setSmartTarget] = useState(null);
   const [recipientIdx,  setRecipientIdx]  = useState(() => recipientIndexFor(initialType, tpl.toField));
   const [toFieldValue, setToFieldValue] = useState(
     (tpl.toField && (tpl.toField.value || tpl.toField.selector)) || '',
@@ -288,8 +291,10 @@ function TemplateEditor({ tpl, onDelete }) {
   }
 
   const handleSaveSmart = smart => {
-    setVars(vs => vs.map(v => v.name === smartFor.name ? { ...v, smart } : v));
-    setSmartFor(null);
+    if (!smartTarget?.variable) return;
+    const name = smartTarget.variable.name;
+    setVars(vs => vs.map(v => v.name === name ? { ...v, smart } : v));
+    setSmartTarget(null);
   };
   const handleAddVar    = ({ name, kind, config, source, group, scope }) => {
     setVars(vs => [...vs, {
@@ -310,9 +315,13 @@ function TemplateEditor({ tpl, onDelete }) {
     }));
   };
   const handleDeleteVar = name => setVars(vs => vs.filter(v => v.name !== name));
-  const openSmartByName = name => {
+  const openSmartByName = (name, anchor) => {
     const v = vars.find(x => x.name === name);
-    if (v) setSmartFor(v);
+    if (v && anchor) setSmartTarget({ variable: v, anchor });
+  };
+  // VariableTable's BodyVar passes (v, anchor) on bolt click.
+  const openSmartFromTable = (v, anchor) => {
+    if (v && anchor) setSmartTarget({ variable: v, anchor });
   };
 
   /* ── Auto-save ──────────────────────────────────────────────
@@ -704,12 +713,20 @@ function TemplateEditor({ tpl, onDelete }) {
           onAdd={handleAddVar}
           onEdit={handleEditVar}
           onDelete={handleDeleteVar}
-          onOpenSmart={setSmartFor}
+          onOpenSmart={openSmartFromTable}
         />
       </div>
 
       <AnimatePresence>
-        {smartFor && <SmartModal key="smart" variable={smartFor} onClose={() => setSmartFor(null)} onSave={handleSaveSmart} />}
+        {smartTarget && (
+          <SmartPopover
+            key="smart"
+            variable={smartTarget.variable}
+            anchor={smartTarget.anchor}
+            onClose={() => setSmartTarget(null)}
+            onSave={handleSaveSmart}
+          />
+        )}
       </AnimatePresence>
     </div>
   );

@@ -21,13 +21,17 @@ const VariableIcon = (p) => (
     <path d="M9 9l6 6M9 15l6-6"/>
   </Icon>
 );
-// Variable name needs the most room — chip + bolt + ellipsis room.
-// Kind pill is content-width; source/resolved share the remainder.
-const COL_GRID = '2fr 70px 1.1fr 1.1fr 70px 28px';
+// 5 columns: variable | kind | source | resolved | actions (edit+delete).
+// Status column dropped — BodyVar's chip color already encodes status
+// (green=ok, yellow=fallback, red=miss), so the dedicated tag was
+// redundant. Variable column trimmed slightly to give actions room for
+// both icon buttons without crowding.
+const COL_GRID = '1.6fr 64px 1fr 1.3fr 60px';
 
 /**
- * VariableTable — 6-column grid showing all variables for a template.
- * Columns: name · kind · source config · resolved value · status · delete.
+ * VariableTable — 5-column grid showing all variables for a template.
+ * Columns: name · kind · source config · resolved value · actions.
+ * Status is conveyed by BodyVar's chip color rather than a separate column.
  *
  * Props:
  *   typeId       'order'|'case'|'account'
@@ -58,12 +62,18 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-primary)' }}>
           Variables
         </span>
-        <Tag tone="brand" size="xs">{vars.filter(v => v.status === 'ok').length} resolved</Tag>
-        {vars.some(v => v.status === 'miss') && (
-          <Tag tone="warning" size="xs">
-            {vars.filter(v => v.status === 'miss').length} unresolved
-          </Tag>
-        )}
+        {/* Single combined status tag — "<ok>/<total> resolved" with tone
+            tracking completeness. Replaces the dual "resolved/unresolved"
+            chips which were saying the same thing twice. */}
+        {vars.length > 0 && (() => {
+          const okN = vars.filter(v => v.status === 'ok').length;
+          const allOk = okN === vars.length;
+          return (
+            <Tag tone={allOk ? 'brand' : 'warning'} size="xs">
+              {okN}/{vars.length} resolved
+            </Tag>
+          );
+        })()}
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 9.5, color: 'var(--gb-text-muted)' }}>
           Live
@@ -84,7 +94,6 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
         <div>Kind</div>
         <div>Source</div>
         <div>Resolved</div>
-        <div style={{ textAlign: 'center' }}>Status</div>
         <div />
       </div>
 
@@ -98,11 +107,6 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
             || v.smart.conditional
             || v.smart.format
         ));
-        const tone  = v.status === 'ok' ? 'brand' : 'warning';
-        const label = v.status === 'ok' ? 'OK' : hasSmart ? 'FALLBACK' : 'MISS';
-        const tagIcon = v.status === 'ok'
-          ? <I.check />
-          : hasSmart ? <I.bolt /> : <I.alert />;
         const isMissNoFallback = v.status === 'miss' && !hasSmart;
 
         return (
@@ -151,18 +155,13 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
               }
             </div>
 
-            {/* Status tag */}
-            <div style={{ textAlign: 'center' }}>
-              <Tag tone={tone} size="xs" icon={tagIcon}>{label}</Tag>
-            </div>
-
-            {/* Delete */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4 }}>
+            {/* Actions — rename + delete, share the column */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
               <IconBtn
                 size="sm"
                 icon={<I.edit />}
                 variant="ghost"
-                tooltip="Edit name or kind"
+                tooltip="Rename or change kind"
                 onClick={() => setEditVar(v)}
               />
               <IconBtn size="sm" icon={<I.trash />} danger onClick={() => onDelete?.(v.name)} />

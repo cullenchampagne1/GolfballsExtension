@@ -288,14 +288,16 @@ export function RichTextEditor({
     if (singleLine && e.key === 'Enter') e.preventDefault();
   }
 
-  // Clicking a {{variable}} chip (name or bolt) opens its smart-options modal.
+  // Clicking a {{variable}} chip (name or bolt) opens its smart-options popover.
+  // We pass the chip element as the anchor so the popover can position
+  // itself against it via getBoundingClientRect.
   function onClickContent(e) {
     if (!onChipClick) return;
     const chip = e.target?.closest?.('.gb-rte-chip');
     if (!chip) return;
     const nameEl = chip.querySelector('.gb-rte-chip-name');
     const name   = ((nameEl || chip).textContent || '').replace(/[{}]/g, '').trim();
-    if (name) onChipClick(name);
+    if (name) onChipClick(name, chip);
   }
 
   function onInput() {

@@ -60,6 +60,7 @@ export { MultiSelectCombo } from './components/MultiSelectCombo.jsx';
 export { ConditionCard } from './components/ConditionCard.jsx';
 export { VariableTable } from './components/VariableTable.jsx';
 export { SmartModal } from './components/SmartModal.jsx';
+export { SmartPopover } from './components/SmartPopover.jsx';
 export { AddVariableModal, SOURCE_KINDS, BUILTIN_PATHS, REGEX_FIELDS } from './components/AddVariableModal.jsx';
 export { InlineVariableForm } from './components/InlineVariableForm.jsx';
 export { EditVariableModal } from './components/EditVariableModal.jsx';
