@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import {
   Btn, IconBtn, Tag, Input, Segmented, I, Icon, T,
+  SettingNotificationHost, useSettingNotification,
 } from '../ui/index.js';
 
 /* ────────────────────────────────────────────────────────────────
@@ -393,6 +394,17 @@ function FolderGroup({ folder, tpls, isNote, currentId, onOpen, onMove, onRename
 
 /* ── Root ───────────────────────────────────────────────────────── */
 function TemplateSidebar() {
+  // Wraps the actual sidebar so its descendants can use the slide-in
+  // SettingNotification system (replaces browser confirm/prompt).
+  return (
+    <SettingNotificationHost>
+      <SidebarInner />
+    </SettingNotificationHost>
+  );
+}
+
+function SidebarInner() {
+  const notify = useSettingNotification();
   const [tab,         setTab]         = useState('templates');
   const [templates,   setTemplates]   = useState([]);
   const [notes,       setNotes]       = useState([]);
@@ -458,15 +470,21 @@ function TemplateSidebar() {
     const fn = isNote ? window.newNoteTemplate : window.newTemplate;
     if (typeof fn === 'function') fn();
   }
-  function newFolder() {
-    const name = window.prompt('Folder name:');
+  async function newFolder() {
+    const name = await notify.prompt('Name the new folder', {
+      placeholder: 'e.g. Outreach',
+      confirmLabel: 'Create',
+    });
     if (!name) return;
     const next = [...folders, { id: 'f_' + Date.now().toString(36), name: name.trim() }];
     (isNote ? setNoteFolders : setTplFolders)(next);
     saveKey(folderKey, next);
   }
-  function renameFolder(folder) {
-    const name = window.prompt('Rename folder:', folder.name);
+  async function renameFolder(folder) {
+    const name = await notify.prompt('Rename folder', {
+      defaultValue: folder.name,
+      confirmLabel: 'Rename',
+    });
     if (!name) return;
     const next = folders.map((f) => (f.id === folder.id ? { ...f, name: name.trim() } : f));
     (isNote ? setNoteFolders : setTplFolders)(next);
@@ -477,8 +495,12 @@ function TemplateSidebar() {
     (isNote ? setNoteFolders : setTplFolders)(next);
     saveKey(folderKey, next);
   }
-  function deleteFolder(folder) {
-    if (!window.confirm(`Delete folder "${folder.name}"? Templates inside move to Uncategorized.`)) return;
+  async function deleteFolder(folder) {
+    const ok = await notify.confirm(
+      `Delete "${folder.name}"? Templates inside move to Uncategorized.`,
+      { tone: 'danger', confirmLabel: 'Delete' },
+    );
+    if (!ok) return;
     const nextFolders = folders.filter((f) => f.id !== folder.id);
     const nextTpls = allItems.map((t) => (t.folderId === folder.id ? { ...t, folderId: undefined } : t));
     (isNote ? setNoteFolders : setTplFolders)(nextFolders);
