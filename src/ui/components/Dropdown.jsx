@@ -26,11 +26,16 @@ function ensureScrollbarStyle() {
  *                 paints a 2px left-border in the matching --gb-{tone}
  *                 color and pads the row to keep the label aligned.
  *                 Use it to mark a row without spending a whole group.
+ *   maxHeight    number — explicit ceiling for the menu list (px). Overrides
+ *                the auto-clamp against the viewport bottom. Use it when the
+ *                Dropdown lives inside a wrapper whose available height isn't
+ *                window.innerHeight (e.g. a Chrome toolbar popup whose body
+ *                resizes dynamically based on feature flags).
  *   onChange(id).
  */
 export function Dropdown({
   value, placeholder = 'Select…', options = [], size = 'md',
-  leading, searchable, disabled, onChange, style,
+  leading, searchable, disabled, onChange, maxHeight, style,
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -57,7 +62,12 @@ export function Dropdown({
       if (!el) return;
       const r = el.getBoundingClientRect();
       const top = r.bottom + 4;
-      const maxListHeight = Math.max(80, Math.min(240, window.innerHeight - top - 8));
+      // documentElement.clientHeight tracks the actual rendered viewport,
+      // including dynamic Chrome popup auto-resizing — window.innerHeight
+      // can lag a frame during the resize.
+      const viewportH = document.documentElement.clientHeight || window.innerHeight;
+      const ceiling = typeof maxHeight === 'number' ? maxHeight : 240;
+      const maxListHeight = Math.max(80, Math.min(ceiling, viewportH - top - 8));
       setPos({ top, left: r.left, width: r.width, maxListHeight });
     }
     update();
@@ -71,7 +81,7 @@ export function Dropdown({
       window.removeEventListener('resize', update);
       window.removeEventListener('scroll', onScroll, true);
     };
-  }, [open]);
+  }, [open, maxHeight]);
 
   useEffect(() => {
     if (!open) return undefined;
