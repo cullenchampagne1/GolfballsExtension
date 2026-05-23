@@ -2,31 +2,27 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { AnimatePresence, motion } from 'motion/react';
 import { Btn } from './Btn.jsx';
 import { Input } from './Input.jsx';
-import { Dot } from './Dot.jsx';
 import { I } from '../icons.jsx';
 
 /* ────────────────────────────────────────────────────────────────
    SettingNotification — themed replacement for window.confirm /
    window.prompt, with a passive toast variant.
 
+   Visual model: ActionToast from notification_handoff/ — icon tile +
+   title/message + tone-tinted footer with action buttons — but scaled
+   down for the editor panel context.
+
    `useSettingNotification()` returns:
-     • notify(message, opts)  → void            — auto-dismissing toast
+     • notify(message, opts)  → void            — auto-dismissing
      • confirm(message, opts) → Promise<bool>   — yes/no
      • prompt(message, opts)  → Promise<str|null>
 
    Placements:
-     • placement="top" (default for the global host) — slides down from the
-       center-top edge of the viewport. Pill-style card per the spec's
-       PillToast pattern (dot · message · actions). Smaller than the main
-       page toast system that will follow.
-     • placement="top-pinned" — slides into the nearest positioned ancestor's
-       top edge. For surface-scoped notifications.
+     • placement="top"        — slides down from center-top of viewport
+     • placement="top-pinned" — slides into the nearest positioned ancestor
 
-   Hook fallback: outside a host, prefers window.__gbNotify (the global top
-   notification host) before browser dialogs.
-
-   This is the SETTINGS-scoped notification system. The main-page
-   notification system will be a separate, larger component.
+   Hook fallback: outside a host, prefers window.__gbNotify (the global
+   top notification host) before browser dialogs.
 ──────────────────────────────────────────────────────────────── */
 
 const Ctx = createContext(null);
@@ -43,7 +39,7 @@ export function useSettingNotification() {
 }
 
 /* ── Internal: input form for prompt() mode ───────────────────── */
-function PromptForm({ defaultValue, placeholder, onSubmit, onCancel, confirmLabel, cancelLabel }) {
+function PromptForm({ defaultValue, placeholder, onSubmit, onCancel, confirmLabel, cancelLabel, tone }) {
   const [value, setValue] = useState(defaultValue || '');
   return (
     <form
@@ -60,81 +56,86 @@ function PromptForm({ defaultValue, placeholder, onSubmit, onCancel, confirmLabe
       />
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
         <Btn variant="ghost" size="sm" onClick={onCancel} type="button">{cancelLabel}</Btn>
-        <Btn variant="primary" size="sm" type="submit" disabled={!value.trim()}>{confirmLabel}</Btn>
+        <Btn variant={tone === 'danger' ? 'danger' : 'primary'} size="sm" type="submit" disabled={!value.trim()}>{confirmLabel}</Btn>
       </div>
     </form>
   );
 }
 
-/* tone → dot tone + border-left fg color. The Dot component drives the
-   visual tone indicator (no icon tile — keeps the card compact). */
+/* tone → fg/bg/border + default icon. Matches ActionToast TONES with the
+   addition of `info` + `default` for our notify/confirm/prompt scope. */
 const TONES = {
-  info:    { dot: 'brand',   fg: 'var(--gb-info-fg)'       },
-  success: { dot: 'brand',   fg: 'var(--gb-success-fg)'    },
-  warning: { dot: 'warning', fg: 'var(--gb-warning-fg)'    },
-  danger:  { dot: 'error',   fg: 'var(--gb-error-fg)'      },
-  default: { dot: 'brand',   fg: 'var(--gb-brand-label)'   },
+  info:    { fg: 'var(--gb-info-fg)',     bg: 'var(--gb-info-tint-soft)',    bd: 'var(--gb-info-tint-border)',    icon: <I.alert /> },
+  success: { fg: 'var(--gb-success-fg)',  bg: 'var(--gb-success-tint-soft)', bd: 'var(--gb-success-tint-border)', icon: <I.check /> },
+  warning: { fg: 'var(--gb-warning-fg)',  bg: 'var(--gb-warning-tint-soft)', bd: 'var(--gb-warning-tint-border)', icon: <I.alert /> },
+  danger:  { fg: 'var(--gb-error-fg)',    bg: 'var(--gb-error-tint-soft)',   bd: 'var(--gb-error-tint-border)',   icon: <I.trash /> },
+  default: { fg: 'var(--gb-brand-label)', bg: 'var(--gb-brand-tint-soft)',   bd: 'var(--gb-brand-tint-border)',   icon: <I.bolt />  },
 };
 
-/* Pill card — single message row + (optional) actions row.
-   Spec inspiration: PillToast ("Dot · message · close"). Smaller than
-   the main-page toast system that will follow. */
-function PillCard({ active, dismiss }) {
+/* ActionToast-shaped card, panel-scoped (between the spec's sm 280 and md
+   360 sizes — 320 wide). Top row: icon tile + title/message + close;
+   tinted footer with actions. Notify mode skips the footer. */
+function NotificationCard({ active, dismiss }) {
   const tone = TONES[active.tone] || TONES.default;
+  const icon = active.icon || tone.icon;
   const isNotify = active.kind === 'notify';
+  const title    = active.title || (isNotify ? null : active.message);
+  const message  = active.title ? active.message : (isNotify ? active.message : null);
 
   return (
     <div style={{
-      background: 'var(--gb-surface-modal)',
-      border: '1px solid var(--gb-border-default)',
-      borderLeft: `2px solid ${tone.fg}`,
+      width: '100%',
+      background: 'var(--gb-surface-1)',
+      border: `1px solid ${tone.bd}`,
       borderRadius: 'var(--gb-r-md)',
-      boxShadow: '0 12px 28px rgba(0, 0, 0, 0.22), 0 2px 6px rgba(0, 0, 0, 0.08)',
-      fontFamily: 'var(--gb-font-sans)',
+      boxShadow: 'var(--gb-shadow-popover)',
       overflow: 'hidden',
+      fontFamily: 'var(--gb-font-sans)',
     }}>
       <div style={{
-        display: 'flex', alignItems: 'flex-start', gap: 10,
-        padding: '10px 12px',
+        display: 'flex', alignItems: 'flex-start', gap: 9,
+        padding: '10px 10px 9px',
       }}>
-        <span style={{ display: 'flex', marginTop: 6, flexShrink: 0 }}>
-          <Dot tone={tone.dot} size={6} glow />
-        </span>
+        <div style={{
+          width: 24, height: 24, borderRadius: 'var(--gb-r-sm)',
+          background: tone.bg, color: tone.fg,
+          border: `1px solid ${tone.bd}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}>
+          {React.cloneElement(icon, { size: 12 })}
+        </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          {active.title && (
+          {title && (
             <div style={{
-              fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)',
-              letterSpacing: -0.1,
-            }}>{active.title}</div>
+              fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)',
+              letterSpacing: -0.1, lineHeight: 1.3,
+            }}>{title}</div>
           )}
-          <div style={{
-            fontSize: 11.5,
-            fontWeight: active.title ? 500 : 600,
-            color: active.title ? 'var(--gb-text-tertiary)' : 'var(--gb-text-primary)',
-            marginTop: active.title ? 2 : 0,
-            lineHeight: 1.45,
-          }}>
-            {active.message}
-          </div>
+          {message && (
+            <div style={{
+              fontSize: 11, color: 'var(--gb-text-tertiary)',
+              marginTop: title ? 2 : 0, lineHeight: 1.45,
+            }}>{message}</div>
+          )}
         </div>
         {isNotify && (
-          <button
-            type="button" onClick={dismiss} aria-label="Dismiss"
-            style={{
-              background: 'transparent', border: 'none', cursor: 'pointer',
-              color: 'var(--gb-text-muted)', display: 'flex', padding: 0, marginTop: 2,
-            }}
+          <span
+            onClick={dismiss}
+            style={{ cursor: 'pointer', color: 'var(--gb-text-muted)', display: 'flex', padding: 2 }}
           >
             <I.close size={11} />
-          </button>
+          </span>
         )}
       </div>
 
+      {/* Tinted action footer — confirm + prompt only. */}
       {active.kind === 'confirm' && (
         <div style={{
-          display: 'flex', justifyContent: 'flex-end', gap: 6,
-          padding: '0 12px 10px',
+          display: 'flex', gap: 6, padding: '6px 8px 7px',
+          borderTop: '1px solid var(--gb-border-subtle)',
+          background: tone.bg,
         }}>
+          <div style={{ flex: 1 }} />
           <Btn variant="ghost" size="sm" onClick={() => active.onResolve(false)}>
             {active.cancelLabel}
           </Btn>
@@ -149,12 +150,17 @@ function PillCard({ active, dismiss }) {
       )}
 
       {active.kind === 'prompt' && (
-        <div style={{ padding: '0 12px 10px' }}>
+        <div style={{
+          padding: '8px 10px 9px',
+          borderTop: '1px solid var(--gb-border-subtle)',
+          background: tone.bg,
+        }}>
           <PromptForm
             defaultValue={active.defaultValue}
             placeholder={active.placeholder}
             confirmLabel={active.confirmLabel}
             cancelLabel={active.cancelLabel}
+            tone={active.tone}
             onSubmit={(v) => active.onResolve(v || null)}
             onCancel={() => active.onResolve(null)}
           />
@@ -177,15 +183,15 @@ function PinnedRenderer({ active, dismiss }) {
           transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
           style={{ position: 'absolute', top: 8, left: 8, right: 8, zIndex: 200 }}
         >
-          <PillCard active={active} dismiss={dismiss} />
+          <NotificationCard active={active} dismiss={dismiss} />
         </motion.div>
       )}
     </AnimatePresence>
   );
 }
 
-/** Center-top page-wide notification. No backdrop — the card stands
-    on its own and uses buttons / Esc for action. */
+/** Center-top page-wide notification — slides down from the top edge.
+    No backdrop; user dismisses via the buttons / X / Esc. */
 function TopRenderer({ active, dismiss }) {
   return (
     <AnimatePresence>
@@ -199,11 +205,11 @@ function TopRenderer({ active, dismiss }) {
           style={{
             position: 'fixed', top: 14, left: '50%',
             zIndex: 2147483600,
-            width: 'min(360px, calc(100vw - 24px))',
+            width: 'min(320px, calc(100vw - 24px))',
             pointerEvents: 'auto',
           }}
         >
-          <PillCard active={active} dismiss={dismiss} />
+          <NotificationCard active={active} dismiss={dismiss} />
         </motion.div>
       )}
     </AnimatePresence>
@@ -218,7 +224,7 @@ function TopRenderer({ active, dismiss }) {
  *   placement  'top' (default) | 'top-pinned'
  *   style      extra style on the wrapper (top-pinned only)
  *
- * Accepts the legacy `placement="centered"` value — treated as `top`.
+ * Legacy `placement="centered"` is accepted — treated as `top`.
  */
 export function SettingNotificationHost({ children, placement = 'top', style }) {
   const [active, setActive] = useState(null);
@@ -231,6 +237,7 @@ export function SettingNotificationHost({ children, placement = 'top', style }) 
         kind: 'notify', message,
         tone: options.tone || 'info',
         title: options.title,
+        icon: options.icon,
       });
       const ms = options.duration ?? 2400;
       if (ms > 0) {
@@ -242,6 +249,7 @@ export function SettingNotificationHost({ children, placement = 'top', style }) 
         kind: 'confirm', message,
         tone: options.tone || 'default',
         title: options.title,
+        icon: options.icon,
         confirmLabel: options.confirmLabel || 'Confirm',
         cancelLabel:  options.cancelLabel  || 'Cancel',
         onResolve: (v) => { setActive(null); resolve(v); },
@@ -252,6 +260,7 @@ export function SettingNotificationHost({ children, placement = 'top', style }) 
         kind: 'prompt', message,
         tone: options.tone || 'default',
         title: options.title,
+        icon: options.icon,
         placeholder:  options.placeholder  || '',
         defaultValue: options.defaultValue || '',
         confirmLabel: options.confirmLabel || 'OK',
