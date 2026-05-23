@@ -4368,3 +4368,59 @@ document.getElementById('btn-signature')?.addEventListener('click', openSignatur
 
 // ── Init RTE on page load ────────────────────────────────────────────────────
 initRTE('rte-body-wrap');
+
+/**
+ * One-shot console utility: collapse legacy "Variation #N" sibling
+ * templates into the parent's `tpl.variations` array. Run from DevTools
+ * with the Manage tab focused:
+ *
+ *   await gbMigrateVariations()
+ *
+ * - Matches any template whose name ends with " Variation [#]N".
+ * - Locates the parent by same type + the base name (everything before
+ *   " Variation N").
+ * - Moves { id, label, subject, body } onto parent.variations.
+ * - Deletes the migrated children from chrome.storage.local.templates.
+ *
+ * Idempotent — once children are gone, subsequent runs do nothing.
+ */
+window.gbMigrateVariations = async function gbMigrateVariations() {
+  const { templates: tpls = [] } = await new Promise((r) =>
+    chrome.storage.local.get('templates', r),
+  );
+  const VAR_RX = /^(.+?)\s+Variation\s+#?(\d+)\s*$/i;
+  const byKey = new Map();
+  tpls.forEach((t) => byKey.set(`${t.type || 'order'}::${(t.name || '').trim()}`, t));
+
+  const moved  = [];
+  const remove = new Set();
+
+  for (const child of tpls) {
+    const m = (child.name || '').match(VAR_RX);
+    if (!m) continue;
+    const baseName = m[1].trim();
+    const parent   = byKey.get(`${child.type || 'order'}::${baseName}`);
+    if (!parent || parent.id === child.id) continue;
+    parent.variations = parent.variations || [];
+    parent.variations.push({
+      id:      child.id,
+      label:   `Variation ${m[2]}`,
+      subject: child.subject || '',
+      body:    child.body || '',
+    });
+    remove.add(child.id);
+    moved.push(`${baseName} ← variation ${m[2]}`);
+  }
+
+  if (!moved.length) {
+    console.log('[gb-migrate] No variation siblings found. Nothing to do.');
+    return { moved: 0 };
+  }
+
+  const next = tpls.filter((t) => !remove.has(t.id));
+  await new Promise((r) => chrome.storage.local.set({ templates: next }, r));
+  console.log(`[gb-migrate] Ported ${moved.length} variation(s):`);
+  moved.forEach((m) => console.log('  •', m));
+  console.log('[gb-migrate] Reload the editor to see the new structure.');
+  return { moved: moved.length, details: moved };
+};

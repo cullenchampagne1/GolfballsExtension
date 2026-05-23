@@ -27,13 +27,38 @@ const ICON_MAP = {
 };
 const getIcon = (name) => ICON_MAP[name] || <I.cog />;
 
+/* Each variant's BASELINE brand-label — mirrors src/ui/theme.css. The
+   preview overrides --gb-brand-label inline so the user's saved color
+   override on <html> doesn't leak in and make every card show the same
+   green. (Inline style on the preview div beats inline style on <html>
+   because the cream/dark/etc. declaration sits on the preview itself.) */
+const VARIANT_BASE_BRAND = {
+  dark:     '#8fce2e',
+  midnight: '#a3e030',
+  light:    '#4d6b14',
+  cream:    '#5a7a14',
+};
+
 /* ── Variant Card ────────────────────────────────────────────── */
 function VariantCard({ variant, active, onClick }) {
+  const baseBrand = VARIANT_BASE_BRAND[variant.id] || VARIANT_BASE_BRAND.dark;
   return (
-    <Card active={active} hover onClick={onClick} padding={8} style={{ cursor: 'pointer' }}>
+    <Card
+      active={active} hover onClick={onClick} padding={8}
+      style={{
+        cursor: 'pointer',
+        // Non-themed border on the container — the variant previews can
+        // change, but the frame around them stays put.
+        border: '1px solid rgba(128, 128, 128, 0.28)',
+      }}
+    >
       <div
         data-theme={variant.id}
         style={{
+          // Force the preview's brand back to the variant's baseline so
+          // the user's custom brand override doesn't paint every card the
+          // same color.
+          '--gb-brand-label': baseBrand,
           height: 38, borderRadius: 'var(--gb-r-sm)', padding: '0 8px',
           background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)',
           display: 'flex', alignItems: 'center', gap: 6,

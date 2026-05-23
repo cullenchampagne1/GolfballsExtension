@@ -168,7 +168,33 @@ function TemplateEditor({ tpl, onDelete }) {
   );
   const [presetTaskId,   setPresetTaskId]   = useState(tpl.presetTaskId || '');
   const [presetTaskOpts, setPresetTaskOpts] = useState([]);
+  // Explicit variations replace the legacy "Variation #N" sibling naming.
+  // Each variation has its own subject + body; selection logic comes later.
+  const [variations, setVariations] = useState(() =>
+    (tpl.variations || []).map((v, i) => ({
+      id:      v.id      || `var_${Date.now()}_${i}`,
+      label:   v.label   || `Variation ${i + 1}`,
+      subject: v.subject || '',
+      body:    v.body    || '',
+    })),
+  );
   const recipOpt = meta.recipientOptions[recipientIdx] || meta.recipientOptions[0];
+
+  function addVariation() {
+    setVariations((vs) => [
+      ...vs,
+      { id: `var_${Date.now()}`, label: `Variation ${vs.length + 1}`, subject: '', body: '' },
+    ]);
+  }
+  function removeVariation(id) {
+    // Re-label sequentially so labels stay tidy after a delete.
+    setVariations((vs) =>
+      vs.filter((v) => v.id !== id).map((v, i) => ({ ...v, label: `Variation ${i + 1}` })),
+    );
+  }
+  function updateVariation(id, patch) {
+    setVariations((vs) => vs.map((v) => (v.id === id ? { ...v, ...patch } : v)));
+  }
 
   // Load task templates (account "Auto-Create Task on Send" picker).
   useEffect(() => {
@@ -220,6 +246,7 @@ function TemplateEditor({ tpl, onDelete }) {
       type: typeId,
       name: name.trim() || 'Untitled',
       enabled, subject, body,
+      variations: variations.length ? variations : undefined,
       // Only account templates persist a presetTaskId — other types
       // explicitly clear it so type-switching doesn't strand stale data.
       presetTaskId: typeId === 'account' ? (presetTaskId || '') : undefined,
@@ -258,7 +285,7 @@ function TemplateEditor({ tpl, onDelete }) {
       if (typeof window.__gbSaveTemplate === 'function') window.__gbSaveTemplate(buildTemplate());
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [typeId, name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [typeId, name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId, variations]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Live resolution ────────────────────────────────────────
      The editor window has no page DOM, so it asks the order /
@@ -413,6 +440,65 @@ function TemplateEditor({ tpl, onDelete }) {
           minHeight={150}
           placeholder="Write the email body — format with the toolbar, insert variables from the menu. Click a variable chip to set fallbacks, transforms, or formatting."
         />
+      </div>
+
+      {/* ── Variations — explicit sub-templates; animated in/out ── */}
+      <AnimatePresence initial={false}>
+        {variations.map((v) => (
+          <motion.div
+            key={v.id}
+            initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+            animate={{ opacity: 1, height: 'auto', marginBottom: 12 }}
+            exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+            transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div style={{
+              padding: 12, borderRadius: 'var(--gb-r-md)',
+              background: 'var(--gb-fill-faint)',
+              border: '1px solid var(--gb-brand-tint-border)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                <I.bolt size={11} style={{ color: 'var(--gb-brand-label)' }} />
+                <span style={{ flex: 1, fontSize: 11, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: 0.2 }}>
+                  {v.label}
+                </span>
+                <Btn variant="ghost" size="xs" icon={<I.trash />} onClick={() => removeVariation(v.id)}>
+                  Remove
+                </Btn>
+              </div>
+              <div style={S.mb8}>
+                <span style={S.label}>Subject</span>
+                <RichTextEditor
+                  singleLine size="sm"
+                  initialHtml={v.subject}
+                  onChange={(s) => updateVariation(v.id, { subject: s })}
+                  onChipClick={openSmartByName}
+                  variables={vars}
+                  placeholder="Variation subject line"
+                />
+              </div>
+              <div>
+                <span style={S.label}>Body</span>
+                <RichTextEditor
+                  size="sm"
+                  initialHtml={v.body}
+                  onChange={(b) => updateVariation(v.id, { body: b })}
+                  onChipClick={openSmartByName}
+                  variables={vars}
+                  minHeight={130}
+                  placeholder="Variation body"
+                />
+              </div>
+            </div>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+
+      <div style={S.mb12}>
+        <Btn variant="dashed" size="sm" icon={<I.plus />} full onClick={addVariation}>
+          Add variation
+        </Btn>
       </div>
 
       {/* ── Variables ── */}
