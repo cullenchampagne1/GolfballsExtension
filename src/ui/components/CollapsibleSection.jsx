@@ -17,9 +17,12 @@ import { I } from '../icons.jsx';
  *               Clicks inside it shouldn't toggle the section, so
  *               wrap your action handlers with `e.stopPropagation()`.
  *   defaultOpen Default false.
+ *   maxHeight   Optional. Caps the body height (px) and scrolls inside.
+ *               Useful when the body can grow long (e.g. dev settings
+ *               registry) so it doesn't stretch the whole settings page.
  *   children    Body.
  */
-export function CollapsibleSection({ icon, title, subtitle, action, defaultOpen = false, children }) {
+export function CollapsibleSection({ icon, title, subtitle, action, defaultOpen = false, maxHeight, children }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div style={{
@@ -81,7 +84,11 @@ export function CollapsibleSection({ icon, title, subtitle, action, defaultOpen 
             transition={T.base}
             style={{ overflow: 'hidden' }}
           >
-            <div style={{ padding: '10px 12px', background: 'var(--gb-fill-inverse-soft)' }}>
+            <div style={{
+              padding: '10px 12px',
+              background: 'var(--gb-fill-inverse-soft)',
+              maxHeight, overflowY: maxHeight ? 'auto' : undefined,
+            }}>
               {children}
             </div>
           </motion.div>

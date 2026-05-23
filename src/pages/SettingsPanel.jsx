@@ -702,13 +702,15 @@ export function SettingsPanel() {
       {/* Developer Settings — registry-driven key/value table for
           low-priority knobs that don't deserve a feature flag.
           Always at the bottom. Adding a new row is one entry in
-          src/lib/devSettings.js → DEV_SETTINGS. */}
+          src/lib/devSettings.js → DEV_SETTINGS. The body caps at
+          340px and scrolls so the page doesn't grow as the registry
+          fills up. */}
       <section>
-        <SectionLabel>Developer Settings</SectionLabel>
         <CollapsibleSection
           icon={<I.bolt />}
-          title={`${DEV_SETTINGS.length} knob${DEV_SETTINGS.length === 1 ? '' : 's'}`}
+          title="Developer Settings"
           subtitle="Low-level tweaks — animation timing, debounce intervals, etc."
+          maxHeight={340}
           action={
             <Btn variant="ghost" size="xs" onClick={resetDevSettings}>Reset</Btn>
           }
