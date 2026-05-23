@@ -21,6 +21,8 @@ import {
 } from '../lib/presetScopes.js';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { Tag } from '../ui/components/Tag.jsx';
+import { CollapsibleSection } from '../ui/components/CollapsibleSection.jsx';
+import { DEV_SETTINGS, defaultDevSettings, loadDevSettings, saveDevSettings } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    SettingsPanel — the fully-featured Manage → Settings page.
@@ -191,57 +193,6 @@ function KeyboardShortcutRow({ label, desc, value, onChange }) {
         </AnimatePresence>
       </div>
     </div>
-  );
-}
-
-/* ── Dev console buttons (match design reference's NotifBtn / ModalBtn) ── */
-function NotifBtn({ tone, label, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 7,
-        padding: '8px 11px',
-        background: 'var(--gb-surface-1)',
-        border: '1px solid var(--gb-border-default)',
-        borderRadius: 'var(--gb-r-sm)',
-        fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-secondary)',
-        cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
-      }}
-    >
-      <Dot tone={tone} glow size={6} />
-      {label}
-    </button>
-  );
-}
-
-function ModalBtn({ icon, label, meta, metaTone, onClick }) {
-  const metaColor = metaTone === 'error' ? 'var(--gb-error-fg)'
-    : metaTone === 'brand' ? 'var(--gb-brand-label)'
-      : 'var(--gb-text-ghost)';
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: '8px 12px',
-        background: 'var(--gb-surface-1)',
-        border: '1px solid var(--gb-border-default)',
-        borderRadius: 'var(--gb-r-sm)',
-        fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-secondary)',
-        cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
-      }}
-    >
-      <span style={{ color: 'var(--gb-text-tertiary)', display: 'flex' }}>
-        {React.cloneElement(icon, { size: 12 })}
-      </span>
-      {label}
-      {meta && (
-        <span style={{ marginLeft: 'auto', fontSize: 9.5, fontWeight: 500, color: metaColor }}>
-          {meta}
-        </span>
-      )}
-    </button>
   );
 }
 
@@ -467,21 +418,103 @@ function UserPresetsManager({ onPresetLoad }) {
   );
 }
 
+/* ── Developer-settings row — bool toggles to a Switch, number to a
+       narrow Input with a unit suffix. Add new control types here as
+       the registry grows. */
+function DevSettingRow({ def, value, onChange }) {
+  const isBool = def.type === 'bool';
+  const isNum  = def.type === 'number';
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'flex-start', gap: 10,
+      padding: '8px 0',
+      borderBottom: '1px solid var(--gb-border-subtle)',
+    }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)' }}>
+          {def.label}
+        </div>
+        <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1, lineHeight: 1.4 }}>
+          {def.desc}
+        </div>
+        <div style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)', marginTop: 3, fontFamily: 'var(--gb-font-mono)' }}>
+          {def.key}
+        </div>
+      </div>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
+        {isBool && (
+          <Switch on={!!value} size="sm" onChange={(on) => onChange(on)} />
+        )}
+        {isNum && (
+          <>
+            <Input
+              size="sm" mono
+              value={String(value ?? '')}
+              onChange={(v) => {
+                const cleaned = v.replace(/[^0-9.]/g, '');
+                if (cleaned === '') { onChange(def.default); return; }
+                const n = Number(cleaned);
+                if (Number.isNaN(n)) return;
+                const clamped = Math.max(def.min ?? -Infinity, Math.min(def.max ?? Infinity, n));
+                onChange(clamped);
+              }}
+              style={{ width: 70 }}
+            />
+            {def.unit && (
+              <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>{def.unit}</span>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ── Main Settings Panel ─────────────────────────────────────── */
 export function SettingsPanel() {
   const [theme, setTheme] = useState(DEFAULT_THEME);
   const [flags, setFlags] = useState(FEATURE_DEFAULTS);
   const [shortcuts, setShortcuts] = useState(KEYBOARD_SHORTCUTS_DEFAULTS);
   const [customPages, setCustomPages] = useState(emptyCustomPages);
+  const [devSettings, setDevSettings] = useState(defaultDevSettings);
+  const [devSearch, setDevSearch] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [paStatus, setPaStatus] = useState(null);
+
+  /* Sort registry alphabetically once; filter on the user's query
+     case-insensitively against label / desc / key so they can find a
+     knob by any of the three. Memoization is fine on every render —
+     DEV_SETTINGS is tiny. */
+  const filteredDevSettings = (() => {
+    const q = devSearch.trim().toLowerCase();
+    const sorted = [...DEV_SETTINGS].sort((a, b) => a.label.localeCompare(b.label));
+    if (!q) return sorted;
+    return sorted.filter((d) =>
+      d.label.toLowerCase().includes(q)
+      || d.desc.toLowerCase().includes(q)
+      || d.key.toLowerCase().includes(q),
+    );
+  })();
 
   useEffect(() => {
     loadTheme().then((t) => { setTheme(t); applyTheme(t); });
     loadFlags().then(setFlags);
     loadKeyboardShortcuts().then(setShortcuts);
     loadCustomPages().then(setCustomPages);
+    loadDevSettings().then(setDevSettings);
   }, [refreshKey]);
+
+  function setDevSetting(key, value) {
+    const next = { ...devSettings, [key]: value };
+    setDevSettings(next);
+    saveDevSettings(next);
+  }
+  function resetDevSettings() {
+    const next = defaultDevSettings();
+    setDevSettings(next);
+    saveDevSettings(next);
+    window.__gbToast?.success('Developer settings reset to defaults');
+  }
 
   /* Update one section's selection + persist. The customPages shape is
      { [sectionId]: [pageId, …] }, so we replace the section's array
@@ -509,28 +542,10 @@ export function SettingsPanel() {
 
   const regularFeatures = FEATURE_FLAGS.filter(f => !f.experimental && !f.dev);
   const experimentalFeatures = FEATURE_FLAGS.filter(f => f.experimental);
-  const devFeature = FEATURE_FLAGS.find(f => f.dev);
-
-  // Dev test helpers
-  const fireNotification = (type, msg, dur) => {
-    chrome.tabs.query({}, tabs => tabs.forEach(tab =>
-      chrome.tabs.sendMessage(tab.id, { action: 'devFireNotification', type, msg, dur }, () => void chrome.runtime.lastError)
-    ));
-  };
-  const fireModal = (modal, extra = {}) => {
-    const stubs = {
-      charge: { action: 'showChargeModal', context: { orderId: 'TEST-1234', userId: 'DEV-USER', pageTotal: 87.50, captured: 75.00, apiOrderTotal: 87.50, diffAmount: 12.50, isRefund: false, isZeroDiff: false, chargeRows: [], _devMode: true } },
-      'charge-refund': { action: 'showChargeModal', context: { orderId: 'TEST-1234', userId: 'DEV-USER', pageTotal: 75.00, captured: 87.50, apiOrderTotal: 75.00, diffAmount: -12.50, isRefund: true, isZeroDiff: false, chargeRows: [], _devMode: true } },
-      calendar: { action: 'devFireModal', modal: 'calendar' },
-      'image-viewer': { action: 'devFireModal', modal: 'image-viewer' },
-      'proof-modal': { action: 'devFireModal', modal: 'proof-modal' },
-      'email-preview-case': { action: 'devFireModal', modal: 'email-preview', isCasePage: true },
-      'email-preview-nocase': { action: 'devFireModal', modal: 'email-preview', isCasePage: false },
-      watchlist: { action: 'showWatchListModal' },
-    };
-    const stub = stubs[modal];
-    if (stub) chrome.tabs.query({}, tabs => tabs.forEach(tab => chrome.tabs.sendMessage(tab.id, { ...stub, ...extra }, () => void chrome.runtime.lastError)));
-  };
+  // The old `devFeature` (flagged "developerMode") drove a test console
+  // for firing notifications + opening modals. Modals are being rebuilt;
+  // we don't need a launcher inside Settings any more. Developer
+  // Settings now owns a registry-driven key/value editor instead.
 
   // Non-destructive check of the Power Automate flow URL format.
   // Accepts both Logic Apps (logic.azure.com) and Power Platform direct
@@ -684,50 +699,72 @@ export function SettingsPanel() {
         </div>
       </section>
 
-      {/* Developer — always at the bottom */}
-      {devFeature && (
-        <section>
-          <SectionLabel>Developer</SectionLabel>
-          <ExpandableFeature
-            on={!!flags[devFeature.key]}
-            onChange={() => toggleFlag(devFeature.key)}
-            icon={<I.bolt />}
-            tone="brand"
-            name={devFeature.name}
-            desc="Reveals a test console for firing notifications and opening modals on the active tab. API calls fail gracefully — UI is fully visible."
-          >
-            {/* Notifications */}
-            <div style={{ marginBottom: 14 }}>
-              <SectionLabel divider={false} style={{ marginBottom: 7 }}>Notifications</SectionLabel>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-                <NotifBtn tone="brand"   label="Info"    onClick={() => fireNotification('info', 'Info — everything looks normal', 4000)} />
-                <NotifBtn tone="success" label="Success" onClick={() => fireNotification('success', 'Success — action completed', 4000)} />
-                <NotifBtn tone="error"   label="Error"   onClick={() => fireNotification('error', 'Error — something went wrong', 5000)} />
-                <NotifBtn tone="warning" label="Loading" onClick={() => fireNotification('loading', 'Loading — simulating progress…', 0)} />
-              </div>
+      {/* Developer Settings — registry-driven key/value table for
+          low-priority knobs that don't deserve a feature flag.
+          Always at the bottom. Adding a new row is one entry in
+          src/lib/devSettings.js → DEV_SETTINGS. */}
+      <section>
+        <SectionLabel>Developer Settings</SectionLabel>
+        <CollapsibleSection
+          icon={<I.bolt />}
+          title={`${DEV_SETTINGS.length} knob${DEV_SETTINGS.length === 1 ? '' : 's'}`}
+          subtitle="Low-level tweaks — animation timing, debounce intervals, etc."
+          action={
+            <Btn variant="ghost" size="xs" onClick={resetDevSettings}>Reset</Btn>
+          }
+        >
+          {/* Search — animates filtered rows in/out via AnimatePresence
+              and motion's `layout` so the table reflows smoothly as the
+              query narrows. Rows are sorted alphabetically by label. */}
+          <div style={{ marginBottom: 8 }}>
+            <Input
+              size="sm"
+              value={devSearch}
+              onChange={setDevSearch}
+              placeholder="Search settings…"
+              leading={<I.search />}
+              trailing={devSearch ? (
+                <span
+                  onClick={() => setDevSearch('')}
+                  style={{ cursor: 'pointer', display: 'flex', color: 'var(--gb-text-muted)' }}
+                  title="Clear search"
+                >
+                  <I.close size={11} />
+                </span>
+              ) : undefined}
+            />
+          </div>
+          <AnimatePresence initial={false} mode="popLayout">
+            {filteredDevSettings.map((def) => (
+              <motion.div
+                key={def.key}
+                layout
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4, scale: 0.97 }}
+                transition={{ duration: 0.18, ease: [0.32, 0.72, 0, 1] }}
+              >
+                <DevSettingRow
+                  def={def}
+                  value={devSettings[def.key]}
+                  onChange={(v) => setDevSetting(def.key, v)}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          {filteredDevSettings.length === 0 && (
+            <div style={{
+              padding: '14px 12px', textAlign: 'center', fontSize: 11,
+              color: 'var(--gb-text-muted)',
+              border: '1px dashed var(--gb-border-default)',
+              borderRadius: 'var(--gb-r-sm)',
+              background: 'var(--gb-fill-subtle)',
+            }}>
+              No settings match "{devSearch}".
             </div>
-
-            {/* Modals */}
-            <div style={{ marginBottom: 14 }}>
-              <SectionLabel divider={false} style={{ marginBottom: 7 }}>Modals</SectionLabel>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5 }}>
-                <ModalBtn icon={<I.card />} label="Charge Card"             meta="+$12.50 due" metaTone="brand" onClick={() => fireModal('charge')} />
-                <ModalBtn icon={<I.card />} label="Charge — Refund state"   meta="−$12.50"     metaTone="error" onClick={() => fireModal('charge-refund')} />
-                <ModalBtn icon={<I.edit />} label="Calendar / Date Picker"  meta="dev mode"    onClick={() => fireModal('calendar')} />
-                <ModalBtn icon={<I.eye />}  label="Image / Logo Viewer"     meta="placeholder" onClick={() => fireModal('image-viewer')} />
-                <ModalBtn icon={<I.send />} label="Submit Proof Modal"      meta="stub data"   onClick={() => fireModal('proof-modal')} />
-                <ModalBtn icon={<I.mail />} label="Email Preview — Case"    meta="w/ sidebar"  onClick={() => fireModal('email-preview-case')} />
-                <ModalBtn icon={<I.mail />} label="Email Preview — No case" meta="no sidebar"  onClick={() => fireModal('email-preview-nocase')} />
-                <ModalBtn icon={<I.eye />}  label="Watch List Modal"        onClick={() => fireModal('watchlist')} />
-              </div>
-            </div>
-
-            <Callout tone="neutral" icon={<I.alert />}>
-              API calls inside modals will fail gracefully — UI is fully visible.
-            </Callout>
-          </ExpandableFeature>
-        </section>
-      )}
+          )}
+        </CollapsibleSection>
+      </section>
     </div>
   );
 }

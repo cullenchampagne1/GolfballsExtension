@@ -3,6 +3,7 @@ import {
   FloatingPanel, ModalHeader, ModalFooter, Field, Input, Btn, I,
   NumberDisplay, inputBaseStyle,
 } from '../ui/index.js';
+import { useDevSettings } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    MarginCalc — margin & profit calculator, rebuilt on the design
@@ -102,6 +103,12 @@ export function MarginCalc({ shortcut, onClosed, bindClose }) {
   const onField = (field) => (val) => setV((prev) => recalc(field, { ...prev, [field]: val }));
   const selectAll = (e) => e.target.select();
 
+  /* Animation settings — driven by Developer Settings so users can
+     turn off count-up or tweak its duration without code changes. */
+  const [dev] = useDevSettings();
+  const countAnimate  = !!dev['numberDisplay.enabled'];
+  const countDuration = (dev['numberDisplay.durationMs'] || 400) / 1000;
+
   return (
     <FloatingPanel width={520} backdrop onClose={onClosed} bindClose={bindClose}>
       <ModalHeader
@@ -151,6 +158,8 @@ export function MarginCalc({ shortcut, onClosed, bindClose }) {
               <NumberDisplay
                 value={v.totalProfit}
                 decimals={2}
+                animate={countAnimate}
+                duration={countDuration}
                 style={{
                   flex: 1, minWidth: 0,
                   fontFamily: 'var(--gb-font-mono)', fontWeight: 600,

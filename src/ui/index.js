@@ -49,6 +49,7 @@ export { KeyVal } from './components/KeyVal.jsx';
 export { EditorHeader } from './components/EditorHeader.jsx';
 export { ResolveHint } from './components/ResolveHint.jsx';
 export { CollapsibleChecklist } from './components/CollapsibleChecklist.jsx';
+export { CollapsibleSection } from './components/CollapsibleSection.jsx';
 export { TYPE_ICONS, TYPE_COLORS } from './typeIcons.jsx';
 
 export { FeatureSpotlight } from './components/FeatureSpotlight.jsx';
