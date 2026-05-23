@@ -4,8 +4,8 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import {
-  Btn, Dropdown, Dot, Tag, KeyVal, SectionLabel, Field, Textarea,
-  Spinner, I, T, sizeIcon, inputBaseStyle,
+  Btn, Dropdown, Dot, Tag, KeyVal, Field, Textarea,
+  Spinner, I, T, inputBaseStyle,
 } from '../ui';
 
 /* ───────────────────────────────────────────────────────────────
@@ -641,157 +641,123 @@ function MainView({
   const hasTemplates = templates.length > 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-      {/* TEMPLATE — only when there are templates matching this page type */}
+      {/* TEMPLATE — dropdown or empty pill */}
       {hasTemplates ? (
-        <section>
-          <SectionLabel>Template</SectionLabel>
-          <Dropdown
-            size="sm"
-            value={selectedId}
-            options={dropdownOptions}
-            searchable={templates.length > 6}
-            leading={<Dot tone={isMatched ? 'brand' : 'muted'} size={7} glow={isMatched} />}
-            onChange={onSelect}
-          />
-        </section>
+        <Dropdown
+          size="sm"
+          value={selectedId}
+          options={dropdownOptions}
+          searchable={templates.length > 6}
+          leading={<Dot tone={isMatched ? 'brand' : 'muted'} size={7} glow={isMatched} />}
+          onChange={onSelect}
+        />
       ) : (
-        <section>
-          <SectionLabel>Template</SectionLabel>
-          <div style={{
-            fontSize: 11, color: 'var(--gb-text-muted)', lineHeight: 1.5,
-            padding: '8px 10px',
-            background: 'var(--gb-fill-subtle)',
-            border: '1px dashed var(--gb-border-default)',
-            borderRadius: 'var(--gb-r-md)',
-          }}>
-            No templates for this page type.
-          </div>
-        </section>
+        <div style={{
+          fontSize: 11, color: 'var(--gb-text-muted)', lineHeight: 1.5,
+          padding: '8px 10px',
+          background: 'var(--gb-fill-subtle)',
+          border: '1px dashed var(--gb-border-default)',
+          borderRadius: 'var(--gb-r-md)',
+        }}>
+          No templates for this page type.
+        </div>
       )}
 
-      {/* ACTIONS — order page only */}
-      {(flags.chargeEnabled || flags.orderEditEnabled) && (
-        <section>
-          <SectionLabel>Actions</SectionLabel>
-          <Stack>
-            {flags.chargeEnabled && (
-              <Btn full size="sm"
-                variant={chargeReady ? 'tinted' : 'secondary'}
-                status={isRefund ? 'error' : 'brand'}
-                disabled={!chargeReady}
-                icon={<I.card />}
-                onClick={onCharge}>
-                {chargeLabel}
-              </Btn>
-            )}
-            {flags.orderEditEnabled && (
-              <Btn full size="sm"
-                disabled={!pageInfo.messageId}
-                icon={<I.edit />}
-                onClick={onOrderEdit}>
-                Order Edit
-              </Btn>
-            )}
-          </Stack>
-        </section>
+      {/* ACTIONS */}
+      {flags.chargeEnabled && (
+        <Btn full size="sm"
+          variant={chargeReady ? 'tinted' : 'secondary'}
+          status={isRefund ? 'error' : 'brand'}
+          disabled={!chargeReady}
+          icon={<I.card />}
+          onClick={onCharge}>
+          {chargeLabel}
+        </Btn>
+      )}
+      {flags.orderEditEnabled && (
+        <Btn full size="sm"
+          disabled={!pageInfo.messageId}
+          icon={<I.edit />}
+          onClick={onOrderEdit}>
+          Order Edit
+        </Btn>
       )}
 
-      {/* TRACKING — watch-list pair */}
+      {/* WATCH PAIR — side-by-side row */}
       {flags.watchListEnabled && (
-        <section>
-          <SectionLabel>Tracking</SectionLabel>
-          <Stack>
-            <Btn full size="sm"
-              disabled={watchAddDisabled}
-              icon={<I.eye />}
-              onClick={onOpenWatchAdd}>
-              {WL_ENTITY[knownType ? pageType : 'order'].btn}
-            </Btn>
-            <Btn full size="sm"
-              variant={watchHasCrit && watchCount > 0 ? 'tinted' : 'secondary'}
-              status="error"
-              icon={<Ic.watch />}
-              iconRight={watchCount > 0
-                ? <Tag tone={watchHasCrit ? 'error' : 'brand'} size="xs" pulse={watchHasCrit}>{watchCount > 99 ? '99+' : watchCount}</Tag>
-                : null}
-              onClick={onWatchListShow}>
-              Watch List
-            </Btn>
-          </Stack>
-        </section>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <Btn full size="sm"
+            disabled={watchAddDisabled}
+            icon={<I.eye />}
+            onClick={onOpenWatchAdd}>
+            {WL_ENTITY[knownType ? pageType : 'order'].btn}
+          </Btn>
+          <Btn full size="sm"
+            variant={watchHasCrit && watchCount > 0 ? 'tinted' : 'secondary'}
+            status="error"
+            icon={<Ic.watch />}
+            iconRight={watchCount > 0
+              ? <Tag tone={watchHasCrit ? 'error' : 'brand'} size="xs" pulse={watchHasCrit}>{watchCount > 99 ? '99+' : watchCount}</Tag>
+              : null}
+            onClick={onWatchListShow}>
+            Watch List
+          </Btn>
+        </div>
       )}
 
-      {/* TOOLS */}
-      {(flags.taskListEnabled || flags.crmSearchEnabled || flags.submitProofEnabled) && (
-        <section>
-          <SectionLabel>Tools</SectionLabel>
-          <Stack>
-            {flags.taskListEnabled && (
-              <Btn full size="sm" icon={<Ic.checkbox />} onClick={onTaskList}>
-                My Tasks
-              </Btn>
-            )}
-            {flags.crmSearchEnabled && (
-              <Btn full size="sm" icon={<I.search />} onClick={onCrmSearch}>
-                CRM Search
-              </Btn>
-            )}
-            {flags.submitProofEnabled && (
-              <Btn full size="sm"
-                disabled={proofDisabled}
-                icon={<Ic.paperclip />}
-                onClick={onOpenProof}>
-                Submit Proof
-              </Btn>
-            )}
-          </Stack>
-        </section>
+      {/* TOOLS — full-width stack */}
+      {flags.taskListEnabled && (
+        <Btn full size="sm" icon={<Ic.checkbox />} onClick={onTaskList}>My Tasks</Btn>
+      )}
+      {flags.crmSearchEnabled && (
+        <Btn full size="sm" icon={<I.search />} onClick={onCrmSearch}>CRM Search</Btn>
+      )}
+      {flags.submitProofEnabled && (
+        <Btn full size="sm"
+          disabled={proofDisabled}
+          icon={<Ic.paperclip />}
+          onClick={onOpenProof}>
+          Submit Proof
+        </Btn>
       )}
 
-      {/* RESOLVED CONTEXT + PRIMARY SEND — only meaningful with a template */}
+      {/* RESOLVED — KeyVal rows, only when a template is loaded */}
       {hasTemplates && (
-        <>
-          <section>
-            <SectionLabel>Resolved</SectionLabel>
-            {resolving ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 11.5, padding: '4px 0' }}>
-                <Spinner size={11} /> Resolving variables…
-              </div>
-            ) : (
-              <div>
-                <KeyVal k="To" v={resolvedTo || 'Not found'} tone={canSend ? 'ok' : 'error'} />
-                {Object.entries(resolvedVars).map(([name, val]) => (
-                  <KeyVal key={name} k={name} v={val ? String(val).slice(0, 40) : 'Not found'} tone={val ? 'default' : 'error'} />
-                ))}
-              </div>
-            )}
-          </section>
-
-          <div style={{
-            borderTop: '1px solid var(--gb-border-subtle)',
-            paddingTop: 12,
-          }}>
-            <Btn
-              full
-              variant="primary"
-              size="md"
-              disabled={!canSend || resolving}
-              icon={sendMode?.icon}
-              onClick={onSend}>
-              {sendMode?.label || 'Open in Outlook'}
-            </Btn>
-          </div>
-        </>
+        <div style={{ marginTop: 4 }}>
+          {resolving ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 11.5, padding: '4px 0' }}>
+              <Spinner size={11} /> Resolving variables…
+            </div>
+          ) : (
+            <>
+              <KeyVal k="To" v={resolvedTo || 'Not found'} tone={canSend ? 'ok' : 'error'} />
+              {Object.entries(resolvedVars).map(([name, val]) => (
+                <KeyVal key={name} k={name} v={val ? String(val).slice(0, 40) : 'Not found'} tone={val ? 'default' : 'error'} />
+              ))}
+            </>
+          )}
+        </div>
       )}
+
+      {/* PRIMARY SEND — always rendered; disabled when no template / no recipient */}
+      <div style={{
+        borderTop: '1px solid var(--gb-border-subtle)',
+        paddingTop: 10, marginTop: 4,
+      }}>
+        <Btn
+          full
+          variant="primary"
+          size="md"
+          disabled={!hasTemplates || !canSend || resolving}
+          icon={sendMode?.icon || <I.send />}
+          onClick={onSend}>
+          {sendMode?.label || 'Open in Outlook'}
+        </Btn>
+      </div>
     </div>
   );
-}
-
-/* ── Stack: vertical row of buttons w/ consistent gap ─────────── */
-function Stack({ children, gap = 6 }) {
-  return <div style={{ display: 'flex', flexDirection: 'column', gap }}>{children}</div>;
 }
 
 /* ============================================================
