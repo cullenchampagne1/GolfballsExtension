@@ -65,11 +65,19 @@ function ensureStyle() {
   const el = document.createElement('style');
   el.id = STYLE_ID;
   el.textContent = `
-    .gb-rte-content { outline: none; }
+    .gb-rte-content { outline: none; scrollbar-width: thin; scrollbar-color: var(--gb-border-default) transparent; }
     .gb-rte-content p { margin: 0 0 8px; }
     .gb-rte-content p:last-child { margin-bottom: 0; }
     .gb-rte-content a { color: var(--gb-brand-label); }
     .gb-rte-content ul, .gb-rte-content ol { margin: 0 0 8px; padding-left: 22px; }
+    /* Thin themed scrollbars on RTE — fixes the chunky native bar that
+       appears on long single-line subjects and tall bodies. */
+    .gb-rte-content::-webkit-scrollbar { width: 6px; height: 6px; }
+    .gb-rte-content::-webkit-scrollbar-track { background: transparent; }
+    .gb-rte-content::-webkit-scrollbar-thumb {
+      background: var(--gb-border-default); border-radius: 6px;
+    }
+    .gb-rte-content::-webkit-scrollbar-thumb:hover { background: var(--gb-border-strong); }
     /* Matches BodyVar.jsx (size 'md') — the canonical body-content
        variable chip: two-part pill with name + clickable lightning bolt,
        divider between. Brand-colored at rest (resolution state isn't

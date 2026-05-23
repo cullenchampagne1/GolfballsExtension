@@ -232,12 +232,23 @@ function TemplateRow({ tpl, isNote, type, active, onClick, onMove, folders, onDr
           textDecoration: disabled ? 'line-through' : 'none',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>{tpl.name || 'Untitled'}</div>
-        {!isNote && (
-          <div style={{ fontSize: 9.5, color: disabled ? 'var(--gb-text-ghost)' : 'var(--gb-text-muted)', marginTop: 1 }}>
-            {(tpl.rules || []).length} rule{(tpl.rules || []).length !== 1 ? 's' : ''} ·{' '}
-            {Object.keys(tpl.vars || {}).length} var{Object.keys(tpl.vars || {}).length !== 1 ? 's' : ''}
-          </div>
-        )}
+        {!isNote && (() => {
+          const ruleN = (tpl.rules || []).length;
+          const varN  = Object.keys(tpl.vars || {}).length;
+          const varsN = (tpl.variations || []).length;
+          return (
+            <div style={{ fontSize: 9.5, color: disabled ? 'var(--gb-text-ghost)' : 'var(--gb-text-muted)', marginTop: 1 }}>
+              {ruleN} rule{ruleN !== 1 ? 's' : ''}
+              {' · '}
+              {varN} var{varN !== 1 ? 's' : ''}
+              {/* Show variations stat once there's any variation — keeps
+                  the row chrome quiet for single-version templates. */}
+              {varsN > 0 && (
+                <>{' · '}{varsN} variation{varsN !== 1 ? 's' : ''}</>
+              )}
+            </div>
+          );
+        })()}
       </div>
       {disabled && <Tag tone="neutral" size="xs">OFF</Tag>}
       <div ref={btnRef} style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
@@ -672,7 +683,7 @@ function TemplateSidebar() {
       {/* Folder + uncategorized list — wrapped in a LayoutGroup so every
           row's `layoutId` resolves against the same shared layout context,
           letting rows spring between folder/type sections cleanly. */}
-      <div style={{
+      <div className="gb-thin-scroll" style={{
         flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden',
         padding: '4px 8px 12px',
       }}>
