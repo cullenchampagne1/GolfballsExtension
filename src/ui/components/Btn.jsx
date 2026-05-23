@@ -5,11 +5,13 @@ import { I } from '../icons.jsx';
 
 // radius scales with height so every size keeps the same corner ratio
 // (~0.25 of height) instead of a fixed value that over-rounds small buttons.
+// Heights mirror inputBaseStyle (shared.jsx) — sm 28 · md 32 · lg 36 — so a
+// Btn at `size="sm"` sits flush with a Dropdown/Input at `size="sm"`.
 const SIZES = {
   xs: { fontSize: 10.5, padding: '0 8px',  height: 22, gap: 4, iconSize: 10, radius: 'var(--gb-r-sm)' },
-  sm: { fontSize: 11,   padding: '0 10px', height: 26, gap: 5, iconSize: 11, radius: 'var(--gb-r-sm)' },
+  sm: { fontSize: 11,   padding: '0 10px', height: 28, gap: 5, iconSize: 11, radius: 'var(--gb-r-sm)' },
   md: { fontSize: 12,   padding: '0 12px', height: 32, gap: 6, iconSize: 12, radius: 'var(--gb-r-md)' },
-  lg: { fontSize: 13,   padding: '0 16px', height: 38, gap: 7, iconSize: 13, radius: 'var(--gb-r-lg)' },
+  lg: { fontSize: 13,   padding: '0 16px', height: 36, gap: 7, iconSize: 13, radius: 'var(--gb-r-lg)' },
 };
 
 const STATUS = {
