@@ -691,20 +691,22 @@ function MainView({
         )}
         {flags.watchListEnabled && (
           <div style={{ display: 'flex', gap: 6 }}>
-            <Btn full size="sm"
+            <Btn size="sm"
               disabled={watchAddDisabled}
               icon={<I.eye />}
-              onClick={onOpenWatchAdd}>
+              onClick={onOpenWatchAdd}
+              style={{ flex: 1, minWidth: 0, width: 'auto' }}>
               {WL_ENTITY[knownType ? pageType : 'order'].btn}
             </Btn>
-            <Btn full size="sm"
+            <Btn size="sm"
               variant={watchHasCrit && watchCount > 0 ? 'tinted' : 'secondary'}
               status="error"
               icon={<Ic.watch />}
               iconRight={watchCount > 0
                 ? <Tag tone={watchHasCrit ? 'error' : 'brand'} size="xs" pulse={watchHasCrit}>{watchCount > 99 ? '99+' : watchCount}</Tag>
                 : null}
-              onClick={onWatchListShow}>
+              onClick={onWatchListShow}
+              style={{ flex: 1, minWidth: 0, width: 'auto' }}>
               Watch List
             </Btn>
           </div>
