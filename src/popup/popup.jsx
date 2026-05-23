@@ -380,8 +380,14 @@ function PopupApp() {
   // (not the page-filtered subset), so it's a stable "how many templates do
   // I have" indicator regardless of what tab the popup opened over.
   const templateCount = allTemplates.length;
-  if (stage === 'loading') return <Shell templateCount={templateCount}><LoadingState /></Shell>;
-  if (stage === 'empty')   return <Shell templateCount={templateCount} onManage={openManager}><EmptyState onCreate={openManager} /></Shell>;
+  // Email-templates UI off → the popup doesn't need to reserve room for a
+  // dropdown, so we let Chrome shrink it to whatever height the button stack
+  // naturally takes. On → minHeight reserves enough room that the dropdown
+  // always has somewhere to land beneath the trigger.
+  const emailTemplatesOn = flags.emailTemplatesEnabled !== false;
+  const shellMinHeight = emailTemplatesOn ? 340 : 0;
+  if (stage === 'loading') return <Shell templateCount={templateCount} minHeight={shellMinHeight}><LoadingState /></Shell>;
+  if (stage === 'empty')   return <Shell templateCount={templateCount} minHeight={shellMinHeight} onManage={openManager}><EmptyState onCreate={openManager} /></Shell>;
 
   const tpl = visibleTemplates.find((t) => t.id === selectedId);
 
@@ -396,7 +402,7 @@ function PopupApp() {
 
   return (
     <>
-      <Shell templateCount={templateCount} onManage={openManager}>
+      <Shell templateCount={templateCount} minHeight={shellMinHeight} onManage={openManager}>
         <MainView
           templates={visibleTemplates}
           matchedIds={effectiveMatchedIds}
@@ -453,19 +459,22 @@ function PopupApp() {
    SHELL — header + scrollable body
 ============================================================ */
 
-function Shell({ children, onManage, templateCount }) {
+function Shell({ children, onManage, templateCount, minHeight = 340 }) {
   // The Chrome popup frame is drawn by the OS before React mounts — there's
   // an unavoidable brief moment where the window is visible but blank.
   // A small fade + scale on the entire content fills that void so the popup
   // feels like it "settles in" rather than snapping. transformOrigin: top
   // matches the user's mental model (popup grows down from the toolbar icon).
+  //
+  // `minHeight` is conditional on emailTemplatesEnabled — when off, the popup
+  // shrinks to button-stack height; when on, it reserves dropdown room.
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.97, y: -4 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       transition={{ duration: 0.22, ease: [0.34, 1.4, 0.64, 1] }}
       style={{
-        width: 320, minHeight: 340,
+        width: 320, minHeight,
         display: 'flex', flexDirection: 'column',
         background: 'var(--gb-surface-canvas)',
         color: 'var(--gb-text-secondary)',
@@ -825,6 +834,14 @@ function MainView({
                   searchable={templates.length > 6}
                   leading={<Dot tone={isMatched ? 'brand' : 'muted'} size={7} glow={isMatched} />}
                   onChange={onSelect}
+                  /* Constrain the menu to whatever the bottom section
+                     leaves available below the trigger. The Dropdown's
+                     own auto-clamp uses window.innerHeight which can
+                     lag during Chrome's popup auto-resize — passing an
+                     explicit ceiling derived from the popup's known
+                     layout avoids any race where the menu briefly draws
+                     taller than the popup. */
+                  maxHeight={216}
                 />
               ) : (
                 <div style={{
@@ -969,15 +986,28 @@ function MainView({
  *
  * `initial: false` on the parent AnimatePresence makes the first render
  * paint instantly, but flipping a flag at runtime triggers the animation.
+ *
+ * overflow:hidden is required *during* the height animation so contents
+ * don't bleed outside the collapsing box — but once settled at full
+ * height we flip to overflow:visible so children with intentional bleed
+ * (Btn badges, tooltips, popovers) aren't clipped. onAnimationStart
+ * resets to hidden on every transition; onAnimationComplete only relaxes
+ * when the entry animation finishes.
  */
 function Reveal({ children, gap = 6 }) {
+  const [overflow, setOverflow] = useState('hidden');
   return (
     <motion.div
       initial={{ height: 0, opacity: 0, marginTop: 0 }}
       animate={{ height: 'auto', opacity: 1, marginTop: gap }}
       exit={{ height: 0, opacity: 0, marginTop: 0 }}
       transition={T.base}
-      style={{ overflow: 'hidden' }}
+      onAnimationStart={() => setOverflow('hidden')}
+      onAnimationComplete={(target) => {
+        // Only relax overflow when settling at the "open" state, never on exit.
+        if (target && target.opacity === 1) setOverflow('visible');
+      }}
+      style={{ overflow }}
     >
       {children}
     </motion.div>
