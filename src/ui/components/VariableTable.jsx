@@ -26,12 +26,12 @@ const VariableIcon = (p) => (
   </Icon>
 );
 // 5 columns: variable | kind | source | resolved | actions (single edit).
-// Status column dropped — BodyVar's chip color already encodes status
-// (green=ok, yellow=fallback, red=miss), so the dedicated tag was
-// redundant. The actions column holds just one edit button now (Delete
-// moved into the rename prompt), so it's been tightened to a 28px slot.
-// Reclaimed space goes to Source + Resolved, which were getting cramped.
-const COL_GRID = '1.2fr 84px 1.1fr 1.4fr 28px';
+// Variable column eats all the slack (1fr). Kind/Source/Resolved size to
+// their content (`max-content`), capped at a sensible fraction of the
+// grid via fit-content so a single long config string doesn't squeeze
+// the variable name. Actions is a fixed 28px slot for the single edit
+// button — Delete moved into the rename prompt.
+const COL_GRID = 'minmax(0, 1fr) max-content fit-content(30%) fit-content(30%) 28px';
 
 /**
  * VariableTable — 5-column grid showing all variables for a template.
