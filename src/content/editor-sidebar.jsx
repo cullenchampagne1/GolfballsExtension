@@ -558,7 +558,13 @@ function SidebarInner() {
 
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', height: '100%',
+      // flex: 1 + minHeight: 0 is the correct sizing for a child of a
+      // flex-column parent. `height: 100%` worked when the parent was
+      // #sidebar-react directly, but the SettingNotificationHost wrapper
+      // is also flex-column — height: 100% on a flex-column child can
+      // collapse the list area to zero because flex sizing took over.
+      display: 'flex', flexDirection: 'column',
+      flex: 1, minHeight: 0,
       background: 'var(--gb-surface-canvas)',
       fontFamily: 'var(--gb-font-sans)',
       color: 'var(--gb-text-secondary)',
