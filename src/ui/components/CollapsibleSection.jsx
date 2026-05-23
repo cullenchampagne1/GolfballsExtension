@@ -1,7 +1,22 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { T } from '../shared.jsx';
 import { I } from '../icons.jsx';
+
+/* One-time injected style: hides the native scrollbar on opt-in surfaces
+   marked with `.gb-cs-nobar`. Firefox uses scrollbar-width; Chromium needs
+   the ::-webkit pseudo. The class is scoped so it only affects sections
+   that explicitly request scrollbar hiding. */
+const NOBAR_STYLE_ID = '__gb-cs-nobar';
+function ensureNobarStyle() {
+  if (typeof document === 'undefined' || document.getElementById(NOBAR_STYLE_ID)) return;
+  const el = document.createElement('style');
+  el.id = NOBAR_STYLE_ID;
+  el.textContent =
+    '.gb-cs-nobar{scrollbar-width:none;-ms-overflow-style:none}' +
+    '.gb-cs-nobar::-webkit-scrollbar{width:0;height:0;display:none}';
+  (document.head || document.documentElement).appendChild(el);
+}
 
 /**
  * CollapsibleSection — neutral collapsible card. Same chrome as
@@ -10,19 +25,24 @@ import { I } from '../icons.jsx';
  * this body": developer settings, advanced options, etc.
  *
  * Props:
- *   icon        Optional React element in the 22px header tile.
- *   title       Required. Header text.
- *   subtitle    Optional second-line muted text.
- *   action      Optional right-side slot (e.g. a Reset button).
- *               Clicks inside it shouldn't toggle the section, so
- *               wrap your action handlers with `e.stopPropagation()`.
- *   defaultOpen Default false.
- *   maxHeight   Optional. Caps the body height (px) and scrolls inside.
- *               Useful when the body can grow long (e.g. dev settings
- *               registry) so it doesn't stretch the whole settings page.
- *   children    Body.
+ *   icon          Optional React element in the 22px header tile.
+ *   title         Required. Header text.
+ *   subtitle      Optional second-line muted text.
+ *   action        Optional right-side slot (e.g. a Reset button).
+ *                 Clicks inside it shouldn't toggle the section, so
+ *                 wrap your action handlers with `e.stopPropagation()`.
+ *   defaultOpen   Default false.
+ *   maxHeight     Optional. Caps the body height (px) and scrolls inside.
+ *                 Useful when the body can grow long (e.g. dev settings
+ *                 registry) so it doesn't stretch the whole settings page.
+ *   hideScrollbar Optional. When true (only meaningful with maxHeight),
+ *                 the native scrollbar is hidden via CSS — content still
+ *                 scrolls via wheel/touch/keyboard. Use when the visible
+ *                 scrollbar is more distracting than helpful.
+ *   children      Body.
  */
-export function CollapsibleSection({ icon, title, subtitle, action, defaultOpen = false, maxHeight, children }) {
+export function CollapsibleSection({ icon, title, subtitle, action, defaultOpen = false, maxHeight, hideScrollbar, children }) {
+  useEffect(() => { if (hideScrollbar) ensureNobarStyle(); }, [hideScrollbar]);
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div style={{
@@ -84,11 +104,14 @@ export function CollapsibleSection({ icon, title, subtitle, action, defaultOpen 
             transition={T.base}
             style={{ overflow: 'hidden' }}
           >
-            <div style={{
-              padding: '10px 12px',
-              background: 'var(--gb-fill-inverse-soft)',
-              maxHeight, overflowY: maxHeight ? 'auto' : undefined,
-            }}>
+            <div
+              className={hideScrollbar && maxHeight ? 'gb-cs-nobar' : undefined}
+              style={{
+                padding: '10px 12px',
+                background: 'var(--gb-fill-inverse-soft)',
+                maxHeight, overflowY: maxHeight ? 'auto' : undefined,
+              }}
+            >
               {children}
             </div>
           </motion.div>

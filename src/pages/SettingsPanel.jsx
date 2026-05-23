@@ -707,14 +707,17 @@ export function SettingsPanel() {
       {/* Developer Settings — registry-driven key/value table for
           low-priority knobs that don't deserve a feature flag.
           Always at the bottom. Adding a new row is one entry in
-          src/lib/devSettings.js → DEV_SETTINGS. The body grows with the
-          registry; the parent settings page handles scrolling, so we
-          don't add an inner scroll surface that would clash with it. */}
+          src/lib/devSettings.js → DEV_SETTINGS. The body caps at 340px
+          and scrolls internally (native scrollbar hidden via the
+          CollapsibleSection's `hideScrollbar` flag) so the page doesn't
+          grow as the registry fills up. */}
       <section>
         <CollapsibleSection
           icon={<I.bolt />}
           title="Developer Settings"
           subtitle="Low-level tweaks — animation timing, debounce intervals, etc."
+          maxHeight={340}
+          hideScrollbar
           action={
             <Btn variant="ghost" size="xs" onClick={resetDevSettings}>Reset</Btn>
           }
