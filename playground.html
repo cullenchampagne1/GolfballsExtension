@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Modal Playground — Golfballs Extension</title>
+<script src="theme-init.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; margin: 0; padding: 0;
+    background: #0e0f10;          /* matches --gb-surface-canvas; theme tokens take over once playground.js mounts */
+    color: rgba(255,255,255,.8);
+    font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    overflow: hidden;
+  }
+  #playground-root { width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+  <div id="playground-root"></div>
+  <script src="react-dist/playground/playground.js"></script>
+</body>
+</html>

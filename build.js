@@ -28,8 +28,9 @@ const mode = isWatch ? 'development' : 'production';
 // "one IIFE bundle per .jsx file" convention so the output can be dropped
 // straight into a content-script `js` array or referenced from an HTML host.
 const surfaces = [
-  { srcDir: 'src/content', outDir: 'react-dist/content' },
-  { srcDir: 'src/popup',   outDir: 'react-dist/popup'   },
+  { srcDir: 'src/content',    outDir: 'react-dist/content'    },
+  { srcDir: 'src/popup',      outDir: 'react-dist/popup'      },
+  { srcDir: 'src/playground', outDir: 'react-dist/playground' },
 ];
 
 let total = 0;
@@ -68,7 +69,7 @@ for (const { srcDir, outDir } of surfaces) {
 }
 
 if (total === 0) {
-  console.log('No components found in src/content/ or src/popup/ — nothing to build.');
+  console.log('No components found in any surface dir — nothing to build.');
   process.exit(0);
 }
 

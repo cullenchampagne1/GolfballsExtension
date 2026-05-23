@@ -51,6 +51,27 @@ export const DEV_SETTINGS = [
     step:    1,
   },
 
+  /* ── Modal playground ─────────────────────────────────────────
+     An `action` row renders just a button instead of a persisted
+     value. `runner` fires on click and gets `{ notify }` so it can
+     surface success/failure inline via the notification system. */
+  {
+    key:     'playground.open',
+    label:   'Modal playground',
+    desc:    'Opens a blank in-extension page (transparent grid background) for previewing and iterating on modals without needing the production website to be reachable.',
+    type:    'action',
+    buttonLabel: 'Open playground',
+    buttonIcon:  'bolt',
+    runner: ({ notify } = {}) => {
+      try {
+        const url = chrome.runtime.getURL('playground.html');
+        chrome.tabs.create({ url, active: true });
+      } catch (e) {
+        notify?.notify?.('Failed to open playground: ' + e.message, { tone: 'warning' });
+      }
+    },
+  },
+
   /* ── Per-button context-ignore knobs ──────────────────────────
      Each one bypasses the disabled state of a specific popup button
      so it always renders enabled, regardless of page context. Clicking
@@ -88,7 +109,11 @@ export const DEV_SETTINGS = [
 
 export const STORAGE_KEY = 'devSettings';
 
-const DEFAULTS = Object.fromEntries(DEV_SETTINGS.map((s) => [s.key, s.default]));
+// Skip `action` rows — they fire a runner instead of persisting a value,
+// so there's no default to merge into the bag.
+const DEFAULTS = Object.fromEntries(
+  DEV_SETTINGS.filter((s) => s.type !== 'action').map((s) => [s.key, s.default]),
+);
 
 /** Synchronous fallback when storage isn't ready yet. */
 export function defaultDevSettings() {
