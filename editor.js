@@ -23,6 +23,20 @@ let varOrder      = [];
 // ═══════════════════════════════════════════════════════════════
 
 const $ = id => document.getElementById(id);
+
+/**
+ * Themed confirm/prompt that go through the global SettingNotification
+ * centered overlay (mounted by editor-notifications.js). Falls back to
+ * window.confirm/prompt if the bridge isn't ready yet.
+ */
+function gbConfirm(message, options = {}) {
+  if (window.__gbNotify?.confirm) return window.__gbNotify.confirm(message, options);
+  return Promise.resolve(window.confirm(message));
+}
+function gbPrompt(message, options = {}) {
+  if (window.__gbNotify?.prompt) return window.__gbNotify.prompt(message, options);
+  return Promise.resolve(window.prompt(message, options.defaultValue || ''));
+}
 const show = id => $(id)?.classList.remove('hidden');
 const hide = id => $(id)?.classList.add('hidden');
 const uid  = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -1277,7 +1291,7 @@ window.__gbSaveTemplate = applyTemplatePatch;
  */
 async function deleteTemplate() {
   if (!currentId) return; 
-  if (!confirm('Delete this email template?')) return;
+  if (!(await gbConfirm('Delete this email template?', { tone: 'danger', confirmLabel: 'Delete' }))) return;
   
   templates = templates.filter(t => t.id !== currentId); 
   await saveTemplates();
@@ -1371,7 +1385,7 @@ async function saveNoteTemplate() {
  */
 async function deleteNoteTemplate() {
   if (!currentNoteId) return; 
-  if (!confirm('Delete this note template?')) return;
+  if (!(await gbConfirm('Delete this note template?', { tone: 'danger', confirmLabel: 'Delete' }))) return;
   
   noteTemplates = noteTemplates.filter(t => t.id !== currentNoteId); 
   await saveNoteTemplates();
@@ -2287,7 +2301,7 @@ function renderUserPresetsBar(container) {
     if (!_selectedId) { toast('Select a preset to delete', true); return; }
     const p = _userPresets.find(x => x.id === _selectedId);
     if (!p) return;
-    if (!confirm('Delete "' + p.name + '"?')) return;
+    if (!(await gbConfirm('Delete "' + p.name + '"?', { tone: 'danger', confirmLabel: 'Delete' }))) return;
     await deleteUserPreset(_selectedId);
     _selectedId = null;
     renderUserPresetsBar(container);
@@ -2349,8 +2363,8 @@ function renderSettingsPanel() {
   `;
 
   document.getElementById('btn-settings-back').addEventListener('click', closeSettings);
-  document.getElementById('btn-reset-all-colors').addEventListener('click', () => {
-    if (!confirm('Reset all theme colours to their defaults?')) return;
+  document.getElementById('btn-reset-all-colors').addEventListener('click', async () => {
+    if (!(await gbConfirm('Reset all theme colours to their defaults?', { tone: 'warning', confirmLabel: 'Reset' }))) return;
     themeColors = { ...THEME_DEFAULTS };
     applyAllColorsToDocument(themeColors);
     saveThemeColors();
@@ -3499,7 +3513,7 @@ async function renderCaseTplPanel() {
 
     // Delete
     document.getElementById('btn-ctpl-del')?.addEventListener('click', async () => {
-      if (!confirm('Delete this template?')) return;
+      if (!(await gbConfirm('Delete this template?', { tone: 'danger', confirmLabel: 'Delete' }))) return;
       _caseTpls = _caseTpls.filter(t => t.id !== editing.id);
       await _saveCaseTpls();
       _caseTplEditId = null;
@@ -4096,14 +4110,17 @@ function initRTE(wrapId) {
   if (!toolbar || !editor) return;
 
   // ── Toolbar button clicks ───────────────────────────────────
-  toolbar.addEventListener('click', e => {
+  toolbar.addEventListener('click', async (e) => {
     const btn = e.target.closest('.gb-rte-btn[data-cmd]');
     if (!btn) return;
     e.preventDefault();
     const cmd = btn.dataset.cmd;
 
     if (cmd === 'createLink') {
-      const url = prompt('Enter URL:', 'https://');
+      const url = await gbPrompt('Insert link', {
+        defaultValue: 'https://', placeholder: 'https://example.com',
+        confirmLabel: 'Insert',
+      });
       if (url) document.execCommand('createLink', false, url);
     } else {
       document.execCommand(cmd, false, null);

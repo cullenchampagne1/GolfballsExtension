@@ -2,6 +2,32 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion, useAnimate } from 'motion/react';
 import { SHAKE, SHAKE_T, inputBaseStyle } from '../shared.jsx';
 
+/* Chrome's autofill paints a yellow background ONTO the <input> element
+   (not the styled wrapper) — that's the "weird outline around the actual
+   text size." Override it once on first mount so the autofill rect blends
+   into the wrapper instead of standing out as an inner box. */
+const AUTOFILL_STYLE_ID = '__gb-input-autofill';
+function ensureAutofillStyle() {
+  if (typeof document === 'undefined' || document.getElementById(AUTOFILL_STYLE_ID)) return;
+  const el = document.createElement('style');
+  el.id = AUTOFILL_STYLE_ID;
+  el.textContent = `
+    .gb-input-native:-webkit-autofill,
+    .gb-input-native:-webkit-autofill:hover,
+    .gb-input-native:-webkit-autofill:focus,
+    .gb-input-native:-webkit-autofill:active {
+      -webkit-text-fill-color: var(--gb-text-primary) !important;
+      -webkit-box-shadow: 0 0 0 1000px var(--gb-surface-2) inset !important;
+      caret-color: var(--gb-text-primary);
+      transition: background-color 100000s ease-out 0s;
+    }
+    .gb-input-native {
+      -webkit-appearance: none; appearance: none;
+    }
+  `;
+  (document.head || document.documentElement).appendChild(el);
+}
+
 /**
  * Input — single-line text control.
  *
@@ -19,6 +45,8 @@ export function Input({
   const [empty, setEmpty] = useState(() => !String((value ?? defaultValue) ?? '').length);
   const [scope, animate] = useAnimate();
   const prevError = useRef(error);
+
+  useEffect(() => { ensureAutofillStyle(); }, []);
 
   useEffect(() => {
     if (error && !prevError.current) animate(scope.current, { x: SHAKE }, SHAKE_T);
@@ -49,6 +77,7 @@ export function Input({
           }}>{placeholder}</span>
         )}
         <input
+          className="gb-input-native"
           type={type}
           value={value}
           defaultValue={defaultValue}
@@ -60,7 +89,8 @@ export function Input({
           onBlur={(e) => { setFocused(false); onBlur?.(e); }}
           style={{
             flex: 1, minWidth: 0, width: '100%',
-            background: 'transparent', border: 'none', outline: 'none', padding: 0, margin: 0,
+            background: 'transparent', border: 'none', outline: 'none',
+            boxShadow: 'none', padding: 0, margin: 0,
             color: 'var(--gb-text-primary)', font: 'inherit',
             fontFamily: mono ? 'var(--gb-font-mono)' : 'inherit',
             cursor: readOnly ? 'default' : 'text',

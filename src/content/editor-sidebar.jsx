@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import {
   Btn, IconBtn, Tag, Input, Segmented, I, Icon, T,
-  SettingNotificationHost, useSettingNotification,
+  useSettingNotification,
 } from '../ui/index.js';
 
 /* ────────────────────────────────────────────────────────────────
@@ -394,16 +394,9 @@ function FolderGroup({ folder, tpls, isNote, currentId, onOpen, onMove, onRename
 
 /* ── Root ───────────────────────────────────────────────────────── */
 function TemplateSidebar() {
-  // Wraps the actual sidebar so its descendants can use the slide-in
-  // SettingNotification system (replaces browser confirm/prompt).
-  return (
-    <SettingNotificationHost>
-      <SidebarInner />
-    </SettingNotificationHost>
-  );
-}
-
-function SidebarInner() {
+  // No local SettingNotificationHost — the hook below picks up
+  // window.__gbNotify (mounted globally by editor-notifications.jsx),
+  // so confirm/prompt overlays the whole window, not the sidebar.
   const notify = useSettingNotification();
   const [tab,         setTab]         = useState('templates');
   const [templates,   setTemplates]   = useState([]);
