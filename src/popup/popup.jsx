@@ -341,16 +341,35 @@ function PopupApp() {
     });
   }, [selectedId, tab, visibleTemplates, ignorePageContext]);
 
-  /* ── listen for live flag changes (charge/orderEdit toggles, etc.) ── */
+  /* ── live-sync feature flags + watchList + templates from storage ──
+     The popup window isn't a tab, so the GB_FEATURE_FLAGS runtime broadcast
+     from saveFlags() never reaches it. Subscribe to storage.onChanged
+     directly so every write — flags, watchlist, even template edits —
+     reflects instantly while the popup is open.
+
+     Defaults match the init-load merge above so flipping any flag off
+     produces the same shape as if it had never been written. */
   useEffect(() => {
-    if (!chrome?.runtime?.onMessage) return;
-    const listener = (msg) => {
-      if (msg.action === 'GB_FEATURE_FLAGS' && msg.flags) {
-        setFlags((prev) => ({ ...prev, ...msg.flags }));
+    if (!chrome?.storage?.onChanged) return;
+    const listener = (changes, area) => {
+      if (area !== 'local') return;
+      if (changes.featureFlags) {
+        const next = changes.featureFlags.newValue || {};
+        setFlags({
+          chargeEnabled: true, orderEditEnabled: true, submitProofEnabled: true,
+          taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true,
+          ...next,
+        });
+      }
+      if (changes.watchList) setWatchList(changes.watchList.newValue || []);
+      if (changes.templates) {
+        const next = (changes.templates.newValue || [])
+          .filter((t) => t.enabled !== false && t.type !== 'case');
+        setAllTemplates(next);
       }
     };
-    chrome.runtime.onMessage.addListener(listener);
-    return () => chrome.runtime.onMessage.removeListener(listener);
+    chrome.storage.onChanged.addListener(listener);
+    return () => chrome.storage.onChanged.removeListener(listener);
   }, []);
 
   /* ── header openers ── */
@@ -435,24 +454,35 @@ function PopupApp() {
 ============================================================ */
 
 function Shell({ children, onManage, templateCount }) {
+  // The Chrome popup frame is drawn by the OS before React mounts — there's
+  // an unavoidable brief moment where the window is visible but blank.
+  // A small fade + scale on the entire content fills that void so the popup
+  // feels like it "settles in" rather than snapping. transformOrigin: top
+  // matches the user's mental model (popup grows down from the toolbar icon).
   return (
-    <div style={{
-      width: 320, minHeight: 340,
-      display: 'flex', flexDirection: 'column',
-      background: 'var(--gb-surface-canvas)',
-      color: 'var(--gb-text-secondary)',
-      fontFamily: 'var(--gb-font-sans)',
-      borderRight: '1px solid var(--gb-border-subtle)',
-      borderBottom: '1px solid var(--gb-border-subtle)',
-      overflow: 'hidden',
-      position: 'relative',
-      boxSizing: 'border-box',
-    }}>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.97, y: -4 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      transition={{ duration: 0.22, ease: [0.34, 1.4, 0.64, 1] }}
+      style={{
+        width: 320, minHeight: 340,
+        display: 'flex', flexDirection: 'column',
+        background: 'var(--gb-surface-canvas)',
+        color: 'var(--gb-text-secondary)',
+        fontFamily: 'var(--gb-font-sans)',
+        borderRight: '1px solid var(--gb-border-subtle)',
+        borderBottom: '1px solid var(--gb-border-subtle)',
+        overflow: 'hidden',
+        position: 'relative',
+        boxSizing: 'border-box',
+        transformOrigin: 'top center',
+      }}
+    >
       <Header onManage={onManage} templateCount={templateCount} />
       <div style={{ padding: '14px 14px 14px', overflow: 'hidden' }}>
         {children}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -757,8 +787,11 @@ function MainView({
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
 
-      {/* ── TOP SECTION ─ template dropdown + all action buttons ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {/* ── TOP SECTION ─ template dropdown + all action buttons ──
+         No `gap` on the column so each <Reveal> can animate its own
+         marginTop on exit. Without that, flex `gap` snaps to zero only
+         after the child unmounts, breaking the collapse transition. */}
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
 
         {/* Template label + dropdown / empty pill */}
         <SectionLabel divider={false} style={{ marginBottom: 2 }}>Template</SectionLabel>
@@ -784,61 +817,77 @@ function MainView({
         )}
 
         {/* Action stack — matches original popup order:
-            Charge → Order Edit → Watch + Watch List row → Tasks → CRM Search → Submit Proof */}
-        {flags.chargeEnabled && (
-          <Btn full size="sm"
-            variant={chargeReady ? 'tinted' : 'secondary'}
-            status={isRefund ? 'error' : 'brand'}
-            disabled={chargeDisabled}
-            icon={<I.card />}
-            onClick={onCharge}>
-            {chargeLabel}
-          </Btn>
-        )}
-        {flags.orderEditEnabled && (
-          <Btn full size="sm"
-            disabled={orderEditDisabled}
-            icon={<I.edit />}
-            onClick={onOrderEdit}>
-            Order Edit
-          </Btn>
-        )}
-        {flags.watchListEnabled && (
-          <div style={{ display: 'flex', gap: 6 }}>
-            <Btn size="sm"
-              disabled={watchAddDisabled}
-              icon={<I.eye />}
-              onClick={onOpenWatchAdd}
-              style={{ flex: 1, minWidth: 0, width: 'auto' }}>
-              {WL_ENTITY[knownType ? pageType : 'order'].btn}
-            </Btn>
-            <Btn size="sm"
-              variant={watchHasCrit && watchCount > 0 ? 'tinted' : 'secondary'}
-              status="error"
-              icon={<Ic.watch />}
-              badge={watchCount}
-              badgeTone={watchHasCrit ? 'error' : 'brand'}
-              badgePulse={watchHasCrit}
-              onClick={onWatchListShow}
-              style={{ flex: 1, minWidth: 0, width: 'auto' }}>
-              Watch List
-            </Btn>
-          </div>
-        )}
-        {flags.taskListEnabled && (
-          <Btn full size="sm" icon={<Ic.checkbox />} onClick={onTaskList}>My Tasks</Btn>
-        )}
-        {flags.crmSearchEnabled && (
-          <Btn full size="sm" icon={<I.search />} onClick={onCrmSearch}>CRM Search</Btn>
-        )}
-        {flags.submitProofEnabled && (
-          <Btn full size="sm"
-            disabled={proofDisabled}
-            icon={<Ic.paperclip />}
-            onClick={onOpenProof}>
-            Submit Proof
-          </Btn>
-        )}
+            Charge → Order Edit → Watch + Watch List row → Tasks → CRM Search → Submit Proof.
+            Each wrapped in <Reveal> so flipping its feature flag collapses
+            the height + opacity with siblings sliding to fill the gap. */}
+        <AnimatePresence initial={false}>
+          {flags.chargeEnabled && (
+            <Reveal key="charge">
+              <Btn full size="sm"
+                variant={chargeReady ? 'tinted' : 'secondary'}
+                status={isRefund ? 'error' : 'brand'}
+                disabled={chargeDisabled}
+                icon={<I.card />}
+                onClick={onCharge}>
+                {chargeLabel}
+              </Btn>
+            </Reveal>
+          )}
+          {flags.orderEditEnabled && (
+            <Reveal key="orderEdit">
+              <Btn full size="sm"
+                disabled={orderEditDisabled}
+                icon={<I.edit />}
+                onClick={onOrderEdit}>
+                Order Edit
+              </Btn>
+            </Reveal>
+          )}
+          {flags.watchListEnabled && (
+            <Reveal key="watch">
+              <div style={{ display: 'flex', gap: 6 }}>
+                <Btn size="sm"
+                  disabled={watchAddDisabled}
+                  icon={<I.eye />}
+                  onClick={onOpenWatchAdd}
+                  style={{ flex: 1, minWidth: 0, width: 'auto' }}>
+                  {WL_ENTITY[knownType ? pageType : 'order'].btn}
+                </Btn>
+                <Btn size="sm"
+                  variant={watchHasCrit && watchCount > 0 ? 'tinted' : 'secondary'}
+                  status="error"
+                  icon={<Ic.watch />}
+                  badge={watchCount}
+                  badgeTone={watchHasCrit ? 'error' : 'brand'}
+                  badgePulse={watchHasCrit}
+                  onClick={onWatchListShow}
+                  style={{ flex: 1, minWidth: 0, width: 'auto' }}>
+                  Watch List
+                </Btn>
+              </div>
+            </Reveal>
+          )}
+          {flags.taskListEnabled && (
+            <Reveal key="tasks">
+              <Btn full size="sm" icon={<Ic.checkbox />} onClick={onTaskList}>My Tasks</Btn>
+            </Reveal>
+          )}
+          {flags.crmSearchEnabled && (
+            <Reveal key="crmSearch">
+              <Btn full size="sm" icon={<I.search />} onClick={onCrmSearch}>CRM Search</Btn>
+            </Reveal>
+          )}
+          {flags.submitProofEnabled && (
+            <Reveal key="proof">
+              <Btn full size="sm"
+                disabled={proofDisabled}
+                icon={<Ic.paperclip />}
+                onClick={onOpenProof}>
+                Submit Proof
+              </Btn>
+            </Reveal>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* ── BOTTOM SECTION ─ resolved info + hairline + send button ── */}
@@ -871,6 +920,29 @@ function MainView({
         </Btn>
       </div>
     </div>
+  );
+}
+
+/**
+ * Reveal — collapses height + opacity + top-margin on exit, mirrors on enter.
+ * Drop-in wrapper for any conditionally-rendered child inside an
+ * <AnimatePresence>. Uses a 6px top margin to replace the gap that the
+ * parent flex column had to give up (gap is not animatable per-child).
+ *
+ * `initial: false` on the parent AnimatePresence makes the first render
+ * paint instantly, but flipping a flag at runtime triggers the animation.
+ */
+function Reveal({ children, gap = 6 }) {
+  return (
+    <motion.div
+      initial={{ height: 0, opacity: 0, marginTop: 0 }}
+      animate={{ height: 'auto', opacity: 1, marginTop: gap }}
+      exit={{ height: 0, opacity: 0, marginTop: 0 }}
+      transition={T.base}
+      style={{ overflow: 'hidden' }}
+    >
+      {children}
+    </motion.div>
   );
 }
 
