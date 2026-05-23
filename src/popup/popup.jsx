@@ -479,7 +479,17 @@ function Shell({ children, onManage, templateCount }) {
       }}
     >
       <Header onManage={onManage} templateCount={templateCount} />
-      <div style={{ padding: '14px 14px 14px', overflow: 'hidden' }}>
+      {/* The body is itself a flex column with flex:1 so MainView can use
+          margin-top:auto on its bottom section to push any extra height
+          (created by the popup's min-height when few buttons are visible)
+          INTO the gap between the dropdown/buttons and the Send button —
+          not into a dead zone at the very bottom. */}
+      <div style={{
+        flex: 1,
+        padding: '14px 14px 14px',
+        overflow: 'hidden',
+        display: 'flex', flexDirection: 'column',
+      }}>
         {children}
       </div>
     </motion.div>
@@ -785,36 +795,45 @@ function MainView({
   const hasTemplates = templates.length > 0;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
 
       {/* ── TOP SECTION ─ template dropdown + all action buttons ──
          No `gap` on the column so each <Reveal> can animate its own
          marginTop on exit. Without that, flex `gap` snaps to zero only
-         after the child unmounts, breaking the collapse transition. */}
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
+         after the child unmounts, breaking the collapse transition.
+         flex-shrink:0 keeps it from squishing when the popup is short. */}
+      <div style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
 
-        {/* Template label + dropdown / empty pill */}
-        <SectionLabel divider={false} style={{ marginBottom: 2 }}>Template</SectionLabel>
-        {hasTemplates ? (
-          <Dropdown
-            size="sm"
-            value={selectedId}
-            options={dropdownOptions}
-            searchable={templates.length > 6}
-            leading={<Dot tone={isMatched ? 'brand' : 'muted'} size={7} glow={isMatched} />}
-            onChange={onSelect}
-          />
-        ) : (
-          <div style={{
-            fontSize: 11, color: 'var(--gb-text-muted)', lineHeight: 1.5,
-            padding: '8px 10px',
-            background: 'var(--gb-fill-subtle)',
-            border: '1px dashed var(--gb-border-default)',
-            borderRadius: 'var(--gb-r-md)',
-          }}>
-            No templates for this page type.
-          </div>
-        )}
+        {/* Template label + dropdown / empty pill — gated on emailTemplatesEnabled.
+            Turning off Email Templates collapses this entire block so the popup
+            becomes a pure action-launcher (charge / watch / tasks / etc.). */}
+        <AnimatePresence initial={false}>
+          {flags.emailTemplatesEnabled && (
+            <Reveal key="template-block" gap={0}>
+              <SectionLabel divider={false} style={{ marginBottom: 2 }}>Template</SectionLabel>
+              {hasTemplates ? (
+                <Dropdown
+                  size="sm"
+                  value={selectedId}
+                  options={dropdownOptions}
+                  searchable={templates.length > 6}
+                  leading={<Dot tone={isMatched ? 'brand' : 'muted'} size={7} glow={isMatched} />}
+                  onChange={onSelect}
+                />
+              ) : (
+                <div style={{
+                  fontSize: 11, color: 'var(--gb-text-muted)', lineHeight: 1.5,
+                  padding: '8px 10px',
+                  background: 'var(--gb-fill-subtle)',
+                  border: '1px dashed var(--gb-border-default)',
+                  borderRadius: 'var(--gb-r-md)',
+                }}>
+                  No templates for this page type.
+                </div>
+              )}
+            </Reveal>
+          )}
+        </AnimatePresence>
 
         {/* Action stack — matches original popup order:
             Charge → Order Edit → Watch + Watch List row → Tasks → CRM Search → Submit Proof.
@@ -890,34 +909,47 @@ function MainView({
         </AnimatePresence>
       </div>
 
-      {/* ── BOTTOM SECTION ─ resolved info + hairline + send button ── */}
-      <div style={{ paddingTop: 14 }}>
-        {hasTemplates && (
-          resolving ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 11.5, padding: '4px 0' }}>
-              <Spinner size={11} /> Resolving variables…
-            </div>
-          ) : (
-            <div>
-              <KeyVal k="To" v={resolvedTo || 'Not found'} tone={hasRecipient ? 'ok' : 'error'} />
-              {Object.entries(resolvedVars).map(([name, val]) => (
-                <KeyVal key={name} k={name} v={val ? String(val).slice(0, 40) : 'Not found'} tone={val ? 'default' : 'error'} />
-              ))}
-            </div>
-          )
-        )}
+      {/* ── BOTTOM SECTION ─ resolved info + hairline + send button ──
+         marginTop:auto pushes this block to the bottom of the popup body,
+         so any extra height left over by a short button stack appears as
+         empty space between the dropdown and the resolved section — not
+         dangling beneath the send button.
 
-        <hr style={{ border: 0, borderTop: '1px solid var(--gb-border-subtle)', margin: '10px 0' }} />
+         Gated on emailTemplatesEnabled — when off, the whole block (resolved
+         info + hr + send button) collapses away so the popup is buttons-only. */}
+      <div style={{ marginTop: 'auto', flexShrink: 0 }}>
+        <AnimatePresence initial={false}>
+          {flags.emailTemplatesEnabled && (
+            <Reveal key="send-block" gap={14}>
+              {hasTemplates && (
+                resolving ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 11.5, padding: '4px 0' }}>
+                    <Spinner size={11} /> Resolving variables…
+                  </div>
+                ) : (
+                  <div>
+                    <KeyVal k="To" v={resolvedTo || 'Not found'} tone={hasRecipient ? 'ok' : 'error'} />
+                    {Object.entries(resolvedVars).map(([name, val]) => (
+                      <KeyVal key={name} k={name} v={val ? String(val).slice(0, 40) : 'Not found'} tone={val ? 'default' : 'error'} />
+                    ))}
+                  </div>
+                )
+              )}
 
-        <Btn
-          full
-          variant="primary"
-          size="md"
-          disabled={!hasTemplates || !canSend || resolving}
-          icon={sendMode?.icon || <I.send />}
-          onClick={onSend}>
-          {sendMode?.label || 'Open in Outlook'}
-        </Btn>
+              <hr style={{ border: 0, borderTop: '1px solid var(--gb-border-subtle)', margin: '10px 0' }} />
+
+              <Btn
+                full
+                variant="primary"
+                size="md"
+                disabled={!hasTemplates || !canSend || resolving}
+                icon={sendMode?.icon || <I.send />}
+                onClick={onSend}>
+                {sendMode?.label || 'Open in Outlook'}
+              </Btn>
+            </Reveal>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
