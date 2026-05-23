@@ -67,10 +67,14 @@ function VariantCard({ variant, active, onClick }) {
       <div
         data-theme={variant.id}
         style={{
-          // No --gb-brand-label override — the brand swatch picks up the
-          // user's themed brand color (set on <html> via applyTheme), so
-          // each card previews how THEIR brand would look against that
-          // variant's surface/text tokens.
+          // Force the brand back to the user's themed value. Each
+          // [data-theme="…"] block in src/ui/theme.css re-declares
+          // --gb-brand-label to that variant's baseline; setting it to
+          // `inherit` here makes it walk back up to <html> (where
+          // applyTheme wrote the user's customized brand color). The
+          // surface/text/border tokens stay variant-specific so each
+          // card still previews the variant's chrome under YOUR brand.
+          '--gb-brand-label': 'inherit',
           height: 38, borderRadius: 'var(--gb-r-sm)', padding: '0 8px',
           background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)',
           display: 'flex', alignItems: 'center', gap: 6,
