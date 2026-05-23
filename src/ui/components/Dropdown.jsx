@@ -219,7 +219,7 @@ export function Dropdown({
                         whileHover={o.disabled ? undefined : { backgroundColor: 'var(--gb-fill-soft)' }}
                         style={{
                           position: 'relative',
-                          padding: o.accent ? '6px 8px 6px 10px' : '6px 8px',
+                          padding: o.accent ? '6px 8px 6px 12px' : '6px 8px',
                           borderRadius: 'var(--gb-r-sm)',
                           fontSize: 12, fontFamily: 'var(--gb-font-sans)',
                           display: 'flex', alignItems: 'center', gap: 8,
@@ -233,7 +233,7 @@ export function Dropdown({
                         {o.accent && (
                           <span style={{
                             position: 'absolute',
-                            top: 4, bottom: 4, left: 3,
+                            top: 4, bottom: 4, left: 4,
                             width: 2,
                             background: accentColor,
                             borderRadius: 1,

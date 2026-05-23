@@ -27,6 +27,7 @@ export function KeyVal({ k, v, tone = 'default', mono, style }) {
         fontWeight: tone === 'ok' ? 600 : 500,
         fontFamily: mono ? 'var(--gb-font-mono)' : 'var(--gb-font-sans)',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        textAlign: 'right',
       }}>
         {v}
       </div>
