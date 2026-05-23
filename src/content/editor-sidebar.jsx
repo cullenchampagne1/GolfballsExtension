@@ -213,10 +213,11 @@ function TemplateRow({ tpl, isNote, type, active, onClick, onMove, folders, onDr
       }}
     >
       {/* Type stripe — inset rounded bar, never a full border. Stays put
-          when the row goes active. */}
+          when the row goes active. Left inset matches top/bottom so the
+          stripe sits in a balanced gutter. */}
       <span style={{
         position: 'absolute',
-        left: 4, top: 6, bottom: 6,
+        left: 6, top: 6, bottom: 6,
         width: 2, borderRadius: 2,
         background: meta.color,
         opacity: disabled ? 0.45 : 1,

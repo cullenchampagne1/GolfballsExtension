@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { AnimatePresence } from 'motion/react';
 import { Tag } from './Tag.jsx';
 import { Dot } from './Dot.jsx';
 import { Btn } from './Btn.jsx';
 import { IconBtn } from './IconBtn.jsx';
 import { KindPill } from './KindPill.jsx';
 import { BodyVar } from './BodyVar.jsx';
+import { InlineVariableForm } from './InlineVariableForm.jsx';
 import { I, Icon } from '../icons.jsx';
 
 const VariableIcon = (p) => (
@@ -29,6 +31,7 @@ const COL_GRID = '2fr 70px 1.1fr 1.1fr 70px 28px';
  *   onOpenSmart (variable) => void — opens the smart-options modal
  */
 export function VariableTable({ typeId, vars = [], onAdd, onDelete, onOpenSmart }) {
+  const [adding, setAdding] = useState(false);
   return (
     <div style={{
       border: '1px solid var(--gb-border-default)',
@@ -146,16 +149,29 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onOpenSmart 
         );
       })}
 
-      {/* Add-variable footer row */}
-      <div style={{
-        padding: 8,
-        background: 'var(--gb-surface-modal)',
-        borderTop: '1px solid var(--gb-border-subtle)',
-      }}>
-        <Btn variant="dashed" size="sm" icon={<I.plus />} full onClick={onAdd}>
-          Add variable
-        </Btn>
-      </div>
+      {/* Inline add-variable form — slides into the table when the
+          dashed Add button is clicked. Replaces the legacy modal. */}
+      <AnimatePresence initial={false}>
+        {adding && (
+          <InlineVariableForm
+            key="inline-add"
+            typeId={typeId}
+            onAdd={(payload) => { onAdd?.(payload); setAdding(false); }}
+            onCancel={() => setAdding(false)}
+          />
+        )}
+      </AnimatePresence>
+      {!adding && (
+        <div style={{
+          padding: 8,
+          background: 'var(--gb-surface-modal)',
+          borderTop: '1px solid var(--gb-border-subtle)',
+        }}>
+          <Btn variant="dashed" size="sm" icon={<I.plus />} full onClick={() => setAdding(true)}>
+            Add variable
+          </Btn>
+        </div>
+      )}
     </div>
   );
 }

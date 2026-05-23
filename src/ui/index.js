@@ -60,7 +60,8 @@ export { MultiSelectCombo } from './components/MultiSelectCombo.jsx';
 export { ConditionCard } from './components/ConditionCard.jsx';
 export { VariableTable } from './components/VariableTable.jsx';
 export { SmartModal } from './components/SmartModal.jsx';
-export { AddVariableModal, SOURCE_KINDS } from './components/AddVariableModal.jsx';
+export { AddVariableModal, SOURCE_KINDS, BUILTIN_PATHS, REGEX_FIELDS } from './components/AddVariableModal.jsx';
+export { InlineVariableForm } from './components/InlineVariableForm.jsx';
 export { SignatureModal } from './components/SignatureModal.jsx';
 
 /* ── Type-specific rule composites ──────────────────────────── */

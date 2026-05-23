@@ -7,7 +7,7 @@ import {
   Input, Dropdown, Field,
   SwitchTag, Segmented,
   I, Icon,
-  SmartModal, AddVariableModal, SignatureModal,
+  SmartModal, SignatureModal,
   RichTextEditor,
   VariableTable, OrderRules, CaseRules, AccountRules,
 } from '../ui/index.js';
@@ -161,7 +161,6 @@ function TemplateEditor({ tpl, onDelete }) {
   const [ruleData, setRuleData] = useState(null);
   const [resolvedMap, setResolvedMap] = useState({});
   const [smartFor, setSmartFor] = useState(null);
-  const [showAdd,  setShowAdd]  = useState(false);
   const [recipientIdx,  setRecipientIdx]  = useState(() => recipientIndexFor(initialType, tpl.toField));
   const [toFieldValue, setToFieldValue] = useState(
     (tpl.toField && (tpl.toField.value || tpl.toField.selector)) || '',
@@ -227,7 +226,6 @@ function TemplateEditor({ tpl, onDelete }) {
       ...(source ? { source } : {}),
       resolved: null, status: 'miss', smart: {},
     }]);
-    setShowAdd(false);
   };
   const handleDeleteVar = name => setVars(vs => vs.filter(v => v.name !== name));
   const openSmartByName = name => {
@@ -513,12 +511,13 @@ function TemplateEditor({ tpl, onDelete }) {
         </Btn>
       </div>
 
-      {/* ── Variables ── */}
+      {/* ── Variables — VariableTable manages its own inline add form
+           now, so we just pass the create callback directly. ── */}
       <div style={S.mb12}>
         <VariableTable
           typeId={typeId}
           vars={displayVars}
-          onAdd={() => setShowAdd(true)}
+          onAdd={handleAddVar}
           onDelete={handleDeleteVar}
           onOpenSmart={setSmartFor}
         />
@@ -526,7 +525,6 @@ function TemplateEditor({ tpl, onDelete }) {
 
       <AnimatePresence>
         {smartFor && <SmartModal key="smart" variable={smartFor} onClose={() => setSmartFor(null)} onSave={handleSaveSmart} />}
-        {showAdd  && <AddVariableModal key="add" typeId={typeId} onClose={() => setShowAdd(false)} onAdd={handleAddVar} />}
       </AnimatePresence>
     </div>
   );
