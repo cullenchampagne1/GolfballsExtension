@@ -38,28 +38,15 @@ export function useSettingNotification() {
   };
 }
 
-/* ── Internal: input form for prompt() mode ───────────────────── */
-function PromptForm({ defaultValue, placeholder, onSubmit, onCancel, confirmLabel, cancelLabel, tone }) {
-  const [value, setValue] = useState(defaultValue || '');
-  return (
-    <form
-      onSubmit={(e) => { e.preventDefault(); onSubmit(value.trim()); }}
-      style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
-    >
-      <Input
-        size="sm"
-        value={value}
-        placeholder={placeholder}
-        onChange={setValue}
-        autoFocus
-        onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); onCancel(); } }}
-      />
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
-        <Btn variant="ghost" size="sm" onClick={onCancel} type="button">{cancelLabel}</Btn>
-        <Btn variant={tone === 'danger' ? 'danger' : 'primary'} size="sm" type="submit" disabled={!value.trim()}>{confirmLabel}</Btn>
-      </div>
-    </form>
-  );
+/* ── Internal: hook owning the prompt's input state. The input itself
+   lives in the grey body of the card so the tone-tinted footer only
+   carries the action buttons — visually separates "what you type" from
+   "what you confirm". */
+function usePromptValue(active) {
+  const [value, setValue] = useState(active?.defaultValue || '');
+  // Reset when a different prompt opens (queue advances).
+  useEffect(() => { setValue(active?.defaultValue || ''); }, [active?.id, active?.defaultValue]);
+  return [value, setValue];
 }
 
 /* tone → fg/bg/border + default icon. Matches ActionToast TONES with the
@@ -79,8 +66,16 @@ function NotificationCard({ active, dismiss }) {
   const tone = TONES[active.tone] || TONES.default;
   const icon = active.icon || tone.icon;
   const isNotify = active.kind === 'notify';
+  const isPrompt = active.kind === 'prompt';
   const title    = active.title || (isNotify ? null : active.message);
   const message  = active.title ? active.message : (isNotify ? active.message : null);
+  // Prompt's input value lives at card level so the input (body) and
+  // submit button (footer) stay in sync across the colored / grey split.
+  const [promptValue, setPromptValue] = usePromptValue(isPrompt ? active : null);
+  const submitPrompt = () => {
+    const v = promptValue.trim();
+    active.onResolve(v || null);
+  };
 
   return (
     <div style={{
@@ -131,6 +126,26 @@ function NotificationCard({ active, dismiss }) {
         )}
       </div>
 
+      {/* Prompt input — lives in the grey body (matching the card's
+          surface), so the tinted footer below holds only the action
+          buttons. Keeps "what you type" visually distinct from "what
+          you confirm". */}
+      {isPrompt && (
+        <div style={{ padding: '0 10px 10px' }}>
+          <Input
+            size="sm"
+            value={promptValue}
+            placeholder={active.placeholder}
+            onChange={setPromptValue}
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); submitPrompt(); }
+              if (e.key === 'Escape') { e.preventDefault(); active.onResolve(null); }
+            }}
+          />
+        </div>
+      )}
+
       {/* Tinted action footer — confirm + prompt only. */}
       {active.kind === 'confirm' && (
         <div style={{
@@ -152,21 +167,26 @@ function NotificationCard({ active, dismiss }) {
         </div>
       )}
 
-      {active.kind === 'prompt' && (
+      {/* Tinted action footer for prompt — buttons only; the input is up
+          in the body above. */}
+      {isPrompt && (
         <div style={{
-          padding: '8px 10px 9px',
+          display: 'flex', gap: 6, padding: '6px 8px 7px',
           borderTop: '1px solid var(--gb-border-subtle)',
           background: tone.bg,
         }}>
-          <PromptForm
-            defaultValue={active.defaultValue}
-            placeholder={active.placeholder}
-            confirmLabel={active.confirmLabel}
-            cancelLabel={active.cancelLabel}
-            tone={active.tone}
-            onSubmit={(v) => active.onResolve(v || null)}
-            onCancel={() => active.onResolve(null)}
-          />
+          <div style={{ flex: 1 }} />
+          <Btn variant="ghost" size="sm" onClick={() => active.onResolve(null)}>
+            {active.cancelLabel}
+          </Btn>
+          <Btn
+            variant={active.tone === 'danger' ? 'danger' : 'primary'}
+            size="sm"
+            disabled={!promptValue.trim()}
+            onClick={submitPrompt}
+          >
+            {active.confirmLabel}
+          </Btn>
         </div>
       )}
     </div>
