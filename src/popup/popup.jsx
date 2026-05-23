@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import { useDevSettings } from '../lib/devSettings.js';
 import {
-  Btn, Dropdown, Dot, KeyVal, SectionLabel, Field, Textarea,
+  Btn, Dropdown, Dot, Tag, KeyVal, SectionLabel, Field, Textarea,
   Spinner, I, T, inputBaseStyle,
 } from '../ui';
 
@@ -357,8 +357,12 @@ function PopupApp() {
   const openManager = () => { try { chrome.runtime.sendMessage({ action: 'openEditor' }); } catch {} };
 
   /* ── stage routes ── */
-  if (stage === 'loading') return <Shell><LoadingState /></Shell>;
-  if (stage === 'empty')   return <Shell onManage={openManager}><EmptyState onCreate={openManager} /></Shell>;
+  // templateCount in the header reflects the user's total enabled templates
+  // (not the page-filtered subset), so it's a stable "how many templates do
+  // I have" indicator regardless of what tab the popup opened over.
+  const templateCount = allTemplates.length;
+  if (stage === 'loading') return <Shell templateCount={templateCount}><LoadingState /></Shell>;
+  if (stage === 'empty')   return <Shell templateCount={templateCount} onManage={openManager}><EmptyState onCreate={openManager} /></Shell>;
 
   const tpl = visibleTemplates.find((t) => t.id === selectedId);
 
@@ -373,7 +377,7 @@ function PopupApp() {
 
   return (
     <>
-      <Shell onManage={openManager}>
+      <Shell templateCount={templateCount} onManage={openManager}>
         <MainView
           templates={visibleTemplates}
           matchedIds={effectiveMatchedIds}
@@ -429,7 +433,7 @@ function PopupApp() {
    SHELL — header + scrollable body
 ============================================================ */
 
-function Shell({ children, onManage }) {
+function Shell({ children, onManage, templateCount }) {
   return (
     <div style={{
       width: 320, minHeight: 340,
@@ -443,7 +447,7 @@ function Shell({ children, onManage }) {
       position: 'relative',
       boxSizing: 'border-box',
     }}>
-      <Header onManage={onManage} />
+      <Header onManage={onManage} templateCount={templateCount} />
       <div style={{ padding: '14px 14px 14px', overflow: 'hidden' }}>
         {children}
       </div>
@@ -451,7 +455,7 @@ function Shell({ children, onManage }) {
   );
 }
 
-function Header({ onManage }) {
+function Header({ onManage, templateCount }) {
   return (
     <div style={{
       padding: '12px 14px',
@@ -477,8 +481,20 @@ function Header({ onManage }) {
         }}>
           Email Templates
         </div>
-        <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', fontWeight: 500, marginTop: 1 }}>
-          Golfballs.com
+        <div style={{
+          fontSize: 10, color: 'var(--gb-text-muted)', fontWeight: 500, marginTop: 1,
+          display: 'flex', alignItems: 'center', gap: 5,
+        }}>
+          <span>Golfballs.com</span>
+          {typeof templateCount === 'number' && (
+            <>
+              <span style={{
+                width: 2, height: 2, borderRadius: '50%',
+                background: 'currentColor', opacity: 0.6, flexShrink: 0,
+              }} />
+              <span>{templateCount} template{templateCount === 1 ? '' : 's'}</span>
+            </>
+          )}
         </div>
       </div>
       {onManage && (
@@ -583,17 +599,25 @@ function MainView({
   const proofDisabled = ignoreProof ? false : proofDisabledReal;
 
   // ── template dropdown options ──
-  // Matched templates pinned to top; "matched" tag on the row label so the
-  // user can spot which the page-rules engine pre-selected.
+  // Matched templates pinned to top with a "Matched" group header so the
+  // user can spot which the page-rules engine pre-selected. Templates with
+  // 2+ variations get a small "Nx" tag in the row's trailing slot so the
+  // user knows there's more than one version behind the name.
   const dropdownOptions = useMemo(() => {
     const matchedSet = new Set(matchedIds);
     const matched = templates.filter((t) => matchedSet.has(t.id));
     const rest    = templates.filter((t) => !matchedSet.has(t.id));
-    return [...matched, ...rest].map((t) => ({
-      id: t.id,
-      label: t.name || 'Untitled',
-      group: matchedSet.has(t.id) ? 'Matched' : 'All templates',
-    }));
+    return [...matched, ...rest].map((t) => {
+      const varN = (t.variations || []).length;
+      return {
+        id: t.id,
+        label: t.name || 'Untitled',
+        group: matchedSet.has(t.id) ? 'Matched' : 'All templates',
+        trailing: varN > 1
+          ? <Tag tone="info" size="xs">{varN}x</Tag>
+          : null,
+      };
+    });
   }, [templates, matchedIds]);
 
   const isMatched = matchedIds.includes(selectedId);
