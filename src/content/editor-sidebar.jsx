@@ -640,13 +640,14 @@ function TemplateSidebar() {
         <AnimatePresence mode="wait">
           <motion.div
             key={tab}
-            // Direction-aware tab switch: Templates is left, Notes is right.
-            // Outgoing slides toward its tab's side, incoming slides in from
-            // the opposite side — so the motion always reads as "navigate
-            // to the next tab" rather than a generic fade.
+            // Each tab consistently animates from its own side: Templates
+            // (left tab) slides to / from the left, Notes (right tab) from
+            // the right. The outgoing element keeps the tab value it was
+            // rendered with — so click Notes and Templates exits LEFT,
+            // Notes enters from the RIGHT (both moving left-to-right).
             initial={{ opacity: 0, x: tab === 'templates' ? -18 : 18 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: tab === 'templates' ? 18 : -18 }}
+            exit={{ opacity: 0, x: tab === 'templates' ? -18 : 18 }}
             transition={SOFT}
           >
             {/* Folders first */}

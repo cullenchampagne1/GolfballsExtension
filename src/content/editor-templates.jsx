@@ -276,8 +276,9 @@ function TemplateEditor({ tpl, onDelete }) {
     return next;
   }
 
-  const skipSave  = useRef(true);
-  const saveTimer = useRef(0);
+  const skipSave     = useRef(true);
+  const skipTypeSave = useRef(true);
+  const saveTimer    = useRef(0);
   useEffect(() => {
     if (skipSave.current) { skipSave.current = false; return undefined; }
     clearTimeout(saveTimer.current);
@@ -285,7 +286,18 @@ function TemplateEditor({ tpl, onDelete }) {
       if (typeof window.__gbSaveTemplate === 'function') window.__gbSaveTemplate(buildTemplate());
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [typeId, name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId, variations]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId, variations]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* Type changes bypass the 500ms debounce — the sidebar's row-teleport
+     spring is keyed on tpl.type, so we save the new type immediately and
+     let the storage `onChanged` listener kick the layout animation in
+     within a frame. */
+  useEffect(() => {
+    if (skipTypeSave.current) { skipTypeSave.current = false; return; }
+    if (typeof window.__gbSaveTemplate === 'function') {
+      window.__gbSaveTemplate(buildTemplate());
+    }
+  }, [typeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Live resolution ────────────────────────────────────────
      The editor window has no page DOM, so it asks the order /
