@@ -306,9 +306,16 @@ export function SettingsPanel() {
   }, [refreshKey]);
 
   const commitTheme = (next) => { setTheme(next); applyTheme(next); saveTheme(next); };
-  const pickVariant = (variant) => commitTheme({ ...theme, variant });
+  const pickVariant = (variant) => {
+    if (variant === theme.variant) return;
+    commitTheme({ ...theme, variant });
+    window.__gbToast?.success(`Theme set to ${variant}`);
+  };
   const setColor = (key, value) => commitTheme({ ...theme, colors: { ...theme.colors, [key]: value } });
-  const resetColors = () => commitTheme({ ...theme, colors: {} });
+  const resetColors = () => {
+    commitTheme({ ...theme, colors: {} });
+    window.__gbToast?.success('Colors reset to variant defaults');
+  };
   const toggleFlag = (key) => { const next = { ...flags, [key]: !flags[key] }; setFlags(next); saveFlags(next); };
   const setFlagValue = (key, value) => { const next = { ...flags, [key]: value }; setFlags(next); saveFlags(next); };
   const setShortcut = (key, value) => { const next = { ...shortcuts, [key]: value.toLowerCase() }; setShortcuts(next); saveKeyboardShortcuts(next); };
