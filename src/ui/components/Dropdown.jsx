@@ -19,7 +19,9 @@ function ensureScrollbarStyle() {
  * Dropdown — select control with an animated menu.
  *
  * Props: value, placeholder, size, leading, searchable, disabled,
- *   options: Array<{ id, label, disabled?, group? }>,
+ *   options: Array<{ id, label, disabled?, group?, trailing? }>,
+ *     - trailing: ReactNode rendered on the right side of the row,
+ *       before the check mark. Useful for tags / badges / counts.
  *   onChange(id).
  */
 export function Dropdown({
@@ -196,6 +198,9 @@ export function Dropdown({
                         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {o.label}
                         </span>
+                        {o.trailing && (
+                          <span style={{ display: 'flex', flexShrink: 0 }}>{o.trailing}</span>
+                        )}
                         {active && <I.check size={12} />}
                       </motion.div>
                     );
