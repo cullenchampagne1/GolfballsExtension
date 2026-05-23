@@ -693,6 +693,25 @@ function MainView({
 
   const isMatched = matchedIds.includes(selectedId);
 
+  // ── dynamic dropdown maxHeight ──
+  // The popup auto-resizes to its content with a 340px floor. The button
+  // stack fits "for free" up to ~3 rows within that floor; each row beyond
+  // that grows the popup taller, so the dropdown menu should grow by the
+  // same amount or it'll look artificially cramped against a tall popup.
+  //
+  // Row height: 28px button + 6px stack gap = 34px. Watch pair = 1 row.
+  // Floor at 160 (one usable page of options) at the floor popup height;
+  // ceiling at 280 so an everything-on popup doesn't grow an absurd menu.
+  const visibleButtonRows =
+    (flags.chargeEnabled    ? 1 : 0) +
+    (flags.orderEditEnabled ? 1 : 0) +
+    (flags.watchListEnabled ? 1 : 0) +
+    (flags.taskListEnabled  ? 1 : 0) +
+    (flags.crmSearchEnabled ? 1 : 0) +
+    (flags.submitProofEnabled ? 1 : 0);
+  const rowsAboveFloor = Math.max(0, visibleButtonRows - 3);
+  const dropdownMaxHeight = Math.min(280, 160 + rowsAboveFloor * 34);
+
   // ── action handlers ──
   const onCharge = async () => {
     if (!tab) return;
@@ -835,14 +854,13 @@ function MainView({
                   leading={<Dot tone={isMatched ? 'brand' : 'muted'} size={7} glow={isMatched} />}
                   onChange={onSelect}
                   /* Hard-clamp the menu height so it always fits inside
-                     the 340px popup with visible bottom padding. We
-                     don't rely on the Dropdown's auto-clamp here
-                     because Chrome's popup auto-resize can fire after
-                     the menu opens, leaving the menu sized against a
-                     stale viewport. 160px gives ~36px of breathing room
-                     below the menu so it never butts against the
-                     popup's bottom edge. */
-                  maxHeight={160}
+                     the popup with visible bottom padding. We don't
+                     rely on the Dropdown's auto-clamp here because
+                     Chrome's popup auto-resize can fire after the menu
+                     opens, leaving the menu sized against a stale
+                     viewport. Scales with visible button rows so the
+                     menu grows as the popup grows. */
+                  maxHeight={dropdownMaxHeight}
                 />
               ) : (
                 <div style={{
