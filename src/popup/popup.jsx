@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
+import { loadDevSettings, STORAGE_KEY as DEV_KEY } from '../lib/devSettings.js';
 import {
   Btn, Dropdown, Dot, Tag, KeyVal, SectionLabel, Field, Textarea,
   Spinner, I, T, inputBaseStyle,
@@ -160,6 +161,10 @@ function PopupApp() {
   const [pageInfo, setPageInfo] = useState({});
   const [flags, setFlags] = useState({});
   const [watchList, setWatchList] = useState([]);
+  // Dev knob — when true, the page-type filter is bypassed and every
+  // order/account template shows. Variables stay unmatched (no point
+  // round-tripping to content scripts that may not be on a GB page).
+  const [ignorePageContext, setIgnorePageContext] = useState(false);
 
   // ── selected template + resolved data ──
   const [selectedId, setSelectedId] = useState(null);
@@ -183,20 +188,30 @@ function PopupApp() {
         catch { res(); }
       });
 
-      const data = await storageGet(['templates', 'watchList', 'featureFlags']);
+      const [data, devSettings] = await Promise.all([
+        storageGet(['templates', 'watchList', 'featureFlags']),
+        loadDevSettings(),
+      ]);
       const tpls = (data.templates || []).filter((t) => t.enabled !== false && t.type !== 'case');
       const mergedFlags = {
         chargeEnabled: true, orderEditEnabled: true, submitProofEnabled: true,
         taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true,
         ...(data.featureFlags || {}),
       };
+      const ignoreCtx = !!devSettings['popup.ignorePageContext'];
       if (cancelled) return;
       setTab(currentTab);
       setAllTemplates(tpls);
       setWatchList(data.watchList || []);
       setFlags(mergedFlags);
+      setIgnorePageContext(ignoreCtx);
 
       if (tpls.length === 0) { setStage('empty'); return; }
+
+      // Dev escape hatch — skip page-script probing and variable resolution.
+      // Templates list still populates because visibleTemplates returns ALL
+      // order/account templates when ignoreCtx is on.
+      if (ignoreCtx) { renderMain({ pageType: '__all__' }, tpls); return; }
 
       // Probe whether all content scripts are fully live in this tab.
       // Checks both the ready flag (set by main.js) AND the existence of the
@@ -250,13 +265,30 @@ function PopupApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /* ── live-sync the ignore-context dev toggle ── */
+  useEffect(() => {
+    if (!chrome?.storage?.onChanged) return;
+    const onChanged = (changes, area) => {
+      if (area !== 'local' || !changes[DEV_KEY]) return;
+      const next = changes[DEV_KEY].newValue || {};
+      setIgnorePageContext(!!next['popup.ignorePageContext']);
+    };
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
+  }, []);
+
   /* ── narrow templates to those relevant for this page type ── */
   const visibleTemplates = useMemo(() => {
+    if (ignorePageContext) {
+      // Show every order + account/contact template, no matter the page.
+      return allTemplates.filter((t) =>
+        t.type === 'order' || t.type === 'email' || !t.type || t.type === 'account');
+    }
     const pageType = pageInfo.pageType || 'other';
     if (pageType === 'order')   return allTemplates.filter((t) => t.type === 'order' || t.type === 'email' || !t.type);
     if (pageType === 'account' || pageType === 'contact') return allTemplates.filter((t) => t.type === 'account');
     return [];
-  }, [allTemplates, pageInfo.pageType]);
+  }, [allTemplates, pageInfo.pageType, ignorePageContext]);
 
   function renderMain(info, tpls = allTemplates) {
     setPageInfo(info);
@@ -267,9 +299,14 @@ function PopupApp() {
     // even when no template matches the current page type. The template
     // section in MainView shows its own "no matches" state when empty.
     const pageType = info.pageType || 'other';
-    const visible =
-      pageType === 'order'   ? tpls.filter((t) => t.type === 'order' || t.type === 'email' || !t.type) :
-      (pageType === 'account' || pageType === 'contact') ? tpls.filter((t) => t.type === 'account') : [];
+    const ignore = pageType === '__all__';
+    const visible = ignore
+      ? tpls.filter((t) => t.type === 'order' || t.type === 'email' || !t.type || t.type === 'account')
+      : pageType === 'order'
+        ? tpls.filter((t) => t.type === 'order' || t.type === 'email' || !t.type)
+        : (pageType === 'account' || pageType === 'contact')
+          ? tpls.filter((t) => t.type === 'account')
+          : [];
 
     const matched = info.matchedTemplateIds || [];
     const initial = matched.find((id) => visible.some((t) => t.id === id)) || visible[0]?.id || null;
@@ -282,6 +319,15 @@ function PopupApp() {
     if (!selectedId || !tab) return;
     const tpl = visibleTemplates.find((t) => t.id === selectedId);
     if (!tpl) return;
+    // ignorePageContext mode: skip the round-trip — variables will be unmatched
+    // because the page isn't a GB page (or the content script isn't present).
+    if (ignorePageContext) {
+      const empty = Object.fromEntries(Object.keys(tpl.vars || {}).map((k) => [k, '']));
+      setResolvedVars(empty);
+      setResolvedTo('');
+      setResolving(false);
+      return;
+    }
     setResolving(true);
     setResolvedVars({});
     setResolvedTo('');
@@ -294,7 +340,7 @@ function PopupApp() {
       setResolvedTo(result?.toEmail || '');
       setResolving(false);
     });
-  }, [selectedId, tab, visibleTemplates]);
+  }, [selectedId, tab, visibleTemplates, ignorePageContext]);
 
   /* ── listen for live flag changes (charge/orderEdit toggles, etc.) ── */
   useEffect(() => {
