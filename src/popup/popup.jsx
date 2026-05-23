@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import { useDevSettings } from '../lib/devSettings.js';
 import {
-  Btn, Dropdown, Dot, Tag, KeyVal, SectionLabel, Field, Textarea,
+  Btn, Dropdown, Dot, KeyVal, SectionLabel, Field, Textarea,
   Spinner, I, T, inputBaseStyle,
 } from '../ui';
 
@@ -395,6 +395,7 @@ function PopupApp() {
           ignoreOrderEdit={ignoreOrderEdit}
           ignoreWatch={ignoreWatch}
           ignoreProof={ignoreProof}
+          ignorePageContext={ignorePageContext}
           onOpenWatchAdd={() => setWatchModalOpen(true)}
           onOpenProof={() => setProofModalOpen(true)}
         />
@@ -556,11 +557,19 @@ function EmptyState({ onCreate }) {
 function MainView({
   templates, matchedIds, selectedId, onSelect, tpl,
   resolving, resolvedVars, resolvedTo, pageInfo, flags, watchList, tab,
-  ignoreCharge, ignoreOrderEdit, ignoreWatch, ignoreProof,
+  ignoreCharge, ignoreOrderEdit, ignoreWatch, ignoreProof, ignorePageContext,
   onOpenWatchAdd, onOpenProof,
 }) {
   // ── derived button states ──
-  const canSend = !!(resolvedTo && resolvedTo.includes('@'));
+  // hasRecipient = real recipient resolved by content scripts. Required for
+  // mailto/reply-file modes (the email needs a To address baked in) but not
+  // strictly required for PA modes (the flow can resolve recipient server-side)
+  // or for dev "ignore page context" mode where we never even ran resolution.
+  //
+  // canSend = should the Send button actually fire? Gates on having a template
+  // selected, plus a recipient unless we're in a mode that doesn't need one.
+  const hasRecipient = !!(resolvedTo && resolvedTo.includes('@'));
+  const canSend = !!tpl && (hasRecipient || ignorePageContext);
 
   const pageType = pageInfo.pageType || 'other';
   const knownType = (pageType === 'order' || pageType === 'contact' || pageType === 'account');
@@ -599,10 +608,14 @@ function MainView({
   const proofDisabled = ignoreProof ? false : proofDisabledReal;
 
   // ── template dropdown options ──
-  // Matched templates pinned to top with a "Matched" group header so the
-  // user can spot which the page-rules engine pre-selected. Templates with
-  // 2+ variations get a small "Nx" tag in the row's trailing slot so the
-  // user knows there's more than one version behind the name.
+  // Matched templates pin to the top of a single flat list with a brand
+  // left-accent — same vocabulary as the rest of the design system's list
+  // surfaces. No group header needed: the accent reads as "this one matched
+  // the page rules" at a glance without spending a whole section.
+  //
+  // Templates with 2+ variations get a quiet count chip in the trailing slot
+  // (muted text on the menu background) so it informs without competing with
+  // the label or the accent.
   const dropdownOptions = useMemo(() => {
     const matchedSet = new Set(matchedIds);
     const matched = templates.filter((t) => matchedSet.has(t.id));
@@ -612,9 +625,12 @@ function MainView({
       return {
         id: t.id,
         label: t.name || 'Untitled',
-        group: matchedSet.has(t.id) ? 'Matched' : 'All templates',
+        accent: matchedSet.has(t.id) ? 'brand' : undefined,
         trailing: varN > 1
-          ? <Tag tone="info" size="xs">{varN}x</Tag>
+          ? <span style={{
+              fontSize: 9, fontWeight: 600, color: 'var(--gb-text-muted)',
+              fontVariantNumeric: 'tabular-nums', letterSpacing: 0.2,
+            }}>{varN}×</span>
           : null,
       };
     });
@@ -721,8 +737,12 @@ function MainView({
   };
 
   // ── send button mode → icon/label
+  // Derived from the selected template's replyMode + PA flags, regardless of
+  // whether canSend is true — that way the button shows the right label even
+  // when it's disabled (e.g. "Reply in Outlook" stays visible during loading
+  // rather than flashing back to the default "Open in Outlook").
   const sendMode = (() => {
-    if (!canSend) return null;
+    if (!tpl) return null;
     const replyMode = tpl?.replyMode || 'standalone';
     const isReply = replyMode === 'reply';
     const paReady = !!(flags.replyWithTemplateEnabled && flags.powerAutomateUrl);
@@ -830,7 +850,7 @@ function MainView({
             </div>
           ) : (
             <div>
-              <KeyVal k="To" v={resolvedTo || 'Not found'} tone={canSend ? 'ok' : 'error'} />
+              <KeyVal k="To" v={resolvedTo || 'Not found'} tone={hasRecipient ? 'ok' : 'error'} />
               {Object.entries(resolvedVars).map(([name, val]) => (
                 <KeyVal key={name} k={name} v={val ? String(val).slice(0, 40) : 'Not found'} tone={val ? 'default' : 'error'} />
               ))}

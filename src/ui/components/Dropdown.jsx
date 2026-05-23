@@ -19,9 +19,13 @@ function ensureScrollbarStyle() {
  * Dropdown — select control with an animated menu.
  *
  * Props: value, placeholder, size, leading, searchable, disabled,
- *   options: Array<{ id, label, disabled?, group?, trailing? }>,
+ *   options: Array<{ id, label, disabled?, group?, trailing?, accent? }>,
  *     - trailing: ReactNode rendered on the right side of the row,
  *       before the check mark. Useful for tags / badges / counts.
+ *     - accent:   'brand'|'error'|'warning'|'success'|'info'
+ *                 paints a 2px left-border in the matching --gb-{tone}
+ *                 color and pads the row to keep the label aligned.
+ *                 Use it to mark a row without spending a whole group.
  *   onChange(id).
  */
 export function Dropdown({
@@ -179,13 +183,22 @@ export function Dropdown({
                   )}
                   {opts.map((o) => {
                     const active = o.id === value;
+                    // Accent colours mirror the status tokens so a `info`
+                    // accent reads green-of-info, etc. Padding shifts 2px
+                    // to absorb the left-border so the label stays aligned
+                    // with non-accented rows.
+                    const accentColor = o.accent
+                      ? `var(--gb-${o.accent === 'brand' ? 'brand-label' : `${o.accent}-fg`})`
+                      : null;
                     return (
                       <motion.div
                         key={o.id}
                         onClick={() => pick(o)}
                         whileHover={o.disabled ? undefined : { backgroundColor: 'var(--gb-fill-soft)' }}
                         style={{
-                          padding: '6px 8px', borderRadius: 'var(--gb-r-sm)',
+                          padding: o.accent ? '6px 8px 6px 6px' : '6px 8px',
+                          borderLeft: o.accent ? `2px solid ${accentColor}` : '2px solid transparent',
+                          borderRadius: 'var(--gb-r-sm)',
                           fontSize: 12, fontFamily: 'var(--gb-font-sans)',
                           display: 'flex', alignItems: 'center', gap: 8,
                           cursor: o.disabled ? 'not-allowed' : 'pointer',
