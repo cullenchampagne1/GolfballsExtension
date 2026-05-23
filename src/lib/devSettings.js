@@ -41,6 +41,16 @@ export const DEV_SETTINGS = [
     default: false,
   },
   {
+    key:     'marginCalc.minAllowedMargin',
+    label:   'Margin calculator: minimum allowed margin',
+    desc:    'Threshold for the low-margin warning in the Margin Calculator. The warning shows when the entered margin is positive but below this value. 0 disables the warning entirely.',
+    type:    'number',
+    default: 30,
+    min:     0,
+    max:     100,
+    step:    1,
+  },
+  {
     key:     'popup.forceMatchedCount',
     label:   'Popup: force matched count',
     desc:    'Force the first N templates in the popup dropdown to render with the matched-template styling (brand dot + Matched group). 0 = off.',

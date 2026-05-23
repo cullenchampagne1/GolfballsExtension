@@ -6,9 +6,9 @@ import {
 } from '../ui/index.js';
 import { useDevSettings } from '../lib/devSettings.js';
 
-// Margins under this threshold trigger the "out of recommended range"
-// warning. Tweak here if the business definition of "healthy" shifts.
-const LOW_MARGIN_THRESHOLD = 30;
+// Fallback only — real value comes from Developer Settings
+// (`marginCalc.minAllowedMargin`) which is loaded from chrome.storage.
+const DEFAULT_MIN_MARGIN = 30;
 
 /* ───────────────────────────────────────────────────────────────
    MarginCalc — margin & profit calculator, rebuilt on the design
@@ -115,11 +115,14 @@ export function MarginCalc({ shortcut, onClosed, bindClose }) {
   const countDuration = (dev['numberDisplay.durationMs'] || 400) / 1000;
 
   // Low-margin warning gate. Only fires when the margin has a real
-  // positive value below the threshold — empty / zero / negative margins
-  // are "no signal" states, not "out of range". The Callout's own
-  // AnimatePresence handles the in/out transition.
+  // positive value below the user's configured minimum — empty / zero /
+  // negative margins are "no signal" states, not "out of range". A
+  // threshold of 0 disables the warning entirely (matches the desc in
+  // the dev settings registry). The Callout's own AnimatePresence
+  // handles the in/out transition as the user types past the threshold.
+  const minMargin = Number(dev['marginCalc.minAllowedMargin'] ?? DEFAULT_MIN_MARGIN);
   const marginNum = parseVal(v.margin);
-  const showLowMargin = marginNum !== null && marginNum > 0 && marginNum < LOW_MARGIN_THRESHOLD;
+  const showLowMargin = minMargin > 0 && marginNum !== null && marginNum > 0 && marginNum < minMargin;
 
   return (
     <FloatingPanel width={520} backdrop onClose={onClosed} bindClose={bindClose}>
@@ -198,7 +201,7 @@ export function MarginCalc({ shortcut, onClosed, bindClose }) {
             >
               <Callout
                 tone="warning"
-                title={`Margin ${marginNum.toFixed(1)}% is below the recommended ${LOW_MARGIN_THRESHOLD}%`}
+                title={`Margin ${marginNum.toFixed(1)}% is below the recommended ${minMargin}%`}
               >
                 Revisit cost or selling price before quoting this margin.
               </Callout>
