@@ -93,7 +93,15 @@ export function Spinner({ size = 12 }) {
   );
 }
 
-/** Shared visual shell for Input / Textarea / Dropdown. */
+/** Shared visual shell for Input / Textarea / Dropdown.
+ *  Radius scales with size so the corner ratio stays visually consistent
+ *  across sizes — a fixed `var(--gb-r-md)` (8px) on a 28px-tall sm input
+ *  reads as proportionally MORE rounded than the same 8px on a 36px lg
+ *  input. Matches the same scaling pattern as Btn (xs/sm: r-sm · md/lg:
+ *  r-md). Without this, switching a modal from lg → sm visibly grows
+ *  every input's corner roundness even though the value is unchanged. */
+const INPUT_RADII = { sm: 'var(--gb-r-sm)', md: 'var(--gb-r-md)', lg: 'var(--gb-r-md)' };
+
 export function inputBaseStyle({ focused, error, size = 'md' }) {
   const heights = { sm: 28, md: 32, lg: 36 };
   const fontSizes = { sm: 11.5, md: 12, lg: 13 };
@@ -104,7 +112,7 @@ export function inputBaseStyle({ focused, error, size = 'md' }) {
         : error ? 'var(--gb-error)'
           : 'var(--gb-border-default)'
     ),
-    borderRadius: 'var(--gb-r-md)',
+    borderRadius: INPUT_RADII[size] || INPUT_RADII.md,
     boxShadow: focused ? 'var(--gb-focus-ring)' : 'none',
     height: heights[size],
     fontSize: fontSizes[size],

@@ -3,18 +3,21 @@ import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import {
   SettingNotificationHost, useSettingNotification,
+  ToastHost,
 } from '../ui/index.js';
 
 /* ────────────────────────────────────────────────────────────────
-   editor-notifications.jsx — mounts a centered, page-wide notification
-   host into #notifications-root and exposes the API as window.__gbNotify.
+   editor-notifications.jsx — mounts the editor's notification roots
+   into #notifications-root and exposes the APIs as globals:
+     · window.__gbNotify — themed confirm/prompt (SettingNotification)
+     · window.__gbToast  — pill/action/step/tray/edge toasts (ToastHost)
 
    Other React roots (editor-sidebar, editor-templates, editor-settings)
-   pick it up automatically via `useSettingNotification()` — the hook
-   falls back to window.__gbNotify when no in-tree provider exists.
+   pick `__gbNotify` up automatically via `useSettingNotification()` —
+   the hook falls back to window.__gbNotify when no in-tree provider
+   exists. Same fallback for `useToast()` and window.__gbToast.
 
-   editor.js (vanilla) calls window.__gbNotify.confirm/prompt directly
-   to replace the native browser dialogs.
+   editor.js (vanilla) + content scripts call the globals directly.
 ──────────────────────────────────────────────────────────────── */
 
 function GlobalBridge() {
@@ -28,9 +31,11 @@ function GlobalBridge() {
 
 function EditorNotifications() {
   return (
-    <SettingNotificationHost placement="top">
-      <GlobalBridge />
-    </SettingNotificationHost>
+    <ToastHost>
+      <SettingNotificationHost placement="top">
+        <GlobalBridge />
+      </SettingNotificationHost>
+    </ToastHost>
   );
 }
 

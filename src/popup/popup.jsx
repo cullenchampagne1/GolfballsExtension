@@ -6,7 +6,7 @@ import { ensureTheme } from '../lib/theme.js';
 import { useDevSettings } from '../lib/devSettings.js';
 import {
   Btn, Dropdown, Dot, Tag, KeyVal, SectionLabel, Field, Textarea,
-  Spinner, I, T, inputBaseStyle,
+  Spinner, I, T, inputBaseStyle, ToastHost,
 } from '../ui';
 
 /* ───────────────────────────────────────────────────────────────
@@ -1483,7 +1483,11 @@ ensureTheme();
 function mount() {
   const host = document.getElementById('popup-root');
   if (!host) return;
-  createRoot(host).render(<PopupApp />);
+  createRoot(host).render(
+    <ToastHost>
+      <PopupApp />
+    </ToastHost>,
+  );
 }
 
 if (document.readyState === 'loading') {

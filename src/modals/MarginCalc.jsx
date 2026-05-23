@@ -132,7 +132,7 @@ export function MarginCalc({ shortcut, onClosed, bindClose }) {
         subtitle="Enter any two values"
       />
 
-      <div style={{ padding: '12px 12px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ padding: '12px 12px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
           <Field label="Item Cost">
             <Input size="sm" mono inputMode="decimal" placeholder="0.00" autoFocus
@@ -208,7 +208,7 @@ export function MarginCalc({ shortcut, onClosed, bindClose }) {
                 tone="warning"
                 title={`Margin ${marginNum.toFixed(1)}% is below the recommended ${minMargin}%`}
               >
-                Revisit cost or selling price before quoting this margin.
+                Increased sell price recomended.
               </Callout>
             </motion.div>
           )}
