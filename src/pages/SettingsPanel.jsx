@@ -30,8 +30,7 @@ const getIcon = (name) => ICON_MAP[name] || <I.cog />;
 /* Each variant's BASELINE brand-label — mirrors src/ui/theme.css. The
    preview overrides --gb-brand-label inline so the user's saved color
    override on <html> doesn't leak in and make every card show the same
-   green. (Inline style on the preview div beats inline style on <html>
-   because the cream/dark/etc. declaration sits on the preview itself.) */
+   green. */
 const VARIANT_BASE_BRAND = {
   dark:     '#8fce2e',
   midnight: '#a3e030',
@@ -39,17 +38,42 @@ const VARIANT_BASE_BRAND = {
   cream:    '#5a7a14',
 };
 
+/* Card hover/active transitions go through a CSS class — not motion's
+   whileHover — because motion can't smoothly interpolate `var()` color
+   tokens. The artifact was a transient "dark flash" in light theme and
+   a midnight-tinted bg in dark theme as motion fell back to invalid
+   interpolation values. CSS handles it cleanly. */
+const VARIANT_CARD_STYLE_ID = '__gb-variant-card';
+function ensureVariantCardStyle() {
+  if (typeof document === 'undefined' || document.getElementById(VARIANT_CARD_STYLE_ID)) return;
+  const el = document.createElement('style');
+  el.id = VARIANT_CARD_STYLE_ID;
+  el.textContent = `
+    .gb-variant-card {
+      transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
+    }
+    .gb-variant-card:hover { background: var(--gb-surface-2); }
+    .gb-variant-card:active { transform: scale(0.985); }
+  `;
+  (document.head || document.documentElement).appendChild(el);
+}
+
 /* ── Variant Card ────────────────────────────────────────────── */
 function VariantCard({ variant, active, onClick }) {
+  useEffect(() => { ensureVariantCardStyle(); }, []);
   const baseBrand = VARIANT_BASE_BRAND[variant.id] || VARIANT_BASE_BRAND.dark;
   return (
-    <Card
-      active={active} hover onClick={onClick} padding={8}
+    <div
+      className="gb-variant-card"
+      onClick={onClick}
       style={{
         cursor: 'pointer',
-        // Non-themed border on the container — the variant previews can
-        // change, but the frame around them stays put.
-        border: '1px solid rgba(128, 128, 128, 0.28)',
+        background: active ? 'var(--gb-surface-2)' : 'var(--gb-surface-1)',
+        // Non-themed border so the frame is stable while the preview repaints.
+        border: '1px solid ' + (active ? 'var(--gb-brand-tint-border)' : 'rgba(128, 128, 128, 0.28)'),
+        borderRadius: 'var(--gb-r-md)',
+        padding: 8,
+        boxSizing: 'border-box',
       }}
     >
       <div
@@ -71,7 +95,7 @@ function VariantCard({ variant, active, onClick }) {
       <div style={{ marginTop: 7, fontSize: 11.5, fontWeight: 700, color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-primary)' }}>
         {variant.name}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -255,7 +279,7 @@ function UserPresetsManager({ onPresetLoad }) {
         )}
       </AnimatePresence>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <Dropdown value={selectedId} placeholder={hasPresets ? 'Select a preset...' : 'No saved presets'} options={dropdownOptions} onChange={setSelectedId} disabled={!hasPresets} style={{ flex: 1 }} />
+        <Dropdown size="sm" value={selectedId} placeholder={hasPresets ? 'Select a preset...' : 'No saved presets'} options={dropdownOptions} onChange={setSelectedId} disabled={!hasPresets} style={{ flex: 1 }} />
         <Btn variant="primary" size="sm" onClick={handleLoad} disabled={!selectedId}>Load</Btn>
         <Btn variant="secondary" size="sm" onClick={() => setShowSaveDialog(true)}>Save</Btn>
         <Btn variant="secondary" size="sm" onClick={handleExport} disabled={!selectedId}>Export</Btn>
