@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { T, inputBaseStyle } from '../shared.jsx';
 import { I } from '../icons.jsx';
@@ -28,11 +29,40 @@ export function Dropdown({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const rootRef = useRef(null);
+  const popoverRef = useRef(null);
+
+  // Position the portaled menu under the trigger. Recompute on resize +
+  // close on outside scroll (so it doesn't float when ancestors scroll).
+  // Portal-to-body lets the menu escape `overflow: hidden` parents like
+  // the InlineVariableForm wrapper or a modal body.
+  const [pos, setPos] = useState(null);
+  useEffect(() => {
+    if (!open) { setPos(null); return undefined; }
+    function update() {
+      const el = rootRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    }
+    update();
+    const onScroll = (e) => {
+      if (popoverRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', onScroll, true);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return undefined;
     const onDown = (e) => {
-      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
+      if (rootRef.current?.contains(e.target)) return;
+      if (popoverRef.current?.contains(e.target)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
@@ -91,16 +121,22 @@ export function Dropdown({
         </motion.span>
       </div>
 
+      {/* Menu is portaled to <body> so it escapes overflow:hidden parents
+          (modals, the inline-add wrapper's height-animation clip). It's
+          fixed-positioned from the trigger's bounding rect; updates on
+          window resize, closes on ancestor scroll. */}
+      {typeof document !== 'undefined' && createPortal(
       <AnimatePresence>
-        {open && (
+        {open && pos && (
           <motion.div
+            ref={popoverRef}
             initial={{ opacity: 0, y: -4, scaleY: 0.95 }}
             animate={{ opacity: 1, y: 0, scaleY: 1 }}
             exit={{ opacity: 0, y: -4, scaleY: 0.95, transition: T.base }}
             transition={T.bounce}
             style={{
-              position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-              transformOrigin: 'top', zIndex: 50,
+              position: 'fixed', top: pos.top, left: pos.left, width: pos.width,
+              transformOrigin: 'top', zIndex: 2147483400,
               background: 'var(--gb-surface-modal)',
               border: '1px solid var(--gb-border-default)',
               borderRadius: 'var(--gb-r-md)',
@@ -169,7 +205,8 @@ export function Dropdown({
             </div>
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body)}
     </div>
   );
 }

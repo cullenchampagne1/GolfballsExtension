@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { I, Icon } from '../icons.jsx';
 import { Btn } from './Btn.jsx';
@@ -121,13 +121,29 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
 
   const canAdd = !!name && !!config;
 
+  // Smooth scroll the form into view as it expands, then again when the
+  // user switches kinds (each kind has a different height). `block: 'end'`
+  // keeps the action row visible at the bottom edge so Add/Cancel never
+  // sit below the fold while the form is mid-expand.
+  const formRef = useRef(null);
+  useEffect(() => {
+    const el = formRef.current;
+    if (!el) return;
+    // Wait a frame so motion has applied the new height before we scroll.
+    const id = requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [kind]);
+
   return (
     <motion.div
-      // `layout` keeps the surrounding table reflowing as the form's
-      // height changes (e.g., when the user switches kinds and the
-      // config block grows). Initial/exit use a tight opacity+y so the
-      // height auto-measure is the only motion on the opening edge.
-      layout
+      ref={formRef}
+      // `layout` is intentionally omitted here — it fights `height: auto`
+      // on the same element (each frame motion remeasures and snaps the
+      // height instead of tweening). Surrounding rows reflow naturally
+      // because they're inside an `<AnimatePresence mode="popLayout">`
+      // with their own `layout` props.
       initial={{ height: 0, opacity: 0 }}
       animate={{ height: 'auto', opacity: 1 }}
       exit={{ height: 0, opacity: 0 }}
