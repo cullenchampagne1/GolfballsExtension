@@ -275,9 +275,9 @@ function UserPresetsManager({ onPresetLoad }) {
         <Btn variant="primary" size="sm" onClick={handleLoad} disabled={!selectedId}>Load</Btn>
         <Btn variant="secondary" size="sm" onClick={() => setShowSaveDialog(true)}>Save</Btn>
         <Btn variant="secondary" size="sm" onClick={handleExport} disabled={!selectedId}>Export</Btn>
-        <Btn variant="ghost" size="sm" onClick={handleDelete} disabled={!selectedId}><I.trash size={12} /></Btn>
+        <Btn variant="secondary" size="sm" onClick={handleDelete} disabled={!selectedId}><I.trash size={12} /></Btn>
         <input ref={fileInputRef} type="file" accept=".json" onChange={handleImport} style={{ display: 'none' }} />
-        <Btn variant="ghost" size="sm" onClick={() => fileInputRef.current?.click()}>Import</Btn>
+        <Btn variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>Import</Btn>
       </div>
     </div>
   );
