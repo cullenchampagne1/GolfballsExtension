@@ -37,6 +37,13 @@ const MODAL_REGISTRY = [
   { id: 'calendar',     label: 'Calendar',        icon: 'cog',     wired: false },
 ];
 
+// Visual scale applied to the whole playground surface. The default Chrome
+// 100% zoom renders DS chrome larger than it does on a real GB tab (their
+// page CSS shrinks form elements down). 0.74 matches what you'd manually
+// dial to on Cmd/Ctrl+Minus and bakes that in so opening the playground
+// always lands at the right size.
+const PLAYGROUND_SCALE = 0.74;
+
 // Grid tunables — derived from the active theme so the surface re-themes
 // when the user switches variant. The two gradient layers stack:
 //   minor: every 16px, faint
@@ -77,14 +84,32 @@ function PlaygroundSurface() {
     notify.notify(`${entry.label} modal — coming soon`, { tone: 'info' });
   };
 
+  // 1/scale so the inner box, after `transform: scale(SCALE)`, lands at
+  // 100% of the viewport. Without this the scaled content would occupy
+  // SCALE × viewport, leaving an empty gutter on the right + bottom.
+  const inv = 1 / PLAYGROUND_SCALE;
+
   return (
     <div style={{
       width: '100%', height: '100vh',
       ...gridBackground,
       position: 'relative',
-      overflow: 'auto',
+      overflow: 'hidden',
       fontFamily: 'var(--gb-font-sans)',
       color: 'var(--gb-text-secondary)',
+    }}>
+    {/* Scaled wrapper holds the modal mount + center hint. The toolbar
+        lives OUTSIDE so it stays at native chrome size — a transformed
+        ancestor would scale the toolbar AND break its position:fixed
+        anchoring (CSS quirk: fixed elements anchor to their nearest
+        transformed ancestor, not the viewport). Modals INSIDE this
+        wrapper inherit the scale, which is the whole point. */}
+    <div style={{
+      transform: `scale(${PLAYGROUND_SCALE})`,
+      transformOrigin: 'top left',
+      width:  `${inv * 100}%`,
+      height: `${inv * 100}%`,
+      position: 'relative',
     }}>
       {/* Center hint — empty-state cue when no modal is up. */}
       {!mounted && (
@@ -108,45 +133,10 @@ function PlaygroundSurface() {
         </div>
       )}
 
-      {/* Top-right toolbar — one button per planned modal. Wired entries
-          mount the real component into the playground; everything else
-          fires a "coming soon" toast so the chrome is in place for when
-          each modal lands. */}
-      <div style={{
-        position: 'fixed', top: 14, right: 14, zIndex: 10,
-        background: 'var(--gb-surface-modal)',
-        border: '1px solid var(--gb-border-default)',
-        borderRadius: 'var(--gb-r-lg)',
-        boxShadow: 'var(--gb-shadow-popover)',
-        padding: 10,
-        display: 'flex', flexDirection: 'column', gap: 8,
-        minWidth: 180,
-      }}>
-        <SectionLabel divider={false} style={{ marginBottom: 0 }}>Modals</SectionLabel>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {MODAL_REGISTRY.map((entry) => {
-            const Icon = I[entry.icon] || I.bolt;
-            return (
-              <Btn
-                key={entry.id}
-                size="sm"
-                full
-                icon={<Icon />}
-                variant={entry.wired ? 'tinted' : 'secondary'}
-                status="brand"
-                onClick={() => launch(entry)}
-                style={{ justifyContent: 'flex-start' }}
-              >
-                {entry.label}
-              </Btn>
-            );
-          })}
-        </div>
-      </div>
-
       {/* Modal mount points — one block per wired modal. Each is gated on
           `mounted === id` so only one renders at a time; AnimatePresence
-          plays the modal's exit animation when we null out `mounted`. */}
+          plays the modal's exit animation when we null out `mounted`.
+          Lives INSIDE the scaled wrapper so modals inherit the scale. */}
       <AnimatePresence>
         {mounted === 'margin' && (
           <MarginCalc
@@ -155,6 +145,49 @@ function PlaygroundSurface() {
           />
         )}
       </AnimatePresence>
+    </div>
+    {/* /scaled wrapper */}
+
+    {/* Top-right toolbar — one button per planned modal. Wired entries
+        mount the real component into the playground; everything else
+        fires a "coming soon" toast so the chrome is in place for when
+        each modal lands.
+
+        Lives OUTSIDE the scaled wrapper so it stays at native size and
+        is anchored to the viewport edge (a position:fixed child of a
+        transformed ancestor anchors to that ancestor, not the viewport,
+        so we keep it as a sibling instead). */}
+    <div style={{
+      position: 'fixed', top: 14, right: 14, zIndex: 10,
+      background: 'var(--gb-surface-modal)',
+      border: '1px solid var(--gb-border-default)',
+      borderRadius: 'var(--gb-r-lg)',
+      boxShadow: 'var(--gb-shadow-popover)',
+      padding: 10,
+      display: 'flex', flexDirection: 'column', gap: 8,
+      minWidth: 180,
+    }}>
+      <SectionLabel divider={false} style={{ marginBottom: 0 }}>Modals</SectionLabel>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {MODAL_REGISTRY.map((entry) => {
+          const Icon = I[entry.icon] || I.bolt;
+          return (
+            <Btn
+              key={entry.id}
+              size="sm"
+              full
+              icon={<Icon />}
+              variant={entry.wired ? 'tinted' : 'secondary'}
+              status="brand"
+              onClick={() => launch(entry)}
+              style={{ justifyContent: 'flex-start' }}
+            >
+              {entry.label}
+            </Btn>
+          );
+        })}
+      </div>
+    </div>
     </div>
   );
 }

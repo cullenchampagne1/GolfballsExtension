@@ -418,6 +418,60 @@ function UserPresetsManager({ onPresetLoad }) {
   );
 }
 
+/* ── NumberCell — controlled input for `number` dev settings.
+       Backed by a local draft string so backspacing to empty doesn't
+       immediately snap back to the default value (the previous version
+       force-flushed `def.default` on every empty render, fighting the
+       user's input — backspace would visibly replace the cleared field
+       with the stored default). The draft commits to the store on every
+       valid numeric edit AND on blur (clamped); blur with an empty
+       field reverts to the last good stored value rather than mutating it. */
+function NumberCell({ def, value, onChange }) {
+  const [draft, setDraft] = useState(String(value ?? ''));
+
+  // Keep the draft in sync when the stored value changes from outside
+  // (e.g. Reset Developer Settings, or another tab editing storage).
+  // Skip the sync while the input is focused so we don't stomp the user
+  // mid-edit.
+  const focusedRef = useRef(false);
+  useEffect(() => {
+    if (!focusedRef.current) setDraft(String(value ?? ''));
+  }, [value]);
+
+  return (
+    <Input
+      size="sm" mono
+      value={draft}
+      onFocus={() => { focusedRef.current = true; }}
+      onBlur={() => {
+        focusedRef.current = false;
+        // Empty / non-numeric → revert to the stored value rather than
+        // forcing the default (the user might have been mid-edit and
+        // bailed; mutating to default would surprise them).
+        if (draft.trim() === '') { setDraft(String(value ?? '')); return; }
+        const n = Number(draft);
+        if (Number.isNaN(n)) { setDraft(String(value ?? '')); return; }
+        const clamped = Math.max(def.min ?? -Infinity, Math.min(def.max ?? Infinity, n));
+        setDraft(String(clamped));
+        if (clamped !== value) onChange(clamped);
+      }}
+      onChange={(v) => {
+        const cleaned = v.replace(/[^0-9.]/g, '');
+        setDraft(cleaned);
+        // Persist as the user types when the field holds a valid number;
+        // empty / partial input ("1.") stays in the draft only so React
+        // doesn't fight us by re-rendering the field to the stored value.
+        if (cleaned === '') return;
+        const n = Number(cleaned);
+        if (Number.isNaN(n)) return;
+        const clamped = Math.max(def.min ?? -Infinity, Math.min(def.max ?? Infinity, n));
+        if (clamped !== value) onChange(clamped);
+      }}
+      style={{ width: 70 }}
+    />
+  );
+}
+
 /* ── Developer-settings row — bool toggles to a Switch, number to a
        narrow Input with a unit suffix, action to a button that fires the
        row's `runner`. Add new control types here as the registry grows. */
@@ -447,19 +501,7 @@ function DevSettingRow({ def, value, onChange }) {
           <Switch on={!!value} size="sm" onChange={(on) => onChange(on)} />
         )}
         {isNum && (
-          <Input
-            size="sm" mono
-            value={String(value ?? '')}
-            onChange={(v) => {
-              const cleaned = v.replace(/[^0-9.]/g, '');
-              if (cleaned === '') { onChange(def.default); return; }
-              const n = Number(cleaned);
-              if (Number.isNaN(n)) return;
-              const clamped = Math.max(def.min ?? -Infinity, Math.min(def.max ?? Infinity, n));
-              onChange(clamped);
-            }}
-            style={{ width: 70 }}
-          />
+          <NumberCell def={def} value={value} onChange={onChange} />
         )}
         {isAction && (
           <Btn
