@@ -60,7 +60,7 @@ export const DEV_SETTINGS = [
     label:   'Modal playground',
     desc:    'Blank in-extension surface for previewing modals.',
     type:    'action',
-    buttonLabel: 'Open playground',
+    buttonLabel: 'Open',
     buttonIcon:  'bolt',
     runner: ({ notify } = {}) => {
       try {
