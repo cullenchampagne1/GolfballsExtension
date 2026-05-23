@@ -648,10 +648,13 @@ function MainView({
   const proofDisabled = ignoreProof ? false : proofDisabledReal;
 
   // ── template dropdown options ──
-  // Matched templates pin to the top of a single flat list with a brand
-  // left-accent — same vocabulary as the rest of the design system's list
-  // surfaces. No group header needed: the accent reads as "this one matched
-  // the page rules" at a glance without spending a whole section.
+  // Matched templates pin to the top with a brand left-accent bar AND a
+  // small group header ("Matched" / "All templates") — the accent gives an
+  // at-a-glance "this matched the page rules" cue, and the group header
+  // makes the matched/unmatched split unmissable when both kinds are present.
+  //
+  // We only emit group labels when both buckets are non-empty; if every
+  // template matched (or none did), the headers would just be noise.
   //
   // Templates with 2+ variations get a quiet count chip in the trailing slot
   // (muted text on the menu background) so it informs without competing with
@@ -660,12 +663,15 @@ function MainView({
     const matchedSet = new Set(matchedIds);
     const matched = templates.filter((t) => matchedSet.has(t.id));
     const rest    = templates.filter((t) => !matchedSet.has(t.id));
+    const showGroups = matched.length > 0 && rest.length > 0;
     return [...matched, ...rest].map((t) => {
       const varN = (t.variations || []).length;
+      const isMatchedRow = matchedSet.has(t.id);
       return {
         id: t.id,
         label: t.name || 'Untitled',
-        accent: matchedSet.has(t.id) ? 'brand' : undefined,
+        group: showGroups ? (isMatchedRow ? 'Matched' : 'All templates') : undefined,
+        accent: isMatchedRow ? 'brand' : undefined,
         trailing: varN > 1
           ? <span style={{
               fontSize: 9, fontWeight: 600, color: 'var(--gb-text-muted)',

@@ -183,10 +183,12 @@ export function Dropdown({
                   )}
                   {opts.map((o) => {
                     const active = o.id === value;
-                    // Accent colours mirror the status tokens so a `info`
-                    // accent reads green-of-info, etc. Padding shifts 2px
-                    // to absorb the left-border so the label stays aligned
-                    // with non-accented rows.
+                    // Accent colours mirror the status tokens so an `info`
+                    // accent reads info-blue, etc. The accent bar is an
+                    // absolutely-positioned child rather than a borderLeft —
+                    // a borderLeft inherits the row's border-radius and gets
+                    // rounded at the corners, which looks like a fat
+                    // tear-drop instead of a clean indicator bar.
                     const accentColor = o.accent
                       ? `var(--gb-${o.accent === 'brand' ? 'brand-label' : `${o.accent}-fg`})`
                       : null;
@@ -196,8 +198,8 @@ export function Dropdown({
                         onClick={() => pick(o)}
                         whileHover={o.disabled ? undefined : { backgroundColor: 'var(--gb-fill-soft)' }}
                         style={{
-                          padding: o.accent ? '6px 8px 6px 6px' : '6px 8px',
-                          borderLeft: o.accent ? `2px solid ${accentColor}` : '2px solid transparent',
+                          position: 'relative',
+                          padding: o.accent ? '6px 8px 6px 10px' : '6px 8px',
                           borderRadius: 'var(--gb-r-sm)',
                           fontSize: 12, fontFamily: 'var(--gb-font-sans)',
                           display: 'flex', alignItems: 'center', gap: 8,
@@ -208,6 +210,16 @@ export function Dropdown({
                           background: active ? 'var(--gb-brand-tint-soft)' : 'transparent',
                         }}
                       >
+                        {o.accent && (
+                          <span style={{
+                            position: 'absolute',
+                            top: 4, bottom: 4, left: 3,
+                            width: 2,
+                            background: accentColor,
+                            borderRadius: 1,
+                            pointerEvents: 'none',
+                          }} />
+                        )}
                         <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {o.label}
                         </span>
