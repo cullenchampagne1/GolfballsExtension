@@ -22,7 +22,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["charge.html", "charge.js", "editor.html"],
+      "resources": ["charge.html", "charge.js", "editor.html", "playground.html"],
       "matches": ["<all_urls>"]
     }
   ],

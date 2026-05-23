@@ -419,11 +419,12 @@ function UserPresetsManager({ onPresetLoad }) {
 }
 
 /* ── Developer-settings row — bool toggles to a Switch, number to a
-       narrow Input with a unit suffix. Add new control types here as
-       the registry grows. */
+       narrow Input with a unit suffix, action to a button that fires the
+       row's `runner`. Add new control types here as the registry grows. */
 function DevSettingRow({ def, value, onChange }) {
-  const isBool = def.type === 'bool';
-  const isNum  = def.type === 'number';
+  const isBool   = def.type === 'bool';
+  const isNum    = def.type === 'number';
+  const isAction = def.type === 'action';
   return (
     <div style={{
       display: 'flex', alignItems: 'flex-start', gap: 10,
@@ -464,6 +465,16 @@ function DevSettingRow({ def, value, onChange }) {
               <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>{def.unit}</span>
             )}
           </>
+        )}
+        {isAction && (
+          <Btn
+            size="sm"
+            variant="primary"
+            icon={def.buttonIcon && I[def.buttonIcon] ? React.createElement(I[def.buttonIcon]) : undefined}
+            onClick={() => def.runner?.()}
+          >
+            {def.buttonLabel || 'Run'}
+          </Btn>
         )}
       </div>
     </div>
