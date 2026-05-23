@@ -121,20 +121,29 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
 
   const canAdd = !!name && !!config;
 
-  // Smooth scroll the form into view as it expands, then again when the
-  // user switches kinds (each kind has a different height). `block: 'end'`
-  // keeps the action row visible at the bottom edge so Add/Cancel never
-  // sit below the fold while the form is mid-expand.
+  // Keep the form's bottom edge (the Add/Cancel row) in view as the
+  // height animates open or the user swaps kinds (each kind has its own
+  // height). We track the action row, not the wrapper — that way:
+  //   - `block: 'nearest'` only nudges the page when the actions actually
+  //     leave the viewport, so a form opened mid-screen doesn't jump.
+  //   - The previous `block: 'end'` aligned the wrapper's bottom to the
+  //     viewport bottom while the wrapper was still height: 0, which
+  //     scrolled the page UP while the form grew DOWN — the "wrong
+  //     direction" feel.
+  // ResizeObserver fires once per layout change during the height tween,
+  // so the page tracks the bottom edge in lockstep with the animation.
   const formRef = useRef(null);
+  const bottomRef = useRef(null);
   useEffect(() => {
     const el = formRef.current;
-    if (!el) return;
-    // Wait a frame so motion has applied the new height before we scroll.
-    const id = requestAnimationFrame(() => {
-      el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    const anchor = bottomRef.current;
+    if (!el || !anchor) return undefined;
+    const observer = new ResizeObserver(() => {
+      anchor.scrollIntoView({ behavior: 'auto', block: 'nearest' });
     });
-    return () => cancelAnimationFrame(id);
-  }, [kind]);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <motion.div
@@ -333,8 +342,8 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
           </span>
         </div>
 
-        {/* Actions */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+        {/* Actions — also the scroll anchor (see ResizeObserver above) */}
+        <div ref={bottomRef} style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
           <Btn variant="ghost" size="sm" onClick={onCancel}>Cancel</Btn>
           <Btn
             variant="primary"

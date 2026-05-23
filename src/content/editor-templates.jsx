@@ -5,11 +5,11 @@ import { ensureTheme } from '../lib/theme.js';
 import {
   Btn, Tag,
   Input, Dropdown, Field,
-  SwitchTag, Segmented,
+  Switch, SwitchTag, Segmented,
   I, Icon,
   SmartModal, SignatureModal,
   RichTextEditor,
-  VariableTable, OrderRules, CaseRules, AccountRules,
+  VariableTable, OrderRules, CaseRules, AccountRules, CaseTagsEditor,
 } from '../ui/index.js';
 
 /* ─────────────────────────────────────────────────────────────
@@ -167,6 +167,13 @@ function TemplateEditor({ tpl, onDelete }) {
   );
   const [presetTaskId,   setPresetTaskId]   = useState(tpl.presetTaskId || '');
   const [presetTaskOpts, setPresetTaskOpts] = useState([]);
+  // Default to reply mode for new templates — matches legacy editor's
+  // "checked unless explicitly 'standalone'" load behavior.
+  const [replyMode,      setReplyMode]      = useState(tpl.replyMode !== 'standalone');
+  // caseTags is only saved for case templates. null = "user hasn't
+  // touched it yet" — same `ruleData` pattern, prevents writing an
+  // empty array over the saved value on initial mount.
+  const [caseTagsData,   setCaseTagsData]   = useState(null);
   // Explicit variations replace the legacy "Variation #N" sibling naming.
   // Each variation has its own subject + body; selection logic comes later.
   const [variations, setVariations] = useState(() =>
@@ -214,6 +221,7 @@ function TemplateEditor({ tpl, onDelete }) {
     setRecipientIdx(0);
     setToFieldValue('');
     setRuleData(null);
+    setCaseTagsData(null);
   }
 
   const handleSaveSmart = smart => {
@@ -248,6 +256,10 @@ function TemplateEditor({ tpl, onDelete }) {
       // Only account templates persist a presetTaskId — other types
       // explicitly clear it so type-switching doesn't strand stale data.
       presetTaskId: typeId === 'account' ? (presetTaskId || '') : undefined,
+      // Reply-mode toggle: case templates always thread as replies (the
+      // user opens them inside an existing case), so we omit the field
+      // for case to match the legacy editor's behavior.
+      replyMode: typeId === 'case' ? undefined : (replyMode ? 'reply' : 'standalone'),
       updatedAt: Date.now(),
     };
     // Recipient selection → stored toField.
@@ -256,6 +268,9 @@ function TemplateEditor({ tpl, onDelete }) {
     else                                     next.toField = { type: 'auto' };
     if (typeId === 'case') {
       next.caseVars = vars;
+      // Only overwrite caseTags once the user has actually edited them
+      // (same null-guard as ruleData above).
+      if (caseTagsData != null) next.caseTags = caseTagsData;
     } else {
       const obj = {};
       vars.forEach((v) => {
@@ -284,7 +299,7 @@ function TemplateEditor({ tpl, onDelete }) {
       if (typeof window.__gbSaveTemplate === 'function') window.__gbSaveTemplate(buildTemplate());
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId, variations]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId, replyMode, caseTagsData, variations]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Type changes bypass the 500ms debounce — the sidebar's row-teleport
      spring is keyed on tpl.type, so we save the new type immediately and
@@ -409,6 +424,42 @@ function TemplateEditor({ tpl, onDelete }) {
               placeholder="— none —"
             />
           </Field>
+        </div>
+      )}
+
+      {/* ── Reply mode (non-case only — case templates always thread).
+          Compact inline row so it doesn't compete with the Field-style
+          blocks above. */}
+      {typeId !== 'case' && (
+        <div style={{
+          ...S.mb12,
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '8px 10px',
+          background: 'var(--gb-fill-faint)',
+          border: '1px solid var(--gb-border-subtle)',
+          borderRadius: 'var(--gb-r-md)',
+        }}>
+          <Switch size="sm" on={replyMode} onChange={setReplyMode} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>
+              Reply to most recent email
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>
+              {replyMode
+                ? 'Threads this template as a reply on the latest message.'
+                : 'Sends as a standalone new message.'}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Recommended case tags (case templates only) ── */}
+      {typeId === 'case' && (
+        <div style={S.mb14}>
+          <CaseTagsEditor
+            initial={tpl.caseTags}
+            onChange={setCaseTagsData}
+          />
         </div>
       )}
 

@@ -78,6 +78,26 @@ const LAYOUT_SPRING = { type: 'spring', stiffness: 360, damping: 32, mass: 0.9 }
 const SOFT          = { duration: 0.26, ease: [0.32, 0.72, 0, 1] };
 const SNAP          = { duration: 0.14, ease: [0.4, 0, 0.2, 1] };
 
+/* Hover backgrounds for rows and folder headers live in CSS instead of
+   motion's `whileHover` — motion tries to interpolate between two CSS
+   `var()` strings on the same property and falls back to a bright
+   midpoint on first hover (the "flash" the user reported). A plain CSS
+   `:hover` with a `transition` handles the fade cleanly; the active
+   class wins so the brand tint never gets overwritten by hover. */
+const ROW_STYLE_ID = '__gb-sidebar-row';
+function ensureRowStyle() {
+  if (typeof document === 'undefined' || document.getElementById(ROW_STYLE_ID)) return;
+  const el = document.createElement('style');
+  el.id = ROW_STYLE_ID;
+  el.textContent = `
+    .gb-sidebar-hoverable { transition: background-color 140ms ease; }
+    .gb-sidebar-hoverable:not(.is-active):not(.is-disabled):hover {
+      background-color: var(--gb-fill-soft) !important;
+    }
+  `;
+  (document.head || document.documentElement).appendChild(el);
+}
+
 /* Tab-aware "what type is this row?" */
 function rowType(t, isNote) {
   if (isNote) return t.subType || 'note';
@@ -180,6 +200,7 @@ function TemplateRow({ tpl, isNote, type, active, onClick, onMove, folders, onDr
   const meta = (isNote ? TYPE_META_NOTE : TYPE_META_TPL)[type] || (isNote ? TYPE_META_NOTE.note : TYPE_META_TPL.order);
   const TypeIcon = meta.icon;
   const disabled = tpl.enabled === false;
+  useEffect(() => { ensureRowStyle(); }, []);
 
   return (
     <motion.div
@@ -198,18 +219,21 @@ function TemplateRow({ tpl, isNote, type, active, onClick, onMove, folders, onDr
       }}
       onDragEnd={() => onDragEnd?.()}
       onClick={onClick}
-      whileHover={{ background: 'var(--gb-fill-soft)' }}
       whileTap={{ scale: 0.985 }}
       animate={{
-        background: active ? 'var(--gb-brand-tint-soft)' : (disabled ? 'var(--gb-surface-deep)' : 'transparent'),
         boxShadow: active ? 'inset 0 0 0 1px var(--gb-brand-tint-border)' : 'inset 0 0 0 1px transparent',
       }}
+      className={`gb-sidebar-hoverable${active ? ' is-active' : ''}${disabled ? ' is-disabled' : ''}`}
       style={{
         position: 'relative',
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '6px 8px 6px 14px',
         borderRadius: 'var(--gb-r-sm)',
         cursor: 'grab', userSelect: 'none',
+        // Base background is plain CSS so :hover can fade cleanly. Active
+        // and disabled states override via the className-scoped rule
+        // below, and the class wins over :hover (CSS specificity).
+        background: active ? 'var(--gb-brand-tint-soft)' : (disabled ? 'var(--gb-surface-deep)' : 'transparent'),
       }}
     >
       {/* Type stripe — inset rounded bar, never a full border. Stays put
@@ -375,9 +399,9 @@ function FolderGroup({ folder, tpls, isNote, currentId, onOpen, onMove, onRename
       {/* Folder header */}
       <motion.div
         onClick={() => setOpen((v) => !v)}
-        whileHover={{ background: 'var(--gb-fill-soft)' }}
         whileTap={{ scale: 0.99 }}
         transition={SNAP}
+        className="gb-sidebar-hoverable"
         style={{
           position: 'relative',
           display: 'flex', alignItems: 'center', gap: 6,
