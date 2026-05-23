@@ -584,43 +584,28 @@ function openTemplate(id) {
  * Creates a blank quick-note template, appends it to the note list, selects
  * it, and opens it in the note editor form.
  */
-function newNoteTemplate() {
-  currentNoteId = null;
-  
-  hide('ed-empty'); 
-  hide('ed-form'); 
-  show('ed-note-form'); 
-  hide('btn-note-del');
+async function newNoteTemplate() {
+  // React owns #ed-note-form. Create the blank note, persist, then hand
+  // off to openNoteTemplate which calls __gbOpenNote with the real tpl.
+  if (!window.__gbOpenNote) {
+    console.warn('[gb-editor] React note-template bridge missing; reload editor.');
+    return;
+  }
+  const id = 'n_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const blank = {
+    id, name: 'New Note Template', subType: 'note',
+    enabled: true, subject: '', body: '',
+    audienceVal: '', daysOut: null,
+    updatedAt: Date.now(),
+  };
+  noteTemplates.push(blank);
+  await saveNoteTemplates();
+  hide('ed-empty');
+  hide('ed-form');
+  hide('ed-settings');
+  show('ed-note-form');
   animateView('ed-note-form');
-  
-  $('ed-note-title').textContent = 'New Note Template';
-  $('fn-name').value = ''; 
-  $('fn-audience').value = ''; 
-  $('fn-subject').value = '';
-  $('fn-body').value = ''; 
-  $('fn-days-out').value = ''; 
-  $('fn-enabled').checked = true;
-  if ($('fn-sub-type'))       $('fn-sub-type').value       = 'note';
-  if ($('fn-task-btn-label')) $('fn-task-btn-label').value  = '';
-  if ($('fn-task-name'))      $('fn-task-name').value       = '';
-  if ($('fn-task-desc'))     $('fn-task-desc').value      = '';
-  if ($('fn-priority'))      $('fn-priority').value       = '2';
-  if ($('fn-task-days-out')) $('fn-task-days-out').value  = '';
-  if ($('fn-category-id'))   $('fn-category-id').value    = '0';
-  // Call log fields reset
-  if ($('fn-call-btn-label'))  $('fn-call-btn-label').value  = '';
-  if ($('fn-call-direction'))  $('fn-call-direction').value  = '0';
-  if ($('fn-call-category'))   $('fn-call-category').value   = '0';
-  if ($('fn-call-voicemail'))  $('fn-call-voicemail').checked = false;
-  if ($('fn-call-subject'))    $('fn-call-subject').value    = '';
-  if ($('fn-call-body'))       $('fn-call-body').value       = '';
-  if ($('fn-call-step1'))      $('fn-call-step1').value      = '';
-  if ($('fn-call-step2'))      $('fn-call-step2').value      = '';
-  if ($('fn-call-step3'))      $('fn-call-step3').value      = '';
-  if ($('fn-call-step4'))      $('fn-call-step4').value      = '';
-  switchNoteSubType('note');
-  
-  renderSidebar();
+  openNoteTemplate(id);
 }
 
 /**
@@ -632,45 +617,23 @@ function openNoteTemplate(id) {
 
   const tpl = noteTemplates.find(t => t.id === id);
   if (!tpl) return;
-  
+
   currentNoteId = id;
-  
-  hide('ed-empty'); 
-  hide('ed-form'); 
-  show('ed-note-form'); 
-  show('btn-note-del');
+
+  hide('ed-empty');
+  hide('ed-form');
+  hide('ed-settings');
+  show('ed-note-form');
   animateView('ed-note-form');
-  
-  $('ed-note-title').textContent = tpl.name || 'Note Template';
-  $('fn-name').value     = tpl.name      || '';
-  $('fn-audience').value = tpl.audienceVal || '';
-  $('fn-subject').value  = tpl.subject   || '';
-  $('fn-body').value     = tpl.body      || '';
-  $('fn-days-out').value = tpl.daysOut   != null ? tpl.daysOut : '';
-  $('fn-enabled').checked = tpl.enabled !== false;
-  if ($('fn-sub-type')) $('fn-sub-type').value = tpl.subType || 'note';
-  switchNoteSubType(tpl.subType || 'note');
 
-  // Task-specific fields
-  if ($('fn-task-btn-label')) $('fn-task-btn-label').value = tpl.name        || '';
-  if ($('fn-task-name'))      $('fn-task-name').value      = tpl.subject      || tpl.taskName || tpl.name || '';
-  if ($('fn-task-desc'))      $('fn-task-desc').value      = tpl.body         || '';
-  if ($('fn-priority'))       $('fn-priority').value       = String(tpl.priority   ?? 2);
-  if ($('fn-task-days-out'))  $('fn-task-days-out').value  = tpl.daysOut     != null ? tpl.daysOut : '';
-  if ($('fn-category-id'))    $('fn-category-id').value    = String(tpl.categoryId ?? 0);
-
-  // Call log-specific fields
-  if ($('fn-call-btn-label'))  $('fn-call-btn-label').value   = tpl.name           || '';
-  if ($('fn-call-direction'))  $('fn-call-direction').value   = String(tpl.callDirection ?? 0);
-  if ($('fn-call-category'))   $('fn-call-category').value    = String(tpl.callCategory  ?? 0);
-  if ($('fn-call-voicemail'))  $('fn-call-voicemail').checked = !!tpl.callVoicemail;
-  if ($('fn-call-subject'))    $('fn-call-subject').value     = tpl.subject        || '';
-  if ($('fn-call-body'))       $('fn-call-body').value        = tpl.body           || '';
-  if ($('fn-call-step1'))      $('fn-call-step1').value       = tpl.callStep1      || '';
-  if ($('fn-call-step2'))      $('fn-call-step2').value       = tpl.callStep2      || '';
-  if ($('fn-call-step3'))      $('fn-call-step3').value       = tpl.callStep3      || '';
-  if ($('fn-call-step4'))      $('fn-call-step4').value       = tpl.callStep4      || '';
-  
+  // React note editor (react-dist/content/editor-notes.js) owns #ed-note-form.
+  if (window.__gbOpenNote) {
+    window.__gbOpenNote(tpl);
+    renderSidebar();
+    return;
+  }
+  // Bridge missing AND legacy DOM is gone — nothing to do.
+  console.warn('[gb-editor] React note-template bridge missing; reload editor.');
   renderSidebar();
 }
 
@@ -1006,26 +969,7 @@ function renderVarChips() {
   });
 }
 
-/**
- * Renders and wires the `{{date}}` and `{{time}}` insert-chip buttons in the
- * note editor's subject and body fields.
- */
-function wireNoteChips() {
-  document.querySelectorAll('.var-chip[data-target]').forEach(chip => {
-    chip.addEventListener('click', () => {
-      const inp = $(chip.dataset.target); 
-      if (!inp) return;
-      
-      const s = inp.selectionStart ?? inp.value.length;
-      const e2 = inp.selectionEnd ?? inp.value.length; 
-      const ins = chip.dataset.insert;
-      
-      inp.value = inp.value.slice(0, s) + ins + inp.value.slice(e2);
-      inp.selectionStart = inp.selectionEnd = s + ins.length; 
-      inp.focus();
-    });
-  });
-}
+// wireNoteChips removed — React note editor owns {{date}}/{{time}} hints inline.
 
 // ═══════════════════════════════════════════════════════════════
 // TO FIELD
@@ -1328,6 +1272,23 @@ async function applyTemplatePatch(tpl) {
 window.__gbSaveTemplate = applyTemplatePatch;
 
 /**
+ * Auto-save bridge for the React note-template editor. Same shape as
+ * applyTemplatePatch but writes into noteTemplates[].
+ * @param {object} tpl Complete note template object from the React editor.
+ */
+async function applyNotePatch(tpl) {
+  if (!tpl || !tpl.id) return;
+  currentNoteId = tpl.id;
+  const idx = noteTemplates.findIndex(t => t.id === tpl.id);
+  if (idx >= 0) noteTemplates[idx] = tpl; else noteTemplates.push(tpl);
+  await saveNoteTemplates();
+  const titleEl = document.getElementById('ed-note-title');
+  if (titleEl) titleEl.textContent = tpl.name || 'Untitled';
+  renderSidebar();
+}
+window.__gbSaveNote = applyNotePatch;
+
+/**
  * Deletes the currently selected email template after user confirmation,
  * persists the change, and returns the editor to the list view.
  * @returns {Promise<void>}
@@ -1350,76 +1311,8 @@ async function deleteTemplate() {
 // NOTE TEMPLATE: SAVE / DELETE
 // ═══════════════════════════════════════════════════════════════
 
-/**
- * Reads all note-template form fields and assembles them into a note-template
- * object ready for storage.
- * @returns {object} The assembled note-template object.
- */
-function collectNoteTemplate() {
-  const subType   = $('fn-sub-type')?.value || 'note';
-  const isTask    = subType === 'task';
-  const isCallLog = subType === 'call_log';
-
-  const name = isTask
-    ? ($('fn-task-btn-label')?.value.trim() || $('fn-task-name')?.value.trim() || 'Untitled Task')
-    : isCallLog
-      ? ($('fn-call-btn-label')?.value.trim() || 'Untitled Call Log')
-      : ($('fn-name')?.value.trim()           || 'Untitled');
-
-  const taskSubject = isTask
-    ? ($('fn-task-name')?.value.trim() || name)
-    : undefined;
-
-  const daysOut = isTask
-    ? (parseInt($('fn-task-days-out')?.value, 10) >= 0 ? parseInt($('fn-task-days-out')?.value, 10) : null)
-    : (parseInt($('fn-days-out')?.value, 10)       >= 0 ? parseInt($('fn-days-out')?.value, 10)       : null);
-
-  return {
-    id: currentNoteId || uid(),
-    name,
-    subType,
-    audienceVal:     isTask || isCallLog ? '' : ($('fn-audience')?.value.trim() || ''),
-    subject:         isTask ? taskSubject : isCallLog ? ($('fn-call-subject')?.value.trim() || '') : ($('fn-subject')?.value.trim() || ''),
-    body:            isTask ? ($('fn-task-desc')?.value || '') : isCallLog ? ($('fn-call-body')?.value || '') : ($('fn-body')?.value || ''),
-    daysOut:         (!isNaN(daysOut) && daysOut >= 0) ? daysOut : null,
-    enabled:         $('fn-enabled').checked,
-    // task-specific
-    priority:        isTask ? (parseInt($('fn-priority')?.value, 10) || 2) : undefined,
-    categoryId:      isTask ? (parseInt($('fn-category-id')?.value, 10) || 0) : undefined,
-    // call log-specific
-    callDirection:   isCallLog ? (parseInt($('fn-call-direction')?.value, 10) || 0) : undefined,
-    callCategory:    isCallLog ? (parseInt($('fn-call-category')?.value, 10)  || 0) : undefined,
-    callVoicemail:   isCallLog ? ($('fn-call-voicemail')?.checked || false) : undefined,
-    callStep1:       isCallLog ? ($('fn-call-step1')?.value.trim() || '') : undefined,
-    callStep2:       isCallLog ? ($('fn-call-step2')?.value.trim() || '') : undefined,
-    callStep3:       isCallLog ? ($('fn-call-step3')?.value.trim() || '') : undefined,
-    callStep4:       isCallLog ? ($('fn-call-step4')?.value.trim() || '') : undefined,
-    updatedAt:       Date.now(),
-  };
-}
-
-/**
- * Saves the currently edited note template to storage, shows a toast, and
- * refreshes the sidebar.
- * @returns {Promise<void>}
- */
-async function saveNoteTemplate() {
-  const tpl = collectNoteTemplate(); 
-  currentNoteId = tpl.id;
-  
-  const idx = noteTemplates.findIndex(t => t.id === tpl.id);
-  if (idx >= 0) {
-    noteTemplates[idx] = tpl; 
-  } else {
-    noteTemplates.push(tpl);
-  }
-  
-  await saveNoteTemplates(); 
-  $('ed-note-title').textContent = tpl.name; 
-  show('btn-note-del'); 
-  renderSidebar(); 
-  toast('Note template saved');
-}
+// collectNoteTemplate + saveNoteTemplate removed — React owns note-template
+// state and persistence via window.__gbSaveNote (applyNotePatch).
 
 /**
  * Deletes the currently selected note template after user confirmation,
@@ -1464,28 +1357,25 @@ async function init() {
   });
   
   $('btn-add-var').addEventListener('click', addVar);
-  
-  $('btn-note-save').addEventListener('click', saveNoteTemplate); 
-  $('btn-note-del').addEventListener('click', deleteNoteTemplate);
-  
-  $('btn-new').addEventListener('click', () => { 
-    if (currentTab === 'email') newTemplate(); 
-    else newNoteTemplate(); 
+
+  // Note-template save/delete buttons removed from DOM; React owns the
+  // header. Delete is reachable via React's onDelete → window.deleteNoteTemplate.
+  $('btn-new').addEventListener('click', () => {
+    if (currentTab === 'email') newTemplate();
+    else newNoteTemplate();
   });
 
+  // Cmd-S — email still uses legacy save; note auto-saves so it's a no-op.
   document.addEventListener('keydown', e => {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
-      if (currentTab === 'email' && !$('ed-form').classList.contains('hidden')) {
+      if (currentTab === 'email' && !$('ed-form')?.classList.contains('hidden')) {
         saveTemplate();
-      } else if (currentTab === 'notes' && !$('ed-note-form').classList.contains('hidden')) {
-        saveNoteTemplate();
       }
     }
   });
 
   bindCustomDropdowns(document);
-  wireNoteChips(); 
   renderSidebar();
   
   if (templates.length === 0) {
@@ -3912,39 +3802,8 @@ document.getElementById('f-tpl-type')?.addEventListener('change', e => {
   if (e.target.value === 'account') populatePresetTaskDropdown();
 });
 
-// ── Note subType switching ────────────────────────────────────────────────────
-
-function switchNoteSubType(subType) {
-  const isTask    = subType === 'task';
-  const isCallLog = subType === 'call_log';
-  const isNote    = !isTask && !isCallLog;
-  const toggleSec = (id, show) => {
-    const el = document.getElementById(id);
-    if (el) el.classList.toggle('hidden', !show);
-  };
-  toggleSec('fn-callout-note',       isNote);
-  toggleSec('fn-callout-task',       isTask);
-  toggleSec('fn-callout-call-log',   isCallLog);
-  toggleSec('fn-sec-note-config',    isNote);
-  toggleSec('fn-sec-note-content',   isNote);
-  toggleSec('fn-sec-automation',     isNote);
-  toggleSec('fn-sec-task-config',    isTask);
-  toggleSec('fn-sec-task-details',   isTask);
-  toggleSec('fn-sec-call-config',    isCallLog);
-  toggleSec('fn-sec-call-details',   isCallLog);
-  toggleSec('fn-sec-call-content',   isCallLog);
-  toggleSec('fn-sec-call-steps',     isCallLog);
-  const lbl = document.getElementById('fn-enabled-label');
-  if (lbl) lbl.textContent = isTask
-    ? 'Enabled — show as quick-task button on contact/account pages'
-    : isCallLog
-      ? 'Enabled — show as quick-log button on contact pages'
-      : 'Enabled — show as quick-note button';
-}
-
-document.getElementById('fn-sub-type')?.addEventListener('change', e => {
-  switchNoteSubType(e.target.value);
-});
+// switchNoteSubType + fn-sub-type listener removed — React Segmented switcher
+// in NoteEditor owns subtype state and renders subtype-specific sections.
 
 
 // ── Account Conditions ─────────────────────────────────────────────────────────
