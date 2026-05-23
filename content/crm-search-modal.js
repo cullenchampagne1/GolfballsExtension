@@ -1046,7 +1046,9 @@ window.__gbShowCrmSearchModal = async function () {
 // ── Keyboard shortcut ─────────────────────────────────────────────────────────
 (function registerCsmShortcut() {
   chrome.storage.local.get('keyboardShortcuts',({keyboardShortcuts})=>{
-    const key=(keyboardShortcuts?.crmSearch||'k').toLowerCase();
+    const raw=keyboardShortcuts?.crmSearch;
+    const key=(raw===undefined?'k':raw).toLowerCase();
+    if (!key) return;
     document.addEventListener('keydown',e=>{
       if (!e.ctrlKey||e.shiftKey||e.altKey) return;
       if (e.key.toLowerCase()!==key) return;

@@ -692,17 +692,21 @@ function TemplateSidebar() {
           ]}
         />
         <Input size="sm" value={search} onChange={setSearch} placeholder="Search…" leading={<I.search />} />
-        {/* Both buttons share the row equally via flex:1. `full` would set
-            each to 100% width → overflow + clipping in a 240–280px sidebar. */}
+        {/* Template button takes the row; Folder is icon-only so the
+            primary action (new template) reads at a glance and we
+            recover the horizontal space the redundant "Folder" label
+            was eating in this narrow sidebar. */}
         <div style={{ display: 'flex', gap: 6 }}>
           <Btn variant="dashed" size="sm" icon={<I.plus />} onClick={newTpl}
                style={{ flex: 1, minWidth: 0 }}>
             {isNote ? 'Note' : 'Template'}
           </Btn>
-          <Btn variant="dashed" size="sm" icon={<FolderIcon />} onClick={newFolder}
-               style={{ flex: 1, minWidth: 0 }}>
-            Folder
-          </Btn>
+          <IconBtn
+            size="sm"
+            icon={<FolderIcon />}
+            tooltip="New folder"
+            onClick={newFolder}
+          />
         </div>
       </div>
 

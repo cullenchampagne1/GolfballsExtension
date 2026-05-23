@@ -97,6 +97,7 @@ function VariantCard({ variant, active, onClick }) {
 
 /* ── Keyboard Shortcut Input ─────────────────────────────────── */
 function KeyboardShortcutRow({ label, desc, value, onChange }) {
+  const enabled = !!value;
   const handleInput = (e) => {
     const v = e.target.value.replace(/[^a-zA-Z]/g, '');
     onChange(v ? v.slice(-1).toUpperCase() : '');
@@ -111,24 +112,77 @@ function KeyboardShortcutRow({ label, desc, value, onChange }) {
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gb-text-primary)' }}>{label}</div>
-        <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 2 }}>{desc}</div>
+        <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 2 }}>
+          {enabled ? desc : <span style={{ color: 'var(--gb-text-ghost)', fontStyle: 'italic' }}>Disabled — clear left empty</span>}
+        </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-        <span style={{ fontSize: 11, color: 'var(--gb-text-ghost)' }}>Ctrl +</span>
-        <input
-          type="text"
-          maxLength={1}
-          value={value}
-          onChange={handleInput}
-          placeholder="X"
-          style={{
-            width: 38, height: 32, textAlign: 'center',
-            fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1,
-            background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)',
-            borderRadius: 'var(--gb-r-sm)', color: 'var(--gb-text-primary)',
-            outline: 'none',
+        <motion.span
+          animate={{ color: enabled ? 'var(--gb-text-ghost)' : 'var(--gb-text-ghost)', opacity: enabled ? 1 : 0.5 }}
+          transition={T.base}
+          style={{ fontSize: 11 }}
+        >
+          Ctrl +
+        </motion.span>
+        <motion.div
+          /* `key={value}` makes the input pop on every change — the new
+             letter animates in from a slight scale instead of just text-
+             swapping. AnimatePresence handles the disabled-state empty
+             box vs. an active letter. */
+          animate={{
+            backgroundColor: enabled ? 'var(--gb-brand-tint-soft)' : 'var(--gb-surface-2)',
+            borderColor: enabled ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)',
           }}
-        />
+          transition={T.base}
+          style={{
+            position: 'relative',
+            width: 38, height: 32,
+            borderRadius: 'var(--gb-r-sm)',
+            border: '1px solid',
+          }}
+        >
+          <input
+            type="text"
+            maxLength={1}
+            value={value}
+            onChange={handleInput}
+            placeholder="—"
+            style={{
+              position: 'absolute', inset: 0, width: '100%', height: '100%',
+              textAlign: 'center',
+              fontSize: 13, fontWeight: 700,
+              textTransform: 'uppercase', letterSpacing: 1,
+              background: 'transparent', border: 'none',
+              borderRadius: 'var(--gb-r-sm)',
+              color: enabled ? 'var(--gb-brand-label)' : 'var(--gb-text-ghost)',
+              outline: 'none',
+            }}
+          />
+        </motion.div>
+        {/* Clear / disable — fades in when there's a value to clear, so
+            an unbound shortcut stays visually quiet. */}
+        <AnimatePresence initial={false}>
+          {enabled && (
+            <motion.button
+              key="clear"
+              type="button"
+              onClick={() => onChange('')}
+              title="Disable shortcut"
+              initial={{ opacity: 0, width: 0, marginLeft: 0 }}
+              animate={{ opacity: 1, width: 20, marginLeft: 0 }}
+              exit={{ opacity: 0, width: 0, marginLeft: 0 }}
+              transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                height: 20, padding: 0,
+                background: 'transparent', border: 'none', cursor: 'pointer',
+                color: 'var(--gb-text-muted)', overflow: 'hidden',
+              }}
+            >
+              <I.close size={11} />
+            </motion.button>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

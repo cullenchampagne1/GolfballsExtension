@@ -159,34 +159,50 @@ export function OrderRules({ initial, onChange }) {
                   transition={ROW_TRANSITION}
                 >
                   <Card padding={8}>
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: noVal ? '1fr 132px 26px' : '1fr 132px 1fr 26px',
-                      gap: 6, alignItems: 'center',
-                    }}>
-                      <Input
-                        size="sm" mono value={r.left} leading={<I.search />}
-                        placeholder={picking ? 'Pick an element on the order tab…' : 'page.url or .selector'}
-                        onChange={(v) => edit(r._id, { left: v })}
-                        trailing={
-                          /* Inline DOM picker — same plumbing as the
-                             variable picker, namespaced by row id so two
-                             rows don't fight over the same pickResult. */
-                          <IconBtn
-                            size="xs"
-                            variant="ghost"
-                            active={picking}
-                            icon={<PickerIcon />}
-                            tooltip={picking ? 'Cancel pick' : 'Pick element from page'}
-                            onClick={() => (picking ? cancelPick() : startPick(r._id))}
-                          />
-                        }
-                      />
-                      <Dropdown size="sm" value={r.op} options={OP_OPTIONS} onChange={(v) => edit(r._id, { op: v })} />
-                      {!noVal && (
-                        <Input size="sm" mono value={r.right} placeholder="value" onChange={(v) => edit(r._id, { right: v })} />
-                      )}
-                      <IconBtn size="sm" icon={<I.trash />} danger onClick={() => del(r._id)} />
+                    {/* Flex layout (not grid) so when the value Input
+                        unmounts on an `exists`/`notExists` op switch,
+                        the remaining selector input can naturally grow
+                        and motion's layout animation tweens the reflow
+                        instead of snapping. */}
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <motion.div layout style={{ flex: 1, minWidth: 0 }}>
+                        <Input
+                          size="sm" mono value={r.left} leading={<I.search />}
+                          placeholder={picking ? 'Pick an element on the order tab…' : 'page.url or .selector'}
+                          onChange={(v) => edit(r._id, { left: v })}
+                          trailing={
+                            <IconBtn
+                              size="xs"
+                              variant="ghost"
+                              active={picking}
+                              icon={<PickerIcon />}
+                              tooltip={picking ? 'Cancel pick' : 'Pick element from page'}
+                              onClick={() => (picking ? cancelPick() : startPick(r._id))}
+                            />
+                          }
+                        />
+                      </motion.div>
+                      <motion.div layout style={{ width: 132, flexShrink: 0 }}>
+                        <Dropdown size="sm" value={r.op} options={OP_OPTIONS} onChange={(v) => edit(r._id, { op: v })} />
+                      </motion.div>
+                      <AnimatePresence initial={false}>
+                        {!noVal && (
+                          <motion.div
+                            key="val"
+                            layout
+                            initial={{ opacity: 0, width: 0 }}
+                            animate={{ opacity: 1, width: 'auto' }}
+                            exit={{ opacity: 0, width: 0 }}
+                            transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+                            style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}
+                          >
+                            <Input size="sm" mono value={r.right} placeholder="value" onChange={(v) => edit(r._id, { right: v })} />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                      <motion.div layout style={{ flexShrink: 0 }}>
+                        <IconBtn size="sm" icon={<I.trash />} danger onClick={() => del(r._id)} />
+                      </motion.div>
                     </div>
                   </Card>
                   {/* Live resolved hint — shared ResolveHint component. */}

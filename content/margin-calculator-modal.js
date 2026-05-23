@@ -224,10 +224,11 @@ if (!window.__gbMarginCalcLoaded) {
   function __gbShowMarginCalcModal() {
     if (document.getElementById('__gb-mc-overlay')) return;
 
-    // Read current shortcut hint for the subtitle
+    // Read current shortcut hint for the subtitle (empty = disabled).
     chrome.storage.local.get('keyboardShortcuts', ({ keyboardShortcuts }) => {
-      const keyLetter = (keyboardShortcuts?.marginCalc || 'm').toUpperCase();
-      _openMarginModal(`Ctrl+${keyLetter}`);
+      const raw = keyboardShortcuts?.marginCalc;
+      const keyLetter = (raw === undefined ? 'm' : raw).toUpperCase();
+      _openMarginModal(keyLetter ? `Ctrl+${keyLetter}` : '');
     });
   }
 
@@ -396,7 +397,11 @@ if (!window.__gbMarginCalcLoaded) {
   // ── Configurable keyboard shortcut (default Ctrl+M) ──────────────────────────
   (function registerShortcut() {
     chrome.storage.local.get(['keyboardShortcuts','featureFlags'], ({ keyboardShortcuts, featureFlags }) => {
-      const key = (keyboardShortcuts?.marginCalc || 'm').toLowerCase();
+      // `undefined` = never customised → use default. `''` = explicitly
+      // cleared in Settings → keep the shortcut disabled.
+      const raw = keyboardShortcuts?.marginCalc;
+      const key = (raw === undefined ? 'm' : raw).toLowerCase();
+      if (!key) return;
 
       document.addEventListener('keydown', e => {
         if (!e.ctrlKey || e.shiftKey || e.altKey) return;

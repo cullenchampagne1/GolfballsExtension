@@ -118,41 +118,62 @@ export function AccountRules({ initial, onChange }) {
                   transition={ROW_TRANSITION}
                 >
                   <Card padding={8}>
+                    {/* Op-conditional value cell wrapped in AnimatePresence
+                        so switching between has-value / no-value / relative
+                        forms tweens the layout instead of snapping. The
+                        IconBtn has its own `layout` prop so it slides left
+                        when the value cell collapses. */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <Dropdown
-                        size="sm" value={c.field} options={FIELD_OPTIONS}
-                        onChange={(v) => changeField(c._id, v)}
-                        style={{ width: 156, flexShrink: 0 }}
-                      />
-                      <Dropdown
-                        size="sm" value={op} options={opOptions(type)}
-                        onChange={(v) => edit(c._id, { op: v })}
-                        style={{ width: 130, flexShrink: 0 }}
-                      />
-                      {noVal ? (
-                        <div style={{ flex: 1 }} />
-                      ) : isRel ? (
-                        <>
-                          <Input
-                            size="sm" mono value={c.num || ''} placeholder="1"
-                            onChange={(v) => edit(c._id, { num: v })}
-                            style={{ width: 60, flexShrink: 0 }}
-                          />
-                          <Dropdown
-                            size="sm" value={c.unit || 'days'} options={UNIT_OPTIONS}
-                            onChange={(v) => edit(c._id, { unit: v })}
-                            style={{ flex: 1, minWidth: 0 }}
-                          />
-                        </>
-                      ) : (
-                        <Input
-                          size="sm" mono value={c.val || ''}
-                          placeholder={isDate ? 'YYYY-MM-DD or {{var}}' : 'value or {{var}}…'}
-                          onChange={(v) => edit(c._id, { val: v })}
-                          style={{ flex: 1, minWidth: 0 }}
+                      <motion.div layout style={{ width: 156, flexShrink: 0 }}>
+                        <Dropdown
+                          size="sm" value={c.field} options={FIELD_OPTIONS}
+                          onChange={(v) => changeField(c._id, v)}
                         />
-                      )}
-                      <IconBtn size="sm" icon={<I.trash />} danger onClick={() => del(c._id)} />
+                      </motion.div>
+                      <motion.div layout style={{ width: 130, flexShrink: 0 }}>
+                        <Dropdown
+                          size="sm" value={op} options={opOptions(type)}
+                          onChange={(v) => edit(c._id, { op: v })}
+                        />
+                      </motion.div>
+                      <AnimatePresence initial={false} mode="popLayout">
+                        {!noVal && (
+                          <motion.div
+                            key={isRel ? 'rel' : 'val'}
+                            layout
+                            initial={{ opacity: 0, width: 0 }}
+                            animate={{ opacity: 1, width: 'auto' }}
+                            exit={{ opacity: 0, width: 0 }}
+                            transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+                            style={{ display: 'flex', gap: 6, flex: 1, minWidth: 0, overflow: 'hidden' }}
+                          >
+                            {isRel ? (
+                              <>
+                                <Input
+                                  size="sm" mono value={c.num || ''} placeholder="1"
+                                  onChange={(v) => edit(c._id, { num: v })}
+                                  style={{ width: 60, flexShrink: 0 }}
+                                />
+                                <Dropdown
+                                  size="sm" value={c.unit || 'days'} options={UNIT_OPTIONS}
+                                  onChange={(v) => edit(c._id, { unit: v })}
+                                  style={{ flex: 1, minWidth: 0 }}
+                                />
+                              </>
+                            ) : (
+                              <Input
+                                size="sm" mono value={c.val || ''}
+                                placeholder={isDate ? 'YYYY-MM-DD or {{var}}' : 'value or {{var}}…'}
+                                onChange={(v) => edit(c._id, { val: v })}
+                                style={{ flex: 1, minWidth: 0 }}
+                              />
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                      <motion.div layout style={{ flexShrink: 0, marginLeft: noVal ? 'auto' : 0 }}>
+                        <IconBtn size="sm" icon={<I.trash />} danger onClick={() => del(c._id)} />
+                      </motion.div>
                     </div>
                   </Card>
                 </motion.div>
