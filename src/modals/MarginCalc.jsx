@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
-  FloatingPanel, ModalHeader, ModalFooter, Field, Input, Btn, I,
-  NumberDisplay, inputBaseStyle,
+  FloatingPanel, ModalHeader, ModalFooter, Field, Input, Btn, Callout, I,
+  NumberDisplay, inputBaseStyle, T,
 } from '../ui/index.js';
 import { useDevSettings } from '../lib/devSettings.js';
+
+// Margins under this threshold trigger the "out of recommended range"
+// warning. Tweak here if the business definition of "healthy" shifts.
+const LOW_MARGIN_THRESHOLD = 30;
 
 /* ───────────────────────────────────────────────────────────────
    MarginCalc — margin & profit calculator, rebuilt on the design
@@ -109,6 +114,13 @@ export function MarginCalc({ shortcut, onClosed, bindClose }) {
   const countAnimate  = !!dev['numberDisplay.enabled'];
   const countDuration = (dev['numberDisplay.durationMs'] || 400) / 1000;
 
+  // Low-margin warning gate. Only fires when the margin has a real
+  // positive value below the threshold — empty / zero / negative margins
+  // are "no signal" states, not "out of range". The Callout's own
+  // AnimatePresence handles the in/out transition.
+  const marginNum = parseVal(v.margin);
+  const showLowMargin = marginNum !== null && marginNum > 0 && marginNum < LOW_MARGIN_THRESHOLD;
+
   return (
     <FloatingPanel width={520} backdrop onClose={onClosed} bindClose={bindClose}>
       <ModalHeader
@@ -117,7 +129,7 @@ export function MarginCalc({ shortcut, onClosed, bindClose }) {
         subtitle="Enter any two values to auto-calculate the rest"
       />
 
-      <div style={{ padding: '20px 20px 6px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ padding: '20px 20px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <Field label="Item Cost">
             <Input size="lg" mono inputMode="decimal" placeholder="0.00" autoFocus
@@ -163,12 +175,36 @@ export function MarginCalc({ shortcut, onClosed, bindClose }) {
                 style={{
                   flex: 1, minWidth: 0,
                   fontFamily: 'var(--gb-font-mono)', fontWeight: 600,
-                  color: 'var(--gb-brand-label)',
+                  color: 'var(--gb-error-fg)',
                 }}
               />
             </div>
           </Field>
         </div>
+
+        {/* Low-margin warning — wrapped in our own AnimatePresence so the
+            whole Callout mounts/unmounts cleanly as the margin crosses
+            the threshold (height collapses, gap closes), without leaving
+            an empty Callout shell behind when it's "no signal". */}
+        <AnimatePresence initial={false}>
+          {showLowMargin && (
+            <motion.div
+              key="low-margin"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={T.base}
+              style={{ overflow: 'hidden' }}
+            >
+              <Callout
+                tone="warning"
+                title={`Margin ${marginNum.toFixed(1)}% is below the recommended ${LOW_MARGIN_THRESHOLD}%`}
+              >
+                Revisit cost or selling price before quoting this margin.
+              </Callout>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <ModalFooter>

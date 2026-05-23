@@ -51,9 +51,10 @@ export function FloatingPanel({ children, width = 480, backdrop = true, onClose,
             position: 'fixed', inset: 0, zIndex: 999990,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             pointerEvents: 'none', // backdrop is click-through — page stays usable
+            // Tint only, no blur. FloatingPanel's whole reason for existing
+            // is that the page underneath stays readable (drag the panel,
+            // copy/paste from the page below) — a blur defeats that.
             background: backdrop ? 'var(--gb-backdrop)' : 'transparent',
-            backdropFilter: backdrop ? 'var(--gb-backdrop-blur)' : 'none',
-            WebkitBackdropFilter: backdrop ? 'var(--gb-backdrop-blur)' : 'none',
           }}
         >
           <FloatingPanelContext.Provider value={ctx}>
