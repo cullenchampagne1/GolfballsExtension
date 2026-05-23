@@ -39,7 +39,7 @@ function ensureAutofillStyle() {
 export function Input({
   value, defaultValue, placeholder, size = 'md', mono, error,
   leading, trailing, type = 'text', disabled, readOnly,
-  onChange, onFocus, onBlur, style, ...rest
+  onChange, onFocus, onBlur, nativeRef, style, ...rest
 }) {
   const [focused, setFocused] = useState(false);
   const [empty, setEmpty] = useState(() => !String((value ?? defaultValue) ?? '').length);
@@ -77,6 +77,7 @@ export function Input({
           }}>{placeholder}</span>
         )}
         <input
+          ref={nativeRef}
           className="gb-input-native"
           type={type}
           value={value}

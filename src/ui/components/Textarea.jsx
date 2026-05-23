@@ -11,7 +11,7 @@ import { SHAKE, SHAKE_T, inputBaseStyle } from '../shared.jsx';
  */
 export function Textarea({
   value, defaultValue, placeholder, rows = 3, resize = 'none', error, disabled,
-  onChange, onFocus, onBlur, style, ...rest
+  onChange, onFocus, onBlur, nativeRef, style, ...rest
 }) {
   const [focused, setFocused] = useState(false);
   const [empty, setEmpty] = useState(() => !String((value ?? defaultValue) ?? '').length);
@@ -45,6 +45,7 @@ export function Textarea({
         }}>{placeholder}</span>
       )}
       <textarea
+        ref={nativeRef}
         rows={rows}
         value={value}
         defaultValue={defaultValue}
