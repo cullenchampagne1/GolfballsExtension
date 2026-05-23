@@ -1016,7 +1016,13 @@ function MainView({
  * when the entry animation finishes.
  */
 function Reveal({ children, gap = 6 }) {
-  const [overflow, setOverflow] = useState('hidden');
+  // Default 'visible' because the parent <AnimatePresence initial={false}>
+  // skips the entry animation on first mount — so onAnimationComplete
+  // wouldn't fire and overflow would stick on 'hidden' forever, clipping
+  // intentional bleed-out children (Btn badges, popovers, etc.).
+  // onAnimationStart re-clamps to 'hidden' the moment an exit transition
+  // begins so the height collapse still clips properly.
+  const [overflow, setOverflow] = useState('visible');
   return (
     <motion.div
       initial={{ height: 0, opacity: 0, marginTop: 0 }}
