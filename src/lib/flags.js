@@ -22,6 +22,7 @@ export const FEATURE_DEFAULTS = {
   marginCalcEnabled:        true,
   crmSearchEnabled:         true,
   phoneFinderEnabled:       true,
+  emailTemplatesEnabled:    true,
   replyWithTemplateEnabled: false,
   powerAutomateUrl:         '',
   developerMode:            false,
@@ -48,6 +49,12 @@ export async function saveKeyboardShortcuts(shortcuts) {
 
 /** Display metadata + render order for the settings toggles. */
 export const FEATURE_FLAGS = [
+  {
+    key: 'emailTemplatesEnabled',
+    name: 'Email Templates',
+    desc: 'Shows the template dropdown, resolved-variables readout, and Send button in the popup. Turn off to use the popup as a pure action launcher (Charge, Watch List, Tasks, etc.) without any template UI.',
+    icon: 'mail',
+  },
   {
     key: 'chargeEnabled',
     name: 'Charge Card',
