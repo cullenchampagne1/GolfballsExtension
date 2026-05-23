@@ -178,7 +178,12 @@ export function MarginCalc({ shortcut, onClosed, bindClose }) {
                 style={{
                   flex: 1, minWidth: 0,
                   fontFamily: 'var(--gb-font-mono)', fontWeight: 600,
-                  color: 'var(--gb-error-fg)',
+                  // Muted when we've got no signal (no inputs yet);
+                  // red only once there's an actual computed total
+                  // — otherwise a fresh-opened calc reads as alarming.
+                  color: v.totalProfit !== 0
+                    ? 'var(--gb-error-fg)'
+                    : 'var(--gb-text-muted)',
                 }}
               />
             </div>
