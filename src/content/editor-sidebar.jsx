@@ -633,11 +633,16 @@ function TemplateSidebar() {
     moveById(id, null);
   }
 
-  // Sync selection from legacy editor.js' globals so the active row tracks.
+  // Sync selection from legacy editor.js' globals so the active row
+  // tracks both directions: pick up when editor.js opens something, AND
+  // clear when it goes back to the empty state (delete, type-switch
+  // bucket flip, etc). The earlier `if (id)` guard left the row stuck
+  // active forever once anything was selected.
   useEffect(() => {
     const i = setInterval(() => {
       const id = isNote ? window.currentNoteId : window.currentId;
-      if (id && id !== currentId) setCurrentId(id);
+      const next = id || null;
+      if (next !== currentId) setCurrentId(next);
     }, 300);
     return () => clearInterval(i);
   }, [currentId, isNote]);
