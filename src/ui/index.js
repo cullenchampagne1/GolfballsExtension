@@ -46,6 +46,9 @@ export { ModalFooter } from './components/ModalFooter.jsx';
 export { SectionLabel } from './components/SectionLabel.jsx';
 export { Card } from './components/Card.jsx';
 export { KeyVal } from './components/KeyVal.jsx';
+export { EditorHeader } from './components/EditorHeader.jsx';
+export { ResolveHint } from './components/ResolveHint.jsx';
+export { TYPE_ICONS, TYPE_COLORS } from './typeIcons.jsx';
 
 export { FeatureSpotlight } from './components/FeatureSpotlight.jsx';
 export { ExpandableFeature } from './components/ExpandableFeature.jsx';

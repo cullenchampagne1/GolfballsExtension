@@ -3,10 +3,11 @@ import { createRoot } from 'react-dom/client';
 import { AnimatePresence, motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import {
-  Btn, Tag,
+  Btn,
   Input, Dropdown, Field, IconBtn,
-  SwitchTag, Segmented, FeatureSpotlight,
-  I, Icon, Dot,
+  Segmented, FeatureSpotlight, EditorHeader, ResolveHint,
+  TYPE_ICONS,
+  I, Icon,
   SmartPopover, SignatureModal,
   RichTextEditor,
   VariableTable, OrderRules, CaseRules, AccountRules, CaseTagsEditor,
@@ -19,12 +20,9 @@ import {
    so this component adds NO extra horizontal padding.
 ───────────────────────────────────────────────────────────── */
 
-/* ── Template-type icons ──────────────────────────────────── */
-const RTE = {
-  doc:   p => <Icon {...p}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></Icon>,
-  inbox: p => <Icon {...p}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></Icon>,
-  user:  p => <Icon {...p}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></Icon>,
-};
+/* Template-type icons come from the shared TYPE_ICONS map so the email
+   editor header, the sidebar row, and any future surface render the same
+   glyph for the same type. */
 const PickerIcon = (p) => <Icon {...p}><path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/></Icon>;
 
 /* ────────────────────────────────────────────────────────────
@@ -101,7 +99,7 @@ function varDef(v) {
 ──────────────────────────────────────────────────────────── */
 const TYPE_META = {
   order: {
-    icon: <RTE.doc />, label: 'Order',
+    icon: <TYPE_ICONS.order />, label: 'Order',
     desc: 'Shown in the popup on order pages. Variables resolve against live page DOM.',
     recipientOptions: [
       { label: 'Smart detect',   toType: 'auto' },
@@ -110,7 +108,7 @@ const TYPE_META = {
     ],
   },
   case: {
-    icon: <RTE.inbox />, label: 'Case',
+    icon: <TYPE_ICONS.case />, label: 'Case',
     desc: 'Shown in the case email modal. Matches From / Subject / Body of the inbound email.',
     recipientOptions: [
       { label: 'Reply to sender', toType: 'auto' },
@@ -119,7 +117,7 @@ const TYPE_META = {
     ],
   },
   account: {
-    icon: <RTE.user />, label: 'Account',
+    icon: <TYPE_ICONS.account />, label: 'Account',
     desc: "Shown in the popup on account pages. Variables pull from the contact's Solr record.",
     recipientOptions: [
       { label: 'Contact email', toType: 'auto' },
@@ -427,7 +425,6 @@ function TemplateEditor({ tpl, onDelete }) {
     mb8:  { marginBottom: 8  },
     mb12: { marginBottom: 12 },
     mb14: { marginBottom: 14 },
-    label: { fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .8, color: 'var(--gb-text-muted)', marginBottom: 4, display: 'block' },
   };
 
   // Overlay live-resolved values onto the variable definitions for display.
@@ -439,23 +436,16 @@ function TemplateEditor({ tpl, onDelete }) {
   return (
     <div style={{ fontFamily: 'var(--gb-font-sans)', color: 'var(--gb-text-secondary)' }}>
 
-      {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <div style={{ width: 28, height: 28, borderRadius: 'var(--gb-r-sm)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {React.cloneElement(meta.icon, { size: 13 })}
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ flex: '0 1 auto', minWidth: 0, fontSize: 13, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {name || 'New Template'}
-            </span>
-            <Tag tone="neutral" size="xs" mono style={{ flexShrink: 0 }}>{typeId.toUpperCase()}</Tag>
-            <SwitchTag on={enabled} label={enabled ? 'Enabled' : 'Disabled'} onClick={() => setEnabled(e => !e)} size="sm" style={{ flexShrink: 0 }} />
-          </div>
-          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{meta.desc}</div>
-        </div>
-        <Btn variant="danger" size="sm" icon={<I.trash />} onClick={onDelete}>Delete</Btn>
-      </div>
+      {/* ── Header — shared EditorHeader, identical to NoteEditor's. ── */}
+      <EditorHeader
+        icon={meta.icon}
+        title={name || 'New Template'}
+        typeLabel={typeId.toUpperCase()}
+        enabled={enabled}
+        onToggle={() => setEnabled((e) => !e)}
+        desc={meta.desc}
+        onDelete={onDelete}
+      />
 
       {/* ── Type tabs — sit under the title so the header reads first ── */}
       <div style={{ marginBottom: 12 }}>
@@ -499,32 +489,14 @@ function TemplateEditor({ tpl, onDelete }) {
               ) : undefined}
             />
           </Field>
-          {/* Live hint — show what the recipient selector resolves to on
-              the order/account tab, so the user can verify before saving. */}
+          {/* Live hint — what the recipient selector resolves to on the
+              active page. Shared ResolveHint component (same as OrderRules). */}
           {recipOpt.toType === 'selector' && toFieldValue && (
-            <div style={{
-              marginTop: 6,
-              padding: '7px 10px',
-              background: 'var(--gb-fill-subtle)',
-              border: '1px solid var(--gb-border-subtle)',
-              borderRadius: 'var(--gb-r-sm)',
-              fontSize: 10.5,
-              display: 'flex', alignItems: 'center', gap: 7,
-            }}>
-              <Dot
-                tone={pickingRecipient ? 'brand' : recipientResolved ? 'brand' : 'warning'}
-                glow={pickingRecipient || !!recipientResolved}
-                size={5}
-              />
-              <span style={{ flex: 1, color: 'var(--gb-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {pickingRecipient
-                  ? 'Hover an element on the page…'
-                  : recipientResolved
-                    ? <><strong style={{ color: 'var(--gb-brand-label)' }}>1 match</strong> · <code style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 10 }}>{recipientResolved}</code></>
-                    : <span style={{ color: 'var(--gb-warning-fg)' }}>No match on active page</span>
-                }
-              </span>
-            </div>
+            <ResolveHint
+              picking={pickingRecipient}
+              resolved={recipientResolved}
+              style={{ marginTop: 6 }}
+            />
           )}
         </div>
       )}
@@ -587,30 +559,32 @@ function TemplateEditor({ tpl, onDelete }) {
 
       {/* ── Subject ── */}
       <div style={S.mb12}>
-        <span style={S.label}>Subject</span>
-        <RichTextEditor
-          singleLine
-          size="sm"
-          initialHtml={subject}
-          onChange={setSubject}
-          onChipClick={openSmartByName}
-          variables={vars}
-          placeholder="Email subject line"
-        />
+        <Field label="Subject">
+          <RichTextEditor
+            singleLine
+            size="sm"
+            initialHtml={subject}
+            onChange={setSubject}
+            onChipClick={openSmartByName}
+            variables={vars}
+            placeholder="Email subject line"
+          />
+        </Field>
       </div>
 
       {/* ── Body — compact 'sm' editor to fit the ~700px panel ── */}
       <div style={S.mb12}>
-        <span style={S.label}>Email body</span>
-        <RichTextEditor
-          size="sm"
-          initialHtml={body}
-          onChange={setBody}
-          onChipClick={openSmartByName}
-          variables={vars}
-          minHeight={150}
-          placeholder="Write the email body — format with the toolbar, insert variables from the menu. Click a variable chip to set fallbacks, transforms, or formatting."
-        />
+        <Field label="Email body">
+          <RichTextEditor
+            size="sm"
+            initialHtml={body}
+            onChange={setBody}
+            onChipClick={openSmartByName}
+            variables={vars}
+            minHeight={150}
+            placeholder="Write the email body — format with the toolbar, insert variables from the menu. Click a variable chip to set fallbacks, transforms, or formatting."
+          />
+        </Field>
       </div>
 
       {/* ── Variations — explicit sub-templates; animated in/out ── */}
@@ -639,27 +613,29 @@ function TemplateEditor({ tpl, onDelete }) {
                 </Btn>
               </div>
               <div style={S.mb8}>
-                <span style={S.label}>Subject</span>
-                <RichTextEditor
-                  singleLine size="sm"
-                  initialHtml={v.subject}
-                  onChange={(s) => updateVariation(v.id, { subject: s })}
-                  onChipClick={openSmartByName}
-                  variables={vars}
-                  placeholder="Variation subject line"
-                />
+                <Field label="Subject">
+                  <RichTextEditor
+                    singleLine size="sm"
+                    initialHtml={v.subject}
+                    onChange={(s) => updateVariation(v.id, { subject: s })}
+                    onChipClick={openSmartByName}
+                    variables={vars}
+                    placeholder="Variation subject line"
+                  />
+                </Field>
               </div>
               <div>
-                <span style={S.label}>Body</span>
-                <RichTextEditor
-                  size="sm"
-                  initialHtml={v.body}
-                  onChange={(b) => updateVariation(v.id, { body: b })}
-                  onChipClick={openSmartByName}
-                  variables={vars}
-                  minHeight={130}
-                  placeholder="Variation body"
-                />
+                <Field label="Body">
+                  <RichTextEditor
+                    size="sm"
+                    initialHtml={v.body}
+                    onChange={(b) => updateVariation(v.id, { body: b })}
+                    onChipClick={openSmartByName}
+                    variables={vars}
+                    minHeight={130}
+                    placeholder="Variation body"
+                  />
+                </Field>
               </div>
             </div>
           </motion.div>

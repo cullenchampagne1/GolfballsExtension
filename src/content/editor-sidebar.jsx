@@ -4,7 +4,8 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import {
-  Btn, IconBtn, Tag, Input, Segmented, I, Icon, T,
+  Btn, IconBtn, Tag, Input, Segmented, SectionLabel, I, Icon, T,
+  TYPE_ICONS, TYPE_COLORS,
   useSettingNotification,
 } from '../ui/index.js';
 
@@ -22,21 +23,18 @@ import {
 
 /* ── Per-type metadata: icon + color stripe + section label.
       Color is the left-border accent shown on each template row. */
+/* Per-type label + color stripe. Icons + colors come from the shared
+   TYPE_ICONS/TYPE_COLORS maps so the sidebar, editor headers, and any
+   future surface all agree on the glyph for a given type. */
 const TYPE_META_TPL = {
-  order:   { label: 'Order',   color: 'var(--gb-brand-label)',
-             icon: (p) => <Icon {...p}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></Icon> },
-  account: { label: 'Account', color: 'var(--gb-info-fg)',
-             icon: (p) => <Icon {...p}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></Icon> },
-  case:    { label: 'Case',    color: 'var(--gb-warning-fg)',
-             icon: (p) => <Icon {...p}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></Icon> },
+  order:   { label: 'Order',    color: TYPE_COLORS.order,    icon: TYPE_ICONS.order },
+  account: { label: 'Account',  color: TYPE_COLORS.account,  icon: TYPE_ICONS.account },
+  case:    { label: 'Case',     color: TYPE_COLORS.case,     icon: TYPE_ICONS.case },
 };
 const TYPE_META_NOTE = {
-  note:     { label: 'Note',     color: 'var(--gb-text-tertiary)',
-              icon: (p) => <Icon {...p}><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></Icon> },
-  task:     { label: 'Task',     color: 'var(--gb-brand-label)',
-              icon: (p) => <Icon {...p}><polyline points="20 6 9 17 4 12"/></Icon> },
-  call_log: { label: 'Call log', color: 'var(--gb-info-fg)',
-              icon: (p) => <Icon {...p}><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.13.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0122 16.92z"/></Icon> },
+  note:     { label: 'Note',     color: TYPE_COLORS.note,     icon: TYPE_ICONS.note },
+  task:     { label: 'Task',     color: TYPE_COLORS.task,     icon: TYPE_ICONS.task },
+  call_log: { label: 'Call log', color: TYPE_COLORS.call_log, icon: TYPE_ICONS.call_log },
 };
 const TYPE_ORDER_TPL  = ['order', 'account', 'case'];
 const TYPE_ORDER_NOTE = ['note', 'task', 'call_log'];
@@ -669,9 +667,7 @@ function TemplateSidebar() {
         flexShrink: 0,
       }}>
         <div>
-          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>
-            Golfballs · Templates
-          </div>
+          <SectionLabel divider={false} style={{ marginBottom: 0 }}>Golfballs · Templates</SectionLabel>
           <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -0.2, marginTop: 2 }}>
             Manager
           </div>

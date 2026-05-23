@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Btn } from './Btn.jsx';
 import { Input } from './Input.jsx';
 import { Dropdown } from './Dropdown.jsx';
+import { Field } from './Field.jsx';
 import { ModalShell } from './ModalShell.jsx';
 import { ModalHeader } from './ModalHeader.jsx';
 import { ModalFooter } from './ModalFooter.jsx';
@@ -46,10 +47,7 @@ export function EditVariableModal({ typeId, variable, allNames = [], onSave, onC
     <ModalShell onClose={onClose}>
       <ModalHeader onClose={onClose}>Edit variable</ModalHeader>
       <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div>
-          <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--gb-text-muted)', display: 'block', marginBottom: 6 }}>
-            Name
-          </label>
+        <Field label="Name">
           <Input
             value={name}
             mono
@@ -58,18 +56,15 @@ export function EditVariableModal({ typeId, variable, allNames = [], onSave, onC
             onChange={(v) => { setName(v); setError(''); }}
             placeholder="variable_name"
           />
-        </div>
-        <div>
-          <label style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5, color: 'var(--gb-text-muted)', display: 'block', marginBottom: 6 }}>
-            Source kind
-          </label>
+        </Field>
+        <Field label="Source kind">
           <Dropdown
             size="sm"
             value={kind}
             options={kindOptions}
             onChange={setKind}
           />
-        </div>
+        </Field>
         {error && (
           <div style={{ padding: '8px 10px', background: 'var(--gb-error-tint-soft)', border: '1px solid var(--gb-error-tint-border)', borderRadius: 'var(--gb-r-sm)', fontSize: 11, color: 'var(--gb-error-fg)' }}>
             {error}

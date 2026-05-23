@@ -5,7 +5,7 @@ import { IconBtn } from '../IconBtn.jsx';
 import { Input } from '../Input.jsx';
 import { Dropdown } from '../Dropdown.jsx';
 import { Card } from '../Card.jsx';
-import { Dot } from '../Dot.jsx';
+import { ResolveHint } from '../ResolveHint.jsx';
 import { SectionLabel } from '../SectionLabel.jsx';
 import { I, Icon } from '../../icons.jsx';
 
@@ -189,32 +189,14 @@ export function OrderRules({ initial, onChange }) {
                       <IconBtn size="sm" icon={<I.trash />} danger onClick={() => del(r._id)} />
                     </div>
                   </Card>
-                  {/* Live resolved hint — show what this selector matches on
-                      the order tab so the user can verify it before saving. */}
+                  {/* Live resolved hint — shared ResolveHint component. */}
                   {r.left && (
-                    <div style={{
-                      marginTop: 4,
-                      padding: '6px 9px',
-                      background: 'var(--gb-fill-subtle)',
-                      border: '1px solid var(--gb-border-subtle)',
-                      borderRadius: 'var(--gb-r-sm)',
-                      fontSize: 10,
-                      display: 'flex', alignItems: 'center', gap: 6,
-                    }}>
-                      <Dot
-                        tone={picking ? 'brand' : hints[r._id] ? 'brand' : 'warning'}
-                        glow={picking || !!hints[r._id]}
-                        size={5}
-                      />
-                      <span style={{ flex: 1, color: 'var(--gb-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {picking
-                          ? 'Hover an element on the page…'
-                          : hints[r._id]
-                            ? <><strong style={{ color: 'var(--gb-brand-label)' }}>1 match</strong> · <code style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 10 }}>{hints[r._id]}</code></>
-                            : <span style={{ color: 'var(--gb-warning-fg)' }}>No match on active page</span>
-                        }
-                      </span>
-                    </div>
+                    <ResolveHint
+                      picking={picking}
+                      resolved={hints[r._id]}
+                      size="xs"
+                      style={{ marginTop: 4 }}
+                    />
                   )}
                 </motion.div>
               );
