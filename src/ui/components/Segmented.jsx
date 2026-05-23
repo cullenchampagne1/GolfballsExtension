@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useId } from 'react';
+import { motion } from 'motion/react';
 
 /* Density presets. Defaults match the spec's SidePicker
    (design_handoff_components/reference/system-page.jsx:533) — 10.5px text,
@@ -8,6 +9,8 @@ const SIZES = {
   md: { pad: 2, btnPad: '3px 9px',  font: 10.5, gap: 1, radius: 'var(--gb-r-sm)', innerRadius: 4, icon: 11 },
   lg: { pad: 3, btnPad: '4px 11px', font: 11,   gap: 1, radius: 'var(--gb-r-md)', innerRadius: 5, icon: 12 },
 };
+
+const INDICATOR_SPRING = { type: 'spring', stiffness: 420, damping: 34, mass: 0.85 };
 
 /**
  * Segmented — inline single-select pill control. Use for switching modes
@@ -24,6 +27,9 @@ const SIZES = {
  */
 export function Segmented({ value, onChange, options = [], size = 'md', full, style }) {
   const s = SIZES[size] || SIZES.md;
+  // Unique per instance — keeps active indicators from different Segmented
+  // controls from being mistaken for the same layout element.
+  const groupId = useId();
   return (
     <div style={{
       display: full ? 'flex' : 'inline-flex',
@@ -41,19 +47,37 @@ export function Segmented({ value, onChange, options = [], size = 'md', full, st
             type="button"
             onClick={() => { if (!active) onChange?.(o.id); }}
             style={{
+              position: 'relative',
               flex: full ? 1 : '0 0 auto',
               padding: s.btnPad, borderRadius: s.innerRadius, border: 'none',
-              background: active ? 'var(--gb-brand-tint-medium)' : 'transparent',
+              background: 'transparent',
               color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
               fontSize: s.font, fontWeight: 600, fontFamily: 'var(--gb-font-sans)',
               cursor: active ? 'default' : 'pointer',
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               gap: 5, whiteSpace: 'nowrap',
-              transition: 'background .12s, color .12s',
+              transition: 'color .14s',
             }}
           >
-            {o.icon && React.cloneElement(o.icon, { size: s.icon })}
-            {o.label}
+            {/* Sliding active background — shared layoutId so the brand
+                pill springs between options instead of cross-fading. */}
+            {active && (
+              <motion.span
+                layoutId={`segmented-${groupId}-bg`}
+                transition={INDICATOR_SPRING}
+                style={{
+                  position: 'absolute', inset: 0,
+                  background: 'var(--gb-brand-tint-medium)',
+                  borderRadius: s.innerRadius,
+                  zIndex: 0,
+                }}
+              />
+            )}
+            {/* Label/icon sit above the pill so they stay readable. */}
+            <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              {o.icon && React.cloneElement(o.icon, { size: s.icon })}
+              {o.label}
+            </span>
           </button>
         );
       })}

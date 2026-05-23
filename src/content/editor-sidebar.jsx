@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import {
   Btn, IconBtn, Tag, Input, Segmented, I, Icon, T,
@@ -66,6 +66,16 @@ function saveKey(key, value) { chrome.storage.local.set({ [key]: value }); }
 
 /* DataTransfer MIME — kept unique so we don't trample other drags. */
 const DRAG_MIME = 'application/x-gb-tpl';
+
+/* Consistent animation language. Used everywhere so every interaction
+   feels like it belongs to the same UI:
+   - LAYOUT_SPRING — row teleporting between folders / type sections /
+                     enabled-vs-disabled buckets.
+   - SOFT          — folder collapse, content area fades.
+   - SNAP          — instant color/opacity transitions (hover, active). */
+const LAYOUT_SPRING = { type: 'spring', stiffness: 360, damping: 32, mass: 0.9 };
+const SOFT          = { duration: 0.26, ease: [0.32, 0.72, 0, 1] };
+const SNAP          = { duration: 0.14, ease: [0.4, 0, 0.2, 1] };
 
 /* Tab-aware "what type is this row?" */
 function rowType(t, isNote) {
@@ -136,6 +146,13 @@ function TemplateRow({ tpl, isNote, type, active, onClick, onMove, folders, onDr
 
   return (
     <motion.div
+      // layoutId makes the row a SHARED element across folder / type-
+      // section parents — when its grouping changes (type change, folder
+      // move, enable/disable bucket flip) motion springs it from the old
+      // position to the new instead of cross-fading.
+      layoutId={`tpl-${tpl.id}`}
+      layout="position"
+      transition={LAYOUT_SPRING}
       draggable
       onDragStart={(e) => {
         e.dataTransfer.setData(DRAG_MIME, tpl.id);
@@ -145,16 +162,16 @@ function TemplateRow({ tpl, isNote, type, active, onClick, onMove, folders, onDr
       onDragEnd={() => onDragEnd?.()}
       onClick={onClick}
       whileHover={{ background: 'var(--gb-fill-soft)' }}
-      animate={{ background: active ? 'var(--gb-brand-tint-soft)' : (disabled ? 'var(--gb-surface-deep)' : 'transparent') }}
-      transition={T.base}
+      whileTap={{ scale: 0.985 }}
+      animate={{
+        background: active ? 'var(--gb-brand-tint-soft)' : (disabled ? 'var(--gb-surface-deep)' : 'transparent'),
+        boxShadow: active ? 'inset 0 0 0 1px var(--gb-brand-tint-border)' : 'inset 0 0 0 1px transparent',
+      }}
       style={{
         position: 'relative',
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '6px 8px 6px 14px',
         borderRadius: 'var(--gb-r-sm)',
-        // Active outline goes on boxShadow (inset) so the stripe div is
-        // never fought-over by a border shorthand.
-        boxShadow: active ? 'inset 0 0 0 1px var(--gb-brand-tint-border)' : 'none',
         cursor: 'grab', userSelect: 'none',
       }}
     >
@@ -295,21 +312,23 @@ function FolderGroup({ folder, tpls, isNote, currentId, onOpen, onMove, onRename
 
   return (
     <motion.div
+      layout="position"
+      transition={LAYOUT_SPRING}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       animate={{
         background: hot ? 'var(--gb-brand-tint-soft)' : 'transparent',
-        boxShadow: hot ? 'inset 0 0 0 1px var(--gb-brand-tint-border)' : 'none',
+        boxShadow: hot ? 'inset 0 0 0 1px var(--gb-brand-tint-border)' : 'inset 0 0 0 1px transparent',
       }}
-      transition={T.base}
       style={{ borderRadius: 'var(--gb-r-md)', marginBottom: 3, padding: 1 }}
     >
       {/* Folder header */}
       <motion.div
         onClick={() => setOpen((v) => !v)}
         whileHover={{ background: 'var(--gb-fill-soft)' }}
-        transition={T.base}
+        whileTap={{ scale: 0.99 }}
+        transition={SNAP}
         style={{
           position: 'relative',
           display: 'flex', alignItems: 'center', gap: 6,
@@ -317,7 +336,11 @@ function FolderGroup({ folder, tpls, isNote, currentId, onOpen, onMove, onRename
           cursor: 'pointer', userSelect: 'none',
         }}
       >
-        <motion.span animate={{ rotate: open ? 90 : 0 }} transition={T.base} style={{ display: 'inline-flex', color: 'var(--gb-text-muted)' }}>
+        <motion.span
+          animate={{ rotate: open ? 90 : 0 }}
+          transition={{ type: 'spring', stiffness: 480, damping: 26 }}
+          style={{ display: 'inline-flex', color: 'var(--gb-text-muted)' }}
+        >
           <I.chevr size={9} />
         </motion.span>
         <FolderIcon size={12} style={{ color: accent, flexShrink: 0 }} />
@@ -371,7 +394,7 @@ function FolderGroup({ folder, tpls, isNote, currentId, onOpen, onMove, onRename
           <motion.div
             key="children"
             initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+            transition={SOFT}
             style={{ overflow: 'hidden' }}
           >
             <div style={{ padding: '2px 0 4px 6px' }}>
@@ -606,16 +629,25 @@ function TemplateSidebar() {
         </div>
       </div>
 
-      {/* Folder + uncategorized list */}
+      {/* Folder + uncategorized list — wrapped in a LayoutGroup so every
+          row's `layoutId` resolves against the same shared layout context,
+          letting rows spring between folder/type sections cleanly. */}
       <div style={{
         flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden',
         padding: '4px 8px 12px',
       }}>
+        <LayoutGroup id="sidebar-list">
         <AnimatePresence mode="wait">
           <motion.div
             key={tab}
-            initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-            transition={T.base}
+            // Direction-aware tab switch: Templates is left, Notes is right.
+            // Outgoing slides toward its tab's side, incoming slides in from
+            // the opposite side — so the motion always reads as "navigate
+            // to the next tab" rather than a generic fade.
+            initial={{ opacity: 0, x: tab === 'templates' ? -18 : 18 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: tab === 'templates' ? 18 : -18 }}
+            transition={SOFT}
           >
             {/* Folders first */}
             {groups.folders.map(({ folder, tpls }) => (
@@ -692,6 +724,7 @@ function TemplateSidebar() {
             )}
           </motion.div>
         </AnimatePresence>
+        </LayoutGroup>
       </div>
 
       {/* Pinned signature button */}
