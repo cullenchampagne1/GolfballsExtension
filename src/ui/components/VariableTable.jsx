@@ -12,7 +12,6 @@ import { IconBtn } from './IconBtn.jsx';
 import { KindPill } from './KindPill.jsx';
 import { BodyVar } from './BodyVar.jsx';
 import { InlineVariableForm } from './InlineVariableForm.jsx';
-import { EditVariableModal } from './EditVariableModal.jsx';
 import { I, Icon } from '../icons.jsx';
 
 const VariableIcon = (p) => (
@@ -24,9 +23,9 @@ const VariableIcon = (p) => (
 // 5 columns: variable | kind | source | resolved | actions (edit+delete).
 // Status column dropped — BodyVar's chip color already encodes status
 // (green=ok, yellow=fallback, red=miss), so the dedicated tag was
-// redundant. Variable column trimmed slightly to give actions room for
-// both icon buttons without crowding.
-const COL_GRID = '1.6fr 64px 1fr 1.3fr 60px';
+// redundant. Variable column tightened so the Kind pill (which can show
+// long labels like "constant") has room to breathe without truncating.
+const COL_GRID = '1.2fr 84px 1fr 1.3fr 60px';
 
 /**
  * VariableTable — 5-column grid showing all variables for a template.
@@ -38,12 +37,37 @@ const COL_GRID = '1.6fr 64px 1fr 1.3fr 60px';
  *   vars         Variable[]
  *   onAdd        () => void      — fires when the dashed Add row is clicked
  *   onDelete     (name) => void
- *   onEdit       ({oldName, newName, newKind}, variable) => void — renames and/or swaps kind, preserving smart options
+ *   onEdit       ({oldName, newName}, variable) => void — renames only.
+ *                Changing kind is intentionally not supported: each kind
+ *                stores config in a different shape (path vs regex vs
+ *                literal), so the only sane way to "change kind" is to
+ *                delete and re-add. Reduces the rename UI to a native prompt.
  *   onOpenSmart  (variable) => void — opens the smart-options modal
  */
 export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOpenSmart }) {
   const [adding, setAdding] = useState(false);
-  const [editVar, setEditVar] = useState(null);
+
+  // Rename via browser's native prompt. Validates that the new name is
+  // non-empty, distinct from the old name, a legal JS-ish identifier (the
+  // resolver assumes \w+), and not already in use by another variable.
+  // Anything invalid → alert() and bail. Cheap to use, no modal chrome to
+  // maintain.
+  const renameVariable = (variable) => {
+    const next = window.prompt(`Rename variable "${variable.name}"`, variable.name);
+    if (next == null) return;
+    const newName = next.trim();
+    if (!newName || newName === variable.name) return;
+    if (!/^\w+$/.test(newName)) {
+      window.alert('Variable name must contain only letters, numbers, and underscores.');
+      return;
+    }
+    if (vars.some((v) => v.name === newName && v.name !== variable.name)) {
+      window.alert(`A variable named "${newName}" already exists.`);
+      return;
+    }
+    onEdit?.({ oldName: variable.name, newName }, variable);
+  };
+
   return (
     <div style={{
       border: '1px solid var(--gb-border-default)',
@@ -155,14 +179,16 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
               }
             </div>
 
-            {/* Actions — rename + delete, share the column */}
+            {/* Actions — rename + delete, share the column.
+                Rename uses a native prompt (see renameVariable). Changing
+                kind is unsupported by design — delete and re-add instead. */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
               <IconBtn
                 size="sm"
                 icon={<I.edit />}
                 variant="ghost"
-                tooltip="Rename or change kind"
-                onClick={() => setEditVar(v)}
+                tooltip="Rename"
+                onClick={() => renameVariable(v)}
               />
               <IconBtn size="sm" icon={<I.trash />} danger onClick={() => onDelete?.(v.name)} />
             </div>
@@ -193,19 +219,6 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
             Add variable
           </Btn>
         </div>
-      )}
-      {/* Edit variable modal — rename or swap kind while preserving smart options */}
-      {editVar && (
-        <EditVariableModal
-          typeId={typeId}
-          variable={editVar}
-          allNames={vars.map(v => v.name).filter(n => n !== editVar.name)}
-          onSave={({name, kind}) => {
-            onEdit?.({oldName: editVar.name, newName: name, newKind: kind}, editVar);
-            setEditVar(null);
-          }}
-          onClose={() => setEditVar(null)}
-        />
       )}
     </div>
   );
