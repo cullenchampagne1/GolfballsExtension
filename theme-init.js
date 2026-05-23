@@ -1,11 +1,15 @@
 // theme-init.js
 // Applies saved theme colour overrides before the page first renders,
 // preventing a flash of default colours. Referenced by popup.html and editor.html.
-// theme.js then takes over for live updates.
+// theme.js / src/lib/theme.js then take over for live updates.
+//
+// Reads BOTH `gbTheme` (the React Settings shape) and the legacy
+// `themeColors` (older user data) so customized colors paint correctly
+// on first frame regardless of which writer set them last.
 (function () {
   if (typeof chrome === 'undefined' || !chrome.storage) return;
-  chrome.storage.local.get('themeColors', function (data) {
-    var ov = data && data.themeColors;
+  chrome.storage.local.get(['gbTheme', 'themeColors'], function (data) {
+    var ov = (data && data.gbTheme && data.gbTheme.colors) || (data && data.themeColors) || null;
     if (!ov || !Object.keys(ov).length) return;
     var root = document.documentElement;
     var rgbMap = {
