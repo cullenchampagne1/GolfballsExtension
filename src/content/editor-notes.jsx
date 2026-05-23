@@ -5,7 +5,8 @@ import {
   Btn, IconBtn, Tag, Dot,
   Input, Textarea, Dropdown, Field,
   SwitchTag, Segmented,
-  Callout, SectionLabel, Card,
+  FeatureSpotlight,
+  SectionLabel, Card,
   BodyVar,
   I, Icon,
 } from '../ui/index.js';
@@ -477,38 +478,17 @@ function CallLogPanel({ data, set }) {
         </Field>
       </div>
 
-      {/* Voicemail toggle — full-row spotlight: the card itself tints
-          brand-green when active so the on-state reads at a glance,
-          matching the xs SwitchTag pattern from the header. */}
-      <div
-        onClick={() => set({ callVoicemail: !data.callVoicemail })}
-        style={{
-          marginBottom: 14, padding: 10,
-          borderRadius: 'var(--gb-r-md)',
-          background: data.callVoicemail ? 'var(--gb-brand-tint-soft)' : 'var(--gb-surface-1)',
-          border: '1px solid ' + (data.callVoicemail ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'),
-          display: 'flex', alignItems: 'center', gap: 9,
-          cursor: 'pointer', userSelect: 'none',
-          transition: 'background 140ms ease, border-color 140ms ease',
-        }}
-      >
-        <NIcons.mic size={13} style={{ color: data.callVoicemail ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }} />
-        <div style={{ flex: 1 }}>
-          <div style={{
-            fontSize: 12, fontWeight: 600,
-            color: data.callVoicemail ? 'var(--gb-brand-label)' : 'var(--gb-text-primary)',
-          }}>
-            Left voicemail
-          </div>
-          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>
-            Logs the call with a voicemail flag.
-          </div>
-        </div>
-        <SwitchTag
+      {/* Voicemail toggle — uses the shared FeatureSpotlight component
+          (xs size) so it matches the settings page's feature-flag rows
+          1:1 instead of being a bespoke styled div. */}
+      <div style={{ marginBottom: 14 }}>
+        <FeatureSpotlight
           size="xs"
           on={!!data.callVoicemail}
-          label={data.callVoicemail ? 'Voicemail' : 'No voicemail'}
-          onClick={(e) => { e.stopPropagation(); set({ callVoicemail: !data.callVoicemail }); }}
+          icon={<NIcons.mic />}
+          name="Left voicemail"
+          desc="Logs the call with a voicemail flag."
+          onChange={(on) => set({ callVoicemail: on })}
         />
       </div>
 
@@ -698,14 +678,6 @@ function NoteEditor({ tpl, onDelete }) {
           email editor uses for its order/case/account picker. */}
       <div style={{ marginBottom: 12 }}>
         <Segmented value={subType} onChange={setSubType} options={SUBTYPE_OPTIONS} />
-      </div>
-
-      {/* ── Per-subtype callout — short, functional description of where
-          the subtype's buttons appear in the extension. */}
-      <div style={{ marginBottom: 12 }}>
-        <Callout tone="info" title={`${t.label} templates`} icon={<I.bolt />}>
-          {t.callout}
-        </Callout>
       </div>
 
       {/* ── Subtype panel ── */}

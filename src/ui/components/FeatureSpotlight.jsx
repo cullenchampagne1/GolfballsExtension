@@ -9,12 +9,17 @@ import { Tag } from './Tag.jsx';
  * Glows when on. `experimental` uses amber styling.
  *
  * Props: on, icon, name, desc, onChange, tone 'brand'|'warning',
- *   experimental, size 'sm'|'md'|'lg' (default 'md').
+ *   experimental, size 'xs'|'sm'|'md'|'lg' (default 'md').
+ *
+ * `xs` keeps the full-line layout (icon tile + name/desc + switch) but
+ * tightens vertical rhythm — for inline use inside editors where a full
+ * sm/md row would over-dominate the form.
  */
 const SIZES = {
-  sm: { pad: 11, box: 30, icon: 15, name: 12.5, desc: 10.5, gap: 11, sw: 'sm' },
-  md: { pad: 14, box: 36, icon: 17, name: 13.5, desc: 11,   gap: 12, sw: 'md' },
-  lg: { pad: 16, box: 44, icon: 20, name: 14,   desc: 11.5, gap: 14, sw: 'lg' },
+  xs: { pad: 8,  box: 24, icon: 12, name: 11.5, desc: 10,   gap: 9,  sw: 'sm', radius: 'var(--gb-r-md)' },
+  sm: { pad: 11, box: 30, icon: 15, name: 12.5, desc: 10.5, gap: 11, sw: 'sm', radius: 'var(--gb-r-lg)' },
+  md: { pad: 14, box: 36, icon: 17, name: 13.5, desc: 11,   gap: 12, sw: 'md', radius: 'var(--gb-r-lg)' },
+  lg: { pad: 16, box: 44, icon: 20, name: 14,   desc: 11.5, gap: 14, sw: 'lg', radius: 'var(--gb-r-lg)' },
 };
 
 export function FeatureSpotlight({ on, icon, name, desc, onChange, tone, experimental, size = 'md' }) {
@@ -37,7 +42,7 @@ export function FeatureSpotlight({ on, icon, name, desc, onChange, tone, experim
       style={{
         padding: s.pad,
         border: '1px solid',
-        borderRadius: 'var(--gb-r-lg)',
+        borderRadius: s.radius,
         display: 'flex', alignItems: 'center', gap: s.gap,
         cursor: 'pointer',
       }}
