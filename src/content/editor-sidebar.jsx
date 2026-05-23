@@ -101,7 +101,10 @@ function ActionMenu({ onClose, anchorRef, children }) {
       transition={T.base}
       onClick={(e) => e.stopPropagation()}
       style={{
-        position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 60,
+        // Sits above motion's layout-animated rows (layoutId can elevate
+        // their stacking). 2147483400 is below the global notification
+        // host (2147483600) so a confirm still wins over a kebab menu.
+        position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 2147483400,
         minWidth: 150,
         background: 'var(--gb-surface-modal)',
         border: '1px solid var(--gb-border-default)',
@@ -118,7 +121,9 @@ function MenuItem({ children, onClick, danger }) {
   return (
     <button
       type="button"
-      onClick={onClick}
+      // Stop propagation so clicks never leak past the menu — the row
+      // beneath shouldn't open just because the menu was over it.
+      onClick={(e) => { e.stopPropagation(); onClick?.(e); }}
       style={{
         display: 'flex', alignItems: 'center', gap: 8, width: '100%',
         padding: '6px 8px', borderRadius: 'var(--gb-r-sm)', border: 'none',

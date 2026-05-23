@@ -76,8 +76,11 @@ export function ColorPickerPopover({
   const [hexInput, setHexInput] = useState(value);
   useEffect(() => { setHexInput(value); }, [value]);
 
-  // Position the portaled popover from the anchor's viewport rect. Updates
-  // on scroll/resize so the popover stays attached when the page moves.
+  // Position the portaled popover from the anchor's viewport rect — once
+  // at open, then on window resize. We do NOT track scroll: doing so
+  // recomputes pos on every keystroke-induced layout shift inside the
+  // popover (focus scrolls etc.), making it twitch mid-interaction.
+  // Instead, scrolling the page closes the popover (handled below).
   // Portal-to-body is required because the popover otherwise gets clipped
   // by sibling cards in the same stacking context (visible in the settings
   // page where multiple ColorSpotlights stack vertically).
@@ -94,12 +97,20 @@ export function ColorPickerPopover({
     }
     update();
     window.addEventListener('resize', update);
-    window.addEventListener('scroll', update, true);
-    return () => {
-      window.removeEventListener('resize', update);
-      window.removeEventListener('scroll', update, true);
-    };
+    return () => window.removeEventListener('resize', update);
   }, [anchorRef, align, offset]);
+
+  // Close on outside scroll (any scrollable in the editor — capture phase
+  // catches nested ones). Scrolls inside the popover itself are ignored
+  // so dragging picker controls doesn't auto-close.
+  useEffect(() => {
+    const onScroll = (e) => {
+      if (ref.current?.contains(e.target)) return;
+      onClose?.();
+    };
+    window.addEventListener('scroll', onScroll, true);
+    return () => window.removeEventListener('scroll', onScroll, true);
+  }, [onClose]);
 
   // Outside click + Esc close. (Anchor click is part of "inside.")
   useEffect(() => {

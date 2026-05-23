@@ -489,6 +489,13 @@ function openTemplate(id) {
     window.__gbOpenTemplate(tpl);
     return;
   }
+  // Bridge isn't installed (React mount failed or torn down) AND the
+  // legacy DOM is gone — bail before touching null. Without this guard
+  // every click here throws on `$('ed-title').textContent`.
+  if (!$('ed-title')) {
+    console.warn('[gb-editor] React template bridge missing and legacy DOM is gone; reload the editor tab.');
+    return;
+  }
 
   rules              = JSON.parse(JSON.stringify(tpl.rules || []));
   accountConditions  = JSON.parse(JSON.stringify(tpl.accountConditions || []));
