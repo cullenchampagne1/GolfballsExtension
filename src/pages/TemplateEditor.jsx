@@ -247,10 +247,18 @@ export function TemplateEditor({ tpl, onDelete }) {
   // Feature flags — only `replyWithTemplateEnabled` (Direct Send via
   // Power Automate) is consumed here. Live-updated so flipping the
   // flag in settings immediately gates the sender picker.
+  //
+  // `paReady` blocks the initial render until the async storage check
+  // resolves — otherwise the editor paints first with paEnabled=false
+  // (hiding reply mode + sender pills), then the async result lands and
+  // those controls visibly pop in. The whole template panel takes ~1
+  // frame longer to appear but renders in its final shape.
   const [paEnabled, setPaEnabled] = useState(false);
+  const [paReady, setPaReady] = useState(false);
   useEffect(() => {
     chrome.storage.local.get('featureFlags', ({ featureFlags }) => {
       setPaEnabled(!!(featureFlags && featureFlags.replyWithTemplateEnabled));
+      setPaReady(true);
     });
     function onChanged(changes) {
       if (!changes.featureFlags) return;
@@ -466,6 +474,12 @@ export function TemplateEditor({ tpl, onDelete }) {
     const r = resolvedMap[v.name];
     return r ? { ...v, resolved: r.resolved, status: r.status } : v;
   });
+
+  // Hold the entire panel render until the PA flag check resolves —
+  // otherwise the editor would paint with paEnabled=false, then re-render
+  // a moment later when the async storage.get lands, causing the reply
+  // mode + sender pills to visibly pop in after the rest of the panel.
+  if (!paReady) return null;
 
   return (
     <div style={{ fontFamily: 'var(--gb-font-sans)', color: 'var(--gb-text-secondary)' }}>
