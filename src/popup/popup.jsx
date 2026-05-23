@@ -834,14 +834,15 @@ function MainView({
                   searchable={templates.length > 6}
                   leading={<Dot tone={isMatched ? 'brand' : 'muted'} size={7} glow={isMatched} />}
                   onChange={onSelect}
-                  /* Constrain the menu to whatever the bottom section
-                     leaves available below the trigger. The Dropdown's
-                     own auto-clamp uses window.innerHeight which can
-                     lag during Chrome's popup auto-resize — passing an
-                     explicit ceiling derived from the popup's known
-                     layout avoids any race where the menu briefly draws
-                     taller than the popup. */
-                  maxHeight={216}
+                  /* Hard-clamp the menu height to a value that always
+                     fits inside the 340px popup with breathing room.
+                     We don't rely on the Dropdown's auto-clamp here
+                     because Chrome's popup auto-resize can fire after
+                     the menu opens, leaving the menu sized against a
+                     stale viewport. 180px = 340 minus header (55) -
+                     padding (14) - section label (12) - trigger (28) -
+                     offset (4) - shadow (30) - bottom safety (17). */
+                  maxHeight={180}
                 />
               ) : (
                 <div style={{
