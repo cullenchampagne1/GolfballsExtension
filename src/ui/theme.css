@@ -143,7 +143,7 @@
   --gb-success:         #5cd99a;
   --gb-info:            #6ab0f3;
 
-  --gb-text-on-brand:   #050507;   /* dark text on punchier brand */
+  --gb-text-on-brand:   #ecf3df;   /* off-white reads better on the deeper midnight brand than near-black did */
   --gb-backdrop:        rgba(0, 0, 0, 0.75);
 }
 
