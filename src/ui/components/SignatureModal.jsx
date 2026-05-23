@@ -1,25 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { I, Icon } from '../icons.jsx';
-import { Btn } from './Btn.jsx';
 import { CompactModal } from './CompactModal.jsx';
-import { ModalHeader } from './ModalHeader.jsx';
-import { ModalFooter } from './ModalFooter.jsx';
 import { RichTextEditor } from './RichTextEditor.jsx';
-
-const PenIcon = (p) => (
-  <Icon {...p}><path d="M17 3a2.85 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5z"/></Icon>
-);
 
 /**
  * SignatureModal — edits the global email signature stored at
- * chrome.storage.local.emailSignature. The signature HTML is appended
- * to every email sent through Direct Send / Power Automate.
+ * chrome.storage.local.emailSignature.
  *
- * Built on CompactModal — a small, focused dialog rather than a full
- * 560px modal. Mount it inside an <AnimatePresence>.
+ * The "modal" is just the RichTextEditor itself: backdrop dims the page,
+ * the editor sits centered with its own slight border (no header, no
+ * footer, no Cancel/Save). Clicking the backdrop or pressing Esc saves
+ * the current contents and closes. Mount inside an <AnimatePresence>.
  *
  * Props:
- *   onClose () => void
+ *   onClose () => void  — fired AFTER persistence completes
  */
 export function SignatureModal({ onClose }) {
   const [loaded, setLoaded] = useState(false);
@@ -39,57 +32,45 @@ export function SignatureModal({ onClose }) {
     return () => { alive = false; };
   }, []);
 
-  // Returning a Promise lets Btn animate loading → success automatically.
-  function save() {
-    return new Promise(resolve => {
-      chrome.storage.local.set({ emailSignature: htmlRef.current }, () => {
-        setTimeout(() => { onClose?.(); resolve(); }, 450);
-      });
+  // Backdrop click / Esc → persist then close. No explicit Save button —
+  // exit IS save.
+  function saveAndClose() {
+    chrome.storage.local.set({ emailSignature: htmlRef.current }, () => {
+      window.__gbToast?.success('Signature saved');
+      onClose?.();
     });
   }
 
   return (
-    // 680px wide — matches the old editor's signature card (backup/editor.js).
-    // A signature is email content: the renderer needs width. "Compact" here
-    // means small text + tight chrome, not a narrow modal.
-    <CompactModal size={680} onClose={onClose}>
-      <ModalHeader
-        icon={<PenIcon />}
-        title="Email Signature"
-        subtitle="Appended to every outgoing email"
-        onClose={onClose}
-      />
-
-      {/* Body scrolls within CompactModal's height cap; header/footer pin. */}
-      <div style={{
-        padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 8,
-        flex: 1, minHeight: 0, overflow: 'auto',
-      }}>
-        {loaded ? (
-          <RichTextEditor
-            size="sm"
-            initialHtml={initial}
-            onChange={html => { htmlRef.current = html; }}
-            minHeight={200}
-            placeholder="Name, title, phone, company — formatted how you like it."
-          />
-        ) : (
-          <div style={{
-            minHeight: 200, borderRadius: 'var(--gb-r-md)',
-            border: '1px solid var(--gb-border-default)',
-            background: 'var(--gb-surface-canvas)',
-          }} />
-        )}
-        <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>
-          Keep it lightweight — inline images can render inconsistently when relayed through Power Automate.
-        </div>
-      </div>
-
-      <ModalFooter>
-        <span style={{ flex: 1 }} />
-        <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
-        <Btn variant="primary" icon={<I.check />} onClick={save}>Save</Btn>
-      </ModalFooter>
+    // CompactModal handles portal + backdrop + escape stack. Override its
+    // card chrome to transparent so the RichTextEditor's own border IS
+    // the visible "modal" boundary — one slight border, not nested.
+    <CompactModal
+      size={680}
+      onClose={saveAndClose}
+      style={{
+        background: 'transparent',
+        border: 'none',
+        boxShadow: 'none',
+        borderRadius: 0,
+        overflow: 'visible',
+      }}
+    >
+      {loaded ? (
+        <RichTextEditor
+          size="sm"
+          initialHtml={initial}
+          onChange={html => { htmlRef.current = html; }}
+          minHeight={220}
+          placeholder="Name, title, phone, company — formatted how you like it."
+        />
+      ) : (
+        <div style={{
+          minHeight: 220, borderRadius: 'var(--gb-r-md)',
+          border: '1px solid var(--gb-border-default)',
+          background: 'var(--gb-surface-canvas)',
+        }} />
+      )}
     </CompactModal>
   );
 }
