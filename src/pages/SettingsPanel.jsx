@@ -447,24 +447,19 @@ function DevSettingRow({ def, value, onChange }) {
           <Switch on={!!value} size="sm" onChange={(on) => onChange(on)} />
         )}
         {isNum && (
-          <>
-            <Input
-              size="sm" mono
-              value={String(value ?? '')}
-              onChange={(v) => {
-                const cleaned = v.replace(/[^0-9.]/g, '');
-                if (cleaned === '') { onChange(def.default); return; }
-                const n = Number(cleaned);
-                if (Number.isNaN(n)) return;
-                const clamped = Math.max(def.min ?? -Infinity, Math.min(def.max ?? Infinity, n));
-                onChange(clamped);
-              }}
-              style={{ width: 70 }}
-            />
-            {def.unit && (
-              <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>{def.unit}</span>
-            )}
-          </>
+          <Input
+            size="sm" mono
+            value={String(value ?? '')}
+            onChange={(v) => {
+              const cleaned = v.replace(/[^0-9.]/g, '');
+              if (cleaned === '') { onChange(def.default); return; }
+              const n = Number(cleaned);
+              if (Number.isNaN(n)) return;
+              const clamped = Math.max(def.min ?? -Infinity, Math.min(def.max ?? Infinity, n));
+              onChange(clamped);
+            }}
+            style={{ width: 70 }}
+          />
         )}
         {isAction && (
           <Btn
@@ -712,15 +707,14 @@ export function SettingsPanel() {
       {/* Developer Settings — registry-driven key/value table for
           low-priority knobs that don't deserve a feature flag.
           Always at the bottom. Adding a new row is one entry in
-          src/lib/devSettings.js → DEV_SETTINGS. The body caps at
-          340px and scrolls so the page doesn't grow as the registry
-          fills up. */}
+          src/lib/devSettings.js → DEV_SETTINGS. The body grows with the
+          registry; the parent settings page handles scrolling, so we
+          don't add an inner scroll surface that would clash with it. */}
       <section>
         <CollapsibleSection
           icon={<I.bolt />}
           title="Developer Settings"
           subtitle="Low-level tweaks — animation timing, debounce intervals, etc."
-          maxHeight={340}
           action={
             <Btn variant="ghost" size="xs" onClick={resetDevSettings}>Reset</Btn>
           }
