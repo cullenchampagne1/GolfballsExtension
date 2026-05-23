@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Icon } from '../icons.jsx';
 import { ColorButton } from './ColorButton.jsx';
 
@@ -183,6 +184,7 @@ export function RichTextEditor({
   const [marks,     setMarks]     = useState({});
   const [empty,     setEmpty]     = useState(true);
   const [varMenu,   setVarMenu]   = useState(false);
+  const varBtnRef = useRef(null);
   // Last-picked text + highlight colors — drive the toolbar swatches so
   // the buttons reflect the current choice instead of a static muted color.
   const [textColor, setTextColor] = useState('#7db82a');
@@ -308,7 +310,11 @@ export function RichTextEditor({
   return (
     <div style={{
       border: '1px solid var(--gb-border-default)',
-      borderRadius: 'var(--gb-r-md)', overflow: 'visible',
+      borderRadius: 'var(--gb-r-md)',
+      // Clip children to the rounded corners. Without this, the singleLine
+      // overflow:auto scroll layer + the body's content paint extend past
+      // the wrapper's border-radius and the corners look square.
+      overflow: 'hidden',
       background: 'var(--gb-surface-canvas)',
     }}>
       {/* ── Toolbar (full mode only) ── */}
@@ -358,6 +364,7 @@ export function RichTextEditor({
             <>
               <div style={{ flex: 1 }} />
               <button
+                ref={varBtnRef}
                 type="button"
                 onMouseDown={e => { e.preventDefault(); saveSelection(); setVarMenu(v => !v); }}
                 style={{
@@ -371,7 +378,7 @@ export function RichTextEditor({
                 <Ic.bolt size={sz.varIcon} /> Variable
               </button>
               {varMenu && (
-                <VarMenu variables={variables} onPick={insertVariable} onClose={() => setVarMenu(false)} />
+                <VarMenu anchorRef={varBtnRef} variables={variables} onPick={insertVariable} onClose={() => setVarMenu(false)} />
               )}
             </>
           )}
@@ -422,17 +429,35 @@ export function RichTextEditor({
 }
 
 /* ── Variable dropdown menu (full-mode toolbar) ─────────────── */
-function VarMenu({ variables, onPick, onClose }) {
+function VarMenu({ variables, onPick, onClose, anchorRef }) {
+  // Position from the anchor's viewport rect — portaled to body so the
+  // wrapper's `overflow: hidden` (which rounds the editor's corners)
+  // doesn't clip the dropdown.
+  const [pos, setPos] = useState(null);
+  useEffect(() => {
+    function update() {
+      const el = anchorRef?.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, right: window.innerWidth - r.right });
+    }
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [anchorRef]);
+
   useEffect(() => {
     const h = () => onClose();
     const t = setTimeout(() => document.addEventListener('mousedown', h), 0);
     return () => { clearTimeout(t); document.removeEventListener('mousedown', h); };
   }, [onClose]);
-  return (
+
+  if (!pos) return null;
+  return createPortal(
     <div
       onMouseDown={e => e.stopPropagation()}
       style={{
-        position: 'absolute', top: 'calc(100% + 4px)', right: 6, zIndex: 50,
+        position: 'fixed', top: pos.top, right: pos.right, zIndex: 2147483400,
         minWidth: 170, maxHeight: 220, overflowY: 'auto',
         background: 'var(--gb-surface-2)',
         border: '1px solid var(--gb-border-default)',
@@ -456,7 +481,8 @@ function VarMenu({ variables, onPick, onClose }) {
           {`{{${v.name}}}`}
         </button>
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
