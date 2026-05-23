@@ -172,6 +172,7 @@ function KeyboardShortcutRow({ label, desc, value, onChange }) {
               animate={{ opacity: 1, width: 20, marginLeft: 0 }}
               exit={{ opacity: 0, width: 0, marginLeft: 0 }}
               transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
+              whileHover={{ color: 'var(--gb-error-fg)' }}
               style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 height: 20, padding: 0,
@@ -179,7 +180,7 @@ function KeyboardShortcutRow({ label, desc, value, onChange }) {
                 color: 'var(--gb-text-muted)', overflow: 'hidden',
               }}
             >
-              <I.close size={11} />
+              <I.trash size={11} />
             </motion.button>
           )}
         </AnimatePresence>
