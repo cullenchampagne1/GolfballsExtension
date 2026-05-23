@@ -952,14 +952,14 @@ function MainView({
       </div>
 
       {/* ── BOTTOM SECTION ─ resolved info + hairline + send button ──
-         marginTop:auto pushes this block to the bottom of the popup body,
-         so any extra height left over by a short button stack appears as
-         empty space between the dropdown and the resolved section — not
-         dangling beneath the send button.
+         Sits directly under the last visible button. The popup's minHeight
+         (340 when email templates are on, 0 when off) means any extra
+         height is just empty popup below the send button — better than
+         opening a yawning gap between the buttons and the resolved info.
 
          Gated on emailTemplatesEnabled — when off, the whole block (resolved
          info + hr + send button) collapses away so the popup is buttons-only. */}
-      <div style={{ marginTop: 'auto', flexShrink: 0 }}>
+      <div style={{ flexShrink: 0, paddingTop: 12 }}>
         <AnimatePresence initial={false}>
           {flags.emailTemplatesEnabled && (
             <Reveal key="send-block" gap={14}>

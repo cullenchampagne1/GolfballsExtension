@@ -168,13 +168,28 @@ function NotificationCard({ active, dismiss }) {
       )}
 
       {/* Tinted action footer for prompt — buttons only; the input is up
-          in the body above. */}
+          in the body above.
+
+          Layout: [extraAction] · [spacer] · [Cancel] · [Confirm]
+          extraAction sits on the LEFT (separated from the primary actions
+          by the flex spacer) so destructive secondary options like Delete
+          read as "this is a different path, not just another way to
+          confirm". Resolves the promise with extraAction.value. */}
       {isPrompt && (
         <div style={{
           display: 'flex', gap: 6, padding: '6px 8px 7px',
           borderTop: '1px solid var(--gb-border-subtle)',
           background: tone.bg,
         }}>
+          {active.extraAction && (
+            <Btn
+              variant={active.extraAction.tone === 'danger' ? 'danger' : 'ghost'}
+              size="sm"
+              onClick={() => active.onResolve(active.extraAction.value)}
+            >
+              {active.extraAction.label}
+            </Btn>
+          )}
           <div style={{ flex: 1 }} />
           <Btn variant="ghost" size="sm" onClick={() => active.onResolve(null)}>
             {active.cancelLabel}
@@ -288,6 +303,13 @@ export function SettingNotificationHost({ children, placement = 'top', style }) 
         defaultValue: options.defaultValue || '',
         confirmLabel: options.confirmLabel || 'OK',
         cancelLabel:  options.cancelLabel  || 'Cancel',
+        // Optional third button in the footer (left-aligned). Use for a
+        // secondary destructive option alongside the primary action — e.g.
+        // a "Delete" button next to a "Rename" prompt. The shape is:
+        //   { label, tone?: 'danger'|'default', value? }
+        // value is the sentinel returned via the promise (defaults to a
+        // unique Symbol that callers can compare with `===`).
+        extraAction: options.extraAction || null,
         onResolve: (v) => { setActive(null); resolve(v); },
       });
     }),
