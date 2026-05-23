@@ -79,6 +79,14 @@ export function FloatingPanel({ children, width = 480, backdrop = true, onClose,
                 overflow: 'hidden',
                 display: 'flex', flexDirection: 'column',
                 fontFamily: 'var(--gb-font-sans)',
+                // Lock font metrics so the modal renders identically across
+                // host pages. Without this, any unstyled text inside the
+                // modal inherits the host's font-size + line-height — e.g.
+                // an empty playground.html with browser-default 16px makes
+                // the modal look noticeably bigger than the same modal
+                // mounted on a busy site that sets body { font-size: 12px }.
+                fontSize: 13,
+                lineHeight: 1.4,
               }}
             >
               {children}
