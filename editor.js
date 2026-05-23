@@ -4384,6 +4384,60 @@ initRTE('rte-body-wrap');
  *
  * Idempotent — once children are gone, subsequent runs do nothing.
  */
+/**
+ * Reverse `gbMigrateVariations`: split tpl.variations back into standalone
+ * templates so false-positive matches can be undone. Each restored child
+ * inherits the parent's type / rules / vars (the original migration only
+ * kept {id, label, subject, body}, so those fields can't be recovered).
+ *
+ *   await gbUnmigrateVariations()
+ *
+ * Idempotent — second run finds nothing once variations are flattened.
+ */
+window.gbUnmigrateVariations = async function gbUnmigrateVariations() {
+  const { templates: tpls = [] } = await new Promise((r) =>
+    chrome.storage.local.get('templates', r),
+  );
+  const next = [];
+  const restored = [];
+
+  for (const t of tpls) {
+    if (Array.isArray(t.variations) && t.variations.length) {
+      // Re-emit the parent without its variations.
+      const { variations, ...rest } = t;
+      next.push({ ...rest });
+      // Each variation comes back as a sibling: inherits type/rules/vars,
+      // gets its own name reconstructed from parent + label.
+      variations.forEach((v, i) => {
+        const label = v.label || `Variation ${i + 1}`;
+        const child = {
+          ...rest,
+          id:      v.id || `tpl_${Date.now().toString(36)}_${i}`,
+          name:    `${t.name || 'Untitled'} ${label}`.trim(),
+          subject: v.subject || '',
+          body:    v.body    || '',
+          updatedAt: Date.now(),
+        };
+        delete child.variations;
+        next.push(child);
+        restored.push(child.name);
+      });
+    } else {
+      next.push(t);
+    }
+  }
+
+  if (!restored.length) {
+    console.log('[gb-migrate] No tpl.variations to restore.');
+    return { restored: 0 };
+  }
+  await new Promise((r) => chrome.storage.local.set({ templates: next }, r));
+  console.log(`[gb-migrate] Restored ${restored.length} variation(s) to standalone templates:`);
+  restored.forEach((n) => console.log('  •', n));
+  console.log('[gb-migrate] Reload the editor to see the restored templates.');
+  return { restored: restored.length, details: restored };
+};
+
 window.gbMigrateVariations = async function gbMigrateVariations() {
   const { templates: tpls = [] } = await new Promise((r) =>
     chrome.storage.local.get('templates', r),

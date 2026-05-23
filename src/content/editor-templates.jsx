@@ -558,7 +558,7 @@ function mount() {
   if (!host || host.__gbTemplatesMounted) return;
   host.__gbTemplatesMounted = true;
   // Padding on the host itself, so the top gap shows regardless of layout.
-  host.style.padding = '24px 0 40px';
+  host.style.padding = '40px 0 48px';
   ensureTheme();
   createRoot(host).render(<TemplateEditorRoot />);
 }
