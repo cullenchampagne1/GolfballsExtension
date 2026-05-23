@@ -144,20 +144,29 @@ function TemplateRow({ tpl, isNote, type, active, onClick, onMove, folders, onDr
       onDragEnd={() => onDragEnd?.()}
       onClick={onClick}
       whileHover={{ background: 'var(--gb-fill-soft)' }}
-      animate={{ background: active ? 'var(--gb-brand-tint-soft)' : (disabled ? 'var(--gb-surface-base)' : 'transparent') }}
+      animate={{ background: active ? 'var(--gb-brand-tint-soft)' : (disabled ? 'var(--gb-surface-deep)' : 'transparent') }}
       transition={T.base}
       style={{
         position: 'relative',
         display: 'flex', alignItems: 'center', gap: 8,
-        padding: '6px 8px 6px 12px',
+        padding: '6px 8px 6px 14px',
         borderRadius: 'var(--gb-r-sm)',
-        border: '1px solid ' + (active ? 'var(--gb-brand-tint-border)' : 'transparent'),
-        // Thin 2px type stripe — matches spec accents (Callout uses 3px,
-        // rows are quieter).
-        borderLeft: `2px solid ${meta.color}`,
+        // Active outline goes on boxShadow (inset) so the stripe div is
+        // never fought-over by a border shorthand.
+        boxShadow: active ? 'inset 0 0 0 1px var(--gb-brand-tint-border)' : 'none',
         cursor: 'grab', userSelect: 'none',
       }}
     >
+      {/* Type stripe — inset rounded bar, never a full border. Stays put
+          when the row goes active. */}
+      <span style={{
+        position: 'absolute',
+        left: 4, top: 6, bottom: 6,
+        width: 2, borderRadius: 2,
+        background: meta.color,
+        opacity: disabled ? 0.45 : 1,
+        pointerEvents: 'none',
+      }} />
       <TypeIcon size={11} style={{ color: disabled ? 'var(--gb-text-ghost)' : (active ? 'var(--gb-brand-label)' : meta.color), flexShrink: 0, opacity: disabled ? 0.55 : 1 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
@@ -528,7 +537,7 @@ function TemplateSidebar() {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', height: '100%',
-      background: 'var(--gb-surface-base)',
+      background: 'var(--gb-surface-canvas)',
       fontFamily: 'var(--gb-font-sans)',
       color: 'var(--gb-text-secondary)',
     }}>
@@ -667,7 +676,7 @@ function TemplateSidebar() {
       {/* Pinned signature button */}
       <div style={{
         padding: 10, borderTop: '1px solid var(--gb-border-subtle)', flexShrink: 0,
-        background: 'var(--gb-surface-base)',
+        background: 'var(--gb-surface-canvas)',
       }}>
         <Btn variant="ghost" size="sm" icon={<PenIcon />} full onClick={openSignature}>
           Email signature
