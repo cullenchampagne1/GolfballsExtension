@@ -14,6 +14,7 @@ import { ModalFooter } from './ModalFooter.jsx';
 const CaseIcon   = (p) => <Icon {...p}><path d="M4 7V4h16v3"/><path d="M9 20h6M12 4v16"/></Icon>;
 const IfElseIcon = (p) => <Icon {...p}><path d="M5 4v16M19 4v16M5 12h14"/></Icon>;
 const FilterIcon = (p) => <Icon {...p}><path d="M22 3H2l8 9.5V19l4 2v-8.5z"/></Icon>;
+const ExtractIcon= (p) => <Icon {...p}><circle cx="12" cy="12" r="3"/><path d="M12 5v6M12 12v6M6 12h12"/></Icon>;
 
 const Mono = ({ children }) => (
   <code style={{
@@ -29,6 +30,7 @@ const Mono = ({ children }) => (
 
 const TABS = [
   { id: 'fallback',    icon: I.bolt,     label: 'Fallback',    hint: 'Use a default if unresolved' },
+  { id: 'extract',     icon: ExtractIcon,label: 'Extract',     hint: 'Run a regex against the value' },
   { id: 'transform',   icon: CaseIcon,   label: 'Transform',   hint: 'Reshape the value' },
   { id: 'conditional', icon: IfElseIcon, label: 'Conditional', hint: 'Drop sentence if missing' },
   { id: 'format',      icon: FilterIcon, label: 'Format',      hint: 'Number / date / currency' },
@@ -84,6 +86,7 @@ export function SmartModal({ variable, onClose, onSave }) {
 
   const isTabEnabled = (id) => {
     if (id === 'fallback')    return typeof smart.fallback === 'string' && smart.fallback.length > 0;
+    if (id === 'extract')     return !!smart.extract?.pattern;
     if (id === 'transform')   return !!smart.transform;
     if (id === 'conditional') return !!smart.conditional;
     if (id === 'format')      return !!smart.format;
@@ -149,6 +152,44 @@ export function SmartModal({ variable, onClose, onSave }) {
                   </span>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Extract tab — regex applied to the resolved value, capture
+              group becomes the final value. Replaces the legacy "regex"
+              variable kind for order/account templates. */}
+          {tab === 'extract' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <Callout tone="info">
+                Run a JavaScript regex against the value the variable just resolved
+                to, then take a capture group. Use this to pull an order ID out of
+                a label, a year out of a date, etc.
+              </Callout>
+              <Field label="Pattern" hint="Plain regex — no leading/trailing slashes">
+                <Input
+                  value={smart.extract?.pattern || ''}
+                  placeholder="ORD-(\\d+)"
+                  mono
+                  onChange={(v) => upd({ extract: { ...(smart.extract || {}), pattern: v } })}
+                />
+              </Field>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <Field label="Capture group" hint="0 = whole match · 1 = first group">
+                  <Input
+                    type="number"
+                    value={String(smart.extract?.group ?? 1)}
+                    onChange={(v) => upd({ extract: { ...(smart.extract || {}), group: Number(v) || 0 } })}
+                  />
+                </Field>
+                <Field label="Flags" hint="e.g. 'i' for case-insensitive">
+                  <Input
+                    mono
+                    value={smart.extract?.flags || ''}
+                    placeholder="i"
+                    onChange={(v) => upd({ extract: { ...(smart.extract || {}), flags: v.replace(/[^gimsuy]/g, '') } })}
+                  />
+                </Field>
+              </div>
             </div>
           )}
 

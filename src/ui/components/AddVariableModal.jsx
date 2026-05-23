@@ -16,10 +16,14 @@ const PickerIcon  = (p) => <Icon {...p}><path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5
 const RegexIcon   = (p) => <Icon {...p}><circle cx="12" cy="12" r="3"/><path d="M12 5v6M12 12v6M6 12h12"/></Icon>;
 const VariableIcon= (p) => <Icon {...p}><path d="M5 4 a14 14 0 000 16M19 4a14 14 0 010 16"/><path d="M9 9l6 6M9 15l6-6"/></Icon>;
 
+/* Regex as a primary variable kind only makes sense for case templates
+   (matching the inbound email body/subject/from). For order/account
+   pages, regex moved to a Smart "Extract" transform that runs against
+   the already-resolved builtin/DOM/literal value. */
 export const SOURCE_KINDS = {
-  order:   ['builtin', 'dom', 'regex', 'literal'],
+  order:   ['builtin', 'dom', 'literal'],
   case:    ['builtin', 'regex', 'literal'],
-  account: ['builtin', 'dom', 'regex', 'literal'],
+  account: ['builtin', 'dom', 'literal'],
 };
 
 const KIND_OPTIONS = {
@@ -31,8 +35,9 @@ const KIND_OPTIONS = {
 
 /* Built-in variable paths offered per template type. order/case resolve via
    the smart detectors; account pulls from the page's contact/account fields
-   (see smartPageVariables in content/smart-detection.js). */
-const BUILTIN_PATHS = {
+   (see smartPageVariables in content/smart-detection.js). Exported so the
+   inline variable form can reuse the same option lists. */
+export const BUILTIN_PATHS = {
   order: [
     { id: 'email',                   label: 'Customer email' },
     { id: 'order_number',            label: 'Order number' },
@@ -83,7 +88,7 @@ const BUILTIN_PATHS = {
 };
 
 /* Inbound-email field a regex runs against. */
-const REGEX_FIELDS = [
+export const REGEX_FIELDS = [
   { id: 'body',    label: 'Email body' },
   { id: 'subject', label: 'Subject line' },
   { id: 'from',    label: 'From address' },

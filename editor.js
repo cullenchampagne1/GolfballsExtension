@@ -428,21 +428,50 @@ function renderSidebar() {
  * Creates a blank email template, appends it to the template list, selects
  * it, and opens it in the editor form.
  */
-function newTemplate() {
-  currentId = null; 
-  rules = []; 
-  vars = {}; 
+async function newTemplate() {
+  // React owns #ed-form, so the legacy DOM-population path below is gone.
+  // Create the blank template up-front and route through openTemplate so
+  // the React TemplateEditor receives a real tpl object via __gbOpenTemplate.
+  if (window.__gbOpenTemplate) {
+    const id = 't_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const blank = {
+      id, type: 'order', name: 'New Template',
+      enabled: true, subject: '', body: '',
+      rules: [], vars: {}, varOrder: [],
+      updatedAt: Date.now(),
+    };
+    templates.push(blank);
+    await saveTemplates();
+    hide('ed-empty');
+    hide('ed-note-form');
+    hide('ed-settings');
+    show('ed-form');
+    show('btn-del');
+    animateView('ed-form');
+    openTemplate(id);
+    return;
+  }
+
+  // Legacy DOM path — bail if React already destroyed the form.
+  if (!$('ed-title')) {
+    console.warn('[gb-editor] React template bridge missing; reload editor.');
+    return;
+  }
+
+  currentId = null;
+  rules = [];
+  vars = {};
   varOrder = [];
-  
-  hide('ed-empty'); 
-  hide('ed-note-form'); 
-  show('ed-form'); 
+
+  hide('ed-empty');
+  hide('ed-note-form');
+  show('ed-form');
   hide('btn-del');
   animateView('ed-form');
-  
+
   $('ed-title').textContent = 'New Template';
-  $('f-name').value = ''; 
-  $('f-subject').value = ''; 
+  $('f-name').value = '';
+  $('f-subject').value = '';
   $('f-body').innerHTML = '';
   $('f-enabled').checked = true;
   if ($('f-tpl-type')) $('f-tpl-type').value = 'order';

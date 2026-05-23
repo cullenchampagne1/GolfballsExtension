@@ -167,7 +167,20 @@
     return v;
   }
 
-  /** fallback → transform → format. Empty + no fallback returns ''. */
+  /** Extract a regex capture group from the value — a Smart transform for
+      order/account templates that used to expose regex as a primary kind. */
+  function applyExtract(v, extract) {
+    if (!extract || !extract.pattern || typeof v !== 'string' || !v) return v;
+    try {
+      const rx = new RegExp(extract.pattern, extract.flags || '');
+      const m  = v.match(rx);
+      if (!m) return '';
+      const g = extract.group != null ? Number(extract.group) : 1;
+      return m[g] !== undefined ? m[g] : (m[0] || '');
+    } catch { return v; }
+  }
+
+  /** fallback → extract → transform → format. Empty + no fallback returns ''. */
   function applySmart(value, def) {
     const smart = def && def.smart;
     if (!smart) return value;
@@ -175,6 +188,7 @@
     if ((v === '' || v == null) && typeof smart.fallback === 'string' && smart.fallback.length > 0) {
       v = smart.fallback;
     }
+    if (smart.extract)   v = applyExtract(v, smart.extract);
     if (smart.transform) v = applyTransform(v, smart.transform);
     if (smart.format)    v = applyFormat(v, smart.format);
     return v;
