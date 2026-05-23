@@ -26,12 +26,12 @@ const VariableIcon = (p) => (
   </Icon>
 );
 // 5 columns: variable | kind | source | resolved | actions (single edit).
-// Variable column eats all the slack (1fr). Kind/Source/Resolved size to
-// their content (`max-content`), capped at a sensible fraction of the
-// grid via fit-content so a single long config string doesn't squeeze
-// the variable name. Actions is a fixed 28px slot for the single edit
-// button — Delete moved into the rename prompt.
-const COL_GRID = 'minmax(0, 1fr) max-content fit-content(30%) fit-content(30%) 28px';
+// Variable is the ONLY flexible column (1fr) — it absorbs all leftover
+// space. Kind/Source/Resolved are fixed widths so headers + rows resolve
+// to the same track sizes (separate grids can't share `max-content` /
+// `fit-content` measurements, which is why the headers were drifting
+// rightward away from the data). Actions stays at 28px for the edit btn.
+const COL_GRID = 'minmax(0, 1fr) 84px 120px 120px 28px';
 
 /**
  * VariableTable — 5-column grid showing all variables for a template.
