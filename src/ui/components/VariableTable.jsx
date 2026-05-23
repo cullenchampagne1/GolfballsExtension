@@ -12,6 +12,7 @@ import { IconBtn } from './IconBtn.jsx';
 import { KindPill } from './KindPill.jsx';
 import { BodyVar } from './BodyVar.jsx';
 import { InlineVariableForm } from './InlineVariableForm.jsx';
+import { EditVariableModal } from './EditVariableModal.jsx';
 import { I, Icon } from '../icons.jsx';
 
 const VariableIcon = (p) => (
@@ -29,14 +30,16 @@ const COL_GRID = '2fr 70px 1.1fr 1.1fr 70px 28px';
  * Columns: name · kind · source config · resolved value · status · delete.
  *
  * Props:
- *   typeId      'order'|'case'|'account'
- *   vars        Variable[]
- *   onAdd       () => void      — fires when the dashed Add row is clicked
- *   onDelete    (name) => void
- *   onOpenSmart (variable) => void — opens the smart-options modal
+ *   typeId       'order'|'case'|'account'
+ *   vars         Variable[]
+ *   onAdd        () => void      — fires when the dashed Add row is clicked
+ *   onDelete     (name) => void
+ *   onEdit       ({oldName, newName, newKind}, variable) => void — renames and/or swaps kind, preserving smart options
+ *   onOpenSmart  (variable) => void — opens the smart-options modal
  */
-export function VariableTable({ typeId, vars = [], onAdd, onDelete, onOpenSmart }) {
+export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOpenSmart }) {
   const [adding, setAdding] = useState(false);
+  const [editVar, setEditVar] = useState(null);
   return (
     <div style={{
       border: '1px solid var(--gb-border-default)',
@@ -154,7 +157,14 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onOpenSmart 
             </div>
 
             {/* Delete */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4 }}>
+              <IconBtn
+                size="sm"
+                icon={<I.edit />}
+                variant="ghost"
+                tooltip="Edit name or kind"
+                onClick={() => setEditVar(v)}
+              />
               <IconBtn size="sm" icon={<I.trash />} danger onClick={() => onDelete?.(v.name)} />
             </div>
           </motion.div>
@@ -184,6 +194,19 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onOpenSmart 
             Add variable
           </Btn>
         </div>
+      )}
+      {/* Edit variable modal — rename or swap kind while preserving smart options */}
+      {editVar && (
+        <EditVariableModal
+          typeId={typeId}
+          variable={editVar}
+          allNames={vars.map(v => v.name).filter(n => n !== editVar.name)}
+          onSave={({name, kind}) => {
+            onEdit?.({oldName: editVar.name, newName: name, newKind: kind}, editVar);
+            setEditVar(null);
+          }}
+          onClose={() => setEditVar(null)}
+        />
       )}
     </div>
   );

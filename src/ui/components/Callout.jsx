@@ -1,7 +1,21 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { T, sizeIcon } from '../shared.jsx';
 import { I } from '../icons.jsx';
+
+/* Per-tip dismissal persisted across reloads. Use stable, unique ids;
+   reusing an id across different copy means users won't see the updated
+   text after their first dismissal. */
+const DISMISS_KEY = '__gb_callouts_dismissed';
+function readDismissed() {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(DISMISS_KEY) : null;
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch (_) { return new Set(); }
+}
+function writeDismissed(set) {
+  try { localStorage.setItem(DISMISS_KEY, JSON.stringify([...set])); } catch (_) {}
+}
 
 const TONES = {
   info:    { fg: 'var(--gb-info-fg)',       bg: 'var(--gb-info-tint-soft)',    bd: 'var(--gb-info-tint-border)' },
@@ -19,9 +33,28 @@ const DEFAULT_ICON = { info: 'alert', brand: 'bolt', success: 'check', warning: 
  *
  * Props: tone 'info'|'brand'|'success'|'warning'|'error'|'neutral',
  *   title, icon (ReactElement | false), dismissable, onDismiss, children.
+ *   persistId — when set, dismissal is saved to localStorage and the
+ *               callout stays hidden across reloads. Implies dismissable.
  */
-export function Callout({ tone = 'info', icon, title, children, dismissable, onDismiss, style }) {
-  const [visible, setVisible] = useState(true);
+export function Callout({ tone = 'info', icon, title, children, dismissable, onDismiss, persistId, style }) {
+  const isPersist = !!persistId;
+  // Persistable callouts start hidden until we've checked storage to
+  // avoid a flash of "shown then hidden" on mount.
+  const [visible, setVisible] = useState(!isPersist);
+  useEffect(() => {
+    if (!isPersist) return;
+    setVisible(!readDismissed().has(persistId));
+  }, [isPersist, persistId]);
+  const canDismiss = dismissable || isPersist;
+  const dismiss = () => {
+    setVisible(false);
+    if (isPersist) {
+      const next = readDismissed();
+      next.add(persistId);
+      writeDismissed(next);
+    }
+    onDismiss?.();
+  };
   const t = TONES[tone] || TONES.info;
   const DefaultIcon = I[DEFAULT_ICON[tone] || 'alert'];
   const shownIcon = icon === false ? null : (icon || <DefaultIcon />);
@@ -60,9 +93,9 @@ export function Callout({ tone = 'info', icon, title, children, dismissable, onD
             )}
             {children}
           </div>
-          {dismissable && (
+          {canDismiss && (
             <motion.span
-              onClick={() => { setVisible(false); onDismiss?.(); }}
+              onClick={dismiss}
               whileHover={{ color: 'var(--gb-text-secondary)' }}
               style={{ color: 'var(--gb-text-muted)', cursor: 'pointer', display: 'flex', flexShrink: 0, marginTop: 1 }}
             >

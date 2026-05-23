@@ -3400,12 +3400,15 @@ async function _saveCaseTpls() {
 }
 
 function openCaseTplEditor() {
-  const views = ['ed-empty','ed-form','ed-note-form','ed-settings'];
-  _caseTplPrev = views.find(v => !$(v)?.classList.contains('hidden')) || 'ed-empty';
-  views.forEach(v => $(v)?.classList.add('hidden'));
-  renderCaseTplPanel();
-  $('ed-case-tpls')?.classList.remove('hidden');
-  $('ed-case-tpls')?.classList.add('view-animate');
+  // The standalone Case Templates panel was retired when case templates
+  // were unified into the main editor's type-switcher. The #ed-case-tpls
+  // container has no React mount, so showing it would just be a blank
+  // white panel. Notify the user instead and stay on the current view.
+  if (typeof window.__gbToast === 'object' && typeof window.__gbToast.info === 'function') {
+    window.__gbToast.info('Case templates now live in the main editor — switch the template type to "Case".');
+  } else {
+    console.info('[gb] Case template editor is unified with the main editor. Use the type-switcher.');
+  }
 }
 
 function closeCaseTplEditor() {

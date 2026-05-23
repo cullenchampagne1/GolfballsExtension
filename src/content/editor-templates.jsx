@@ -3,10 +3,10 @@ import { createRoot } from 'react-dom/client';
 import { AnimatePresence, motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import {
-  Btn, Tag,
-  Input, Dropdown, Field,
+  Btn, Tag, Callout,
+  Input, Dropdown, Field, IconBtn,
   Switch, SwitchTag, Segmented,
-  I, Icon,
+  I, Icon, Dot,
   SmartModal, SignatureModal,
   RichTextEditor,
   VariableTable, OrderRules, CaseRules, AccountRules, CaseTagsEditor,
@@ -25,6 +25,7 @@ const RTE = {
   inbox: p => <Icon {...p}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"/></Icon>,
   user:  p => <Icon {...p}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></Icon>,
 };
+const PickerIcon = (p) => <Icon {...p}><path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/></Icon>;
 
 /* ────────────────────────────────────────────────────────────
    Convert old template format → new
@@ -41,6 +42,8 @@ function convertVars(tpl) {
       kind:     v.kind || 'literal',
       config:   v.config || '',
       ...(v.source ? { source: v.source } : {}),
+      ...(v.group  ? { group:  v.group  } : {}),
+      ...(v.scope  ? { scope:  v.scope  } : {}),
       resolved: v.resolved ?? null,
       status:   v.status  || 'miss',
       smart:    v.smart   || {},
@@ -70,6 +73,8 @@ function convertVars(tpl) {
     return {
       name, kind, config,
       ...(v.type === 'regex' ? { source: v.source || 'body' } : {}),
+      ...(v.group ? { group: v.group } : {}),
+      ...(v.scope ? { scope: v.scope } : {}),
       resolved: null, status: 'miss', smart: v.smart || {},
     };
   });
@@ -81,7 +86,13 @@ function convertVars(tpl) {
 function varDef(v) {
   if (v.kind === 'builtin') return { type: 'builtin',  builtin:  v.config };
   if (v.kind === 'dom')     return { type: 'selector', selector: v.config };
-  if (v.kind === 'regex')   return { type: 'regex',    pattern:  v.config, source: v.source || 'body' };
+  if (v.kind === 'regex')   return {
+    type: 'regex',
+    pattern:  v.config,
+    source:   v.source || 'body',
+    ...(v.group ? { group: v.group } : {}),
+    ...(v.scope ? { scope: v.scope } : {}),
+  };
   return { type: 'literal', value: v.config };
 }
 
@@ -165,6 +176,10 @@ function TemplateEditor({ tpl, onDelete }) {
   const [toFieldValue, setToFieldValue] = useState(
     (tpl.toField && (tpl.toField.value || tpl.toField.selector)) || '',
   );
+  // Recipient DOM picker — same namespace-by-id plumbing as OrderRules,
+  // stores the resolved email address for the live hint.
+  const [pickingRecipient, setPickingRecipient] = useState(false);
+  const [recipientResolved, setRecipientResolved] = useState(null);
   const [presetTaskId,   setPresetTaskId]   = useState(tpl.presetTaskId || '');
   const [presetTaskOpts, setPresetTaskOpts] = useState([]);
   // Default to reply mode for new templates — matches legacy editor's
@@ -213,6 +228,54 @@ function TemplateEditor({ tpl, onDelete }) {
     });
   }, []);
 
+  // Recipient DOM picker — fires when user clicks the Pick button on
+  // the recipient selector input. Namespaced by 'pick_recipient' so it
+  // doesn't conflict with rule pickers.
+  useEffect(() => {
+    if (!pickingRecipient) return undefined;
+    function onChanged(changes) {
+      if (!changes.pickResult) return;
+      const result = changes.pickResult.newValue;
+      if (!result || result.fieldId !== 'pick_recipient') return;
+      setToFieldValue(result.selector || '');
+      setPickingRecipient(false);
+    }
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
+  }, [pickingRecipient]);
+
+  const startPickRecipient = () => {
+    setPickingRecipient(true);
+    chrome.runtime.sendMessage({ action: 'startPick', fieldId: 'pick_recipient' });
+  };
+  const cancelPickRecipient = () => {
+    setPickingRecipient(false);
+    chrome.runtime.sendMessage({ action: 'cancelPick' });
+  };
+
+  // Live resolution of the recipient selector on the order/account tab.
+  // If recipOpt.toType === 'selector', ask __gbResolveVars to resolve
+  // the toField as a DOM selector and show the resolved email address.
+  useEffect(() => {
+    if (recipOpt.toType !== 'selector' || !toFieldValue || pickingRecipient) {
+      setRecipientResolved(null);
+      return undefined;
+    }
+    if (typeof window.__gbResolveVars !== 'function') return undefined;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      Promise.resolve(window.__gbResolveVars({
+        __recipientPreview: { type: 'selector', selector: toFieldValue },
+      }))
+        .then((res) => {
+          if (cancelled) return;
+          const val = res?.resolved?.__recipientPreview;
+          setRecipientResolved(val ? String(val) : null);
+        });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [recipOpt.toType, toFieldValue, pickingRecipient]);
+
   // Switching template type resets recipient + rules (each type's options
   // differ, and stale rule data would be written to the wrong storage key).
   function changeType(newId) {
@@ -228,12 +291,23 @@ function TemplateEditor({ tpl, onDelete }) {
     setVars(vs => vs.map(v => v.name === smartFor.name ? { ...v, smart } : v));
     setSmartFor(null);
   };
-  const handleAddVar    = ({ name, kind, config, source }) => {
+  const handleAddVar    = ({ name, kind, config, source, group, scope }) => {
     setVars(vs => [...vs, {
       name, kind, config,
       ...(source ? { source } : {}),
+      ...(group ? { group } : {}),
+      ...(scope ? { scope } : {}),
       resolved: null, status: 'miss', smart: {},
     }]);
+  };
+  const handleEditVar = ({ oldName, newName, newKind }, variable) => {
+    setVars(vs => vs.map(v => {
+      if (v.name !== oldName) return v;
+      // Preserve smart options, only update name and kind.
+      // Reset config to '' when kind changes — user must re-enter.
+      const config = newKind !== variable.kind ? '' : v.config;
+      return { ...v, name: newName, kind: newKind, config };
+    }));
   };
   const handleDeleteVar = name => setVars(vs => vs.filter(v => v.name !== name));
   const openSmartByName = name => {
@@ -404,8 +478,45 @@ function TemplateEditor({ tpl, onDelete }) {
               mono={recipOpt.toType === 'selector'}
               placeholder={recipOpt.toType === 'literal' ? 'name@example.com' : '.customer-email'}
               onChange={setToFieldValue}
+              trailing={recipOpt.toType === 'selector' ? (
+                <IconBtn
+                  size="xs"
+                  variant="ghost"
+                  active={pickingRecipient}
+                  icon={<PickerIcon />}
+                  tooltip={pickingRecipient ? 'Cancel pick' : 'Pick element from page'}
+                  onClick={() => (pickingRecipient ? cancelPickRecipient() : startPickRecipient())}
+                />
+              ) : undefined}
             />
           </Field>
+          {/* Live hint — show what the recipient selector resolves to on
+              the order/account tab, so the user can verify before saving. */}
+          {recipOpt.toType === 'selector' && toFieldValue && (
+            <div style={{
+              marginTop: 6,
+              padding: '7px 10px',
+              background: 'var(--gb-fill-subtle)',
+              border: '1px solid var(--gb-border-subtle)',
+              borderRadius: 'var(--gb-r-sm)',
+              fontSize: 10.5,
+              display: 'flex', alignItems: 'center', gap: 7,
+            }}>
+              <Dot
+                tone={pickingRecipient ? 'brand' : recipientResolved ? 'brand' : 'warning'}
+                glow={pickingRecipient || !!recipientResolved}
+                size={5}
+              />
+              <span style={{ flex: 1, color: 'var(--gb-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {pickingRecipient
+                  ? 'Hover an element on the page…'
+                  : recipientResolved
+                    ? <><strong style={{ color: 'var(--gb-brand-label)' }}>1 match</strong> · <code style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 10 }}>{recipientResolved}</code></>
+                    : <span style={{ color: 'var(--gb-warning-fg)' }}>No match on active page</span>
+                }
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -465,6 +576,23 @@ function TemplateEditor({ tpl, onDelete }) {
 
       {/* ── Rules — imports the template's saved rules/conditions ── */}
       <div style={S.mb14}>
+        {/* Smart Triggers explainer — dismissible per-user. The copy
+            varies by template type so each gets its own persistId. */}
+        {typeId === 'order' && (
+          <Callout persistId="callout-rules-order" tone="info" icon={<I.bolt />} title="Smart Triggers" style={{ marginBottom: 8 }}>
+            Add a rule and this template auto-fires when the order page matches. Click <strong>Pick</strong> next to a selector to grab an element straight off the active tab.
+          </Callout>
+        )}
+        {typeId === 'account' && (
+          <Callout persistId="callout-rules-account" tone="info" icon={<I.bolt />} title="Account Conditions" style={{ marginBottom: 8 }}>
+            Conditions filter which accounts this template applies to. Combine fields like order count, last contact, or sales rep.
+          </Callout>
+        )}
+        {typeId === 'case' && (
+          <Callout persistId="callout-rules-case" tone="info" icon={<I.bolt />} title="Case Reply Template" style={{ marginBottom: 8 }}>
+            Match rules check the inbound email's <strong>subject</strong>, <strong>body</strong>, <strong>from</strong>, or <strong>to</strong>. Use the Recommended Case Tags above to suggest identifiers when the case is processed.
+          </Callout>
+        )}
         <RulesComp
           initial={
             typeId === 'account' ? tpl.accountConditions
@@ -565,10 +693,16 @@ function TemplateEditor({ tpl, onDelete }) {
       {/* ── Variables — VariableTable manages its own inline add form
            now, so we just pass the create callback directly. ── */}
       <div style={S.mb12}>
+        <Callout persistId={`callout-vars-${typeId}`} tone="neutral" icon={<I.bolt />} title="Variable types" style={{ marginBottom: 8 }}>
+          <strong>Built-in</strong> reads a known page value. <strong>DOM</strong> grabs text from a CSS selector. <strong>Literal</strong> is fixed text.
+          {typeId === 'case' && <> <strong>Regex</strong> extracts from the inbound email; set group + scope to refine.</>}
+          {' '}Edit name/kind via the pencil icon to keep smart options.
+        </Callout>
         <VariableTable
           typeId={typeId}
           vars={displayVars}
           onAdd={handleAddVar}
+          onEdit={handleEditVar}
           onDelete={handleDeleteVar}
           onOpenSmart={setSmartFor}
         />

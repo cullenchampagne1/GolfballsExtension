@@ -52,6 +52,9 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
   const [hoverText,    setHoverText]    = useState('');
   const [liveResolved, setLiveResolved] = useState(null);
   const [regexField,   setRegexField]   = useState('body');
+  const [regexGroup,   setRegexGroup]   = useState('1');
+  const [regexScope,   setRegexScope]   = useState('');
+  const [pickingScope, setPickingScope] = useState(false);
 
   // Reset kind/config when the template type changes.
   useEffect(() => {
@@ -91,6 +94,32 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
     setPicking(false);
     chrome.runtime.sendMessage({ action: 'cancelPick' });
   }
+
+  // Regex-scope DOM picker — separate fieldId so it doesn't collide with
+  // the main dom-kind picker above. Only used by the regex branch when
+  // the user wants to narrow the match to a subtree of the page.
+  useEffect(() => {
+    if (!pickingScope) return undefined;
+    function onChanged(changes) {
+      if (!changes.pickResult) return;
+      const result = changes.pickResult.newValue;
+      if (result && result.fieldId === 'pick_inlinevar_scope') {
+        setRegexScope(result.selector || '');
+        setPickingScope(false);
+      }
+    }
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
+  }, [pickingScope]);
+
+  const startPickScope = () => {
+    setPickingScope(true);
+    chrome.runtime.sendMessage({ action: 'startPick', fieldId: 'pick_inlinevar_scope' });
+  };
+  const cancelPickScope = () => {
+    setPickingScope(false);
+    chrome.runtime.sendMessage({ action: 'cancelPick' });
+  };
 
   // Live DOM resolution preview for the dom kind.
   useEffect(() => {
@@ -283,21 +312,58 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
             )}
 
             {kind === 'regex' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: 6 }}>
-                <Field label="From field">
-                  <Dropdown size="sm" value={regexField} options={REGEX_FIELDS} onChange={setRegexField} />
-                </Field>
-                <Field label="Regex (capture 1)">
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr 60px', gap: 6 }}>
+                  <Field label="From field">
+                    <Dropdown size="sm" value={regexField} options={REGEX_FIELDS} onChange={setRegexField} />
+                  </Field>
+                  <Field label={`Regex (capture ${regexGroup || '1'})`}>
+                    <Input
+                      size="sm"
+                      value={config}
+                      placeholder="order\\s+(ORD-\\d+)"
+                      mono
+                      leading={<RegexIcon />}
+                      onChange={setConfig}
+                    />
+                  </Field>
+                  {/* Capture group number — defaults to 1, but the regex
+                      may have multiple capture groups and the user might
+                      want #2 or higher. Backup had this on the var def. */}
+                  <Field label="Group">
+                    <Input
+                      size="sm"
+                      mono
+                      value={regexGroup}
+                      placeholder="1"
+                      onChange={(v) => setRegexGroup(v.replace(/[^0-9]/g, '') || '')}
+                    />
+                  </Field>
+                </div>
+                {/* Optional scope: narrow the regex match to a CSS subtree
+                    of the page (case templates often want to match within
+                    a specific email body container, not the whole page). */}
+                <Field label="Scope (optional CSS selector)" hint="Limit the regex to a subtree on the page">
                   <Input
                     size="sm"
-                    value={config}
-                    placeholder="order\\s+(ORD-\\d+)"
                     mono
-                    leading={<RegexIcon />}
-                    onChange={setConfig}
+                    value={regexScope}
+                    placeholder=".email-body, #thread-1, etc."
+                    leading={<I.search />}
+                    onChange={setRegexScope}
+                    trailing={
+                      <Btn
+                        variant={pickingScope ? 'ghost' : 'tinted'}
+                        size="xs"
+                        icon={<PickerIcon />}
+                        onClick={pickingScope ? cancelPickScope : startPickScope}
+                      >
+                        {pickingScope ? 'Cancel' : 'Pick'}
+                      </Btn>
+                    }
                   />
                 </Field>
-              </div>
+              </>
             )}
 
             {kind === 'literal' && (
@@ -352,7 +418,11 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
             disabled={!canAdd}
             onClick={() => onAdd?.({
               name, kind, config,
-              ...(kind === 'regex' ? { source: regexField } : {}),
+              ...(kind === 'regex' ? {
+                source: regexField,
+                group: Number(regexGroup) || 1,
+                ...(regexScope ? { scope: regexScope } : {}),
+              } : {}),
             })}
           >
             Add
