@@ -1554,6 +1554,23 @@ const ConfettiIcon = (p) => (
   </svg>
 );
 
+/* Explode glyph — central dot with eight outward rays. Reads
+   as a burst / shatter at small sizes. */
+const ExplodeIcon = (p) => (
+  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
+    <path d="M12 3v3.5" />
+    <path d="M12 17.5V21" />
+    <path d="M3 12h3.5" />
+    <path d="M17.5 12H21" />
+    <path d="M5.6 5.6l2.5 2.5" />
+    <path d="M15.9 15.9l2.5 2.5" />
+    <path d="M18.4 5.6l-2.5 2.5" />
+    <path d="M8.1 15.9l-2.5 2.5" />
+  </svg>
+);
+
 /* Eyedropper glyph — pipette body + small drop tip. */
 const DropperIcon = (p) => (
   <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
@@ -1823,6 +1840,15 @@ function ViewerToolbox({ viewerRef }) {
     }
   }, [activeTool, viewerRef]);
 
+  // Reassemble the ball when leaving the explode tool. Mounts a no-op
+  // when activeTool flips ON; the cleanup fires on the flip OFF so any
+  // shards currently in the air glide back home before the user moves
+  // to a different tool.
+  useEffect(() => {
+    if (activeTool !== 'explode') return undefined;
+    return () => { viewerRef.current?.reassembleBall?.(); };
+  }, [activeTool, viewerRef]);
+
   // Global pointer listeners for bomb + ball + water tools.
   useEffect(() => {
     if (!activeTool || activeTool === 'confetti') return undefined;
@@ -1850,6 +1876,9 @@ function ViewerToolbox({ viewerRef }) {
       if (activeTool === 'water') {
         v.waterActive = true;
         v.pourWaterAt?.({ clientX: e.clientX, clientY: e.clientY });
+      }
+      if (activeTool === 'explode') {
+        v.explodeBallAt?.({ clientX: e.clientX, clientY: e.clientY });
       }
     };
 
@@ -1905,6 +1934,7 @@ function ViewerToolbox({ viewerRef }) {
     { key: 'balls',    icon: <BallSpawnerIcon size={14} /> },
     { key: 'confetti', icon: <ConfettiIcon size={14} /> },
     { key: 'water',    icon: <WaterIcon size={14} /> },
+    { key: 'explode',  icon: <ExplodeIcon size={14} /> },
   ];
 
   return (

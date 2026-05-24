@@ -341,12 +341,11 @@ export function WatchList({ onClosed, bindClose }) {
           />
           <Btn
             size="sm"
-            variant="tinted"
-            status="brand"
+            variant="secondary"
             icon={<I.plus size={11} />}
             onClick={startNew}
             disabled={editingId === '__new'}
-          >New</Btn>
+          >Watch</Btn>
         </div>
       </div>
 
@@ -544,7 +543,7 @@ function TaskRow({ task, index, isResolving, onToggle, onEdit, onDelete }) {
             icon={<I.edit size={11} />}
             onClick={onEdit}
             style={{ height: 26, width: 26, padding: 0 }}
-            title="Edit task"
+            title="Edit watch item"
           />
           <Btn
             variant="ghost"
@@ -552,7 +551,7 @@ function TaskRow({ task, index, isResolving, onToggle, onEdit, onDelete }) {
             icon={<I.trash size={11} />}
             onClick={onDelete}
             style={{ height: 26, width: 26, padding: 0 }}
-            title="Delete task"
+            title="Remove from watch list"
           />
         </div>
       </div>
@@ -632,7 +631,7 @@ function TaskEditor({ draft, onChange, onCommit, onCancel, isNew }) {
           nativeRef={titleRef}
           value={draft.title}
           onChange={(v) => set({ title: v })}
-          placeholder={isNew ? 'New task title…' : 'Task title'}
+          placeholder={isNew ? 'What do you want to watch?' : 'Watch item title'}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
               e.preventDefault(); onCommit();
@@ -713,7 +712,7 @@ function TaskEditor({ draft, onChange, onCommit, onCancel, isNew }) {
             icon={<I.check size={10} />}
             onClick={onCommit}
             disabled={!draft.title.trim()}
-          >{isNew ? 'Add task' : 'Save'}</Btn>
+          >{isNew ? 'Add to watch list' : 'Save'}</Btn>
         </div>
       </Card>
     </motion.li>
