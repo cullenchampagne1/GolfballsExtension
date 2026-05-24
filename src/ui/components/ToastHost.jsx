@@ -177,10 +177,16 @@ export function ToastHost({ children, maxPerPlacement = MAX_PER_PLACEMENT, insta
     };
   }, [api, installGlobal]);
 
-  // Group the stack by placement so we can render each fixed container's
-  // children together. Empty placements skip rendering entirely.
+  // Group the stack by placement. We pre-seed every known placement
+  // with an empty array so the matching container + AnimatePresence
+  // always mount, even when there are no toasts at that placement.
+  // Critical for exit animations: if the LAST toast at a placement
+  // gets dismissed and we'd otherwise drop the container, the exiting
+  // toast's AnimatePresence unmounts before its exit animation runs.
+  // Keeping the host mounted lets AnimatePresence track the departing
+  // child long enough to play its exit transition cleanly.
   const byPlacement = useMemo(() => {
-    const map = new Map();
+    const map = new Map(Object.keys(PLACEMENTS).map((p) => [p, []]));
     for (const t of stack) {
       if (!map.has(t.placement)) map.set(t.placement, []);
       map.get(t.placement).push(t);
@@ -209,7 +215,17 @@ export function ToastHost({ children, maxPerPlacement = MAX_PER_PLACEMENT, insta
                   ...p,
                 }}
               >
-                <AnimatePresence initial={false} mode="popLayout">
+                {/* initial:true (the default) so even the first toast in a
+                    fresh placement animates in. We had initial=false here
+                    previously; Motion treats that as "skip entry for the
+                    FIRST child of this AnimatePresence" which gave us the
+                    odd behavior where the very first toast popped in
+                    without animation while every toast after it slid in
+                    cleanly. mode:sync (the default) so layout animations
+                    don't fight the entry — popLayout is for cases where
+                    exiting siblings need to NOT shift the layout, which
+                    isn't the case here (we want neighbors to slide). */}
+                <AnimatePresence>
                   {entries.map((entry) => (
                     <motion.div
                       key={entry.id}
