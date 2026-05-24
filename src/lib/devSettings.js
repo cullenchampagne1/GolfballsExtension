@@ -85,6 +85,38 @@ export const DEV_SETTINGS = [
     default: 0,
     min:     -180, max: 180, step: 1,
   },
+  /* ── Watch list urgency thresholds ────────────────────────────
+     Each item progresses through four urgency tiers based on its
+     age. These three values are the boundaries (in hours) between
+     them. Defaults match the original extension:
+       < moderate  → normal     (brand)
+       moderate–high → moderate  (warning)
+       high–critical → high       (orange)
+       ≥ critical  → critical   (error, pulses)                  */
+  {
+    key:     'watchList.thresholdModerateH',
+    label:   'Watch list: moderate threshold (hours)',
+    desc:    'Items older than this many hours flip from "normal" to "moderate" urgency in the Watch List.',
+    type:    'number',
+    default: 1,
+    min:     0.05, max: 24, step: 0.05,
+  },
+  {
+    key:     'watchList.thresholdHighH',
+    label:   'Watch list: high threshold (hours)',
+    desc:    'Items older than this many hours flip from "moderate" to "high" urgency. Must be ≥ moderate.',
+    type:    'number',
+    default: 4,
+    min:     0.05, max: 48, step: 0.05,
+  },
+  {
+    key:     'watchList.thresholdCriticalH',
+    label:   'Watch list: critical threshold (hours)',
+    desc:    'Items older than this many hours flip to "critical" — red, pulsing, and the header count badge turns red. Must be ≥ high.',
+    type:    'number',
+    default: 6,
+    min:     0.05, max: 168, step: 0.05,
+  },
   {
     key:     'marginCalc.minAllowedMargin',
     label:   'Margin calculator: minimum allowed margin',
