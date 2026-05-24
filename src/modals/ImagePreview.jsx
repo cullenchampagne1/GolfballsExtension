@@ -1164,9 +1164,7 @@ const ToolboxIcon = (p) => (
   </svg>
 );
 
-/* Bomb glyph — circle body, short fuse, spark dot. Currentcolor
-   lets the parent set hover/active tints via color: like the rest
-   of the chip icons. */
+/* Bomb glyph — circle body, short fuse, spark dot. */
 const BombIcon = (p) => (
   <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1176,27 +1174,116 @@ const BombIcon = (p) => (
   </svg>
 );
 
+/* Ball spawner — three overlapping circles suggesting a pile of
+   colorful balls. Hold-to-spawn; matches the ball-pit concept. */
+const BallSpawnerIcon = (p) => (
+  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="8"  cy="15" r="5" />
+    <circle cx="16" cy="15" r="5" />
+    <circle cx="12" cy="8"  r="5" />
+  </svg>
+);
+
+/* Confetti — four diagonal rectangles at different angles, like
+   pieces caught mid-fall. Simple and reads instantly. */
+const ConfettiIcon = (p) => (
+  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3"  y="4"  width="4" height="7" rx="1" transform="rotate(-20 3 4)" />
+    <rect x="10" y="2"  width="4" height="6" rx="1" transform="rotate(10 10 2)" />
+    <rect x="16" y="5"  width="3" height="6" rx="1" transform="rotate(-35 16 5)" />
+    <rect x="5"  y="14" width="4" height="6" rx="1" transform="rotate(25 5 14)" />
+    <rect x="14" y="13" width="3" height="5" rx="1" transform="rotate(-15 14 13)" />
+  </svg>
+);
+
 /* ── ViewerToolbox ──────────────────────────────────────────────
-   Bottom-right frosted-glass dropup built on <LiquidDrawer>. Same
-   sliding-pip semantics as the scene drawer: pick a tool → pip
-   slides to it; pick it again → pip slides back to the toggle
-   and the drawer collapses. */
+   Bottom-right frosted-glass dropup built on <LiquidDrawer>.
+
+   Tools:
+     bomb     — click anywhere on the canvas to place a bomb
+     balls    — hold anywhere to rain colored physics balls (1/s)
+     confetti — toggle: rain confetti that piles up + scatters in blasts
+*/
 function ViewerToolbox({ viewerRef }) {
   const [open, setOpen] = useState(false);
-  const [activeTool, setActiveTool] = useState(null); // null | 'bomb'
+  const [activeTool, setActiveTool] = useState(null);
+  // Track whether the balls tool hold-interval is running.
+  const spawnIntervalRef = useRef(null);
+  const lastCursorRef = useRef({ clientX: 0, clientY: 0 });
 
-  // Global pointerdown listener while a tool is armed. Spawns the
-  // tool's effect on canvas clicks; skips clicks on UI chrome.
+  // Clean up spawner if the tool is deactivated while held.
   useEffect(() => {
-    if (!activeTool) return undefined;
+    if (activeTool !== 'balls') {
+      clearInterval(spawnIntervalRef.current);
+      spawnIntervalRef.current = null;
+      if (viewerRef.current) viewerRef.current.spawnBallActive = false;
+    }
+  }, [activeTool, viewerRef]);
+
+  // Deactivate confetti when switching away.
+  useEffect(() => {
+    if (activeTool !== 'confetti') {
+      viewerRef.current?.setConfetti?.(false);
+    } else {
+      viewerRef.current?.setConfetti?.(true);
+    }
+  }, [activeTool, viewerRef]);
+
+  // Global pointer listeners for bomb + ball tools.
+  useEffect(() => {
+    if (!activeTool || activeTool === 'confetti') return undefined;
+
     const onDown = (e) => {
+      if (e.button !== 0) return;
       if (e.target?.closest?.('button, [data-viewer-ui="true"]')) return;
       const v = viewerRef.current;
       if (!v?.containsPoint?.({ clientX: e.clientX, clientY: e.clientY })) return;
-      if (activeTool === 'bomb') v.dropBomb?.({ clientX: e.clientX, clientY: e.clientY });
+
+      if (activeTool === 'bomb') {
+        v.dropBomb?.({ clientX: e.clientX, clientY: e.clientY });
+      }
+      if (activeTool === 'balls') {
+        lastCursorRef.current = { clientX: e.clientX, clientY: e.clientY };
+        v.spawnBallActive = true;
+        // Spawn one immediately, then every second.
+        v.spawnBallAt?.({ clientX: e.clientX, clientY: e.clientY });
+        spawnIntervalRef.current = setInterval(() => {
+          const cur = lastCursorRef.current;
+          if (viewerRef.current?.spawnBallActive) {
+            viewerRef.current.spawnBallAt?.(cur);
+          }
+        }, 1000);
+      }
     };
+
+    const onMove = (e) => {
+      if (activeTool === 'balls') {
+        lastCursorRef.current = { clientX: e.clientX, clientY: e.clientY };
+      }
+    };
+
+    const onUp = () => {
+      if (activeTool === 'balls') {
+        if (viewerRef.current) viewerRef.current.spawnBallActive = false;
+        clearInterval(spawnIntervalRef.current);
+        spawnIntervalRef.current = null;
+      }
+    };
+
     window.addEventListener('pointerdown', onDown);
-    return () => window.removeEventListener('pointerdown', onDown);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      clearInterval(spawnIntervalRef.current);
+      spawnIntervalRef.current = null;
+    };
   }, [activeTool, viewerRef]);
 
   const handleOpenChange = (next) => {
@@ -1213,7 +1300,9 @@ function ViewerToolbox({ viewerRef }) {
   };
 
   const tools = [
-    { key: 'bomb', icon: <BombIcon size={14} /> },
+    { key: 'bomb',     icon: <BombIcon size={14} /> },
+    { key: 'balls',    icon: <BallSpawnerIcon size={14} /> },
+    { key: 'confetti', icon: <ConfettiIcon size={14} /> },
   ];
 
   return (
