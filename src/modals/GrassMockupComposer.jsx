@@ -31,18 +31,20 @@ import React, { useEffect, useRef, useState } from 'react';
 ─────────────────────────────────────────────────────────────── */
 
 const BAKE_PATH = 'icons/mockup_base.png';
-const BAKE_W = 1920;
+const BAKE_W = 1080;
 const BAKE_H = 1080;
-// Ball position in the bake, derived from Blender camera projection
-// at the time the bake was rendered (camera 41mm lens at full-frame
-// sensor, ball at world (0, 0, 0.665), distance ~10.83m).
-const BALL_CENTER_X = 1124.13;
-const BALL_CENTER_Y = 431.57;
-const BALL_RADIUS_PX = 140;       // slight overscan vs the 134.48 silhouette so the warp covers a 1–2px feather
-// Fraction of ball diameter the logo covers. 0.7 matches the live
-// 3D viewer's decal projection size, keeping the print prominent
-// without wrapping around the limb where the warp would distort.
-const LOGO_SIZE = 0.7;
+// Ball position in the bake — square 1080×1080 frame, ball centered.
+// Camera 41mm lens on 36mm sensor, at 3.2m from ball, pitched 35°
+// below horizontal, f/2.8 DoF, animation action detached during the
+// bake so transforms actually applied.
+const BALL_CENTER_X = 540;
+const BALL_CENTER_Y = 540;
+const BALL_RADIUS_PX = 268;       // ~3px overscan vs the 261.3 silhouette so the warp covers a small feather
+// Fraction of ball diameter the logo covers. Bumped from 0.7 → 0.85
+// so the print reads bigger on the mockup; at 0.85 the curvature
+// foreshortening at the logo edge is still <5%, visually
+// indistinguishable from a geodesic warp.
+const LOGO_SIZE = 0.85;
 
 export const GrassMockupComposer = React.forwardRef(function GrassMockupComposer(
   { decalDataUrl, onError },
