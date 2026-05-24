@@ -311,11 +311,31 @@ export function WatchList({ onClosed, bindClose }) {
         overflowY: 'auto', overflowX: 'hidden',
         padding: 8,
       }}>
+        {/* Empty state — rendered OUTSIDE the items <AnimatePresence>
+            with an instant fade. Putting it inside the same presence
+            caused a stall: when items first loaded, AnimatePresence
+            held space for the EmptyState's exit animation before the
+            items could lay in. Here it just vanishes the moment any
+            visible row exists, so the items fly in immediately. */}
+        <AnimatePresence mode="popLayout" initial={false}>
+          {loaded && visible.length === 0 && editingId !== '__new' && (
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
+            >
+              <EmptyState filter={filter} onNew={startNew} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <motion.ul layout style={{
           margin: 0, padding: 0, listStyle: 'none',
           display: 'flex', flexDirection: 'column', gap: 4,
         }}>
-          <AnimatePresence initial={false}>
+          <AnimatePresence initial={false} mode="popLayout">
             {editingId === '__new' && (
               <TaskEditor
                 key="__new"
@@ -347,60 +367,10 @@ export function WatchList({ onClosed, bindClose }) {
                 />
               )
             ))}
-            {loaded && visible.length === 0 && editingId !== '__new' && (
-              <EmptyState
-                key="empty"
-                filter={filter}
-                onNew={startNew}
-              />
-            )}
           </AnimatePresence>
         </motion.ul>
       </div>
 
-      {/* Status bar — fixed-height footer that shows the live counts.
-          Lives outside the scrollable body so its position is stable
-          even when items add / resolve / scroll. */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '8px 14px',
-        borderTop: '1px solid var(--gb-border-subtle)',
-        background: 'var(--gb-surface-1)',
-        fontSize: 10.5, fontWeight: 600, letterSpacing: 0.3,
-        color: 'var(--gb-text-tertiary)',
-        fontFamily: 'var(--gb-font-mono)',
-      }}>
-        <span>{counts.all} total</span>
-        <span style={{ color: 'var(--gb-text-ghost)' }}>·</span>
-        <span style={{ color: 'var(--gb-brand-label)' }}>{counts.active} active</span>
-        {counts.high > 0 && (
-          <>
-            <span style={{ color: 'var(--gb-text-ghost)' }}>·</span>
-            <span style={{ color: 'var(--gb-error-fg)' }}>{counts.high} high</span>
-          </>
-        )}
-        {counts.done > 0 && (
-          <>
-            <span style={{ color: 'var(--gb-text-ghost)' }}>·</span>
-            <span>{counts.done} done</span>
-          </>
-        )}
-        <div style={{ flex: 1 }} />
-        {filter !== 'all' && (
-          <button
-            type="button"
-            onClick={() => setFilter('all')}
-            style={{
-              fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
-              textTransform: 'uppercase',
-              background: 'transparent', border: 'none', padding: 0,
-              color: 'var(--gb-text-secondary)',
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-            }}
-          >Clear filter</button>
-        )}
-      </div>
     </FloatingPanel>
   );
 }
@@ -489,25 +459,37 @@ function TaskRow({ task, index, isResolving, onToggle, onEdit, onDelete }) {
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
                     fontSize: 10.5, fontWeight: 500,
                     color: 'var(--gb-text-tertiary)',
                     textDecoration: 'none',
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--gb-brand-label)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--gb-text-tertiary)'; }}
-                >{formatContext(task.context)}</a>
+                >
+                  <ContextIcon type={task.context.type} />
+                  {formatContext(task.context)}
+                </a>
               ) : (
                 <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
                   fontSize: 10.5, fontWeight: 500,
                   color: 'var(--gb-text-tertiary)',
-                }}>{formatContext(task.context)}</span>
+                }}>
+                  <ContextIcon type={task.context.type} />
+                  {formatContext(task.context)}
+                </span>
               )
             ) : (
               <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 4,
                 fontSize: 10.5, fontWeight: 500,
                 color: 'var(--gb-text-ghost)',
                 fontStyle: 'italic',
-              }}>Standalone</span>
+              }}>
+                <StandaloneIcon />
+                Standalone
+              </span>
             )}
             {task.due && (
               <>
@@ -759,21 +741,15 @@ function PrioritySelect({ value, onChange }) {
 
 function EmptyState({ filter, onNew }) {
   const map = {
-    all:    { strong: 'No tasks yet',                hint: 'Add a task to get started.' },
-    active: { strong: 'No active tasks',             hint: 'Everything is done or filtered out.' },
-    high:   { strong: 'No high-priority tasks',      hint: 'Nothing urgent in your queue.' },
-    done:   { strong: 'No completed tasks yet',      hint: 'Finish a task and it shows up here.' },
+    all:    { strong: 'Nothing on your watch list', hint: 'Add a watch item to get started.' },
+    active: { strong: 'No active items',            hint: 'Everything is resolved or filtered out.' },
+    high:   { strong: 'No high-priority items',     hint: 'Nothing urgent in your queue.' },
+    done:   { strong: 'No completed items yet',     hint: 'Mark a watch item done and it shows up here.' },
   };
   const copy = map[filter] || map.all;
   return (
-    <motion.li
-      key="empty-state"
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.25 }}
+    <div
       style={{
-        listStyle: 'none',
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
         padding: '36px 20px',
         textAlign: 'center',
@@ -807,7 +783,7 @@ function EmptyState({ filter, onNew }) {
           onClick={onNew}
         >New task</Btn>
       )}
-    </motion.li>
+    </div>
   );
 }
 
@@ -821,11 +797,11 @@ function contextUrl(ctx) {
   return '';
 }
 function formatContext(ctx) {
+  // The icon encodes the type — just show `#ID · Name` (or `#ID`).
   if (!ctx) return '';
   const id = ctx.id ? `#${ctx.id}` : '';
-  const cap = ctx.type[0].toUpperCase() + ctx.type.slice(1);
-  if (ctx.name) return `${cap} ${id} · ${ctx.name}`;
-  return `${cap} ${id}`.trim();
+  if (ctx.name) return id ? `${id} · ${ctx.name}` : ctx.name;
+  return id;
 }
 
 /* Color the due date red when it looks "urgent today", brand
@@ -840,4 +816,47 @@ function dueLabelColor(task) {
   if (d.includes('overdue')) return 'var(--gb-error-fg)';
   return 'var(--gb-text-tertiary)';
 }
+
+/* ── Entity icons ─────────────────────────────────────────────
+   Tiny 11px glyphs that prefix the context label so the user
+   can scan the row type without reading the text. Tones inherit
+   currentColor so the icon color tracks the surrounding label
+   (including the brand-color hover state on linked context). */
+function ContextIcon({ type }) {
+  if (type === 'order')   return <OrderIcon />;
+  if (type === 'contact') return <ContactIcon />;
+  if (type === 'account') return <AccountIcon />;
+  return null;
+}
+const OrderIcon = () => (
+  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+    <line x1="8" y1="13" x2="16" y2="13" />
+    <line x1="8" y1="17" x2="14" y2="17" />
+  </svg>
+);
+const ContactIcon = () => (
+  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+    <circle cx="12" cy="7" r="4" />
+  </svg>
+);
+const AccountIcon = () => (
+  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <rect x="3" y="6" width="18" height="14" rx="2" />
+    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    <line x1="3" y1="12" x2="21" y2="12" />
+  </svg>
+);
+const StandaloneIcon = () => (
+  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 5v2M12 17v2M5 12h2M17 12h2" />
+  </svg>
+);
 
