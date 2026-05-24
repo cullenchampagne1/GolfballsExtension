@@ -1301,12 +1301,14 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
            the decal mesh as a child — when the shard tumbles, the
            decal tumbles with it (it will visibly warp; per design,
            that's preferred over the decal vanishing). */
-        const SHARD_LON_BANDS  = 4;                   // phi divisions (around Y)
-        const SHARD_LAT_BANDS  = 4;                   // theta divisions (top→bottom)
+        const SHARD_LON_BANDS  = 6;                   // phi divisions (around Y)
+        const SHARD_LAT_BANDS  = 5;                   // theta divisions (top→bottom) → 30 wedges
         const SHARD_LIFE_MS    = 1100;
-        const SHARD_RETURN_MS  = 850;
+        const SHARD_RETURN_MS  = 700;
         const SHARD_DRAG       = 0.985;               // per-frame velocity damping (gentle — gravity dominates)
         const SHARD_GRAVITY    = 980;                 // px/s² — matches the rest of the world
+        const SHARD_BOUNCE     = 0.45;                // floor/wall restitution
+        const SHARD_FRICTION   = 0.78;                // tangential damping on bounce
         const _tmpV3a = new THREE.Vector3();
         const _tmpQa  = new THREE.Quaternion();
         const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
@@ -1487,6 +1489,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             const shard = {
               mesh,
               outDir,
+              home: new THREE.Vector3(0, 0, 0),       // shard verts are baked at home position
               homeQuat: new THREE.Quaternion(),
               vel,
               angVel,
@@ -2483,6 +2486,25 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                          + dispose all shards in one pass. */
           if (shards.length > 0) {
             const SHARD_DAMP_F = Math.pow(SHARD_DRAG, dt * 60);
+            // Room bounds (world space). Shards collide against the
+            // same 5-wall room the main ball lives in — floor, ceiling,
+            // back, left, right. The front is open (camera side); we
+            // bounce off it too so pieces don't fly through the viewer.
+            const SHARD_R = 35;
+            const SHARD_FLOOR   = -HALF_Y + SHARD_R;
+            const SHARD_CEIL    =  HALF_Y - SHARD_R;
+            const SHARD_LEFT    = -HALF_X + SHARD_R;
+            const SHARD_RIGHT   =  HALF_X - SHARD_R;
+            const SHARD_BACK    = -HALF_Z + SHARD_R;
+            const SHARD_FRONT   =  HALF_Z - SHARD_R;
+            // ballGroup may be anywhere in the room (throw mode is on
+            // when explode is available — the ball can be mid-air). So
+            // we integrate in ballGroup-LOCAL space, then convert each
+            // shard to WORLD to test collisions, push out of penetration,
+            // and convert back.
+            const gx = ballGroup.position.x;
+            const gy = ballGroup.position.y;
+            const gz = ballGroup.position.z;
             let returningCount = 0;
             let landedCount = 0;
             for (let i = shards.length - 1; i >= 0; i--) {
@@ -2493,6 +2515,26 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 s.mesh.position.x += s.vel.x * dt;
                 s.mesh.position.y += s.vel.y * dt;
                 s.mesh.position.z += s.vel.z * dt;
+                // ── Collide with room walls (world space) ─────────
+                // Convert local → world, clamp + reflect velocity on
+                // any axis that penetrated, convert back to local.
+                let wx = s.mesh.position.x + gx;
+                let wy = s.mesh.position.y + gy;
+                let wz = s.mesh.position.z + gz;
+                let bounced = false;
+                if (wy < SHARD_FLOOR) { wy = SHARD_FLOOR; if (s.vel.y < 0) { s.vel.y = -s.vel.y * SHARD_BOUNCE; s.vel.x *= SHARD_FRICTION; s.vel.z *= SHARD_FRICTION; bounced = true; } }
+                if (wy > SHARD_CEIL)  { wy = SHARD_CEIL;  if (s.vel.y > 0) { s.vel.y = -s.vel.y * SHARD_BOUNCE; bounced = true; } }
+                if (wx < SHARD_LEFT)  { wx = SHARD_LEFT;  if (s.vel.x < 0) { s.vel.x = -s.vel.x * SHARD_BOUNCE; bounced = true; } }
+                if (wx > SHARD_RIGHT) { wx = SHARD_RIGHT; if (s.vel.x > 0) { s.vel.x = -s.vel.x * SHARD_BOUNCE; bounced = true; } }
+                if (wz < SHARD_BACK)  { wz = SHARD_BACK;  if (s.vel.z < 0) { s.vel.z = -s.vel.z * SHARD_BOUNCE; bounced = true; } }
+                if (wz > SHARD_FRONT) { wz = SHARD_FRONT; if (s.vel.z > 0) { s.vel.z = -s.vel.z * SHARD_BOUNCE; bounced = true; } }
+                if (bounced) {
+                  s.mesh.position.set(wx - gx, wy - gy, wz - gz);
+                  // Bleed angular velocity on impact so spinning shards
+                  // eventually settle instead of spinning in place
+                  // against the floor forever.
+                  s.angVel.multiplyScalar(0.7);
+                }
                 // Tumble: integrate angular velocity into the
                 // quaternion via a small-angle delta quat per axis.
                 // Cheap and stable for the moderate spin rates we use.
