@@ -77,14 +77,18 @@ export function FloatingPanel({
           {/* Backdrop — its own fixed full-viewport layer so the
               physics-driven Throwable above it doesn't have to compete
               with a positioning ancestor. pointerEvents:none keeps it
-              click-through so the page underneath stays usable. */}
+              click-through so the page underneath stays usable.
+              Z-order: backdrop sits at 999990, the modal Throwable sits
+              at 999999. Large gap because the page may already have
+              other extension overlays at this depth — we want the modal
+              unmistakably above any sibling fixed-position decoration. */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
             style={{
-              position: 'fixed', inset: 0, zIndex: 999989,
+              position: 'fixed', inset: 0, zIndex: 999990,
               pointerEvents: 'none',
               // Tint only, no blur. FloatingPanel's whole reason for existing
               // is that the page underneath stays readable.
@@ -104,7 +108,7 @@ export function FloatingPanel({
               restitution={phys.restitution}
               maxSpeed={phys.maxSpeed}
               throwScale={phys.throwScale}
-              style={{ zIndex: 999990, pointerEvents: 'auto' }}
+              style={{ zIndex: 999999, pointerEvents: 'auto' }}
             >
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
