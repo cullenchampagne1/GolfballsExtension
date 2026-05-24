@@ -292,6 +292,11 @@ export function Throwable({
   // and the last one wins). Outer fixed wrapper at viewport center +
   // motion translate-by-(x,y); inner div self-centers via static
   // transform so the outer's translate is pure displacement.
+  //
+  // `...style` is applied to the OUTER wrapper only — z-index / pointer
+  // events / display rules need to live on the positioned ancestor.
+  // Duplicating them onto the inner div would be redundant at best and
+  // create a separate stacking context at worst.
   return (
     <motion.div
       ref={rootRef}
@@ -300,10 +305,11 @@ export function Throwable({
         position: 'fixed',
         left: '50%', top: '50%',
         touchAction: 'none',
+        ...style,
       }}
       {...rest}
     >
-      <div ref={innerRef} style={{ transform: 'translate(-50%, -50%)', ...style }}>
+      <div ref={innerRef} style={{ transform: 'translate(-50%, -50%)' }}>
         {children}
       </div>
     </motion.div>
