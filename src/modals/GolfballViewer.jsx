@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useDevSetting, useDevSettings } from '../lib/devSettings.js';
+import { LiquidDrawer } from '../ui/components/LiquidDrawer.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    GolfballViewer — Three.js scene that renders a golf ball with
@@ -92,7 +93,7 @@ export const SCENES = [
   { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'icons/moonlit_golf_4k.exr',     icon: 'moon' },
 ];
 
-export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, onError, onSceneChange }, ref) {
+export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, onError, onSceneChange, onThrowChange }, ref) {
   const containerRef = useRef(null);
   // Imperative snapshot handle — set by the WebGL effect once the
   // scene is ready. Parent calls snapshotRef.current() to capture a
@@ -137,6 +138,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   const [throwMode, setThrowMode] = useState(false);
   const throwModeRef = useRef(false);
   useEffect(() => { throwModeRef.current = throwMode; }, [throwMode]);
+  // Surface throwMode to the parent (ImagePreview) so it can show /
+  // hide the fun menu in sync with gravity.
+  useEffect(() => { onThrowChange?.(throwMode); }, [throwMode, onThrowChange]);
   // Scene mode — swaps the room for an HDRI environment. The state
   // holds the active scene's KEY (one of SCENES below) or null when
   // the user is in the room. Mutually exclusive with throw mode and
@@ -1706,134 +1710,33 @@ const SCENE_ICONS = {
 };
 
 /* ── SceneDrawer ──────────────────────────────────────────────
-   Top-LEFT connected dropdown. The toggle pins to the top-left
-   corner of the canvas; scene chips slide DOWN from below it,
-   sharing borders so the whole thing reads as one rounded strip.
-
-   Closing the drawer clears the active scene — leaving a scene
-   armed after the drawer disappears would be surprising.
-   Clicking an already-active scene chip also clears it. */
+   Top-left frosted-glass dropdown. Picks an HDRI scene from the
+   SCENES registry. Visual chrome is owned by <LiquidDrawer> — a
+   tinted-blur capsule that expands from the toggle into a strip
+   of icon-only buttons; active item flips its icon to pure white
+   and shows a soft white inset highlight. Closing the drawer
+   clears the active scene so the user isn't left with a scene
+   armed once the chrome disappears. */
 function SceneDrawer({ active, onPick }) {
   const [open, setOpen] = React.useState(false);
   const handleToggleDrawer = (next) => {
     setOpen(next);
     if (!next && active) onPick(null);
   };
+  const items = SCENES.map((s) => {
+    const Icon = SCENE_ICONS[s.icon] || SceneIcon;
+    return { key: s.key, icon: <Icon size={14} />, active: active === s.key };
+  });
   return (
-    <div style={{
-      position: 'absolute', top: 8, left: 8, zIndex: 6,
-      display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
-    }}>
-      <SceneToggle
-        active={open || !!active}
-        open={open}
-        onClick={() => handleToggleDrawer(!open)}
-      />
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            key="scene-items"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-            style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
-          >
-            {SCENES.map((s, i) => {
-              const Icon = SCENE_ICONS[s.icon] || SceneIcon;
-              const isBottomOfStrip = i === SCENES.length - 1;
-              return (
-                <SceneRowChip
-                  key={s.key}
-                  glyph={<Icon size={13} />}
-                  active={active === s.key}
-                  onClick={() => onPick(s.key)}
-                  connectedBottom={isBottomOfStrip}
-                  connectedInternal={!isBottomOfStrip}
-                />
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function SceneToggle({ active, open, onClick }) {
-  const [hovered, setHovered] = React.useState(false);
-  const color  = active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)';
-  const border = active ? 'var(--gb-brand-label)' : 'var(--gb-border-default)';
-  const bg     = active
-    ? 'var(--gb-brand-tint-soft)'
-    : (hovered ? 'var(--gb-fill-soft)' : 'var(--gb-surface-modal)');
-  // Top-left DROPDOWN: when open, the toggle's bottom corners go
-  // flat so it visually joins the chips below; top corners stay
-  // rounded so the strip's outer outline is one rounded shape.
-  const radius = open
-    ? 'var(--gb-r-sm) var(--gb-r-sm) 0 0'
-    : 'var(--gb-r-sm)';
-  return (
-    <button
-      type="button"
-      data-viewer-ui="true"
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        width: 26, height: 26, padding: 0,
-        color, background: bg,
-        border: `1px solid ${border}`,
-        // When open, drop the bottom border so it merges with the
-        // first chip's top edge (no double line in the seam).
-        borderBottomWidth: open ? 0 : 1,
-        borderRadius: radius,
-        cursor: 'pointer',
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'background-color .12s, color .12s, border-color .12s, border-radius .12s',
-      }}
-    >
-      <SceneIcon size={13} />
-    </button>
-  );
-}
-
-function SceneRowChip({ glyph, active, onClick, connectedBottom, connectedInternal }) {
-  const [hovered, setHovered] = React.useState(false);
-  const color  = active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)';
-  const border = active ? 'var(--gb-brand-label)' : 'var(--gb-border-default)';
-  const bg     = active
-    ? 'var(--gb-brand-tint-soft)'
-    : (hovered ? 'var(--gb-fill-soft)' : 'var(--gb-surface-modal)');
-  // Dropdown layout: bottom chip rounds its bottom corners;
-  // every other chip is flat (the toggle handles top rounding).
-  const radius = connectedBottom
-    ? '0 0 var(--gb-r-sm) var(--gb-r-sm)'
-    : '0';
-  return (
-    <button
-      type="button"
-      data-viewer-ui="true"
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        width: 26, height: 26, padding: 0,
-        color, background: bg,
-        border: `1px solid ${border}`,
-        // Internal chips drop their bottom border so the seam with
-        // the next chip below is a single line. Only the bottom
-        // chip keeps its full border (its 1px is the strip's base).
-        borderBottomWidth: connectedInternal ? 0 : 1,
-        borderRadius: radius,
-        cursor: 'pointer',
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'background-color .12s, color .12s, border-color .12s',
-        boxShadow: active ? 'inset 0 0 0 1px var(--gb-brand-tint-soft)' : 'none',
-      }}
-    >
-      {glyph}
-    </button>
+    <LiquidDrawer
+      anchor="top-left"
+      open={open}
+      onOpenChange={handleToggleDrawer}
+      toggleIcon={<SceneIcon size={14} />}
+      items={items}
+      onPick={(k) => onPick(k === active ? null : k)}
+      ariaLabel="Scene"
+    />
   );
 }
 
