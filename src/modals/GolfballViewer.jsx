@@ -80,48 +80,6 @@ async function loadThreeAndModel() {
   return { ...cache.three, model };
 }
 
-/* Build a CanvasTexture that mirrors the playground page's two-layer
-   line grid (minor every 16, major every 64) so the room walls blend
-   visually with the page background behind the canvas. Reads the
-   current values of --gb-border-default + --gb-border-subtle off
-   the document so the texture re-themes with the user's variant.
-   `THREE` is passed in because this runs inside the effect after
-   the dynamic Three.js import. */
-function makeGridTexture(THREE) {
-  const TILE = 192;            // each tile spans 3 major squares (192/64)
-  const MINOR = 16;
-  const MAJOR = 64;
-  const cv = document.createElement('canvas');
-  cv.width = TILE; cv.height = TILE;
-  const ctx = cv.getContext('2d');
-  // Sample design tokens off the document so the texture stays
-  // in-theme. Fallbacks match the dark variant baseline.
-  const cs = getComputedStyle(document.documentElement);
-  const minor = cs.getPropertyValue('--gb-border-subtle').trim() || '#1a1c1f';
-  const major = cs.getPropertyValue('--gb-border-default').trim() || '#26292d';
-  const surface = cs.getPropertyValue('--gb-surface-canvas').trim() || '#0e0f10';
-  ctx.fillStyle = surface;
-  ctx.fillRect(0, 0, TILE, TILE);
-  ctx.lineWidth = 1;
-  // Minor grid
-  ctx.strokeStyle = minor;
-  for (let i = 0; i <= TILE; i += MINOR) {
-    ctx.beginPath(); ctx.moveTo(i + 0.5, 0); ctx.lineTo(i + 0.5, TILE); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, i + 0.5); ctx.lineTo(TILE, i + 0.5); ctx.stroke();
-  }
-  // Major grid (drawn over the minor so brighter lines win at intersections)
-  ctx.strokeStyle = major;
-  for (let i = 0; i <= TILE; i += MAJOR) {
-    ctx.beginPath(); ctx.moveTo(i + 0.5, 0); ctx.lineTo(i + 0.5, TILE); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, i + 0.5); ctx.lineTo(TILE, i + 0.5); ctx.stroke();
-  }
-  const tex = new THREE.CanvasTexture(cv);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
 export function GolfballViewer({ decalDataUrl, onError }) {
   const containerRef = useRef(null);
   // 'loading' until Three.js + the model finish; then 'ready'. 'error'
@@ -254,72 +212,141 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         scene.add(fill);
 
         // ── Room walls ─────────────────────────────────────────
-        // Build 5 inward-facing textured planes (back, floor, ceiling,
-        // left, right) to form a room the user looks INTO. The 6th
-        // plane (front, between camera and ball) is intentionally
-        // omitted so the user can see in. Each plane uses the same
-        // grid texture as the playground page background — when
-        // viewed at an angle the lights cast subtle shading on the
-        // grid, giving the depth cue you'd get from a real room.
+        // 5 inward-facing planes form the room; the 6th (front) is
+        // omitted so the user can see in. Each wall uses a per-wall
+        // baked CanvasTexture: flat surface color + the playground
+        // grid + a vignette of soft inward shadows along the edges.
         //
-        // Planes use MeshStandardMaterial so they pick up the scene's
-        // hemisphere + directional lights; the resulting shading
-        // gradient across each wall is what reads as "depth without
-        // a solid background change".
+        // We bake the shadows into the texture (instead of letting
+        // scene lights cast them) so the wall fills stay the EXACT
+        // background color — no global darkening — and only the
+        // edges/seams pick up shading. The material is therefore
+        // MeshBasicMaterial (no lighting) so nothing dims the fill.
         {
-          const tex = makeGridTexture(THREE);
-          objectsToDispose.push(tex);
+          // Sample design tokens once for the bakes below.
+          const cs = getComputedStyle(document.documentElement);
+          const surface = cs.getPropertyValue('--gb-surface-canvas').trim() || '#0e0f10';
+          const minor = cs.getPropertyValue('--gb-border-subtle').trim() || '#1a1c1f';
+          const major = cs.getPropertyValue('--gb-border-default').trim() || '#26292d';
 
-          // Texture repeat tuned so each tile is ~96 world units —
-          // matches the playground's 64px major grid at roughly the
-          // same visual density when the wall sits at typical depth.
-          function makeWall(width, height, repeatX, repeatY) {
-            const t = tex.clone();
-            t.needsUpdate = true;
-            t.wrapS = THREE.RepeatWrapping;
-            t.wrapT = THREE.RepeatWrapping;
-            t.repeat.set(repeatX, repeatY);
-            const mat = new THREE.MeshStandardMaterial({
-              map: t,
-              roughness: 0.95,
-              metalness: 0,
-              side: THREE.FrontSide,
-            });
-            objectsToDispose.push(t, mat);
-            return new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat);
+          /* Bake a wall texture sized to the wall's actual aspect
+             ratio so the grid stays square + the edge vignette
+             reads symmetrically. The base color matches the
+             playground background; the grid is the same 16/64 spacing
+             as the playground page; the vignette uses 4 directional
+             linear gradients (one per edge) that fall off from
+             opaque-dark at the edge to fully transparent ~22% of the
+             way in. Result: walls visually disappear into the
+             background and only the corners catch shadow. */
+          function makeWallTexture(widthWU, heightWU) {
+            // Texture resolution: 4 px per world unit, capped, so big
+            // walls don't blow out the upload size.
+            const PXPU = 3;
+            const w = Math.min(2048, Math.max(256, Math.round(widthWU * PXPU)));
+            const h = Math.min(2048, Math.max(256, Math.round(heightWU * PXPU)));
+            const cv = document.createElement('canvas');
+            cv.width = w; cv.height = h;
+            const ctx = cv.getContext('2d');
+
+            // Fill — exact background color, no darkening
+            ctx.fillStyle = surface;
+            ctx.fillRect(0, 0, w, h);
+
+            // Grid — same 16/64 spacing as the playground, scaled to
+            // texture pixels (PXPU px per world unit).
+            const MINOR_PX = 16 * PXPU;
+            const MAJOR_PX = 64 * PXPU;
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = minor;
+            for (let x = 0; x <= w; x += MINOR_PX) {
+              ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, h); ctx.stroke();
+            }
+            for (let y = 0; y <= h; y += MINOR_PX) {
+              ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(w, y + 0.5); ctx.stroke();
+            }
+            ctx.strokeStyle = major;
+            for (let x = 0; x <= w; x += MAJOR_PX) {
+              ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, h); ctx.stroke();
+            }
+            for (let y = 0; y <= h; y += MAJOR_PX) {
+              ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(w, y + 0.5); ctx.stroke();
+            }
+
+            // Edge vignette — 4 directional gradients, each from
+            // dark-opaque at the edge to transparent at ~22% in.
+            // Using rgba black so the shadow darkens whatever's
+            // below regardless of theme.
+            const fade = 0.22;
+            const shadow = (g) => {
+              g.addColorStop(0,    'rgba(0,0,0,0.55)');
+              g.addColorStop(0.35, 'rgba(0,0,0,0.18)');
+              g.addColorStop(1,    'rgba(0,0,0,0)');
+            };
+            // Left edge
+            let g = ctx.createLinearGradient(0, 0, w * fade, 0); shadow(g);
+            ctx.fillStyle = g; ctx.fillRect(0, 0, w * fade, h);
+            // Right edge
+            g = ctx.createLinearGradient(w, 0, w - w * fade, 0); shadow(g);
+            ctx.fillStyle = g; ctx.fillRect(w - w * fade, 0, w * fade, h);
+            // Top edge
+            g = ctx.createLinearGradient(0, 0, 0, h * fade); shadow(g);
+            ctx.fillStyle = g; ctx.fillRect(0, 0, w, h * fade);
+            // Bottom edge
+            g = ctx.createLinearGradient(0, h, 0, h - h * fade); shadow(g);
+            ctx.fillStyle = g; ctx.fillRect(0, h - h * fade, w, h * fade);
+
+            const tex = new THREE.CanvasTexture(cv);
+            tex.colorSpace = THREE.SRGBColorSpace;
+            tex.minFilter = THREE.LinearFilter;
+            tex.magFilter = THREE.LinearFilter;
+            objectsToDispose.push(tex);
+            return tex;
           }
+
+          function makeWall(widthWU, heightWU) {
+            const tex = makeWallTexture(widthWU, heightWU);
+            // MeshBasicMaterial — NO scene lighting applied. The
+            // baked texture is the entire visual: flat fill + grid
+            // + edge shadow. Scene lights (which still illuminate
+            // the ball) don't darken this surface.
+            const mat = new THREE.MeshBasicMaterial({
+              map: tex,
+              side: THREE.FrontSide,
+              transparent: false,
+            });
+            objectsToDispose.push(mat);
+            return new THREE.Mesh(new THREE.PlaneGeometry(widthWU, heightWU), mat);
+          }
+
           const wT = HALF_X * 2;
           const hT = HALF_Y * 2;
           const dT = HALF_Z * 2;
-          // Per-wall repeat — tile world-units / ~96px-per-tile so the
-          // grid density stays even regardless of wall size.
-          const TILE_WU = 96;
 
           // Floor (y = -HALF_Y, facing up)
-          const floor = makeWall(wT, dT, wT / TILE_WU, dT / TILE_WU);
+          const floor = makeWall(wT, dT);
           floor.rotation.x = -Math.PI / 2;
           floor.position.set(0, -HALF_Y, 0);
           scene.add(floor);
 
           // Ceiling (y = +HALF_Y, facing down)
-          const ceil = makeWall(wT, dT, wT / TILE_WU, dT / TILE_WU);
+          const ceil = makeWall(wT, dT);
           ceil.rotation.x = Math.PI / 2;
           ceil.position.set(0, HALF_Y, 0);
           scene.add(ceil);
 
           // Back wall (z = -HALF_Z, facing toward camera = +Z)
-          const back = makeWall(wT, hT, wT / TILE_WU, hT / TILE_WU);
+          const back = makeWall(wT, hT);
           back.position.set(0, 0, -HALF_Z);
           scene.add(back);
 
           // Left wall (x = -HALF_X, facing +X)
-          const left = makeWall(dT, hT, dT / TILE_WU, hT / TILE_WU);
+          const left = makeWall(dT, hT);
           left.rotation.y = Math.PI / 2;
           left.position.set(-HALF_X, 0, 0);
           scene.add(left);
 
           // Right wall (x = +HALF_X, facing -X)
-          const right = makeWall(dT, hT, dT / TILE_WU, hT / TILE_WU);
+          const right = makeWall(dT, hT);
           right.rotation.y = -Math.PI / 2;
           right.position.set(HALF_X, 0, 0);
           scene.add(right);
