@@ -294,7 +294,7 @@ export function WatchList({ onClosed, bindClose }) {
   ];
 
   const subtitle = tasks.length === 0
-    ? 'Nothing yet — add a task to get started'
+    ? 'Nothing yet — add something to watch'
     : `${counts.active} active${completedToday > 0 ? ` · ${completedToday} completed today` : ''}`;
 
   return (
@@ -313,7 +313,7 @@ export function WatchList({ onClosed, bindClose }) {
       />
 
       {/* Toolbar — Segmented filters on top (sliding indicator matches
-          the rest of the system), search + New task underneath. */}
+          the rest of the system), search + Watch button underneath. */}
       <div style={{
         display: 'flex', flexDirection: 'column', gap: 8,
         padding: '10px 14px',
@@ -768,11 +768,10 @@ function EmptyState({ filter, onNew }) {
       {filter === 'all' && (
         <Btn
           size="sm"
-          variant="tinted"
-          status="brand"
+          variant="secondary"
           icon={<I.plus size={11} />}
           onClick={onNew}
-        >New task</Btn>
+        >Watch</Btn>
       )}
     </div>
   );
