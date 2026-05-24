@@ -29,15 +29,14 @@ export function ModalHeader({ icon, title, subtitle, right, tone, accent = true,
   const handleClose = onClose || panel?.requestClose;
   const t = TONES[tone || (accent ? 'brand' : 'neutral')] || TONES.brand;
 
-  // Inside a FloatingPanel, dragging starts from the header — but not when
-  // the pointer goes down on a button (the close control).
-  const startDrag = panel
-    ? (e) => { if (!e.target.closest('button')) panel.dragControls.start(e); }
-    : undefined;
-
+  // Inside a FloatingPanel, the header IS the throw handle. Throwable
+  // wires its pointer listeners to whatever DOM node ends up in this
+  // ref; attaching it here makes the title bar the only grabbable
+  // region (clicks on inner buttons short-circuit Throwable's own
+  // interactive-element guard).
   return (
     <div
-      onPointerDown={startDrag}
+      ref={panel?.dragHandleRef}
       style={{
         padding: '14px 16px', flexShrink: 0,
         background: 'var(--gb-surface-2)',
