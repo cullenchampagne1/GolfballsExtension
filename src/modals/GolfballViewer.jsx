@@ -1254,6 +1254,203 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             particles[i].mesh.material.dispose();
           }
           particles.length = 0;
+          // Shards — kill them instantly and restore the ball. Used
+          // when the user closes the fun menu mid-explosion: there's
+          // no point animating a graceful return when the whole UI
+          // is going away.
+          for (let i = shards.length - 1; i >= 0; i--) {
+            ballGroup.remove(shards[i].mesh);
+            shards[i].mesh.geometry.dispose();
+            shards[i].mesh.material.dispose();
+          }
+          shards.length = 0;
+          if (ballExploded) {
+            ballMesh.visible = true;
+            if (decalMesh) decalMesh.visible = true;
+            ballExploded = false;
+          }
+        };
+
+        /* ── Ball-explode effect ───────────────────────────────────
+           Slice the visible ball into ~16 curved wedges, fling them
+           outward with random spins, and burst a particle puff at
+           the origin. The ball mesh itself goes invisible while the
+           shards are out so the user sees the ball "become" the
+           shards. Reassemble() reverses it: tween each shard back to
+           its home seat, then show the ball + dispose the shards.
+
+           Geometry: each shard is a SphereGeometry slice carved by
+           (phiStart, phiLength, thetaStart, thetaLength). A 4×4 grid
+           of slices (4 longitude bands × 4 latitude bands) gives 16
+           wedges that perfectly cover the ball surface; centroids are
+           offset OUTWARD slightly so the burst looks volumetric on
+           the first frame rather than collapsing through itself.
+
+           Shards live as children of ballGroup so wheel-scale + dev-
+           setting rotation still apply — the explosion respects the
+           same camera/scale framing as the intact ball. */
+        const SHARD_LON_BANDS  = 4;
+        const SHARD_LAT_BANDS  = 4;
+        const SHARD_LIFE_MS    = 1100;
+        const SHARD_RETURN_MS  = 850;
+        const SHARD_RADIUS     = 100;            // matches targetRadius
+        const SHARD_DRAG       = 0.93;           // per-frame velocity damping
+        const SHARD_GRAVITY    = 240;            // px/s² downward while flying
+        const _tmpV3a = new THREE.Vector3();
+        const _tmpQa  = new THREE.Quaternion();
+        // Cubic ease-out for the reassembly tween — fast at first,
+        // slow as each shard settles into its seat (reads as "magnetic
+        // snap"). Sharper than a linear lerp without overshooting.
+        const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+        explodeBallAtRef.current = () => {
+          // Re-explode while shards are already out: just toss them
+          // again with fresh velocities. Avoids the awkward "click
+          // does nothing because shards exist" path.
+          if (shards.length > 0) {
+            for (const s of shards) {
+              s.mode = 'flying';
+              s.life = SHARD_LIFE_MS;
+              const dir = _tmpV3a.copy(s.home).normalize();
+              const speed = 220 + Math.random() * 180;
+              s.vel.copy(dir).multiplyScalar(speed);
+              s.vel.y += 60 + Math.random() * 80;
+              s.angVel.set(
+                (Math.random() - 0.5) * 6,
+                (Math.random() - 0.5) * 6,
+                (Math.random() - 0.5) * 6,
+              );
+            }
+            spawnExplodeParticles();
+            return;
+          }
+
+          // Build shards from a sliced sphere. Each slice owns a
+          // CLONE of the ball's material so we can fade them
+          // independently later without touching the ball material.
+          const phiStep   = (Math.PI * 2) / SHARD_LON_BANDS;
+          const thetaStep =  Math.PI      / SHARD_LAT_BANDS;
+          const ballMatSrc = ballMesh.material;
+          for (let li = 0; li < SHARD_LON_BANDS; li++) {
+            for (let lj = 0; lj < SHARD_LAT_BANDS; lj++) {
+              const phiStart   = li * phiStep;
+              const phiLength  = phiStep;
+              const thetaStart = lj * thetaStep;
+              const thetaLength = thetaStep;
+              // Segments tuned: enough to read as a curved wedge but
+              // not so many that 16 shards balloon vertex count.
+              const geo = new THREE.SphereGeometry(
+                SHARD_RADIUS,
+                10, 6,
+                phiStart, phiLength,
+                thetaStart, thetaLength,
+              );
+              const mat = ballMatSrc.clone();
+              mat.transparent = true;
+              mat.opacity = 1;
+              const mesh = new THREE.Mesh(geo, mat);
+              mesh.castShadow = true;
+              // Home pose = identity (the wedge already sits exactly
+              // where its piece of the ball surface would be when
+              // added at origin). Stash these so reassembly knows
+              // where to land each shard.
+              const home = new THREE.Vector3(0, 0, 0);
+              const homeQuat = new THREE.Quaternion();
+              mesh.position.copy(home);
+              mesh.quaternion.copy(homeQuat);
+              // Outward direction = wedge centroid in spherical
+              // coords. We give each shard a velocity along this
+              // ray + a small up-bias so the burst lofts upward
+              // instead of just spraying flat.
+              const phiMid   = phiStart   + phiLength   * 0.5;
+              const thetaMid = thetaStart + thetaLength * 0.5;
+              const dir = new THREE.Vector3(
+                Math.sin(thetaMid) * Math.cos(phiMid),
+                Math.cos(thetaMid),
+                Math.sin(thetaMid) * Math.sin(phiMid),
+              );
+              const speed = 240 + Math.random() * 220;
+              const vel = dir.clone().multiplyScalar(speed);
+              vel.y += 80 + Math.random() * 60;
+              const angVel = new THREE.Vector3(
+                (Math.random() - 0.5) * 7,
+                (Math.random() - 0.5) * 7,
+                (Math.random() - 0.5) * 7,
+              );
+              ballGroup.add(mesh);
+              shards.push({
+                mesh,
+                home,
+                homeQuat,
+                vel,
+                angVel,
+                mode: 'flying',
+                t: 0,
+                startPos: new THREE.Vector3(),
+                startQuat: new THREE.Quaternion(),
+                life: SHARD_LIFE_MS,
+              });
+            }
+          }
+          // Hide the intact ball + its decal so we don't render both.
+          ballMesh.visible = false;
+          if (decalMesh) decalMesh.visible = false;
+          ballExploded = true;
+          spawnExplodeParticles();
+        };
+
+        /* Spawn a sparkle puff at the ball center. Reuses the
+           existing particle array so the render loop's particle
+           update path is the only thing that touches them. Brand
+           color + white mix reads as a "magic burst" rather than the
+           bomb's orange/red. */
+        const spawnExplodeParticles = () => {
+          const cs = getComputedStyle(document.documentElement);
+          const brandHex = cs.getPropertyValue('--gb-brand-label').trim() || '#a78bfa';
+          const PUFF_COUNT = 48;
+          for (let i = 0; i < PUFF_COUNT; i++) {
+            const theta = Math.random() * Math.PI * 2;
+            const phi = (Math.random() - 0.5) * Math.PI;
+            const speed = 220 + Math.random() * 240;
+            const dir = new THREE.Vector3(
+              Math.cos(theta) * Math.cos(phi),
+              Math.sin(phi) + 0.4,
+              Math.sin(theta) * Math.cos(phi) * 0.6,
+            ).normalize();
+            const geo = new THREE.SphereGeometry(1.4 + Math.random() * 1.3, 6, 6);
+            const mat = new THREE.MeshBasicMaterial({
+              color: Math.random() < 0.5 ? brandHex : 0xffffff,
+              transparent: true,
+              opacity: 1,
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.copy(ballGroup.position);
+            scene.add(mesh);
+            particles.push({
+              mesh,
+              vel: dir.multiplyScalar(speed),
+              life: 750,
+              maxLife: 750,
+            });
+          }
+        };
+
+        reassembleBallRef.current = () => {
+          if (shards.length === 0) return;
+          // Snapshot each shard's CURRENT pose as the tween start, so
+          // we lerp from wherever the shard happens to be (mid-flight
+          // or already settling) back to its home seat. Switching to
+          // 'returning' clears the velocity integration so gravity
+          // stops dragging it down mid-return.
+          for (const s of shards) {
+            s.mode = 'returning';
+            s.t = 0;
+            s.startPos.copy(s.mesh.position);
+            s.startQuat.copy(s.mesh.quaternion);
+          }
+          // Particle puff at the destination too — same "magic" beat
+          // as the explosion so the eye reads it as a paired motion.
+          spawnExplodeParticles();
         };
 
         /* Pour stream — visual water droplets gushing from the cursor.
@@ -2152,6 +2349,73 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 p.mesh.material.dispose();
                 particles.splice(i, 1);
               }
+            }
+          }
+
+          /* ── Shard update ──────────────────────────────────────
+             Two modes share one loop:
+               flying:   integrate vel + angVel with gravity drag.
+                         When life hits zero the shard simply hovers
+                         until reassembleBall() is called (we don't
+                         auto-dispose — the burst stays visible).
+               returning: ease position/quaternion from start → home.
+                         When the LAST shard lands we re-show the ball
+                         + dispose all shards in one pass. */
+          if (shards.length > 0) {
+            const SHARD_DAMP_F = Math.pow(SHARD_DRAG, dt * 60);
+            let returningCount = 0;
+            let landedCount = 0;
+            for (let i = shards.length - 1; i >= 0; i--) {
+              const s = shards[i];
+              if (s.mode === 'flying') {
+                s.vel.y -= SHARD_GRAVITY * dt;
+                s.vel.multiplyScalar(SHARD_DAMP_F);
+                s.mesh.position.x += s.vel.x * dt;
+                s.mesh.position.y += s.vel.y * dt;
+                s.mesh.position.z += s.vel.z * dt;
+                // Tumble: integrate angular velocity into the
+                // quaternion via a small-angle delta quat per axis.
+                // Cheap and stable for the moderate spin rates we use.
+                _tmpQa.setFromAxisAngle(_tmpV3a.set(1, 0, 0), s.angVel.x * dt);
+                s.mesh.quaternion.multiply(_tmpQa);
+                _tmpQa.setFromAxisAngle(_tmpV3a.set(0, 1, 0), s.angVel.y * dt);
+                s.mesh.quaternion.multiply(_tmpQa);
+                _tmpQa.setFromAxisAngle(_tmpV3a.set(0, 0, 1), s.angVel.z * dt);
+                s.mesh.quaternion.multiply(_tmpQa);
+                s.life -= dt * 1000;
+                // Past life ends, keep the shard around but
+                // exponentially damp its motion to a near-stop so it
+                // hangs in space waiting for reassembly.
+                if (s.life <= 0) {
+                  s.vel.multiplyScalar(0.85);
+                  s.angVel.multiplyScalar(0.9);
+                }
+              } else {
+                // returning
+                returningCount++;
+                s.t += (dt * 1000) / SHARD_RETURN_MS;
+                if (s.t >= 1) {
+                  s.t = 1;
+                  landedCount++;
+                }
+                const k = easeOutCubic(s.t);
+                s.mesh.position.lerpVectors(s.startPos, s.home, k);
+                // slerpQuaternions writes start→end interpolation
+                // directly onto the target — no temp arrays needed.
+                s.mesh.quaternion.slerpQuaternions(s.startQuat, s.homeQuat, k);
+              }
+            }
+            // All shards have landed → tear them down, show the ball.
+            if (returningCount > 0 && landedCount === returningCount && returningCount === shards.length) {
+              for (let i = shards.length - 1; i >= 0; i--) {
+                ballGroup.remove(shards[i].mesh);
+                shards[i].mesh.geometry.dispose();
+                shards[i].mesh.material.dispose();
+              }
+              shards.length = 0;
+              ballMesh.visible = true;
+              if (decalMesh) decalMesh.visible = true;
+              ballExploded = false;
             }
           }
 
