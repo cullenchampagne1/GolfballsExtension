@@ -1729,6 +1729,11 @@ function SwapPopover({ pick, wrapRef, swapCount, onPreview, onCancel, onApply })
         boxShadow: '0 8px 24px -8px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.06) inset',
         display: 'flex', flexDirection: 'column', gap: 9,
         fontFamily: 'var(--gb-font-sans)',
+        // Portaled into body, so the modal's userSelect:none doesn't
+        // reach us — apply our own. Drag-to-reposition would otherwise
+        // paint text-selection ranges across the popover labels.
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
       }}
     >
       {/* Drag handle — header row doubles as the grip. cursor:move

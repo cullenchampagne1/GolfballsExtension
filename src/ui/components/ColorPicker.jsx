@@ -187,6 +187,13 @@ export function ColorPickerPopover({
         borderRadius: 'var(--gb-r-md)',
         boxShadow: 'var(--gb-shadow-popover)',
         fontFamily: 'var(--gb-font-sans)',
+        // Disable text selection on the popover chrome — without this,
+        // dragging the SV square or hue slider painted a text-selection
+        // range across the surrounding labels/inputs. The hex <input>
+        // re-enables selection on itself below so the user can still
+        // type/paste hex codes there.
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
       }}
     >
       {/* Saturation / Value square */}
@@ -267,6 +274,10 @@ export function ColorPickerPopover({
               flex: 1, minWidth: 0, width: '100%',
               background: 'transparent', border: 'none', outline: 'none',
               padding: 0, margin: 0, font: 'inherit',
+              // Re-enable selection only on this input — the popover
+              // root sets userSelect:none for the chrome.
+              userSelect: 'text',
+              WebkitUserSelect: 'text',
               fontFamily: 'var(--gb-font-mono)', fontSize: 11.5, fontWeight: 600,
               color: 'var(--gb-text-primary)', textTransform: 'uppercase',
             }}
