@@ -212,7 +212,7 @@ export function MarginCalc({ shortcut, onClosed, bindClose }) {
             >
               <Callout
                 tone="warning"
-                title={`Margin ${marginNum.toFixed(1)}% is below the recommended ${minMargin}%`}
+                title={`Margin ${marginNum.toFixed(1)}% is below ${minMargin}% threshold.`}
               >
                 Increased sell price recomended.
               </Callout>

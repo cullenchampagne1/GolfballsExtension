@@ -125,6 +125,13 @@ export const DEV_SETTINGS = [
     type:    'bool',
     default: false,
   },
+  {
+    key:     'crmCreateContact.requireAccount',
+    label:   'CRM New Contact: require account',
+    desc:    'When on, the New Contact modal blocks submit until an account is selected (or typed). Creating a contact without an account is allowed by the API but is bad practice. Turn off to override.',
+    type:    'bool',
+    default: true,
+  },
 
   /* ── Watch list housekeeping ──────────────────────────────────
      Completed items auto-purge after N days so the "Completed"
