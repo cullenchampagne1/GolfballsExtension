@@ -103,7 +103,8 @@ export function GolfballViewer({ decalDataUrl, onError }) {
 
         const { clientWidth: w, clientHeight: h } = container;
         camera = new THREE.PerspectiveCamera(38, w / h, 0.1, 1000);
-        camera.position.set(0, 0, 350);
+        // Camera position is set AFTER the ball + decal so we can frame
+        // the actual print area. Placed below in the controls setup.
 
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setPixelRatio(window.devicePixelRatio);
@@ -190,14 +191,27 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           objectsToDispose.push(decalGeo, decalMat);
         }
 
-        // ── Controls ───────────────────────────────────────────
+        // ── Controls + camera framing ─────────────────────────
+        // Aim at the print area (the top pole, at world +Y). Position
+        // the camera up-and-forward so the print sits front-and-center
+        // on first open instead of needing the user to orbit up. The
+        // user can still drag to rotate freely from there.
+        const printPos = new THREE.Vector3(0, targetRadius, 0);
+        // Frame the print area with a bit of headroom — too close and
+        // the ball fills the frame; this gives the decal room to read
+        // without forcing the user to immediately scroll-zoom out.
+        camera.position.set(0, targetRadius * 1.8, targetRadius * 3.4);
+        camera.lookAt(printPos);
+
         controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.copy(printPos);
         controls.enableDamping = true;
         controls.dampingFactor = 0.1;
         controls.enablePan = false;
         controls.minDistance = 160;
         controls.maxDistance = 600;
         controls.rotateSpeed = 0.7;
+        controls.update();
 
         // ── Render loop ────────────────────────────────────────
         const render = () => {
