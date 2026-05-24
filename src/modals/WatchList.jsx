@@ -535,22 +535,26 @@ function TaskRow({ task, index, isResolving, onToggle, onEdit, onDelete }) {
           </div>
         </div>
 
-        {/* Edit + delete */}
-        <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+        {/* Edit + delete — solid (secondary) so they read as
+            real chips and balance the two-line row content. */}
+        <div style={{
+          display: 'flex', gap: 4, flexShrink: 0,
+          alignSelf: 'center', // vertically center against both lines
+        }}>
           <Btn
-            variant="ghost"
+            variant="secondary"
             size="sm"
-            icon={<I.edit size={11} />}
+            icon={<I.edit size={12} />}
             onClick={onEdit}
-            style={{ height: 26, width: 26, padding: 0 }}
+            style={{ height: 30, width: 30, padding: 0 }}
             title="Edit watch item"
           />
           <Btn
-            variant="ghost"
+            variant="secondary"
             size="sm"
-            icon={<I.trash size={11} />}
+            icon={<I.trash size={12} />}
             onClick={onDelete}
-            style={{ height: 26, width: 26, padding: 0 }}
+            style={{ height: 30, width: 30, padding: 0 }}
             title="Remove from watch list"
           />
         </div>
