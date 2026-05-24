@@ -701,21 +701,22 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                   </div>
                 </>
               )}
-
-              {/* 3D-mode toolbox — bottom-right collapsible drawer.
-                  Closed = single chip (toolbox icon). Open = the chip
-                  stays and items slide up above it. Items are drag-
-                  to-canvas: pointerdown spawns a floating bump that
-                  follows the cursor; pointerup over the 3D canvas
-                  calls viewerRef.dropBomb({clientX,clientY}). */}
-              {view === '3d' && (
-                <ViewerToolbox viewerRef={viewerRef} />
-              )}
             </>
           )}
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* 3D-mode toolbox — bottom-right collapsible drawer. Lives
+              OUTSIDE both the `status === 'ready'` gate AND the view-
+              crossfade AnimatePresence. The crossfade only renders ONE
+              of the two motion.divs at a time, so putting the toolbox
+              inside the 2D branch (the previous bug) means it never
+              shows in 3D. Anchoring it directly to the wrapRef div
+              also keeps it stable across view transitions. */}
+          {view === '3d' && (
+            <ViewerToolbox viewerRef={viewerRef} />
+          )}
         </div>
 
         {/* Decode error — only when a real URL was passed AND it failed.
