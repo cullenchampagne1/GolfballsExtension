@@ -1219,6 +1219,14 @@ function ViewerToolbox({ viewerRef }) {
   const spawnIntervalRef = useRef(null);
   const lastCursorRef = useRef({ clientX: 0, clientY: 0 });
 
+  // On unmount (fun menu disappears because gravity flipped off OR
+  // the user left 3D view), purge everything in the room except the
+  // ball — same rule as closing the menu manually.
+  useEffect(() => {
+    const v = viewerRef;
+    return () => { v.current?.clearRoomItems?.(); };
+  }, [viewerRef]);
+
   // Clean up spawner if the tool is deactivated while held.
   useEffect(() => {
     if (activeTool !== 'balls') {
@@ -1304,7 +1312,13 @@ function ViewerToolbox({ viewerRef }) {
 
   const handleOpenChange = (next) => {
     setOpen(next);
-    if (!next && activeTool) setActiveTool(null);
+    if (!next) {
+      if (activeTool) setActiveTool(null);
+      // Closing the fun menu purges everything in the room except the
+      // golf ball — same behavior as entering a scene. The user has
+      // signaled they're done playing; clean slate.
+      viewerRef.current?.clearRoomItems?.();
+    }
   };
   const handlePick = (key) => {
     if (key === activeTool) {
