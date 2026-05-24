@@ -6,6 +6,7 @@ import {
   I, T,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
+import { GolfballViewer } from './GolfballViewer.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    ImagePreview — port of content/logo-extractor.js's logo modal.
@@ -104,9 +105,16 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   const [imageSize, setImageSize] = useState(null);
   // Alignment overlay toggle. When on, a centered circle is overlaid
   // on the image and the surrounding chrome dims so the user can
-  // position the image inside the alignment ring. Real alignment
-  // logic ships later — for now this is purely visual + animated.
+  // position the image inside the alignment ring.
   const [aligning, setAligning] = useState(false);
+  // Persisted decal — the cropped+masked PNG built from the most
+  // recent Save Alignment. Null until the user saves once; cleared
+  // when the source URL changes. Feeds the 3D viewer as a decal.
+  const [decalDataUrl, setDecalDataUrl] = useState(null);
+  // View mode: '2d' shows the image preview + zoom controls; '3d'
+  // swaps the same area for the GolfballViewer with the saved decal
+  // wrapped on the model. 3D button toggles between them.
+  const [view, setView] = useState('2d');
 
   // Zoom + pan: tracked in refs (no re-render per wheel event) plus a
   // tiny zoomLevel state purely so the bottom-left zoom-percentage chip
@@ -136,6 +144,8 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   useEffect(() => {
     setStatus('loading');
     setImageSize(null);
+    setDecalDataUrl(null);
+    setView('2d');
     scaleRef.current = 1; txRef.current = 0; tyRef.current = 0;
     setZoomLevel(100);
     applyTransform(false);
@@ -242,6 +252,98 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   };
 
   // Action handlers
+  /* ── Alignment → decal capture ──────────────────────────────
+     Compute the crop the user has currently positioned inside the
+     ring, render it onto a square canvas with a circular alpha mask
+     so the decal projection later only paints inside the ring,
+     and stash the result as `decalDataUrl`. Called from the Save
+     button in the alignment action strip.
+
+     Coordinate math (wrapper space → image natural pixel space):
+       inner viewport transform = translate(tx, ty) scale(scale)
+       around the wrapper's center; image inside is centered via
+       flexbox at its rendered (post-fit) size where
+         fit = min(0.85 * wrapperW/natW, 0.85 * wrapperH/natH)
+       To go from a point P in wrapper coords to image natural coords:
+         P' = (P - wrapperCenter - {tx,ty}) / scale / fit + natCenter
+     Ring center is wrapperCenter, so its image-space position is:
+         ringCenterImage = (-{tx,ty} / scale) / fit + natCenter
+     Ring radius in wrapper px = ringRadiusWrapperPx.
+     Ring radius in image px = ringRadiusWrapperPx / scale / fit.
+  ─────────────────────────────────────────────────────────── */
+  function captureAlignment() {
+    const wrap = wrapRef.current;
+    if (!wrap || !imageSize) return null;
+    const wrapperH = wrap.clientHeight;
+    const wrapperW = wrap.clientWidth;
+    const natW = imageSize.w;
+    const natH = imageSize.h;
+    // Match the ring's actual rendered size in AlignmentOverlay:
+    //   height: 70% of wrapper, aspect-ratio 1, max 240
+    const ringDiameterWrapperPx = Math.min(wrapperH * 0.70, 240);
+    const ringRadiusWrapperPx = ringDiameterWrapperPx / 2;
+
+    // fit = the px-per-natural-pixel ratio at scale=1
+    const fit = Math.min(0.85 * wrapperW / natW, 0.85 * wrapperH / natH);
+    const scale = scaleRef.current;
+    const tx = txRef.current;
+    const ty = tyRef.current;
+
+    // Image-space center of the ring (wrapper center, inverse-transformed)
+    const cx = (-tx) / scale / fit + natW / 2;
+    const cy = (-ty) / scale / fit + natH / 2;
+    const r  = ringRadiusWrapperPx / scale / fit;
+
+    // Crop rect in image natural pixels (square bounding the ring)
+    const cropX = cx - r;
+    const cropY = cy - r;
+    const cropSize = r * 2;
+
+    // Render the source image to an offscreen canvas, then extract the
+    // crop with a circular alpha mask. Decal output dimension capped at
+    // 1024 to keep texture upload + projection fast.
+    const OUT_SIZE = Math.min(1024, Math.max(256, Math.ceil(cropSize)));
+    const canvas = document.createElement('canvas');
+    canvas.width = OUT_SIZE;
+    canvas.height = OUT_SIZE;
+    const ctx = canvas.getContext('2d');
+
+    // We draw the source image scaled+translated so the crop region
+    // lands at (0,0) → (OUT_SIZE, OUT_SIZE) of the canvas. Use the
+    // already-loaded <img> element rather than a fresh fetch.
+    const sourceImg = wrap.querySelector('img');
+    if (!sourceImg) return null;
+
+    // Circular clip so the decal alpha matches the ring shape.
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(OUT_SIZE / 2, OUT_SIZE / 2, OUT_SIZE / 2, 0, Math.PI * 2);
+    ctx.clip();
+    // drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh) — extracts a
+    // sub-rect of the source and stretches it into the canvas.
+    ctx.drawImage(
+      sourceImg,
+      cropX, cropY, cropSize, cropSize,
+      0, 0, OUT_SIZE, OUT_SIZE,
+    );
+    ctx.restore();
+
+    return canvas.toDataURL('image/png');
+  }
+
+  /* 3D-button handler. Three states:
+     • No alignment saved yet  → toast "Align first" and bail.
+     • Currently in 3D view    → flip back to 2D.
+     • Crop saved, in 2D       → flip into 3D using the cached decal. */
+  function on3DToggle() {
+    if (view === '3d') { setView('2d'); return; }
+    if (!decalDataUrl) {
+      toast?.warning?.('Align the image first to set the print area', { tone: 'warning' });
+      return;
+    }
+    setView('3d');
+  }
+
   const onCopy = async () => {
     try {
       await navigator.clipboard.writeText(effectiveUrl);
@@ -320,6 +422,24 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
             userSelect: 'none',
           }}
         >
+          {/* 3D view — only mounts when the user has saved an alignment
+              crop AND clicked the 3D button. Replaces the entire 2D
+              preview content; tap 3D again to flip back. */}
+          {view === '3d' && decalDataUrl && (
+            <GolfballViewer
+              decalDataUrl={decalDataUrl}
+              onError={() => {
+                toast?.error?.('Failed to load 3D viewer');
+                setView('2d');
+              }}
+            />
+          )}
+
+          {/* Everything below is the 2D experience — loading overlay,
+              image+viewport, alignment overlay, size/zoom chips, and
+              zoom-control cluster. Gated so the 3D canvas above can
+              own the wrapper area without competing controls. */}
+          {view === '2d' && (<>
           {/* Loading overlay — shows while the image is being decoded. */}
           {status === 'loading' && (
             <div style={{
@@ -385,9 +505,10 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                 />
                 <IconBtn
                   size="sm"
-                  tooltip="View in 3D (coming soon)"
+                  tooltip={view === '3d' ? 'Back to image' : (decalDataUrl ? 'View in 3D' : 'Align first to enable 3D')}
                   icon={<CubeIcon />}
-                  onClick={() => toast?.info?.('3D view — coming soon', { tone: 'info' })}
+                  active={view === '3d'}
+                  onClick={on3DToggle}
                 />
               </div>
 
@@ -457,6 +578,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
               </div>
             </>
           )}
+          </>)}
         </div>
 
         {/* Decode error — only when a real URL was passed AND it failed.
@@ -525,8 +647,17 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                   status="brand"
                   icon={<I.check />}
                   onClick={() => {
+                    // Snapshot the crop NOW (before we close align mode
+                    // and the overlay unmounts) and stash it for the 3D
+                    // viewer to consume on next press of the 3D button.
+                    const url = captureAlignment();
                     setAligning(false);
-                    toast?.success?.('Alignment saved');
+                    if (url) {
+                      setDecalDataUrl(url);
+                      toast?.success?.('Alignment saved — open 3D to preview');
+                    } else {
+                      toast?.warning?.('Could not capture alignment crop', { tone: 'warning' });
+                    }
                   }}
                 >
                   Save
