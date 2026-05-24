@@ -85,6 +85,33 @@ export const DEV_SETTINGS = [
     default: 0,
     min:     -180, max: 180, step: 1,
   },
+  /* ── Per-modal draggable mode ─────────────────────────────────
+     Each wired modal exposes a `<name>.draggable` flag. When ON, the
+     modal is a click-through tool window the user can fling around
+     with physics. When OFF, it's a centered classic modal with a
+     solid backdrop — click outside to close. */
+  {
+    key:     'marginCalc.draggable',
+    label:   'Margin Calculator: draggable mode',
+    desc:    'When on, the Margin Calculator is a draggable tool window with a click-through backdrop. When off, it sits centered with a solid backdrop that closes on outside-click.',
+    type:    'bool',
+    default: true,
+  },
+  {
+    key:     'imageViewer.draggable',
+    label:   'Image Viewer: draggable mode',
+    desc:    'When on, the Image Viewer is a draggable tool window. When off, it sits centered and closes on outside-click.',
+    type:    'bool',
+    default: false,
+  },
+  {
+    key:     'watchList.draggable',
+    label:   'Watch List: draggable mode',
+    desc:    'When on, the Watch List is a draggable tool window. When off, it sits centered and closes on outside-click.',
+    type:    'bool',
+    default: false,
+  },
+
   /* ── Watch list housekeeping ──────────────────────────────────
      Completed items auto-purge after N days so the "Completed"
      filter doesn't grow forever. Counted from each item's doneAt

@@ -159,6 +159,7 @@ export function WatchList({ onClosed, bindClose }) {
 
   // Auto-delete completed items after N days (0 = keep forever).
   const autoDeleteDays = Number(useDevSetting('watchList.autoDeleteCompletedDays') ?? 5);
+  const draggable = useDevSetting('watchList.draggable') ?? false;
 
   // Load + subscribe + prune stale completed items.
   useEffect(() => {
@@ -287,7 +288,13 @@ export function WatchList({ onClosed, bindClose }) {
     : `${counts.active} active${completedToday > 0 ? ` · ${completedToday} completed today` : ''}`;
 
   return (
-    <FloatingPanel width={560} backdrop onClose={onClosed} bindClose={bindClose}>
+    <FloatingPanel
+      width={560}
+      backdrop
+      draggable={draggable}
+      onClose={onClosed}
+      bindClose={bindClose}
+    >
       <ModalHeader
         accent
         icon={<I.eye size={14} />}

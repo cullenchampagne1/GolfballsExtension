@@ -5,26 +5,27 @@ import { T, FloatingPanelContext } from '../shared.jsx';
 import { Throwable } from './Throwable.jsx';
 
 /**
- * FloatingPanel — a draggable, screen-positioned panel for injected tools
- * (margin calculator, call-log panel, etc.). Unlike a centered modal it
- * floats over the page: the dim backdrop is click-through, so the page
- * underneath stays usable.
+ * FloatingPanel — a screen-positioned modal with two behavior modes.
  *
- * Drag it by any ModalHeader rendered inside it. Closes on Escape or the
- * header's close button — both play the exit animation.
+ *   draggable = true  (default, the original "tool window" mode)
+ *     • Drag by any ModalHeader rendered inside (via Throwable physics)
+ *     • Click-through backdrop tint — page underneath stays usable
+ *     • Closes on Escape or the header close button
+ *
+ *   draggable = false (classic centered modal)
+ *     • Centered in the viewport, NOT draggable
+ *     • Solid backdrop captures pointer events — click anywhere outside
+ *       the modal to close (animated)
+ *     • Closes on Escape or backdrop click
  *
  * Props:
- *   width     intrinsic px width (clamped to the viewport)   · default 480
- *   backdrop  show the dim + blur scrim (click-through)      · default true
- *   onClose   called once the close animation finishes (unmount here)
- *   bindClose optional — receives the animated-close fn, so callers (e.g. a
- *             keyboard shortcut) can trigger a graceful close from outside
- */
-/**
- * Physics knobs forwarded straight to Throwable. Exposed on FloatingPanel
- * so callers (and the playground) can tune the feel per-modal — a
- * margin calculator might want a heavy puck, a tiny info modal something
- * snappier. See <Throwable> for what each value does.
+ *   width      intrinsic px width (clamped to the viewport)   · default 480
+ *   backdrop   show the dim scrim                              · default true
+ *   draggable  enables drag-anywhere + click-through backdrop  · default true
+ *   onClose    called once the close animation finishes (unmount here)
+ *   bindClose  optional — receives the animated-close fn so callers can
+ *              trigger a graceful close from outside (keyboard shortcuts etc.)
+ *   physics    optional Throwable-knob overrides (ignored when !draggable)
  */
 const DEFAULT_PHYSICS = {
   friction: 0.97,
@@ -33,8 +34,44 @@ const DEFAULT_PHYSICS = {
   throwScale: 0.55,
 };
 
+/* Shared modal-card visual — same surface, border, radius, and
+   font lockdown whether we're inside Throwable or a centered wrapper. */
+function ModalCard({ cssWidth, children }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95, transition: T.base }}
+      transition={T.bounce}
+      style={{
+        // `all: revert-layer` resets every inherited / browser-default
+        // property to its un-styled state BEFORE our own styles paint
+        // on top. Critical for content-script injection: host pages
+        // like golfballs.com ship aggressive resets (e.g.
+        // `* { border-radius: 0 !important }` in some legacy CSS)
+        // that would otherwise flatten our rounded corners + inputs.
+        all: 'revert-layer',
+        width: cssWidth,
+        maxHeight: 'calc(100vh - 32px)',
+        background: 'var(--gb-surface-canvas)',
+        border: '1px solid var(--gb-border-default)',
+        borderRadius: 'var(--gb-r-lg)',
+        boxShadow: 'var(--gb-shadow-modal)',
+        overflow: 'hidden',
+        display: 'flex', flexDirection: 'column',
+        fontFamily: 'var(--gb-font-sans)',
+        fontSize: 13,
+        lineHeight: 1.4,
+        color: 'var(--gb-text-secondary)',
+      }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 export function FloatingPanel({
-  children, width = 480, backdrop = true, onClose, bindClose,
+  children, width = 480, backdrop = true, draggable = true, onClose, bindClose,
   // Per-modal physics override. Merged over DEFAULT_PHYSICS so the
   // caller only has to set what they want to change.
   physics,
@@ -87,72 +124,51 @@ export function FloatingPanel({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
+            onClick={!draggable ? requestClose : undefined}
             style={{
               position: 'fixed', inset: 0, zIndex: 999990,
-              pointerEvents: 'none',
-              // Tint only, no blur. FloatingPanel's whole reason for existing
-              // is that the page underneath stays readable.
+              // Draggable mode = click-through so the page stays usable.
+              // Centered modal mode = click-to-close: capture pointer events
+              // and route any click on the backdrop to the close handler.
+              pointerEvents: draggable ? 'none' : 'auto',
               background: backdrop ? 'var(--gb-backdrop)' : 'transparent',
             }}
           />
           <FloatingPanelContext.Provider value={ctx}>
-            {/* Throwable owns position — physics loop integrates velocity,
-                bounces off viewport walls, decays via friction. The
-                modal's own mount/unmount animation (scale+fade) wraps
-                INSIDE Throwable so the panel pops into existence at
-                its current physics-driven position without arguing with
-                the outer translate. */}
-            <Throwable
-              dragHandle={dragHandleRef}
-              friction={phys.friction}
-              restitution={phys.restitution}
-              maxSpeed={phys.maxSpeed}
-              throwScale={phys.throwScale}
-              style={{ zIndex: 999999, pointerEvents: 'auto' }}
-            >
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95, transition: T.base }}
-                transition={T.bounce}
+            {draggable ? (
+              /* Throwable owns position — physics loop integrates velocity,
+                 bounces off viewport walls, decays via friction. The
+                 modal's own mount/unmount animation (scale+fade) wraps
+                 INSIDE Throwable so the panel pops into existence at
+                 its current physics-driven position without arguing with
+                 the outer translate. */
+              <Throwable
+                dragHandle={dragHandleRef}
+                friction={phys.friction}
+                restitution={phys.restitution}
+                maxSpeed={phys.maxSpeed}
+                throwScale={phys.throwScale}
+                style={{ zIndex: 999999, pointerEvents: 'auto' }}
+              >
+                <ModalCard cssWidth={cssWidth}>{children}</ModalCard>
+              </Throwable>
+            ) : (
+              /* Centered, non-draggable. Pointer events:none on the
+                 wrapper so the backdrop catches outside-clicks; the
+                 card itself re-enables them. */
+              <div
                 style={{
-                  // `all: revert-layer` resets every inherited / browser-default
-                  // property to its un-styled state BEFORE our own styles paint
-                  // on top. Critical for content-script injection: host pages
-                  // like golfballs.com ship aggressive resets (e.g.
-                  // `* { border-radius: 0 !important }` in some legacy CSS)
-                  // that would otherwise flatten our rounded corners + inputs.
-                  // revert-layer is safer than `all: initial` because it lets
-                  // the user-agent default come through (font rendering, focus
-                  // outlines on inner controls, etc.) which we then override
-                  // explicitly per-property.
-                  all: 'revert-layer',
-                  width: cssWidth,
-                  maxHeight: 'calc(100vh - 32px)',
-                  background: 'var(--gb-surface-canvas)',
-                  border: '1px solid var(--gb-border-default)',
-                  // r-lg (10px) keeps narrow FloatingPanels (~360px) reading
-                  // as a tight tool window rather than the pill-rounded
-                  // r-xl (14px) which over-softens at smaller widths.
-                  borderRadius: 'var(--gb-r-lg)',
-                  boxShadow: 'var(--gb-shadow-modal)',
-                  overflow: 'hidden',
-                  display: 'flex', flexDirection: 'column',
-                  fontFamily: 'var(--gb-font-sans)',
-                  // Lock font metrics so the modal renders identically across
-                  // host pages. Without this, any unstyled text inside the
-                  // modal inherits the host's font-size + line-height — e.g.
-                  // an empty playground.html with browser-default 16px makes
-                  // the modal look noticeably bigger than the same modal
-                  // mounted on a busy site that sets body { font-size: 12px }.
-                  fontSize: 13,
-                  lineHeight: 1.4,
-                  color: 'var(--gb-text-secondary)',
+                  position: 'fixed', inset: 0, zIndex: 999999,
+                  pointerEvents: 'none',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: 16,
                 }}
               >
-                {children}
-              </motion.div>
-            </Throwable>
+                <div style={{ pointerEvents: 'auto' }}>
+                  <ModalCard cssWidth={cssWidth}>{children}</ModalCard>
+                </div>
+              </div>
+            )}
           </FloatingPanelContext.Provider>
         </>
       )}
