@@ -83,6 +83,11 @@ export function GolfballViewer({ decalDataUrl, onError }) {
   // 'loading' until Three.js + the model finish; then 'ready'. 'error'
   // surfaces a basic message instead of an empty canvas.
   const [status, setStatus] = useState('loading');
+  // Live snapshot of camera + controls state for the debug HUD.
+  // Updated by the render loop (throttled to ~10Hz) so React isn't
+  // re-rendering 60 times a second just to paint readouts.
+  const [debug, setDebug] = useState(null);
+  const [debugCopied, setDebugCopied] = useState(false);
 
   useEffect(() => {
     let disposed = false;
@@ -224,10 +229,32 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         controls.saveState();
 
         // ── Render loop ────────────────────────────────────────
+        // Debug HUD pulls camera/target state once every ~100ms so React
+        // re-renders are bounded; the WebGL frame loop is independent.
+        let lastDebugTs = 0;
         const render = () => {
           if (disposed) return;
           controls.update();
           renderer.render(scene, camera);
+          const now = performance.now();
+          if (now - lastDebugTs > 100) {
+            lastDebugTs = now;
+            // Spherical (azimuth, polar, radius) is how OrbitControls
+            // really thinks about the camera — easier to dial in than
+            // raw x/y/z. Distance is the same as spherical.radius.
+            const offset = camera.position.clone().sub(controls.target);
+            const r = offset.length();
+            const polarDeg = Math.acos(Math.max(-1, Math.min(1, offset.y / r))) * 180 / Math.PI;
+            const azimuthDeg = Math.atan2(offset.x, offset.z) * 180 / Math.PI;
+            setDebug({
+              pos: [camera.position.x, camera.position.y, camera.position.z],
+              target: [controls.target.x, controls.target.y, controls.target.z],
+              dist: r,
+              azimuth: azimuthDeg,
+              polar: polarDeg,
+              radius: targetRadius,
+            });
+          }
           animationId = requestAnimationFrame(render);
         };
         render();
@@ -301,6 +328,68 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           fontSize: 12, color: 'var(--gb-error-fg)', textAlign: 'center', padding: 20,
         }}>
           Failed to load 3D viewer.
+        </div>
+      )}
+
+      {/* Debug HUD — top-left overlay showing the camera's current
+          position, target, distance, and orbit angles. Lets you orbit
+          the ball into a desired default framing and copy the values
+          straight back into the source. The copy payload is a JS-ready
+          snippet of camera.position.set + target.set so you can paste
+          directly into the GolfballViewer init code. */}
+      {debug && (
+        <div style={{
+          position: 'absolute', top: 8, left: 8, zIndex: 5,
+          padding: '6px 8px',
+          background: 'var(--gb-surface-modal)',
+          border: '1px solid var(--gb-border-default)',
+          borderRadius: 'var(--gb-r-sm)',
+          fontFamily: 'var(--gb-font-mono)',
+          fontSize: 9.5, lineHeight: 1.4,
+          color: 'var(--gb-text-secondary)',
+          pointerEvents: 'auto',
+          minWidth: 180,
+          display: 'flex', flexDirection: 'column', gap: 2,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{
+              fontWeight: 700, fontSize: 9, letterSpacing: 0.4,
+              textTransform: 'uppercase', color: 'var(--gb-text-muted)',
+            }}>Camera debug</span>
+            <span style={{ flex: 1 }} />
+            <button
+              type="button"
+              onClick={() => {
+                const r = debug.radius;
+                const snippet =
+                  `// targetRadius = ${r.toFixed(1)}\n` +
+                  `camera.position.set(${debug.pos.map((n) => n.toFixed(1)).join(', ')});\n` +
+                  `controls.target.set(${debug.target.map((n) => n.toFixed(1)).join(', ')});\n` +
+                  `// orbit: azimuth ${debug.azimuth.toFixed(1)}°, polar ${debug.polar.toFixed(1)}°, dist ${debug.dist.toFixed(1)}`;
+                navigator.clipboard?.writeText(snippet)
+                  .then(() => { setDebugCopied(true); setTimeout(() => setDebugCopied(false), 1500); })
+                  .catch(() => {});
+              }}
+              style={{
+                fontFamily: 'var(--gb-font-mono)', fontSize: 9, fontWeight: 700,
+                background: debugCopied ? 'var(--gb-success-tint-medium)' : 'var(--gb-fill-soft)',
+                color: debugCopied ? 'var(--gb-success-fg)' : 'var(--gb-text-secondary)',
+                border: '1px solid ' + (debugCopied ? 'var(--gb-success-tint-border)' : 'var(--gb-border-default)'),
+                borderRadius: 'var(--gb-r-xs)',
+                padding: '1px 6px', cursor: 'pointer',
+                textTransform: 'uppercase', letterSpacing: 0.4,
+              }}
+            >{debugCopied ? 'copied' : 'copy'}</button>
+          </div>
+          {/* Stripped down to the values useful for tuning the default
+              camera framing. Multiply-by-r values give you the value in
+              "radius units" which is how the source code expresses
+              camera.position.set (e.g. targetRadius * 1.8). */}
+          <div>pos    [{debug.pos.map((n) => (n / debug.radius).toFixed(2) + 'r').join(', ')}]</div>
+          <div>target [{debug.target.map((n) => (n / debug.radius).toFixed(2) + 'r').join(', ')}]</div>
+          <div>dist   {(debug.dist / debug.radius).toFixed(2)}r</div>
+          <div>az     {debug.azimuth.toFixed(1)}°</div>
+          <div>polar  {debug.polar.toFixed(1)}°</div>
         </div>
       )}
     </div>
