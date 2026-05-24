@@ -537,15 +537,19 @@ function AlignmentOverlay() {
           + max-width / max-height). The 9999px box-shadow fills the
           entire surrounding area with dim black so the ring's interior
           is the only un-dimmed region — a "spotlight" mask without SVG. */}
+      {/* Ring sized by HEIGHT only (the wrapper's shorter axis since
+          the modal is wider than tall). Width follows aspect-ratio 1
+          for a true circle — setting both width AND height in % would
+          have given an oval because the wrapper is non-square. */}
       <motion.div
         initial={{ scale: 0.85, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.85, opacity: 0 }}
         transition={{ type: 'spring', stiffness: 340, damping: 26 }}
         style={{
-          width: '60%', height: '60%',
-          maxWidth: 240, maxHeight: 240,
+          height: '70%',
           aspectRatio: '1 / 1',
+          maxWidth: 240, maxHeight: 240,
           borderRadius: '50%',
           border: '2px solid var(--gb-brand-label)',
           boxShadow: `0 0 0 9999px rgba(0,0,0,.55)`,
