@@ -265,6 +265,9 @@ function DraggablePanel({ title, initial = { top: 14, left: 14 }, width = 200, c
 function PlaygroundSurface() {
   // Single mounted modal at a time. Value is the registry id, or null.
   const [mounted, setMounted] = useState(null);
+  // Carries the image (if any) the user loaded in ImagePreview when
+  // they click Submit Proof — handed to SubmitProof on the swap.
+  const [proofImage, setProofImage] = useState(null);
   const notify = useSettingNotification();
   const toast = useToast();
 
@@ -415,12 +418,29 @@ function PlaygroundSurface() {
           />
         )}
         {mounted === 'submitProof' && (
-          /* Mounted with no fields pre-filled — mirrors how the modal
-             opens when invoked from a page that doesn't expose the
-             order / customer info. */
-          <SubmitProof
-            key="submitProof"
+          /* Entry point is ImagePreview, NOT SubmitProof directly. The
+             user drops / pastes / skips an image, then clicks Submit
+             Proof inside ImagePreview, which hands off to SubmitProof
+             via onLaunchSubmitProof. ImagePreview opens with no url →
+             drop-zone view. */
+          <ImagePreview
+            key="submitProof-entry"
             onClosed={() => setMounted(null)}
+            onLaunchSubmitProof={(payload) => {
+              // Swap to SubmitProof with whatever image (if any) the
+              // user had loaded. Mount key differs from the playground
+              // imageViewer entry so AnimatePresence treats it as a
+              // distinct modal lifecycle.
+              setProofImage(payload || null);
+              setMounted('submitProofForm');
+            }}
+          />
+        )}
+        {mounted === 'submitProofForm' && (
+          <SubmitProof
+            key="submitProofForm"
+            image={proofImage}
+            onClosed={() => { setMounted(null); setProofImage(null); }}
           />
         )}
       </AnimatePresence>

@@ -115,9 +115,19 @@ export function ImagePreview({
   // provided, the user can paste one into the URL input that appears
   // above the preview surface, or drop a file directly. No bundled
   // fallback — empty = drop-zone view.
+  //
+  // Two pastedUrl states: `pastedUrlDraft` is what the user is typing
+  // (no fetch yet), `pastedUrl` is what the image actually loads. We
+  // only commit when the user blurs the field or presses Enter, so
+  // partial URLs don't fire a load on every keystroke.
+  const [pastedUrlDraft, setPastedUrlDraft] = useState('');
   const [pastedUrl, setPastedUrl] = useState('');
   const effectiveUrl = url || pastedUrl || '';
   const usingFallback = false;
+  const commitPastedUrl = () => {
+    const v = pastedUrlDraft.trim();
+    if (v && v !== pastedUrl) setPastedUrl(v);
+  };
   const toast = useToast();
   const draggable = useDevSetting('imageViewer.draggable') ?? false;
 
@@ -803,9 +813,13 @@ export function ImagePreview({
             file onto the preview surface below. */}
         {!effectiveUrl && (
           <Input
-            value={pastedUrl}
-            onChange={setPastedUrl}
-            placeholder="Paste an image URL…"
+            value={pastedUrlDraft}
+            onChange={setPastedUrlDraft}
+            onBlur={commitPastedUrl}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); commitPastedUrl(); }
+            }}
+            placeholder="Paste an image URL and press Enter…"
             leading={<I.search size={11} />}
           />
         )}
