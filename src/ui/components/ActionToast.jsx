@@ -46,6 +46,7 @@ export function ActionToast({
   size = 'md',
 }) {
   const handlePrimary = () => {
+    console.log('[ActionToast] handlePrimary called, onPrimary:', typeof onPrimary);
     if (onPrimary) onPrimary();
     onDismiss?.();
   };
