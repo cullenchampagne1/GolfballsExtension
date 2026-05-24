@@ -1652,7 +1652,10 @@ function SwapPopover({ pick, wrapRef, swapCount, onPreview, onCancel, onApply })
         position: 'fixed',
         left: pos.left, top: pos.top,
         width: POPOVER_W,
-        zIndex: 2147483600,
+        // Stay BELOW the DS ColorPickerPopover (z 2147483500) so when
+        // the user opens it from our "new color" swatch, it floats on
+        // top of us instead of behind.
+        zIndex: 2147483400,
         padding: 10,
         background: 'var(--gb-surface-modal)',
         border: '1px solid var(--gb-border-default)',
