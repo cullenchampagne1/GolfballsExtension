@@ -5,7 +5,6 @@ import {
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
-import { ImagePreview } from './ImagePreview.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    SubmitProof — React port of the proof-submission flow that used
@@ -157,13 +156,16 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
   const forceMock = useDevSetting('submitProof.useMock') ?? false;
   const useMock   = forceMock || !hasExtensionContext();
 
-  // ── Top-level state machine ───────────────────────────────
-  // 'awaiting-image' — no image → mount ImagePreview first
-  // 'form'           — main proof form
-  // 'submitting'     — sending requests
-  // 'results'        — generated links panel
-  const [stage, setStage] = useState(image?.dataUrl || image?.url ? 'form' : 'awaiting-image');
+  // Stage drives the footer button + results panel. We open straight
+  // to the form regardless of whether an image was passed — the source-
+  // image field handles both "you have one" and "drop one here".
+  //   'form'        — main proof form (default)
+  //   'submitting'  — sending requests
+  //   'results'     — generated links panel
+  const [stage, setStage] = useState('form');
   const [imageData, setImageData] = useState(image || null);
+  // URL paste input shown only while there's no image attached.
+  const [imageUrlInput, setImageUrlInput] = useState('');
 
   // Form fields.
   const [orderId, setOrderId]       = useState(orderIdProp || '');
@@ -200,9 +202,11 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
   const [submitProgress, setSubmitProgress] = useState({ current: 0, total: 0, item: '' });
   const [results, setResults] = useState([]);
 
-  // Fire async loads when we enter 'form' (skip during 'awaiting-image').
+  // Fire async loads on mount.
   useEffect(() => {
-    if (stage !== 'form') return;
+    // (no-op gate kept so the effect signature stays clear if we add
+    // more stages later)
+    if (stage === 'submitting' || stage === 'results') return;
     let alive = true;
     (async () => {
       // ── Dropdowns (reps + artists) ──
@@ -404,25 +408,6 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
     bindClose?.(fn);
   }, [bindClose]);
 
-  // ── awaiting-image stage: open ImagePreview in picker mode ──
-  if (stage === 'awaiting-image') {
-    return (
-      <ImagePreview
-        pickerMode
-        onUseImage={(picked) => {
-          setImageData(picked);
-          setStage('form');
-        }}
-        onSkipImage={() => {
-          setImageData(null);
-          setStage('form');
-        }}
-        onClosed={onClosed}
-        bindClose={bindClose}
-      />
-    );
-  }
-
   // ── Main form ──
   const repOptions = (reps || []).map((r) => ({ id: r.val, label: r.txt }));
   const artistOptions = (artists || []).map((a) => ({ id: a.val, label: a.txt }));
@@ -470,38 +455,33 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           padding: 16,
           display: 'flex', flexDirection: 'column', gap: 10,
         }}>
-          {/* Image preview chip — only when we have one. */}
-          {(imageData?.dataUrl || imageData?.url) && (
-            <Field label="Source image">
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: 8,
-                border: '1px solid var(--gb-border-default)',
-                borderRadius: 'var(--gb-r-sm)',
-                background: 'var(--gb-surface-1)',
-              }}>
-                <img
-                  src={imageData.dataUrl || imageData.url}
-                  alt=""
-                  style={{
-                    width: 48, height: 48, objectFit: 'cover',
-                    borderRadius: 'var(--gb-r-xs)',
-                    border: '1px solid var(--gb-border-subtle)',
-                    flexShrink: 0,
-                  }}
-                />
-                <span style={{
-                  flex: 1, fontSize: 11,
-                  color: 'var(--gb-text-tertiary)',
-                  fontFamily: 'var(--gb-font-mono)',
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>
-                  {imageData.dataUrl ? 'Custom image · attached' : (imageData.url || '')}
-                </span>
-                <Btn size="sm" variant="ghost" onClick={() => setImageData(null)}>Remove</Btn>
-              </div>
-            </Field>
-          )}
+          {/* Source image — chip when attached, drop-zone + URL input
+              when not. Submitting without an image is fine; we just
+              don't attach `sourceImage` to the payload. */}
+          <Field
+            label="Source image"
+            hint={imageData ? undefined : 'Optional — drop a file or paste a URL. Submit without one is fine.'}
+          >
+            {imageData ? (
+              <SourceImageChip
+                imageData={imageData}
+                onRemove={() => setImageData(null)}
+              />
+            ) : (
+              <SourceImageDrop
+                urlInput={imageUrlInput}
+                onUrlInput={setImageUrlInput}
+                onAttachUrl={() => {
+                  const v = imageUrlInput.trim();
+                  if (!v) return;
+                  setImageData({ url: v });
+                  setImageUrlInput('');
+                }}
+                onAttachFile={(dataUrl) => setImageData({ dataUrl })}
+                onError={(msg) => toast?.error?.(msg)}
+              />
+            )}
+          </Field>
 
           {/* Multi-select items */}
           <Field
@@ -737,6 +717,146 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
 /* ───────────────────────────────────────────────────────────────
    Subcomponents
 ─────────────────────────────────────────────────────────────── */
+
+/* SourceImageChip — compact attached-image row with a thumbnail,
+   short caption (dataUrl vs URL), and Remove. */
+function SourceImageChip({ imageData, onRemove }) {
+  const src = imageData.dataUrl || imageData.url;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: 8,
+      border: '1px solid var(--gb-border-default)',
+      borderRadius: 'var(--gb-r-sm)',
+      background: 'var(--gb-surface-1)',
+    }}>
+      <img
+        src={src}
+        alt=""
+        style={{
+          width: 48, height: 48, objectFit: 'cover',
+          borderRadius: 'var(--gb-r-xs)',
+          border: '1px solid var(--gb-border-subtle)',
+          flexShrink: 0,
+        }}
+      />
+      <span style={{
+        flex: 1, fontSize: 11,
+        color: 'var(--gb-text-tertiary)',
+        fontFamily: 'var(--gb-font-mono)',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {imageData.dataUrl ? 'Custom image · attached' : (imageData.url || '')}
+      </span>
+      <Btn size="sm" variant="ghost" onClick={onRemove}>Remove</Btn>
+    </div>
+  );
+}
+
+/* SourceImageDrop — drag-and-drop target + URL paste input. Lets
+   the user attach an image when SubmitProof was opened without one. */
+function SourceImageDrop({ urlInput, onUrlInput, onAttachUrl, onAttachFile, onError }) {
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handleFile = (file) => {
+    if (!file?.type?.startsWith('image/')) {
+      onError?.('That doesn’t look like an image file');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => onAttachFile?.(reader.result);
+    reader.onerror = () => onError?.('Could not read that file');
+    reader.readAsDataURL(file);
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div
+        onDragOver={(e) => {
+          if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'copy';
+        }}
+        onDragEnter={(e) => {
+          if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return;
+          e.preventDefault();
+          setDragActive(true);
+        }}
+        onDragLeave={(e) => {
+          // Only clear when leaving the drop target itself, not children.
+          if (e.currentTarget.contains(e.relatedTarget)) return;
+          setDragActive(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragActive(false);
+          const file = Array.from(e.dataTransfer?.files || []).find((f) => f.type.startsWith('image/'));
+          if (file) handleFile(file);
+        }}
+        onClick={() => fileInputRef.current?.click()}
+        style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          gap: 6,
+          padding: '22px 16px',
+          border: '1.5px dashed ' + (dragActive ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
+          borderRadius: 'var(--gb-r-md)',
+          background: dragActive
+            ? 'var(--gb-brand-tint-soft)'
+            : 'var(--gb-surface-1)',
+          color: dragActive ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
+          cursor: 'pointer',
+          textAlign: 'center',
+          transition: 'border-color .15s, background-color .15s, color .15s',
+        }}
+      >
+        <UploadIcon />
+        <div style={{ fontSize: 12, fontWeight: 600 }}>
+          {dragActive ? 'Drop to attach' : 'Drop an image here, or click to browse'}
+        </div>
+        <div style={{ fontSize: 10.5, color: 'var(--gb-text-ghost)' }}>
+          PNG, JPG, GIF, WEBP
+        </div>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleFile(file);
+            e.target.value = ''; // allow re-selecting the same file
+          }}
+        />
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <Input
+          value={urlInput}
+          onChange={onUrlInput}
+          placeholder="…or paste an image URL"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); onAttachUrl?.(); }
+          }}
+        />
+        <Btn
+          size="sm"
+          variant="secondary"
+          onClick={onAttachUrl}
+          disabled={!urlInput.trim()}
+        >Attach</Btn>
+      </div>
+    </div>
+  );
+}
+
+const UploadIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="17 8 12 3 7 8" />
+    <line x1="12" y1="3" x2="12" y2="15" />
+  </svg>
+);
 
 function ItemMultiSelect({ items, counts, error, onAdd, onRemove, onTouch }) {
   const [open, setOpen] = useState(false);

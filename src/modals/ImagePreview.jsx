@@ -106,31 +106,14 @@ const ImageIcon = (p) => (
 
 export function ImagePreview({
   url, itemLink, onClosed, bindClose,
-  // ── picker mode ───────────────────────────────────────────
-  // When SubmitProof opens this modal first (no image to attach yet),
-  // it passes:
-  //   pickerMode    — switches the "Submit Proof" CTA into
-  //                   "Use this image" + "Skip"
-  //   onUseImage    — called with { dataUrl?, url? } when the user
-  //                   accepts the current image (edited if they've
-  //                   tweaked it, otherwise the original URL)
-  //   onSkipImage   — called when the user wants to proceed without
-  //                   attaching anything
-  pickerMode = false,
-  onUseImage,
-  onSkipImage,
-  // When opened by the normal flow, the "Submit Proof" CTA can be
-  // routed back to a parent that wants to mount SubmitProof itself
-  // (typically the content script). When omitted, falls back to the
-  // legacy stub toast.
+  // When provided, the Submit Proof button routes through this
+  // callback instead of firing the stub toast — lets a content-script
+  // wrapper mount the real SubmitProof modal with the current image.
   onLaunchSubmitProof,
 }) {
   // Resolve which image to render. A URL prop wins; otherwise we fall
   // back to the bundled sample so the modal is fully usable empty.
-  // In picker mode the user can paste a URL into the input above the
-  // preview — that becomes the live image until they Use / Skip.
-  const [pastedUrl, setPastedUrl] = useState('');
-  const effectiveUrl = pastedUrl || url || resolveFallbackUrl();
+  const effectiveUrl = url || resolveFallbackUrl();
   const usingFallback = !url;
   const toast = useToast();
   const draggable = useDevSetting('imageViewer.draggable') ?? false;
@@ -740,20 +723,6 @@ export function ImagePreview({
     toast?.info?.('Submit Proof — coming soon', { tone: 'info' });
   };
 
-  // Picker-mode acceptance — hand the current image (edited if any) up
-  // to the SubmitProof modal that mounted us. Priority:
-  //   editedDataUrl > pastedUrl > url prop > fallback.
-  const onPickerUse = () => {
-    if (editedDataUrl) {
-      onUseImage?.({ dataUrl: editedDataUrl });
-    } else if (pastedUrl) {
-      onUseImage?.({ url: pastedUrl });
-    } else if (url) {
-      onUseImage?.({ url });
-    } else {
-      onUseImage?.({ url: effectiveUrl });
-    }
-  };
 
   /* 3D snapshot helpers. The GolfballViewer exposes .snapshot()
      which renders the ball ONLY (no walls, transparent background)
@@ -823,25 +792,6 @@ export function ImagePreview({
       />
 
       <div style={{ padding: '16px 16px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-        {/* Picker-mode URL paste row — only when the SubmitProof modal
-            (or any picker host) is asking us for an image. Lets the user
-            drop a file OR paste a link. Drag/drop is already wired into
-            the wrapper below. */}
-        {pickerMode && (
-          <div style={{ display: 'flex', gap: 6 }}>
-            <Input
-              value={pastedUrl}
-              onChange={setPastedUrl}
-              placeholder="Paste image URL…"
-              leading={<I.search size={11} />}
-              style={{ flex: 1 }}
-            />
-            {pastedUrl && (
-              <Btn size="sm" variant="ghost" onClick={() => setPastedUrl('')}>Clear</Btn>
-            )}
-          </div>
-        )}
 
         {/* Preview surface — fixed-height dark wrapper with the image
             zoomed/panned inside. Zoom controls float bottom-right;
@@ -1368,43 +1318,16 @@ export function ImagePreview({
           </Btn>
         </div>
 
-        {/* Bottom CTA — picker mode swaps in "Use this image" + Skip
-            so the SubmitProof parent can take over with the chosen
-            image. Otherwise it's the standard Submit Proof launcher. */}
-        {pickerMode ? (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Btn
-              size="sm"
-              variant="ghost"
-              onClick={onSkipImage}
-              style={{ flex: 0 }}
-            >
-              Skip — no image
-            </Btn>
-            <div style={{ flex: 1 }} />
-            <Btn
-              size="sm"
-              variant="tinted"
-              status="brand"
-              icon={<I.check />}
-              onClick={onPickerUse}
-              disabled={status !== 'ready'}
-            >
-              Use this image
-            </Btn>
-          </div>
-        ) : (
-          <Btn
-            full
-            size="sm"
-            variant="tinted"
-            status="brand"
-            icon={<I.send />}
-            onClick={onSubmitProof}
-          >
-            Submit Proof
-          </Btn>
-        )}
+        <Btn
+          full
+          size="sm"
+          variant="tinted"
+          status="brand"
+          icon={<I.send />}
+          onClick={onSubmitProof}
+        >
+          Submit Proof
+        </Btn>
       </div>
       </div>
     </FloatingPanel>
