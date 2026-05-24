@@ -9,6 +9,7 @@ import {
 } from '../ui/index.js';
 import { MarginCalc } from '../modals/MarginCalc.jsx';
 import { ImagePreview } from '../modals/ImagePreview.jsx';
+import { WatchList } from '../modals/WatchList.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    playground.jsx — in-extension modal playground.
@@ -30,7 +31,7 @@ const MODAL_REGISTRY = [
   { id: 'margin',       label: 'Margin',          icon: 'calc',    wired: true  },
   { id: 'charge',       label: 'Charge',          icon: 'card',    wired: false },
   { id: 'orderEdit',    label: 'Order Edit',      icon: 'edit',    wired: false },
-  { id: 'watchList',    label: 'Watch List',      icon: 'eye',     wired: false },
+  { id: 'watchList',    label: 'Watch List',      icon: 'eye',     wired: true  },
   { id: 'emailPreview', label: 'Email Preview',   icon: 'mail',    wired: false },
   { id: 'imageViewer',  label: 'Image Viewer',    icon: 'eye',     wired: true  },
   { id: 'submitProof',  label: 'Submit Proof',    icon: 'send',    wired: false },
@@ -41,6 +42,47 @@ const MODAL_REGISTRY = [
   { id: 'phoneFinder',  label: 'Phone Finder',    icon: 'search',  wired: false },
   { id: 'calendar',     label: 'Calendar',        icon: 'cog',     wired: false },
 ];
+
+/* Playground seed for the Watch List modal. Writes a spread of sample
+   items across all three entity types and all four urgency tiers so
+   the modal opens with its full visual surface populated. No-op if
+   the user already has items saved (don't clobber real data when
+   we're running inside the extension; harmless either way). */
+const WATCHLIST_STORAGE_KEY = 'watchList';
+function seedWatchListSamples() {
+  const hasChromeStorage = (() => {
+    try { return typeof chrome !== 'undefined' && !!chrome.storage?.local; }
+    catch { return false; }
+  })();
+
+  const now = Date.now();
+  const samples = [
+    { id: 'pg-1', entityType: 'order',   orderId: '802145', reason: 'Customer asked for proof revisions',         addedAt: now - 3 * 60 * 1000 },
+    { id: 'pg-2', entityType: 'contact', orderId: '4429',   reason: 'Waiting on logo upload',                      addedAt: now - 25 * 60 * 1000 },
+    { id: 'pg-3', entityType: 'order',   orderId: '802077', reason: 'Production hold — verify color match',        addedAt: now - 2.2 * 60 * 60 * 1000 },
+    { id: 'pg-4', entityType: 'account', orderId: '1187',   reason: 'Pending payment method on file',              addedAt: now - 4.5 * 60 * 60 * 1000 },
+    { id: 'pg-5', entityType: 'order',   orderId: '801993', reason: 'Rush — promised ship date is tomorrow',       addedAt: now - 6.5 * 60 * 60 * 1000 },
+    { id: 'pg-6', entityType: 'contact', orderId: '4517',   reason: 'Left voicemail, awaiting callback',           addedAt: now - 9 * 60 * 60 * 1000 },
+  ];
+
+  const apply = (existing) => {
+    if (existing && existing.length > 0) return;
+    if (hasChromeStorage) {
+      chrome.storage.local.set({ [WATCHLIST_STORAGE_KEY]: samples });
+    } else {
+      try { localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(samples)); } catch {}
+    }
+  };
+
+  if (hasChromeStorage) {
+    chrome.storage.local.get(WATCHLIST_STORAGE_KEY, (data) => apply(data?.[WATCHLIST_STORAGE_KEY]));
+  } else {
+    try {
+      const raw = localStorage.getItem(WATCHLIST_STORAGE_KEY);
+      apply(raw ? JSON.parse(raw) : null);
+    } catch { apply(null); }
+  }
+}
 
 /* Notification test pane registry — one entry per fire-button. Each entry's
    `run` receives the toast API and dispatches the matching variant with
@@ -229,7 +271,13 @@ function PlaygroundSurface() {
   });
 
   const launch = (entry) => {
-    if (entry.wired) { setMounted(entry.id); return; }
+    if (entry.wired) {
+      // Seed sample watchlist data on first open so the modal shows
+      // its full design instead of an empty state in the playground.
+      if (entry.id === 'watchList') seedWatchListSamples();
+      setMounted(entry.id);
+      return;
+    }
     notify.notify(`${entry.label} modal — coming soon`, { tone: 'info' });
   };
 
@@ -338,6 +386,12 @@ function PlaygroundSurface() {
              so the modal opens fully populated for design iteration. */
           <ImagePreview
             key="imageViewer"
+            onClosed={() => setMounted(null)}
+          />
+        )}
+        {mounted === 'watchList' && (
+          <WatchList
+            key="watchList"
             onClosed={() => setMounted(null)}
           />
         )}
