@@ -459,24 +459,38 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
             userSelect: 'none',
           }}
         >
-          {/* 3D view — only mounts when the user has saved an alignment
-              crop AND clicked the 3D button. Replaces the entire 2D
-              preview content; tap 3D again to flip back. */}
-          {view === '3d' && decalDataUrl && (
-            <GolfballViewer
-              decalDataUrl={decalDataUrl}
-              onError={() => {
-                toast?.error?.('Failed to load 3D viewer');
-                setView('2d');
-              }}
-            />
-          )}
-
-          {/* Everything below is the 2D experience — loading overlay,
-              image+viewport, alignment overlay, size/zoom chips, and
-              zoom-control cluster. Gated so the 3D canvas above can
-              own the wrapper area without competing controls. */}
-          {view === '2d' && (<>
+          {/* View crossfade — `mode="wait"` keeps only one view in the
+              DOM at a time, so the outgoing view finishes its exit
+              animation before the incoming view mounts. Without this
+              we'd see both rendered simultaneously mid-transition
+              (image + 3D canvas overlapping) which reads as a flash. */}
+          <AnimatePresence mode="wait" initial={false}>
+            {view === '3d' && decalDataUrl ? (
+              <motion.div
+                key="threed-view"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+                style={{ position: 'absolute', inset: 0 }}
+              >
+                <GolfballViewer
+                  decalDataUrl={decalDataUrl}
+                  onError={() => {
+                    toast?.error?.('Failed to load 3D viewer');
+                    setView('2d');
+                  }}
+                />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="twod-view"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+                style={{ position: 'absolute', inset: 0 }}
+              >
           {/* Loading overlay — shows while the image is being decoded. */}
           {status === 'loading' && (
             <div style={{
@@ -624,7 +638,9 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
               </div>
             </>
           )}
-          </>)}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Decode error — only when a real URL was passed AND it failed.
