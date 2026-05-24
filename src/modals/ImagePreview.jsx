@@ -815,8 +815,12 @@ export function ImagePreview({
         {/* URL paste row — shown only when there's no image attached.
             Lets the user paste a link as an alternative to dropping a
             file onto the preview surface below. */}
+        {/* URL paste row — fades out as soon as ANY image is loaded
+            (effectiveUrl from prop/paste OR editedDataUrl from a drop).
+            The previous gate only watched effectiveUrl, so dropped
+            files (which set editedDataUrl) didn't trigger the fade. */}
         <AnimatePresence initial={false}>
-          {!effectiveUrl && (
+          {!effectiveUrl && !editedDataUrl && (
             <motion.div
               key="url-paste"
               initial={{ opacity: 0, height: 0, marginBottom: -12 }}
