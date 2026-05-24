@@ -225,7 +225,11 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
     dragRef.current = null;
     try { e.currentTarget.releasePointerCapture?.(e.pointerId); } catch {}
   };
-  const onDoubleClick = () => {
+  const onDoubleClick = (e) => {
+    // Ignore double-clicks that originated on overlay controls — two
+    // rapid clicks on the zoom button were bubbling up and treating
+    // the wrapper as the dblclick target, snapping zoom back to 1x.
+    if (e.target?.closest?.('button, input, textarea, select, a')) return;
     // Toggle 1x ↔ 2x for a quick zoom-in shortcut.
     if (scaleRef.current !== 1 || txRef.current !== 0 || tyRef.current !== 0) {
       resetZoom();
@@ -585,22 +589,22 @@ function AlignmentOverlay({ onSubmit, onCancel }) {
           background: 'var(--gb-brand-label)', opacity: 0.4,
         }} />
       </motion.div>
-      {/* Submit / Cancel action bar — bottom-center of the overlay,
-          inside the dimmed area but with `pointerEvents:auto` so the
-          buttons stay clickable. Slides in shortly after the ring so
-          the controls don't pop in simultaneously with the spotlight. */}
+      {/* Submit / Cancel — small in-frame IconBtns at the bottom-right,
+          matching the zoom-control cluster's size + position language.
+          pointerEvents:auto re-enables clicks on the buttons inside the
+          otherwise pass-through overlay. */}
       <motion.div
-        initial={{ opacity: 0, y: 8 }}
+        initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 8 }}
+        exit={{ opacity: 0, y: 4 }}
         transition={{ delay: 0.08, duration: 0.18 }}
         style={{
-          position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)',
-          display: 'flex', gap: 6,
+          position: 'absolute', bottom: 8, right: 8,
+          display: 'flex', gap: 4,
           pointerEvents: 'auto',
         }}>
-        <Btn size="sm" variant="ghost" onClick={onCancel}>Cancel</Btn>
-        <Btn size="sm" variant="primary" icon={<I.check />} onClick={onSubmit}>Submit</Btn>
+        <IconBtn size="sm" tooltip="Cancel" icon={<I.close />} danger onClick={onCancel} />
+        <IconBtn size="sm" tooltip="Save alignment" icon={<I.check />} active onClick={onSubmit} />
       </motion.div>
     </motion.div>
   );
