@@ -125,7 +125,13 @@ export function MarginCalc({ shortcut, onClosed, bindClose }) {
   const showLowMargin = minMargin > 0 && marginNum !== null && marginNum > 0 && marginNum < minMargin;
 
   return (
-    <FloatingPanel width={360} backdrop onClose={onClosed} bindClose={bindClose}>
+    <FloatingPanel
+      width={360}
+      backdrop
+      draggable={dev['marginCalc.draggable'] ?? true}
+      onClose={onClosed}
+      bindClose={bindClose}
+    >
       <ModalHeader
         icon={<I.calc />}
         title="Margin Calculator"

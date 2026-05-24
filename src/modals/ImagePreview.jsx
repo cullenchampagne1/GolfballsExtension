@@ -7,6 +7,7 @@ import {
 } from '../ui/index.js';
 import { ColorPickerPopover as DSColorPickerPopover } from '../ui/components/ColorPicker.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
+import { useDevSetting } from '../lib/devSettings.js';
 import { GolfballViewer } from './GolfballViewer.jsx';
 import { LiquidDrawer } from '../ui/components/LiquidDrawer.jsx';
 
@@ -109,6 +110,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   const effectiveUrl = url || resolveFallbackUrl();
   const usingFallback = !url;
   const toast = useToast();
+  const draggable = useDevSetting('imageViewer.draggable') ?? false;
 
   // load-state machine for the preview area + subtitle copy
   const [status, setStatus] = useState('loading');
@@ -646,6 +648,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
     <FloatingPanel
       width={500}
       backdrop
+      draggable={draggable}
       onClose={onClosed}
       bindClose={bindClose}
     >
