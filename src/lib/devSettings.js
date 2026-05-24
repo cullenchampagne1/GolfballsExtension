@@ -111,6 +111,20 @@ export const DEV_SETTINGS = [
     type:    'bool',
     default: false,
   },
+  {
+    key:     'crmCreateContact.draggable',
+    label:   'CRM New Contact: draggable mode',
+    desc:    'When on, the New Contact modal is a draggable tool window. When off, it sits centered and closes on outside-click.',
+    type:    'bool',
+    default: true,
+  },
+  {
+    key:     'crmCreateContact.useMock',
+    label:   'CRM New Contact: force mock mode',
+    desc:    'Bypass the live CRM endpoints (account search + create) and use canned data + fake success responses. Useful for playground previews or when the API is down. The modal auto-mocks when not in an extension context.',
+    type:    'bool',
+    default: false,
+  },
 
   /* ── Watch list housekeeping ──────────────────────────────────
      Completed items auto-purge after N days so the "Completed"
