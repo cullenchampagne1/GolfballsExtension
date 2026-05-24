@@ -174,7 +174,6 @@ function KeyboardShortcutRow({ label, desc, value, onChange }) {
               key="clear"
               type="button"
               onClick={() => onChange('')}
-              title="Disable shortcut"
               initial={{ opacity: 0, width: 0, marginLeft: 0 }}
               animate={{ opacity: 1, width: 20, marginLeft: 0 }}
               exit={{ opacity: 0, width: 0, marginLeft: 0 }}
@@ -778,7 +777,6 @@ export function SettingsPanel() {
                 <span
                   onClick={() => setDevSearch('')}
                   style={{ cursor: 'pointer', display: 'flex', color: 'var(--gb-text-muted)' }}
-                  title="Clear search"
                 >
                   <I.close size={11} />
                 </span>

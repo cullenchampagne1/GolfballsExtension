@@ -153,10 +153,10 @@ function normalizeInitial(html) {
 }
 
 /* ── Toolbar primitives ─────────────────────────────────────── */
-function TBtn({ icon, active, onMouseDown, title, sz }) {
+function TBtn({ icon, active, onMouseDown, title: _title, sz }) {
   return (
     <button
-      type="button" title={title} onMouseDown={onMouseDown}
+      type="button" onMouseDown={onMouseDown}
       style={{
         width: sz.btnW, height: sz.btnH, borderRadius: 4, border: 'none', cursor: 'pointer',
         background: active ? 'var(--gb-brand-tint-medium)' : 'transparent',

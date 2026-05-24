@@ -435,7 +435,6 @@ function FolderGroup({ folder, tpls, isNote, currentId, onOpen, onMove, onRename
                     return (
                       <button
                         key={c.id}
-                        title={c.id}
                         onClick={() => { onColor(folder, c.id); }}
                         style={{
                           width: 16, height: 16, borderRadius: '50%',
@@ -677,7 +676,7 @@ function TemplateSidebar() {
             Manager
           </div>
         </div>
-        <IconBtn size="sm" icon={<CogIcon />} onClick={openSettings} title="Settings" />
+        <IconBtn size="sm" icon={<CogIcon />} onClick={openSettings} />
       </div>
 
       {/* Controls: tabs + search + new template + new folder */}
@@ -704,7 +703,6 @@ function TemplateSidebar() {
             variant="dashed" size="sm"
             icon={<FolderIcon />}
             onClick={newFolder}
-            title="New folder"
             style={{ flexShrink: 0, padding: '0 9px' }}
           />
         </div>

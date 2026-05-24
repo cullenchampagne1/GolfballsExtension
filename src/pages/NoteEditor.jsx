@@ -122,7 +122,6 @@ function VarChips({ targets = ['date', 'time'], nativeEl, value, onChange }) {
           key={name}
           onClick={() => insert(name)}
           style={{ cursor: 'pointer' }}
-          title={`Insert {{${name}}}`}
         >
           <BodyVar v={{ name, status: 'ok', smart: {} }} size="sm" onOpenSmart={() => insert(name)} />
         </span>
