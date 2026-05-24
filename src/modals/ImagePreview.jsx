@@ -9,6 +9,7 @@ import { ColorPickerPopover as DSColorPickerPopover } from '../ui/components/Col
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { GolfballViewer } from './GolfballViewer.jsx';
+import { GrassMockupComposer } from './GrassMockupComposer.jsx';
 import { LiquidDrawer } from '../ui/components/LiquidDrawer.jsx';
 
 /* ───────────────────────────────────────────────────────────────
@@ -234,6 +235,11 @@ export function ImagePreview({
   const wrapRef = useRef(null);      // the 340px preview surface (drag + wheel target)
   const viewportRef = useRef(null);  // inner transform layer (translate + scale applied here)
   const viewerRef = useRef(null);    // GolfballViewer imperative handle — .snapshot() returns a PNG dataURL
+  const mockupRef = useRef(null);    // GrassMockupComposer imperative handle — .snapshot() returns a PNG dataURL
+  // True whenever we're in a viewer-style mode (3D ball OR grass mockup),
+  // i.e. NOT the 2D image editor. Used by drag/pan/wheel guards so
+  // 2D-only gestures don't fire on top of the active viewer.
+  const inViewerMode = view !== '2d';
   // Mirrors the viewer's internal sceneKey so the fun-menu drawer can
   // hide while an HDRI scene is up (no walls = nothing for bombs to
   // bounce off, so we don't even offer the tool).
@@ -280,20 +286,20 @@ export function ImagePreview({
      drop. dataTransfer.dropEffect tells the OS what cursor to show
      (copy vs move vs none); 'copy' reads as "we'll take a copy". */
   const onWrapDragOver = (e) => {
-    if (view === '3d') return;
+    if (inViewerMode) return;
     if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
   };
   const onWrapDragEnter = (e) => {
-    if (view === '3d') return;
+    if (inViewerMode) return;
     if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return;
     e.preventDefault();
     dragDepthRef.current += 1;
     if (!dropActive) setDropActive(true);
   };
   const onWrapDragLeave = (e) => {
-    if (view === '3d') return;
+    if (inViewerMode) return;
     dragDepthRef.current -= 1;
     if (dragDepthRef.current <= 0) {
       dragDepthRef.current = 0;
@@ -301,7 +307,7 @@ export function ImagePreview({
     }
   };
   const onWrapDrop = (e) => {
-    if (view === '3d') return;
+    if (inViewerMode) return;
     e.preventDefault();
     dragDepthRef.current = 0;
     setDropActive(false);
@@ -487,7 +493,7 @@ export function ImagePreview({
   // handler (ball scale) receives events without competition.
   useEffect(() => {
     const c = wrapRef.current;
-    if (!c || status !== 'ready' || view === '3d') return undefined;
+    if (!c || status !== 'ready' || inViewerMode) return undefined;
     const onWheel = (e) => {
       e.preventDefault();
       const rect = c.getBoundingClientRect();
@@ -507,7 +513,7 @@ export function ImagePreview({
   const dragRef = useRef(null);
   const onPointerDown = (e) => {
     if (e.button !== 0 || status !== 'ready') return;
-    if (view === '3d') return;
+    if (inViewerMode) return;
     if (e.target?.closest?.('button, input, textarea, select, a, [data-viewer-ui="true"]')) return;
     // Eyedropper mode — clicking the image samples a pixel and opens
     // the color-picker popover instead of starting a drag.
@@ -541,9 +547,9 @@ export function ImagePreview({
     try { e.currentTarget.releasePointerCapture?.(e.pointerId); } catch {}
   };
   const onDoubleClick = (e) => {
-    // Same defense as onPointerDown — 3D view owns this gesture in
-    // its own canvas handlers (double-click = reset zoom, etc.).
-    if (view === '3d') return;
+    // Same defense as onPointerDown — viewer modes own this gesture in
+    // their own canvas handlers (double-click = reset zoom, etc.).
+    if (inViewerMode) return;
     // Ignore double-clicks that originated on overlay controls — two
     // rapid clicks on the zoom button were bubbling up and treating
     // the wrapper as the dblclick target, snapping zoom back to 1x.
@@ -686,6 +692,21 @@ export function ImagePreview({
     setView('3d');
   }
 
+  /* Mockup-button handler. Mirrors on3DToggle but flips into the
+     'mockup' view, which renders a photoreal Cycles backplate of
+     the ball nestled in grass with the user's logo composited
+     onto the camera-facing pole. No alignment-saved guard since
+     the composer wants the FULL cropped image, not the print
+     area — but we still need a decal source to compose. */
+  function onMockupToggle() {
+    if (view === 'mockup') { setView('2d'); return; }
+    if (!decalDataUrl) {
+      toast?.warning?.('Align the image first to compose a mockup', { tone: 'warning' });
+      return;
+    }
+    setView('mockup');
+  }
+
   const onCopy = async () => {
     try {
       await navigator.clipboard.writeText(effectiveUrl);
@@ -759,11 +780,20 @@ export function ImagePreview({
         return dot > 0 ? base.slice(0, dot) : base;
       } catch { return ''; }
     })();
-    return (stem || `golfball-${Date.now()}`) + '-3d.png';
+    const suffix = view === 'mockup' ? '-mockup.png' : '-3d.png';
+    return (stem || `golfball-${Date.now()}`) + suffix;
+  };
+  // Pick the right snapshot source for the active view: GolfballViewer
+  // returns a 1024×1024 ball-only PNG; GrassMockupComposer returns the
+  // full 1920×1080 grass mockup with logo. Either can be null while
+  // the viewer is still loading, which is the only failure path here.
+  const getViewerSnapshot = () => {
+    if (view === 'mockup') return mockupRef.current?.snapshot?.() || null;
+    return viewerRef.current?.snapshot?.(1024) || null;
   };
   const onCopy3D = async () => {
-    const url = viewerRef.current?.snapshot?.(1024);
-    if (!url) { toast?.error?.('3D viewer not ready'); return; }
+    const url = getViewerSnapshot();
+    if (!url) { toast?.error?.('Viewer not ready'); return; }
     try {
       const blob = await (await fetch(url)).blob();
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
@@ -773,8 +803,8 @@ export function ImagePreview({
     }
   };
   const onDownload3D = () => {
-    const url = viewerRef.current?.snapshot?.(1024);
-    if (!url) { toast?.error?.('3D viewer not ready'); return; }
+    const url = getViewerSnapshot();
+    if (!url) { toast?.error?.('Viewer not ready'); return; }
     const a = document.createElement('a');
     a.href = url;
     a.download = snapshotName();
@@ -888,7 +918,29 @@ export function ImagePreview({
               we'd see both rendered simultaneously mid-transition
               (image + 3D canvas overlapping) which reads as a flash. */}
           <AnimatePresence mode="wait" initial={false}>
-            {view === '3d' && decalDataUrl ? (
+            {view === 'mockup' && decalDataUrl ? (
+              <motion.div
+                key="mockup-view"
+                /* 2D → mockup entrance: matches the 3D entrance feel so
+                   both viewer-style modes have the same "materializing"
+                   transition. The composer paints in a single canvas
+                   pass once both images load, so first frame is ~stable. */
+                initial={{ opacity: 0, scale: 0.94 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 1.02 }}
+                transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+                style={{ position: 'absolute', inset: 0, transformOrigin: 'center' }}
+              >
+                <GrassMockupComposer
+                  ref={mockupRef}
+                  decalDataUrl={decalDataUrl}
+                  onError={() => {
+                    toast?.error?.('Failed to load mockup');
+                    setView('2d');
+                  }}
+                />
+              </motion.div>
+            ) : view === '3d' && decalDataUrl ? (
               <motion.div
                 key="threed-view"
                 /* 2D → 3D entrance: a soft scale-up + opacity ramp.
@@ -1031,6 +1083,16 @@ export function ImagePreview({
                   icon={<CubeIcon />}
                   active={view === '3d'}
                   onClick={on3DToggle}
+                />
+                {/* Studio mockup — composes the user's logo onto a
+                    photoreal pre-rendered ball-in-grass shot. Lives
+                    next to the 3D cube since both are "preview the
+                    print" modes; the camera glyph reads as "snap a
+                    product photo". */}
+                <GlassIconBtn
+                  icon={<CameraIcon />}
+                  active={view === 'mockup'}
+                  onClick={onMockupToggle}
                 />
               </div>
 
@@ -1325,7 +1387,7 @@ export function ImagePreview({
             inside the 3D canvas) plus copy + download stubs for the
             future 3D-screenshot feature. */}
         <AnimatePresence initial={false}>
-          {view === '3d' && (
+          {inViewerMode && (
             <motion.div
               key="three-strip"
               initial={{ height: 0, opacity: 0, marginBottom: -8 }}
@@ -1827,6 +1889,15 @@ const CubeIcon = (p) => (
     <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
     <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
     <line x1="12" y1="22.08" x2="12" y2="12" />
+  </svg>
+);
+// Camera glyph — DSLR body + lens. Reads as "snap a photo" / "studio
+// shot" which is exactly what the grass mockup mode produces.
+const CameraIcon = (p) => (
+  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+    <circle cx="12" cy="13" r="4" />
   </svg>
 );
 
