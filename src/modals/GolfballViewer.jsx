@@ -308,13 +308,12 @@ export function GolfballViewer({ decalDataUrl, onError }) {
               ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(w, y + 0.5); ctx.stroke();
             }
 
-            // Soft edge vignette with rounded inner corners — the
-            // shadow is painted INSIDE a clip path defined as
-            // "full rect MINUS rounded-rect", so the inner boundary
-            // of the shaded area is a rounded rect by construction.
-            // Inside that band we draw the 4 linear gradient edges
-            // (the soft falloff that reads well); the clip makes
-            // sure the corners curve instead of forming an L.
+            // Soft edge vignette — 4 directional linear gradients
+            // with a multi-stop ease-out falloff. The geometry of the
+            // wall itself curves at the corners (see makeWall), so we
+            // don't try to fake roundness in the texture — keeping
+            // the shadow falloff soft and clip-free is what makes
+            // the bowed corners read correctly.
             const fade = 0.35;
             const edgeShadow = (g) => {
               g.addColorStop(0.00, 'rgba(0,0,0,0.30)');
@@ -323,39 +322,6 @@ export function GolfballViewer({ decalDataUrl, onError }) {
               g.addColorStop(0.80, 'rgba(0,0,0,0.02)');
               g.addColorStop(1.00, 'rgba(0,0,0,0)');
             };
-
-            ctx.save();
-            // Build the "frame with rounded inner hole" clip:
-            //   outer = full texture rect (CW)
-            //   inner = rounded rect (CCW) — even-odd cuts it out
-            const innerInset = Math.min(w, h) * fade * 0.30;
-            const innerR     = Math.min(w, h) * fade * 0.85;
-            const ix = innerInset, iy = innerInset;
-            const iw = w - innerInset * 2, ih = h - innerInset * 2;
-            const rr = Math.min(innerR, iw / 2, ih / 2);
-            const path = new Path2D();
-            // outer rect, clockwise
-            path.moveTo(0, 0);
-            path.lineTo(w, 0);
-            path.lineTo(w, h);
-            path.lineTo(0, h);
-            path.closePath();
-            // inner rounded rect, counter-clockwise (so even-odd punches it)
-            path.moveTo(ix + rr, iy);
-            path.lineTo(ix + iw - rr, iy);
-            path.arcTo(ix + iw, iy,           ix + iw, iy + rr,      rr);
-            path.lineTo(ix + iw, iy + ih - rr);
-            path.arcTo(ix + iw, iy + ih,      ix + iw - rr, iy + ih, rr);
-            path.lineTo(ix + rr, iy + ih);
-            path.arcTo(ix, iy + ih,           ix, iy + ih - rr,      rr);
-            path.lineTo(ix, iy + rr);
-            path.arcTo(ix, iy,                ix + rr, iy,           rr);
-            path.closePath();
-            ctx.clip(path, 'evenodd');
-
-            // Now paint the 4 directional gradients — they only show
-            // inside the frame region, and the inner boundary follows
-            // the rounded rect.
             let g = ctx.createLinearGradient(0, 0, w * fade, 0); edgeShadow(g);
             ctx.fillStyle = g; ctx.fillRect(0, 0, w * fade, h);
             g = ctx.createLinearGradient(w, 0, w - w * fade, 0); edgeShadow(g);
@@ -365,8 +331,6 @@ export function GolfballViewer({ decalDataUrl, onError }) {
             g = ctx.createLinearGradient(0, h, 0, h - h * fade); edgeShadow(g);
             ctx.fillStyle = g; ctx.fillRect(0, h - h * fade, w, h * fade);
 
-            ctx.restore();
-
             const tex = new THREE.CanvasTexture(cv);
             tex.colorSpace = THREE.SRGBColorSpace;
             tex.minFilter = THREE.LinearFilter;
@@ -375,15 +339,24 @@ export function GolfballViewer({ decalDataUrl, onError }) {
             return tex;
           }
 
+          // How far the corners bow OUT from the wall plane (in world
+          // units along the wall's normal). The mesh becomes a shallow
+          // bowl — flat across the middle, curving smoothly toward
+          // the inside of the room at the edges and corners.
+          const BOWL_DEPTH = 24;
+          const BOWL_FALLOFF = 0.42;   // fraction of half-extent that's curved
+
+          /* Build a subdivided plane (default 48×48) whose vertices
+             are displaced along +Z by a smooth corner bow. Each vert
+             gets a falloff factor based on how close it is to the
+             edge on each axis; multiplying the two factors gives a
+             classic rounded-rect-corner curve (strong only where BOTH
+             axes are near an edge), then a smaller edge bow is added
+             so the straight edges curve too. The result, viewed
+             through any wall, is real curved geometry — corners look
+             rounded because they ARE rounded. */
           function makeWall(widthWU, heightWU) {
             const tex = makeWallTexture(widthWU, heightWU);
-            // MeshStandardMaterial with the texture set as EMISSIVE
-            // (not albedo). Emissive isn't affected by lighting, so
-            // the wall's fill stays the EXACT background color — but
-            // standard materials can still receive shadows. Albedo
-            // is pure black so no direct light brightens the wall.
-            // Net result: walls look unlit, but the ball drops a
-            // visible shadow on them as it moves.
             const mat = new THREE.MeshStandardMaterial({
               color: 0x000000,
               emissive: 0xffffff,
@@ -393,7 +366,45 @@ export function GolfballViewer({ decalDataUrl, onError }) {
               side: THREE.FrontSide,
             });
             objectsToDispose.push(mat);
-            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(widthWU, heightWU), mat);
+
+            const SEGS = 48;
+            const geo = new THREE.PlaneGeometry(widthWU, heightWU, SEGS, SEGS);
+            const pos = geo.attributes.position;
+            const halfW = widthWU / 2;
+            const halfH = heightWU / 2;
+            // smoothstep eases the curve in, so the flat middle
+            // blends seamlessly into the bowed edges
+            const smoothstep = (t) => t * t * (3 - 2 * t);
+            for (let i = 0; i < pos.count; i++) {
+              const x = pos.getX(i);
+              const y = pos.getY(i);
+              // Per-axis "how close to the edge" in [0..1] where 1 is at the edge
+              const tx = Math.min(1, Math.abs(x) / halfW);
+              const ty = Math.min(1, Math.abs(y) / halfH);
+              // Only the outer BOWL_FALLOFF fraction bows; remap so
+              // tx<thresh contributes 0, tx=1 contributes 1
+              const remap = (t) => {
+                const thresh = 1 - BOWL_FALLOFF;
+                if (t <= thresh) return 0;
+                return smoothstep((t - thresh) / BOWL_FALLOFF);
+              };
+              const ex = remap(tx);
+              const ey = remap(ty);
+              // Edge bow (gentle): max(ex, ey) — straight edges curve
+              // Corner bow (strong): ex * ey — pops at the corners
+              const bow = Math.max(ex, ey) * 0.35 + ex * ey * 0.65;
+              // Displace AWAY from the room interior (-Z in local
+              // space, since +Z is the inward-facing normal). The
+              // corners physically recede, so the room reads as
+              // having rounded inner corners — actual geometry,
+              // not a texture trick.
+              pos.setZ(i, -BOWL_DEPTH * bow);
+            }
+            pos.needsUpdate = true;
+            geo.computeVertexNormals();
+            objectsToDispose.push(geo);
+
+            const mesh = new THREE.Mesh(geo, mat);
             mesh.receiveShadow = true;
             return mesh;
           }
