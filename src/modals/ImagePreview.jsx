@@ -149,6 +149,15 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   // wrapped on the model. 3D button toggles between them.
   const [view, setView] = useState('2d');
 
+  // Drag-and-drop file replace. When the user drags any image file
+  // over the preview wrapper, we light up a frosted "Drop to replace"
+  // overlay and accept the drop to swap displayUrl. dragenter/leave
+  // fire on every child element entered, so we count nesting depth
+  // instead of toggling on each event — without the counter the
+  // overlay flickers as the cursor crosses inner elements.
+  const [dropActive, setDropActive] = useState(false);
+  const dragDepthRef = useRef(0);
+
   // Zoom + pan: tracked in refs (no re-render per wheel event) plus a
   // tiny zoomLevel state purely so the bottom-left zoom-percentage chip
   // can re-render when it changes.
@@ -226,6 +235,70 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
     if (img?.naturalWidth) setImageSize({ w: img.naturalWidth, h: img.naturalHeight });
   };
   const onImgError = () => setStatus(usingFallback ? 'ready' : 'error');
+
+  /* Replace the visible image with a new dataURL. Resets everything
+     derived from the previous image (zoom/pan, color swaps, decal,
+     view mode) so the user sees the new logo fresh and on the same
+     pipeline. Because editedDataUrl outranks the original url in
+     `displayUrl`, we don't have to touch the prop chain — just set it. */
+  const replaceImage = (dataUrl) => {
+    setStatus('loading');
+    setImageSize(null);
+    setDecalDataUrl(null);
+    setView('2d');
+    setColorSwaps([]);
+    setEyedropping(false);
+    setPendingPick(null);
+    setPreviewDataUrl(null);
+    scaleRef.current = 1; txRef.current = 0; tyRef.current = 0;
+    rotationRef.current = 0; setRotation(0);
+    setZoomLevel(100);
+    applyTransform(false);
+    setEditedDataUrl(dataUrl);
+  };
+
+  /* dragOver — must call preventDefault to opt INTO accepting the
+     drop. dataTransfer.dropEffect tells the OS what cursor to show
+     (copy vs move vs none); 'copy' reads as "we'll take a copy". */
+  const onWrapDragOver = (e) => {
+    if (view === '3d') return;
+    if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+  const onWrapDragEnter = (e) => {
+    if (view === '3d') return;
+    if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return;
+    e.preventDefault();
+    dragDepthRef.current += 1;
+    if (!dropActive) setDropActive(true);
+  };
+  const onWrapDragLeave = (e) => {
+    if (view === '3d') return;
+    dragDepthRef.current -= 1;
+    if (dragDepthRef.current <= 0) {
+      dragDepthRef.current = 0;
+      setDropActive(false);
+    }
+  };
+  const onWrapDrop = (e) => {
+    if (view === '3d') return;
+    e.preventDefault();
+    dragDepthRef.current = 0;
+    setDropActive(false);
+    const file = Array.from(e.dataTransfer?.files || []).find((f) => f.type.startsWith('image/'));
+    if (!file) {
+      toast?.warning?.('Only image files can replace the preview');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      replaceImage(String(reader.result));
+      toast?.success?.(`Replaced with ${file.name}`);
+    };
+    reader.onerror = () => toast?.error?.('Could not read dropped file');
+    reader.readAsDataURL(file);
+  };
   // Reset zoom + load state whenever the URL changes (reopen with a
   // different image — currently never happens in playground but
   // future implementations will swap URLs).
@@ -716,12 +789,25 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
           onDoubleClick={onDoubleClick}
+          onDragOver={onWrapDragOver}
+          onDragEnter={onWrapDragEnter}
+          onDragLeave={onWrapDragLeave}
+          onDrop={onWrapDrop}
           style={{
             position: 'relative',
             height: 320,
             width: '100%',
             ...PREVIEW_GRID,
-            border: '1px solid var(--gb-border-default)',
+            // Border thickens + recolors when a file is being dragged
+            // over the wrapper so the drop affordance is obvious from
+            // the outside, not just the centered overlay.
+            border: dropActive
+              ? '1px solid var(--gb-brand-label)'
+              : '1px solid var(--gb-border-default)',
+            boxShadow: dropActive
+              ? '0 0 0 3px color-mix(in srgb, var(--gb-brand-label) 22%, transparent)'
+              : 'none',
+            transition: 'border-color .18s, box-shadow .18s',
             borderRadius: 'var(--gb-r-md)',
             overflow: 'hidden',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1044,6 +1130,13 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Drop-to-replace overlay — frosted scrim with a brand-tinted
+              ring + label. pointerEvents:none so the wrapper's own drag
+              events keep firing through it (otherwise the cursor crossing
+              the overlay would trigger dragleave on the wrapper and the
+              overlay would flicker). */}
+          <DropOverlay active={dropActive} />
         </div>
 
         {/* Decode error — only when a real URL was passed AND it failed.
@@ -1224,6 +1317,108 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
       </div>
       </div>
     </FloatingPanel>
+  );
+}
+
+/* ── DropOverlay ─────────────────────────────────────────────────
+   Frosted scrim that fades in over the preview wrapper while the
+   user is dragging a file in. Centered capsule shows a download
+   glyph + "Drop to replace" label; a dashed brand-tinted ring
+   pulses subtly so the affordance reads as "this is a target."
+
+   Animations:
+     • Scrim: opacity 0 → 1 over 160ms
+     • Capsule: scale 0.9 → 1 + opacity, spring (slight bounce)
+     • Dashed ring: opacity ramp + a slow stroke-dash drift so it
+       feels alive without spinning like a loader
+
+   pointerEvents:'none' on the root — drag events must pass through
+   to the wrapper so dragleave doesn't trigger on every overlay
+   intersection. */
+function DropOverlay({ active }) {
+  return (
+    <AnimatePresence>
+      {active && (
+        <motion.div
+          key="drop-overlay"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
+          style={{
+            position: 'absolute', inset: 0, zIndex: 7,
+            pointerEvents: 'none',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            // Soft brand-tinted scrim so the underlying image stays
+            // visible but it's clear something is about to change.
+            background: 'color-mix(in srgb, var(--gb-brand-label) 18%, color-mix(in srgb, var(--gb-surface-canvas) 55%, transparent))',
+            backdropFilter: 'blur(6px) saturate(140%)',
+            WebkitBackdropFilter: 'blur(6px) saturate(140%)',
+          }}
+        >
+          {/* Animated dashed ring — sits behind the capsule, drifts
+              slowly clockwise so the user reads it as "live target". */}
+          <motion.svg
+            width="180" height="180" viewBox="0 0 180 180"
+            style={{ position: 'absolute' }}
+            initial={{ rotate: 0, scale: 0.86, opacity: 0 }}
+            animate={{ rotate: 360, scale: 1, opacity: 1 }}
+            exit={{ scale: 0.86, opacity: 0 }}
+            transition={{
+              rotate: { duration: 22, ease: 'linear', repeat: Infinity },
+              scale:  { type: 'spring', stiffness: 280, damping: 22 },
+              opacity:{ duration: 0.22 },
+            }}
+          >
+            <circle
+              cx="90" cy="90" r="78" fill="none"
+              stroke="var(--gb-brand-label)"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeDasharray="10 8"
+              opacity="0.85"
+            />
+          </motion.svg>
+          {/* Centered capsule — frosted glass with download arrow +
+              label. Spring scale-in feels like a snap-to-target. */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.94, y: 4 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 26, mass: 0.8 }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 9,
+              padding: '10px 16px',
+              background: 'color-mix(in srgb, var(--gb-surface-canvas) 82%, transparent)',
+              backdropFilter: 'blur(18px) saturate(160%)',
+              WebkitBackdropFilter: 'blur(18px) saturate(160%)',
+              border: '1px solid color-mix(in srgb, var(--gb-brand-label) 40%, transparent)',
+              borderRadius: 14,
+              boxShadow: '0 8px 24px -8px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.08) inset',
+              color: 'var(--gb-text-primary)',
+              fontFamily: 'var(--gb-font-sans)',
+              fontSize: 13, fontWeight: 700, letterSpacing: 0.2,
+            }}
+          >
+            {/* Download glyph — incoming arrow into a tray. Same icon
+                vocabulary as the modal's Download button so the user
+                reads "this slot accepts a file." */}
+            <motion.svg
+              width="18" height="18" viewBox="0 0 24 24" fill="none"
+              stroke="var(--gb-brand-label)" strokeWidth="2.2"
+              strokeLinecap="round" strokeLinejoin="round"
+              animate={{ y: [0, -2, 0] }}
+              transition={{ duration: 1.2, ease: 'easeInOut', repeat: Infinity }}
+            >
+              <path d="M12 3v12" />
+              <path d="M6 11l6 6 6-6" />
+              <path d="M4 21h16" />
+            </motion.svg>
+            <span>Drop to replace</span>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
