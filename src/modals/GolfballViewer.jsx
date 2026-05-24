@@ -137,12 +137,13 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   // 'loading' until Three.js + the model finish; then 'ready'. 'error'
   // surfaces a basic message instead of an empty canvas.
   const [status, setStatus] = useState('loading');
-  // Underwater tint — 0 (none) to 1 (fully submerged). Updated by the
-  // render loop via a ref→state bridge at a capped rate so we don't
-  // trigger re-renders every frame.
-  const [underwaterFrac, setUnderwaterFrac] = useState(0);
-  const underwaterFracRef = useRef(0);
-  const lastUnderwaterUpdateRef = useRef(0);
+  // Underwater tint — clipped to the water line. waterLineTop is the
+  // CSS-px Y coord (from container top) of the projected water surface,
+  // so the tint div can be positioned with `top: waterLineTop`. -1
+  // means no water (don't render the overlay).
+  const [waterLineTop, setWaterLineTop] = useState(-1);
+  const waterLineTopRef = useRef(-1);
+  const lastWaterLineUpdateRef = useRef(0);
   // Debug HUD is gated behind a developer setting (default off). When
   // off, the render loop also skips publishing snapshot state so we
   // avoid the ~10Hz React re-renders entirely. Mirror the flag to a
@@ -1948,26 +1949,27 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             waterMesh.visible = false;
           }
 
-          /* ── Underwater detection ───────────────────────────────
-             Camera is fixed straight-on at (0, 0, 520), so it never
-             physically enters the water. The "underwater" feel needs
-             to come from the BALL being submerged — that's where the
-             user's eye is. Use the ball's submersion fraction. */
-          let underTint = 0;
+          /* ── Water line projection → screen-space Y ─────────────
+             Project the water surface (at world Y = baseLevel) into
+             clip space, convert to a CSS pixel offset from the top
+             of the canvas. The React overlay clips its blue tint to
+             everything BELOW that Y, so above-water pixels stay clean. */
+          let waterLinePx = -1;
           if (hasWater) {
-            const surfY = surfaceHeightAt(ballBody.position.x, ballBody.position.z);
-            const r = targetRadius * state.scale;
-            const bot = ballBody.position.y - r;
-            const top = ballBody.position.y + r;
-            if (bot < surfY) {
-              // 0 at just touching, 1 at fully submerged
-              underTint = Math.min(1, (surfY - bot) / (r * 2));
-            }
+            // Pick a sample point on the water surface plane in front
+            // of the camera so the projection is well-defined.
+            const sampleZ = 0;
+            const wp = new THREE.Vector3(0, baseLevel, sampleZ);
+            wp.project(camera);
+            // wp.y is now in NDC [-1, +1] with +1 = top of screen.
+            // CSS Y from top = (1 - wp.y) / 2 * height.
+            const containerH = renderer.domElement.clientHeight;
+            waterLinePx = Math.round((1 - wp.y) * 0.5 * containerH);
           }
-          underwaterFracRef.current = underTint;
-          if (nowMs - lastUnderwaterUpdateRef.current > 80) {
-            lastUnderwaterUpdateRef.current = nowMs;
-            setUnderwaterFrac(underTint);
+          waterLineTopRef.current = waterLinePx;
+          if (nowMs - lastWaterLineUpdateRef.current > 50) {
+            lastWaterLineUpdateRef.current = nowMs;
+            setWaterLineTop(waterLinePx);
           }
 
           const stepNeeded = throwModeRef.current || bombs.length > 0
@@ -2478,65 +2480,22 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         </div>
       )}
 
-      {/* Underwater overlay — fires when the ball is submerged.
-          Strong blue tint + animated caustic streaks so above vs
-          below water is unmistakable visually. */}
-      {underwaterFrac > 0.01 && (
-        <>
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute', inset: 0,
-              pointerEvents: 'none',
-              background: `linear-gradient(180deg,
-                rgba(20, 110, 200, ${(underwaterFrac * 0.55).toFixed(3)}) 0%,
-                rgba(5, 60, 150, ${(underwaterFrac * 0.70).toFixed(3)}) 60%,
-                rgba(0, 25, 80, ${(underwaterFrac * 0.85).toFixed(3)}) 100%)`,
-              transition: 'background 0.18s',
-              zIndex: 5,
-            }}
-          />
-          {/* Animated caustic streaks — moving diagonal bright bands
-              read instantly as "looking up through water". */}
-          <div
-            aria-hidden
-            className="gb-water-caustics"
-            style={{
-              position: 'absolute', inset: 0,
-              pointerEvents: 'none',
-              opacity: underwaterFrac * 0.45,
-              background: `repeating-linear-gradient(135deg,
-                rgba(255,255,255,0) 0px,
-                rgba(255,255,255,0) 18px,
-                rgba(180,220,255,0.35) 22px,
-                rgba(255,255,255,0) 28px,
-                rgba(255,255,255,0) 60px)`,
-              backgroundSize: '300px 300px',
-              animation: 'gbWaterCaustics 6s linear infinite',
-              mixBlendMode: 'screen',
-              zIndex: 5,
-            }}
-          />
-          {/* Edge vignette — focuses attention on the center and
-              implies the lens distortion of looking through water. */}
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute', inset: 0,
-              pointerEvents: 'none',
-              background: `radial-gradient(ellipse at center,
-                transparent 30%,
-                rgba(0, 20, 60, ${(underwaterFrac * 0.55).toFixed(3)}) 100%)`,
-              zIndex: 5,
-            }}
-          />
-          <style>{`
-            @keyframes gbWaterCaustics {
-              0%   { background-position: 0 0; }
-              100% { background-position: 300px 200px; }
-            }
-          `}</style>
-        </>
+      {/* Below-the-water-line blue tint — clipped to start at the
+          projected water surface, so only the submerged portion of
+          the frame is tinted. Pure visual; pointer-events:none. */}
+      {waterLineTop >= 0 && (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            left: 0, right: 0,
+            top: Math.max(0, waterLineTop),
+            bottom: 0,
+            pointerEvents: 'none',
+            background: 'linear-gradient(180deg, rgba(20, 110, 200, 0.35) 0%, rgba(5, 60, 150, 0.55) 100%)',
+            zIndex: 5,
+          }}
+        />
       )}
     </div>
   );
