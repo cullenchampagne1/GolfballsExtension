@@ -348,17 +348,24 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           }
 
           // ── Rounded room — actual geometry, no seams ──────────
-          // The room rounds on X/Y only — the back wall stays a flat
-          // plane that the side walls + floor + ceiling all curve
-          // into. Conceptually the room is a rounded tube whose axis
-          // is Z: cross-section is a rounded rectangle, but along Z
-          // the cross-section is constant. That makes the back wall
-          // a straight cap and the front (open) end just framing.
+          // Cross-section in (X, Y) is a "stadium": flat vertical
+          // sides at x=±HALF_X, flat horizontal top and bottom at
+          // y=±HALF_Y, joined at the four corners by quarter-circle
+          // fillets of radius ROUND_R. The shape is constant along
+          // Z, so the back wall reads as a flat plane and the left/
+          // right walls stay straight verticals — they only curve
+          // where they meet the floor or ceiling, in the corners.
           //
-          // For each vertex we clamp X/Y into the inner rounded-rect
-          // core, then push outward by ROUND_R along the direction
-          // from clamp→vertex. Z is left untouched, so the back wall
-          // stays perfectly flat.
+          // Snap rule (rounded-rect SDF in 2D):
+          //   • clamp X into the inner band [−INNER_X, INNER_X]
+          //   • clamp Y into the inner band [−INNER_Y, INNER_Y]
+          //   • compute the offset from the clamped point
+          //   • if the vertex sat in a CORNER zone (both axes
+          //     clamped), normalize the offset and re-place it at
+          //     distance ROUND_R → produces the quarter-circle curve
+          //   • if it sat along a FLAT side (only one axis clamped),
+          //     leave it alone — sides/top/bottom stay perfectly flat
+          //   • Z is untouched throughout → back wall is flat
           const ROUND_R = 72;
           const INNER_X = HALF_X - ROUND_R;
           const INNER_Y = HALF_Y - ROUND_R;
@@ -369,13 +376,21 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             const cy = Math.max(-INNER_Y, Math.min(INNER_Y, p.y));
             const dx = p.x - cx;
             const dy = p.y - cy;
+            // Only round in the CORNER zone (where both X and Y were
+            // clamped). On a flat side only one of dx/dy will be
+            // non-zero relative to the unclamped axis — but with the
+            // clamp above, the axis that was inside the inner band
+            // returns dx=0 or dy=0. So we need both to be nonzero
+            // (within tolerance) to mean "this vertex is in the
+            // corner region". Otherwise leave it alone.
+            const onCornerX = Math.abs(p.x) > INNER_X;
+            const onCornerY = Math.abs(p.y) > INNER_Y;
+            if (!(onCornerX && onCornerY)) return; // flat side — no snap
             const len = Math.sqrt(dx * dx + dy * dy);
-            if (len < 1e-6) return;     // already inside the core
+            if (len < 1e-6) return;
             const k = ROUND_R / len;
             p.x = cx + dx * k;
             p.y = cy + dy * k;
-            // Z stays as-is → back wall is flat, side walls round
-            // only on the X/Y axis where they meet floor/ceiling.
           };
 
           function makeWall(widthWU, heightWU) {
