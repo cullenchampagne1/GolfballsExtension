@@ -326,6 +326,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           icon: <I.alert />,
           duration: null, // sticky — user must dismiss
           onPrimary: () => {
+            console.log('[SubmitProof] dropdowns onPrimary fired — installing mock reps/artists');
             setReps(MOCK_REPS);
             setArtists(MOCK_ARTISTS);
             setDropdownsFailed(false);
@@ -364,7 +365,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           secondary: 'Skip gallery',
           icon: <I.alert />,
           duration: null,
-          onPrimary: () => setGallery(MOCK_GALLERY),
+          onPrimary: () => { console.log('[SubmitProof] gallery onPrimary fired — installing mock gallery'); setGallery(MOCK_GALLERY); },
         });
       }
     })();
