@@ -50,7 +50,7 @@ const BALL_RADIUS_PX = 268;       // ~3px overscan vs the 261.3 silhouette so th
 // warp shows ~5% distortion at the corners — visually acceptable
 // for typical square/rectangular logos; bumping higher (toward 1.0)
 // starts to look unnatural as the logo wraps around the silhouette.
-const LOGO_SIZE = 0.95;
+const LOGO_SIZE = 1.2;
 
 // Pan/zoom — mirrors ImagePreview's 2D image surface so the two
 // preview modes feel identical to the user.

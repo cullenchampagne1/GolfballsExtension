@@ -164,6 +164,12 @@ export function ImagePreview({
   // recent Save Alignment. Null until the user saves once; cleared
   // when the source URL changes. Feeds the 3D viewer as a decal.
   const [decalDataUrl, setDecalDataUrl] = useState(null);
+  // Mirror of the decal at the moment alignment was saved — i.e. BEFORE
+  // any color swaps. Lets the Reset button restore the un-recolored
+  // print without forcing the user to re-align. Set alongside
+  // decalDataUrl on alignment-save; cleared whenever the source image
+  // changes (drop, URL change, etc).
+  const [originalDecalDataUrl, setOriginalDecalDataUrl] = useState(null);
   // View mode: '2d' shows the image preview + zoom controls; '3d'
   // swaps the same area for the GolfballViewer with the saved decal
   // wrapped on the model. 3D button toggles between them.
@@ -270,6 +276,7 @@ export function ImagePreview({
     setStatus('loading');
     setImageSize(null);
     setDecalDataUrl(null);
+    setOriginalDecalDataUrl(null);
     setView('2d');
     setColorSwaps([]);
     setEyedropping(false);
@@ -333,6 +340,7 @@ export function ImagePreview({
     setStatus(effectiveUrl ? 'loading' : 'empty');
     setImageSize(null);
     setDecalDataUrl(null);
+    setOriginalDecalDataUrl(null);
     setView('2d');
     setEditedDataUrl(null);
     setColorSwaps([]);
@@ -1144,6 +1152,9 @@ export function ImagePreview({
                         setColorSwaps([]);
                         setPendingPick(null);
                         setEyedropping(false);
+                        // Restore the pre-swap decal snapshot so 3D +
+                        // mockup snap back to the original print colors.
+                        if (originalDecalDataUrl) setDecalDataUrl(originalDecalDataUrl);
                         toast?.info?.('Color swaps reset');
                       }}
                     />
@@ -1172,14 +1183,30 @@ export function ImagePreview({
                     setPreviewDataUrl(null);
                     setPendingPick(null);
                   }}
-                  onApply={(newColor, tolerance) => {
+                  onApply={async (newColor, tolerance) => {
                     // Preview is already the result we want — promote it.
-                    if (previewDataUrl) {
-                      setEditedDataUrl(previewDataUrl);
-                      setColorSwaps((prev) => [...prev, { from: pendingPick.color, to: newColor, tolerance }]);
-                      setPreviewDataUrl(null);
-                      setPendingPick(null);
-                      toast?.success?.('Color swapped');
+                    if (!previewDataUrl) return;
+                    setEditedDataUrl(previewDataUrl);
+                    setColorSwaps((prev) => [...prev, { from: pendingPick.color, to: newColor, tolerance }]);
+                    setPreviewDataUrl(null);
+                    const swappedFrom = pendingPick.color;
+                    setPendingPick(null);
+                    toast?.success?.('Color swapped');
+                    // Keep decalDataUrl in sync: apply the same swap to
+                    // it so 3D + mockup show the recolored print without
+                    // forcing the user to re-align. Skipped silently if
+                    // no alignment was saved or the recolor fails.
+                    if (decalDataUrl) {
+                      try {
+                        const updatedDecal = await applyColorSwap(
+                          swappedFrom, newColor, tolerance, decalDataUrl,
+                        );
+                        setDecalDataUrl(updatedDecal);
+                      } catch (e) {
+                        // CORS-tainted or other failure — leave decal at
+                        // its previous colors and let the user re-align
+                        // manually if they care.
+                      }
                     }
                   }}
                 />
@@ -1367,6 +1394,9 @@ export function ImagePreview({
                     setAligning(false);
                     if (url) {
                       setDecalDataUrl(url);
+                      // Stash the un-recolored snapshot so Reset can
+                      // restore it without forcing a re-align.
+                      setOriginalDecalDataUrl(url);
                       toast?.success?.('Alignment saved — open 3D to preview');
                     } else {
                       toast?.warning?.('Could not capture alignment crop', { tone: 'warning' });
