@@ -468,11 +468,17 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
             {view === '3d' && decalDataUrl ? (
               <motion.div
                 key="threed-view"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-                style={{ position: 'absolute', inset: 0 }}
+                /* 2D → 3D entrance: a soft scale-up + opacity ramp.
+                   650ms is long enough to feel like the 3D scene is
+                   "materializing" rather than snap-cutting in. The
+                   loading splash inside the GolfballViewer paints
+                   immediately so the user sees motion even while the
+                   model + textures finish resolving in the background. */
+                initial={{ opacity: 0, scale: 0.94 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 1.02 }}
+                transition={{ duration: 0.65, ease: [0.22, 1, 0.36, 1] }}
+                style={{ position: 'absolute', inset: 0, transformOrigin: 'center' }}
               >
                 <GolfballViewer
                   decalDataUrl={decalDataUrl}
@@ -485,10 +491,16 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
             ) : (
               <motion.div
                 key="twod-view"
+                /* 3D → 2D return: slow, generous fade so the ball
+                   gracefully dissolves back to the source image
+                   instead of snap-cutting. Longer than the entrance
+                   on purpose — the user has typically just been in
+                   the 3D scene admiring it; the slow return reads as
+                   a thoughtful exit, not a yank back to the editor. */
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+                transition={{ duration: 0.85, ease: [0.4, 0, 0.2, 1] }}
                 style={{ position: 'absolute', inset: 0 }}
               >
           {/* Loading overlay — shows while the image is being decoded. */}

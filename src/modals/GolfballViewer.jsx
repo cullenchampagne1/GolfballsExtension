@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Spinner } from '../ui/index.js';
-import { useDevSetting } from '../lib/devSettings.js';
+import { motion } from 'motion/react';
+import { useDevSetting, useDevSettings } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    GolfballViewer — Three.js scene that renders a golf ball with
@@ -97,6 +97,28 @@ export function GolfballViewer({ decalDataUrl, onError }) {
   // Clear stale snapshot the moment the flag flips off so the HUD
   // doesn't linger with its last reading.
   useEffect(() => { if (!debugEnabled) setDebug(null); }, [debugEnabled]);
+
+  // Camera defaults are dev-settings-driven so the team can dial in
+  // framing per-install without touching code. Read once at mount —
+  // changing these values while the viewer is open won't reframe the
+  // existing scene (the user can still orbit). They take effect on
+  // the next 3D-view open, which is the saner UX (no surprise yanks).
+  const [dev] = useDevSettings();
+  const initialCameraRef = useRef(null);
+  if (!initialCameraRef.current) {
+    initialCameraRef.current = {
+      camera: [
+        Number(dev['golfballViewer.cameraX'] ?? 0),
+        Number(dev['golfballViewer.cameraY'] ?? 408.9),
+        Number(dev['golfballViewer.cameraZ'] ?? 0),
+      ],
+      target: [
+        Number(dev['golfballViewer.targetX'] ?? 0),
+        Number(dev['golfballViewer.targetY'] ?? 100),
+        Number(dev['golfballViewer.targetZ'] ?? 0),
+      ],
+    };
+  }
 
   useEffect(() => {
     let disposed = false;
@@ -210,13 +232,14 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         // the camera up-and-forward so the print sits front-and-center
         // on first open instead of needing the user to orbit up. The
         // user can still drag to rotate freely from there.
-        // Print area is the top pole at world +Y. To see it head-on
-        // the camera needs to sit ABOVE the pole on the same +Y side
-        // of the ball, looking down. A pure top-down view reads as
-        // flat; tilt the camera slightly forward (+Z) so the ball's
-        // curvature is visible and the print sits front-and-center.
-        const printPos = new THREE.Vector3(0, targetRadius, 0);
-        camera.position.set(0, targetRadius * 3.0, targetRadius * 1.8);
+        // Camera framing is dev-settings-driven; defaults are the
+        // top-down view dialed in via the debug HUD. Calibrated against
+        // targetRadius=100 (matches the rescale above), so any custom
+        // values entered through Developer Settings stay in the same
+        // coordinate space the HUD reports.
+        const { camera: cam0, target: tgt0 } = initialCameraRef.current;
+        const printPos = new THREE.Vector3(tgt0[0], tgt0[1], tgt0[2]);
+        camera.position.set(cam0[0], cam0[1], cam0[2]);
         camera.lookAt(printPos);
 
         controls = new OrbitControls(camera, renderer.domElement);
@@ -323,15 +346,7 @@ export function GolfballViewer({ decalDataUrl, onError }) {
       position: 'absolute', inset: 0,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      {status === 'loading' && (
-        <div style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-          color: 'var(--gb-text-muted)', fontSize: 12,
-        }}>
-          <Spinner size={20} />
-          <span>Loading 3D model…</span>
-        </div>
-      )}
+      {status === 'loading' && <LoadingBall />}
       {status === 'error' && (
         <div style={{
           fontSize: 12, color: 'var(--gb-error-fg)', textAlign: 'center', padding: 20,
@@ -401,6 +416,65 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           <div>polar  {debug.polar.toFixed(1)}°</div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── LoadingBall ────────────────────────────────────────────────
+   Placeholder splash shown while Three.js + the OBJ file are
+   resolving. A CSS-styled "golf ball" rotates in 3D via Motion's
+   continuous keyframes loop on rotateY. A radial-gradient body
+   gives it the highlight/shadow of a real ball; a multi-stop
+   tiled background-image fakes the dimple pattern.
+
+   Pure CSS + Motion (no Three.js dependency yet — that's still
+   loading) so this paints the instant the component mounts.
+─────────────────────────────────────────────────────────────── */
+function LoadingBall() {
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
+      color: 'var(--gb-text-muted)', fontSize: 12,
+    }}>
+      <motion.div
+        animate={{ rotateY: [0, 360] }}
+        transition={{ duration: 2.4, ease: 'linear', repeat: Infinity }}
+        style={{
+          /* Container set up as a 3D scene so the rotateY actually
+             reads as depth. transformStyle: preserve-3d lets the
+             child highlight gradient appear to wrap the ball. */
+          width: 64, height: 64,
+          perspective: 240,
+          transformStyle: 'preserve-3d',
+          borderRadius: '50%',
+          /* Dimple pattern — tiled radial-gradients give the
+             pockmarked look of a golf ball without an actual mesh.
+             Highlight overlay (the second linear-gradient) sells
+             the spherical curvature. */
+          background: `
+            radial-gradient(circle at 30% 28%, rgba(255,255,255,0.95) 0%, rgba(245,245,245,1) 38%, rgba(200,200,200,1) 88%, rgba(140,140,140,1) 100%),
+            radial-gradient(circle 3px at 50% 50%, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.0) 70%)
+          `,
+          backgroundSize: '100% 100%, 12px 12px',
+          backgroundBlendMode: 'normal, multiply',
+          boxShadow: `
+            inset -8px -8px 16px rgba(0,0,0,0.18),
+            inset 6px 6px 14px rgba(255,255,255,0.4),
+            0 12px 24px rgba(0,0,0,0.35)
+          `,
+        }}
+      />
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+        <span style={{
+          fontSize: 11, fontWeight: 700, letterSpacing: 0.6,
+          textTransform: 'uppercase', color: 'var(--gb-text-tertiary)',
+        }}>Preparing 3D view</span>
+        {/* Sub-text helps justify the brief wait — three.js + the
+            OBJ (4.7MB) only load on first 3D open per session. */}
+        <span style={{ fontSize: 10, color: 'var(--gb-text-muted)' }}>
+          Loading model + engine…
+        </span>
+      </div>
     </div>
   );
 }
