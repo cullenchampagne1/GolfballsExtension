@@ -1257,144 +1257,264 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // Shards — kill them instantly and restore the ball. Used
           // when the user closes the fun menu mid-explosion: there's
           // no point animating a graceful return when the whole UI
-          // is going away.
+          // is going away. Reparent the decal back to ballGroup first
+          // so it doesn't get disposed with the host shard.
           for (let i = shards.length - 1; i >= 0; i--) {
-            ballGroup.remove(shards[i].mesh);
-            shards[i].mesh.geometry.dispose();
-            shards[i].mesh.material.dispose();
+            const s = shards[i];
+            if (s.hasDecal && decalMesh) {
+              ballGroup.add(decalMesh);
+            }
+            ballGroup.remove(s.mesh);
+            s.mesh.geometry.dispose();
+            s.mesh.material.dispose();
           }
           shards.length = 0;
           if (ballExploded) {
             ballMesh.visible = true;
-            if (decalMesh) decalMesh.visible = true;
             ballExploded = false;
           }
         };
 
         /* ── Ball-explode effect ───────────────────────────────────
-           Slice the visible ball into ~16 curved wedges, fling them
-           outward with random spins, and burst a particle puff at
-           the origin. The ball mesh itself goes invisible while the
-           shards are out so the user sees the ball "become" the
-           shards. Reassemble() reverses it: tween each shard back to
-           its home seat, then show the ball + dispose the shards.
+           Slice the real ball mesh into ~16 wedges by spatially
+           binning its triangles, fling them outward with random spins
+           + realistic gravity, and burst a particle puff at the
+           origin. The ball mesh goes invisible while shards are out
+           so the user sees the ball "become" its pieces. Reassemble()
+           reverses it: tween each shard back home, then show the
+           ball + dispose the shards.
 
-           Geometry: each shard is a SphereGeometry slice carved by
-           (phiStart, phiLength, thetaStart, thetaLength). A 4×4 grid
-           of slices (4 longitude bands × 4 latitude bands) gives 16
-           wedges that perfectly cover the ball surface; centroids are
-           offset OUTWARD slightly so the burst looks volumetric on
-           the first frame rather than collapsing through itself.
+           Binning: each source triangle's CENTROID is converted to
+           spherical coords (phi, theta) on the ball; the (phi, theta)
+           pair indexes one of 4×4=16 wedge bins. All triangles in a
+           bin become one shard's BufferGeometry — so each shard owns
+           a real, dimpled patch of the original ball surface.
 
-           Shards live as children of ballGroup so wheel-scale + dev-
-           setting rotation still apply — the explosion respects the
-           same camera/scale framing as the intact ball. */
-        const SHARD_LON_BANDS  = 4;
-        const SHARD_LAT_BANDS  = 4;
+           Closed cuts: each wedge would be hollow viewed from inside
+           since the model's only the outer shell. We cap every shard
+           with a fan of inner triangles meeting at the ball center,
+           textured with the same material, so seeing into a tumbling
+           shard reads as solid rather than empty.
+
+           Decal: the camera-facing logo lives at (0,0,+100) on the
+           ball. Whichever shard's bin contains that direction adopts
+           the decal mesh as a child — when the shard tumbles, the
+           decal tumbles with it (it will visibly warp; per design,
+           that's preferred over the decal vanishing). */
+        const SHARD_LON_BANDS  = 4;                   // phi divisions (around Y)
+        const SHARD_LAT_BANDS  = 4;                   // theta divisions (top→bottom)
         const SHARD_LIFE_MS    = 1100;
         const SHARD_RETURN_MS  = 850;
-        const SHARD_RADIUS     = 100;            // matches targetRadius
-        const SHARD_DRAG       = 0.93;           // per-frame velocity damping
-        const SHARD_GRAVITY    = 240;            // px/s² downward while flying
+        const SHARD_DRAG       = 0.985;               // per-frame velocity damping (gentle — gravity dominates)
+        const SHARD_GRAVITY    = 980;                 // px/s² — matches the rest of the world
         const _tmpV3a = new THREE.Vector3();
         const _tmpQa  = new THREE.Quaternion();
-        // Cubic ease-out for the reassembly tween — fast at first,
-        // slow as each shard settles into its seat (reads as "magnetic
-        // snap"). Sharper than a linear lerp without overshooting.
         const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
 
+        /* Bin the source geometry's triangles by (phi, theta) of their
+           centroid. We pre-compute this ONCE so re-clicking explode
+           doesn't re-walk the geometry every time. The result is a
+           Map keyed by `${i}_${j}` → { positions:Float32Array,
+           normals:Float32Array }. Positions are pre-baked through
+           ballMesh's local matrix so the shard geometry lives in
+           ballGroup-local space, which matches the camera framing
+           the user already sees. */
+        let cachedShardBins = null;
+        const buildShardBins = () => {
+          if (cachedShardBins) return cachedShardBins;
+          const srcGeo = ballMesh.geometry;
+          const srcPos = srcGeo.attributes.position;
+          const srcNrm = srcGeo.attributes.normal;
+          const srcIdx = srcGeo.index;
+          // Compose ballMesh's local matrix (scale + recentering
+          // offset) so the shard verts land where the visible ball
+          // sits, not at the OBJ's native scale.
+          ballMesh.updateMatrix();
+          const mat4 = ballMesh.matrix;
+          const nMat3 = new THREE.Matrix3().getNormalMatrix(mat4);
+          const phiStep   = (Math.PI * 2) / SHARD_LON_BANDS;
+          const thetaStep =  Math.PI      / SHARD_LAT_BANDS;
+          const bins = new Map();
+          const getBin = (key) => {
+            let b = bins.get(key);
+            if (!b) { b = { positions: [], normals: [] }; bins.set(key, b); }
+            return b;
+          };
+          const triCount = srcIdx ? srcIdx.count / 3 : srcPos.count / 3;
+          const va = new THREE.Vector3(), vb = new THREE.Vector3(), vc = new THREE.Vector3();
+          const na = new THREE.Vector3(), nb = new THREE.Vector3(), nc = new THREE.Vector3();
+          const ce = new THREE.Vector3();
+          for (let t = 0; t < triCount; t++) {
+            const i0 = srcIdx ? srcIdx.getX(t * 3 + 0) : t * 3 + 0;
+            const i1 = srcIdx ? srcIdx.getX(t * 3 + 1) : t * 3 + 1;
+            const i2 = srcIdx ? srcIdx.getX(t * 3 + 2) : t * 3 + 2;
+            va.fromBufferAttribute(srcPos, i0).applyMatrix4(mat4);
+            vb.fromBufferAttribute(srcPos, i1).applyMatrix4(mat4);
+            vc.fromBufferAttribute(srcPos, i2).applyMatrix4(mat4);
+            na.fromBufferAttribute(srcNrm, i0).applyMatrix3(nMat3).normalize();
+            nb.fromBufferAttribute(srcNrm, i1).applyMatrix3(nMat3).normalize();
+            nc.fromBufferAttribute(srcNrm, i2).applyMatrix3(nMat3).normalize();
+            ce.set((va.x + vb.x + vc.x) / 3, (va.y + vb.y + vc.y) / 3, (va.z + vb.z + vc.z) / 3);
+            // Sphere coords for the centroid. theta∈[0,π] from +Y down
+            // matches Three.js SphereGeometry conventions; phi∈[0,2π)
+            // around Y. Both map directly to bin indices.
+            const r = Math.sqrt(ce.x * ce.x + ce.y * ce.y + ce.z * ce.z) || 1;
+            const theta = Math.acos(Math.max(-1, Math.min(1, ce.y / r)));
+            let phi = Math.atan2(ce.z, ce.x);
+            if (phi < 0) phi += Math.PI * 2;
+            const li = Math.min(SHARD_LON_BANDS - 1, Math.floor(phi / phiStep));
+            const lj = Math.min(SHARD_LAT_BANDS - 1, Math.floor(theta / thetaStep));
+            const bin = getBin(`${li}_${lj}`);
+            bin.positions.push(va.x, va.y, va.z, vb.x, vb.y, vb.z, vc.x, vc.y, vc.z);
+            bin.normals.push(na.x, na.y, na.z, nb.x, nb.y, nb.z, nc.x, nc.y, nc.z);
+          }
+          cachedShardBins = { bins, phiStep, thetaStep };
+          return cachedShardBins;
+        };
+
+        /* Decide which (li, lj) bin contains the decal anchor point
+           (0, 0, +100). That bin's shard adopts the decal. */
+        const decalBinKey = (() => {
+          const dir = new THREE.Vector3(0, 0, 1);
+          const r = 1;
+          const theta = Math.acos(Math.max(-1, Math.min(1, dir.y / r)));
+          let phi = Math.atan2(dir.z, dir.x);
+          if (phi < 0) phi += Math.PI * 2;
+          const phiStep   = (Math.PI * 2) / SHARD_LON_BANDS;
+          const thetaStep =  Math.PI      / SHARD_LAT_BANDS;
+          const li = Math.min(SHARD_LON_BANDS - 1, Math.floor(phi / phiStep));
+          const lj = Math.min(SHARD_LAT_BANDS - 1, Math.floor(theta / thetaStep));
+          return `${li}_${lj}`;
+        })();
+
         explodeBallAtRef.current = () => {
-          // Re-explode while shards are already out: just toss them
-          // again with fresh velocities. Avoids the awkward "click
-          // does nothing because shards exist" path.
+          // Re-explode while shards are already out: toss them again
+          // with fresh velocities. Avoids the awkward "nothing happens"
+          // path when the user clicks rapidly.
           if (shards.length > 0) {
             for (const s of shards) {
               s.mode = 'flying';
               s.life = SHARD_LIFE_MS;
-              const dir = _tmpV3a.copy(s.home).normalize();
-              const speed = 220 + Math.random() * 180;
-              s.vel.copy(dir).multiplyScalar(speed);
-              s.vel.y += 60 + Math.random() * 80;
+              const speed = 260 + Math.random() * 240;
+              s.vel.copy(s.outDir).multiplyScalar(speed);
+              s.vel.y += 200 + Math.random() * 120;
               s.angVel.set(
-                (Math.random() - 0.5) * 6,
-                (Math.random() - 0.5) * 6,
-                (Math.random() - 0.5) * 6,
+                (Math.random() - 0.5) * 8,
+                (Math.random() - 0.5) * 8,
+                (Math.random() - 0.5) * 8,
               );
             }
             spawnExplodeParticles();
             return;
           }
 
-          // Build shards from a sliced sphere. Each slice owns a
-          // CLONE of the ball's material so we can fade them
-          // independently later without touching the ball material.
-          const phiStep   = (Math.PI * 2) / SHARD_LON_BANDS;
-          const thetaStep =  Math.PI      / SHARD_LAT_BANDS;
+          const { bins, phiStep, thetaStep } = buildShardBins();
           const ballMatSrc = ballMesh.material;
-          for (let li = 0; li < SHARD_LON_BANDS; li++) {
-            for (let lj = 0; lj < SHARD_LAT_BANDS; lj++) {
-              const phiStart   = li * phiStep;
-              const phiLength  = phiStep;
-              const thetaStart = lj * thetaStep;
-              const thetaLength = thetaStep;
-              // Segments tuned: enough to read as a curved wedge but
-              // not so many that 16 shards balloon vertex count.
-              const geo = new THREE.SphereGeometry(
-                SHARD_RADIUS,
-                10, 6,
-                phiStart, phiLength,
-                thetaStart, thetaLength,
-              );
-              const mat = ballMatSrc.clone();
-              mat.transparent = true;
-              mat.opacity = 1;
-              const mesh = new THREE.Mesh(geo, mat);
-              mesh.castShadow = true;
-              // Home pose = identity (the wedge already sits exactly
-              // where its piece of the ball surface would be when
-              // added at origin). Stash these so reassembly knows
-              // where to land each shard.
-              const home = new THREE.Vector3(0, 0, 0);
-              const homeQuat = new THREE.Quaternion();
-              mesh.position.copy(home);
-              mesh.quaternion.copy(homeQuat);
-              // Outward direction = wedge centroid in spherical
-              // coords. We give each shard a velocity along this
-              // ray + a small up-bias so the burst lofts upward
-              // instead of just spraying flat.
-              const phiMid   = phiStart   + phiLength   * 0.5;
-              const thetaMid = thetaStart + thetaLength * 0.5;
-              const dir = new THREE.Vector3(
-                Math.sin(thetaMid) * Math.cos(phiMid),
-                Math.cos(thetaMid),
-                Math.sin(thetaMid) * Math.sin(phiMid),
-              );
-              const speed = 240 + Math.random() * 220;
-              const vel = dir.clone().multiplyScalar(speed);
-              vel.y += 80 + Math.random() * 60;
-              const angVel = new THREE.Vector3(
-                (Math.random() - 0.5) * 7,
-                (Math.random() - 0.5) * 7,
-                (Math.random() - 0.5) * 7,
-              );
-              ballGroup.add(mesh);
-              shards.push({
-                mesh,
-                home,
-                homeQuat,
-                vel,
-                angVel,
-                mode: 'flying',
-                t: 0,
-                startPos: new THREE.Vector3(),
-                startQuat: new THREE.Quaternion(),
-                life: SHARD_LIFE_MS,
-              });
+          for (const [key, bin] of bins) {
+            if (bin.positions.length === 0) continue;
+            const [liStr, ljStr] = key.split('_');
+            const li = +liStr, lj = +ljStr;
+            // Build the outer (dimpled) surface from the binned tris.
+            const positions = new Float32Array(bin.positions);
+            const normals = new Float32Array(bin.normals);
+            const geo = new THREE.BufferGeometry();
+            geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+            // Cap the cut faces with a fan of inner triangles meeting
+            // at the ball center. Each triangle (a, b, c) on the outer
+            // shell gets a matching inner triangle (center, c, b) —
+            // reversed winding so its normal faces INWARD, sealing
+            // the wedge so it doesn't read as hollow when tumbling.
+            const triCount = positions.length / 9;
+            const capPos = new Float32Array(triCount * 9);
+            const capNrm = new Float32Array(triCount * 9);
+            for (let t = 0; t < triCount; t++) {
+              const o = t * 9;
+              // center vertex (origin)
+              capPos[o + 0] = 0; capPos[o + 1] = 0; capPos[o + 2] = 0;
+              // c, then b (reversed from a,b,c)
+              capPos[o + 3] = positions[o + 6]; capPos[o + 4] = positions[o + 7]; capPos[o + 5] = positions[o + 8];
+              capPos[o + 6] = positions[o + 3]; capPos[o + 7] = positions[o + 4]; capPos[o + 8] = positions[o + 5];
+              // Inward normal — point back toward the center from the
+              // average of the outer triangle. Cheap shading hint;
+              // these inner faces are rarely seen so flat normals are
+              // fine.
+              const ax = positions[o + 0], ay = positions[o + 1], az = positions[o + 2];
+              const bx = positions[o + 3], by = positions[o + 4], bz = positions[o + 5];
+              const cx = positions[o + 6], cy = positions[o + 7], cz = positions[o + 8];
+              const mx = (ax + bx + cx) / 3, my = (ay + by + cy) / 3, mz = (az + bz + cz) / 3;
+              const ml = Math.sqrt(mx * mx + my * my + mz * mz) || 1;
+              const nx = -mx / ml, ny = -my / ml, nz = -mz / ml;
+              capNrm[o + 0] = nx; capNrm[o + 1] = ny; capNrm[o + 2] = nz;
+              capNrm[o + 3] = nx; capNrm[o + 4] = ny; capNrm[o + 5] = nz;
+              capNrm[o + 6] = nx; capNrm[o + 7] = ny; capNrm[o + 8] = nz;
             }
+            // Merge outer shell + inner cap into one BufferGeometry.
+            const mergedPos = new Float32Array(positions.length + capPos.length);
+            const mergedNrm = new Float32Array(normals.length + capNrm.length);
+            mergedPos.set(positions, 0); mergedPos.set(capPos, positions.length);
+            mergedNrm.set(normals, 0); mergedNrm.set(capNrm, normals.length);
+            geo.setAttribute('position', new THREE.BufferAttribute(mergedPos, 3));
+            geo.setAttribute('normal', new THREE.BufferAttribute(mergedNrm, 3));
+            const mat = ballMatSrc.clone();
+            mat.side = THREE.DoubleSide; // safety net — inner caps render either way
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.castShadow = true;
+            // Home pose = identity. Geometry already sits in ballGroup-
+            // local space (we baked ballMesh.matrix into the verts),
+            // so position=(0,0,0) puts the shard exactly where its
+            // piece of the ball used to be.
+            mesh.position.set(0, 0, 0);
+            mesh.quaternion.identity();
+            // Outward direction = the bin's wedge centroid on the unit
+            // sphere. Velocity is scripted along this ray + an up-bias.
+            const phiMid   = (li + 0.5) * phiStep;
+            const thetaMid = (lj + 0.5) * thetaStep;
+            const outDir = new THREE.Vector3(
+              Math.sin(thetaMid) * Math.cos(phiMid),
+              Math.cos(thetaMid),
+              Math.sin(thetaMid) * Math.sin(phiMid),
+            );
+            const speed = 280 + Math.random() * 260;
+            const vel = outDir.clone().multiplyScalar(speed);
+            vel.y += 220 + Math.random() * 140; // strong loft so they arc up before falling
+            const angVel = new THREE.Vector3(
+              (Math.random() - 0.5) * 9,
+              (Math.random() - 0.5) * 9,
+              (Math.random() - 0.5) * 9,
+            );
+            ballGroup.add(mesh);
+            const shard = {
+              mesh,
+              outDir,
+              homeQuat: new THREE.Quaternion(),
+              vel,
+              angVel,
+              mode: 'flying',
+              t: 0,
+              startPos: new THREE.Vector3(),
+              startQuat: new THREE.Quaternion(),
+              life: SHARD_LIFE_MS,
+              hasDecal: false,
+            };
+            // The wedge that owns the decal anchor adopts the decal
+            // mesh as a child. The shard's geometry already lives in
+            // ballGroup-local space (matrix baked in), and the shard's
+            // local transform is identity at home — so the decal keeps
+            // the SAME local position/scale it had under ballGroup,
+            // which puts its dimples-projected vertices exactly where
+            // they were before. When the shard tumbles, the decal goes
+            // along; when reassembly returns the shard to identity,
+            // the decal sits back on the ball surface.
+            if (decalMesh && key === decalBinKey) {
+              mesh.add(decalMesh);
+              shard.hasDecal = true;
+            }
+            shards.push(shard);
           }
-          // Hide the intact ball + its decal so we don't render both.
+          // Hide the intact ball. The decal travels with its host
+          // shard, so we don't toggle decalMesh.visible.
           ballMesh.visible = false;
-          if (decalMesh) decalMesh.visible = false;
           ballExploded = true;
           spawnExplodeParticles();
         };
@@ -2405,16 +2525,23 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 s.mesh.quaternion.slerpQuaternions(s.startQuat, s.homeQuat, k);
               }
             }
-            // All shards have landed → tear them down, show the ball.
+            // All shards have landed → re-home the decal, tear shards
+            // down, show the ball. Decal goes back under ballGroup with
+            // its original transform preserved (it has been sitting at
+            // home position/quaternion via the host shard's identity
+            // pose, so no re-set needed).
             if (returningCount > 0 && landedCount === returningCount && returningCount === shards.length) {
               for (let i = shards.length - 1; i >= 0; i--) {
-                ballGroup.remove(shards[i].mesh);
-                shards[i].mesh.geometry.dispose();
-                shards[i].mesh.material.dispose();
+                const s = shards[i];
+                if (s.hasDecal && decalMesh) {
+                  ballGroup.add(decalMesh); // reparent back; local xform preserved
+                }
+                ballGroup.remove(s.mesh);
+                s.mesh.geometry.dispose();
+                s.mesh.material.dispose();
               }
               shards.length = 0;
               ballMesh.visible = true;
-              if (decalMesh) decalMesh.visible = true;
               ballExploded = false;
             }
           }
