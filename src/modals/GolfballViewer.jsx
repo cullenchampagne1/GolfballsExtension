@@ -703,7 +703,33 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           e.preventDefault();
           const factor = e.deltaY < 0 ? 1.08 : 1 / 1.08;
           state.scale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, state.scale * factor));
+          // Resize the cannon collision sphere to match the visual
+          // scale. Without this, the physics sphere stays at its
+          // original 100-unit radius while the rendered ball changes
+          // size — the ball's visible bottom drifts above (when
+          // scaled down) or clips through (when scaled up) the floor.
+          syncBodyRadius();
         };
+
+        /* Replace the cannon sphere with one matching the current
+           visual scale. cannon-es doesn't support live shape resizing,
+           so we clear + add. Cheap enough at click frequency. */
+        function syncBodyRadius() {
+          if (!ballBody) return;
+          // Snapshot pos+quat so the shape swap doesn't reset them.
+          const px = ballBody.position.x, py = ballBody.position.y, pz = ballBody.position.z;
+          const qx = ballBody.quaternion.x, qy = ballBody.quaternion.y;
+          const qz = ballBody.quaternion.z, qw = ballBody.quaternion.w;
+          ballBody.shapes = [];
+          ballBody.shapeOffsets = [];
+          ballBody.shapeOrientations = [];
+          ballBody.addShape(new CANNON.Sphere(targetRadius * state.scale));
+          ballBody.updateMassProperties();
+          ballBody.position.set(px, py, pz);
+          ballBody.quaternion.set(qx, qy, qz, qw);
+        }
+        // Initial sync so the body matches the dev-default ball scale.
+        if (state.scale !== 1) syncBodyRadius();
 
         renderer.domElement.addEventListener('pointerdown', onPDown);
         renderer.domElement.addEventListener('pointermove', onPMove);
