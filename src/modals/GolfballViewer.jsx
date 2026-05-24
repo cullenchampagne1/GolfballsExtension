@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Spinner } from '../ui/index.js';
+import { useDevSetting } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    GolfballViewer — Three.js scene that renders a golf ball with
@@ -83,11 +84,19 @@ export function GolfballViewer({ decalDataUrl, onError }) {
   // 'loading' until Three.js + the model finish; then 'ready'. 'error'
   // surfaces a basic message instead of an empty canvas.
   const [status, setStatus] = useState('loading');
-  // Live snapshot of camera + controls state for the debug HUD.
-  // Updated by the render loop (throttled to ~10Hz) so React isn't
-  // re-rendering 60 times a second just to paint readouts.
+  // Debug HUD is gated behind a developer setting (default off). When
+  // off, the render loop also skips publishing snapshot state so we
+  // avoid the ~10Hz React re-renders entirely. Mirror the flag to a
+  // ref so the long-lived render closure can read it live without
+  // forcing the WebGL effect to tear down on every toggle.
+  const debugEnabled = !!useDevSetting('golfballViewer.showDebugHud');
+  const debugEnabledRef = useRef(debugEnabled);
+  useEffect(() => { debugEnabledRef.current = debugEnabled; }, [debugEnabled]);
   const [debug, setDebug] = useState(null);
   const [debugCopied, setDebugCopied] = useState(false);
+  // Clear stale snapshot the moment the flag flips off so the HUD
+  // doesn't linger with its last reading.
+  useEffect(() => { if (!debugEnabled) setDebug(null); }, [debugEnabled]);
 
   useEffect(() => {
     let disposed = false;
@@ -237,7 +246,7 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           controls.update();
           renderer.render(scene, camera);
           const now = performance.now();
-          if (now - lastDebugTs > 100) {
+          if (debugEnabledRef.current && now - lastDebugTs > 100) {
             lastDebugTs = now;
             // Spherical (azimuth, polar, radius) is how OrbitControls
             // really thinks about the camera — easier to dial in than
