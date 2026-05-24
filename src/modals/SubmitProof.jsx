@@ -508,6 +508,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
               counts={itemCounts}
               error={showErr('items', selectedItems.length === 0)}
               onAdd={(it) => {
+                console.log('[SubmitProof] onAdd fired with:', it);
                 addItem(it);
                 setInvalid((i) => ({ ...i, items: false }));
                 setTouched((t) => ({ ...t, items: false }));
@@ -975,7 +976,7 @@ function ItemMultiSelect({ items, counts, error, onAdd, onRemove, onTouch }) {
                 >
                   <button
                     type="button"
-                    onMouseDown={(e) => { e.preventDefault(); onAdd(it); }}
+                    onMouseDown={(e) => { console.log('[ItemMultiSelect] option mousedown:', it); e.preventDefault(); onAdd(it); }}
                     style={{
                       flex: 1, textAlign: 'left',
                       background: 'transparent', border: 'none', padding: 0,
@@ -1048,6 +1049,7 @@ function ToggleTag({ on, onClick, icon, children }) {
    skipped — they're a request, not a deliverable. Each block has its
    own delete button that pulls the item out of selectedItems. */
 function DynamicFieldsList({ selectedItems, dynData, onUpdate, onRemove }) {
+  console.log('[DynamicFieldsList] render — selectedItems:', selectedItems);
   // Build instance numbers per item so duplicates get " · 2" / " · 3".
   const counts = {};
   const seen = {};
