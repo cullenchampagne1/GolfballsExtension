@@ -131,7 +131,15 @@ export function FloatingPanel({
               // Centered modal mode = click-to-close: capture pointer events
               // and route any click on the backdrop to the close handler.
               pointerEvents: draggable ? 'none' : 'auto',
-              background: backdrop ? 'var(--gb-backdrop)' : 'transparent',
+              // Visual treatment differs too: draggable uses the soft
+              // page-tint backdrop (so the page underneath stays legible),
+              // centered modal uses a darker scrim + slight blur to push
+              // the page back and focus attention on the modal.
+              background: backdrop
+                ? (draggable ? 'var(--gb-backdrop)' : 'rgba(0, 0, 0, 0.55)')
+                : 'transparent',
+              backdropFilter: backdrop && !draggable ? 'blur(4px)' : 'none',
+              WebkitBackdropFilter: backdrop && !draggable ? 'blur(4px)' : 'none',
             }}
           />
           <FloatingPanelContext.Provider value={ctx}>
