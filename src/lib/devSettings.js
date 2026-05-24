@@ -48,58 +48,42 @@ export const DEV_SETTINGS = [
     default: false,
   },
 
-  /* ── 3D viewer camera defaults ────────────────────────────────
-     Six knobs (camera xyz + target xyz) defining where the camera
-     lands on initial 3D-view open. Defaults are the user's dialed-
-     in pole-down framing copied straight out of the debug HUD;
-     each is editable per-installation via the dev settings table. */
+  /* ── 3D viewer ball defaults ──────────────────────────────────
+     Camera is fixed now (straight-on, floor aligns with the panel
+     bottom). The remaining tunables are the BALL — initial scale +
+     a starting orientation so the team can dial in how the print
+     sits at first open without touching code. */
   {
-    key:     'golfballViewer.cameraX',
-    label:   'Golfball viewer: camera X',
-    desc:    'Default camera X position (world units; ball radius = 100).',
+    key:     'golfballViewer.ballScale',
+    label:   'Golfball viewer: default ball scale',
+    desc:    'Initial scale of the ball when 3D opens (1 = native size). Wheel zoom still overrides during use.',
+    type:    'number',
+    default: 1,
+    min:     0.4, max: 2.5, step: 0.05,
+  },
+  {
+    key:     'golfballViewer.ballRotX',
+    label:   'Golfball viewer: default ball rotation X (deg)',
+    desc:    'Initial pitch rotation of the ball around the X axis at first 3D open. Drag-to-rotate still overrides during use.',
     type:    'number',
     default: 0,
-    min:     -1000, max: 1000, step: 1,
+    min:     -180, max: 180, step: 1,
   },
   {
-    key:     'golfballViewer.cameraY',
-    label:   'Golfball viewer: camera Y',
-    desc:    'Default camera Y position (world units; ball radius = 100).',
-    type:    'number',
-    default: 408.9,
-    min:     -1000, max: 1000, step: 1,
-  },
-  {
-    key:     'golfballViewer.cameraZ',
-    label:   'Golfball viewer: camera Z',
-    desc:    'Default camera Z position (world units; ball radius = 100).',
+    key:     'golfballViewer.ballRotY',
+    label:   'Golfball viewer: default ball rotation Y (deg)',
+    desc:    'Initial yaw rotation of the ball around the Y axis at first 3D open.',
     type:    'number',
     default: 0,
-    min:     -1000, max: 1000, step: 1,
+    min:     -180, max: 180, step: 1,
   },
   {
-    key:     'golfballViewer.targetX',
-    label:   'Golfball viewer: target X',
-    desc:    'OrbitControls target X (the point the camera orbits around).',
+    key:     'golfballViewer.ballRotZ',
+    label:   'Golfball viewer: default ball rotation Z (deg)',
+    desc:    'Initial roll rotation of the ball around the Z axis at first 3D open.',
     type:    'number',
     default: 0,
-    min:     -500, max: 500, step: 1,
-  },
-  {
-    key:     'golfballViewer.targetY',
-    label:   'Golfball viewer: target Y',
-    desc:    'OrbitControls target Y (the point the camera orbits around).',
-    type:    'number',
-    default: 100,
-    min:     -500, max: 500, step: 1,
-  },
-  {
-    key:     'golfballViewer.targetZ',
-    label:   'Golfball viewer: target Z',
-    desc:    'OrbitControls target Z (the point the camera orbits around).',
-    type:    'number',
-    default: 0,
-    min:     -500, max: 500, step: 1,
+    min:     -180, max: 180, step: 1,
   },
   {
     key:     'marginCalc.minAllowedMargin',

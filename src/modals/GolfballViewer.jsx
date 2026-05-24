@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useDevSetting } from '../lib/devSettings.js';
+import { useDevSetting, useDevSettings } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    GolfballViewer — Three.js scene that renders a golf ball with
@@ -150,10 +150,22 @@ export function GolfballViewer({ decalDataUrl, onError }) {
   // doesn't linger with its last reading.
   useEffect(() => { if (!debugEnabled) setDebug(null); }, [debugEnabled]);
 
-  // Camera is fixed: side view, ball centered, decal facing the
-  // camera. No more mode-switching cameras or user-controlled orbit.
-  // The dev-setting registry entries for camera x/y/z + target stay
-  // in place for future tuning but aren't read here.
+  // Camera is fixed (straight-on, floor at the bottom edge). The
+  // remaining tunables are the BALL — initial scale + Euler rotation —
+  // driven from Developer Settings so the team can dial in default
+  // framing per-install. Snapshotted once into a ref at mount; future
+  // toggles affect the next 3D-view open, not the live scene.
+  const [dev] = useDevSettings();
+  const initialBallRef = useRef(null);
+  if (!initialBallRef.current) {
+    const deg = (k, fallback) => (Number(dev[k] ?? fallback) * Math.PI) / 180;
+    initialBallRef.current = {
+      scale: Number(dev['golfballViewer.ballScale'] ?? 1),
+      rotX: deg('golfballViewer.ballRotX', 0),
+      rotY: deg('golfballViewer.ballRotY', 0),
+      rotZ: deg('golfballViewer.ballRotZ', 0),
+    };
+  }
 
   useEffect(() => {
     let disposed = false;
@@ -192,7 +204,10 @@ export function GolfballViewer({ decalDataUrl, onError }) {
            • wheel still scales (cosmetic — also resizes the physics
              sphere shape so collisions match) */
     const state = {
-      scale: 1,
+      // Initial scale comes from the dev-settings snapshot so the
+      // team can set a baseline ball size per-install. Wheel still
+      // overrides during use.
+      scale: initialBallRef.current.scale,
       dragging: false,
       dragStart: { px: 0, py: 0, wx: 0, wy: 0 },
       history: [],
@@ -212,14 +227,14 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         // around the ball. Matches the playground's design-canvas vibe.
 
         const { clientWidth: w, clientHeight: h } = container;
-        // Camera tilted above the ball looking slightly down so the
-        // floor is visible below. ~25° tilt is enough for spatial
-        // reference (you see the floor + ball relationship) without
-        // making the front of the ball foreshorten too much. Position
-        // is pulled back to fit the larger HALF_* box in frame.
+        // Camera fixed straight-on at the room's center — no Y offset,
+        // no downward tilt. The floor wall (y = -HALF_Y) therefore
+        // projects as a horizontal line at the bottom edge of the
+        // panel instead of receding diagonally. The print decal sits
+        // on the +Z face of the ball, directly facing the camera.
         camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 2000);
-        camera.position.set(0, 180, 480);
-        camera.lookAt(0, -40, 0);
+        camera.position.set(0, 0, 520);
+        camera.lookAt(0, 0, 0);
 
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setPixelRatio(window.devicePixelRatio);
@@ -343,6 +358,14 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         // wall-collision math.
         ballGroup = new THREE.Group();
         ballGroup.add(ballMesh);
+        // Apply the dev-settings default rotation so the print sits
+        // at whatever orientation the team has dialed in. Drag-to-
+        // rotate during use can override this freely.
+        ballGroup.rotation.set(
+          initialBallRef.current.rotX,
+          initialBallRef.current.rotY,
+          initialBallRef.current.rotZ,
+        );
         scene.add(ballGroup);
         objectsToDispose.push(ballMesh.material);
 
@@ -360,25 +383,13 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           decalTexture.wrapT = THREE.ClampToEdgeWrapping;
           objectsToDispose.push(decalTexture);
 
-          // Project the decal from the camera's general direction so
-          // the print faces the viewer. Camera sits at (0, 180, 480)
-          // looking down-and-forward; normalizing that vector and
-          // placing the decal source at radius distance along it puts
-          // the print on the visible face of the ball.
-          //
-          // decalOrientation is derived from the projection direction:
-          // a Vector3.lookAt-equivalent Euler so DecalGeometry's
-          // projection-box faces the ball center. Built by constructing
-          // a temporary Object3D and reading its rotation.
-          const camDir = new THREE.Vector3(0, 180, 480).normalize();
-          const decalPosition = camDir.clone().multiplyScalar(targetRadius * 0.999);
-          const orienter = new THREE.Object3D();
-          orienter.position.copy(decalPosition);
-          orienter.lookAt(0, 0, 0);
-          // DecalGeometry projects along -Z of its orientation, so the
-          // lookAt-derived Euler aims the projection axis at the ball
-          // center. No extra rotation tweak needed.
-          const decalOrientation = orienter.rotation;
+          // Camera is straight-on at +Z, so the decal projects from
+          // +Z directly toward the ball center along -Z. Default
+          // identity Euler aims the projection box's -Z axis at the
+          // origin, which IS the ball center — the print lands flat
+          // on the camera-facing face of the ball.
+          const decalPosition = new THREE.Vector3(0, 0, targetRadius * 0.999);
+          const decalOrientation = new THREE.Euler(0, 0, 0);
           const decalSize = new THREE.Vector3(targetRadius * 0.7, targetRadius * 0.7, targetRadius * 2);
 
           const decalGeo = new DecalGeometry(ballMesh, decalPosition, decalOrientation, decalSize);
@@ -533,13 +544,17 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           const now = performance.now();
           if (debugEnabledRef.current && now - lastDebugTs > 100) {
             lastDebugTs = now;
+            // Snapshot the ball's user-visible state — scale + Euler
+            // rotation in degrees. These are the values the user will
+            // copy into the dev settings to set new defaults.
+            const rad2deg = (r) => (r * 180) / Math.PI;
             setDebug({
-              pos: [camera.position.x, camera.position.y, camera.position.z],
-              target: [0, 0, 0],
-              dist: camera.position.length(),
-              azimuth: 0,
-              polar: 90,
-              radius: targetRadius,
+              scale: state.scale,
+              rotDeg: [
+                rad2deg(ballGroup.rotation.x),
+                rad2deg(ballGroup.rotation.y),
+                rad2deg(ballGroup.rotation.z),
+              ],
             });
           }
           animationId = requestAnimationFrame(render);
@@ -820,6 +835,11 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           straight back into the source. The copy payload is a JS-ready
           snippet of camera.position.set + target.set so you can paste
           directly into the GolfballViewer init code. */}
+      {/* Debug HUD — shows ball scale + Euler rotation in degrees so
+          you can orbit/scale the ball into the desired default look
+          and copy the exact values into Developer Settings → Golfball
+          viewer defaults. Camera is now fixed; what matters is what
+          the BALL is doing. */}
       {debug && (
         <div style={{
           position: 'absolute', top: 8, left: 8, zIndex: 5,
@@ -838,17 +858,19 @@ export function GolfballViewer({ decalDataUrl, onError }) {
             <span style={{
               fontWeight: 700, fontSize: 9, letterSpacing: 0.4,
               textTransform: 'uppercase', color: 'var(--gb-text-muted)',
-            }}>Camera debug</span>
+            }}>Ball debug</span>
             <span style={{ flex: 1 }} />
             <button
               type="button"
               onClick={() => {
-                const r = debug.radius;
+                // Snippet matches the dev-setting keys exactly so the
+                // user can paste the values directly into Developer
+                // Settings without translating coordinate systems.
                 const snippet =
-                  `// targetRadius = ${r.toFixed(1)}\n` +
-                  `camera.position.set(${debug.pos.map((n) => n.toFixed(1)).join(', ')});\n` +
-                  `controls.target.set(${debug.target.map((n) => n.toFixed(1)).join(', ')});\n` +
-                  `// orbit: azimuth ${debug.azimuth.toFixed(1)}°, polar ${debug.polar.toFixed(1)}°, dist ${debug.dist.toFixed(1)}`;
+                  `golfballViewer.ballScale = ${debug.scale.toFixed(2)}\n` +
+                  `golfballViewer.ballRotX  = ${debug.rotDeg[0].toFixed(1)}°\n` +
+                  `golfballViewer.ballRotY  = ${debug.rotDeg[1].toFixed(1)}°\n` +
+                  `golfballViewer.ballRotZ  = ${debug.rotDeg[2].toFixed(1)}°`;
                 navigator.clipboard?.writeText(snippet)
                   .then(() => { setDebugCopied(true); setTimeout(() => setDebugCopied(false), 1500); })
                   .catch(() => {});
@@ -864,15 +886,10 @@ export function GolfballViewer({ decalDataUrl, onError }) {
               }}
             >{debugCopied ? 'copied' : 'copy'}</button>
           </div>
-          {/* Stripped down to the values useful for tuning the default
-              camera framing. Multiply-by-r values give you the value in
-              "radius units" which is how the source code expresses
-              camera.position.set (e.g. targetRadius * 1.8). */}
-          <div>pos    [{debug.pos.map((n) => (n / debug.radius).toFixed(2) + 'r').join(', ')}]</div>
-          <div>target [{debug.target.map((n) => (n / debug.radius).toFixed(2) + 'r').join(', ')}]</div>
-          <div>dist   {(debug.dist / debug.radius).toFixed(2)}r</div>
-          <div>az     {debug.azimuth.toFixed(1)}°</div>
-          <div>polar  {debug.polar.toFixed(1)}°</div>
+          <div>scale   {debug.scale.toFixed(2)}</div>
+          <div>rot.x   {debug.rotDeg[0].toFixed(1)}°</div>
+          <div>rot.y   {debug.rotDeg[1].toFixed(1)}°</div>
+          <div>rot.z   {debug.rotDeg[2].toFixed(1)}°</div>
         </div>
       )}
     </div>
