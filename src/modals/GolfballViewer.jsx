@@ -789,6 +789,11 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         scene.add(ballGroup);
         objectsToDispose.push(ballMesh.material);
 
+        // Decal projection params, stashed at module scope so the
+        // explode tool can re-project the SAME decal onto each shard
+        // individually (the logo physically tears apart along shard
+        // seams instead of riding on one piece).
+        let decalProjectionParams = null;  // { position, orientation, size, texture }
         // ── Decal — projected onto the top pole ────────────────
         if (decalDataUrl) {
           const texLoader = new THREE.TextureLoader();
@@ -832,6 +837,13 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           decalMesh.scale.copy(ballMesh.scale);
           ballGroup.add(decalMesh);
           objectsToDispose.push(decalGeo, decalMat);
+          // Stash projection params for explode-time per-shard reuse.
+          decalProjectionParams = {
+            position: decalPosition.clone(),
+            orientation: decalOrientation.clone(),
+            size: decalSize.clone(),
+            texture: decalTexture,
+          };
         }
 
         /* ── Snapshot ────────────────────────────────────────────
@@ -1254,23 +1266,26 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             particles[i].mesh.material.dispose();
           }
           particles.length = 0;
-          // Shards — kill them instantly and restore the ball. Used
-          // when the user closes the fun menu mid-explosion: there's
-          // no point animating a graceful return when the whole UI
-          // is going away. Reparent the decal back to ballGroup first
-          // so it doesn't get disposed with the host shard.
+          // Shards — kill them instantly and restore the ball + the
+          // original decal. Used when the user closes the fun menu
+          // mid-explosion: no point animating a graceful return when
+          // the whole UI is going away. The per-shard decals live as
+          // children of each shardGroup, so disposing the group
+          // disposes them too.
           for (let i = shards.length - 1; i >= 0; i--) {
             const s = shards[i];
-            if (s.hasDecal && decalMesh) {
-              ballGroup.add(decalMesh);
-            }
-            ballGroup.remove(s.mesh);
-            s.mesh.geometry.dispose();
-            s.mesh.material.dispose();
+            s.group.traverse((child) => {
+              if (child.isMesh) {
+                child.geometry.dispose();
+                child.material.dispose();
+              }
+            });
+            scene.remove(s.group);
           }
           shards.length = 0;
           if (ballExploded) {
             ballMesh.visible = true;
+            if (decalMesh) decalMesh.visible = true;
             ballExploded = false;
           }
         };
@@ -1311,6 +1326,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         const SHARD_FRICTION   = 0.78;                // tangential damping on bounce
         const _tmpV3a = new THREE.Vector3();
         const _tmpQa  = new THREE.Quaternion();
+        const _tmpScale = new THREE.Vector3();
         const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
 
         /* Bin the source geometry's triangles by (phi, theta) of their
@@ -1410,6 +1426,18 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             return;
           }
 
+          /* Capture ballGroup's CURRENT world transform — shards
+             detach from ballGroup and live in scene-space from here
+             on, so they don't inherit the ball's physics motion or
+             rotation. Each shard's initial pose = ballGroup's world
+             pose; integration is pure scripted (no parent yanking). */
+          ballGroup.updateMatrixWorld(true);
+          const startWorldPos   = new THREE.Vector3();
+          const startWorldQuat  = new THREE.Quaternion();
+          const startWorldScale = new THREE.Vector3();
+          ballGroup.matrixWorld.decompose(startWorldPos, startWorldQuat, startWorldScale);
+          const startScale = startWorldScale.x; // uniform
+
           const { bins, phiStep, thetaStep } = buildShardBins();
           const ballMatSrc = ballMesh.material;
           for (const [key, bin] of bins) {
@@ -1423,24 +1451,16 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
             geo.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
             // Cap the cut faces with a fan of inner triangles meeting
-            // at the ball center. Each triangle (a, b, c) on the outer
-            // shell gets a matching inner triangle (center, c, b) —
-            // reversed winding so its normal faces INWARD, sealing
-            // the wedge so it doesn't read as hollow when tumbling.
+            // at the ball center, sealing each wedge so the inside
+            // isn't visible mid-tumble.
             const triCount = positions.length / 9;
             const capPos = new Float32Array(triCount * 9);
             const capNrm = new Float32Array(triCount * 9);
             for (let t = 0; t < triCount; t++) {
               const o = t * 9;
-              // center vertex (origin)
               capPos[o + 0] = 0; capPos[o + 1] = 0; capPos[o + 2] = 0;
-              // c, then b (reversed from a,b,c)
               capPos[o + 3] = positions[o + 6]; capPos[o + 4] = positions[o + 7]; capPos[o + 5] = positions[o + 8];
               capPos[o + 6] = positions[o + 3]; capPos[o + 7] = positions[o + 4]; capPos[o + 8] = positions[o + 5];
-              // Inward normal — point back toward the center from the
-              // average of the outer triangle. Cheap shading hint;
-              // these inner faces are rarely seen so flat normals are
-              // fine.
               const ax = positions[o + 0], ay = positions[o + 1], az = positions[o + 2];
               const bx = positions[o + 3], by = positions[o + 4], bz = positions[o + 5];
               const cx = positions[o + 6], cy = positions[o + 7], cz = positions[o + 8];
@@ -1451,7 +1471,6 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               capNrm[o + 3] = nx; capNrm[o + 4] = ny; capNrm[o + 5] = nz;
               capNrm[o + 6] = nx; capNrm[o + 7] = ny; capNrm[o + 8] = nz;
             }
-            // Merge outer shell + inner cap into one BufferGeometry.
             const mergedPos = new Float32Array(positions.length + capPos.length);
             const mergedNrm = new Float32Array(normals.length + capNrm.length);
             mergedPos.set(positions, 0); mergedPos.set(capPos, positions.length);
@@ -1459,65 +1478,102 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             geo.setAttribute('position', new THREE.BufferAttribute(mergedPos, 3));
             geo.setAttribute('normal', new THREE.BufferAttribute(mergedNrm, 3));
             const mat = ballMatSrc.clone();
-            mat.side = THREE.DoubleSide; // safety net — inner caps render either way
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.castShadow = true;
-            // Home pose = identity. Geometry already sits in ballGroup-
-            // local space (we baked ballMesh.matrix into the verts),
-            // so position=(0,0,0) puts the shard exactly where its
-            // piece of the ball used to be.
-            mesh.position.set(0, 0, 0);
-            mesh.quaternion.identity();
-            // Outward direction = the bin's wedge centroid on the unit
-            // sphere. Velocity is scripted along this ray + an up-bias.
+            mat.side = THREE.DoubleSide;
+
+            // Wrap each shard in a Group: shell mesh + optional decal
+            // child. Group lives in WORLD space (parented to scene),
+            // so its position/rotation are not inherited from ballGroup.
+            const shellMesh = new THREE.Mesh(geo, mat);
+            shellMesh.castShadow = true;
+            shellMesh.position.set(0, 0, 0);
+            shellMesh.quaternion.identity();
+
+            const shardGroup = new THREE.Group();
+            shardGroup.add(shellMesh);
+
+            /* Per-shard decal projection. DecalGeometry projects the
+               original logo box onto THIS shard's mesh only — any
+               triangles outside the projection box just don't appear
+               in the resulting geometry, so shards far from the logo
+               get an empty (or near-empty) decal that we skip. The
+               result: each shard naturally carries its own slice of
+               the logo, torn along shard seams. */
+            if (decalProjectionParams) {
+              try {
+                const sDecalGeo = new DecalGeometry(
+                  shellMesh,
+                  decalProjectionParams.position,
+                  decalProjectionParams.orientation,
+                  decalProjectionParams.size,
+                );
+                // DecalGeometry returns an empty buffer if no source
+                // triangles fall inside the projection box. Skip those.
+                if (sDecalGeo.attributes?.position?.count > 0) {
+                  const sDecalMat = new THREE.MeshStandardMaterial({
+                    map: decalProjectionParams.texture,
+                    transparent: true,
+                    depthTest: true,
+                    depthWrite: false,
+                    polygonOffset: true,
+                    polygonOffsetFactor: -4,
+                    roughness: 0.5,
+                    metalness: 0,
+                  });
+                  const sDecalMesh = new THREE.Mesh(sDecalGeo, sDecalMat);
+                  shardGroup.add(sDecalMesh);
+                } else {
+                  sDecalGeo.dispose();
+                }
+              } catch { /* projection failed for this shard — skip */ }
+            }
+
+            // Initial world pose = the ball's current world pose.
+            // Shards therefore "appear" exactly where the visible
+            // ball was sitting at click time, regardless of throw-
+            // mode physics.
+            shardGroup.position.copy(startWorldPos);
+            shardGroup.quaternion.copy(startWorldQuat);
+            shardGroup.scale.setScalar(startScale);
+            scene.add(shardGroup);
+
+            // Outward direction = wedge centroid on the unit sphere,
+            // then ROTATED by the ball's current world orientation so
+            // the burst sprays outward relative to the visible ball,
+            // not the local frame. Without this, an upside-down ball
+            // would still spray its "north" pieces toward world +Y.
             const phiMid   = (li + 0.5) * phiStep;
             const thetaMid = (lj + 0.5) * thetaStep;
-            const outDir = new THREE.Vector3(
+            const localOutDir = new THREE.Vector3(
               Math.sin(thetaMid) * Math.cos(phiMid),
               Math.cos(thetaMid),
               Math.sin(thetaMid) * Math.sin(phiMid),
             );
+            const outDir = localOutDir.clone().applyQuaternion(startWorldQuat);
+
             const speed = 280 + Math.random() * 260;
             const vel = outDir.clone().multiplyScalar(speed);
-            vel.y += 220 + Math.random() * 140; // strong loft so they arc up before falling
+            vel.y += 220 + Math.random() * 140;
             const angVel = new THREE.Vector3(
               (Math.random() - 0.5) * 9,
               (Math.random() - 0.5) * 9,
               (Math.random() - 0.5) * 9,
             );
-            ballGroup.add(mesh);
-            const shard = {
-              mesh,
+            shards.push({
+              group: shardGroup,                          // moves in world space
               outDir,
-              home: new THREE.Vector3(0, 0, 0),       // shard verts are baked at home position
-              homeQuat: new THREE.Quaternion(),
               vel,
               angVel,
               mode: 'flying',
               t: 0,
-              startPos: new THREE.Vector3(),
+              startPos: new THREE.Vector3(),              // for return tween
               startQuat: new THREE.Quaternion(),
               life: SHARD_LIFE_MS,
-              hasDecal: false,
-            };
-            // The wedge that owns the decal anchor adopts the decal
-            // mesh as a child. The shard's geometry already lives in
-            // ballGroup-local space (matrix baked in), and the shard's
-            // local transform is identity at home — so the decal keeps
-            // the SAME local position/scale it had under ballGroup,
-            // which puts its dimples-projected vertices exactly where
-            // they were before. When the shard tumbles, the decal goes
-            // along; when reassembly returns the shard to identity,
-            // the decal sits back on the ball surface.
-            if (decalMesh && key === decalBinKey) {
-              mesh.add(decalMesh);
-              shard.hasDecal = true;
-            }
-            shards.push(shard);
+              scale: startScale,                          // frozen at explode time
+            });
           }
-          // Hide the intact ball. The decal travels with its host
-          // shard, so we don't toggle decalMesh.visible.
+          // Hide the intact ball + decal — shards carry both visuals.
           ballMesh.visible = false;
+          if (decalMesh) decalMesh.visible = false;
           ballExploded = true;
           spawnExplodeParticles();
         };
@@ -1560,19 +1616,19 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
 
         reassembleBallRef.current = () => {
           if (shards.length === 0) return;
-          // Snapshot each shard's CURRENT pose as the tween start, so
-          // we lerp from wherever the shard happens to be (mid-flight
-          // or already settling) back to its home seat. Switching to
-          // 'returning' clears the velocity integration so gravity
-          // stops dragging it down mid-return.
+          // Snapshot each shard's CURRENT world pose as the tween
+          // start, so we lerp from wherever the shard happens to be
+          // back to the live ball pose (re-computed every frame in
+          // the integration loop). Flipping mode to 'returning' stops
+          // the gravity/bounce integration.
           for (const s of shards) {
             s.mode = 'returning';
             s.t = 0;
-            s.startPos.copy(s.mesh.position);
-            s.startQuat.copy(s.mesh.quaternion);
+            s.startPos.copy(s.group.position);
+            s.startQuat.copy(s.group.quaternion);
           }
-          // Particle puff at the destination too — same "magic" beat
-          // as the explosion so the eye reads it as a paired motion.
+          // Paired "magic" puff at the destination, same beat as the
+          // explosion so the eye reads it as a reverse motion.
           spawnExplodeParticles();
         };
 
@@ -2486,10 +2542,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                          + dispose all shards in one pass. */
           if (shards.length > 0) {
             const SHARD_DAMP_F = Math.pow(SHARD_DRAG, dt * 60);
-            // Room bounds (world space). Shards collide against the
-            // same 5-wall room the main ball lives in — floor, ceiling,
-            // back, left, right. The front is open (camera side); we
-            // bounce off it too so pieces don't fly through the viewer.
+            // Room bounds (world space). Shards collide with the
+            // same 5-wall room the ball lives in. Shards live DIRECTLY
+            // in scene-space (parented to scene at explode time), so
+            // their position is world-space — no parent offset needed.
             const SHARD_R = 35;
             const SHARD_FLOOR   = -HALF_Y + SHARD_R;
             const SHARD_CEIL    =  HALF_Y - SHARD_R;
@@ -2497,63 +2553,52 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             const SHARD_RIGHT   =  HALF_X - SHARD_R;
             const SHARD_BACK    = -HALF_Z + SHARD_R;
             const SHARD_FRONT   =  HALF_Z - SHARD_R;
-            // ballGroup may be anywhere in the room (throw mode is on
-            // when explode is available — the ball can be mid-air). So
-            // we integrate in ballGroup-LOCAL space, then convert each
-            // shard to WORLD to test collisions, push out of penetration,
-            // and convert back.
-            const gx = ballGroup.position.x;
-            const gy = ballGroup.position.y;
-            const gz = ballGroup.position.z;
             let returningCount = 0;
             let landedCount = 0;
+            // Reassemble target: ballGroup's CURRENT world pose. We
+            // recompute each frame so if the ball keeps moving in
+            // throw mode while shards return, they chase the live
+            // ball pose instead of an out-of-date snapshot.
+            ballGroup.updateMatrixWorld(true);
+            const _retPos = _tmpV3a; // reuse scratch
+            const _retQuat = _tmpQa;
+            const _retScale = _tmpScale;
+            ballGroup.matrixWorld.decompose(_retPos, _retQuat, _retScale);
             for (let i = shards.length - 1; i >= 0; i--) {
               const s = shards[i];
+              const p = s.group.position;
+              const q = s.group.quaternion;
               if (s.mode === 'flying') {
                 s.vel.y -= SHARD_GRAVITY * dt;
                 s.vel.multiplyScalar(SHARD_DAMP_F);
-                s.mesh.position.x += s.vel.x * dt;
-                s.mesh.position.y += s.vel.y * dt;
-                s.mesh.position.z += s.vel.z * dt;
-                // ── Collide with room walls (world space) ─────────
-                // Convert local → world, clamp + reflect velocity on
-                // any axis that penetrated, convert back to local.
-                let wx = s.mesh.position.x + gx;
-                let wy = s.mesh.position.y + gy;
-                let wz = s.mesh.position.z + gz;
+                p.x += s.vel.x * dt;
+                p.y += s.vel.y * dt;
+                p.z += s.vel.z * dt;
+                // Floor/wall collision (world space — direct).
                 let bounced = false;
-                if (wy < SHARD_FLOOR) { wy = SHARD_FLOOR; if (s.vel.y < 0) { s.vel.y = -s.vel.y * SHARD_BOUNCE; s.vel.x *= SHARD_FRICTION; s.vel.z *= SHARD_FRICTION; bounced = true; } }
-                if (wy > SHARD_CEIL)  { wy = SHARD_CEIL;  if (s.vel.y > 0) { s.vel.y = -s.vel.y * SHARD_BOUNCE; bounced = true; } }
-                if (wx < SHARD_LEFT)  { wx = SHARD_LEFT;  if (s.vel.x < 0) { s.vel.x = -s.vel.x * SHARD_BOUNCE; bounced = true; } }
-                if (wx > SHARD_RIGHT) { wx = SHARD_RIGHT; if (s.vel.x > 0) { s.vel.x = -s.vel.x * SHARD_BOUNCE; bounced = true; } }
-                if (wz < SHARD_BACK)  { wz = SHARD_BACK;  if (s.vel.z < 0) { s.vel.z = -s.vel.z * SHARD_BOUNCE; bounced = true; } }
-                if (wz > SHARD_FRONT) { wz = SHARD_FRONT; if (s.vel.z > 0) { s.vel.z = -s.vel.z * SHARD_BOUNCE; bounced = true; } }
-                if (bounced) {
-                  s.mesh.position.set(wx - gx, wy - gy, wz - gz);
-                  // Bleed angular velocity on impact so spinning shards
-                  // eventually settle instead of spinning in place
-                  // against the floor forever.
-                  s.angVel.multiplyScalar(0.7);
-                }
-                // Tumble: integrate angular velocity into the
-                // quaternion via a small-angle delta quat per axis.
-                // Cheap and stable for the moderate spin rates we use.
+                if (p.y < SHARD_FLOOR) { p.y = SHARD_FLOOR; if (s.vel.y < 0) { s.vel.y = -s.vel.y * SHARD_BOUNCE; s.vel.x *= SHARD_FRICTION; s.vel.z *= SHARD_FRICTION; bounced = true; } }
+                if (p.y > SHARD_CEIL)  { p.y = SHARD_CEIL;  if (s.vel.y > 0) { s.vel.y = -s.vel.y * SHARD_BOUNCE; bounced = true; } }
+                if (p.x < SHARD_LEFT)  { p.x = SHARD_LEFT;  if (s.vel.x < 0) { s.vel.x = -s.vel.x * SHARD_BOUNCE; bounced = true; } }
+                if (p.x > SHARD_RIGHT) { p.x = SHARD_RIGHT; if (s.vel.x > 0) { s.vel.x = -s.vel.x * SHARD_BOUNCE; bounced = true; } }
+                if (p.z < SHARD_BACK)  { p.z = SHARD_BACK;  if (s.vel.z < 0) { s.vel.z = -s.vel.z * SHARD_BOUNCE; bounced = true; } }
+                if (p.z > SHARD_FRONT) { p.z = SHARD_FRONT; if (s.vel.z > 0) { s.vel.z = -s.vel.z * SHARD_BOUNCE; bounced = true; } }
+                if (bounced) s.angVel.multiplyScalar(0.7);
+                // Tumble.
                 _tmpQa.setFromAxisAngle(_tmpV3a.set(1, 0, 0), s.angVel.x * dt);
-                s.mesh.quaternion.multiply(_tmpQa);
+                q.multiply(_tmpQa);
                 _tmpQa.setFromAxisAngle(_tmpV3a.set(0, 1, 0), s.angVel.y * dt);
-                s.mesh.quaternion.multiply(_tmpQa);
+                q.multiply(_tmpQa);
                 _tmpQa.setFromAxisAngle(_tmpV3a.set(0, 0, 1), s.angVel.z * dt);
-                s.mesh.quaternion.multiply(_tmpQa);
+                q.multiply(_tmpQa);
                 s.life -= dt * 1000;
-                // Past life ends, keep the shard around but
-                // exponentially damp its motion to a near-stop so it
-                // hangs in space waiting for reassembly.
                 if (s.life <= 0) {
-                  s.vel.multiplyScalar(0.85);
+                  // Aggressive damping past life — settle on the floor
+                  // rather than sliding forever.
+                  s.vel.multiplyScalar(0.88);
                   s.angVel.multiplyScalar(0.9);
                 }
               } else {
-                // returning
+                // returning — tween group to live ballGroup world pose
                 returningCount++;
                 s.t += (dt * 1000) / SHARD_RETURN_MS;
                 if (s.t >= 1) {
@@ -2561,29 +2606,27 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                   landedCount++;
                 }
                 const k = easeOutCubic(s.t);
-                s.mesh.position.lerpVectors(s.startPos, s.home, k);
-                // slerpQuaternions writes start→end interpolation
-                // directly onto the target — no temp arrays needed.
-                s.mesh.quaternion.slerpQuaternions(s.startQuat, s.homeQuat, k);
+                p.lerpVectors(s.startPos, _retPos, k);
+                q.slerpQuaternions(s.startQuat, _retQuat, k);
+                s.group.scale.setScalar(_retScale.x);
               }
             }
-            // All shards have landed → re-home the decal, tear shards
-            // down, show the ball. Decal goes back under ballGroup with
-            // its original transform preserved (it has been sitting at
-            // home position/quaternion via the host shard's identity
-            // pose, so no re-set needed).
+            // All shards landed → restore the ball, dispose shards.
             if (returningCount > 0 && landedCount === returningCount && returningCount === shards.length) {
               for (let i = shards.length - 1; i >= 0; i--) {
                 const s = shards[i];
-                if (s.hasDecal && decalMesh) {
-                  ballGroup.add(decalMesh); // reparent back; local xform preserved
-                }
-                ballGroup.remove(s.mesh);
-                s.mesh.geometry.dispose();
-                s.mesh.material.dispose();
+                // Dispose shell + decal child(ren).
+                s.group.traverse((child) => {
+                  if (child.isMesh) {
+                    child.geometry.dispose();
+                    child.material.dispose();
+                  }
+                });
+                scene.remove(s.group);
               }
               shards.length = 0;
               ballMesh.visible = true;
+              if (decalMesh) decalMesh.visible = true;
               ballExploded = false;
             }
           }
