@@ -264,18 +264,18 @@ export function CRMCreateContact({ onClosed, bindClose }) {
 
   // ── Submit. ─────────────────────────────────────────────────
   const onSubmit = async () => {
-    // Required-fields validation up front.
-    // Website is required when CREATING a new account (no accountId
-    // means we're going to spin up one); the API rejects new-account
-    // creation without a web address. Linking an existing account
-    // (accountId present) skips this rule.
-    const needsWebsite = !accountId && !!accountText.trim();
+    // Required-fields validation. Website is required under the same
+    // rule as the account itself — when "require account" is on AND
+    // the user is creating a NEW account (no accountId picked). Linking
+    // an existing account skips both rules since the server already
+    // has its details on file.
+    const accountIsNew = !accountId;
     const nextInvalid = {
       firstName: !firstName.trim(),
       lastName:  !lastName.trim(),
       email:     !email.trim(),
       account:   requireAccount && !accountText.trim(),
-      accountWebsite: needsWebsite && !accountWebsite.trim(),
+      accountWebsite: requireAccount && accountIsNew && !accountWebsite.trim(),
     };
     setInvalid(nextInvalid);
     const anyInvalid = Object.values(nextInvalid).some(Boolean);
@@ -283,7 +283,7 @@ export function CRMCreateContact({ onClosed, bindClose }) {
       const msg = nextInvalid.account
         ? 'An account is required.'
         : nextInvalid.accountWebsite
-          ? 'Add the account website so we can create it.'
+          ? 'Account website is required.'
           : 'Required fields are missing.';
       setStatusMsg(msg);
       setStatusTone('err');
@@ -486,16 +486,17 @@ export function CRMCreateContact({ onClosed, bindClose }) {
             />
           </Field>
           <Field
-            label="Account website"
-            hint={accountId ? 'Linked — website on file' : 'Required if creating a new account'}
-            error={invalid.accountWebsite ? 'Required when creating a new account' : null}
+            label={accountId ? 'Account website · linked' : 'Account website'}
+            required={requireAccount && !accountId}
+            hint={accountId ? 'Linked — website on file' : undefined}
+            error={invalid.accountWebsite ? 'Required' : null}
           >
             <Input
               value={accountWebsite}
               onChange={(v) => { setAccountWebsite(v); setInvalid((i) => ({ ...i, accountWebsite: false })); }}
               placeholder="https://acme.com"
               disabled={!!accountId}
-              error={invalid.accountWebsite || (!accountId && !!accountText.trim() && !accountWebsite.trim())}
+              error={requireAccount && !accountId && !accountWebsite.trim()}
             />
           </Field>
           <Field label="LinkedIn URL">
