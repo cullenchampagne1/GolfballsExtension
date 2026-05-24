@@ -1252,11 +1252,40 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           if (sceneKeyRef.current !== state.lastSceneKey) {
             state.lastSceneKey = sceneKeyRef.current;
             if (sceneKeyRef.current) {
+              // Entering a scene — destroy everything in the room except
+              // the ball. Bombs, spawned balls, confetti, and particles
+              // all reference the walls/floor for collision; in a skybox
+              // they'd fall through infinity. Clear the lot instantly.
+              for (let i = bombs.length - 1; i >= 0; i--) {
+                scene.remove(bombs[i].group);
+                world.removeBody(bombs[i].body);
+              }
+              bombs.length = 0;
+
+              for (let i = spawnedBalls.length - 1; i >= 0; i--) {
+                scene.remove(spawnedBalls[i].mesh);
+                world.removeBody(spawnedBalls[i].body);
+              }
+              spawnedBalls.length = 0;
+
+              for (let i = confettiPieces.length - 1; i >= 0; i--) {
+                scene.remove(confettiPieces[i].mesh);
+                world.removeBody(confettiPieces[i].body);
+              }
+              confettiPieces.length = 0;
+              confettiActiveRef.current = false;
+              setConfettiRef.current?.(false);
+
+              for (let i = particles.length - 1; i >= 0; i--) {
+                scene.remove(particles[i].mesh);
+                particles[i].mesh.geometry.dispose();
+                particles[i].mesh.material.dispose();
+              }
+              particles.length = 0;
+
               const target = sceneKeyRef.current;
               loadEnvironment(target)
                 .then(() => {
-                  // Bail if the user already flipped to a different
-                  // scene (or closed it) while this load was inflight.
                   if (!disposed && sceneKeyRef.current === target) applySceneMode(target);
                 })
                 .catch((e) => { console.warn('GolfballViewer: failed to load HDRI', target, e); });
