@@ -315,9 +315,30 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
         toast?.warning?.('Sales rep / artist lookup unavailable — switched to text input', { duration: 4500 });
       }
       // ── Gallery (existing proofs for this customer) ──
+      // Three failure modes all surface the same action toast so the
+      // user can drop in template data and keep working:
+      //   1. No customer ID on the page → nothing to query
+      //   2. Live fetch HTTP error / network error
+      //   3. Live fetch returned 0 parseable proofs
       const cust = (customerIdProp || customerId || '').trim();
-      if (!cust) {
+      const fireGalleryFallback = (reason) => {
+        if (!alive) return;
         setGallery([]);
+        setGalleryFailed(true);
+        toast?.action?.({
+          tone: 'warning',
+          title: 'Couldn’t load previous proofs',
+          message: reason,
+          primary: 'Use template data',
+          secondary: 'Skip gallery',
+          icon: <I.alert />,
+          duration: null,
+          onPrimary: () => setGallery(MOCK_GALLERY),
+        });
+      };
+
+      if (!cust) {
+        fireGalleryFallback('No customer ID is set on this page — type one above or drop in template data to preview.');
         return;
       }
       try {
@@ -332,22 +353,14 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           const doc = new DOMParser().parseFromString(html, 'text/html');
           const parsed = parseGalleryFromDoc(doc);
           if (!alive) return;
+          if (parsed.length === 0) {
+            fireGalleryFallback('No previous proofs found for this customer.');
+            return;
+          }
           setGallery(parsed);
         }
       } catch {
-        if (!alive) return;
-        setGallery([]);
-        setGalleryFailed(true);
-        toast?.action?.({
-          tone: 'warning',
-          title: 'Couldn’t load previous proofs',
-          message: 'The customer’s proof history didn’t respond. Want to see what the gallery would look like?',
-          primary: 'Use template data',
-          secondary: 'Skip gallery',
-          icon: <I.alert />,
-          duration: null,
-          onPrimary: () => setGallery(MOCK_GALLERY),
-        });
+        fireGalleryFallback('The customer’s proof history didn’t respond.');
       }
     })();
     return () => { alive = false; };
