@@ -10,6 +10,7 @@ import {
 import { MarginCalc } from '../modals/MarginCalc.jsx';
 import { ImagePreview } from '../modals/ImagePreview.jsx';
 import { WatchList } from '../modals/WatchList.jsx';
+import { CRMCreateContact } from '../modals/CRMCreateContact.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    playground.jsx — in-extension modal playground.
@@ -37,7 +38,7 @@ const MODAL_REGISTRY = [
   { id: 'submitProof',  label: 'Submit Proof',    icon: 'send',    wired: false },
   { id: 'crmSearch',    label: 'CRM Search',      icon: 'search',  wired: false },
   { id: 'crmQuery',     label: 'CRM Query',       icon: 'filter',  wired: false },
-  { id: 'crmContact',   label: 'New Contact',     icon: 'user',    wired: false },
+  { id: 'crmContact',   label: 'New Contact',     icon: 'user',    wired: true  },
   { id: 'taskList',     label: 'Tasks',           icon: 'check',   wired: false },
   { id: 'phoneFinder',  label: 'Phone Finder',    icon: 'search',  wired: false },
   { id: 'calendar',     label: 'Calendar',        icon: 'cog',     wired: false },
@@ -403,6 +404,12 @@ function PlaygroundSurface() {
         {mounted === 'watchList' && (
           <WatchList
             key="watchList"
+            onClosed={() => setMounted(null)}
+          />
+        )}
+        {mounted === 'crmContact' && (
+          <CRMCreateContact
+            key="crmContact"
             onClosed={() => setMounted(null)}
           />
         )}
