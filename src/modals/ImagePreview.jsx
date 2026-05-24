@@ -153,10 +153,32 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   // can read the latest value without a stale closure.
   const [rotation, setRotation] = useState(0);
   const rotationRef = useRef(0);
+  // Slider drags update rotation continuously; no transition while
+  // dragging so the image tracks the slider 1:1.
   useEffect(() => { rotationRef.current = rotation; applyTransform(false); }, [rotation]);
-  // Snap rotation back to 0 whenever the user leaves alignment mode,
-  // so the 2D preview is always upright outside the align workflow.
-  useEffect(() => { if (!aligning && rotation !== 0) setRotation(0); }, [aligning]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Leaving alignment mode — animate the image back to upright instead
+  // of snapping. The slider can leave us at any angle in [-180, 180];
+  // CSS `rotate(deg)` is continuous, so we just kick a transitioned
+  // applyTransform with the ref at the current angle, then set it to
+  // 0 on the next frame to drive the transition to 0°.
+  useEffect(() => {
+    if (aligning || rotation === 0) return;
+    const DURATION = 260;
+    // Start the transition AT the current rotation (already in the ref).
+    const el = viewportRef.current;
+    if (el) {
+      el.style.transition = `transform ${DURATION}ms cubic-bezier(.25,.8,.25,1)`;
+      // Force a layout read so the browser commits the starting frame
+      // before we overwrite the transform below.
+      // eslint-disable-next-line no-unused-expressions
+      el.offsetWidth;
+      rotationRef.current = 0;
+      el.style.transform = `translate(${txRef.current}px, ${tyRef.current}px) rotate(0deg) scale(${scaleRef.current})`;
+    }
+    const id = setTimeout(() => { setRotation(0); }, DURATION + 30);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aligning]);
   const [zoomLevel, setZoomLevel] = useState(100);
 
   const wrapRef = useRef(null);      // the 340px preview surface (drag + wheel target)
