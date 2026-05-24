@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   FloatingPanel, ModalHeader, IconBtn, Btn, Callout, Spinner,
-  I, T,
+  I, T, Slider,
 } from '../ui/index.js';
+import { ColorPickerPopover as DSColorPickerPopover } from '../ui/components/ColorPicker.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { GolfballViewer } from './GolfballViewer.jsx';
 import { LiquidDrawer } from '../ui/components/LiquidDrawer.jsx';
@@ -132,7 +133,6 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   const [pendingPick, setPendingPick] = useState(null);
   const [editedDataUrl, setEditedDataUrl] = useState(null);
   const [colorSwaps, setColorSwaps] = useState([]);
-  const COLOR_TOLERANCE = 30; // RGB distance in 0–255 space
   // Persisted decal — the cropped+masked PNG built from the most
   // recent Save Alignment. Null until the user saves once; cleared
   // when the source URL changes. Feeds the 3D viewer as a decal.
@@ -232,9 +232,9 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
 
   /* Run a color swap on the current displayUrl (working image) and
      return a new dataURL with all matching pixels recolored. Pixels
-     within COLOR_TOLERANCE RGB distance of `from` get replaced with
-     `to`. Preserves alpha so transparent regions stay transparent. */
-  function applyColorSwap(fromRgb, toRgb) {
+     within `tolerance` RGB distance of `from` get replaced with `to`.
+     Preserves alpha so transparent regions stay transparent. */
+  function applyColorSwap(fromRgb, toRgb, tolerance) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
@@ -247,7 +247,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
         try {
           const idata = ctx.getImageData(0, 0, c.width, c.height);
           const d = idata.data;
-          const tol2 = COLOR_TOLERANCE * COLOR_TOLERANCE;
+          const tol2 = tolerance * tolerance;
           for (let i = 0; i < d.length; i += 4) {
             if (d[i + 3] === 0) continue;
             const dr = d[i]     - fromRgb.r;
@@ -827,19 +827,20 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
               )}
 
               {/* Color picker popover — appears at the pixel the user
-                  just sampled. Shows the picked swatch, a native color
-                  input for the replacement, Apply + Cancel. */}
+                  just sampled. Shows the picked swatch, the design-
+                  system color picker for the replacement, a tolerance
+                  slider, and Apply + Cancel. */}
               {pendingPick && (
-                <ColorPickerPopover
+                <SwapPopover
                   pick={pendingPick}
                   wrapRef={wrapRef}
                   swapCount={colorSwaps.length}
                   onCancel={() => setPendingPick(null)}
-                  onApply={async (newColor) => {
+                  onApply={async (newColor, tolerance) => {
                     try {
-                      const url = await applyColorSwap(pendingPick.color, newColor);
+                      const url = await applyColorSwap(pendingPick.color, newColor, tolerance);
                       setEditedDataUrl(url);
-                      setColorSwaps((prev) => [...prev, { from: pendingPick.color, to: newColor }]);
+                      setColorSwaps((prev) => [...prev, { from: pendingPick.color, to: newColor, tolerance }]);
                       setPendingPick(null);
                       toast?.success?.('Color swapped');
                     } catch (e) {
@@ -1401,23 +1402,24 @@ const ResetIcon = (p) => (
   </svg>
 );
 
-/* ── ColorPickerPopover ────────────────────────────────────────
+/* ── SwapPopover ─────────────────────────────────────────────────
    Tooltip-style popover anchored at the user's last sample point.
-   Shows the sampled color, a native color input to pick the
-   replacement, and Apply / Cancel. Clamps inside the wrapRef
-   bounds so it never spills past the preview surface. */
-function ColorPickerPopover({ pick, wrapRef, swapCount, onCancel, onApply }) {
+   Shows the sampled color, a clickable swatch that opens the
+   design-system color picker (themable, matches Settings page),
+   a tolerance slider, and Apply / Cancel. Clamps inside the
+   wrapRef bounds so it never spills past the preview surface. */
+function SwapPopover({ pick, wrapRef, swapCount, onCancel, onApply }) {
   const [newColor, setNewColor] = React.useState(rgbToHex(pick.color));
-  // Re-initialize when a new pick comes in.
+  const [tolerance, setTolerance] = React.useState(30);
+  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const newSwatchRef = useRef(null);
   React.useEffect(() => { setNewColor(rgbToHex(pick.color)); }, [pick.color]);
 
-  // Position — anchor near the click, but clamp so the popover stays
-  // inside the wrapper.
   const wrap = wrapRef.current;
   const wrapperW = wrap?.clientWidth ?? 320;
   const wrapperH = wrap?.clientHeight ?? 320;
-  const POPOVER_W = 200;
-  const POPOVER_H = 96;
+  const POPOVER_W = 226;
+  const POPOVER_H = 140;
   const left = Math.max(6, Math.min(wrapperW - POPOVER_W - 6, pick.x + 12));
   const top  = Math.max(6, Math.min(wrapperH - POPOVER_H - 6, pick.y + 12));
 
@@ -1436,13 +1438,11 @@ function ColorPickerPopover({ pick, wrapRef, swapCount, onCancel, onApply }) {
         width: POPOVER_W,
         zIndex: 7,
         padding: 10,
-        background: 'color-mix(in srgb, var(--gb-surface-canvas) 78%, transparent)',
-        backdropFilter: 'blur(20px) saturate(160%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(160%)',
-        border: '1px solid color-mix(in srgb, var(--gb-text-primary) 14%, transparent)',
-        borderRadius: 10,
+        background: 'var(--gb-surface-modal)',
+        border: '1px solid var(--gb-border-default)',
+        borderRadius: 'var(--gb-r-md)',
         boxShadow: '0 8px 24px -8px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.06) inset',
-        display: 'flex', flexDirection: 'column', gap: 8,
+        display: 'flex', flexDirection: 'column', gap: 9,
         fontFamily: 'var(--gb-font-sans)',
       }}
     >
@@ -1453,36 +1453,56 @@ function ColorPickerPopover({ pick, wrapRef, swapCount, onCancel, onApply }) {
       }}>
         <span>Swap color {swapCount > 0 ? `· #${swapCount + 1}` : ''}</span>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <div title="Picked color" style={{
-          width: 28, height: 28, borderRadius: 6, background: pickedHex,
-          border: '1px solid rgba(255,255,255,0.18)',
-          boxShadow: '0 0 0 1px rgba(0,0,0,0.3)',
+          width: 26, height: 26, borderRadius: 'var(--gb-r-sm)', background: pickedHex,
+          border: '1px solid var(--gb-border-default)',
         }} />
-        <span style={{ color: 'var(--gb-text-tertiary)', fontSize: 12 }}>→</span>
-        <label style={{
-          width: 28, height: 28, borderRadius: 6,
-          background: newColor,
-          border: '1px solid rgba(255,255,255,0.18)',
-          boxShadow: '0 0 0 1px rgba(0,0,0,0.3)',
-          cursor: 'pointer', position: 'relative', overflow: 'hidden',
-        }}>
-          <input
-            type="color"
-            value={newColor}
-            onChange={(e) => setNewColor(e.target.value)}
-            style={{
-              position: 'absolute', inset: 0, width: '100%', height: '100%',
-              opacity: 0, cursor: 'pointer', border: 'none', padding: 0,
-            }}
-          />
-        </label>
+        <I.chevr size={11} style={{ color: 'var(--gb-text-tertiary)' }} />
+        <button
+          ref={newSwatchRef}
+          type="button"
+          onClick={() => setPickerOpen((v) => !v)}
+          style={{
+            width: 26, height: 26, padding: 0, cursor: 'pointer',
+            background: newColor,
+            border: '1px solid var(--gb-border-default)',
+            borderRadius: 'var(--gb-r-sm)',
+          }}
+        />
         <span style={{
-          flex: 1,
-          fontFamily: 'var(--gb-font-mono)', fontSize: 10,
+          flex: 1, textAlign: 'right',
+          fontFamily: 'var(--gb-font-mono)', fontSize: 10.5,
           color: 'var(--gb-text-secondary)',
-          letterSpacing: 0.3,
+          letterSpacing: 0.4,
         }}>{newColor.toUpperCase()}</span>
+      </div>
+      <AnimatePresence>
+        {pickerOpen && (
+          <DSColorPickerPopover
+            value={newColor}
+            onChange={(hex) => setNewColor(hex)}
+            anchorRef={newSwatchRef}
+            onClose={() => setPickerOpen(false)}
+            align="left"
+          />
+        )}
+      </AnimatePresence>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          fontSize: 10, fontWeight: 600, color: 'var(--gb-text-muted)',
+          letterSpacing: 0.3,
+        }}>
+          <span>Tolerance</span>
+        </div>
+        <Slider
+          value={tolerance}
+          min={0}
+          max={120}
+          step={1}
+          onChange={setTolerance}
+        />
       </div>
       <div style={{ display: 'flex', gap: 6 }}>
         <Btn size="sm" variant="secondary" onClick={onCancel} style={{ flex: 1 }}>Cancel</Btn>
@@ -1490,7 +1510,7 @@ function ColorPickerPopover({ pick, wrapRef, swapCount, onCancel, onApply }) {
           size="sm"
           variant="tinted"
           status="brand"
-          onClick={() => onApply(toRgb)}
+          onClick={() => onApply(toRgb, tolerance)}
           style={{ flex: 1 }}
         >Apply</Btn>
       </div>
