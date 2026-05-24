@@ -43,11 +43,10 @@ const MODAL_REGISTRY = [
   { id: 'calendar',     label: 'Calendar',        icon: 'cog',     wired: false },
 ];
 
-/* Playground seed for the Watch List modal. Writes a spread of sample
-   items across all three entity types and all four urgency tiers so
-   the modal opens with its full visual surface populated. No-op if
-   the user already has items saved (don't clobber real data when
-   we're running inside the extension; harmless either way). */
+/* Playground seed for the Watch List / Task List modal. Writes a
+   spread of sample tasks (standalone + context-linked, mixed priorities
+   and dues, including one completed) so the modal opens with its full
+   visual surface populated. No-op if the user already has tasks saved. */
 const WATCHLIST_STORAGE_KEY = 'watchList';
 function seedWatchListSamples() {
   const hasChromeStorage = (() => {
@@ -57,12 +56,12 @@ function seedWatchListSamples() {
 
   const now = Date.now();
   const samples = [
-    { id: 'pg-1', entityType: 'order',   orderId: '802145', reason: 'Customer asked for proof revisions',         addedAt: now - 3 * 60 * 1000 },
-    { id: 'pg-2', entityType: 'contact', orderId: '4429',   reason: 'Waiting on logo upload',                      addedAt: now - 25 * 60 * 1000 },
-    { id: 'pg-3', entityType: 'order',   orderId: '802077', reason: 'Production hold — verify color match',        addedAt: now - 2.2 * 60 * 60 * 1000 },
-    { id: 'pg-4', entityType: 'account', orderId: '1187',   reason: 'Pending payment method on file',              addedAt: now - 4.5 * 60 * 60 * 1000 },
-    { id: 'pg-5', entityType: 'order',   orderId: '801993', reason: 'Rush — promised ship date is tomorrow',       addedAt: now - 6.5 * 60 * 60 * 1000 },
-    { id: 'pg-6', entityType: 'contact', orderId: '4517',   reason: 'Left voicemail, awaiting callback',           addedAt: now - 9 * 60 * 60 * 1000 },
+    { id: 'pg-1', title: 'Call Acme — confirm reorder dates',  priority: 'high', due: 'Today 2pm', done: false, createdAt: now - 3 * 60 * 1000,        context: { type: 'contact', id: '4421', name: 'Marcus Chen' } },
+    { id: 'pg-2', title: 'Send proof revision to TaylorMade',  priority: 'med',  due: 'Today',     done: false, createdAt: now - 25 * 60 * 1000,       context: { type: 'order',   id: '29103' } },
+    { id: 'pg-3', title: 'Follow up on Net-30 invoice',         priority: 'high', due: 'Tomorrow',  done: false, createdAt: now - 2 * 60 * 60 * 1000,  context: { type: 'account', id: '2188', name: 'Acme Industries' } },
+    { id: 'pg-4', title: 'Quote new logo color count',          priority: 'low',  due: 'Apr 2',     done: false, createdAt: now - 4 * 60 * 60 * 1000,  context: { type: 'contact', id: '4517', name: 'Pebble Beach Resort' } },
+    { id: 'pg-5', title: 'Prep weekly customer recap',          priority: 'low',  due: '',          done: false, createdAt: now - 6 * 60 * 60 * 1000,  context: null },
+    { id: 'pg-6', title: 'Confirm setup fee waived',            priority: 'low',  due: 'Done',      done: true,  createdAt: now - 9 * 60 * 60 * 1000, doneAt: now - 30 * 60 * 1000, context: { type: 'order', id: '29512' } },
   ];
 
   const apply = (existing) => {
