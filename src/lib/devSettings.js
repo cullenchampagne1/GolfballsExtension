@@ -41,6 +41,13 @@ export const DEV_SETTINGS = [
     default: false,
   },
   {
+    key:     'golfballViewer.showDebugHud',
+    label:   'Golfball viewer: camera debug HUD',
+    desc:    'Overlay the 3D viewer with a live camera-position / orbit-angle readout plus a copy button. Use it to dial in a default camera framing.',
+    type:    'bool',
+    default: false,
+  },
+  {
     key:     'marginCalc.minAllowedMargin',
     label:   'Margin calculator: minimum allowed margin',
     desc:    'Threshold for the low-margin warning in the Margin Calculator. The warning shows when the entered margin is positive but below this value. 0 disables the warning entirely.',
