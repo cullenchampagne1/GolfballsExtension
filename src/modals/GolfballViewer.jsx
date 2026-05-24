@@ -550,9 +550,17 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
 
           function makeWall(widthWU, heightWU) {
             const tex = makeWallTexture(widthWU, heightWU);
+            // emissive: ~0.72 instead of full white leaves headroom for
+            // scene lights to register on TOP of the baked texture. With
+            // emissive at 1.0 the lit response on a near-white light-
+            // theme canvas saturates/clamps before any tint can show, so
+            // the ball-color picker visibly affects walls only on dark
+            // themes. Dropping the multiplier ~28% lets scene lights
+            // contribute on light themes too, while the texture still
+            // reads as the intended background color.
             const mat = new THREE.MeshStandardMaterial({
-              color: 0x000000,
-              emissive: 0xffffff,
+              color: 0xffffff,
+              emissive: 0xb8b8b8,
               emissiveMap: tex,
               roughness: 1,
               metalness: 0,
