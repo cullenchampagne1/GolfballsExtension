@@ -117,6 +117,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   const waterActiveRef = useRef(false);
   const pourWaterAtRef = useRef(null);   // ({clientX,clientY}) — set pour position
   const drainWaterRef  = useRef(null);   // () — drain all water instantly
+  // Clear every item in the room (bombs, balls, confetti, water,
+  // particles) but leave the main ball untouched. Called when the
+  // user closes the fun menu OR enters a scene.
+  const clearRoomItemsRef = useRef(null);
   // MutationObserver that watches the document element for theme
   // changes and rebakes wall textures. Held on a ref so the
   // effect's teardown can disconnect it across re-runs.
@@ -133,6 +137,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
     set waterActive(v) { waterActiveRef.current = v; },
     pourWaterAt: (...args) => pourWaterAtRef.current?.(...args),
     drainWater: () => drainWaterRef.current?.(),
+    clearRoomItems: () => clearRoomItemsRef.current?.(),
   }), []);
   // 'loading' until Three.js + the model finish; then 'ready'. 'error'
   // surfaces a basic message instead of an empty canvas.
@@ -1140,6 +1145,36 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           streamDroplets.length = 0;
         };
 
+        /* clearRoomItems — purge everything in the room except the
+           main golf ball. Used by both the scene-mode transition AND
+           the fun-menu close. */
+        clearRoomItemsRef.current = () => {
+          for (let i = bombs.length - 1; i >= 0; i--) {
+            scene.remove(bombs[i].group);
+            world.removeBody(bombs[i].body);
+          }
+          bombs.length = 0;
+          for (let i = spawnedBalls.length - 1; i >= 0; i--) {
+            scene.remove(spawnedBalls[i].mesh);
+            world.removeBody(spawnedBalls[i].body);
+          }
+          spawnedBalls.length = 0;
+          for (let i = confettiPieces.length - 1; i >= 0; i--) {
+            scene.remove(confettiPieces[i].mesh);
+            world.removeBody(confettiPieces[i].body);
+          }
+          confettiPieces.length = 0;
+          confettiActiveRef.current = false;
+          setConfettiRef.current?.(false);
+          drainWaterRef.current?.();
+          for (let i = particles.length - 1; i >= 0; i--) {
+            scene.remove(particles[i].mesh);
+            particles[i].mesh.geometry.dispose();
+            particles[i].mesh.material.dispose();
+          }
+          particles.length = 0;
+        };
+
         /* Pour stream — visual water droplets gushing from the cursor.
            Each droplet is a small sphere with physics-driven fall.
            When it hits the water surface (or floor if no water yet)
@@ -1175,10 +1210,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         const explode = (bomb) => {
           const origin = bomb.body.position;
 
-          /* Underwater shockwave — if the bomb detonates beneath the
-             water surface, push a massive radial impulse into the
-             heightfield. This sends a visible shock ring across the
-             pool AND reduces the body impulse (water absorbs energy). */
+          /* Underwater shockwave — water is nearly incompressible so
+             pressure waves transmit hard. If the bomb detonates beneath
+             the surface, push a massive shock ring into the heightfield
+             AND boost the body impulse for any target also underwater. */
           let underwaterBlast = false;
           if (baseLevel > FLOOR_Y) {
             const surfY = surfaceHeightAt(origin.x, origin.z);
@@ -1186,11 +1221,11 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               underwaterBlast = true;
               const ci = xToGridI(origin.x);
               const cj = zToGridJ(origin.z);
-              // Big upward shock at center, ring of upward push around it.
-              injectHeight(ci, cj, 18, 22);
-              injectImpulse(ci, cj, 14, 35);
-              // Outer falloff ring — pushes outward wave.
-              injectImpulse(ci, cj, 28, 10);
+              // Massive central plume + concentric shock rings.
+              injectHeight(ci, cj, 22, 40);
+              injectImpulse(ci, cj, 16, 60);
+              injectImpulse(ci, cj, 34, 22);
+              injectImpulse(ci, cj, 52, 8);
             }
           }
 
@@ -1201,10 +1236,18 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // Quadratic-ish 1/(d+1) was too punishing near the bomb —
           // the user reported "very little effect on the ball." Linear
           // means a near-hit actually flings, and a far hit is a nudge.
-          // Water absorbs explosion energy — underwater blasts hit
-          // ~45% as hard on physics bodies (rest goes into the shock ring).
-          const energyScale = underwaterBlast ? 0.45 : 1.0;
-          const falloff = (d) => Math.max(0, 1 - d / BLAST_R) * IMPULSE_BASE * energyScale;
+          const falloff = (d) => Math.max(0, 1 - d / BLAST_R) * IMPULSE_BASE;
+          // Per-target water amplification — only bodies that are
+          // ALSO underwater at detonation time get the pressure boost.
+          // A body in the air above the water doesn't feel an underwater
+          // blast as hard. This means later, when a body in the air
+          // falls into the water, no "absorption" is retroactively
+          // applied to it — the impulse is already settled.
+          const waterAmplify = (body) => {
+            if (!underwaterBlast || baseLevel <= FLOOR_Y) return 1.0;
+            const surfY = surfaceHeightAt(body.position.x, body.position.z);
+            return body.position.y < surfY ? 1.9 : 1.0;
+          };
 
           const targets = [];
           for (const other of bombs) {
@@ -1214,7 +1257,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             const dz = other.body.position.z - origin.z;
             const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (d > BLAST_R) continue;
-            targets.push({ body: other.body, dx, dy, dz, d, falloff: falloff(d) });
+            targets.push({ body: other.body, dx, dy, dz, d, falloff: falloff(d) * waterAmplify(other.body) });
           }
           {
             const dx = ballBody.position.x - origin.x;
@@ -1222,7 +1265,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             const dz = ballBody.position.z - origin.z;
             const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (d <= BLAST_R && ballBody.type === CANNON.Body.DYNAMIC) {
-              targets.push({ body: ballBody, dx, dy, dz, d, falloff: falloff(d) * BALL_IMPULSE_SHARE });
+              targets.push({ body: ballBody, dx, dy, dz, d, falloff: falloff(d) * BALL_IMPULSE_SHARE * waterAmplify(ballBody) });
             }
           }
           // Spawned balls and confetti scatter in the blast.
@@ -1231,14 +1274,14 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             const dy = sb.body.position.y - origin.y;
             const dz = sb.body.position.z - origin.z;
             const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            if (d <= BLAST_R) targets.push({ body: sb.body, dx, dy, dz, d, falloff: falloff(d) });
+            if (d <= BLAST_R) targets.push({ body: sb.body, dx, dy, dz, d, falloff: falloff(d) * waterAmplify(sb.body) });
           }
           for (const cp of confettiPieces) {
             const dx = cp.body.position.x - origin.x;
             const dy = cp.body.position.y - origin.y;
             const dz = cp.body.position.z - origin.z;
             const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            if (d <= BLAST_R * 1.4) targets.push({ body: cp.body, dx, dy, dz, d, falloff: falloff(d) * 2.2 });
+            if (d <= BLAST_R * 1.4) targets.push({ body: cp.body, dx, dy, dz, d, falloff: falloff(d) * 2.2 * waterAmplify(cp.body) });
           }
           // applyImpulse(impulse, relativePoint): relativePoint is
           // an offset from the body center in WORLD orientation. Pass
@@ -1588,39 +1631,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           if (sceneKeyRef.current !== state.lastSceneKey) {
             state.lastSceneKey = sceneKeyRef.current;
             if (sceneKeyRef.current) {
-              // Entering a scene — destroy everything in the room except
-              // the ball. Bombs, spawned balls, confetti, and particles
-              // all reference the walls/floor for collision; in a skybox
-              // they'd fall through infinity. Clear the lot instantly.
-              for (let i = bombs.length - 1; i >= 0; i--) {
-                scene.remove(bombs[i].group);
-                world.removeBody(bombs[i].body);
-              }
-              bombs.length = 0;
-
-              for (let i = spawnedBalls.length - 1; i >= 0; i--) {
-                scene.remove(spawnedBalls[i].mesh);
-                world.removeBody(spawnedBalls[i].body);
-              }
-              spawnedBalls.length = 0;
-
-              for (let i = confettiPieces.length - 1; i >= 0; i--) {
-                scene.remove(confettiPieces[i].mesh);
-                world.removeBody(confettiPieces[i].body);
-              }
-              confettiPieces.length = 0;
-              confettiActiveRef.current = false;
-              setConfettiRef.current?.(false);
-
-              drainWaterRef.current?.();
-
-              for (let i = particles.length - 1; i >= 0; i--) {
-                scene.remove(particles[i].mesh);
-                particles[i].mesh.geometry.dispose();
-                particles[i].mesh.material.dispose();
-              }
-              particles.length = 0;
-
+              clearRoomItemsRef.current?.();
               const target = sceneKeyRef.current;
               loadEnvironment(target)
                 .then(() => {
@@ -1904,16 +1915,19 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               const buoyF = floatRatio * body.mass * G * frac;
               body.applyForce(new CANNON.Vec3(0, buoyF, 0), new CANNON.Vec3(0, 0, 0));
 
-              // Quadratic drag — F = -0.5 * Cd * |v| * v * frac
-              // Clamp magnitude so a single frame of drag can't reverse
-              // the body's velocity (which causes oscillation + tunneling
-              // for low-mass bodies right after an explosion impulse).
+              // Quadratic drag — F = -0.5 * Cd * |v| * v * frac²
+              // Squaring frac means a body barely touching the surface
+              // gets nearly zero drag, so high-speed re-entry doesn't
+              // stop dead — only fully-submerged bodies feel the full
+              // viscous brake.
               const vx = body.velocity.x, vy = body.velocity.y, vz = body.velocity.z;
               const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
               if (speed > 0.5) {
-                let dragMag = 0.5 * dragCoef * speed * speed * frac;
-                // Cap drag impulse per frame to ≤ 60% of body momentum.
-                const maxDrag = body.mass * speed * 0.6 / Math.max(dt, 1e-3);
+                let dragMag = 0.5 * dragCoef * speed * speed * frac * frac;
+                // Cap drag impulse per frame to ≤ 15% of body momentum
+                // so a fast body can punch through the surface without
+                // instantly halting.
+                const maxDrag = body.mass * speed * 0.15 / Math.max(dt, 1e-3);
                 if (dragMag > maxDrag) dragMag = maxDrag;
                 const inv = 1 / speed;
                 body.applyForce(
@@ -2319,6 +2333,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
       spawnBallActiveRef.current = false;
       pourWaterAtRef.current = null;
       drainWaterRef.current = null;
+      clearRoomItemsRef.current = null;
       waterActiveRef.current = false;
       themeObserverRef.current?.disconnect();
       themeObserverRef.current = null;
