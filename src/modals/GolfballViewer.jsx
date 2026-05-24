@@ -862,23 +862,30 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         <button
           type="button"
           onClick={() => setThrowMode((v) => !v)}
-          title={throwMode ? 'Exit throw mode' : 'Throw ball'}
+          title={throwMode ? 'Disable gravity' : 'Enable gravity'}
           style={{
             position: 'absolute', top: 8, right: 8, zIndex: 6,
             minWidth: 28, height: 24, padding: '0 8px',
             display: 'inline-flex', alignItems: 'center', gap: 4,
             fontFamily: 'var(--gb-font-mono)', fontSize: 10, fontWeight: 700,
             letterSpacing: 0.4,
+            // Active state: a subtle brand-tinted opaque chip — same
+            // structural language as the default (surface-modal fill
+            // + 1px border, no transparency) but border + label shift
+            // to brand so the "on" state reads at a glance without
+            // the heavy primary-button treatment the old styling used.
             color: throwMode ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
-            background: throwMode ? 'var(--gb-brand-tint-medium)' : 'var(--gb-surface-modal)',
-            border: '1px solid ' + (throwMode ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'),
+            background: 'var(--gb-surface-modal)',
+            border: '1px solid ' + (throwMode ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
+            boxShadow: throwMode ? 'inset 0 0 0 1px var(--gb-brand-tint-soft)' : 'none',
             borderRadius: 'var(--gb-r-sm)',
             cursor: 'pointer',
             lineHeight: 1,
+            transition: 'border-color .12s, color .12s, box-shadow .12s',
           }}
         >
           <BounceIcon size={11} />
-          <span>{throwMode ? 'THROWING' : 'THROW'}</span>
+          <span>{throwMode ? 'GRAVITY ON' : 'GRAVITY'}</span>
         </button>
       )}
 
