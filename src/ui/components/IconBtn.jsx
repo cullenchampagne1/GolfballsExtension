@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { T, useAsyncState, sizeIcon, Spinner } from '../shared.jsx';
 import { I } from '../icons.jsx';
@@ -22,6 +23,22 @@ export function IconBtn({
 }) {
   const [effState, run] = useAsyncState(state);
   const [hovered, setHovered] = useState(false);
+  // Tooltip position is computed from the button's bounding rect each
+  // time the tooltip becomes visible. We portal the tooltip to <body>
+  // so it can't get clipped by any ancestor `overflow:hidden` (image
+  // preview wrapper, modal body, etc.) — that was the bug where IconBtn
+  // tooltips inside the ImagePreview were rendering outside the visible
+  // preview surface because the wrapper clipped them.
+  const btnRef = useRef(null);
+  const [tipPos, setTipPos] = useState(null);
+  useEffect(() => {
+    if (!tooltip || !hovered || disabled) { setTipPos(null); return; }
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setTipPos({ centerX: r.left + r.width / 2, top: r.top });
+  }, [tooltip, hovered, disabled]);
+
   const px = BOX[size] || BOX.md;
   const iconPx = ICON[size] || ICON.md;
   const busy = effState === 'loading';
@@ -47,6 +64,7 @@ export function IconBtn({
       onMouseLeave={() => setHovered(false)}
     >
       <motion.button
+        ref={btnRef}
         type="button"
         disabled={disabled || busy}
         onClick={(e) => run(onClick, e)}
@@ -84,27 +102,43 @@ export function IconBtn({
         </span>
       </motion.button>
 
-      <AnimatePresence>
-        {tooltip && hovered && !disabled && (
-          <motion.span
-            initial={{ opacity: 0, y: 3, x: '-50%' }}
-            animate={{ opacity: 1, y: 0, x: '-50%' }}
-            exit={{ opacity: 0, y: 3, x: '-50%' }}
-            transition={T.fast}
-            style={{
-              position: 'absolute', bottom: '100%', left: '50%', marginBottom: 6,
-              padding: '3px 7px', borderRadius: 'var(--gb-r-xs)',
-              background: 'var(--gb-surface-deep)', color: 'var(--gb-text-primary)',
-              border: '1px solid var(--gb-border-default)',
-              boxShadow: 'var(--gb-shadow-popover)',
-              fontSize: 10, fontWeight: 600, fontFamily: 'var(--gb-font-sans)',
-              whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 10,
-            }}
-          >
-            {tooltip}
-          </motion.span>
-        )}
-      </AnimatePresence>
+      {/* Tooltip — portaled to body so ancestor `overflow:hidden`
+          containers (e.g. the ImagePreview's preview wrapper) can't
+          clip it. Positioned ABOVE the button via the cached
+          bounding rect (`marginBottom: 6` offset already baked into
+          translateY: -100%); if there's not enough room above, falls
+          back to below. */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {tooltip && hovered && !disabled && tipPos && (() => {
+            const flipBelow = tipPos.top < 28;  // not enough room above for the chip
+            return (
+              <motion.span
+                initial={{ opacity: 0, y: flipBelow ? -3 : 3 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: flipBelow ? -3 : 3 }}
+                transition={T.fast}
+                style={{
+                  position: 'fixed',
+                  left: tipPos.centerX,
+                  top: flipBelow ? tipPos.top + px + 6 : tipPos.top - 6,
+                  transform: flipBelow ? 'translateX(-50%)' : 'translate(-50%, -100%)',
+                  padding: '3px 7px', borderRadius: 'var(--gb-r-xs)',
+                  background: 'var(--gb-surface-deep)', color: 'var(--gb-text-primary)',
+                  border: '1px solid var(--gb-border-default)',
+                  boxShadow: 'var(--gb-shadow-popover)',
+                  fontSize: 10, fontWeight: 600, fontFamily: 'var(--gb-font-sans)',
+                  whiteSpace: 'nowrap', pointerEvents: 'none',
+                  zIndex: 2147483600,
+                }}
+              >
+                {tooltip}
+              </motion.span>
+            );
+          })()}
+        </AnimatePresence>,
+        document.body,
+      )}
     </span>
   );
 }

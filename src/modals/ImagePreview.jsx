@@ -43,6 +43,22 @@ const ZOOM_MAX = 8;
 const ZOOM_STEP_BTN = 0.35;
 const ZOOM_STEP_WHEEL = 0.12;
 
+/* Preview-surface grid — mirrors the playground's two-layer graph-
+   paper backdrop but at a tighter spacing since the area is only
+   320px tall. Minor lines every 12px, major every 48px. Re-themes
+   automatically because it uses --gb-border-* tokens. */
+const PREVIEW_GRID = {
+  background: 'var(--gb-surface-canvas)',
+  backgroundImage: [
+    'linear-gradient(to right,  var(--gb-border-default) 1px, transparent 1px)',
+    'linear-gradient(to bottom, var(--gb-border-default) 1px, transparent 1px)',
+    'linear-gradient(to right,  var(--gb-border-subtle)  1px, transparent 1px)',
+    'linear-gradient(to bottom, var(--gb-border-subtle)  1px, transparent 1px)',
+  ].join(', '),
+  backgroundSize: '48px 48px, 48px 48px, 12px 12px, 12px 12px',
+  backgroundPosition: '0 0',
+};
+
 /** Fallback image when no URL is provided. Resolves to a runtime-
  *  qualified URL inside the extension (web_accessible_resources
  *  exposes it so content-script callers also resolve correctly). */
@@ -78,6 +94,15 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   // load-state machine for the preview area + subtitle copy
   const [status, setStatus] = useState('loading');
   const [copied, setCopied] = useState(false);
+  // Natural image dimensions in px — captured at load time, displayed
+  // in the top-left chip so the user has the source size at a glance
+  // without inspecting devtools. Null until the image loads.
+  const [imageSize, setImageSize] = useState(null);
+  // Alignment overlay toggle. When on, a centered circle is overlaid
+  // on the image and the surrounding chrome dims so the user can
+  // position the image inside the alignment ring. Real alignment
+  // logic ships later — for now this is purely visual + animated.
+  const [aligning, setAligning] = useState(false);
 
   // Zoom + pan: tracked in refs (no re-render per wheel event) plus a
   // tiny zoomLevel state purely so the bottom-left zoom-percentage chip
@@ -93,13 +118,20 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   // Image load wiring. The <img>'s onLoad/onError flips status. We
   // pre-resolve URLs that are already cached so the spinner doesn't
   // flash for a sub-frame on instant loads.
-  const onImgLoad = () => setStatus('ready');
+  const onImgLoad = (e) => {
+    setStatus('ready');
+    // Capture intrinsic dimensions — naturalWidth/Height are the
+    // source pixels, not the rendered ones. These feed the size chip.
+    const img = e.currentTarget;
+    if (img?.naturalWidth) setImageSize({ w: img.naturalWidth, h: img.naturalHeight });
+  };
   const onImgError = () => setStatus(usingFallback ? 'ready' : 'error');
   // Reset zoom + load state whenever the URL changes (reopen with a
   // different image — currently never happens in playground but
   // future implementations will swap URLs).
   useEffect(() => {
     setStatus('loading');
+    setImageSize(null);
     scaleRef.current = 1; txRef.current = 0; tyRef.current = 0;
     setZoomLevel(100);
     applyTransform(false);
@@ -169,6 +201,13 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   const dragRef = useRef(null);
   const onPointerDown = (e) => {
     if (e.button !== 0 || status !== 'ready') return;
+    // Don't start a drag if the press originated on an interactive
+    // overlay control (zoom buttons, 3D, align). The wrapper otherwise
+    // captures the pointer via setPointerCapture below, which prevents
+    // the underlying click from ever reaching those buttons. Same
+    // pattern Throwable uses to keep its own drag handle from eating
+    // close-button clicks.
+    if (e.target?.closest?.('button, input, textarea, select, a')) return;
     dragRef.current = { x: e.clientX, y: e.clientY, tx: txRef.current, ty: tyRef.current };
     try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch {}
   };
@@ -264,7 +303,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
             position: 'relative',
             height: 320,
             width: '100%',
-            background: 'var(--gb-fill-strong)',
+            ...PREVIEW_GRID,
             border: '1px solid var(--gb-border-default)',
             borderRadius: 'var(--gb-r-md)',
             overflow: 'hidden',
@@ -331,9 +370,10 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
               }}>
                 <IconBtn
                   size="sm"
-                  tooltip="Auto-align (coming soon)"
+                  tooltip={aligning ? 'Exit alignment' : 'Align to circle'}
                   icon={<AlignIcon />}
-                  onClick={() => toast?.info?.('Auto-align — coming soon', { tone: 'info' })}
+                  active={aligning}
+                  onClick={() => setAligning((a) => !a)}
                 />
                 <IconBtn
                   size="sm"
@@ -342,6 +382,36 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                   onClick={() => toast?.info?.('3D view — coming soon', { tone: 'info' })}
                 />
               </div>
+
+              {/* Image-size readout (top-left) — natural source pixels,
+                  not the rendered ones. Mirrors the zoom-level chip
+                  in the bottom-left so the two readouts visually balance
+                  the corners. */}
+              {imageSize && (
+                <div style={{
+                  position: 'absolute', top: 8, left: 10,
+                  fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
+                  color: 'var(--gb-text-secondary)',
+                  background: 'var(--gb-surface-modal)',
+                  border: '1px solid var(--gb-border-default)',
+                  borderRadius: 'var(--gb-r-sm)',
+                  padding: '2px 6px',
+                  pointerEvents: 'none',
+                  fontFamily: 'var(--gb-font-mono)',
+                }}>{imageSize.w}×{imageSize.h}</div>
+              )}
+
+              {/* Alignment overlay — toggled by the Align button. A
+                  centered circle (60% of the wrapper's shorter side)
+                  is highlighted by a massive box-shadow on the inner
+                  span that dims everything OUTSIDE the circle. The
+                  user positions the image inside the ring. Real
+                  alignment logic ships later; this is the visual
+                  scaffold + view-change animation. */}
+              <AnimatePresence>
+                {aligning && <AlignmentOverlay />}
+              </AnimatePresence>
+
               <div style={{
                 position: 'absolute', bottom: 8, left: 10,
                 fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
@@ -430,6 +500,97 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
         </Btn>
       </div>
     </FloatingPanel>
+  );
+}
+
+/* ── AlignmentOverlay ───────────────────────────────────────────
+   Visual scaffold for the future alignment workflow. Currently a
+   pure-CSS spotlight: a centered circle is the "alignment ring"
+   the user will position their image inside; the rest of the
+   surface dims to focus attention on the ring.
+
+   The dim is done via a giant box-shadow on the circle itself
+   (no need for an SVG mask) — the shadow spreads outward from
+   the circle's edges and fills the whole preview wrapper with
+   semi-transparent black, while the circle itself stays
+   transparent. Cleanest mask trick for a circular spotlight.
+
+   Animations:
+     • Backdrop dim fades in (.2s)
+     • Ring scales from 0.85 → 1 with a slight bounce
+     • Crosshair guides fade in shortly after the ring
+─────────────────────────────────────────────────────────────── */
+function AlignmentOverlay() {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+      style={{
+        position: 'absolute', inset: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        pointerEvents: 'none',
+      }}
+    >
+      {/* The ring: 60% of the wrapper's shorter axis (via aspect-ratio:1
+          + max-width / max-height). The 9999px box-shadow fills the
+          entire surrounding area with dim black so the ring's interior
+          is the only un-dimmed region — a "spotlight" mask without SVG. */}
+      <motion.div
+        initial={{ scale: 0.85, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.85, opacity: 0 }}
+        transition={{ type: 'spring', stiffness: 340, damping: 26 }}
+        style={{
+          width: '60%', height: '60%',
+          maxWidth: 240, maxHeight: 240,
+          aspectRatio: '1 / 1',
+          borderRadius: '50%',
+          border: '2px solid var(--gb-brand-label)',
+          boxShadow: `0 0 0 9999px rgba(0,0,0,.55)`,
+        }}
+      />
+      {/* Crosshair guides — paint thin brand-tinted lines through the
+          center of the wrapper to help the user dead-center the image.
+          Fade in slightly after the ring so they don't compete for
+          attention on entry. */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ delay: 0.1, duration: 0.18 }}
+        style={{ position: 'absolute', inset: 0 }}
+      >
+        <div style={{
+          position: 'absolute', top: '50%', left: 0, right: 0, height: 1,
+          background: 'var(--gb-brand-label)', opacity: 0.4,
+        }} />
+        <div style={{
+          position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1,
+          background: 'var(--gb-brand-label)', opacity: 0.4,
+        }} />
+      </motion.div>
+      {/* Helper label at the top of the overlay — explains what the
+          ring is for so the first-time user isn't lost. */}
+      <motion.div
+        initial={{ opacity: 0, y: -4 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -4 }}
+        transition={{ delay: 0.06, duration: 0.18 }}
+        style={{
+          position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
+          fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase',
+          color: 'var(--gb-text-primary)',
+          background: 'var(--gb-surface-modal)',
+          border: '1px solid var(--gb-brand-tint-border)',
+          borderRadius: 'var(--gb-r-sm)',
+          padding: '3px 8px',
+          whiteSpace: 'nowrap',
+        }}>
+        Position image inside ring
+      </motion.div>
+    </motion.div>
   );
 }
 
