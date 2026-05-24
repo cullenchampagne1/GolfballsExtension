@@ -22,7 +22,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["charge.html", "charge.js", "editor.html", "playground.html"],
+      "resources": ["charge.html", "charge.js", "editor.html", "playground.html", "icons/photo_ball.jpg"],
       "matches": ["<all_urls>"]
     }
   ],
