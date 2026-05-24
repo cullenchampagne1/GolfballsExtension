@@ -312,26 +312,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
         setReps([]);
         setArtists([]);
         setDropdownsFailed(true);
-        // Action toast — primary CTA "Use template data" swaps in the
-        // mock rep + artist lists so the dropdowns repopulate and the
-        // user can keep working as if the call had succeeded. This is
-        // a CHOICE, not a fix: the live server is still down, so a
-        // real submit will still fail, but the form is now demo-able.
-        toast?.action?.({
-          tone: 'warning',
-          title: 'Couldn’t load reps & artists',
-          message: 'The CRM directory didn’t respond. Switched to text input — or use template data instead.',
-          primary: 'Use template data',
-          secondary: 'Keep text input',
-          icon: <I.alert />,
-          duration: null, // sticky — user must dismiss
-          onPrimary: () => {
-            console.log('[SubmitProof] dropdowns onPrimary fired — installing mock reps/artists');
-            setReps(MOCK_REPS);
-            setArtists(MOCK_ARTISTS);
-            setDropdownsFailed(false);
-          },
-        });
+        toast?.warning?.('Sales rep / artist lookup unavailable — switched to text input', { duration: 4500 });
       }
       // ── Gallery (existing proofs for this customer) ──
       const cust = (customerIdProp || customerId || '').trim();
@@ -365,7 +346,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           secondary: 'Skip gallery',
           icon: <I.alert />,
           duration: null,
-          onPrimary: () => { console.log('[SubmitProof] gallery onPrimary fired — installing mock gallery'); setGallery(MOCK_GALLERY); },
+          onPrimary: () => setGallery(MOCK_GALLERY),
         });
       }
     })();
