@@ -562,12 +562,14 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
                 position: 'absolute', inset: 0, zIndex: 50,
                 display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                 gap: 10,
-                background: 'color-mix(in srgb, var(--gb-brand-label) 18%, transparent)',
-                border: '2px dashed var(--gb-brand-label)',
+                // Neutral transparent backdrop — theme-aware via
+                // text-primary mix-in, no brand tint.
+                background: 'color-mix(in srgb, var(--gb-text-primary) 25%, transparent)',
+                border: '1.5px dashed color-mix(in srgb, var(--gb-text-primary) 35%, transparent)',
                 borderRadius: 'var(--gb-r-md)',
-                backdropFilter: 'blur(2px)',
-                WebkitBackdropFilter: 'blur(2px)',
-                color: 'var(--gb-brand-label)',
+                backdropFilter: 'blur(3px)',
+                WebkitBackdropFilter: 'blur(3px)',
+                color: 'var(--gb-text-primary)',
                 pointerEvents: 'none',
               }}
             >
@@ -582,7 +584,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
               </div>
               <div style={{
                 fontSize: 11, fontWeight: 500,
-                color: 'color-mix(in srgb, var(--gb-brand-label) 80%, transparent)',
+                color: 'var(--gb-text-tertiary)',
               }}>Adds to the proof request</div>
             </motion.div>
           )}
@@ -876,46 +878,70 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           </Field>
 
           {/* Attached images — INSIDE the form scroll container,
-              below the last question. Scrolls with the rest of the
-              form. Plain conditional div (no AnimatePresence wrapper —
-              the previous height-auto motion.div was measuring 0 and
-              staying collapsed). */}
-          {images.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
-                textTransform: 'uppercase',
-                color: 'var(--gb-text-muted)',
-              }}>
-                <span>Attached images</span>
-                <Tag tone="neutral" size="xs" mono>{images.length}</Tag>
-              </div>
-              {/* Inline non-hosted warning — sits ABOVE the image
-                  chips so the user reads it before the list. */}
-              {hasUnhostedImage && (
+              below the last question. Whole section + each row
+              animates in/out via opacity + y slide. */}
+          <AnimatePresence initial={false}>
+            {images.length > 0 && (
+              <motion.div
+                key="image-list"
+                layout
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}
+              >
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 6,
-                  padding: '5px 8px',
-                  background: 'var(--gb-warning-tint-soft)',
-                  border: '1px solid var(--gb-warning-tint-border)',
-                  borderRadius: 'var(--gb-r-sm)',
-                  color: 'var(--gb-warning-fg)',
-                  fontSize: 10.5, fontWeight: 600,
+                  fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
+                  textTransform: 'uppercase',
+                  color: 'var(--gb-text-muted)',
                 }}>
-                  <I.alert size={11} />
-                  <span>Non-hosted images won&apos;t render in email templates — only embedded link previews will.</span>
+                  <span>Attached images</span>
+                  <Tag tone="neutral" size="xs" mono>{images.length}</Tag>
                 </div>
-              )}
-              {images.map((img) => (
-                <SourceImageChip
-                  key={img.id}
-                  imageData={img}
-                  onRemove={() => removeImage(img.id)}
-                />
-              ))}
-            </div>
-          )}
+                {/* Inline non-hosted warning — sits ABOVE the image
+                    chips so the user reads it before the list. */}
+                {hasUnhostedImage && (
+                  <motion.div
+                    layout
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.18 }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '5px 8px',
+                      background: 'var(--gb-warning-tint-soft)',
+                      border: '1px solid var(--gb-warning-tint-border)',
+                      borderRadius: 'var(--gb-r-sm)',
+                      color: 'var(--gb-warning-fg)',
+                      fontSize: 10.5, fontWeight: 600,
+                    }}
+                  >
+                    <I.alert size={11} />
+                    <span>Non-hosted images won&apos;t render in email templates — only embedded link previews will.</span>
+                  </motion.div>
+                )}
+                <AnimatePresence initial={false}>
+                  {images.map((img) => (
+                    <motion.div
+                      key={img.id}
+                      layout
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -6 }}
+                      transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+                    >
+                      <SourceImageChip
+                        imageData={img}
+                        onRemove={() => removeImage(img.id)}
+                      />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Results panel (shown after a successful submit) */}
           {stage === 'results' && results.length > 0 && (
@@ -1209,13 +1235,13 @@ function DynamicItemBlock({ item, suffix, fields, data, autoName, customName, on
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-      animate={{ opacity: 1, height: 'auto' }}
-      exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-      transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-      style={{
-        overflow: 'hidden',
-      }}
+      // Opacity + y slide only — avoid `height: auto` here because
+      // it measures 0 inside scrollable parents and the block stays
+      // collapsed. Layout animation handles neighbor reflow.
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
     >
       <div style={{
         padding: 10,
