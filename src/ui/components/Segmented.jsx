@@ -1,4 +1,4 @@
-import React, { useId } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 
 /* Density presets. Defaults match the spec's SidePicker
@@ -24,30 +24,92 @@ const INDICATOR_SPRING = { type: 'spring', stiffness: 420, damping: 34, mass: 0.
  *   size        'sm' | 'md' (default) | 'lg'
  *   full        stretch to parent width (each button flex:1)
  *   style       extra style merged onto the outer pill
+ *
+ * Indicator is positioned via measured x/width (NOT layoutId) so the
+ * sliding pill animates correctly from any position to any other position.
+ * The previous layoutId-based approach jumped to the wrong target when the
+ * Segmented sat inside a moving ancestor (e.g. a draggable panel) because
+ * layoutId animations key off bounding-box deltas and react to ancestor
+ * transforms — making clicks during/after a drag warp the pill to random
+ * spots. Measuring relative offsets sidesteps that entirely.
  */
 export function Segmented({ value, onChange, options = [], size = 'md', full, style }) {
   const s = SIZES[size] || SIZES.md;
-  // Unique per instance — keeps active indicators from different Segmented
-  // controls from being mistaken for the same layout element.
-  const groupId = useId();
+  const containerRef = useRef(null);
+  const btnRefs = useRef([]);
+  // Indicator geometry: { x, width } relative to the container's padding box.
+  // null = "no measurement yet" (initial render) → indicator hidden so it
+  // doesn't flash at 0,0 before useLayoutEffect runs.
+  const [ind, setInd] = useState(null);
+
+  // Recompute on every render so option changes (additions / label edits)
+  // and zoom changes update the indicator. useLayoutEffect runs before paint
+  // so the user never sees a stale frame.
+  useLayoutEffect(() => {
+    const idx = options.findIndex((o) => o.id === value);
+    const btn = btnRefs.current[idx];
+    if (!btn) { setInd(null); return; }
+    setInd({ x: btn.offsetLeft, width: btn.offsetWidth });
+  }, [value, options, size]);
+
+  // ResizeObserver: parent width changes (drag-resize, responsive layout)
+  // shift the button offsets without re-rendering. Re-measure on every
+  // container resize so the indicator stays glued to the active option.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(() => {
+      const idx = options.findIndex((o) => o.id === value);
+      const btn = btnRefs.current[idx];
+      if (!btn) return;
+      setInd({ x: btn.offsetLeft, width: btn.offsetWidth });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [value, options]);
+
   return (
-    <div style={{
-      display: full ? 'flex' : 'inline-flex',
-      padding: s.pad, gap: s.gap,
-      borderRadius: s.radius,
-      background: 'var(--gb-fill-subtle)',
-      border: '1px solid var(--gb-border-subtle)',
-      ...style,
-    }}>
-      {options.map((o) => {
+    <div
+      ref={containerRef}
+      style={{
+        display: full ? 'flex' : 'inline-flex',
+        padding: s.pad, gap: s.gap,
+        borderRadius: s.radius,
+        background: 'var(--gb-fill-subtle)',
+        border: '1px solid var(--gb-border-subtle)',
+        position: 'relative',
+        ...style,
+      }}
+    >
+      {/* Sliding active background — absolutely positioned, animated via
+          x/width. Hidden until first measurement so it doesn't flash at
+          the origin. height fills the inner content via top/bottom inset. */}
+      {ind && (
+        <motion.span
+          aria-hidden
+          initial={false}
+          animate={{ x: ind.x, width: ind.width }}
+          transition={INDICATOR_SPRING}
+          style={{
+            position: 'absolute',
+            top: s.pad, bottom: s.pad, left: 0,
+            background: 'var(--gb-brand-tint-medium)',
+            borderRadius: s.innerRadius,
+            zIndex: 0,
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+      {options.map((o, i) => {
         const active = o.id === value;
         return (
           <button
             key={o.id}
+            ref={(el) => { btnRefs.current[i] = el; }}
             type="button"
             onClick={() => { if (!active) onChange?.(o.id); }}
             style={{
-              position: 'relative',
+              position: 'relative', zIndex: 1,
               flex: full ? 1 : '0 0 auto',
               padding: s.btnPad, borderRadius: s.innerRadius, border: 'none',
               background: 'transparent',
@@ -59,25 +121,8 @@ export function Segmented({ value, onChange, options = [], size = 'md', full, st
               transition: 'color .14s',
             }}
           >
-            {/* Sliding active background — shared layoutId so the brand
-                pill springs between options instead of cross-fading. */}
-            {active && (
-              <motion.span
-                layoutId={`segmented-${groupId}-bg`}
-                transition={INDICATOR_SPRING}
-                style={{
-                  position: 'absolute', inset: 0,
-                  background: 'var(--gb-brand-tint-medium)',
-                  borderRadius: s.innerRadius,
-                  zIndex: 0,
-                }}
-              />
-            )}
-            {/* Label/icon sit above the pill so they stay readable. */}
-            <span style={{ position: 'relative', zIndex: 1, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              {o.icon && React.cloneElement(o.icon, { size: s.icon })}
-              {o.label}
-            </span>
+            {o.icon && React.cloneElement(o.icon, { size: s.icon })}
+            {o.label}
           </button>
         );
       })}

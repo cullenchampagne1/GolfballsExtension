@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence, useDragControls } from 'motion/react';
 import { T, FloatingPanelContext } from '../shared.jsx';
 
@@ -38,7 +39,15 @@ export function FloatingPanel({ children, width = 480, backdrop = true, onClose,
   const ctx = useMemo(() => ({ dragControls, requestClose }), [dragControls, requestClose]);
   const cssWidth = typeof width === 'number' ? `min(${width}px, calc(100vw - 32px))` : width;
 
-  return (
+  // Portal to <body> so any ancestor `transform` (e.g. the playground's
+  // 0.74x scale wrapper) doesn't reframe our position:fixed coordinates.
+  // A position:fixed child of a transformed ancestor anchors to that
+  // ancestor — which means drag deltas come in viewport-scaled space and
+  // the modal renders at a scaled size on the playground. Portaling
+  // escapes both problems in one move.
+  const portalTarget = typeof document !== 'undefined' ? document.body : null;
+  if (!portalTarget) return null;
+  return createPortal(
     <AnimatePresence onExitComplete={onClose}>
       {open && (
         <motion.div
@@ -62,9 +71,22 @@ export function FloatingPanel({ children, width = 480, backdrop = true, onClose,
               drag
               dragControls={dragControls}
               dragListener={false}
-              dragMomentum={false}
-              dragElastic={0.06}
+              /* Momentum is on (Motion default) so flicks carry inertia
+                 past pointer release. dragElastic 0.2 lets the panel
+                 bulge past the viewport edge briefly before snapping
+                 back, giving the "walls" a tactile bounce. dragTransition
+                 tunes the decay: lower power = stops sooner; higher
+                 timeConstant = longer slide. The bounce* settings shape
+                 the wall rebound (stiffness 320 / damping 18 ≈ a firm
+                 bounce that settles in ~400ms). */
+              dragElastic={0.2}
               dragConstraints={wrapperRef}
+              dragTransition={{
+                power: 0.4,
+                timeConstant: 220,
+                bounceStiffness: 320,
+                bounceDamping: 18,
+              }}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95, transition: T.base }}
@@ -98,6 +120,7 @@ export function FloatingPanel({ children, width = 480, backdrop = true, onClose,
           </FloatingPanelContext.Provider>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    portalTarget,
   );
 }
