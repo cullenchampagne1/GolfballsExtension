@@ -111,10 +111,13 @@ export function ImagePreview({
   // wrapper mount the real SubmitProof modal with the current image.
   onLaunchSubmitProof,
 }) {
-  // Resolve which image to render. A URL prop wins; otherwise we fall
-  // back to the bundled sample so the modal is fully usable empty.
-  const effectiveUrl = url || resolveFallbackUrl();
-  const usingFallback = !url;
+  // Resolve which image to render. A `url` prop wins. When no url is
+  // provided, the user can paste one into the URL input that appears
+  // above the preview surface, or drop a file directly. No bundled
+  // fallback — empty = drop-zone view.
+  const [pastedUrl, setPastedUrl] = useState('');
+  const effectiveUrl = url || pastedUrl || '';
+  const usingFallback = false;
   const toast = useToast();
   const draggable = useDevSetting('imageViewer.draggable') ?? false;
 
@@ -309,7 +312,9 @@ export function ImagePreview({
   // different image — currently never happens in playground but
   // future implementations will swap URLs).
   useEffect(() => {
-    setStatus('loading');
+    // Empty URL = "empty" status → render the drop-zone view; otherwise
+    // load the image normally.
+    setStatus(effectiveUrl ? 'loading' : 'empty');
     setImageSize(null);
     setDecalDataUrl(null);
     setView('2d');
@@ -793,6 +798,18 @@ export function ImagePreview({
 
       <div style={{ padding: '16px 16px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
+        {/* URL paste row — shown only when there's no image attached.
+            Lets the user paste a link as an alternative to dropping a
+            file onto the preview surface below. */}
+        {!effectiveUrl && (
+          <Input
+            value={pastedUrl}
+            onChange={setPastedUrl}
+            placeholder="Paste an image URL…"
+            leading={<I.search size={11} />}
+          />
+        )}
+
         {/* Preview surface — fixed-height dark wrapper with the image
             zoomed/panned inside. Zoom controls float bottom-right;
             zoom level chip bottom-left. Cursor swaps to grab when
@@ -888,6 +905,34 @@ export function ImagePreview({
             }}>
               <Spinner size={20} />
               <span>Resolving image…</span>
+            </div>
+          )}
+
+          {/* Empty overlay — no image was provided. The user can drop
+              one onto the preview surface (wrapper already accepts
+              files) or proceed straight to Submit Proof without one. */}
+          {status === 'empty' && (
+            <div style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              gap: 8,
+              color: 'var(--gb-text-tertiary)',
+              textAlign: 'center', padding: 24,
+              pointerEvents: 'none',
+            }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <circle cx="8.5" cy="8.5" r="1.5" />
+                <polyline points="21 15 16 10 5 21" />
+              </svg>
+              <div style={{
+                fontSize: 13, fontWeight: 700,
+                color: 'var(--gb-text-primary)',
+              }}>No image attached</div>
+              <div style={{ fontSize: 11.5, maxWidth: 280, lineHeight: 1.5 }}>
+                Drop an image here to extract a logo, or click <strong style={{ color: 'var(--gb-text-secondary)' }}>Submit Proof</strong> to continue without one.
+              </div>
             </div>
           )}
 
