@@ -137,6 +137,12 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   // 'loading' until Three.js + the model finish; then 'ready'. 'error'
   // surfaces a basic message instead of an empty canvas.
   const [status, setStatus] = useState('loading');
+  // Underwater tint — 0 (none) to 1 (fully submerged). Updated by the
+  // render loop via a ref→state bridge at a capped rate so we don't
+  // trigger re-renders every frame.
+  const [underwaterFrac, setUnderwaterFrac] = useState(0);
+  const underwaterFracRef = useRef(0);
+  const lastUnderwaterUpdateRef = useRef(0);
   // Debug HUD is gated behind a developer setting (default off). When
   // off, the render loop also skips publishing snapshot state so we
   // avoid the ~10Hz React re-renders entirely. Mirror the flag to a
@@ -647,11 +653,18 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             const entry = envCache.get(key);
             scene.background = entry?.equirect || null;
             scene.environment = entry?.envMap || null;
-            if (keyLight) keyLight.castShadow = false;
+            // Kill room lights — HDRI env map provides all lighting in
+            // scene mode. Leaving them on washes out the environment.
+            keyLight.intensity = 0;
+            fill.intensity = 0;
+            rim.intensity = 0;
           } else {
             scene.background = null;
             scene.environment = null;
-            if (keyLight) keyLight.castShadow = true;
+            keyLight.intensity = 1.6;
+            keyLight.castShadow = true;
+            fill.intensity = 0.55;
+            rim.intensity = 0.6;
           }
         };
 
@@ -859,20 +872,24 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
 
         /* ── Water ───────────────────────────────────────────────
            A translucent plane tracks `waterLevel` (Y world units).
-           Floor is at -HALF_Y; ceiling at +HALF_Y. The level rises
-           while the water tool is held and drains at a slower rate
-           when released. Buoyancy is applied per-frame: each body's
-           submersion fraction drives an upward force scaled so heavy
-           bodies (ball, bombs) sink and light ones (color balls,
-           confetti) float. */
-        const WATER_RISE_RATE  = 55;   // world-units per second while pouring
-        const WATER_DRAIN_RATE = 18;   // world-units per second when not pouring
+           While the tool is held, level rises AND a stream of droplet
+           particles falls from the cursor to the surface (the "pour").
+           Level never drains — it stays wherever it was left.
+
+           Buoyancy per-frame: F = G * mass * scale * submersionFrac
+             scale < 1  → sinks  (golf ball, bombs)
+             scale > 1  → floats (color balls, confetti)
+
+           Pour stream: small cyan spheres spawn at cursor world pos
+           each frame and fall to the water surface, then vanish. They
+           are purely visual — no physics bodies. */
+        const WATER_RISE_RATE = 60;   // world-units/sec while pouring
         const FLOOR_Y = -HALF_Y;
 
-        let waterLevel = FLOOR_Y;  // starts at floor (invisible)
-        let waterPourX = 0;        // cursor X in world space — drives ripple offset
+        let waterLevel = FLOOR_Y;     // starts at floor (invisible)
+        let waterPourWorld = new THREE.Vector3(0, 0, 0); // cursor in world space
 
-        // Water surface mesh — full room width/depth, at Y = waterLevel.
+        // Water surface mesh — full room width/depth.
         const waterGeo = new THREE.PlaneGeometry(HALF_X * 2, HALF_Z * 2, 32, 32);
         const waterMat = new THREE.MeshStandardMaterial({
           color: 0x1a8cff,
@@ -884,23 +901,33 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           depthWrite: false,
         });
         const waterMesh = new THREE.Mesh(waterGeo, waterMat);
-        waterMesh.rotation.x = -Math.PI / 2;  // lay flat, face up
-        waterMesh.position.y = FLOOR_Y - 4;    // start below floor — invisible
+        waterMesh.rotation.x = -Math.PI / 2;
+        waterMesh.position.y = FLOOR_Y - 4;
         waterMesh.visible = false;
         waterMesh.receiveShadow = false;
         scene.add(waterMesh);
         objectsToDispose.push(waterGeo, waterMat);
 
-        // Pour position tracking — updated by the hold handler.
-        const waterPourPos = { clientX: 0, clientY: 0 };
+        // Stream droplets — visual only, no physics.
+        // Each: { mesh, velY, life, maxLife }
+        const streamDroplets = [];
+        let streamSpawnTimer = 0;
 
         pourWaterAtRef.current = (pos) => {
-          waterPourPos.clientX = pos.clientX;
-          waterPourPos.clientY = pos.clientY;
-          // Convert CSS cursor X to world X so the ripple follows the cursor.
+          // Raycast cursor onto z=0 plane to get world pour position.
           const canvas = renderer.domElement;
           const r = canvas.getBoundingClientRect();
-          waterPourX = ((pos.clientX - r.left) / r.width * 2 - 1) * HALF_X;
+          if (pos.clientX < r.left || pos.clientX > r.right ||
+              pos.clientY < r.top  || pos.clientY > r.bottom) return;
+          ndc.x =  ((pos.clientX - r.left) / r.width)  * 2 - 1;
+          ndc.y = -((pos.clientY - r.top)  / r.height) * 2 + 1;
+          ray.setFromCamera(ndc, camera);
+          ray.ray.intersectPlane(dropPlane, hitPoint);
+          waterPourWorld.set(
+            Math.max(-HALF_X + 10, Math.min(HALF_X - 10, hitPoint.x)),
+            hitPoint.y,
+            Math.max(-HALF_Z + 10, Math.min(HALF_Z - 10, hitPoint.z)),
+          );
         };
 
         drainWaterRef.current = () => {
@@ -908,6 +935,13 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           waterActiveRef.current = false;
           waterMesh.visible = false;
           waterMesh.position.y = FLOOR_Y - 4;
+          // Remove stream droplets.
+          for (const d of streamDroplets) {
+            scene.remove(d.mesh);
+            d.mesh.geometry.dispose();
+            d.mesh.material.dispose();
+          }
+          streamDroplets.length = 0;
         };
         const ndc = new THREE.Vector2();
         const ray = new THREE.Raycaster();
@@ -1456,81 +1490,139 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             }
           }
 
-          /* ── Water level + buoyancy ──────────────────────────────
-             Rise while the tool is held; drain passively when not.
-             Buoyancy = upward force proportional to submersion depth.
-             Each body type has a `buoyancyScale` that determines
-             whether it sinks or floats:
-               > 1  → net upward (floats)   — color balls, confetti
-               < 1  → net downward (sinks)   — main ball, bombs
-             The formula: F_buoy = gravity_mag * mass * scale * frac
-             where frac = clamp(0,1) of how far below waterLevel the
-             center sits relative to its effective radius.              */
+          /* ── Water level + pour stream + buoyancy ────────────────
+             Level rises while held. Droplet stream spawns from cursor
+             world pos, falls to surface, vanishes. No drain.
+
+             Buoyancy: F_up = G * mass * scale * frac (per-frame).
+             scale < 1 → net gravity wins → sinks (ball, bombs).
+             scale > 1 → net buoyancy wins → floats (color balls, confetti).
+             Ball has scale 0.35 → always sinks hard regardless of depth. */
           if (waterActiveRef.current) {
             waterLevel = Math.min(HALF_Y - 4, waterLevel + WATER_RISE_RATE * dt);
-          } else if (waterLevel > FLOOR_Y) {
-            waterLevel = Math.max(FLOOR_Y, waterLevel - WATER_DRAIN_RATE * dt);
           }
 
           const hasWater = waterLevel > FLOOR_Y + 1;
+
+          // Pour stream — spawn droplets from cursor toward the surface.
+          if (waterActiveRef.current && hasWater) {
+            streamSpawnTimer += dt * 1000;
+            // Spawn a burst of droplets every 28ms while pouring.
+            while (streamSpawnTimer >= 28) {
+              streamSpawnTimer -= 28;
+              const count = 3 + Math.floor(Math.random() * 3);
+              for (let si = 0; si < count; si++) {
+                const r = 2.2 + Math.random() * 2;
+                const dGeo = new THREE.SphereGeometry(r, 6, 5);
+                const dMat = new THREE.MeshBasicMaterial({
+                  color: 0x55aaff,
+                  transparent: true,
+                  opacity: 0.72 + Math.random() * 0.2,
+                });
+                const dMesh = new THREE.Mesh(dGeo, dMat);
+                // Start slightly above cursor, with lateral scatter.
+                dMesh.position.set(
+                  waterPourWorld.x + (Math.random() - 0.5) * 14,
+                  waterPourWorld.y + 10 + Math.random() * 20,
+                  waterPourWorld.z + (Math.random() - 0.5) * 14,
+                );
+                scene.add(dMesh);
+                streamDroplets.push({
+                  mesh: dMesh,
+                  velY: -(200 + Math.random() * 120), // downward
+                  life: 1200,
+                  maxLife: 1200,
+                });
+              }
+            }
+          } else {
+            streamSpawnTimer = 0;
+          }
+
+          // Advance droplets — fall, vanish when they hit water surface.
+          for (let di = streamDroplets.length - 1; di >= 0; di--) {
+            const d = streamDroplets[di];
+            d.mesh.position.y += d.velY * dt;
+            d.velY -= 400 * dt; // gravity on the stream
+            d.life -= dt * 1000;
+            // Kill when hitting water surface or time expires.
+            if (d.mesh.position.y <= waterLevel + 1 || d.life <= 0) {
+              scene.remove(d.mesh);
+              d.mesh.geometry.dispose();
+              d.mesh.material.dispose();
+              streamDroplets.splice(di, 1);
+            }
+          }
+
           if (hasWater) {
             waterMesh.visible = true;
             waterMesh.position.y = waterLevel;
 
-            // Gentle vertex wobble — animate the water surface verts
-            // so it looks alive. Small amplitude, slow frequency.
+            // Animated surface ripples — stronger near the pour point.
             const wPos = waterGeo.attributes.position;
             const wTime = nowMs / 1000;
+            const pourX = waterPourWorld.x;
             for (let wi = 0; wi < wPos.count; wi++) {
               const wx = wPos.getX(wi);
-              const wz = wPos.getY(wi); // PlaneGeometry rotated, so Y in local = Z in world
-              const dist = Math.abs(wx - waterPourX) / (HALF_X * 2);
-              const ripple = Math.sin(wx * 0.04 + wTime * 2.8) * 2.5
-                           + Math.cos(wz * 0.035 + wTime * 2.1) * 2.0
-                           + Math.sin(dist * 6 - wTime * 4) * (waterActiveRef.current ? 3.5 : 1.2);
+              const wz = wPos.getY(wi); // rotated plane: local Y = world Z
+              const dist = Math.hypot(wx - pourX, wz) / HALF_X;
+              const ripple = Math.sin(wx * 0.045 + wTime * 3.2) * 2.2
+                           + Math.cos(wz * 0.038 + wTime * 2.5) * 1.8
+                           + Math.sin(dist * 8 - wTime * 5) * (waterActiveRef.current ? 4 : 1.5);
               wPos.setZ(wi, ripple);
             }
             wPos.needsUpdate = true;
             waterGeo.computeVertexNormals();
+            waterMat.opacity = 0.33 + 0.05 * Math.sin(nowMs / 1000 * 1.9);
 
-            // Opacity pulses slightly so the surface shimmers.
-            waterMat.opacity = 0.32 + 0.06 * Math.sin(wTime * 1.7);
-
-            const G = 650; // magnitude of world gravity
-
-            const applyBuoyancy = (body, radius, buoyancyScale) => {
-              if (body.type === CANNON.Body.STATIC) return;
-              const centerY = body.position.y;
-              const submergeDepth = (waterLevel + radius) - centerY;
-              if (submergeDepth <= 0) return;
-              const frac = Math.min(1, submergeDepth / (radius * 2));
-              const F = G * body.mass * buoyancyScale * frac;
-              // Add horizontal drag when moving through water — damps
-              // lateral velocity proportional to submersion so objects
-              // slow down believably as they enter the water.
-              const drag = frac * 3.2;
-              body.velocity.x *= Math.pow(1 - drag * 0.016, 1);
-              body.velocity.z *= Math.pow(1 - drag * 0.016, 1);
-              body.applyForce(new CANNON.Vec3(0, F, 0), new CANNON.Vec3(0, 0, 0));
+            const G = 650;
+            const applyBuoyancy = (body, radius, scale) => {
+              if (body.type === CANNON.Body.STATIC || body.type === CANNON.Body.KINEMATIC) return;
+              const frac = Math.min(1, Math.max(0,
+                ((waterLevel + radius) - body.position.y) / (radius * 2)));
+              if (frac <= 0) return;
+              // Water drag — kill lateral velocity in proportion to submersion.
+              const drag = 1 - frac * 0.08;
+              body.velocity.x *= drag;
+              body.velocity.z *= drag;
+              body.applyForce(new CANNON.Vec3(0, G * body.mass * scale * frac, 0),
+                              new CANNON.Vec3(0, 0, 0));
               body.wakeUp();
             };
 
-            // Main ball — sinks (buoyancyScale < 1 so net force is still downward)
+            // Golf ball & bombs: scale 0.35 → always sinks (G*1*0.35 << G*1).
             if (ballBody.type === CANNON.Body.DYNAMIC) {
-              applyBuoyancy(ballBody, targetRadius * state.scale, 0.62);
+              applyBuoyancy(ballBody, targetRadius * state.scale, 0.35);
             }
-            // Bombs — also sink, slightly more buoyant than the ball
-            for (const b of bombs) applyBuoyancy(b.body, b.radius, 0.70);
-            // Spawned color balls — float
-            for (const sb of spawnedBalls) applyBuoyancy(sb.body, SPAWN_R, 1.55);
-            // Confetti — floats strongly (very low mass)
-            for (const cp of confettiPieces) applyBuoyancy(cp.body, CONFETTI_W * 0.5, 2.8);
+            for (const b of bombs) applyBuoyancy(b.body, b.radius, 0.35);
+            // Color balls: scale 1.6 → floats.
+            for (const sb of spawnedBalls) applyBuoyancy(sb.body, SPAWN_R, 1.6);
+            // Confetti: scale 2.5 → floats hard.
+            for (const cp of confettiPieces) applyBuoyancy(cp.body, CONFETTI_W * 0.5, 2.5);
+
+            // Track how submerged the camera viewpoint is — drive the
+            // blue tint overlay based on whether the water line is above
+            // the camera's lower half of the frame (approximated as
+            // waterLevel vs a fixed "eye height" near floor center).
+            const camEye = -HALF_Y * 0.2; // near-floor reference height
+            const tint = Math.min(1, Math.max(0,
+              (waterLevel - camEye) / (HALF_Y * 1.2)));
+            underwaterFracRef.current = tint;
+            if (nowMs - lastUnderwaterUpdateRef.current > 80) {
+              lastUnderwaterUpdateRef.current = nowMs;
+              setUnderwaterFrac(tint);
+            }
           } else {
             waterMesh.visible = false;
+            if (underwaterFracRef.current > 0) {
+              underwaterFracRef.current = 0;
+              setUnderwaterFrac(0);
+            }
           }
 
           const stepNeeded = throwModeRef.current || bombs.length > 0
-            || spawnedBalls.length > 0 || confettiPieces.length > 0 || hasWater;
+            || spawnedBalls.length > 0 || confettiPieces.length > 0 || hasWater
+            || streamDroplets.length > 0;
           if (stepNeeded) {
             world.step(1 / 60, dt, 3);
             // Sync the ball — only when throwMode is on AND we're
@@ -2018,6 +2110,23 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           <div>rot.z   {debug.rotDeg[2].toFixed(1)}°</div>
         </div>
       )}
+
+      {/* Underwater tint — blue vignette that builds as the water level
+          rises. pointer-events:none so it never blocks the canvas. */}
+      {underwaterFrac > 0.01 && (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute', inset: 0,
+            pointerEvents: 'none',
+            background: `rgba(10, 80, 200, ${(underwaterFrac * 0.45).toFixed(3)})`,
+            // Stronger at the edges to mimic peripheral lens distortion.
+            boxShadow: `inset 0 0 ${80 + underwaterFrac * 120}px ${40 + underwaterFrac * 80}px rgba(0, 60, 180, ${(underwaterFrac * 0.55).toFixed(3)})`,
+            transition: 'background 0.3s, box-shadow 0.3s',
+            zIndex: 5,
+          }}
+        />
+      )}
     </div>
   );
 });
@@ -2048,11 +2157,11 @@ const BounceIcon = (p) => (
    chip. The framed picture metaphor reads as "swap the view"
    without committing to any one scene's vibe. */
 const SceneIcon = (p) => (
-  <svg width={p.size || 13} height={p.size || 13} viewBox="0 0 24 24" fill="none"
+  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="17" cy="7" r="2.2" />
-    <path d="M3 19l5-7 4 5 3-4 6 6" />
-    <rect x="2.5" y="3" width="19" height="18" rx="2.5" />
+    <rect x="3" y="3" width="18" height="18" rx="2.5" />
+    <circle cx="16.5" cy="7.5" r="2" />
+    <path d="M3 16l5-6 4 5 3-3 6 7" />
   </svg>
 );
 
