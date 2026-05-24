@@ -1055,12 +1055,15 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           0x5ac8fa, 0x007aff, 0xaf52de, 0xff2d55, 0xffd60a,
           0x64d2ff, 0xbf5af2, 0xff6961, 0xffb340, 0x30b0c7,
         ];
-        const SPAWN_R = 20;
+        const SPAWN_R = 12;
 
         spawnBallAtRef.current = ({ clientX, clientY }) => {
           if (sceneKeyRef.current) return;
+          // Only spawn when the cursor is actually over the canvas.
           const canvas = renderer.domElement;
           const r = canvas.getBoundingClientRect();
+          if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return;
+
           ndc.x =  ((clientX - r.left) / r.width)  * 2 - 1;
           ndc.y = -((clientY - r.top)  / r.height) * 2 + 1;
           ray.setFromCamera(ndc, camera);
@@ -1069,16 +1072,16 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           const margin = SPAWN_R + 2;
           hitPoint.x = Math.max(-HALF_X + margin, Math.min(HALF_X - margin, hitPoint.x));
           hitPoint.y = Math.max(-HALF_Y + margin, Math.min(HALF_Y - margin, hitPoint.y));
-          hitPoint.z = 0;
+          hitPoint.z = (Math.random() - 0.5) * HALF_Z * 0.4; // slight Z spread so balls don't pancake
 
           const color = BALL_COLORS[Math.floor(Math.random() * BALL_COLORS.length)];
-          const geo = new THREE.SphereGeometry(SPAWN_R, 16, 12);
+          const geo = new THREE.SphereGeometry(SPAWN_R, 14, 10);
           const mat = new THREE.MeshStandardMaterial({
             color,
             roughness: 0.35,
             metalness: 0.05,
             emissive: color,
-            emissiveIntensity: 0.08,
+            emissiveIntensity: 0.1,
           });
           const mesh = new THREE.Mesh(geo, mat);
           mesh.castShadow = true;
@@ -1086,18 +1089,17 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           scene.add(mesh);
 
           const cBody = new CANNON.Body({
-            mass: 0.4,
+            mass: 0.3,
             shape: new CANNON.Sphere(SPAWN_R),
             material: ballMaterial,
             linearDamping: 0.04,
             angularDamping: 0.15,
           });
           cBody.position.set(hitPoint.x, hitPoint.y, hitPoint.z);
-          // Small random initial velocity so balls don't all stack in one column.
           cBody.velocity.set(
-            (Math.random() - 0.5) * 60,
-            (Math.random() - 0.5) * 60,
-            0,
+            (Math.random() - 0.5) * 80,
+            (Math.random() - 0.5) * 80,
+            (Math.random() - 0.5) * 40,
           );
           world.addBody(cBody);
           spawnedBalls.push({ mesh, body: cBody });
@@ -1737,14 +1739,24 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             display: 'inline-flex', alignItems: 'center', gap: 4,
             fontFamily: 'var(--gb-font-mono)', fontSize: 10, fontWeight: 700,
             letterSpacing: 0.4,
-            color: throwMode ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
-            background: 'var(--gb-surface-modal)',
-            border: '1px solid ' + (throwMode ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
-            boxShadow: throwMode ? 'inset 0 0 0 1px var(--gb-brand-tint-soft)' : 'none',
-            borderRadius: 'var(--gb-r-sm)',
+            color: throwMode ? '#ffffff' : 'var(--gb-text-secondary)',
+            background: throwMode
+              ? 'rgba(255,255,255,0.18)'
+              : 'color-mix(in srgb, var(--gb-surface-canvas) 62%, transparent)',
+            backdropFilter: 'blur(18px) saturate(160%)',
+            WebkitBackdropFilter: 'blur(18px) saturate(160%)',
+            border: '1px solid ' + (throwMode
+              ? 'rgba(255,255,255,0.28)'
+              : 'color-mix(in srgb, var(--gb-text-primary) 12%, transparent)'),
+            boxShadow: throwMode
+              ? '0 0 0 1px rgba(255,255,255,0.18) inset, 0 0 14px -2px rgba(255,255,255,0.25)'
+              : '0 4px 14px -6px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.05) inset',
+            borderRadius: 9,
             cursor: 'pointer',
             lineHeight: 1,
-            transition: 'border-color .12s, color .12s, box-shadow .12s',
+            outline: 'none',
+            WebkitTapHighlightColor: 'transparent',
+            transition: 'color .14s, background .14s, border-color .14s, box-shadow .14s',
           }}
         >
           <BounceIcon size={11} />

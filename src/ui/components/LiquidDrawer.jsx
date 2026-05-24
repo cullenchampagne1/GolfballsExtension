@@ -46,7 +46,6 @@ const PAD       = 3;
 const RADIUS    = 14; // squircle-ish — fits a 30px slot nicely
 
 const GLASS_BG = 'color-mix(in srgb, var(--gb-surface-canvas) 62%, transparent)';
-const GLASS_BG_FALLBACK = 'rgba(20, 22, 26, 0.62)';
 const GLASS_BORDER = 'color-mix(in srgb, var(--gb-text-primary) 12%, transparent)';
 const GLASS_FILTER = 'blur(18px) saturate(160%)';
 const SPRING = { type: 'spring', stiffness: 420, damping: 32, mass: 0.7 };
@@ -105,8 +104,7 @@ export function LiquidDrawer({
           width: breadth,
           minHeight: lenClosed,
           borderRadius: RADIUS,
-          background: GLASS_BG_FALLBACK,
-          backgroundImage: GLASS_BG,
+          background: GLASS_BG,
           backdropFilter: GLASS_FILTER,
           WebkitBackdropFilter: GLASS_FILTER,
           border: `1px solid ${GLASS_BORDER}`,

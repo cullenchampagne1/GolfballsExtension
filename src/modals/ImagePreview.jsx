@@ -40,15 +40,17 @@ import { LiquidDrawer } from '../ui/components/LiquidDrawer.jsx';
                                 Submit Proof modal once that lands)
 ─────────────────────────────────────────────────────────────── */
 
-/* Frosted-glass token — matches the LiquidDrawer capsule aesthetic so
-   every overlay element (chips, icon buttons) reads as one design family.
-   color-mix adapts automatically across all 4 themes. */
-const GLASS_BG         = 'color-mix(in srgb, var(--gb-surface-canvas) 62%, transparent)';
-const GLASS_BG_FB      = 'rgba(20, 22, 26, 0.62)';
-const GLASS_BORDER     = 'color-mix(in srgb, var(--gb-text-primary) 12%, transparent)';
-const GLASS_FILTER     = 'blur(18px) saturate(160%)';
-const GLASS_SHADOW     = '0 4px 14px -6px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.05) inset';
-const GLASS_RADIUS     = 9; // px — slightly tighter than the capsule's 14
+/* Frosted-glass tokens — match the LiquidDrawer capsule aesthetic.
+   background uses color-mix directly (NOT backgroundImage — color-mix
+   is a <color>, not an <image>, so backgroundImage silently discards it).
+   backdrop-filter provides the blur; color-mix provides the tint that
+   adapts across all 4 themes automatically. */
+const GLASS_BG     = 'color-mix(in srgb, var(--gb-surface-canvas) 62%, transparent)';
+const GLASS_BG_HVR = 'color-mix(in srgb, var(--gb-surface-canvas) 78%, transparent)';
+const GLASS_BORDER = 'color-mix(in srgb, var(--gb-text-primary) 12%, transparent)';
+const GLASS_FILTER = 'blur(18px) saturate(160%)';
+const GLASS_SHADOW = '0 4px 14px -6px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.05) inset';
+const GLASS_RADIUS = 9; // px — slightly tighter than the capsule's 14
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 8;
@@ -659,8 +661,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                   position: 'absolute', top: 8, left: 10,
                   fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
                   color: 'var(--gb-text-secondary)',
-                  background: GLASS_BG_FB,
-                  backgroundImage: GLASS_BG,
+                  background: GLASS_BG,
                   backdropFilter: GLASS_FILTER,
                   WebkitBackdropFilter: GLASS_FILTER,
                   border: `1px solid ${GLASS_BORDER}`,
@@ -692,8 +693,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                     position: 'absolute', bottom: 8, left: 10,
                     fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
                     color: 'var(--gb-text-secondary)',
-                    background: GLASS_BG_FB,
-                    backgroundImage: GLASS_BG,
+                    background: GLASS_BG,
                     backdropFilter: GLASS_FILTER,
                     WebkitBackdropFilter: GLASS_FILTER,
                     border: `1px solid ${GLASS_BORDER}`,
@@ -1032,10 +1032,7 @@ function ZoomChipBtn({ children, tooltip: _tooltip, onClick }) {
         fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
         fontFamily: 'var(--gb-font-mono)',
         color: hovered ? 'var(--gb-text-primary)' : 'var(--gb-text-secondary)',
-        background: hovered
-          ? 'color-mix(in srgb, var(--gb-surface-canvas) 78%, transparent)'
-          : GLASS_BG_FB,
-        backgroundImage: GLASS_BG,
+        background: hovered ? GLASS_BG_HVR : GLASS_BG,
         backdropFilter: GLASS_FILTER,
         WebkitBackdropFilter: GLASS_FILTER,
         border: `1px solid ${GLASS_BORDER}`,
@@ -1074,8 +1071,7 @@ function GlassIconBtn({ icon, active, onClick }) {
         color: active ? '#ffffff' : (hovered ? 'var(--gb-text-primary)' : 'var(--gb-text-secondary)'),
         background: active
           ? 'rgba(255,255,255,0.20)'
-          : (hovered ? 'color-mix(in srgb, var(--gb-surface-canvas) 78%, transparent)' : GLASS_BG_FB),
-        backgroundImage: active ? undefined : GLASS_BG,
+          : (hovered ? GLASS_BG_HVR : GLASS_BG),
         backdropFilter: GLASS_FILTER,
         WebkitBackdropFilter: GLASS_FILTER,
         border: `1px solid ${active ? 'rgba(255,255,255,0.22)' : GLASS_BORDER}`,
@@ -1247,40 +1243,36 @@ function ViewerToolbox({ viewerRef }) {
       if (activeTool === 'balls') {
         lastCursorRef.current = { clientX: e.clientX, clientY: e.clientY };
         v.spawnBallActive = true;
-        // Spawn one immediately, then every second.
-        v.spawnBallAt?.({ clientX: e.clientX, clientY: e.clientY });
+        // Spawn immediately on press, then every 100ms while held.
+        v.spawnBallAt?.(lastCursorRef.current);
         spawnIntervalRef.current = setInterval(() => {
-          const cur = lastCursorRef.current;
           if (viewerRef.current?.spawnBallActive) {
-            viewerRef.current.spawnBallAt?.(cur);
+            viewerRef.current.spawnBallAt?.(lastCursorRef.current);
           }
-        }, 1000);
+        }, 100);
       }
     };
 
     const onMove = (e) => {
-      if (activeTool === 'balls') {
-        lastCursorRef.current = { clientX: e.clientX, clientY: e.clientY };
-      }
+      // Always track cursor so spawn follows it even while held.
+      lastCursorRef.current = { clientX: e.clientX, clientY: e.clientY };
     };
 
-    const onUp = () => {
-      if (activeTool === 'balls') {
-        if (viewerRef.current) viewerRef.current.spawnBallActive = false;
-        clearInterval(spawnIntervalRef.current);
-        spawnIntervalRef.current = null;
-      }
+    const stopSpawning = () => {
+      if (viewerRef.current) viewerRef.current.spawnBallActive = false;
+      clearInterval(spawnIntervalRef.current);
+      spawnIntervalRef.current = null;
     };
 
     window.addEventListener('pointerdown', onDown);
     window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
+    window.addEventListener('pointerup', stopSpawning);
+    window.addEventListener('pointercancel', stopSpawning);
     return () => {
       window.removeEventListener('pointerdown', onDown);
       window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
+      window.removeEventListener('pointerup', stopSpawning);
+      window.removeEventListener('pointercancel', stopSpawning);
       clearInterval(spawnIntervalRef.current);
       spawnIntervalRef.current = null;
     };
