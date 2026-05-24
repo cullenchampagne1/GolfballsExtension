@@ -11,6 +11,7 @@ import { MarginCalc } from '../modals/MarginCalc.jsx';
 import { ImagePreview } from '../modals/ImagePreview.jsx';
 import { WatchList } from '../modals/WatchList.jsx';
 import { CRMCreateContact } from '../modals/CRMCreateContact.jsx';
+import { SubmitProof } from '../modals/SubmitProof.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    playground.jsx — in-extension modal playground.
@@ -35,7 +36,7 @@ const MODAL_REGISTRY = [
   { id: 'watchList',    label: 'Watch List',      icon: 'eye',     wired: true  },
   { id: 'emailPreview', label: 'Email Preview',   icon: 'mail',    wired: false },
   { id: 'imageViewer',  label: 'Image Viewer',    icon: 'eye',     wired: true  },
-  { id: 'submitProof',  label: 'Submit Proof',    icon: 'send',    wired: false },
+  { id: 'submitProof',  label: 'Submit Proof',    icon: 'send',    wired: true  },
   { id: 'crmSearch',    label: 'CRM Search',      icon: 'search',  wired: false },
   { id: 'crmQuery',     label: 'CRM Query',       icon: 'filter',  wired: false },
   { id: 'crmContact',   label: 'New Contact',     icon: 'user',    wired: true  },
@@ -411,6 +412,16 @@ function PlaygroundSurface() {
           <CRMCreateContact
             key="crmContact"
             onClosed={() => setMounted(null)}
+          />
+        )}
+        {mounted === 'submitProof' && (
+          /* No image passed → SubmitProof opens ImagePreview in
+             picker mode first, then transitions to the form. */
+          <SubmitProof
+            key="submitProof"
+            onClosed={() => setMounted(null)}
+            customerId="4650030"
+            orderId="123456"
           />
         )}
       </AnimatePresence>

@@ -126,6 +126,20 @@ export const DEV_SETTINGS = [
     default: false,
   },
   {
+    key:     'submitProof.draggable',
+    label:   'Submit Proof: draggable mode',
+    desc:    'When on, the Submit Proof modal is a draggable tool window. When off, it sits centered with a solid backdrop that closes on outside-click.',
+    type:    'bool',
+    default: true,
+  },
+  {
+    key:     'submitProof.useMock',
+    label:   'Submit Proof: force mock mode',
+    desc:    'Use canned reps/artists/gallery + fake submit responses. Useful for playground previews or when the CRM is down. Auto-mocks when not in an extension context.',
+    type:    'bool',
+    default: false,
+  },
+  {
     key:     'crmCreateContact.requireAccount',
     label:   'CRM New Contact: require account',
     desc:    'When on, the New Contact modal blocks submit until an account is selected (or typed). Creating a contact without an account is allowed by the API but is bad practice. Turn off to override.',
