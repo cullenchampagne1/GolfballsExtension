@@ -22,7 +22,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["charge.html", "charge.js", "editor.html", "playground.html", "icons/photo_ball.jpg", "icons/golfball_model/Golf_ball.obj", "icons/golden_gate_hills_4k.exr", "icons/lilienstein_4k.exr", "icons/moonlit_golf_4k.exr", "icons/sunset_fairway_4k.exr"],
+      "resources": ["charge.html", "charge.js", "editor.html", "playground.html", "icons/photo_ball.jpg", "icons/golfball_model/Golf_ball.obj", "icons/golden_gate_hills_4k.exr", "icons/lilienstein_4k.exr", "icons/moonlit_golf_4k.exr", "icons/sunset_fairway_4k.exr", "icons/mockup_base.png"],
       "matches": ["<all_urls>"]
     }
   ],
