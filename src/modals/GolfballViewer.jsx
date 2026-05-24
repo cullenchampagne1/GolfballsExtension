@@ -340,53 +340,34 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           }
 
           // ── Rounded room — actual geometry, no seams ──────────
-          // We build each wall as a high-subdivision plane, position
-          // it into the room, then deform its WORLD-SPACE vertices
-          // so any vertex within ROUND_R of the inner rounded box
-          // surface gets snapped onto that surface. Because every
-          // wall runs the same deformation against the same global
-          // surface definition, vertices from adjacent walls that
-          // started at the same world point END at the same world
-          // point → seams stay welded.
+          // The room rounds on X/Y only — the back wall stays a flat
+          // plane that the side walls + floor + ceiling all curve
+          // into. Conceptually the room is a rounded tube whose axis
+          // is Z: cross-section is a rounded rectangle, but along Z
+          // the cross-section is constant. That makes the back wall
+          // a straight cap and the front (open) end just framing.
           //
-          // The inner rounded box is defined by:
-          //   • flat planes at ±(HALF_* - ROUND_R) on each axis
-          //   • 12 cylindrical edges of radius ROUND_R running along
-          //     each box edge axis
-          //   • 8 spherical corners of radius ROUND_R at each corner
-          // For any point P inside the original box but within
-          // ROUND_R of the box surface, the nearest point ON the
-          // rounded surface is: clamp P to the inner rect, then push
-          // outward by ROUND_R along the direction from the clamped
-          // point to P. (Standard rounded-box SDF nearest-surface.)
+          // For each vertex we clamp X/Y into the inner rounded-rect
+          // core, then push outward by ROUND_R along the direction
+          // from clamp→vertex. Z is left untouched, so the back wall
+          // stays perfectly flat.
           const ROUND_R = 72;
           const INNER_X = HALF_X - ROUND_R;
           const INNER_Y = HALF_Y - ROUND_R;
-          const INNER_Z = HALF_Z - ROUND_R;
 
-          // Snap a world-space point onto the rounded inner box
-          // surface. Vertices that started flush with the wall (the
-          // ones that need rounding) all map to the same surface, so
-          // adjacent walls share corners exactly.
           const tmpV = new THREE.Vector3();
           const snapToRoundedBox = (p) => {
-            // Distance from box center along each axis, clamped into
-            // the inner rect — that's the nearest point on the inner
-            // rounded-box's "core" (the rectangular box you'd inflate
-            // by ROUND_R to get the rounded shape).
             const cx = Math.max(-INNER_X, Math.min(INNER_X, p.x));
             const cy = Math.max(-INNER_Y, Math.min(INNER_Y, p.y));
-            const cz = Math.max(-INNER_Z, Math.min(INNER_Z, p.z));
-            // Direction from core to the original point
             const dx = p.x - cx;
             const dy = p.y - cy;
-            const dz = p.z - cz;
-            const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
-            if (len < 1e-6) return; // P is inside the inner core — no snap
+            const len = Math.sqrt(dx * dx + dy * dy);
+            if (len < 1e-6) return;     // already inside the core
             const k = ROUND_R / len;
             p.x = cx + dx * k;
             p.y = cy + dy * k;
-            p.z = cz + dz * k;
+            // Z stays as-is → back wall is flat, side walls round
+            // only on the X/Y axis where they meet floor/ceiling.
           };
 
           function makeWall(widthWU, heightWU) {
@@ -474,7 +455,10 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           // snapped onto the rounded surface; vertices from different
           // walls at the same world point land at the same destination
           // so the seams stay welded.
-          [floor, ceil, back, left, right].forEach(roundWall);
+          // Back wall stays flat — only the four walls that share
+          // a corner with it (floor/ceiling/left/right) round into
+          // the X/Y fillet so they meet at the curve.
+          [floor, ceil, left, right].forEach(roundWall);
 
           // No front wall — user looks INTO the room from outside.
           // The 6th cannon plane still bounces the ball back from the
