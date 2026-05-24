@@ -653,16 +653,6 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           return dataUrl;
         };
 
-        /* ── Bomb drop ────────────────────────────────────────────
-           containsPoint: returns true if a client-space (CSS) point
-           lies over the live canvas. The drawer's drag handler uses
-           it to decide whether the drop counts as "inside the box".
-
-           dropBomb: spawns a small bomb mesh inside the room at the
-           world-space point corresponding to the cursor's screen
-           position, projected onto the Z=0 plane (the same depth as
-           the ball at rest). No physics for now — drops here as a
-           visible token; we can add behavior later. */
         containsPointRef.current = ({ clientX, clientY }) => {
           const canvas = renderer.domElement;
           const r = canvas.getBoundingClientRect();
@@ -670,66 +660,20 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               && clientY >= r.top  && clientY <= r.bottom;
         };
 
-        const bombs = [];
-        const ndc = new THREE.Vector2();
-        const ray = new THREE.Raycaster();
-        const dropPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0); // z = 0
-        const hitPoint = new THREE.Vector3();
-        dropBombRef.current = ({ clientX, clientY }) => {
-          const canvas = renderer.domElement;
-          const r = canvas.getBoundingClientRect();
-          // Convert CSS pixel coords to normalized device coords
-          // (NDC) in [-1, 1] for the raycaster.
-          ndc.x =  ((clientX - r.left) / r.width)  * 2 - 1;
-          ndc.y = -((clientY - r.top)  / r.height) * 2 + 1;
-          ray.setFromCamera(ndc, camera);
-          ray.ray.intersectPlane(dropPlane, hitPoint);
-
-          // Clamp into the room so a bomb can never spawn outside
-          // the visible box (would otherwise look broken if the user
-          // releases just outside the canvas edge).
-          const margin = 18;
-          hitPoint.x = Math.max(-HALF_X + margin, Math.min(HALF_X - margin, hitPoint.x));
-          hitPoint.y = Math.max(-HALF_Y + margin, Math.min(HALF_Y - margin, hitPoint.y));
-          hitPoint.z = 0;
-
-          // Build the bomb: a small dark sphere with a tiny stub
-          // fuse on top. Kept primitive on purpose — we can swap in
-          // a real model later without touching the spawn pipeline.
-          const bombGroup = new THREE.Group();
-          const body = new THREE.Mesh(
-            new THREE.SphereGeometry(14, 24, 18),
-            new THREE.MeshStandardMaterial({ color: 0x1a1c20, roughness: 0.55, metalness: 0.15 }),
-          );
-          body.castShadow = true;
-          const fuse = new THREE.Mesh(
-            new THREE.CylinderGeometry(1.2, 1.2, 10, 8),
-            new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.9 }),
-          );
-          fuse.position.y = 18;
-          const spark = new THREE.Mesh(
-            new THREE.SphereGeometry(2, 12, 10),
-            new THREE.MeshStandardMaterial({
-              color: 0xffb347, emissive: 0xff7a1a, emissiveIntensity: 1.4, roughness: 0.4,
-            }),
-          );
-          spark.position.y = 24;
-          bombGroup.add(body, fuse, spark);
-          bombGroup.position.copy(hitPoint);
-          scene.add(bombGroup);
-          bombs.push(bombGroup);
-          objectsToDispose.push(body.geometry, body.material, fuse.geometry, fuse.material, spark.geometry, spark.material);
-        };
-
         /* ── cannon-es physics world ─────────────────────────────
            One sphere body for the ball + 6 static planes for the box
-           walls. World is stepped each frame ONLY when throw mode is
-           on; otherwise the ball sits at the origin and is driven
-           by drag-rotation.
+           walls + zero-to-many bomb bodies added on drop. The world
+           steps every frame whenever throwMode is on OR any bombs
+           exist (bombs always have gravity so they need physics even
+           when the ball is at rest).
 
-           bodyMaterial restitution=0.6 gives a satisfying bounce
-           without infinite oscillation; air friction 0.05 makes the
-           ball slow naturally on the floor. Gravity is -y. */
+           Three contact materials:
+             • ball ↔ wall   — restitution 0.6, friction 0.05
+             • ball ↔ ball   — used for ball↔bomb and bomb↔bomb, since
+                              bombs are also tagged ballMaterial.
+                              Restitution 0.55 reads as a soft thud
+                              rather than a click; friction 0.10 lets
+                              the ball roll-push a bomb naturally. */
         world = new CANNON.World();
         world.gravity.set(0, -650, 0);
         world.broadphase = new CANNON.NaiveBroadphase();
@@ -740,6 +684,76 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           friction: 0.05,
           restitution: 0.6,
         }));
+        world.addContactMaterial(new CANNON.ContactMaterial(ballMaterial, ballMaterial, {
+          friction: 0.10,
+          restitution: 0.55,
+        }));
+
+        // bombs: array of { group, body, radius }. Populated by
+        // dropBombRef.current below. Render loop iterates it each
+        // frame to sync mesh transforms from physics.
+        const bombs = [];
+        const ndc = new THREE.Vector2();
+        const ray = new THREE.Raycaster();
+        const dropPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0); // z = 0
+        const hitPoint = new THREE.Vector3();
+        dropBombRef.current = ({ clientX, clientY }) => {
+          const canvas = renderer.domElement;
+          const r = canvas.getBoundingClientRect();
+          ndc.x =  ((clientX - r.left) / r.width)  * 2 - 1;
+          ndc.y = -((clientY - r.top)  / r.height) * 2 + 1;
+          ray.setFromCamera(ndc, camera);
+          ray.ray.intersectPlane(dropPlane, hitPoint);
+
+          const BOMB_R = 14;
+          const margin = BOMB_R + 4;
+          hitPoint.x = Math.max(-HALF_X + margin, Math.min(HALF_X - margin, hitPoint.x));
+          hitPoint.y = Math.max(-HALF_Y + margin, Math.min(HALF_Y - margin, hitPoint.y));
+          hitPoint.z = 0;
+
+          const bombGroup = new THREE.Group();
+          const mBody = new THREE.Mesh(
+            new THREE.SphereGeometry(BOMB_R, 24, 18),
+            new THREE.MeshStandardMaterial({ color: 0x1a1c20, roughness: 0.55, metalness: 0.15 }),
+          );
+          mBody.castShadow = true;
+          mBody.userData.isBomb = true; // pickable target for the pointer raycast
+          const mFuse = new THREE.Mesh(
+            new THREE.CylinderGeometry(1.2, 1.2, 10, 8),
+            new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.9 }),
+          );
+          mFuse.position.y = BOMB_R + 4;
+          const mSpark = new THREE.Mesh(
+            new THREE.SphereGeometry(2, 12, 10),
+            new THREE.MeshStandardMaterial({
+              color: 0xffb347, emissive: 0xff7a1a, emissiveIntensity: 1.4, roughness: 0.4,
+            }),
+          );
+          mSpark.position.y = BOMB_R + 10;
+          bombGroup.add(mBody, mFuse, mSpark);
+          bombGroup.position.copy(hitPoint);
+          scene.add(bombGroup);
+          objectsToDispose.push(
+            mBody.geometry, mBody.material,
+            mFuse.geometry, mFuse.material,
+            mSpark.geometry, mSpark.material,
+          );
+
+          // Physics body — tagged ballMaterial so it picks up both
+          // the ball↔wall AND ball↔ball contact materials (collides
+          // with walls AND with the ball / other bombs).
+          const cBody = new CANNON.Body({
+            mass: 0.6,
+            shape: new CANNON.Sphere(BOMB_R),
+            material: ballMaterial,
+            linearDamping: 0.05,
+            angularDamping: 0.20,
+          });
+          cBody.position.set(hitPoint.x, hitPoint.y, hitPoint.z);
+          world.addBody(cBody);
+
+          bombs.push({ group: bombGroup, body: cBody, radius: BOMB_R, mesh: mBody });
+        };
 
         ballBody = new CANNON.Body({
           mass: 1,
@@ -752,6 +766,11 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           allowSleep: true,
         });
         ballBody.position.set(0, 0, 0);
+        // Default to KINEMATIC: throwMode is off at boot, so the
+        // ball is treated as an immovable collider for any bombs
+        // the user drops. Flipping throwMode ON switches it back
+        // to DYNAMIC so gravity takes over.
+        ballBody.type = CANNON.Body.KINEMATIC;
         ballBody.sleep();
         world.addBody(ballBody);
 
@@ -797,6 +816,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           if (throwModeRef.current !== state.lastMode) {
             state.lastMode = throwModeRef.current;
             if (throwModeRef.current) {
+              // Restore DYNAMIC so gravity applies again. The OFF
+              // branch flips the ball KINEMATIC for bomb-collision
+              // staging; we have to undo that on every ON flip.
+              ballBody.type = CANNON.Body.DYNAMIC;
               ballBody.position.set(0, 0, 0);
               ballBody.velocity.set(0, 0, 0);
               ballBody.angularVelocity.set(0, 0, 0);
@@ -816,6 +839,13 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               // dev-settings default pose (origin, default rotation,
               // default scale) over ~450ms with an ease-out. Snapping
               // felt jarring; the slide reads as "settling".
+              //
+              // Switch the body to KINEMATIC so it ignores gravity
+              // but still acts as a collider for bombs. (Bombs that
+              // hit a sleeping dynamic body wake it; the ball would
+              // then drift away from its rest pose. Kinematic
+              // bodies are immovable from the physics side.)
+              ballBody.type = CANNON.Body.KINEMATIC;
               ballBody.sleep();
               ballBody.position.set(0, 0, 0);
               ballBody.velocity.set(0, 0, 0);
@@ -861,14 +891,18 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             }
           }
 
-          /* ── Throw-mode physics step ───────────────────────────
-             World.step every frame. While dragging, the body is
-             kinematic-ish: position is set directly from pointer,
-             velocity is recalculated on next move. cannon-es runs
-             collisions automatically. */
-          if (throwModeRef.current) {
+          /* ── Physics step ──────────────────────────────────────
+             Step whenever throwMode is on OR any bombs exist —
+             bombs always need gravity, so as soon as one drops the
+             world has to integrate every frame even if the ball is
+             at rest. While dragging the active target, that body
+             is kinematic and we mirror its pose from the pointer. */
+          const stepNeeded = throwModeRef.current || bombs.length > 0;
+          if (stepNeeded) {
             world.step(1 / 60, dt, 3);
-            if (!state.dragging) {
+            // Sync the ball — only when throwMode is on AND we're
+            // not currently dragging IT (drag owns the transform).
+            if (throwModeRef.current && !(state.dragging && state.dragTarget?.kind === 'ball')) {
               ballGroup.position.set(
                 ballBody.position.x,
                 ballBody.position.y,
@@ -880,6 +914,13 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 ballBody.quaternion.z,
                 ballBody.quaternion.w,
               );
+            }
+            // Sync each bomb — skip the one currently being dragged
+            // (the pointer handler owns its transform until release).
+            for (const b of bombs) {
+              if (state.dragging && state.dragTarget?.kind === 'bomb' && state.dragTarget.body === b.body) continue;
+              b.group.position.set(b.body.position.x, b.body.position.y, b.body.position.z);
+              b.group.quaternion.set(b.body.quaternion.x, b.body.quaternion.y, b.body.quaternion.z, b.body.quaternion.w);
             }
           }
 
@@ -916,34 +957,64 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                world X/Y space; release seeds linear+angular velocity
            Wheel always scales the ballGroup. */
 
+        /* Raycast the pointer against every bomb mesh first, then
+           the ball. Returns whichever object is under the cursor or
+           null if the click missed everything pickable. Bombs use
+           userData.isBomb so the loop is mesh-agnostic; the picked
+           bomb is matched back to its bombs[] entry by mesh ref. */
+        const pickTargets = [];
+        const pickAt = (clientX, clientY) => {
+          const canvas = renderer.domElement;
+          const r = canvas.getBoundingClientRect();
+          ndc.x =  ((clientX - r.left) / r.width)  * 2 - 1;
+          ndc.y = -((clientY - r.top)  / r.height) * 2 + 1;
+          ray.setFromCamera(ndc, camera);
+          pickTargets.length = 0;
+          for (const b of bombs) pickTargets.push(b.mesh);
+          pickTargets.push(ballMesh);
+          const hits = ray.intersectObjects(pickTargets, false);
+          if (hits.length === 0) return null;
+          const hit = hits[0].object;
+          if (hit === ballMesh) return { kind: 'ball', body: ballBody, group: ballGroup };
+          const bomb = bombs.find((b) => b.mesh === hit);
+          return bomb ? { kind: 'bomb', body: bomb.body, group: bomb.group } : null;
+        };
+
         const onPDown = (e) => {
           if (e.button !== 0) return;
+          // Pick the object under the cursor. If the click missed
+          // everything (empty space in the room), fall through to
+          // the ball — that preserves the original behavior of
+          // "click anywhere to grab the ball" when in throw mode,
+          // and "click anywhere to rotate the ball" in normal mode.
+          const picked = pickAt(e.clientX, e.clientY)
+            ?? { kind: 'ball', body: ballBody, group: ballGroup };
+
           state.dragging = true;
-          // Snapshot EVERYTHING the move handler will need: pointer
-          // start, ball position at start, ball rotation at start.
-          // Without snapshotting on EVERY pointerdown, a stale value
-          // from a previous drag (e.g. dragStartQuat from a release
-          // that never fired onPUp) would carry into the new drag
-          // and the ball would jump.
+          state.dragTarget = picked;
           state.dragStart = {
             px: e.clientX,
             py: e.clientY,
-            wx: ballBody.position.x,
-            wy: ballBody.position.y,
+            wx: picked.body.position.x,
+            wy: picked.body.position.y,
             mode: throwModeRef.current,
           };
-          state.dragStartQuat = ballGroup.quaternion.clone();
+          state.dragStartQuat = picked.group.quaternion.clone();
           state.history = [{ t: performance.now(), x: e.clientX, y: e.clientY }];
 
-          if (throwModeRef.current) {
-            // Convert to KINEMATIC: cannon-es no longer applies
-            // gravity / collisions move the body. We own position
-            // entirely while holding it; the body acts as a sensor.
-            // On release, switch back to DYNAMIC and seed velocity.
-            ballBody.type = CANNON.Body.KINEMATIC;
-            ballBody.velocity.set(0, 0, 0);
-            ballBody.angularVelocity.set(0, 0, 0);
-            ballBody.wakeUp();
+          // Position-drag mode applies to:
+          //  • bombs always (they have gravity and physics on the
+          //    moment they're spawned; rotating them in place is
+          //    meaningless),
+          //  • the ball only when throwMode is on.
+          // In every position-drag case we go KINEMATIC so we own
+          // the body's transform until release.
+          const isPositionDrag = picked.kind === 'bomb' || throwModeRef.current;
+          if (isPositionDrag) {
+            picked.body.type = CANNON.Body.KINEMATIC;
+            picked.body.velocity.set(0, 0, 0);
+            picked.body.angularVelocity.set(0, 0, 0);
+            picked.body.wakeUp();
           }
           try { renderer.domElement.setPointerCapture(e.pointerId); } catch {}
         };
@@ -952,38 +1023,38 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           if (!state.dragging) return;
           const dxPx = e.clientX - state.dragStart.px;
           const dyPx = e.clientY - state.dragStart.py;
+          const target = state.dragTarget;
 
-          // Mode change mid-drag invalidates dragStart anchors. End
-          // the drag cleanly so the new mode starts fresh on the
-          // user's next press. (Pre-edit, throw toggle during a drag
-          // produced the "ball teleports to cursor" symptom because
-          // `wx`/`wy` were 0 from the original mode but body position
-          // had drifted from the new mode's physics.)
-          if (state.dragStart.mode !== throwModeRef.current) {
+          // Ball-only: mode change mid-drag invalidates the anchors,
+          // so abort cleanly. (Bombs are always in position-drag
+          // mode so this check doesn't apply to them.)
+          if (target.kind === 'ball' && state.dragStart.mode !== throwModeRef.current) {
             state.dragging = false;
             state.dragStartQuat = null;
+            state.dragTarget = null;
             return;
           }
 
-          if (throwModeRef.current) {
-            // Move the kinematic body. Mirror to ballGroup so the
+          const isPositionDrag = target.kind === 'bomb' || throwModeRef.current;
+          if (isPositionDrag) {
+            // Move the kinematic body. Mirror to its group so the
             // render reflects the drag without waiting for the next
             // world.step.
-            ballBody.position.x = state.dragStart.wx + dxPx * 0.7;
-            ballBody.position.y = state.dragStart.wy - dyPx * 0.7;
-            ballBody.position.z = 0;
-            ballGroup.position.set(ballBody.position.x, ballBody.position.y, 0);
+            target.body.position.x = state.dragStart.wx + dxPx * 0.7;
+            target.body.position.y = state.dragStart.wy - dyPx * 0.7;
+            target.body.position.z = 0;
+            target.group.position.set(target.body.position.x, target.body.position.y, 0);
           } else {
-            // Quaternion delta from drag-start. premultiply applies
-            // the rotation in world space, which feels like trackball
-            // "drag the surface".
+            // Ball-only rotate gesture — drag rotates the visual
+            // group in place via quaternion deltas (no translation,
+            // no physics). Bombs never take this path.
             tmpQuat.setFromEuler(new THREE.Euler(
               dyPx * ROTATE_SENSITIVITY,
               dxPx * ROTATE_SENSITIVITY,
               0,
               'XYZ',
             ));
-            ballGroup.quaternion.copy(state.dragStartQuat).premultiply(tmpQuat);
+            target.group.quaternion.copy(state.dragStartQuat).premultiply(tmpQuat);
           }
           const now = performance.now();
           state.history.push({ t: now, x: e.clientX, y: e.clientY });
@@ -995,30 +1066,32 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
 
         const onPUp = (e) => {
           if (!state.dragging) return;
+          const target = state.dragTarget;
           state.dragging = false;
           state.dragStartQuat = null;
+          state.dragTarget = null;
           try { renderer.domElement.releasePointerCapture(e.pointerId); } catch {}
 
-          // ALWAYS restore the body to DYNAMIC so future physics
-          // ticks apply gravity again. Even if we didn't switch it
-          // (e.g. a mode-change mid-drag aborted), it's a no-op.
-          if (ballBody.type === CANNON.Body.KINEMATIC) {
-            ballBody.type = CANNON.Body.DYNAMIC;
-            // Sync the rendered rotation onto the body — the user
-            // may have re-positioned the ball after rotating it,
-            // and we want the throw to inherit that orientation.
-            ballBody.quaternion.set(
-              ballGroup.quaternion.x,
-              ballGroup.quaternion.y,
-              ballGroup.quaternion.z,
-              ballGroup.quaternion.w,
+          // Restore the body to DYNAMIC if we'd swapped it (any
+          // position drag did). Mirror the visual rotation onto
+          // the body so it inherits whatever the user rotated to.
+          if (target.body.type === CANNON.Body.KINEMATIC) {
+            target.body.type = CANNON.Body.DYNAMIC;
+            target.body.quaternion.set(
+              target.group.quaternion.x,
+              target.group.quaternion.y,
+              target.group.quaternion.z,
+              target.group.quaternion.w,
             );
           }
 
-          // In throw mode, seed velocity from the recent drag arc so
-          // releasing flings the ball. In normal mode, nothing — the
-          // ball stays at whatever rotation the user landed on.
-          if (!throwModeRef.current) { state.history = []; return; }
+          // Decide whether to seed throw velocity:
+          //  • bomb: always (bombs are physics objects, the release
+          //    fling is the whole interaction model)
+          //  • ball: only in throwMode (otherwise the gesture is
+          //    rotate, not throw)
+          const seedThrow = target.kind === 'bomb' || throwModeRef.current;
+          if (!seedThrow) { state.history = []; return; }
           const h = state.history;
           if (h.length >= 2) {
             const last = h[h.length - 1];
@@ -1032,10 +1105,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 const k = MAX_THROW_SPEED / speed;
                 vx *= k; vy *= k;
               }
-              ballBody.velocity.set(vx, vy, 0);
+              target.body.velocity.set(vx, vy, 0);
               // Angular: top-spin axis perpendicular to throw vector
               const ANG_PER_UNIT = 0.025;
-              ballBody.angularVelocity.set(
+              target.body.angularVelocity.set(
                 vy * ANG_PER_UNIT,
                 -vx * ANG_PER_UNIT,
                 0,
@@ -1043,7 +1116,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             }
           }
           state.history = [];
-          ballBody.wakeUp();
+          target.body.wakeUp();
         };
 
         const onWheel = (e) => {
