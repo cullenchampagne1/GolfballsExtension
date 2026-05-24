@@ -328,6 +328,43 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
     );
     ctx.restore();
 
+    // Knock out near-white pixels so the underlying ball texture bleeds
+    // through (mimicking a real ink print where white = no ink = ball
+    // surface). Threshold is generous — anything with all three RGB
+    // channels above WHITE_CUTOFF AND low saturation is treated as
+    // background. Tuned by eye against the photo_ball.jpg fallback so
+    // off-white scanned backgrounds don't paint as visible ink.
+    const WHITE_CUTOFF = 235;
+    const MAX_CHROMA   = 18;  // max(R,G,B) − min(R,G,B): smaller = closer to gray/white
+    try {
+      const imgData = ctx.getImageData(0, 0, OUT_SIZE, OUT_SIZE);
+      const d = imgData.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        if (r >= WHITE_CUTOFF && g >= WHITE_CUTOFF && b >= WHITE_CUTOFF) {
+          // Pure-ish white → fully transparent
+          d[i + 3] = 0;
+        } else {
+          const max = Math.max(r, g, b);
+          const min = Math.min(r, g, b);
+          const chroma = max - min;
+          // Off-white / cream: still bright AND low chroma → soft fade
+          // out via a linear ramp so the edge between print and ball
+          // doesn't read as a hard alpha cliff.
+          if (max >= WHITE_CUTOFF - 30 && chroma <= MAX_CHROMA) {
+            const ramp = (max - (WHITE_CUTOFF - 30)) / 30;   // 0 at floor, 1 at cutoff
+            d[i + 3] = Math.round(d[i + 3] * (1 - ramp));
+          }
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+    } catch (e) {
+      // CORS-tainted canvases throw on getImageData. Fall back to the
+      // unmodified crop; the 3D decal will look opaque-white but the
+      // shape will still be correct.
+      console.warn('[ImagePreview] white-knockout skipped:', e);
+    }
+
     return canvas.toDataURL('image/png');
   }
 
@@ -469,6 +506,15 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
               <img
                 src={effectiveUrl}
                 alt={url ? 'Extracted logo' : 'Sample preview'}
+                /* crossOrigin lets us read the loaded image back via
+                   canvas getImageData (needed for the white-knockout
+                   step in captureAlignment). For same-origin sources
+                   like our bundled fallback this is a no-op; for
+                   cross-origin URLs the server must respond with
+                   Access-Control-Allow-Origin or the image fails to
+                   load — which is fine, we just keep the opaque
+                   alignment crop. */
+                crossOrigin="anonymous"
                 onLoad={onImgLoad}
                 onError={onImgError}
                 style={{
@@ -661,6 +707,60 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                   }}
                 >
                   Save
+                </Btn>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* 3D-view action strip — same slide-in pattern as the alignment
+            strip. Lives above the primary action row whenever the user
+            is in 3D mode. Hosts a non-intrusive "back to image" exit
+            (so the user doesn't have to find the small cube IconBtn
+            inside the 3D canvas) plus copy + download stubs for the
+            future 3D-screenshot feature. */}
+        <AnimatePresence initial={false}>
+          {view === '3d' && (
+            <motion.div
+              key="three-strip"
+              initial={{ height: 0, opacity: 0, marginBottom: -8 }}
+              animate={{ height: 'auto', opacity: 1, marginBottom: 0 }}
+              exit={{ height: 0, opacity: 0, marginBottom: -8 }}
+              transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+              style={{ overflow: 'hidden' }}
+            >
+              <div style={{
+                padding: 8,
+                background: 'var(--gb-surface-2)',
+                border: '1px dashed var(--gb-brand-tint-border)',
+                borderRadius: 'var(--gb-r-md)',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                <Btn
+                  size="sm"
+                  variant="secondary"
+                  icon={<ChevLeftIcon />}
+                  onClick={() => setView('2d')}
+                >
+                  Image
+                </Btn>
+                <span style={{ flex: 1 }} />
+                <Btn
+                  size="sm"
+                  variant="secondary"
+                  icon={<I.copy />}
+                  onClick={() => toast?.info?.('Copy 3D snapshot — coming soon', { tone: 'info' })}
+                >
+                  Copy
+                </Btn>
+                <Btn
+                  size="sm"
+                  variant="tinted"
+                  status="brand"
+                  icon={<DownloadIcon />}
+                  onClick={() => toast?.info?.('Download 3D snapshot — coming soon', { tone: 'info' })}
+                >
+                  Download
                 </Btn>
               </div>
             </motion.div>
@@ -870,6 +970,16 @@ const DownloadIcon = (p) => (
     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
     <polyline points="7 10 12 15 17 10" />
     <line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+);
+// Left-pointing chevron — pairs with the "Image" label in the 3D
+// action strip's "back to image" button. Mirrors the design system's
+// I.chevr (right) which we don't want to flip via transform because
+// the transform would also flip any adjacent text glyphs.
+const ChevLeftIcon = (p) => (
+  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M15 6l-6 6 6 6" />
   </svg>
 );
 // Crosshair-in-box — reads as "auto-align / center". Couldn't reuse a
