@@ -717,7 +717,6 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             new THREE.MeshStandardMaterial({ color: 0x1a1c20, roughness: 0.55, metalness: 0.15 }),
           );
           mBody.castShadow = true;
-          mBody.userData.isBomb = true; // pickable target for the pointer raycast
           const mFuse = new THREE.Mesh(
             new THREE.CylinderGeometry(1.2, 1.2, 10, 8),
             new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.9 }),
@@ -752,7 +751,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           cBody.position.set(hitPoint.x, hitPoint.y, hitPoint.z);
           world.addBody(cBody);
 
-          bombs.push({ group: bombGroup, body: cBody, radius: BOMB_R, mesh: mBody });
+          bombs.push({ group: bombGroup, body: cBody, radius: BOMB_R });
         };
 
         ballBody = new CANNON.Body({
@@ -901,8 +900,8 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           if (stepNeeded) {
             world.step(1 / 60, dt, 3);
             // Sync the ball — only when throwMode is on AND we're
-            // not currently dragging IT (drag owns the transform).
-            if (throwModeRef.current && !(state.dragging && state.dragTarget?.kind === 'ball')) {
+            // not actively dragging it (drag owns the transform).
+            if (throwModeRef.current && !state.dragging) {
               ballGroup.position.set(
                 ballBody.position.x,
                 ballBody.position.y,
@@ -915,10 +914,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 ballBody.quaternion.w,
               );
             }
-            // Sync each bomb — skip the one currently being dragged
-            // (the pointer handler owns its transform until release).
+            // Sync every bomb from physics — bombs are non-
+            // interactive after spawn, so we always sync.
             for (const b of bombs) {
-              if (state.dragging && state.dragTarget?.kind === 'bomb' && state.dragTarget.body === b.body) continue;
               b.group.position.set(b.body.position.x, b.body.position.y, b.body.position.z);
               b.group.quaternion.set(b.body.quaternion.x, b.body.quaternion.y, b.body.quaternion.z, b.body.quaternion.w);
             }
@@ -957,64 +955,30 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                world X/Y space; release seeds linear+angular velocity
            Wheel always scales the ballGroup. */
 
-        /* Raycast the pointer against every bomb mesh first, then
-           the ball. Returns whichever object is under the cursor or
-           null if the click missed everything pickable. Bombs use
-           userData.isBomb so the loop is mesh-agnostic; the picked
-           bomb is matched back to its bombs[] entry by mesh ref. */
-        const pickTargets = [];
-        const pickAt = (clientX, clientY) => {
-          const canvas = renderer.domElement;
-          const r = canvas.getBoundingClientRect();
-          ndc.x =  ((clientX - r.left) / r.width)  * 2 - 1;
-          ndc.y = -((clientY - r.top)  / r.height) * 2 + 1;
-          ray.setFromCamera(ndc, camera);
-          pickTargets.length = 0;
-          for (const b of bombs) pickTargets.push(b.mesh);
-          pickTargets.push(ballMesh);
-          const hits = ray.intersectObjects(pickTargets, false);
-          if (hits.length === 0) return null;
-          const hit = hits[0].object;
-          if (hit === ballMesh) return { kind: 'ball', body: ballBody, group: ballGroup };
-          const bomb = bombs.find((b) => b.mesh === hit);
-          return bomb ? { kind: 'bomb', body: bomb.body, group: bomb.group } : null;
-        };
-
+        /* Pointer handlers — ball-only. Bombs are passive physics
+           objects after spawn (no drag, no pick); they fall and
+           collide on their own. The original two-mode split applies:
+             • normal mode → drag rotates the ballGroup in place
+             • throw mode  → drag moves the kinematic body around;
+                             release seeds linear+angular velocity */
         const onPDown = (e) => {
           if (e.button !== 0) return;
-          // Pick the object under the cursor. If the click missed
-          // everything (empty space in the room), fall through to
-          // the ball — that preserves the original behavior of
-          // "click anywhere to grab the ball" when in throw mode,
-          // and "click anywhere to rotate the ball" in normal mode.
-          const picked = pickAt(e.clientX, e.clientY)
-            ?? { kind: 'ball', body: ballBody, group: ballGroup };
-
           state.dragging = true;
-          state.dragTarget = picked;
           state.dragStart = {
             px: e.clientX,
             py: e.clientY,
-            wx: picked.body.position.x,
-            wy: picked.body.position.y,
+            wx: ballBody.position.x,
+            wy: ballBody.position.y,
             mode: throwModeRef.current,
           };
-          state.dragStartQuat = picked.group.quaternion.clone();
+          state.dragStartQuat = ballGroup.quaternion.clone();
           state.history = [{ t: performance.now(), x: e.clientX, y: e.clientY }];
 
-          // Position-drag mode applies to:
-          //  • bombs always (they have gravity and physics on the
-          //    moment they're spawned; rotating them in place is
-          //    meaningless),
-          //  • the ball only when throwMode is on.
-          // In every position-drag case we go KINEMATIC so we own
-          // the body's transform until release.
-          const isPositionDrag = picked.kind === 'bomb' || throwModeRef.current;
-          if (isPositionDrag) {
-            picked.body.type = CANNON.Body.KINEMATIC;
-            picked.body.velocity.set(0, 0, 0);
-            picked.body.angularVelocity.set(0, 0, 0);
-            picked.body.wakeUp();
+          if (throwModeRef.current) {
+            ballBody.type = CANNON.Body.KINEMATIC;
+            ballBody.velocity.set(0, 0, 0);
+            ballBody.angularVelocity.set(0, 0, 0);
+            ballBody.wakeUp();
           }
           try { renderer.domElement.setPointerCapture(e.pointerId); } catch {}
         };
@@ -1023,38 +987,26 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           if (!state.dragging) return;
           const dxPx = e.clientX - state.dragStart.px;
           const dyPx = e.clientY - state.dragStart.py;
-          const target = state.dragTarget;
 
-          // Ball-only: mode change mid-drag invalidates the anchors,
-          // so abort cleanly. (Bombs are always in position-drag
-          // mode so this check doesn't apply to them.)
-          if (target.kind === 'ball' && state.dragStart.mode !== throwModeRef.current) {
+          if (state.dragStart.mode !== throwModeRef.current) {
             state.dragging = false;
             state.dragStartQuat = null;
-            state.dragTarget = null;
             return;
           }
 
-          const isPositionDrag = target.kind === 'bomb' || throwModeRef.current;
-          if (isPositionDrag) {
-            // Move the kinematic body. Mirror to its group so the
-            // render reflects the drag without waiting for the next
-            // world.step.
-            target.body.position.x = state.dragStart.wx + dxPx * 0.7;
-            target.body.position.y = state.dragStart.wy - dyPx * 0.7;
-            target.body.position.z = 0;
-            target.group.position.set(target.body.position.x, target.body.position.y, 0);
+          if (throwModeRef.current) {
+            ballBody.position.x = state.dragStart.wx + dxPx * 0.7;
+            ballBody.position.y = state.dragStart.wy - dyPx * 0.7;
+            ballBody.position.z = 0;
+            ballGroup.position.set(ballBody.position.x, ballBody.position.y, 0);
           } else {
-            // Ball-only rotate gesture — drag rotates the visual
-            // group in place via quaternion deltas (no translation,
-            // no physics). Bombs never take this path.
             tmpQuat.setFromEuler(new THREE.Euler(
               dyPx * ROTATE_SENSITIVITY,
               dxPx * ROTATE_SENSITIVITY,
               0,
               'XYZ',
             ));
-            target.group.quaternion.copy(state.dragStartQuat).premultiply(tmpQuat);
+            ballGroup.quaternion.copy(state.dragStartQuat).premultiply(tmpQuat);
           }
           const now = performance.now();
           state.history.push({ t: now, x: e.clientX, y: e.clientY });
@@ -1066,32 +1018,22 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
 
         const onPUp = (e) => {
           if (!state.dragging) return;
-          const target = state.dragTarget;
           state.dragging = false;
           state.dragStartQuat = null;
-          state.dragTarget = null;
           try { renderer.domElement.releasePointerCapture(e.pointerId); } catch {}
 
-          // Restore the body to DYNAMIC if we'd swapped it (any
-          // position drag did). Mirror the visual rotation onto
-          // the body so it inherits whatever the user rotated to.
-          if (target.body.type === CANNON.Body.KINEMATIC) {
-            target.body.type = CANNON.Body.DYNAMIC;
-            target.body.quaternion.set(
-              target.group.quaternion.x,
-              target.group.quaternion.y,
-              target.group.quaternion.z,
-              target.group.quaternion.w,
+          // Throw-mode release → seed velocity. Otherwise just stop.
+          if (ballBody.type === CANNON.Body.KINEMATIC && throwModeRef.current) {
+            ballBody.type = CANNON.Body.DYNAMIC;
+            ballBody.quaternion.set(
+              ballGroup.quaternion.x,
+              ballGroup.quaternion.y,
+              ballGroup.quaternion.z,
+              ballGroup.quaternion.w,
             );
           }
+          if (!throwModeRef.current) { state.history = []; return; }
 
-          // Decide whether to seed throw velocity:
-          //  • bomb: always (bombs are physics objects, the release
-          //    fling is the whole interaction model)
-          //  • ball: only in throwMode (otherwise the gesture is
-          //    rotate, not throw)
-          const seedThrow = target.kind === 'bomb' || throwModeRef.current;
-          if (!seedThrow) { state.history = []; return; }
           const h = state.history;
           if (h.length >= 2) {
             const last = h[h.length - 1];
@@ -1105,10 +1047,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 const k = MAX_THROW_SPEED / speed;
                 vx *= k; vy *= k;
               }
-              target.body.velocity.set(vx, vy, 0);
-              // Angular: top-spin axis perpendicular to throw vector
+              ballBody.velocity.set(vx, vy, 0);
               const ANG_PER_UNIT = 0.025;
-              target.body.angularVelocity.set(
+              ballBody.angularVelocity.set(
                 vy * ANG_PER_UNIT,
                 -vx * ANG_PER_UNIT,
                 0,
@@ -1116,7 +1057,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             }
           }
           state.history = [];
-          target.body.wakeUp();
+          ballBody.wakeUp();
         };
 
         const onWheel = (e) => {
@@ -1258,7 +1199,6 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         <button
           type="button"
           onClick={() => setThrowMode((v) => !v)}
-          title={throwMode ? 'Disable gravity' : 'Enable gravity'}
           style={{
             position: 'absolute', top: 8, right: 8, zIndex: 6,
             minWidth: 28, height: 24, padding: '0 8px',

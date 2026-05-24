@@ -1394,7 +1394,7 @@ function ProofModal({ pageInfo, tab, onClose }) {
                 }}>{file.name}</div>
                 <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 1 }}>{fmt(file.size)}</div>
               </div>
-              <Btn size="xs" variant="ghost" icon={<I.close />} onClick={() => { setFile(null); setThumb(null); }} title="Remove" />
+              <Btn size="xs" variant="ghost" icon={<I.close />} onClick={() => { setFile(null); setThumb(null); }} />
             </div>
           )}
 

@@ -63,7 +63,6 @@ export function BodyVar({ v, onOpenSmart, size = 'md' }) {
           which produced invalid CSS in the original). */}
       <span
         onClick={(e) => { e.stopPropagation(); onOpenSmart?.(v, e.currentTarget); }}
-        title={hasSmart ? 'Edit smart options' : 'Add smart options'}
         style={{
           padding: s.boltPad,
           borderLeft: `1px solid ${p.bd}`,

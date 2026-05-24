@@ -35,7 +35,6 @@ export function ColorButton({
       <button
         ref={anchorRef}
         type="button"
-        title={title}
         onMouseDown={(e) => { onMouseDown?.(e); }}
         onClick={() => setOpen((v) => !v)}
         style={{

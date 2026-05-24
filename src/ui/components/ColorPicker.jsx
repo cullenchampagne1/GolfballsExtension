@@ -272,7 +272,6 @@ export function ColorPickerPopover({
               key={c}
               type="button"
               onClick={() => commit(c)}
-              title={c}
               style={{
                 width: 18, height: 18, borderRadius: '50%', padding: 0,
                 background: c,

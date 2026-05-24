@@ -191,7 +191,6 @@ export function SmartPopover({ variable, anchor, onSave, onClose }) {
         <button
           type="button"
           onClick={onClose}
-          title="Close"
           style={{
             background: 'transparent', border: 'none', cursor: 'pointer',
             color: 'var(--gb-text-muted)', padding: 2, display: 'flex',
@@ -216,7 +215,6 @@ export function SmartPopover({ variable, anchor, onSave, onClose }) {
               key={id}
               type="button"
               onClick={() => setTab(id)}
-              title={label}
               style={{
                 position: 'relative',
                 padding: '7px 4px',

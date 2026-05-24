@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   FloatingPanel, ModalHeader, IconBtn, Btn, Callout, Spinner,
@@ -976,68 +975,35 @@ function AlignmentOverlay() {
 }
 
 /* ── ZoomChipBtn ────────────────────────────────────────────────
-   Plain button styled to visually match the zoom-readout chip
-   bottom-left of the preview area: same `surface-modal` background,
-   `border-default` border, `r-sm` radius, mono font. Lets the three
-   zoom controls + the % readout read as one unified strip.
-
-   Uses a plain <button> rather than IconBtn because IconBtn brings
-   its own background/border palette and hover fill that would
-   compete with the chip look. Hover/active visually nudges via
-   background-color and the tooltip is portaled the same way IconBtn
-   does (kept self-contained to avoid clipping by overflow:hidden). */
-function ZoomChipBtn({ children, tooltip, onClick }) {
+   Plain button styled to match the zoom-readout chip: same
+   `surface-modal` background, `border-default` border, `r-sm`
+   radius, mono font. The three zoom controls + the % readout
+   read as one unified strip. Tooltip prop is accepted and ignored
+   so existing call sites keep working without re-tagging. */
+function ZoomChipBtn({ children, tooltip: _tooltip, onClick }) {
   const [hovered, setHovered] = useState(false);
-  const [tipPos, setTipPos] = useState(null);
-  const btnRef = useRef(null);
-  useEffect(() => {
-    if (!tooltip || !hovered) { setTipPos(null); return; }
-    const el = btnRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    setTipPos({ centerX: r.left + r.width / 2, top: r.top });
-  }, [tooltip, hovered]);
   return (
-    <>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={onClick}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        style={{
-          minWidth: 22, height: 20, padding: '0 6px',
-          fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
-          fontFamily: 'var(--gb-font-mono)',
-          color: 'var(--gb-text-secondary)',
-          background: hovered ? 'var(--gb-fill-soft)' : 'var(--gb-surface-modal)',
-          border: '1px solid var(--gb-border-default)',
-          borderRadius: 'var(--gb-r-sm)',
-          cursor: 'pointer',
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          lineHeight: 1,
-          transition: 'background-color .12s',
-        }}
-      >
-        {children}
-      </button>
-      {typeof document !== 'undefined' && tooltip && hovered && tipPos && createPortal(
-        <span style={{
-          position: 'fixed',
-          left: tipPos.centerX,
-          top: tipPos.top - 6,
-          transform: 'translate(-50%, -100%)',
-          padding: '3px 7px', borderRadius: 'var(--gb-r-xs)',
-          background: 'var(--gb-surface-deep)', color: 'var(--gb-text-primary)',
-          border: '1px solid var(--gb-border-default)',
-          boxShadow: 'var(--gb-shadow-popover)',
-          fontSize: 10, fontWeight: 600, fontFamily: 'var(--gb-font-sans)',
-          whiteSpace: 'nowrap', pointerEvents: 'none',
-          zIndex: 2147483600,
-        }}>{tooltip}</span>,
-        document.body,
-      )}
-    </>
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        minWidth: 22, height: 20, padding: '0 6px',
+        fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
+        fontFamily: 'var(--gb-font-mono)',
+        color: 'var(--gb-text-secondary)',
+        background: hovered ? 'var(--gb-fill-soft)' : 'var(--gb-surface-modal)',
+        border: '1px solid var(--gb-border-default)',
+        borderRadius: 'var(--gb-r-sm)',
+        cursor: 'pointer',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        lineHeight: 1,
+        transition: 'background-color .12s',
+      }}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -1123,169 +1089,111 @@ const BombIcon = (p) => (
 );
 
 /* ── ViewerToolbox ──────────────────────────────────────────────
-   Collapsible drawer that floats in the bottom-right of the 3D
-   preview area. The toggle chip matches the zoom chip language
-   (surface-modal background, border-default ring, r-sm radius);
-   when opened, items stack vertically above it.
+   Collapsible drawer in the bottom-right of the 3D preview area.
+   The toggle chip matches the zoom chip language (surface-modal
+   background, border ring, r-sm radius). Items inside the drawer
+   are TOOL TOGGLES — clicking one enters that tool's "mode", and
+   any subsequent click on the canvas applies it. Clicking the
+   same item again exits the mode. Mutual exclusion is enforced:
+   `activeTool` holds at most one tool name, so picking a new tool
+   replaces the previous one rather than stacking.
 
-   Items are drag-to-canvas: pointerdown on a chip starts a custom
-   drag (no HTML5 drag API — we want a free-floating "bump on the
-   cursor", not the browser's ghost image). A portaled <div>
-   follows the pointer; pointerup tests whether the cursor sits
-   over the GolfballViewer canvas (viewerRef.containsPoint) and,
-   if so, calls viewerRef.dropBomb to spawn the item in-scene. */
+   Active tools:
+     • bomb — each canvas click spawns a bomb at the cursor that
+       falls under gravity and obeys collisions. No drag, no
+       follow-cursor bump — pure click-to-place. */
 function ViewerToolbox({ viewerRef }) {
   const [open, setOpen] = useState(false);
-  // { kind: 'bomb', x, y } — null when no drag is active. Kind is
-  // here so future tools each get their own bump glyph without
-  // restructuring the drag handler.
-  const [drag, setDrag] = useState(null);
+  const [activeTool, setActiveTool] = useState(null); // null | 'bomb'
 
-  // Global move/up listeners. Attached only while a drag is live so
-  // we don't pay for them when the drawer is idle. Pointer capture
-  // would be cleaner, but the chip is a tiny element and capture
-  // sometimes mis-tracks across the modal's stacking contexts.
+  // Global pointerdown listener while a tool is active. Spawns the
+  // tool's effect wherever the user clicks on the canvas. The
+  // listener is attached at the window level so it sees clicks even
+  // if other handlers stopPropagation upstream of the wrap — and
+  // self-cancels if the cursor isn't over the canvas (e.g., user
+  // clicks the chip itself to deactivate).
   useEffect(() => {
-    if (!drag) return undefined;
-    const onMove = (e) => setDrag((d) => d ? { ...d, x: e.clientX, y: e.clientY } : d);
-    const onUp = (e) => {
-      const ok = viewerRef.current?.containsPoint?.({ clientX: e.clientX, clientY: e.clientY });
-      if (ok) viewerRef.current?.dropBomb?.({ clientX: e.clientX, clientY: e.clientY });
-      setDrag(null);
+    if (!activeTool) return undefined;
+    const onDown = (e) => {
+      const v = viewerRef.current;
+      if (!v?.containsPoint?.({ clientX: e.clientX, clientY: e.clientY })) return;
+      if (activeTool === 'bomb') v.dropBomb?.({ clientX: e.clientX, clientY: e.clientY });
     };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
-    return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-    };
-  }, [drag, viewerRef]);
+    window.addEventListener('pointerdown', onDown);
+    return () => window.removeEventListener('pointerdown', onDown);
+  }, [activeTool, viewerRef]);
 
-  const startDragBomb = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDrag({ kind: 'bomb', x: e.clientX, y: e.clientY });
-  };
+  // Tool toggle — clicking the same tool deactivates, clicking a
+  // different tool replaces (mutual exclusion baked in).
+  const toggleTool = (name) => setActiveTool((t) => (t === name ? null : name));
 
   return (
-    <>
-      <div style={{
-        position: 'absolute', bottom: 8, right: 8,
-        display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4,
-        zIndex: 3,
-      }}>
-        <AnimatePresence initial={false}>
-          {open && (
-            <motion.div
-              key="toolbox-items"
-              initial={{ opacity: 0, y: 6, scale: 0.92 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 6, scale: 0.92 }}
-              transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-              style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
-            >
-              <ToolboxChip
-                tooltip="Drag into the box"
-                icon={<BombIcon size={14} />}
-                onPointerDown={startDragBomb}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-        <ToolboxChip
-          tooltip={open ? 'Close toolbox' : 'Open toolbox'}
-          icon={<ToolboxIcon size={14} />}
-          active={open}
-          onClick={() => setOpen((o) => !o)}
-        />
-      </div>
-
-      {/* Floating bump that rides the cursor while dragging. Portaled
-          to body so it can't be clipped by the preview wrapper's
-          overflow:hidden. pointer-events:none so it never eats the
-          pointerup we need for the drop. */}
-      {drag && typeof document !== 'undefined' && createPortal(
-        <div style={{
-          position: 'fixed',
-          left: drag.x, top: drag.y,
-          transform: 'translate(-50%, -50%)',
-          width: 28, height: 28,
-          borderRadius: '50%',
-          background: 'var(--gb-surface-modal)',
-          border: '1px solid var(--gb-brand-tint-border)',
-          boxShadow: 'var(--gb-shadow-popover)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'var(--gb-brand-label)',
-          pointerEvents: 'none',
-          zIndex: 2147483600,
-        }}>
-          <BombIcon size={16} />
-        </div>,
-        document.body,
-      )}
-    </>
+    <div style={{
+      position: 'absolute', bottom: 8, right: 8,
+      display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4,
+      zIndex: 3,
+    }}>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="toolbox-items"
+            initial={{ opacity: 0, y: 6, scale: 0.92 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.92 }}
+            transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+            style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+          >
+            <ToolboxChip
+              icon={<BombIcon size={14} />}
+              active={activeTool === 'bomb'}
+              onClick={() => toggleTool('bomb')}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <ToolboxChip
+        icon={<ToolboxIcon size={14} />}
+        active={open}
+        onClick={() => setOpen((o) => !o)}
+      />
+    </div>
   );
 }
 
 /* Single chip used by ViewerToolbox — same surface language as
-   ZoomChipBtn but square + larger so the icon reads well. Accepts
-   either onClick (toggle) or onPointerDown (drag source); both
-   patterns share the chip body. Active state mirrors the brand
-   tint so the toggle reads as "drawer is open". */
-function ToolboxChip({ tooltip, icon, active, onClick, onPointerDown }) {
+   ZoomChipBtn but square + larger so the icon reads well. The
+   active state pulses a soft brand-tint glow so the user can
+   tell a tool is armed at a glance. */
+function ToolboxChip({ icon, active, onClick }) {
   const [hovered, setHovered] = useState(false);
-  const [tipPos, setTipPos] = useState(null);
-  const btnRef = useRef(null);
-  useEffect(() => {
-    if (!tooltip || !hovered) { setTipPos(null); return; }
-    const el = btnRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    setTipPos({ centerX: r.left + r.width / 2, top: r.top });
-  }, [tooltip, hovered]);
-  const color = active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)';
-  const border = active ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)';
+  const color  = active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)';
+  const border = active ? 'var(--gb-brand-label)' : 'var(--gb-border-default)';
+  const bg     = active
+    ? 'var(--gb-brand-tint-soft)'
+    : (hovered ? 'var(--gb-fill-soft)' : 'var(--gb-surface-modal)');
   return (
-    <>
-      <button
-        ref={btnRef}
-        type="button"
-        onClick={onClick}
-        onPointerDown={onPointerDown}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        style={{
-          width: 26, height: 26, padding: 0,
-          color,
-          background: hovered ? 'var(--gb-fill-soft)' : 'var(--gb-surface-modal)',
-          border: `1px solid ${border}`,
-          borderRadius: 'var(--gb-r-sm)',
-          cursor: onPointerDown ? 'grab' : 'pointer',
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'background-color .12s, color .12s, border-color .12s',
-          touchAction: 'none',
-        }}
-      >
-        {icon}
-      </button>
-      {typeof document !== 'undefined' && tooltip && hovered && tipPos && createPortal(
-        <span style={{
-          position: 'fixed',
-          left: tipPos.centerX,
-          top: tipPos.top - 6,
-          transform: 'translate(-50%, -100%)',
-          padding: '3px 7px', borderRadius: 'var(--gb-r-xs)',
-          background: 'var(--gb-surface-deep)', color: 'var(--gb-text-primary)',
-          border: '1px solid var(--gb-border-default)',
-          boxShadow: 'var(--gb-shadow-popover)',
-          fontSize: 10, fontWeight: 600, fontFamily: 'var(--gb-font-sans)',
-          whiteSpace: 'nowrap', pointerEvents: 'none',
-          zIndex: 2147483600,
-        }}>{tooltip}</span>,
-        document.body,
-      )}
-    </>
+    <motion.button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      animate={active
+        ? { boxShadow: ['0 0 0 0 var(--gb-brand-tint-soft)', '0 0 0 6px transparent', '0 0 0 0 var(--gb-brand-tint-soft)'] }
+        : { boxShadow: '0 0 0 0 transparent' }}
+      transition={active ? { duration: 1.4, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.12 }}
+      style={{
+        width: 26, height: 26, padding: 0,
+        color,
+        background: bg,
+        border: `1px solid ${border}`,
+        borderRadius: 'var(--gb-r-sm)',
+        cursor: 'pointer',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'background-color .12s, color .12s, border-color .12s',
+        touchAction: 'none',
+      }}
+    >
+      {icon}
+    </motion.button>
   );
 }

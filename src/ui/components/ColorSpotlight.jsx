@@ -68,7 +68,6 @@ export function ColorSpotlight({ value, defaultValue, name, desc, varName, onCha
           borderRadius: 'var(--gb-r-sm)',
           position: 'relative',
         }}
-        title={modified ? 'Edited' : 'Default'}
       >
         {modified && (
           <span style={{
@@ -134,7 +133,6 @@ export function ColorSpotlight({ value, defaultValue, name, desc, varName, onCha
       {modified && (
         <button
           onClick={() => onChange?.(defaultValue)}
-          title="Reset to default"
           style={{
             width: s.hexH, height: s.hexH, flexShrink: 0, padding: 0,
             borderRadius: 'var(--gb-r-sm)',
