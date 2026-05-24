@@ -963,7 +963,7 @@ export function ImagePreview({
           >
             {/* The image. Hidden when the surrounding state is loading or
                 error so we don't paint a half-broken icon. */}
-            {status !== 'error' && (
+            {status !== 'error' && status !== 'empty' && displayUrl && (
               <img
                 src={displayUrl}
                 alt={url ? 'Extracted logo' : 'Sample preview'}
