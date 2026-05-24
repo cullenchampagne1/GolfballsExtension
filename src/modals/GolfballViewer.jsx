@@ -86,8 +86,18 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   // scene is ready. Parent calls snapshotRef.current() to capture a
   // square, transparent PNG of the ball at its current rotation.
   const snapshotRef = useRef(null);
+  // Imperative bomb-drop handle. Parent passes the cursor's CSS
+  // viewport coords (clientX/clientY); the viewer raycasts those
+  // into world space and spawns a bomb mesh at the back wall (Z
+  // plane) so it lands visibly inside the room.
+  const dropBombRef = useRef(null);
+  // Hit test — is a CSS point inside the live 3D canvas? Lets the
+  // parent decide whether the drop happened over the viewer.
+  const containsPointRef = useRef(null);
   React.useImperativeHandle(ref, () => ({
     snapshot: (...args) => snapshotRef.current?.(...args),
+    dropBomb: (...args) => dropBombRef.current?.(...args),
+    containsPoint: (...args) => containsPointRef.current?.(...args),
   }), []);
   // 'loading' until Three.js + the model finish; then 'ready'. 'error'
   // surfaces a basic message instead of an empty canvas.
@@ -643,6 +653,74 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           return dataUrl;
         };
 
+        /* ── Bomb drop ────────────────────────────────────────────
+           containsPoint: returns true if a client-space (CSS) point
+           lies over the live canvas. The drawer's drag handler uses
+           it to decide whether the drop counts as "inside the box".
+
+           dropBomb: spawns a small bomb mesh inside the room at the
+           world-space point corresponding to the cursor's screen
+           position, projected onto the Z=0 plane (the same depth as
+           the ball at rest). No physics for now — drops here as a
+           visible token; we can add behavior later. */
+        containsPointRef.current = ({ clientX, clientY }) => {
+          const canvas = renderer.domElement;
+          const r = canvas.getBoundingClientRect();
+          return clientX >= r.left && clientX <= r.right
+              && clientY >= r.top  && clientY <= r.bottom;
+        };
+
+        const bombs = [];
+        const ndc = new THREE.Vector2();
+        const ray = new THREE.Raycaster();
+        const dropPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0); // z = 0
+        const hitPoint = new THREE.Vector3();
+        dropBombRef.current = ({ clientX, clientY }) => {
+          const canvas = renderer.domElement;
+          const r = canvas.getBoundingClientRect();
+          // Convert CSS pixel coords to normalized device coords
+          // (NDC) in [-1, 1] for the raycaster.
+          ndc.x =  ((clientX - r.left) / r.width)  * 2 - 1;
+          ndc.y = -((clientY - r.top)  / r.height) * 2 + 1;
+          ray.setFromCamera(ndc, camera);
+          ray.ray.intersectPlane(dropPlane, hitPoint);
+
+          // Clamp into the room so a bomb can never spawn outside
+          // the visible box (would otherwise look broken if the user
+          // releases just outside the canvas edge).
+          const margin = 18;
+          hitPoint.x = Math.max(-HALF_X + margin, Math.min(HALF_X - margin, hitPoint.x));
+          hitPoint.y = Math.max(-HALF_Y + margin, Math.min(HALF_Y - margin, hitPoint.y));
+          hitPoint.z = 0;
+
+          // Build the bomb: a small dark sphere with a tiny stub
+          // fuse on top. Kept primitive on purpose — we can swap in
+          // a real model later without touching the spawn pipeline.
+          const bombGroup = new THREE.Group();
+          const body = new THREE.Mesh(
+            new THREE.SphereGeometry(14, 24, 18),
+            new THREE.MeshStandardMaterial({ color: 0x1a1c20, roughness: 0.55, metalness: 0.15 }),
+          );
+          body.castShadow = true;
+          const fuse = new THREE.Mesh(
+            new THREE.CylinderGeometry(1.2, 1.2, 10, 8),
+            new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.9 }),
+          );
+          fuse.position.y = 18;
+          const spark = new THREE.Mesh(
+            new THREE.SphereGeometry(2, 12, 10),
+            new THREE.MeshStandardMaterial({
+              color: 0xffb347, emissive: 0xff7a1a, emissiveIntensity: 1.4, roughness: 0.4,
+            }),
+          );
+          spark.position.y = 24;
+          bombGroup.add(body, fuse, spark);
+          bombGroup.position.copy(hitPoint);
+          scene.add(bombGroup);
+          bombs.push(bombGroup);
+          objectsToDispose.push(body.geometry, body.material, fuse.geometry, fuse.material, spark.geometry, spark.material);
+        };
+
         /* ── cannon-es physics world ─────────────────────────────
            One sphere body for the ball + 6 static planes for the box
            walls. World is stepped each frame ONLY when throw mode is
@@ -1056,6 +1134,8 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
     return () => {
       disposed = true;
       snapshotRef.current = null;
+      dropBombRef.current = null;
+      containsPointRef.current = null;
       cleanupRef.current?.();
       cleanupRef.current = null;
     };

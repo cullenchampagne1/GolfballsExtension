@@ -663,41 +663,54 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                 {aligning && <AlignmentOverlay />}
               </AnimatePresence>
 
-              <div style={{
-                position: 'absolute', bottom: 8, left: 10,
-                fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
-                color: 'var(--gb-text-secondary)',
-                background: 'var(--gb-surface-modal)',
-                border: '1px solid var(--gb-border-default)',
-                borderRadius: 'var(--gb-r-sm)',
-                padding: '2px 6px',
-                pointerEvents: 'none',
-                fontFamily: 'var(--gb-font-mono)',
-              }}>{zoomLevel}%</div>
-              <div style={{
-                position: 'absolute', bottom: 8, right: 8,
-                display: 'flex', gap: 4,
-              }}>
-                {/* Zoom controls styled to match the readout chip:
-                    same surface, border, radius, mono font. Plain
-                    <button>s instead of IconBtn so the chrome (rounded
-                    fill, hover ring) doesn't override the chip look. */}
-                <ZoomChipBtn
-                  tooltip="Zoom out"
-                  onClick={() => {
-                    const c = wrapRef.current;
-                    zoom(-ZOOM_STEP_BTN, c ? c.clientWidth / 2 : 0, c ? c.clientHeight / 2 : 0);
-                  }}
-                >−</ZoomChipBtn>
-                <ZoomChipBtn tooltip="Reset zoom" onClick={resetZoom}>1:1</ZoomChipBtn>
-                <ZoomChipBtn
-                  tooltip="Zoom in"
-                  onClick={() => {
-                    const c = wrapRef.current;
-                    zoom(ZOOM_STEP_BTN, c ? c.clientWidth / 2 : 0, c ? c.clientHeight / 2 : 0);
-                  }}
-                >+</ZoomChipBtn>
-              </div>
+              {/* Zoom readout + cluster are only meaningful in 2D
+                  mode. In 3D the viewer owns wheel scaling and the
+                  toolbox (bottom-right) takes over the slot. */}
+              {view === '2d' && (
+                <>
+                  <div style={{
+                    position: 'absolute', bottom: 8, left: 10,
+                    fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
+                    color: 'var(--gb-text-secondary)',
+                    background: 'var(--gb-surface-modal)',
+                    border: '1px solid var(--gb-border-default)',
+                    borderRadius: 'var(--gb-r-sm)',
+                    padding: '2px 6px',
+                    pointerEvents: 'none',
+                    fontFamily: 'var(--gb-font-mono)',
+                  }}>{zoomLevel}%</div>
+                  <div style={{
+                    position: 'absolute', bottom: 8, right: 8,
+                    display: 'flex', gap: 4,
+                  }}>
+                    <ZoomChipBtn
+                      tooltip="Zoom out"
+                      onClick={() => {
+                        const c = wrapRef.current;
+                        zoom(-ZOOM_STEP_BTN, c ? c.clientWidth / 2 : 0, c ? c.clientHeight / 2 : 0);
+                      }}
+                    >−</ZoomChipBtn>
+                    <ZoomChipBtn tooltip="Reset zoom" onClick={resetZoom}>1:1</ZoomChipBtn>
+                    <ZoomChipBtn
+                      tooltip="Zoom in"
+                      onClick={() => {
+                        const c = wrapRef.current;
+                        zoom(ZOOM_STEP_BTN, c ? c.clientWidth / 2 : 0, c ? c.clientHeight / 2 : 0);
+                      }}
+                    >+</ZoomChipBtn>
+                  </div>
+                </>
+              )}
+
+              {/* 3D-mode toolbox — bottom-right collapsible drawer.
+                  Closed = single chip (toolbox icon). Open = the chip
+                  stays and items slide up above it. Items are drag-
+                  to-canvas: pointerdown spawns a floating bump that
+                  follows the cursor; pointerup over the 3D canvas
+                  calls viewerRef.dropBomb({clientX,clientY}). */}
+              {view === '3d' && (
+                <ViewerToolbox viewerRef={viewerRef} />
+              )}
             </>
           )}
               </motion.div>
@@ -1082,3 +1095,196 @@ const CubeIcon = (p) => (
     <line x1="12" y1="22.08" x2="12" y2="12" />
   </svg>
 );
+
+/* Toolbox glyph for the 3D-mode drawer toggle. A simple briefcase
+   shape with a handle reads instantly as "tools / stuff to play
+   with". Same stroke weight + line style as the other modal icons
+   so it sits cleanly next to the zoom chips. */
+const ToolboxIcon = (p) => (
+  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="8" width="18" height="12" rx="2" />
+    <path d="M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+    <line x1="3" y1="13" x2="21" y2="13" />
+  </svg>
+);
+
+/* Bomb glyph — circle body, short fuse, spark dot. Currentcolor
+   lets the parent set hover/active tints via color: like the rest
+   of the chip icons. */
+const BombIcon = (p) => (
+  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="15" r="6" />
+    <path d="M15 9l3-3" />
+    <path d="M17 4l1 2 2 1-2 1-1 2-1-2-2-1 2-1z" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+/* ── ViewerToolbox ──────────────────────────────────────────────
+   Collapsible drawer that floats in the bottom-right of the 3D
+   preview area. The toggle chip matches the zoom chip language
+   (surface-modal background, border-default ring, r-sm radius);
+   when opened, items stack vertically above it.
+
+   Items are drag-to-canvas: pointerdown on a chip starts a custom
+   drag (no HTML5 drag API — we want a free-floating "bump on the
+   cursor", not the browser's ghost image). A portaled <div>
+   follows the pointer; pointerup tests whether the cursor sits
+   over the GolfballViewer canvas (viewerRef.containsPoint) and,
+   if so, calls viewerRef.dropBomb to spawn the item in-scene. */
+function ViewerToolbox({ viewerRef }) {
+  const [open, setOpen] = useState(false);
+  // { kind: 'bomb', x, y } — null when no drag is active. Kind is
+  // here so future tools each get their own bump glyph without
+  // restructuring the drag handler.
+  const [drag, setDrag] = useState(null);
+
+  // Global move/up listeners. Attached only while a drag is live so
+  // we don't pay for them when the drawer is idle. Pointer capture
+  // would be cleaner, but the chip is a tiny element and capture
+  // sometimes mis-tracks across the modal's stacking contexts.
+  useEffect(() => {
+    if (!drag) return undefined;
+    const onMove = (e) => setDrag((d) => d ? { ...d, x: e.clientX, y: e.clientY } : d);
+    const onUp = (e) => {
+      const ok = viewerRef.current?.containsPoint?.({ clientX: e.clientX, clientY: e.clientY });
+      if (ok) viewerRef.current?.dropBomb?.({ clientX: e.clientX, clientY: e.clientY });
+      setDrag(null);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+  }, [drag, viewerRef]);
+
+  const startDragBomb = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDrag({ kind: 'bomb', x: e.clientX, y: e.clientY });
+  };
+
+  return (
+    <>
+      <div style={{
+        position: 'absolute', bottom: 8, right: 8,
+        display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4,
+        zIndex: 3,
+      }}>
+        <AnimatePresence initial={false}>
+          {open && (
+            <motion.div
+              key="toolbox-items"
+              initial={{ opacity: 0, y: 6, scale: 0.92 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 6, scale: 0.92 }}
+              transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+              style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+            >
+              <ToolboxChip
+                tooltip="Drag into the box"
+                icon={<BombIcon size={14} />}
+                onPointerDown={startDragBomb}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        <ToolboxChip
+          tooltip={open ? 'Close toolbox' : 'Open toolbox'}
+          icon={<ToolboxIcon size={14} />}
+          active={open}
+          onClick={() => setOpen((o) => !o)}
+        />
+      </div>
+
+      {/* Floating bump that rides the cursor while dragging. Portaled
+          to body so it can't be clipped by the preview wrapper's
+          overflow:hidden. pointer-events:none so it never eats the
+          pointerup we need for the drop. */}
+      {drag && typeof document !== 'undefined' && createPortal(
+        <div style={{
+          position: 'fixed',
+          left: drag.x, top: drag.y,
+          transform: 'translate(-50%, -50%)',
+          width: 28, height: 28,
+          borderRadius: '50%',
+          background: 'var(--gb-surface-modal)',
+          border: '1px solid var(--gb-brand-tint-border)',
+          boxShadow: 'var(--gb-shadow-popover)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: 'var(--gb-brand-label)',
+          pointerEvents: 'none',
+          zIndex: 2147483600,
+        }}>
+          <BombIcon size={16} />
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
+/* Single chip used by ViewerToolbox — same surface language as
+   ZoomChipBtn but square + larger so the icon reads well. Accepts
+   either onClick (toggle) or onPointerDown (drag source); both
+   patterns share the chip body. Active state mirrors the brand
+   tint so the toggle reads as "drawer is open". */
+function ToolboxChip({ tooltip, icon, active, onClick, onPointerDown }) {
+  const [hovered, setHovered] = useState(false);
+  const [tipPos, setTipPos] = useState(null);
+  const btnRef = useRef(null);
+  useEffect(() => {
+    if (!tooltip || !hovered) { setTipPos(null); return; }
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setTipPos({ centerX: r.left + r.width / 2, top: r.top });
+  }, [tooltip, hovered]);
+  const color = active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)';
+  const border = active ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)';
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={onClick}
+        onPointerDown={onPointerDown}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          width: 26, height: 26, padding: 0,
+          color,
+          background: hovered ? 'var(--gb-fill-soft)' : 'var(--gb-surface-modal)',
+          border: `1px solid ${border}`,
+          borderRadius: 'var(--gb-r-sm)',
+          cursor: onPointerDown ? 'grab' : 'pointer',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'background-color .12s, color .12s, border-color .12s',
+          touchAction: 'none',
+        }}
+      >
+        {icon}
+      </button>
+      {typeof document !== 'undefined' && tooltip && hovered && tipPos && createPortal(
+        <span style={{
+          position: 'fixed',
+          left: tipPos.centerX,
+          top: tipPos.top - 6,
+          transform: 'translate(-50%, -100%)',
+          padding: '3px 7px', borderRadius: 'var(--gb-r-xs)',
+          background: 'var(--gb-surface-deep)', color: 'var(--gb-text-primary)',
+          border: '1px solid var(--gb-border-default)',
+          boxShadow: 'var(--gb-shadow-popover)',
+          fontSize: 10, fontWeight: 600, fontFamily: 'var(--gb-font-sans)',
+          whiteSpace: 'nowrap', pointerEvents: 'none',
+          zIndex: 2147483600,
+        }}>{tooltip}</span>,
+        document.body,
+      )}
+    </>
+  );
+}
