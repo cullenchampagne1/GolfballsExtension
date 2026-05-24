@@ -100,11 +100,11 @@ export function Spinner({ size = 12 }) {
  *  input. Matches the same scaling pattern as Btn (xs/sm: r-sm · md/lg:
  *  r-md). Without this, switching a modal from lg → sm visibly grows
  *  every input's corner roundness even though the value is unchanged. */
-const INPUT_RADII = { sm: 'var(--gb-r-sm)', md: 'var(--gb-r-md)', lg: 'var(--gb-r-md)' };
+const INPUT_RADII = { xs: 'var(--gb-r-sm)', sm: 'var(--gb-r-sm)', md: 'var(--gb-r-md)', lg: 'var(--gb-r-md)' };
 
 export function inputBaseStyle({ focused, error, size = 'md' }) {
-  const heights = { sm: 28, md: 32, lg: 36 };
-  const fontSizes = { sm: 11.5, md: 12, lg: 13 };
+  const heights = { xs: 24, sm: 28, md: 32, lg: 36 };
+  const fontSizes = { xs: 11, sm: 11.5, md: 12, lg: 13 };
   return {
     background: 'var(--gb-surface-2)',
     border: '1px solid ' + (

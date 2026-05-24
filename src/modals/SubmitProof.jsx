@@ -164,8 +164,6 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
   //   'results'     — generated links panel
   const [stage, setStage] = useState('form');
   const [imageData, setImageData] = useState(image || null);
-  // URL paste input shown only while there's no image attached.
-  const [imageUrlInput, setImageUrlInput] = useState('');
 
   // Form fields.
   const [orderId, setOrderId]       = useState(orderIdProp || '');
@@ -462,42 +460,15 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
       />
 
       <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
-        {/* LEFT — form */}
+        {/* LEFT — form. Tightened spacing + xs Input sizing so the
+            modal stays compact (was ballooning to 620px tall). */}
         <div style={{
           flex: 1, minWidth: 0,
-          maxHeight: 'min(72vh, 620px)',
+          maxHeight: 'min(62vh, 520px)',
           overflowY: 'auto', overflowX: 'hidden',
-          padding: 16,
-          display: 'flex', flexDirection: 'column', gap: 10,
+          padding: 12,
+          display: 'flex', flexDirection: 'column', gap: 6,
         }}>
-          {/* Source image — chip when attached, drop-zone + URL input
-              when not. Submitting without an image is fine; we just
-              don't attach `sourceImage` to the payload. */}
-          <Field
-            label="Source image"
-            hint={imageData ? undefined : 'Optional — drop a file or paste a URL. Submit without one is fine.'}
-          >
-            {imageData ? (
-              <SourceImageChip
-                imageData={imageData}
-                onRemove={() => setImageData(null)}
-              />
-            ) : (
-              <SourceImageDrop
-                urlInput={imageUrlInput}
-                onUrlInput={setImageUrlInput}
-                onAttachUrl={() => {
-                  const v = imageUrlInput.trim();
-                  if (!v) return;
-                  setImageData({ url: v });
-                  setImageUrlInput('');
-                }}
-                onAttachFile={(dataUrl) => setImageData({ dataUrl })}
-                onError={(msg) => toast?.error?.(msg)}
-              />
-            )}
-          </Field>
-
           {/* Multi-select items */}
           <Field
             label="Item(s) being proofed"
@@ -519,9 +490,9 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           </Field>
 
           {/* Order / cust / name */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             <Field label="Order #">
-              <Input value={orderId} onChange={setOrderId} placeholder="123456" />
+              <Input size="xs" value={orderId} onChange={setOrderId} placeholder="123456" />
             </Field>
             <Field
               label="Customer ID"
@@ -530,6 +501,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
               error={showErr('customerId', !customerId.trim()) ? 'Required' : null}
             >
               <Input
+                size="xs"
                 value={customerId}
                 onChange={(v) => {
                   setCustomerId(v);
@@ -548,6 +520,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             error={showErr('proofName', !proofName.trim()) ? 'Required' : null}
           >
             <Input
+              size="xs"
               value={proofName}
               onChange={(v) => {
                 setProofName(v);
@@ -561,9 +534,9 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           </Field>
 
           {/* Logo status + reps + artists */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
             <Field label="Logo status">
-              <Dropdown value={status} onChange={setStatus} options={STATUS_OPTS} />
+              <Dropdown size="xs" value={status} onChange={setStatus} options={STATUS_OPTS} />
             </Field>
             <Field
               label="Sales rep"
@@ -573,6 +546,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             >
               {dropdownsFailed ? (
                 <Input
+                  size="xs"
                   value={salesRepId}
                   onChange={(v) => {
                     setSalesRepId(v);
@@ -587,6 +561,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
                 <SkeletonBox />
               ) : (
                 <Dropdown
+                  size="xs"
                   value={salesRepId}
                   onChange={(v) => {
                     setSalesRepId(v);
@@ -608,6 +583,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             >
               {dropdownsFailed ? (
                 <Input
+                  size="xs"
                   value={artistId}
                   onChange={(v) => {
                     setArtistId(v);
@@ -622,6 +598,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
                 <SkeletonBox />
               ) : (
                 <Dropdown
+                  size="xs"
                   value={artistId}
                   onChange={(v) => {
                     setArtistId(v);
@@ -638,7 +615,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           </div>
 
           {/* Order type / value (exclusive tags) */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             <Field label="Order type">
               <ExclusiveTagRow
                 value={orderType}
@@ -710,13 +687,13 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
 
           {/* Links + notes */}
           <Field label="Item link" hint="N/A for white balls unless special alignment">
-            <Input value={itemLink} onChange={setItemLink} placeholder="https://…" />
+            <Input size="xs" value={itemLink} onChange={setItemLink} placeholder="https://…" />
           </Field>
           <Field label="Reference logo link" hint="Previous proofs">
-            <Input value={refLink} onChange={setRefLink} placeholder="https://…" />
+            <Input size="xs" value={refLink} onChange={setRefLink} placeholder="https://…" />
           </Field>
           <Field label="Special instructions">
-            <Input value={notes} onChange={setNotes} placeholder="Write N/A if unneeded" />
+            <Input size="xs" value={notes} onChange={setNotes} placeholder="Write N/A if unneeded" />
           </Field>
 
           {/* Results panel (shown after a successful submit) */}
@@ -725,7 +702,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           )}
         </div>
 
-        {/* RIGHT — gallery */}
+        {/* RIGHT — gallery (column inside the body row) */}
         {hasGallery && (
           <div style={{
             width: 280, flexShrink: 0,
@@ -745,6 +722,17 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           </div>
         )}
       </div>
+
+      {/* Source-image strip — bottom of the modal, ABOVE the footer.
+          Only renders when an image was carried in from ImagePreview.
+          User can clear it from here (but cannot upload — image
+          acquisition lives entirely in ImagePreview). */}
+      {imageData && (
+        <SourceImageChip
+          imageData={imageData}
+          onRemove={() => setImageData(null)}
+        />
+      )}
 
       {/* Footer */}
       <div style={{
@@ -790,30 +778,36 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
    Subcomponents
 ─────────────────────────────────────────────────────────────── */
 
-/* SourceImageChip — compact attached-image row with a thumbnail,
-   short caption (dataUrl vs URL), and Remove. */
+/* SourceImageChip — full-width strip pinned ABOVE the footer.
+   Thumbnail + short caption (dataUrl vs URL) + Remove. No upload UI:
+   image acquisition is delegated to ImagePreview. */
 function SourceImageChip({ imageData, onRemove }) {
   const src = imageData.dataUrl || imageData.url;
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10,
-      padding: 8,
-      border: '1px solid var(--gb-border-default)',
-      borderRadius: 'var(--gb-r-sm)',
+      padding: '8px 12px',
+      borderTop: '1px solid var(--gb-border-subtle)',
       background: 'var(--gb-surface-1)',
+      flexShrink: 0,
     }}>
       <img
         src={src}
         alt=""
         style={{
-          width: 48, height: 48, objectFit: 'cover',
+          width: 32, height: 32, objectFit: 'cover',
           borderRadius: 'var(--gb-r-xs)',
           border: '1px solid var(--gb-border-subtle)',
           flexShrink: 0,
         }}
       />
       <span style={{
-        flex: 1, fontSize: 11,
+        fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
+        textTransform: 'uppercase',
+        color: 'var(--gb-text-muted)',
+      }}>Image</span>
+      <span style={{
+        flex: 1, fontSize: 10.5,
         color: 'var(--gb-text-tertiary)',
         fontFamily: 'var(--gb-font-mono)',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -824,111 +818,6 @@ function SourceImageChip({ imageData, onRemove }) {
     </div>
   );
 }
-
-/* SourceImageDrop — drag-and-drop target + URL paste input. Lets
-   the user attach an image when SubmitProof was opened without one. */
-function SourceImageDrop({ urlInput, onUrlInput, onAttachUrl, onAttachFile, onError }) {
-  const [dragActive, setDragActive] = useState(false);
-  const fileInputRef = useRef(null);
-
-  const handleFile = (file) => {
-    if (!file?.type?.startsWith('image/')) {
-      onError?.('That doesn’t look like an image file');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => onAttachFile?.(reader.result);
-    reader.onerror = () => onError?.('Could not read that file');
-    reader.readAsDataURL(file);
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div
-        onDragOver={(e) => {
-          if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return;
-          e.preventDefault();
-          e.dataTransfer.dropEffect = 'copy';
-        }}
-        onDragEnter={(e) => {
-          if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return;
-          e.preventDefault();
-          setDragActive(true);
-        }}
-        onDragLeave={(e) => {
-          // Only clear when leaving the drop target itself, not children.
-          if (e.currentTarget.contains(e.relatedTarget)) return;
-          setDragActive(false);
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragActive(false);
-          const file = Array.from(e.dataTransfer?.files || []).find((f) => f.type.startsWith('image/'));
-          if (file) handleFile(file);
-        }}
-        onClick={() => fileInputRef.current?.click()}
-        style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-          gap: 6,
-          padding: '22px 16px',
-          border: '1.5px dashed ' + (dragActive ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
-          borderRadius: 'var(--gb-r-md)',
-          background: dragActive
-            ? 'var(--gb-brand-tint-soft)'
-            : 'var(--gb-surface-1)',
-          color: dragActive ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
-          cursor: 'pointer',
-          textAlign: 'center',
-          transition: 'border-color .15s, background-color .15s, color .15s',
-        }}
-      >
-        <UploadIcon />
-        <div style={{ fontSize: 12, fontWeight: 600 }}>
-          {dragActive ? 'Drop to attach' : 'Drop an image here, or click to browse'}
-        </div>
-        <div style={{ fontSize: 10.5, color: 'var(--gb-text-ghost)' }}>
-          PNG, JPG, GIF, WEBP
-        </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          style={{ display: 'none' }}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) handleFile(file);
-            e.target.value = ''; // allow re-selecting the same file
-          }}
-        />
-      </div>
-      <div style={{ display: 'flex', gap: 6 }}>
-        <Input
-          value={urlInput}
-          onChange={onUrlInput}
-          placeholder="…or paste an image URL"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') { e.preventDefault(); onAttachUrl?.(); }
-          }}
-        />
-        <Btn
-          size="sm"
-          variant="secondary"
-          onClick={onAttachUrl}
-          disabled={!urlInput.trim()}
-        >Attach</Btn>
-      </div>
-    </div>
-  );
-}
-
-const UploadIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="17 8 12 3 7 8" />
-    <line x1="12" y1="3" x2="12" y2="15" />
-  </svg>
-);
 
 function ItemMultiSelect({ items, counts, error, onAdd, onRemove, onTouch }) {
   const [open, setOpen] = useState(false);
@@ -948,12 +837,12 @@ function ItemMultiSelect({ items, counts, error, onAdd, onRemove, onTouch }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         style={{
-          display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-          height: 32, padding: '0 10px',
+          display: 'flex', alignItems: 'center', gap: 6, width: '100%',
+          height: 24, padding: '0 9px',
           background: 'var(--gb-surface-2)',
           border: '1px solid ' + (error ? 'var(--gb-error)' : 'var(--gb-border-default)'),
           borderRadius: 'var(--gb-r-sm)',
-          fontSize: 12, fontWeight: 500,
+          fontSize: 11, fontWeight: 500,
           color: total > 0 ? 'var(--gb-text-primary)' : 'var(--gb-text-ghost)',
           fontFamily: 'inherit',
           cursor: 'pointer', textAlign: 'left',
@@ -1107,21 +996,22 @@ function DynamicItemBlock({ item, fields, data, onChange }) {
         color: 'var(--gb-brand-label)',
         marginBottom: 8,
       }}>{item}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
         {fields.map((f) => {
-          // Conditional show: dependsOn + dependsNotValue
           if (f.dependsOn && data[f.dependsOn] === f.dependsNotValue) return null;
           const val = data[f.id] ?? f.default ?? '';
           return (
             <Field key={f.id} label={f.label} hint={f.hint}>
               {f.type === 'select' ? (
                 <Dropdown
+                  size="xs"
                   value={val}
                   onChange={(v) => onChange(f.id, v)}
                   options={f.options.map((o) => ({ id: o, label: o }))}
                 />
               ) : (
                 <Input
+                  size="xs"
                   value={val}
                   onChange={(v) => onChange(f.id, v)}
                   placeholder={f.hint || ''}
