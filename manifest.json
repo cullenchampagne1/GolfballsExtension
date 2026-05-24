@@ -57,7 +57,7 @@
         "content/call-log-panel.js",
         "react-dist/content/margin-calc.js",
         "content/crm-search-modal.js",
-        "content/crm-create-contact-modal.js",
+        "react-dist/content/crm-create-contact.js",
         "content/main.js"
       ],
       "all_frames": false
