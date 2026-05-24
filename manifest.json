@@ -22,7 +22,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["charge.html", "charge.js", "editor.html", "playground.html", "icons/photo_ball.jpg", "icons/golfball_model/Golf_ball.obj"],
+      "resources": ["charge.html", "charge.js", "editor.html", "playground.html", "icons/photo_ball.jpg", "icons/golfball_model/Golf_ball.obj", "icons/golden_gate_hills_4k.exr"],
       "matches": ["<all_urls>"]
     }
   ],
