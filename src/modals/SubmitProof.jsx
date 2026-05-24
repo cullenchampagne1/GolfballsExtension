@@ -1386,31 +1386,47 @@ function DynamicItemBlock({ item, suffix, fields, data, autoName, customName, on
    Adapted from SubmitProofView in the design handoff
    (surfaces-3.jsx ~line 519). */
 function GalleryItem({ proof, index = 0 }) {
+  const toast = useToast();
   const label = proof.label || (proof.name?.match(/v\d+/i)?.[0] || '');
   // Alternating bg gradient so adjacent thumbnails read as distinct.
   const bg = index % 2
     ? 'linear-gradient(135deg, var(--gb-surface-2) 0%, var(--gb-surface-canvas) 50%, var(--gb-surface-2) 100%)'
     : 'linear-gradient(135deg, var(--gb-surface-2) 0%, var(--gb-surface-canvas) 100%)';
+  const onOpen = () => {
+    if (!proof.proofLink || proof.proofLink === '#') return;
+    window.open(proof.proofLink, '_blank', 'noopener,noreferrer');
+  };
+  const onCopy = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!proof.proofLink) return;
+    try {
+      navigator.clipboard?.writeText(proof.proofLink);
+      toast?.success?.('Link copied');
+    } catch {
+      toast?.error?.('Couldn’t copy link');
+    }
+  };
   return (
-    <a
-      href={proof.proofLink || '#'}
-      target="_blank"
-      rel="noopener noreferrer"
-      style={{
-        display: 'flex', flexDirection: 'column', gap: 6,
-        textDecoration: 'none',
-        marginBottom: 14,
-      }}
-    >
-      {/* Square thumbnail container */}
-      <div style={{
-        width: '100%', aspectRatio: '1',
-        borderRadius: 'var(--gb-r-md)',
-        background: bg,
-        border: '1px solid var(--gb-border-subtle)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        position: 'relative', overflow: 'hidden',
-      }}>
+    <div style={{
+      display: 'flex', flexDirection: 'column',
+      marginBottom: 14,
+    }}>
+      {/* Thumbnail — click to open. Bottom corners squared off so it
+          reads as one piece with the info row welded below it. */}
+      <div
+        onClick={onOpen}
+        style={{
+          width: '100%', aspectRatio: '1',
+          borderRadius: 'var(--gb-r-md) var(--gb-r-md) 0 0',
+          background: bg,
+          border: '1px solid var(--gb-border-subtle)',
+          borderBottom: 'none',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          position: 'relative', overflow: 'hidden',
+          cursor: proof.proofLink && proof.proofLink !== '#' ? 'pointer' : 'default',
+        }}
+      >
         {proof.thumbUrl ? (
           <img
             src={proof.thumbUrl}
@@ -1419,10 +1435,6 @@ function GalleryItem({ proof, index = 0 }) {
             onError={(e) => { e.currentTarget.style.display = 'none'; }}
           />
         ) : (
-          // Faux 3D sphere — radial gradient gives the highlight on
-          // the upper-left, inset shadow rounds the bottom. Brand
-          // color blended into surface for the sphere body so it
-          // recolors across themes. Label sits dead-center.
           <div style={{
             width: '60%', aspectRatio: '1',
             borderRadius: '50%',
@@ -1447,32 +1459,53 @@ function GalleryItem({ proof, index = 0 }) {
         )}
       </div>
 
-      {/* Info pill — name + status badge + chevron */}
+      {/* Info row — flat-top, rounded-bottom, attached to the
+          thumbnail with no gap. Name truncates first; status tag
+          sits flush right and overlaps the truncated name's ellipsis
+          if necessary (flex-shrink: 0 on the tag). */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 6,
         background: 'var(--gb-surface-2)',
         border: '1px solid var(--gb-border-subtle)',
-        borderRadius: 18, padding: '4px 6px 4px 10px',
+        borderRadius: '0 0 var(--gb-r-md) var(--gb-r-md)',
+        padding: '5px 6px 5px 8px',
       }}>
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <div style={{
+        <span
+          title={proof.name}
+          style={{
+            flex: 1, minWidth: 0,
             fontSize: 11, fontWeight: 600,
             color: 'var(--gb-text-primary)',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>{proof.name}</div>
-          {proof.status && (
-            <Tag tone={statusTone(proof.status)} size="xs">{proof.status}</Tag>
-          )}
-        </div>
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          width: 22, height: 22, borderRadius: '50%',
-          color: 'var(--gb-text-muted)',
-        }}>
-          <I.chevr size={11} />
-        </span>
+          }}
+        >{proof.name}</span>
+        {proof.status && (
+          <Tag tone={statusTone(proof.status)} size="xs">{proof.status}</Tag>
+        )}
+        <button
+          type="button"
+          onClick={onCopy}
+          title="Copy proof link"
+          aria-label="Copy proof link"
+          style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 22, height: 22, padding: 0,
+            background: 'transparent',
+            border: 'none',
+            borderRadius: 'var(--gb-r-xs)',
+            color: 'var(--gb-text-muted)',
+            cursor: 'pointer',
+            outline: 'none',
+            flexShrink: 0,
+            transition: 'color .12s, background-color .12s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--gb-text-primary)'; e.currentTarget.style.background = 'var(--gb-fill-soft)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--gb-text-muted)'; e.currentTarget.style.background = 'transparent'; }}
+        >
+          <I.copy size={11} />
+        </button>
       </div>
-    </a>
+    </div>
   );
 }
 
