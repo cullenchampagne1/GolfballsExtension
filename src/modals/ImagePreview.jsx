@@ -416,17 +416,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                   alignment logic ships later; this is the visual
                   scaffold + view-change animation. */}
               <AnimatePresence>
-                {aligning && (
-                  <AlignmentOverlay
-                    onSubmit={() => {
-                      setAligning(false);
-                      // Real alignment ships later; for now confirm to
-                      // the user that the gesture registered.
-                      toast?.success?.('Alignment saved');
-                    }}
-                    onCancel={() => setAligning(false)}
-                  />
-                )}
+                {aligning && <AlignmentOverlay />}
               </AnimatePresence>
 
               <div style={{
@@ -476,6 +466,63 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                 The extension fetched the URL but the image couldn't be decoded. Copy or
                 download the file to inspect it directly.
               </Callout>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Alignment action strip — slides down ABOVE the primary
+            action row whenever the user enters align mode. Lives
+            inline (not floated over the buttons below) so the modal's
+            height expands naturally; AnimatePresence handles the
+            height+opacity collapse on enter/exit. */}
+        <AnimatePresence initial={false}>
+          {aligning && (
+            <motion.div
+              key="align-strip"
+              initial={{ height: 0, opacity: 0, marginBottom: -8 }}
+              animate={{ height: 'auto', opacity: 1, marginBottom: 0 }}
+              exit={{ height: 0, opacity: 0, marginBottom: -8 }}
+              transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+              style={{ overflow: 'hidden' }}
+            >
+              <div style={{
+                /* Two-tone "inset" look: surface-2 base with a dashed
+                   brand-border, padded just enough to feel like a
+                   distinct strip while still mixing with the modal's
+                   canvas (matches the settings-page callout cards). */
+                padding: 8,
+                background: 'var(--gb-surface-2)',
+                border: '1px dashed var(--gb-brand-tint-border)',
+                borderRadius: 'var(--gb-r-md)',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                <span style={{
+                  flex: 1,
+                  fontSize: 10.5, fontWeight: 600, letterSpacing: 0.2,
+                  color: 'var(--gb-text-tertiary)',
+                }}>
+                  Position image inside the alignment ring
+                </span>
+                <Btn
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setAligning(false)}
+                >
+                  Cancel
+                </Btn>
+                <Btn
+                  size="sm"
+                  variant="tinted"
+                  status="brand"
+                  icon={<I.check />}
+                  onClick={() => {
+                    setAligning(false);
+                    toast?.success?.('Alignment saved');
+                  }}
+                >
+                  Save
+                </Btn>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -537,7 +584,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
      • Ring scales from 0.85 → 1 with a slight bounce
      • Crosshair guides fade in shortly after the ring
 ─────────────────────────────────────────────────────────────── */
-function AlignmentOverlay({ onSubmit, onCancel }) {
+function AlignmentOverlay() {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -589,23 +636,9 @@ function AlignmentOverlay({ onSubmit, onCancel }) {
           background: 'var(--gb-brand-label)', opacity: 0.4,
         }} />
       </motion.div>
-      {/* Submit / Cancel — small in-frame IconBtns at the bottom-right,
-          matching the zoom-control cluster's size + position language.
-          pointerEvents:auto re-enables clicks on the buttons inside the
-          otherwise pass-through overlay. */}
-      <motion.div
-        initial={{ opacity: 0, y: 4 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 4 }}
-        transition={{ delay: 0.08, duration: 0.18 }}
-        style={{
-          position: 'absolute', bottom: 8, right: 8,
-          display: 'flex', gap: 4,
-          pointerEvents: 'auto',
-        }}>
-        <IconBtn size="sm" tooltip="Cancel" icon={<I.close />} danger onClick={onCancel} />
-        <IconBtn size="sm" tooltip="Save alignment" icon={<I.check />} active onClick={onSubmit} />
-      </motion.div>
+      {/* Submit / Cancel live OUTSIDE the overlay now — in a dashed
+          action strip slid in above the Copy/Download row when align
+          mode is active. See AlignmentActionStrip below. */}
     </motion.div>
   );
 }
