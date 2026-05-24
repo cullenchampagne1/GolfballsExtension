@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   FloatingPanel, ModalHeader, IconBtn, Btn, Callout, Spinner,
@@ -434,17 +435,25 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                 position: 'absolute', bottom: 8, right: 8,
                 display: 'flex', gap: 4,
               }}>
-                <IconBtn size="sm" tooltip="Zoom out" icon={<MinusIcon />}
+                {/* Zoom controls styled to match the readout chip:
+                    same surface, border, radius, mono font. Plain
+                    <button>s instead of IconBtn so the chrome (rounded
+                    fill, hover ring) doesn't override the chip look. */}
+                <ZoomChipBtn
+                  tooltip="Zoom out"
                   onClick={() => {
                     const c = wrapRef.current;
                     zoom(-ZOOM_STEP_BTN, c ? c.clientWidth / 2 : 0, c ? c.clientHeight / 2 : 0);
-                  }} />
-                <IconBtn size="sm" tooltip="Reset zoom" icon={<OneToOneIcon />} onClick={resetZoom} />
-                <IconBtn size="sm" tooltip="Zoom in" icon={<I.plus />}
+                  }}
+                >−</ZoomChipBtn>
+                <ZoomChipBtn tooltip="Reset zoom" onClick={resetZoom}>1:1</ZoomChipBtn>
+                <ZoomChipBtn
+                  tooltip="Zoom in"
                   onClick={() => {
                     const c = wrapRef.current;
                     zoom(ZOOM_STEP_BTN, c ? c.clientWidth / 2 : 0, c ? c.clientHeight / 2 : 0);
-                  }} />
+                  }}
+                >+</ZoomChipBtn>
               </div>
             </>
           )}
@@ -640,6 +649,72 @@ function AlignmentOverlay() {
           action strip slid in above the Copy/Download row when align
           mode is active. See AlignmentActionStrip below. */}
     </motion.div>
+  );
+}
+
+/* ── ZoomChipBtn ────────────────────────────────────────────────
+   Plain button styled to visually match the zoom-readout chip
+   bottom-left of the preview area: same `surface-modal` background,
+   `border-default` border, `r-sm` radius, mono font. Lets the three
+   zoom controls + the % readout read as one unified strip.
+
+   Uses a plain <button> rather than IconBtn because IconBtn brings
+   its own background/border palette and hover fill that would
+   compete with the chip look. Hover/active visually nudges via
+   background-color and the tooltip is portaled the same way IconBtn
+   does (kept self-contained to avoid clipping by overflow:hidden). */
+function ZoomChipBtn({ children, tooltip, onClick }) {
+  const [hovered, setHovered] = useState(false);
+  const [tipPos, setTipPos] = useState(null);
+  const btnRef = useRef(null);
+  useEffect(() => {
+    if (!tooltip || !hovered) { setTipPos(null); return; }
+    const el = btnRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setTipPos({ centerX: r.left + r.width / 2, top: r.top });
+  }, [tooltip, hovered]);
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={onClick}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          minWidth: 22, height: 20, padding: '0 6px',
+          fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
+          fontFamily: 'var(--gb-font-mono)',
+          color: 'var(--gb-text-secondary)',
+          background: hovered ? 'var(--gb-fill-soft)' : 'var(--gb-surface-modal)',
+          border: '1px solid var(--gb-border-default)',
+          borderRadius: 'var(--gb-r-sm)',
+          cursor: 'pointer',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          lineHeight: 1,
+          transition: 'background-color .12s',
+        }}
+      >
+        {children}
+      </button>
+      {typeof document !== 'undefined' && tooltip && hovered && tipPos && createPortal(
+        <span style={{
+          position: 'fixed',
+          left: tipPos.centerX,
+          top: tipPos.top - 6,
+          transform: 'translate(-50%, -100%)',
+          padding: '3px 7px', borderRadius: 'var(--gb-r-xs)',
+          background: 'var(--gb-surface-deep)', color: 'var(--gb-text-primary)',
+          border: '1px solid var(--gb-border-default)',
+          boxShadow: 'var(--gb-shadow-popover)',
+          fontSize: 10, fontWeight: 600, fontFamily: 'var(--gb-font-sans)',
+          whiteSpace: 'nowrap', pointerEvents: 'none',
+          zIndex: 2147483600,
+        }}>{tooltip}</span>,
+        document.body,
+      )}
+    </>
   );
 }
 
