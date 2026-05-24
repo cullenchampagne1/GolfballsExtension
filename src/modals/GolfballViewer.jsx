@@ -278,52 +278,54 @@ export function GolfballViewer({ decalDataUrl, onError }) {
               ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(w, y + 0.5); ctx.stroke();
             }
 
-            // Edge vignette — 4 directional gradients per edge with
-            // a smooth ease-out falloff (more stops + lower peak
-            // opacity than before, so seams read as gentle shading,
-            // not heavy bands). Then 4 radial gradients at the
-            // corners curve the darkening inward so corners read as
-            // rounded fillets instead of sharp 90° intersections.
-            const fade = 0.35;
-            const edgeShadow = (g) => {
-              g.addColorStop(0.00, 'rgba(0,0,0,0.30)');
-              g.addColorStop(0.20, 'rgba(0,0,0,0.18)');
-              g.addColorStop(0.50, 'rgba(0,0,0,0.07)');
-              g.addColorStop(0.80, 'rgba(0,0,0,0.02)');
-              g.addColorStop(1.00, 'rgba(0,0,0,0)');
-            };
-            // Left edge
-            let g = ctx.createLinearGradient(0, 0, w * fade, 0); edgeShadow(g);
-            ctx.fillStyle = g; ctx.fillRect(0, 0, w * fade, h);
-            // Right edge
-            g = ctx.createLinearGradient(w, 0, w - w * fade, 0); edgeShadow(g);
-            ctx.fillStyle = g; ctx.fillRect(w - w * fade, 0, w * fade, h);
-            // Top edge
-            g = ctx.createLinearGradient(0, 0, 0, h * fade); edgeShadow(g);
-            ctx.fillStyle = g; ctx.fillRect(0, 0, w, h * fade);
-            // Bottom edge
-            g = ctx.createLinearGradient(0, h, 0, h - h * fade); edgeShadow(g);
-            ctx.fillStyle = g; ctx.fillRect(0, h - h * fade, w, h * fade);
+            // Rounded inset shadow — instead of 4 linear edge
+            // gradients (which read as a sharp-cornered box) we
+            // compute per-pixel distance to a rounded inner rect
+            // and darken based on that. The shadow band hugs the
+            // rounded shape, so corners visually curve as a single
+            // fillet instead of two perpendicular bars crossing.
+            //
+            // Algorithm: rounded-rect SDF (signed distance field)
+            //   dx = max(|p.x - cx| - halfW + r, 0)
+            //   dy = max(|p.y - cy| - halfH + r, 0)
+            //   dist_to_inner_rect = sqrt(dx² + dy²) - r
+            // For pixels OUTSIDE the rounded inner rect, dist > 0 →
+            // dist=0 at the rounded boundary, dist=large at the
+            // texture edge. Map dist [0..band] → alpha [0..peak]
+            // with ease-in so the shadow is soft near the inner
+            // boundary and strongest at the texture edge.
+            const cornerRadius = Math.min(w, h) * 0.35; // inner rounded-rect radius
+            const band = Math.min(w, h) * 0.40;         // how far the shadow extends in
+            const peakAlpha = 0.32;                     // max darkness at the edge
+            const halfW = w / 2, halfH = h / 2;
+            const innerHalfW = halfW - cornerRadius;
+            const innerHalfH = halfH - cornerRadius;
 
-            // Corner radials — paint a soft round darkening centered
-            // ON the corner so the falloff curves inward instead of
-            // forming a hard L where two linear edges cross. Radius
-            // is tied to the shorter side so it stays proportional on
-            // wide walls (floor/ceiling).
-            const cornerR = Math.min(w, h) * 0.42;
-            const cornerShadow = (cx, cy) => {
-              const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, cornerR);
-              cg.addColorStop(0.00, 'rgba(0,0,0,0.28)');
-              cg.addColorStop(0.35, 'rgba(0,0,0,0.12)');
-              cg.addColorStop(0.70, 'rgba(0,0,0,0.03)');
-              cg.addColorStop(1.00, 'rgba(0,0,0,0)');
-              ctx.fillStyle = cg;
-              ctx.fillRect(cx - cornerR, cy - cornerR, cornerR * 2, cornerR * 2);
-            };
-            cornerShadow(0, 0);     // top-left
-            cornerShadow(w, 0);     // top-right
-            cornerShadow(0, h);     // bottom-left
-            cornerShadow(w, h);     // bottom-right
+            const img = ctx.getImageData(0, 0, w, h);
+            const data = img.data;
+            for (let y = 0; y < h; y++) {
+              const py = y - halfH;
+              const ayBase = Math.abs(py) - innerHalfH;
+              for (let x = 0; x < w; x++) {
+                const px = x - halfW;
+                const ax = Math.abs(px) - innerHalfW;
+                const dx = ax > 0 ? ax : 0;
+                const dy = ayBase > 0 ? ayBase : 0;
+                const dist = Math.sqrt(dx * dx + dy * dy) - cornerRadius;
+                if (dist <= 0) continue;             // inside the rounded rect — no shadow
+                const t = Math.min(1, dist / band);
+                // easeInQuad — slow start (gentle near the curve)
+                // ramping to full at the wall edge
+                const a = peakAlpha * t * t;
+                // Source-over blend: out = src*a + dst*(1-a), with src=black(0)
+                const idx = (y * w + x) * 4;
+                const inv = 1 - a;
+                data[idx]     = data[idx]     * inv;
+                data[idx + 1] = data[idx + 1] * inv;
+                data[idx + 2] = data[idx + 2] * inv;
+              }
+            }
+            ctx.putImageData(img, 0, 0);
 
             const tex = new THREE.CanvasTexture(cv);
             tex.colorSpace = THREE.SRGBColorSpace;
