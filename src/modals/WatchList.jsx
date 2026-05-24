@@ -6,8 +6,10 @@ import {
 import { useToast } from '../ui/components/ToastHost.jsx';
 
 /* ───────────────────────────────────────────────────────────────
-   WatchList — task-list modal, built to match the TaskListView
-   from the redesign (Golfballs Extension Redesign.html → surfaces-2.jsx).
+   WatchList — "My Watch List" modal. Visual structure mirrors
+   the TaskListView from the redesign (Golfballs Extension Redesign.html
+   → surfaces-2.jsx), repurposed as a watch list (Task List is a
+   separate CRM module shipping later).
 
    Task shape:
      {
@@ -266,8 +268,8 @@ export function WatchList({ onClosed, bindClose }) {
     <FloatingPanel width={560} backdrop onClose={onClosed} bindClose={bindClose}>
       <ModalHeader
         accent
-        icon={<TaskIcon size={13} />}
-        title="My Task List"
+        icon={<I.eye size={14} />}
+        title="My Watch List"
         subtitle={subtitle}
       />
 
@@ -299,8 +301,12 @@ export function WatchList({ onClosed, bindClose }) {
         >New task</Btn>
       </div>
 
-      {/* Body */}
+      {/* Body — clamped to a fixed visible range so the modal doesn't
+          bounce in height as items add / resolve. Below minHeight the
+          empty state has room to breathe; above maxHeight the list
+          becomes internally scrollable. */}
       <div style={{
+        minHeight: 320,
         maxHeight: 'min(56vh, 480px)',
         overflowY: 'auto', overflowX: 'hidden',
         padding: 8,
@@ -350,6 +356,50 @@ export function WatchList({ onClosed, bindClose }) {
             )}
           </AnimatePresence>
         </motion.ul>
+      </div>
+
+      {/* Status bar — fixed-height footer that shows the live counts.
+          Lives outside the scrollable body so its position is stable
+          even when items add / resolve / scroll. */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '8px 14px',
+        borderTop: '1px solid var(--gb-border-subtle)',
+        background: 'var(--gb-surface-1)',
+        fontSize: 10.5, fontWeight: 600, letterSpacing: 0.3,
+        color: 'var(--gb-text-tertiary)',
+        fontFamily: 'var(--gb-font-mono)',
+      }}>
+        <span>{counts.all} total</span>
+        <span style={{ color: 'var(--gb-text-ghost)' }}>·</span>
+        <span style={{ color: 'var(--gb-brand-label)' }}>{counts.active} active</span>
+        {counts.high > 0 && (
+          <>
+            <span style={{ color: 'var(--gb-text-ghost)' }}>·</span>
+            <span style={{ color: 'var(--gb-error-fg)' }}>{counts.high} high</span>
+          </>
+        )}
+        {counts.done > 0 && (
+          <>
+            <span style={{ color: 'var(--gb-text-ghost)' }}>·</span>
+            <span>{counts.done} done</span>
+          </>
+        )}
+        <div style={{ flex: 1 }} />
+        {filter !== 'all' && (
+          <button
+            type="button"
+            onClick={() => setFilter('all')}
+            style={{
+              fontSize: 10, fontWeight: 700, letterSpacing: 0.4,
+              textTransform: 'uppercase',
+              background: 'transparent', border: 'none', padding: 0,
+              color: 'var(--gb-text-secondary)',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >Clear filter</button>
+        )}
       </div>
     </FloatingPanel>
   );
@@ -738,7 +788,7 @@ function EmptyState({ filter, onNew }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: 'var(--gb-text-secondary)',
       }}>
-        <TaskIcon size={18} />
+        <I.eye size={18} />
       </div>
       <div>
         <strong style={{
@@ -791,13 +841,3 @@ function dueLabelColor(task) {
   return 'var(--gb-text-tertiary)';
 }
 
-/* Task icon — checklist glyph, used in header + empty state. */
-function TaskIcon({ size = 13 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 11l3 3L22 4" />
-      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-    </svg>
-  );
-}
