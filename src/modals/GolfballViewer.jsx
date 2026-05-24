@@ -604,7 +604,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // of the snapshot, so push the snapshot camera closer:
           const snapCam = camera.clone();
           const ballRadiusVisual = 100 * state.scale;
-          const padFraction = 0.92;             // how much of the frame the ball occupies
+          const padFraction = 0.72;             // how much of the frame the ball occupies (lower = more breathing room)
           const visHalfH = ballRadiusVisual / padFraction;
           // distance for ortho-equivalent framing under perspective:
           // visHalfH = dist * tan(FOV/2)
