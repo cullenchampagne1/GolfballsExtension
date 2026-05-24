@@ -655,7 +655,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           across the gallery. */}
       <div style={{
         display: 'flex',
-        height: 'min(55vh, 460px)',
+        height: 'min(50vh, 380px)',
         minHeight: 0, flex: 1,
       }}>
         {/* LEFT COLUMN — scroll area on top, footer pinned at bottom. */}
@@ -1050,19 +1050,23 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
                 flexShrink: 0,
                 background: 'var(--gb-surface-1)',
                 borderLeft: '1px solid var(--gb-border-subtle)',
+                // alignSelf: 'stretch' makes the gallery fill the parent
+                // row's height even though motion is animating width.
+                // overflow: hidden clips the inner during the width
+                // animation; the inner div owns the scroll.
                 overflow: 'hidden',
-                height: '100%',
+                alignSelf: 'stretch',
+                display: 'flex',
               }}
             >
-              {/* Inner div carries the padding + scroll so the outer
-                  width animation doesn't ripple padding across the
-                  transition (gives a clean slide). */}
               <div style={{
                 width: 280,
                 padding: '14px 14px 20px',
                 overflowY: 'auto',
-                height: '100%',
+                overflowX: 'hidden',
                 boxSizing: 'border-box',
+                flex: 1,
+                minHeight: 0,
               }}>
                 <div style={{
                   fontSize: 10, fontWeight: 800, textTransform: 'uppercase',
