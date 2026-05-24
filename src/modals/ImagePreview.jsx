@@ -726,12 +726,16 @@ export function ImagePreview({
   };
   const onSubmitProof = () => {
     if (onLaunchSubmitProof) {
-      // Parent (content-script entry) wants to take over: hand them the
-      // current image (edited if the user color-swapped, otherwise the
-      // source URL) so they can mount the SubmitProof modal.
-      const payload = editedDataUrl
-        ? { dataUrl: editedDataUrl }
-        : (url ? { url } : { url: effectiveUrl });
+      // Hand the parent (content-script wrapper or playground) the
+      // current image — edited dataUrl if the user color-swapped,
+      // else whatever URL is actually loaded, else null when the
+      // user clicked Submit Proof without ever attaching one.
+      let payload = null;
+      if (editedDataUrl) {
+        payload = { dataUrl: editedDataUrl };
+      } else if (effectiveUrl) {
+        payload = { url: effectiveUrl };
+      }
       onLaunchSubmitProof(payload);
       return;
     }
@@ -811,18 +815,29 @@ export function ImagePreview({
         {/* URL paste row — shown only when there's no image attached.
             Lets the user paste a link as an alternative to dropping a
             file onto the preview surface below. */}
-        {!effectiveUrl && (
-          <Input
-            value={pastedUrlDraft}
-            onChange={setPastedUrlDraft}
-            onBlur={commitPastedUrl}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') { e.preventDefault(); commitPastedUrl(); }
-            }}
-            placeholder="Paste an image URL and press Enter…"
-            leading={<I.search size={11} />}
-          />
-        )}
+        <AnimatePresence initial={false}>
+          {!effectiveUrl && (
+            <motion.div
+              key="url-paste"
+              initial={{ opacity: 0, height: 0, marginBottom: -12 }}
+              animate={{ opacity: 1, height: 'auto', marginBottom: 0 }}
+              exit={{ opacity: 0, height: 0, marginBottom: -12 }}
+              transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+              style={{ overflow: 'hidden' }}
+            >
+              <Input
+                value={pastedUrlDraft}
+                onChange={setPastedUrlDraft}
+                onBlur={commitPastedUrl}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); commitPastedUrl(); }
+                }}
+                placeholder="Paste an image URL and press Enter…"
+                leading={<I.search size={11} />}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Preview surface — fixed-height dark wrapper with the image
             zoomed/panned inside. Zoom controls float bottom-right;
