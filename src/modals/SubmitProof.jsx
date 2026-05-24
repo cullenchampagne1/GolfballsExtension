@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  FloatingPanel, ModalHeader, Btn, Field, Input, Dropdown, Tag, I,
+  FloatingPanel, ModalHeader, Btn, Field, Input, Dropdown, Tag, Segmented, I,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
@@ -111,9 +111,13 @@ const DYN_FIELDS = {
   ],
 };
 
+/* Item → field-group lookup. Mirrors the original logo-extractor
+   logic: items not in GROUP_MAP and not gift sets get NO extra fields
+   (e.g. "Pad to Digital Request" is a request, not a deliverable). */
 function getDynFieldsFor(item) {
   if (item.startsWith('Gift Set')) return DYN_FIELDS.giftset;
-  return DYN_FIELDS[GROUP_MAP[item]] || DYN_FIELDS.other;
+  const key = GROUP_MAP[item];
+  return key ? DYN_FIELDS[key] : null;
 }
 
 const STATUS_OPTS = [
@@ -163,7 +167,31 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
   //   'submitting'  — sending requests
   //   'results'     — generated links panel
   const [stage, setStage] = useState('form');
-  const [imageData, setImageData] = useState(image || null);
+  // Attached images list. Stored as an array so we can grow into
+  // multi-image later without restructuring. Each entry is
+  // { id, dataUrl? | url?, hosted (bool) } — `hosted` controls the
+  // "won't render in email template" warning.
+  const [images, setImages] = useState(() => {
+    if (!image) return [];
+    return [{
+      id: 'init',
+      ...image,
+      hosted: !!image.url && !image.dataUrl,
+    }];
+  });
+  // Convenience accessor for backward-compat code paths that still
+  // read `imageData?.dataUrl || imageData?.url`.
+  const imageData = images[0] || null;
+  const setImageData = (next) => {
+    if (!next) setImages([]);
+    else setImages([{
+      id: `img-${Date.now()}`,
+      ...next,
+      hosted: !!next.url && !next.dataUrl,
+    }]);
+  };
+  const removeImage = (id) => setImages((arr) => arr.filter((x) => x.id !== id));
+  const hasUnhostedImage = images.some((img) => !img.hosted);
 
   // Form fields.
   const [orderId, setOrderId]       = useState(orderIdProp || '');
@@ -489,6 +517,34 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             />
           </Field>
 
+          {/* Per-item dynamic fields — appears IMMEDIATELY below the
+              items dropdown so the user sees their selections expand
+              into a question block. One block per selected item (so
+              duplicates render twice with " · 2"-style instance
+              counters), each with its own delete button. */}
+          <DynamicFieldsList
+            selectedItems={selectedItems}
+            dynData={dynData}
+            onUpdate={updateDyn}
+            onRemove={(idx) => {
+              setSelectedItems((s) => {
+                const next = s.slice();
+                next.splice(idx, 1);
+                return next;
+              });
+              setDynData((d) => {
+                // Re-key remaining items so indices stay tight after removal.
+                const next = {};
+                Object.keys(d).forEach((k) => {
+                  const ki = parseInt(k, 10);
+                  if (ki < idx) next[ki] = d[k];
+                  else if (ki > idx) next[ki - 1] = d[k];
+                });
+                return next;
+              });
+            }}
+          />
+
           {/* Order / cust / name */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             <Field label="Order #">
@@ -614,20 +670,33 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             </Field>
           </div>
 
-          {/* Order type / value (exclusive tags) */}
+          {/* Order type / value — Segmented (sliding-pill exclusive
+              select) so the UX matches the rest of the system. Only
+              one option per field can be selected. */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             <Field label="Order type">
-              <ExclusiveTagRow
+              <Segmented
+                full
+                size="sm"
                 value={orderType}
                 onChange={setOrderType}
-                options={['Live Order', 'Potential Order', 'Jardine Order']}
+                options={[
+                  { id: 'Live Order',       label: 'Live'      },
+                  { id: 'Potential Order',  label: 'Potential' },
+                  { id: 'Jardine Order',    label: 'Jardine'   },
+                ]}
               />
             </Field>
             <Field label="Order value">
-              <ExclusiveTagRow
+              <Segmented
+                full
+                size="sm"
                 value={orderValue}
                 onChange={setOrderValue}
-                options={['Under $2k', 'Over $2k']}
+                options={[
+                  { id: 'Under $2k', label: 'Under $2k' },
+                  { id: 'Over $2k',  label: 'Over $2k'  },
+                ]}
               />
             </Field>
           </div>
@@ -653,38 +722,6 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             </div>
           </Field>
 
-          {/* Per-item dynamic fields */}
-          <AnimatePresence initial={false}>
-            {selectedItems.length > 0 && (
-              <motion.div
-                key="dyn"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.2 }}
-                style={{ overflow: 'hidden' }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 6 }}>
-                  {selectedItems.map((item, idx) => {
-                    const fields = getDynFieldsFor(item);
-                    if (!fields.length) return null;
-                    const data = dynData[idx] || {};
-                    return (
-                      <DynamicItemBlock
-                        key={`${item}-${idx}`}
-                        item={item}
-                        index={idx}
-                        fields={fields}
-                        data={data}
-                        onChange={(fieldId, v) => updateDyn(idx, fieldId, v)}
-                      />
-                    );
-                  })}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           {/* Links + notes */}
           <Field label="Item link" hint="N/A for white balls unless special alignment">
             <Input size="xs" value={itemLink} onChange={setItemLink} placeholder="https://…" />
@@ -695,31 +732,6 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           <Field label="Special instructions">
             <Input size="xs" value={notes} onChange={setNotes} placeholder="Write N/A if unneeded" />
           </Field>
-
-          {/* Attached image — only renders when one was carried in
-              from ImagePreview. Listed at the end of the form (after
-              the last question) instead of pinned as a separate strip.
-              No upload UI — image acquisition is delegated to
-              ImagePreview entirely. */}
-          <AnimatePresence initial={false}>
-            {imageData && (
-              <motion.div
-                key="attached-image"
-                initial={{ opacity: 0, height: 0, marginTop: -6 }}
-                animate={{ opacity: 1, height: 'auto', marginTop: 0 }}
-                exit={{ opacity: 0, height: 0, marginTop: -6 }}
-                transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-                style={{ overflow: 'hidden' }}
-              >
-                <Field label="Attached image">
-                  <SourceImageChip
-                    imageData={imageData}
-                    onRemove={() => setImageData(null)}
-                  />
-                </Field>
-              </motion.div>
-            )}
-          </AnimatePresence>
 
           {/* Results panel (shown after a successful submit) */}
           {stage === 'results' && results.length > 0 && (
@@ -747,6 +759,76 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           </div>
         )}
       </div>
+
+      {/* Attached images — pinned BELOW the body, above the footer.
+          List view of every image carried in from ImagePreview. Each
+          row: thumbnail · short caption · Remove. Pure presentation —
+          users cannot upload here (delegated to ImagePreview). */}
+      <AnimatePresence initial={false}>
+        {images.length > 0 && (
+          <motion.div
+            key="image-list"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+            style={{ overflow: 'hidden', flexShrink: 0 }}
+          >
+            <div style={{
+              borderTop: '1px solid var(--gb-border-subtle)',
+              background: 'var(--gb-surface-1)',
+              padding: '8px 12px',
+              display: 'flex', flexDirection: 'column', gap: 4,
+            }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
+                textTransform: 'uppercase',
+                color: 'var(--gb-text-muted)',
+                marginBottom: 2,
+              }}>
+                <span>Attached images</span>
+                <Tag tone="neutral" size="xs" mono>{images.length}</Tag>
+              </div>
+              {images.map((img) => (
+                <SourceImageChip
+                  key={img.id}
+                  imageData={img}
+                  onRemove={() => removeImage(img.id)}
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Slim warning bar — surfaces when any attached image isn't
+          hosted (i.e. is a dataURL). Hosted URLs render fine in email
+          templates; dataURLs get stripped by mail clients. */}
+      <AnimatePresence initial={false}>
+        {hasUnhostedImage && (
+          <motion.div
+            key="unhosted-warning"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18 }}
+            style={{ overflow: 'hidden', flexShrink: 0 }}
+          >
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '6px 12px',
+              background: 'var(--gb-warning-tint-soft)',
+              borderTop: '1px solid var(--gb-warning-tint-border)',
+              color: 'var(--gb-warning-fg)',
+              fontSize: 10.5, fontWeight: 600,
+            }}>
+              <I.alert size={11} />
+              <span>Non-hosted images won&apos;t render in email templates — only embedded link previews will.</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Footer */}
       <div style={{
@@ -934,37 +1016,6 @@ function ItemMultiSelect({ items, counts, error, onAdd, onRemove, onTouch }) {
   );
 }
 
-function ExclusiveTagRow({ value, onChange, options }) {
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-      {options.map((o) => {
-        const on = value === o;
-        return (
-          <motion.button
-            key={o}
-            type="button"
-            whileTap={{ scale: 0.97 }}
-            onClick={() => onChange(o)}
-            animate={{
-              backgroundColor: on ? 'var(--gb-brand-tint-soft)' : 'var(--gb-surface-1)',
-              color:           on ? 'var(--gb-brand-label)'    : 'var(--gb-text-muted)',
-              borderColor:     on ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)',
-            }}
-            transition={{ duration: 0.15 }}
-            style={{
-              padding: '5px 11px',
-              fontSize: 11, fontWeight: 600,
-              borderRadius: 'var(--gb-r-sm)',
-              border: '1px solid transparent',
-              fontFamily: 'inherit',
-              cursor: 'pointer', outline: 'none',
-            }}
-          >{o}</motion.button>
-        );
-      })}
-    </div>
-  );
-}
 
 function ToggleTag({ on, onClick, icon, children }) {
   return (
@@ -991,46 +1042,132 @@ function ToggleTag({ on, onClick, icon, children }) {
   );
 }
 
-function DynamicItemBlock({ item, fields, data, onChange }) {
+/* DynamicFieldsList — renders one block per selected item, with
+   instance counters when duplicates exist (e.g. "Ball · 2"). Items
+   without a defined field group (e.g. "Pad to Digital Request") are
+   skipped — they're a request, not a deliverable. Each block has its
+   own delete button that pulls the item out of selectedItems. */
+function DynamicFieldsList({ selectedItems, dynData, onUpdate, onRemove }) {
+  // Build instance numbers per item so duplicates get " · 2" / " · 3".
+  const counts = {};
+  const seen = {};
+  for (const it of selectedItems) counts[it] = (counts[it] || 0) + 1;
+  const blocks = selectedItems.map((item, idx) => {
+    const fields = getDynFieldsFor(item);
+    seen[item] = (seen[item] || 0) + 1;
+    const suffix = counts[item] > 1 ? ` · ${seen[item]}` : '';
+    return { item, idx, fields, suffix };
+  });
   return (
-    <div style={{
-      padding: 10,
-      border: '1px solid var(--gb-border-default)',
-      borderRadius: 'var(--gb-r-md)',
-      background: 'var(--gb-surface-1)',
-    }}>
+    <AnimatePresence initial={false}>
+      {blocks.length > 0 && (
+        <motion.div
+          key="dyn-list"
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+          style={{ overflow: 'hidden' }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+            <AnimatePresence initial={false}>
+              {blocks.map(({ item, idx, fields, suffix }) => (
+                <DynamicItemBlock
+                  key={`${item}-${idx}`}
+                  item={item}
+                  suffix={suffix}
+                  fields={fields}
+                  data={dynData[idx] || {}}
+                  onChange={(fieldId, v) => onUpdate(idx, fieldId, v)}
+                  onRemove={() => onRemove(idx)}
+                />
+              ))}
+            </AnimatePresence>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function DynamicItemBlock({ item, suffix, fields, data, onChange, onRemove }) {
+  // Items without field groups (Pad to Digital Request) still get a
+  // tiny chip-style block so the user sees the item is acknowledged
+  // and has a delete affordance.
+  const hasFields = !!fields && fields.length > 0;
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+      animate={{ opacity: 1, height: 'auto' }}
+      exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+      transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+      style={{
+        overflow: 'hidden',
+      }}
+    >
       <div style={{
-        fontSize: 10, fontWeight: 800, letterSpacing: 1,
-        textTransform: 'uppercase',
-        color: 'var(--gb-brand-label)',
-        marginBottom: 8,
-      }}>{item}</div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-        {fields.map((f) => {
-          if (f.dependsOn && data[f.dependsOn] === f.dependsNotValue) return null;
-          const val = data[f.id] ?? f.default ?? '';
-          return (
-            <Field key={f.id} label={f.label} hint={f.hint}>
-              {f.type === 'select' ? (
-                <Dropdown
-                  size="xs"
-                  value={val}
-                  onChange={(v) => onChange(f.id, v)}
-                  options={f.options.map((o) => ({ id: o, label: o }))}
-                />
-              ) : (
-                <Input
-                  size="xs"
-                  value={val}
-                  onChange={(v) => onChange(f.id, v)}
-                  placeholder={f.hint || ''}
-                />
-              )}
-            </Field>
-          );
-        })}
+        padding: hasFields ? 10 : '6px 10px',
+        border: '1px solid var(--gb-border-default)',
+        borderRadius: 'var(--gb-r-md)',
+        background: 'var(--gb-surface-1)',
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          marginBottom: hasFields ? 8 : 0,
+        }}>
+          <span style={{
+            flex: 1, minWidth: 0,
+            fontSize: 10, fontWeight: 800, letterSpacing: 1,
+            textTransform: 'uppercase',
+            color: 'var(--gb-brand-label)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>{item}{suffix}</span>
+          {!hasFields && (
+            <span style={{
+              fontSize: 9.5, fontWeight: 600,
+              color: 'var(--gb-text-ghost)',
+              fontStyle: 'italic',
+            }}>No extra details needed</span>
+          )}
+          <Btn
+            size="sm"
+            variant="ghost"
+            icon={<I.close size={10} />}
+            onClick={onRemove}
+            title="Remove this item"
+            style={{ width: 22, height: 22, padding: 0 }}
+          />
+        </div>
+        {hasFields && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {fields.map((f) => {
+              if (f.dependsOn && data[f.dependsOn] === f.dependsNotValue) return null;
+              const val = data[f.id] ?? f.default ?? '';
+              return (
+                <Field key={f.id} label={f.label} hint={f.hint}>
+                  {f.type === 'select' ? (
+                    <Dropdown
+                      size="xs"
+                      value={val}
+                      onChange={(v) => onChange(f.id, v)}
+                      options={f.options.map((o) => ({ id: o, label: o }))}
+                    />
+                  ) : (
+                    <Input
+                      size="xs"
+                      value={val}
+                      onChange={(v) => onChange(f.id, v)}
+                      placeholder={f.hint || ''}
+                    />
+                  )}
+                </Field>
+              );
+            })}
+          </div>
+        )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
