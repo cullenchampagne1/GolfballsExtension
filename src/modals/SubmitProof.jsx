@@ -185,7 +185,16 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
   const setImageData = (next) => {
     if (!next) setImages([]);
     else setImages([{
-      id: `img-${Date.now()}`,
+      id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      ...next,
+      hosted: !!next.url && !next.dataUrl,
+    }]);
+  };
+  // Add (not replace) — used by the modal-wide drop overlay so each
+  // dropped file becomes a NEW row in the attached-images list.
+  const addImage = (next) => {
+    setImages((arr) => [...arr, {
+      id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       ...next,
       hosted: !!next.url && !next.dataUrl,
     }]);
@@ -449,6 +458,46 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
     bindClose?.(fn);
   }, [bindClose]);
 
+  // ── Modal-wide drag-and-drop. Hovering a file anywhere over the
+  // modal raises an absolute overlay. Drop adds the file to the
+  // attached-images list. dragDepth counts enter/leave events so
+  // crossing child element boundaries doesn't flicker the overlay. */
+  const [dropOver, setDropOver] = useState(false);
+  const dropDepthRef = useRef(0);
+  const onModalDragEnter = (e) => {
+    if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return;
+    e.preventDefault();
+    dropDepthRef.current += 1;
+    if (dropDepthRef.current === 1) setDropOver(true);
+  };
+  const onModalDragOver = (e) => {
+    if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+  const onModalDragLeave = (e) => {
+    if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return;
+    dropDepthRef.current = Math.max(0, dropDepthRef.current - 1);
+    if (dropDepthRef.current === 0) setDropOver(false);
+  };
+  const onModalDrop = (e) => {
+    if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return;
+    e.preventDefault();
+    dropDepthRef.current = 0;
+    setDropOver(false);
+    const files = Array.from(e.dataTransfer?.files || []).filter((f) => f.type.startsWith('image/'));
+    if (files.length === 0) {
+      toast?.warning?.('Only image files can be attached');
+      return;
+    }
+    files.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => addImage({ dataUrl: String(reader.result) });
+      reader.onerror = () => toast?.error?.(`Could not read ${file.name}`);
+      reader.readAsDataURL(file);
+    });
+  };
+
   // ── Main form ──
   const repOptions = (reps || []).map((r) => ({ id: r.val, label: r.txt }));
   const artistOptions = (artists || []).map((a) => ({ id: a.val, label: a.txt }));
@@ -462,6 +511,60 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
       onClose={onClosed}
       bindClose={handleBindClose}
     >
+      <div
+        onDragEnter={onModalDragEnter}
+        onDragOver={onModalDragOver}
+        onDragLeave={onModalDragLeave}
+        onDrop={onModalDrop}
+        style={{
+          position: 'relative',
+          // Inherit FloatingPanel's column flex from ModalCard so the
+          // header / body / footer keep their original layout.
+          display: 'flex', flexDirection: 'column',
+          minHeight: 0, flex: 1,
+        }}
+      >
+        {/* Modal-wide drop overlay — only paints while a file is
+            being dragged over the modal. pointer-events:auto so the
+            drop registers on the overlay itself (children's dropEffect
+            isn't reliable). */}
+        <AnimatePresence>
+          {dropOver && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.12 }}
+              style={{
+                position: 'absolute', inset: 0, zIndex: 50,
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                gap: 10,
+                background: 'color-mix(in srgb, var(--gb-brand-label) 18%, transparent)',
+                border: '2px dashed var(--gb-brand-label)',
+                borderRadius: 'var(--gb-r-md)',
+                backdropFilter: 'blur(2px)',
+                WebkitBackdropFilter: 'blur(2px)',
+                color: 'var(--gb-brand-label)',
+                pointerEvents: 'none',
+              }}
+            >
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: 0.3 }}>
+                Drop image to attach
+              </div>
+              <div style={{
+                fontSize: 11, fontWeight: 500,
+                color: 'color-mix(in srgb, var(--gb-brand-label) 80%, transparent)',
+              }}>Adds to the proof request</div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
       <ModalHeader
         accent
         icon={<I.send size={14} />}
@@ -836,6 +939,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             {submitting ? 'Sending…' : 'Send request'}
           </Btn>
         )}
+      </div>
       </div>
     </FloatingPanel>
   );
