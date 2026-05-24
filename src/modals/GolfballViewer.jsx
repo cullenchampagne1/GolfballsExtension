@@ -122,6 +122,12 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   // particles) but leave the main ball untouched. Called when the
   // user closes the fun menu OR enters a scene.
   const clearRoomItemsRef = useRef(null);
+  // Ball-explode effect: explodeBallAt fires the burst (hides the
+  // ball mesh, spawns shards flying outward + a particle puff);
+  // reassembleBall plays the reverse — shards ease back to their
+  // home seats and the ball re-shows when the last one lands.
+  const explodeBallAtRef = useRef(null);   // ({clientX,clientY}) — burst from ball center
+  const reassembleBallRef = useRef(null);  // () — tween shards home, restore ball
   // MutationObserver that watches the document element for theme
   // changes and rebakes wall textures. Held on a ref so the
   // effect's teardown can disconnect it across re-runs.
@@ -149,6 +155,8 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
     pourWaterAt: (...args) => pourWaterAtRef.current?.(...args),
     drainWater: () => drainWaterRef.current?.(),
     clearRoomItems: () => clearRoomItemsRef.current?.(),
+    explodeBallAt: (...args) => explodeBallAtRef.current?.(...args),
+    reassembleBall: () => reassembleBallRef.current?.(),
   }), []);
   // 'loading' until Three.js + the model finish; then 'ready'. 'error'
   // surfaces a basic message instead of an empty canvas.
@@ -935,6 +943,19 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // confettiPieces: flat physics boxes raining from the ceiling.
         // Each is { mesh, body } — blastable by bombs, pile up on floor.
         const confettiPieces = [];
+        // shards: pieces of the ball when the user fires the "explode"
+        // fun-menu tool. Each is a curved spherical wedge that flies
+        // outward with its own velocity + angular velocity, then —
+        // when reassembleBall() is called — tweens back to its home
+        // pose so the ball pops back into existence intact.
+        //
+        // Shape: { mesh, home, homeQuat, vel, angVel, mode, t,
+        //          startPos, startQuat }
+        //   mode: 'flying' | 'returning'
+        //   t:    progress 0..1 used by 'returning' (lerps mesh.position
+        //         from startPos → home, quaternion startQuat → homeQuat)
+        const shards = [];
+        let ballExploded = false;          // mesh visibility flag
 
         /* ══════════════════════════════════════════════════════════
            WATER — heightfield fluid + shader.
@@ -2394,6 +2415,8 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
       pourWaterAtRef.current = null;
       drainWaterRef.current = null;
       clearRoomItemsRef.current = null;
+      explodeBallAtRef.current = null;
+      reassembleBallRef.current = null;
       waterActiveRef.current = false;
       themeObserverRef.current?.disconnect();
       themeObserverRef.current = null;

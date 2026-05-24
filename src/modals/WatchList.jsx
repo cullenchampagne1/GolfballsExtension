@@ -152,6 +152,7 @@ export function WatchList({ onClosed, bindClose }) {
   const [tasks, setTasks] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [filter, setFilter] = useState('active'); // 'all' | 'active' | 'high' | 'done'
+  const [search, setSearch] = useState('');
   const [editingId, setEditingId] = useState(null); // task id currently in edit mode (or '__new')
   const [draft, setDraft] = useState(null);         // { title, due, priority, context }
   const [resolvingIds, setResolvingIds] = useState(() => new Set());
@@ -196,11 +197,20 @@ export function WatchList({ onClosed, bindClose }) {
 
   // Derived filtered list.
   const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
     const filtered = tasks.filter((t) => {
-      if (filter === 'active') return !t.done;
-      if (filter === 'high')   return !t.done && t.priority === 'high';
-      if (filter === 'done')   return t.done;
-      return true;
+      if (filter === 'active' && t.done) return false;
+      if (filter === 'high'   && (t.done || t.priority !== 'high')) return false;
+      if (filter === 'done'   && !t.done) return false;
+      if (!q) return true;
+      const hay = [
+        t.title,
+        t.context?.id,
+        t.context?.name,
+        t.context?.type,
+        t.due,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return hay.includes(q);
     });
     // Done items sink to the bottom; active sorted by priority then created.
     const pri = { high: 0, med: 1, low: 2 };
@@ -211,7 +221,7 @@ export function WatchList({ onClosed, bindClose }) {
       if (pa !== pb) return pa - pb;
       return a.createdAt - b.createdAt;
     });
-  }, [tasks, filter]);
+  }, [tasks, filter, search]);
 
   // ── Actions ────────────────────────────────────────────────
   const toggleDone = (id) => {
@@ -302,32 +312,42 @@ export function WatchList({ onClosed, bindClose }) {
         subtitle={subtitle}
       />
 
-      {/* Filter bar — segmented chips with count badges + New task. */}
+      {/* Toolbar — Segmented filters on top (sliding indicator matches
+          the rest of the system), search + New task underneath. */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 6,
+        display: 'flex', flexDirection: 'column', gap: 8,
         padding: '10px 14px',
         background: 'var(--gb-surface-1)',
         borderBottom: '1px solid var(--gb-border-subtle)',
         flexShrink: 0,
       }}>
-        {FILTERS.map((f) => (
-          <FilterChip
-            key={f.key}
-            label={f.label}
-            count={f.n}
-            active={filter === f.key}
-            onClick={() => setFilter(f.key)}
+        <Segmented
+          full
+          size="md"
+          value={filter}
+          onChange={setFilter}
+          options={FILTERS.map((f) => ({
+            id: f.key,
+            label: <FilterLabel text={f.label} count={f.n} active={filter === f.key} />,
+          }))}
+        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Input
+            value={search}
+            onChange={setSearch}
+            placeholder="Search title, context, or due…"
+            leading={<I.search size={12} />}
+            style={{ flex: 1 }}
           />
-        ))}
-        <div style={{ flex: 1 }} />
-        <Btn
-          size="sm"
-          variant="tinted"
-          status="brand"
-          icon={<I.plus size={11} />}
-          onClick={startNew}
-          disabled={editingId === '__new'}
-        >New task</Btn>
+          <Btn
+            size="sm"
+            variant="tinted"
+            status="brand"
+            icon={<I.plus size={11} />}
+            onClick={startNew}
+            disabled={editingId === '__new'}
+          >New</Btn>
+        </div>
       </div>
 
       {/* Body — clamped to a fixed visible range so the modal doesn't
@@ -404,33 +424,17 @@ export function WatchList({ onClosed, bindClose }) {
   );
 }
 
-/* ── FilterChip ──────────────────────────────────────────────── */
-function FilterChip({ label, count, active, onClick }) {
+/* ── FilterLabel — label + count badge composed for Segmented.
+   Segmented accepts ReactNode labels and recolors them via its
+   own active/inactive tints, so we just lay out text + Tag. */
+function FilterLabel({ text, count, active }) {
   return (
-    <motion.button
-      type="button"
-      onClick={onClick}
-      whileTap={{ scale: 0.97 }}
-      animate={{
-        backgroundColor: active ? 'var(--gb-fill-soft)' : 'rgba(0,0,0,0)',
-        color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
-        borderColor: active ? 'var(--gb-border-default)' : 'rgba(0,0,0,0)',
-      }}
-      transition={{ duration: 0.18 }}
-      style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6,
-        padding: '5px 10px',
-        borderRadius: 'var(--gb-r-sm)',
-        border: '1px solid transparent',
-        fontSize: 11.5, fontWeight: 600,
-        cursor: 'pointer',
-        outline: 'none',
-        fontFamily: 'inherit',
-      }}
-    >
-      {label}
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+    }}>
+      {text}
       <Tag tone={active ? 'brand' : 'neutral'} size="xs">{count}</Tag>
-    </motion.button>
+    </span>
   );
 }
 
