@@ -81,7 +81,18 @@ async function loadThreeAndModel() {
   return { ...cache.three, model };
 }
 
-export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, onError }, ref) {
+/* HDRI scene registry — one entry per scene. Add a row, drop the
+   matching .exr in /icons, and the drawer picks it up automatically.
+   `icon` is the glyph component used in the drawer chip; `file` is
+   the manifest-listed web-accessible resource path. */
+export const SCENES = [
+  { key: 'goldenGate',  label: 'Golden Gate hills', file: 'icons/golden_gate_hills_4k.exr', icon: 'bridge' },
+  { key: 'sunsetFairway', label: 'Sunset fairway',   file: 'icons/sunset_fairway_4k.exr',   icon: 'sunset' },
+  { key: 'lilienstein', label: 'Lilienstein',       file: 'icons/lilienstein_4k.exr',      icon: 'mountain' },
+  { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'icons/moonlit_golf_4k.exr',     icon: 'moon' },
+];
+
+export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, onError, onSceneChange }, ref) {
   const containerRef = useRef(null);
   // Imperative snapshot handle — set by the WebGL effect once the
   // scene is ready. Parent calls snapshotRef.current() to capture a
@@ -126,15 +137,21 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   const [throwMode, setThrowMode] = useState(false);
   const throwModeRef = useRef(false);
   useEffect(() => { throwModeRef.current = throwMode; }, [throwMode]);
-  // Scene mode — swaps the room for an HDRI environment (Golden Gate
-  // hills .exr). Mutually exclusive with throw mode and with bomb
-  // drops (the dropBomb impl no-ops while sceneMode is on). When the
-  // user toggles it off, the ball stays where it sat in the room.
-  const [sceneMode, setSceneMode] = useState(false);
-  const sceneModeRef = useRef(false);
-  useEffect(() => { sceneModeRef.current = sceneMode; }, [sceneMode]);
-  // Flipping scene on forces gravity off — they're mutually exclusive.
-  useEffect(() => { if (sceneMode && throwMode) setThrowMode(false); }, [sceneMode, throwMode]);
+  // Scene mode — swaps the room for an HDRI environment. The state
+  // holds the active scene's KEY (one of SCENES below) or null when
+  // the user is in the room. Mutually exclusive with throw mode and
+  // with bomb drops (dropBomb no-ops while a scene is active). When
+  // the user clicks the same scene chip again it goes back to null;
+  // clicking a DIFFERENT scene chip swaps to that scene without
+  // returning to the room first. Ball pose carries through unchanged.
+  const [sceneKey, setSceneKey] = useState(null);
+  const sceneKeyRef = useRef(null);
+  useEffect(() => { sceneKeyRef.current = sceneKey; }, [sceneKey]);
+  // Flipping into a scene forces gravity off — they're mutually exclusive.
+  useEffect(() => { if (sceneKey && throwMode) setThrowMode(false); }, [sceneKey, throwMode]);
+  // Notify the parent (ImagePreview) so it can hide the fun menu /
+  // bomb drawer while the user is in an HDRI scene.
+  useEffect(() => { onSceneChange?.(sceneKey); }, [sceneKey, onSceneChange]);
   // Clear stale snapshot the moment the flag flips off so the HUD
   // doesn't linger with its last reading.
   useEffect(() => { if (!debugEnabled) setDebug(null); }, [debugEnabled]);
@@ -202,7 +219,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
       dragStart: { px: 0, py: 0, wx: 0, wy: 0 },
       history: [],
       lastMode: false,
-      lastSceneMode: false,
+      lastSceneKey: null,
       // Active "return to rest" tween. Populated when gravity flips
       // off so the ball slides + rotates + rescales smoothly back to
       // its default position/orientation/scale instead of snapping.
@@ -257,22 +274,22 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         //   • rim — small specular accent from behind to separate
         //     the ball silhouette from the back wall
         scene.add(new THREE.HemisphereLight(0xfff4e5, 0x2a3340, 0.65));
-        const key = new THREE.DirectionalLight(0xffffff, 1.6);
-        key.position.set(180, 240, 220);
-        key.castShadow = true;
+        const keyLight = new THREE.DirectionalLight(0xffffff, 1.6);
+        keyLight.position.set(180, 240, 220);
+        keyLight.castShadow = true;
         // Orthographic shadow camera tuned to the room bounds so the
         // ball's shadow has enough resolution and doesn't get clipped
         // when the ball is at a far corner.
-        key.shadow.mapSize.set(1024, 1024);
-        key.shadow.camera.near = 50;
-        key.shadow.camera.far = 900;
-        key.shadow.camera.left   = -HALF_X * 1.4;
-        key.shadow.camera.right  =  HALF_X * 1.4;
-        key.shadow.camera.top    =  HALF_Y * 1.4;
-        key.shadow.camera.bottom = -HALF_Y * 1.4;
-        key.shadow.bias = -0.0008;
-        key.shadow.radius = 6;        // PCFSoft blur radius
-        scene.add(key);
+        keyLight.shadow.mapSize.set(1024, 1024);
+        keyLight.shadow.camera.near = 50;
+        keyLight.shadow.camera.far = 900;
+        keyLight.shadow.camera.left   = -HALF_X * 1.4;
+        keyLight.shadow.camera.right  =  HALF_X * 1.4;
+        keyLight.shadow.camera.top    =  HALF_Y * 1.4;
+        keyLight.shadow.camera.bottom = -HALF_Y * 1.4;
+        keyLight.shadow.bias = -0.0008;
+        keyLight.shadow.radius = 6;        // PCFSoft blur radius
+        scene.add(keyLight);
         const fill = new THREE.DirectionalLight(0xb8d4ff, 0.55);
         fill.position.set(-200, -60, 120);
         scene.add(fill);
@@ -558,21 +575,23 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         }
 
         /* ── HDRI scene env ───────────────────────────────────────
-           Loaded on demand the first time the user flips into
-           sceneMode. We use a PMREMGenerator so the equirect EXR
-           reads as a PBR environment for the ball, and the same
-           texture as scene.background so the user actually sees the
-           location. Lazy-load + cached on `envCache` so the second
-           toggle is instant. */
-        let envCache = null;
-        let envInFlight = null;
-        const loadEnvironment = () => {
-          if (envCache) return Promise.resolve(envCache);
-          if (envInFlight) return envInFlight;
-          envInFlight = new Promise((resolve, reject) => {
+           Lazy-load each scene on first request, cache its
+           {equirect, envMap} keyed by SCENES.key. Toggling between
+           already-loaded scenes is instant. PMREMGenerator builds
+           the prefiltered envMap so the ball reflects/lights as a
+           real PBR object; the raw equirect doubles as the visible
+           background so the user sees the location. */
+        const envCache = new Map();   // key → { equirect, envMap }
+        const envInFlight = new Map(); // key → Promise
+        const loadEnvironment = (key) => {
+          if (envCache.has(key)) return Promise.resolve(envCache.get(key));
+          if (envInFlight.has(key)) return envInFlight.get(key);
+          const scene = SCENES.find((s) => s.key === key);
+          if (!scene) return Promise.reject(new Error(`Unknown scene: ${key}`));
+          const p = new Promise((resolve, reject) => {
             const url = (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
-              ? chrome.runtime.getURL('icons/golden_gate_hills_4k.exr')
-              : 'icons/golden_gate_hills_4k.exr';
+              ? chrome.runtime.getURL(scene.file)
+              : scene.file;
             new EXRLoader().load(
               url,
               (tex) => {
@@ -581,35 +600,36 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 pmrem.compileEquirectangularShader();
                 const env = pmrem.fromEquirectangular(tex).texture;
                 pmrem.dispose();
-                envCache = { equirect: tex, envMap: env };
+                const entry = { equirect: tex, envMap: env };
+                envCache.set(key, entry);
                 objectsToDispose.push(tex, env);
-                resolve(envCache);
+                resolve(entry);
               },
               undefined,
-              (err) => { envInFlight = null; reject(err); },
+              (err) => { envInFlight.delete(key); reject(err); },
             );
           });
-          return envInFlight;
+          envInFlight.set(key, p);
+          return p;
         };
 
-        // Apply or remove the scene environment based on the latest
-        // sceneMode flag. Called from the render loop on transitions.
-        // Hides ALL room chrome (walls + their cast shadows from the
-        // key light by toggling key.castShadow OFF — we don't want
-        // the ball to drop a fake floor shadow when there's no floor.)
-        const applySceneMode = (on) => {
+        // Swap the scene env to whichever HDRI key is active (or
+        // clear and show the room walls when key is null). Hides
+        // every wall while ANY scene is up; toggles cast-shadow on
+        // the key light so the ball doesn't drop a fake floor shadow
+        // into empty space.
+        const applySceneMode = (key) => {
+          const on = key != null;
           for (const w of wallMeshes) w.visible = !on;
-          // Disable the key light's shadow casting in HDRI mode (no
-          // surface to receive it; cast shadow on an invisible wall
-          // would look like a floating dark blob).
           if (on) {
-            scene.background = envCache?.equirect || null;
-            scene.environment = envCache?.envMap || null;
-            if (key) key.castShadow = false;
+            const entry = envCache.get(key);
+            scene.background = entry?.equirect || null;
+            scene.environment = entry?.envMap || null;
+            if (keyLight) keyLight.castShadow = false;
           } else {
             scene.background = null;
             scene.environment = null;
-            if (key) key.castShadow = true;
+            if (keyLight) keyLight.castShadow = true;
           }
         };
 
@@ -925,9 +945,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         };
 
         dropBombRef.current = ({ clientX, clientY }) => {
-          // Bombs are disabled while the HDRI scene is up — there's
+          // Bombs are disabled while an HDRI scene is up — there's
           // no room to hold them, just the ball in a skybox.
-          if (sceneModeRef.current) return;
+          if (sceneKeyRef.current) return;
           const canvas = renderer.domElement;
           const r = canvas.getBoundingClientRect();
           ndc.x =  ((clientX - r.left) / r.width)  * 2 - 1;
@@ -1107,20 +1127,24 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           }
 
           /* ── Scene-mode transition ─────────────────────────────
-             Lazy-load the HDRI on the first ON flip, then swap the
-             room walls / scene env. We deliberately DO NOT touch the
-             ball's position or rotation — the user's current pose
-             carries straight into the scene. (Throw mode is already
-             forced off by the React side effect, so the body is
-             KINEMATIC + safe to leave alone.) */
-          if (sceneModeRef.current !== state.lastSceneMode) {
-            state.lastSceneMode = sceneModeRef.current;
-            if (sceneModeRef.current) {
-              loadEnvironment()
-                .then(() => { if (!disposed && sceneModeRef.current) applySceneMode(true); })
-                .catch((e) => { console.warn('GolfballViewer: failed to load HDRI', e); });
+             sceneKey === null  → room (walls visible, no env)
+             sceneKey === 'foo' → HDRI scene 'foo'
+             Going A → B without stopping in between is supported:
+             we just (lazy-)load B's env and re-apply. Walls stay
+             hidden, the ball's pose is never touched. */
+          if (sceneKeyRef.current !== state.lastSceneKey) {
+            state.lastSceneKey = sceneKeyRef.current;
+            if (sceneKeyRef.current) {
+              const target = sceneKeyRef.current;
+              loadEnvironment(target)
+                .then(() => {
+                  // Bail if the user already flipped to a different
+                  // scene (or closed it) while this load was inflight.
+                  if (!disposed && sceneKeyRef.current === target) applySceneMode(target);
+                })
+                .catch((e) => { console.warn('GolfballViewer: failed to load HDRI', target, e); });
             } else {
-              applySceneMode(false);
+              applySceneMode(null);
             }
           }
 
@@ -1497,69 +1521,47 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         </div>
       )}
 
-      {/* Top-right chip strip — gravity toggle + scene (HDRI)
-          toggle. The two are mutually exclusive UI-wise:
-            • SCENE is hidden while gravity is on (the HDRI scene
-              has no walls to bounce off — flipping into it
-              mid-throw would look broken)
-            • GRAVITY is hidden while the HDRI scene is up (no room
-              to fall in)
-          Both also live ABOVE the canvas so any pointer-down on
-          them must NOT trigger a bomb-drop. The toolbox listener
-          filters by `e.target.closest('button')` for that. */}
-      {status === 'ready' && (
-        <div
+      {/* Top-right chip — gravity toggle. Hidden while a scene is
+          active (no room to fall in). Lives ABOVE the canvas; the
+          bomb listener excludes any element marked
+          data-viewer-ui="true" so this can't trigger a drop. */}
+      {status === 'ready' && !sceneKey && (
+        <button
+          type="button"
           data-viewer-ui="true"
+          onClick={() => setThrowMode((v) => !v)}
           style={{
             position: 'absolute', top: 8, right: 8, zIndex: 6,
-            display: 'flex', gap: 4, alignItems: 'center',
+            minWidth: 28, height: 24, padding: '0 8px',
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            fontFamily: 'var(--gb-font-mono)', fontSize: 10, fontWeight: 700,
+            letterSpacing: 0.4,
+            color: throwMode ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+            background: 'var(--gb-surface-modal)',
+            border: '1px solid ' + (throwMode ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
+            boxShadow: throwMode ? 'inset 0 0 0 1px var(--gb-brand-tint-soft)' : 'none',
+            borderRadius: 'var(--gb-r-sm)',
+            cursor: 'pointer',
+            lineHeight: 1,
+            transition: 'border-color .12s, color .12s, box-shadow .12s',
           }}
         >
-          {!sceneMode && (
-            <button
-              type="button"
-              data-viewer-ui="true"
-              onClick={() => setThrowMode((v) => !v)}
-              style={{
-                minWidth: 28, height: 24, padding: '0 8px',
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                fontFamily: 'var(--gb-font-mono)', fontSize: 10, fontWeight: 700,
-                letterSpacing: 0.4,
-                color: throwMode ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
-                background: 'var(--gb-surface-modal)',
-                border: '1px solid ' + (throwMode ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
-                boxShadow: throwMode ? 'inset 0 0 0 1px var(--gb-brand-tint-soft)' : 'none',
-                borderRadius: 'var(--gb-r-sm)',
-                cursor: 'pointer',
-                lineHeight: 1,
-                transition: 'border-color .12s, color .12s, box-shadow .12s',
-              }}
-            >
-              <BounceIcon size={11} />
-              <span>{throwMode ? 'GRAVITY ON' : 'GRAVITY'}</span>
-            </button>
-          )}
-          {!throwMode && (
-            <button
-              type="button"
-              data-viewer-ui="true"
-              onClick={() => setSceneMode((v) => !v)}
-              style={{
-                width: 26, height: 24, padding: 0,
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                color: sceneMode ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
-                background: 'var(--gb-surface-modal)',
-                border: '1px solid ' + (sceneMode ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
-                boxShadow: sceneMode ? 'inset 0 0 0 1px var(--gb-brand-tint-soft)' : 'none',
-                borderRadius: 'var(--gb-r-sm)',
-                cursor: 'pointer',
-                transition: 'border-color .12s, color .12s, box-shadow .12s',
-              }}
-            >
-              <SceneIcon size={13} />
-            </button>
-          )}
-        </div>
+          <BounceIcon size={11} />
+          <span>{throwMode ? 'GRAVITY ON' : 'GRAVITY'}</span>
+        </button>
+      )}
+
+      {/* Scene drawer — bottom-LEFT mirror of the bomb drawer.
+          Toggle chip with a landscape glyph; clicking it opens a
+          row of scene chips above it. Hidden while gravity is on
+          (mutually exclusive). The drawer lives ABOVE the canvas
+          and is tagged data-viewer-ui so the bomb listener doesn't
+          spawn a bomb when the user closes the drawer. */}
+      {status === 'ready' && !throwMode && (
+        <SceneDrawer
+          active={sceneKey}
+          onPick={(k) => setSceneKey((cur) => (cur === k ? null : k))}
+        />
       )}
 
       {/* Debug HUD — top-left overlay showing the camera's current
@@ -1651,6 +1653,9 @@ const BounceIcon = (p) => (
 
 /* Scene / landscape glyph — sun + mountain silhouette. Used by the
    HDRI scene toggle in the top-right strip. */
+/* Generic scene/landscape glyph — used for the drawer's toggle
+   chip. The framed picture metaphor reads as "swap the view"
+   without committing to any one scene's vibe. */
 const SceneIcon = (p) => (
   <svg width={p.size || 13} height={p.size || 13} viewBox="0 0 24 24" fill="none"
     stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -1659,6 +1664,179 @@ const SceneIcon = (p) => (
     <rect x="2.5" y="3" width="19" height="18" rx="2.5" />
   </svg>
 );
+
+/* Per-scene icons. Keyed by the SCENES[].icon string. Each glyph is
+   ~24px viewBox, currentColor stroke, no fill — the chip wrapper
+   handles active-state coloring. Pick visuals that hint at the
+   scene's identity: bridge for Golden Gate, mountain for Lilienstein,
+   sunset for Sunset Fairway, moon for Moonlit Golf. */
+const SCENE_ICONS = {
+  bridge: (p) => (
+    <svg width={p.size || 13} height={p.size || 13} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 17h18" />
+      <path d="M6 17V8M18 17V8" />
+      <path d="M4 8c4-3 12-3 16 0" />
+      <path d="M8 17v-4M12 17v-5M16 17v-4" />
+    </svg>
+  ),
+  sunset: (p) => (
+    <svg width={p.size || 13} height={p.size || 13} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 18h18" />
+      <path d="M6 14a6 6 0 0 1 12 0" />
+      <path d="M2 18l1.5-1.5M22 18l-1.5-1.5M12 6v2M5.6 9.6l1.4 1.4M18.4 9.6l-1.4 1.4" />
+    </svg>
+  ),
+  mountain: (p) => (
+    <svg width={p.size || 13} height={p.size || 13} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 19l6-9 4 5 2-2 6 6z" />
+      <circle cx="17" cy="6" r="1.6" />
+    </svg>
+  ),
+  moon: (p) => (
+    <svg width={p.size || 13} height={p.size || 13} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 14a8 8 0 1 1-9-10 6 6 0 0 0 9 10z" />
+      <circle cx="16" cy="6" r="0.9" fill="currentColor" />
+      <circle cx="20" cy="9" r="0.7" fill="currentColor" />
+    </svg>
+  ),
+};
+
+/* ── SceneDrawer ──────────────────────────────────────────────
+   Bottom-left connected dropup. Toggle pins at the bottom-left;
+   scene chips slide up from behind it, sharing borders so the
+   strip reads as one rounded shape (matching the dropdown
+   language used by the bomb drawer at bottom-right).
+
+   `active` is the currently-selected SCENES key (or null). When
+   the user closes the drawer, `onPick(null)` runs to clear the
+   selection — leaving a scene armed after closing the drawer is
+   surprising. Clicking the same scene chip while it's already
+   active also clears it (toggle behavior). */
+function SceneDrawer({ active, onPick }) {
+  const [open, setOpen] = React.useState(false);
+  const handleToggleDrawer = (next) => {
+    setOpen(next);
+    // Closing the drawer also clears the active scene — same rule
+    // the bomb drawer follows for its armed tool. Leaving a scene
+    // armed after the drawer disappears is surprising.
+    if (!next && active) onPick(null);
+  };
+  return (
+    <div style={{
+      position: 'absolute', bottom: 8, left: 8, zIndex: 6,
+      display: 'flex', flexDirection: 'column-reverse', alignItems: 'flex-start',
+    }}>
+      <SceneToggle
+        active={open || !!active}
+        open={open}
+        onClick={() => handleToggleDrawer(!open)}
+      />
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            key="scene-items"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+            style={{ display: 'flex', flexDirection: 'column-reverse', overflow: 'hidden' }}
+          >
+            {SCENES.map((s, i) => {
+              const Icon = SCENE_ICONS[s.icon] || SceneIcon;
+              const isTopOfStrip = i === SCENES.length - 1;
+              return (
+                <SceneRowChip
+                  key={s.key}
+                  glyph={<Icon size={13} />}
+                  active={active === s.key}
+                  onClick={() => onPick(s.key)}
+                  connectedTop={isTopOfStrip}
+                  connectedInternal={!isTopOfStrip}
+                />
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+function SceneToggle({ active, open, onClick }) {
+  const [hovered, setHovered] = React.useState(false);
+  const color  = active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)';
+  const border = active ? 'var(--gb-brand-label)' : 'var(--gb-border-default)';
+  const bg     = active
+    ? 'var(--gb-brand-tint-soft)'
+    : (hovered ? 'var(--gb-fill-soft)' : 'var(--gb-surface-modal)');
+  const radius = open
+    ? '0 0 var(--gb-r-sm) var(--gb-r-sm)'
+    : 'var(--gb-r-sm)';
+  return (
+    <button
+      type="button"
+      data-viewer-ui="true"
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        width: 26, height: 26, padding: 0,
+        color, background: bg,
+        border: `1px solid ${border}`,
+        borderRadius: radius,
+        cursor: 'pointer',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'background-color .12s, color .12s, border-color .12s, border-radius .12s',
+      }}
+    >
+      <SceneIcon size={13} />
+    </button>
+  );
+}
+
+function SceneRowChip({ glyph, active, onClick, connectedTop, connectedInternal }) {
+  const [hovered, setHovered] = React.useState(false);
+  const color  = active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)';
+  const border = active ? 'var(--gb-brand-label)' : 'var(--gb-border-default)';
+  const bg     = active
+    ? 'var(--gb-brand-tint-soft)'
+    : (hovered ? 'var(--gb-fill-soft)' : 'var(--gb-surface-modal)');
+  const radius = connectedTop
+    ? 'var(--gb-r-sm) var(--gb-r-sm) 0 0'
+    : '0';
+  return (
+    <button
+      type="button"
+      data-viewer-ui="true"
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        width: 26, height: 26, padding: 0,
+        color, background: bg,
+        border: `1px solid ${border}`,
+        // Drop the bottom border so it doesn't double up against
+        // the chip below — the visible outline reads as a single
+        // strip rather than stacked chips.
+        borderBottomWidth: connectedTop || connectedInternal ? 0 : 1,
+        borderRadius: radius,
+        cursor: 'pointer',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'background-color .12s, color .12s, border-color .12s',
+        // Steady inset glow when armed; no animated keyframes here
+        // — the old `boxShadow` motion-loop made chips flicker as
+        // the shadow keyframes transitioned to "transparent."
+        boxShadow: active ? 'inset 0 0 0 1px var(--gb-brand-tint-soft)' : 'none',
+      }}
+    >
+      {glyph}
+    </button>
+  );
+}
 
 /* Geometric loading indicator — a brand-tinted SVG ring with a
    sweeping arc. Reads as "loading" without faking a 3D object that
