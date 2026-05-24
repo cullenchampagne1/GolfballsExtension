@@ -1181,6 +1181,16 @@ const BallSpawnerIcon = (p) => (
   </svg>
 );
 
+/* Water drop / pour — teardrop shape with three falling droplets.
+   Reads instantly as liquid / water. */
+const WaterIcon = (p) => (
+  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2C12 2 5 10 5 15a7 7 0 0 0 14 0c0-5-7-13-7-13z" />
+    <path d="M8 17a3 3 0 0 0 5 0" strokeWidth="1.5" opacity="0.6" />
+  </svg>
+);
+
 /* Confetti — four diagonal rectangles at different angles, like
    pieces caught mid-fall. Simple and reads instantly. */
 const ConfettiIcon = (p) => (
@@ -1227,7 +1237,14 @@ function ViewerToolbox({ viewerRef }) {
     }
   }, [activeTool, viewerRef]);
 
-  // Global pointer listeners for bomb + ball tools.
+  // Drain water when switching away from the water tool.
+  useEffect(() => {
+    if (activeTool !== 'water') {
+      if (viewerRef.current) viewerRef.current.waterActive = false;
+    }
+  }, [activeTool, viewerRef]);
+
+  // Global pointer listeners for bomb + ball + water tools.
   useEffect(() => {
     if (!activeTool || activeTool === 'confetti') return undefined;
 
@@ -1237,13 +1254,13 @@ function ViewerToolbox({ viewerRef }) {
       const v = viewerRef.current;
       if (!v?.containsPoint?.({ clientX: e.clientX, clientY: e.clientY })) return;
 
+      lastCursorRef.current = { clientX: e.clientX, clientY: e.clientY };
+
       if (activeTool === 'bomb') {
         v.dropBomb?.({ clientX: e.clientX, clientY: e.clientY });
       }
       if (activeTool === 'balls') {
-        lastCursorRef.current = { clientX: e.clientX, clientY: e.clientY };
         v.spawnBallActive = true;
-        // Spawn immediately on press, then every 100ms while held.
         v.spawnBallAt?.(lastCursorRef.current);
         spawnIntervalRef.current = setInterval(() => {
           if (viewerRef.current?.spawnBallActive) {
@@ -1251,28 +1268,35 @@ function ViewerToolbox({ viewerRef }) {
           }
         }, 100);
       }
+      if (activeTool === 'water') {
+        v.waterActive = true;
+        v.pourWaterAt?.({ clientX: e.clientX, clientY: e.clientY });
+      }
     };
 
     const onMove = (e) => {
-      // Always track cursor so spawn follows it even while held.
       lastCursorRef.current = { clientX: e.clientX, clientY: e.clientY };
+      if (activeTool === 'water' && viewerRef.current?.waterActive) {
+        viewerRef.current.pourWaterAt?.({ clientX: e.clientX, clientY: e.clientY });
+      }
     };
 
-    const stopSpawning = () => {
+    const onUp = () => {
       if (viewerRef.current) viewerRef.current.spawnBallActive = false;
+      if (viewerRef.current) viewerRef.current.waterActive = false;
       clearInterval(spawnIntervalRef.current);
       spawnIntervalRef.current = null;
     };
 
     window.addEventListener('pointerdown', onDown);
     window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', stopSpawning);
-    window.addEventListener('pointercancel', stopSpawning);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
     return () => {
       window.removeEventListener('pointerdown', onDown);
       window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', stopSpawning);
-      window.removeEventListener('pointercancel', stopSpawning);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
       clearInterval(spawnIntervalRef.current);
       spawnIntervalRef.current = null;
     };
@@ -1295,6 +1319,7 @@ function ViewerToolbox({ viewerRef }) {
     { key: 'bomb',     icon: <BombIcon size={14} /> },
     { key: 'balls',    icon: <BallSpawnerIcon size={14} /> },
     { key: 'confetti', icon: <ConfettiIcon size={14} /> },
+    { key: 'water',    icon: <WaterIcon size={14} /> },
   ];
 
   return (
