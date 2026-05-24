@@ -163,13 +163,28 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   // Slider drags update rotation continuously; no transition while
   // dragging so the image tracks the slider 1:1.
   useEffect(() => { rotationRef.current = rotation; applyTransform(false); }, [rotation]);
+  // Mirror of `aligning` so clampPan() (called from pointer + zoom
+  // handlers) sees the live value without a stale closure. While
+  // aligning, pan bounds are unlocked so the user can park ANY part
+  // of the image inside the centered ring — needed for small or
+  // non-square logos that otherwise can't reach the ring's center.
+  const aligningRef = useRef(false);
+  useEffect(() => { aligningRef.current = aligning; }, [aligning]);
   // Leaving alignment mode — animate the image back to upright instead
   // of snapping. The slider can leave us at any angle in [-180, 180];
   // CSS `rotate(deg)` is continuous, so we just kick a transitioned
   // applyTransform with the ref at the current angle, then set it to
   // 0 on the next frame to drive the transition to 0°.
   useEffect(() => {
-    if (aligning || rotation === 0) return;
+    if (aligning) return;
+    // Leaving align mode: re-clamp pan into the strict (non-align)
+    // bounds so an image dragged far off-center during alignment
+    // doesn't get stranded partially off-screen.
+    clampPan();
+    if (rotation === 0) {
+      applyTransform(true);
+      return;
+    }
     const DURATION = 260;
     // Start the transition AT the current rotation (already in the ref).
     const el = viewportRef.current;
@@ -321,6 +336,29 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
     if (!c) return;
     const cw = c.clientWidth;
     const ch = c.clientHeight;
+    // In ALIGN mode, the user needs to drop ANY pixel of the image
+    // into the centered ring. With the old "image edge stays inside
+    // the wrapper" clamp, a small or non-square logo physically
+    // can't reach the ring's center — its edges hit the wall first.
+    // Switch to a generous rule: the rendered image's center can
+    // travel up to (wrapper_dim + image_dim) / 2 in either direction,
+    // minus a small margin so a thin sliver always stays on-screen
+    // (otherwise the user can lose the image entirely off the canvas
+    // and not know where it went).
+    if (aligningRef.current) {
+      const KEEP_VISIBLE = 24; // px of image kept on-screen at the extreme
+      const img = c.querySelector('img');
+      const iw = img?.clientWidth  || cw;
+      const ih = img?.clientHeight || ch;
+      const s = scaleRef.current;
+      const maxX = Math.max(0, (cw + iw * s) / 2 - KEEP_VISIBLE);
+      const maxY = Math.max(0, (ch + ih * s) / 2 - KEEP_VISIBLE);
+      txRef.current = Math.max(-maxX, Math.min(maxX, txRef.current));
+      tyRef.current = Math.max(-maxY, Math.min(maxY, tyRef.current));
+      return;
+    }
+    // Default (non-align): image edges stay inside the wrapper so
+    // the user can't drag the photo fully off-screen mid-review.
     const maxX = Math.max(0, (cw * scaleRef.current - cw) / 2);
     const maxY = Math.max(0, (ch * scaleRef.current - ch) / 2);
     txRef.current = Math.max(-maxX, Math.min(maxX, txRef.current));
