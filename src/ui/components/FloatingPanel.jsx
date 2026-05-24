@@ -69,7 +69,7 @@ function injectScrollbarStyles() {
   document.head.appendChild(el);
 }
 
-function ModalCard({ cssWidth, children }) {
+function ModalCard({ cssWidth, cssMaxHeight, children }) {
   // Inject the themed-scrollbar stylesheet on first mount. Safe to
   // call multiple times — the guard in injectScrollbarStyles dedupes.
   useEffect(injectScrollbarStyles, []);
@@ -89,7 +89,7 @@ function ModalCard({ cssWidth, children }) {
         // that would otherwise flatten our rounded corners + inputs.
         all: 'revert-layer',
         width: cssWidth,
-        maxHeight: 'calc(100vh - 32px)',
+        maxHeight: cssMaxHeight,
         background: 'var(--gb-surface-canvas)',
         border: '1px solid var(--gb-border-default)',
         borderRadius: 'var(--gb-r-lg)',
@@ -117,6 +117,11 @@ export function FloatingPanel({
   // Per-modal physics override. Merged over DEFAULT_PHYSICS so the
   // caller only has to set what they want to change.
   physics,
+  // Optional ceiling on the card height. Accepts any CSS value; pass
+  // a px number to get the standard "min(Npx, calc(100vh - 32px))"
+  // viewport clamp so the modal never spills off-screen on small
+  // displays. Defaults to the viewport clamp alone.
+  maxHeight,
 }) {
   const [open, setOpen] = useState(true);
   // dragHandleRef is published via context so ModalHeader (or any inner
@@ -139,6 +144,11 @@ export function FloatingPanel({
 
   const ctx = useMemo(() => ({ dragHandleRef, requestClose }), [requestClose]);
   const cssWidth = typeof width === 'number' ? `min(${width}px, calc(100vw - 32px))` : width;
+  const cssMaxHeight = maxHeight == null
+    ? 'calc(100vh - 32px)'
+    : (typeof maxHeight === 'number'
+      ? `min(${maxHeight}px, calc(100vh - 32px))`
+      : maxHeight);
   const phys = { ...DEFAULT_PHYSICS, ...(physics || {}) };
 
   // Portal to <body> so any ancestor `transform` (e.g. the playground's
@@ -200,7 +210,7 @@ export function FloatingPanel({
                 throwScale={phys.throwScale}
                 style={{ zIndex: 999999, pointerEvents: 'auto' }}
               >
-                <ModalCard cssWidth={cssWidth}>{children}</ModalCard>
+                <ModalCard cssWidth={cssWidth} cssMaxHeight={cssMaxHeight}>{children}</ModalCard>
               </Throwable>
             ) : (
               /* Centered, non-draggable. Pointer events:none on the
@@ -215,7 +225,7 @@ export function FloatingPanel({
                 }}
               >
                 <div style={{ pointerEvents: 'auto' }}>
-                  <ModalCard cssWidth={cssWidth}>{children}</ModalCard>
+                  <ModalCard cssWidth={cssWidth} cssMaxHeight={cssMaxHeight}>{children}</ModalCard>
                 </div>
               </div>
             )}

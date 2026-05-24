@@ -567,6 +567,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
   return (
     <FloatingPanel
       width={hasGallery ? 1000 : 720}
+      maxHeight={520}
       backdrop
       draggable={draggable}
       onClose={onClosed}
