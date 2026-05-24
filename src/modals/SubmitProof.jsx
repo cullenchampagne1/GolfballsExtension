@@ -37,6 +37,11 @@ import { useDevSetting } from '../lib/devSettings.js';
 ─────────────────────────────────────────────────────────────── */
 
 const ENDPOINT_PAGE128 = '/golfballs/adminnew/Default.aspx?Page=128';
+
+// Shared footer height — used by both the form column's real footer
+// AND the gallery column's blank "footer extender" so the two
+// visually merge into one bar across the modal's bottom edge.
+const FOOTER_HEIGHT = 52;
 const ENDPOINT_CRM240  = (custId) => `/golfballs/adminnew/Default.aspx?Page=240&customerID=${custId}`;
 
 const ITEMS = [
@@ -1000,10 +1005,12 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             stays under the questions, the gallery extends down beside it. */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
-          padding: 12,
+          padding: '0 12px',
+          height: FOOTER_HEIGHT,
           borderTop: '1px solid var(--gb-border-subtle)',
           background: 'var(--gb-surface-1)',
           flexShrink: 0,
+          boxSizing: 'border-box',
         }}>
           <div style={{
             flex: 1, fontSize: 11, fontWeight: 600,
@@ -1050,18 +1057,16 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
                 flexShrink: 0,
                 background: 'var(--gb-surface-1)',
                 borderLeft: '1px solid var(--gb-border-subtle)',
-                // alignSelf: 'stretch' makes the gallery fill the parent
-                // row's height even though motion is animating width.
-                // overflow: hidden clips the inner during the width
-                // animation; the inner div owns the scroll.
                 overflow: 'hidden',
                 alignSelf: 'stretch',
                 display: 'flex',
+                flexDirection: 'column',
               }}
             >
+              {/* Scroll area — gallery items */}
               <div style={{
                 width: 280,
-                padding: '14px 14px 20px',
+                padding: '14px 14px 14px',
                 overflowY: 'auto',
                 overflowX: 'hidden',
                 boxSizing: 'border-box',
@@ -1076,6 +1081,18 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
                   <GalleryItem key={i} proof={p} index={i} />
                 ))}
               </div>
+              {/* Footer extender — matches the form column's footer in
+                  height + background + top border so the modal reads as
+                  one solid bar across the bottom even though the buttons
+                  live in the form column. Empty content; pure visual. */}
+              <div style={{
+                width: 280,
+                flexShrink: 0,
+                height: FOOTER_HEIGHT,
+                background: 'var(--gb-surface-1)',
+                borderTop: '1px solid var(--gb-border-subtle)',
+                boxSizing: 'border-box',
+              }} />
             </motion.div>
           )}
         </AnimatePresence>
