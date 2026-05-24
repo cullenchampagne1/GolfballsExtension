@@ -35,7 +35,7 @@ function ensureScrollbarStyle() {
  */
 export function Dropdown({
   value, placeholder = 'Select…', options = [], size = 'md',
-  leading, searchable, disabled, onChange, maxHeight, style,
+  leading, searchable, disabled, error, onChange, maxHeight, style,
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -126,7 +126,7 @@ export function Dropdown({
       <div
         onClick={() => !disabled && setOpen((v) => !v)}
         style={{
-          ...inputBaseStyle({ focused: open, size }),
+          ...inputBaseStyle({ focused: open, error, size }),
           cursor: disabled ? 'not-allowed' : 'pointer',
           opacity: disabled ? 0.5 : 1, userSelect: 'none',
         }}

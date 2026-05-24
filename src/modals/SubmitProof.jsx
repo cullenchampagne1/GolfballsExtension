@@ -185,8 +185,8 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
   const [dynData, setDynData] = useState({});
 
   // Required-field touched + invalid (same pattern as CRMCreateContact).
-  const [invalid, setInvalid] = useState({ proofName: false, items: false });
-  const [touched, setTouched] = useState({ proofName: false, items: false });
+  const [invalid, setInvalid] = useState({ proofName: false, items: false, customerId: false, salesRep: false, artist: false });
+  const [touched, setTouched] = useState({ proofName: false, items: false, customerId: false, salesRep: false, artist: false });
   const markTouched = (key) => () => setTouched((t) => (t[key] ? t : { ...t, [key]: true }));
   const showErr = (key, empty) => empty && (touched[key] || invalid[key]);
 
@@ -294,15 +294,30 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
   // ── Submit ─────────────────────────────────────────────────
   const onSubmit = async () => {
     const nextInvalid = {
-      proofName: !proofName.trim(),
-      items: selectedItems.length === 0,
+      proofName:  !proofName.trim(),
+      items:      selectedItems.length === 0,
+      customerId: !customerId.trim(),
+      salesRep:   !salesRepId.trim(),
+      artist:     !artistId.trim(),
     };
     setInvalid(nextInvalid);
-    setTouched((t) => ({ ...t, proofName: true, items: true }));
-    if (nextInvalid.proofName || nextInvalid.items) {
-      toast?.warning?.(
-        nextInvalid.items ? 'Pick at least one item to proof' : 'Required fields are missing',
-      );
+    setTouched((t) => ({
+      ...t,
+      proofName: true, items: true,
+      customerId: true, salesRep: true, artist: true,
+    }));
+    const anyInvalid = Object.values(nextInvalid).some(Boolean);
+    if (anyInvalid) {
+      const msg = nextInvalid.items
+        ? 'Pick at least one item to proof'
+        : nextInvalid.customerId
+          ? 'Customer ID is required'
+          : nextInvalid.salesRep
+            ? 'Sales rep is required'
+            : nextInvalid.artist
+              ? 'Artist is required'
+              : 'Required fields are missing';
+      toast?.warning?.(msg);
       return;
     }
 
@@ -508,8 +523,23 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             <Field label="Order #">
               <Input value={orderId} onChange={setOrderId} placeholder="123456" />
             </Field>
-            <Field label="Customer ID" hint={dropdownsFailed ? undefined : 'Drives the previous-proofs gallery'}>
-              <Input value={customerId} onChange={setCustomerId} placeholder="4650030" />
+            <Field
+              label="Customer ID"
+              required
+              hint={dropdownsFailed ? undefined : 'Drives the previous-proofs gallery'}
+              error={showErr('customerId', !customerId.trim()) ? 'Required' : null}
+            >
+              <Input
+                value={customerId}
+                onChange={(v) => {
+                  setCustomerId(v);
+                  setInvalid((i) => ({ ...i, customerId: false }));
+                  if (v) setTouched((t) => ({ ...t, customerId: false }));
+                }}
+                onBlur={markTouched('customerId')}
+                placeholder="4650030"
+                error={showErr('customerId', !customerId.trim())}
+              />
             </Field>
           </div>
           <Field
@@ -535,31 +565,73 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             <Field label="Logo status">
               <Dropdown value={status} onChange={setStatus} options={STATUS_OPTS} />
             </Field>
-            <Field label="Sales rep" hint={dropdownsFailed ? 'Server unavailable — enter ID' : undefined}>
+            <Field
+              label="Sales rep"
+              required
+              hint={dropdownsFailed ? 'Server unavailable — enter ID' : undefined}
+              error={showErr('salesRep', !salesRepId.trim()) ? 'Required' : null}
+            >
               {dropdownsFailed ? (
-                <Input value={salesRepId} onChange={setSalesRepId} placeholder="Rep ID" />
+                <Input
+                  value={salesRepId}
+                  onChange={(v) => {
+                    setSalesRepId(v);
+                    setInvalid((i) => ({ ...i, salesRep: false }));
+                    if (v) setTouched((t) => ({ ...t, salesRep: false }));
+                  }}
+                  onBlur={markTouched('salesRep')}
+                  placeholder="Rep ID"
+                  error={showErr('salesRep', !salesRepId.trim())}
+                />
               ) : reps == null ? (
                 <SkeletonBox />
               ) : (
                 <Dropdown
                   value={salesRepId}
-                  onChange={setSalesRepId}
-                  options={[{ id: '', label: 'Not selected' }, ...repOptions]}
+                  onChange={(v) => {
+                    setSalesRepId(v);
+                    setInvalid((i) => ({ ...i, salesRep: false }));
+                    setTouched((t) => ({ ...t, salesRep: !v }));
+                  }}
+                  options={repOptions}
+                  placeholder="Select a rep…"
                   searchable
+                  error={showErr('salesRep', !salesRepId.trim())}
                 />
               )}
             </Field>
-            <Field label="Artist" hint={dropdownsFailed ? 'Server unavailable — enter ID' : undefined}>
+            <Field
+              label="Artist"
+              required
+              hint={dropdownsFailed ? 'Server unavailable — enter ID' : undefined}
+              error={showErr('artist', !artistId.trim()) ? 'Required' : null}
+            >
               {dropdownsFailed ? (
-                <Input value={artistId} onChange={setArtistId} placeholder="Artist ID" />
+                <Input
+                  value={artistId}
+                  onChange={(v) => {
+                    setArtistId(v);
+                    setInvalid((i) => ({ ...i, artist: false }));
+                    if (v) setTouched((t) => ({ ...t, artist: false }));
+                  }}
+                  onBlur={markTouched('artist')}
+                  placeholder="Artist ID"
+                  error={showErr('artist', !artistId.trim())}
+                />
               ) : artists == null ? (
                 <SkeletonBox />
               ) : (
                 <Dropdown
                   value={artistId}
-                  onChange={setArtistId}
-                  options={[{ id: '', label: 'All artists' }, ...artistOptions]}
+                  onChange={(v) => {
+                    setArtistId(v);
+                    setInvalid((i) => ({ ...i, artist: false }));
+                    setTouched((t) => ({ ...t, artist: !v }));
+                  }}
+                  options={artistOptions}
+                  placeholder="Select an artist…"
                   searchable
+                  error={showErr('artist', !artistId.trim())}
                 />
               )}
             </Field>

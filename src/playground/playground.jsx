@@ -415,13 +415,12 @@ function PlaygroundSurface() {
           />
         )}
         {mounted === 'submitProof' && (
-          /* No image passed → SubmitProof opens ImagePreview in
-             picker mode first, then transitions to the form. */
+          /* Mounted with no fields pre-filled — mirrors how the modal
+             opens when invoked from a page that doesn't expose the
+             order / customer info. */
           <SubmitProof
             key="submitProof"
             onClosed={() => setMounted(null)}
-            customerId="4650030"
-            orderId="123456"
           />
         )}
       </AnimatePresence>
