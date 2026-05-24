@@ -648,18 +648,24 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
         }
       />
 
-      {/* Body row — fixed height so the form scroll AND the gallery
-          scroll always end at the same Y. Was using separate maxHeight
-          values on each column (form: 520, gallery: 620), which made
-          the form cut off mid-content while the gallery had more room. */}
+      {/* Body row — fixed height so the form column AND the gallery
+          column both end at the same Y. The form column is itself a
+          vertical stack of (scroll area + footer) so the Send Request
+          button stays ANCHORED under the questions, not stretched
+          across the gallery. */}
       <div style={{
         display: 'flex',
-        height: 'min(62vh, 520px)',
+        height: 'min(55vh, 460px)',
         minHeight: 0, flex: 1,
       }}>
-        {/* LEFT — form. */}
+        {/* LEFT COLUMN — scroll area on top, footer pinned at bottom. */}
         <div style={{
           flex: 1, minWidth: 0,
+          display: 'flex', flexDirection: 'column',
+          minHeight: 0,
+        }}>
+        <div style={{
+          flex: 1, minHeight: 0,
           overflowY: 'auto', overflowX: 'hidden',
           padding: 12,
           display: 'flex', flexDirection: 'column', gap: 6,
@@ -988,6 +994,47 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           )}
         </div>
 
+        {/* Footer — pinned at the bottom of the form column ONLY.
+            Lives inside the column wrapper so its width tracks the
+            form, not the modal: when the gallery is open the footer
+            stays under the questions, the gallery extends down beside it. */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: 12,
+          borderTop: '1px solid var(--gb-border-subtle)',
+          background: 'var(--gb-surface-1)',
+          flexShrink: 0,
+        }}>
+          <div style={{
+            flex: 1, fontSize: 11, fontWeight: 600,
+            color: 'var(--gb-text-tertiary)',
+          }}>
+            {stage === 'submitting'
+              ? `Sending ${submitProgress.current} of ${submitProgress.total}…`
+              : stage === 'results'
+                ? `${results.filter((r) => r.proofLink).length} of ${results.length} sent`
+                : selectedItems.length > 0
+                  ? `${selectedItems.length} item${selectedItems.length === 1 ? '' : 's'} selected`
+                  : 'Pick items to send'}
+          </div>
+          <Btn size="sm" variant="secondary" onClick={() => bindCloseRef.current?.()} disabled={submitting}>
+            {stage === 'results' ? 'Close' : 'Cancel'}
+          </Btn>
+          {stage !== 'results' && (
+            <Btn
+              size="sm"
+              variant="tinted"
+              status="brand"
+              icon={submitting ? <SpinIcon /> : <I.send size={11} />}
+              onClick={onSubmit}
+              disabled={submitting}
+            >
+              {submitting ? 'Sending…' : 'Send request'}
+            </Btn>
+          )}
+        </div>
+        </div>{/* /LEFT COLUMN */}
+
         {/* RIGHT — gallery (column inside the body row). Animates
             in/out from the right edge when the gallery loads / clears
             (e.g. user clicks "Use template data" on the failure toast). */}
@@ -1030,43 +1077,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
         </AnimatePresence>
       </div>
 
-      {/* Footer */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: 12,
-        borderTop: '1px solid var(--gb-border-subtle)',
-        background: 'var(--gb-surface-1)',
-        flexShrink: 0,
-      }}>
-        <div style={{
-          flex: 1, fontSize: 11, fontWeight: 600,
-          color: 'var(--gb-text-tertiary)',
-        }}>
-          {stage === 'submitting'
-            ? `Sending ${submitProgress.current} of ${submitProgress.total}…`
-            : stage === 'results'
-              ? `${results.filter((r) => r.proofLink).length} of ${results.length} sent`
-              : selectedItems.length > 0
-                ? `${selectedItems.length} item${selectedItems.length === 1 ? '' : 's'} selected`
-                : 'Pick items to send'}
-        </div>
-        <Btn size="sm" variant="secondary" onClick={() => bindCloseRef.current?.()} disabled={submitting}>
-          {stage === 'results' ? 'Close' : 'Cancel'}
-        </Btn>
-        {stage !== 'results' && (
-          <Btn
-            size="sm"
-            variant="tinted"
-            status="brand"
-            icon={submitting ? <SpinIcon /> : <I.send size={11} />}
-            onClick={onSubmit}
-            disabled={submitting}
-          >
-            {submitting ? 'Sending…' : 'Send request'}
-          </Btn>
-        )}
-      </div>
-      </div>
+      </div>{/* /drag wrapper */}
     </FloatingPanel>
   );
 }
