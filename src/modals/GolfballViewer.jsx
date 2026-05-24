@@ -204,18 +204,48 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(w, h);
         renderer.setClearColor(0x000000, 0);   // fully transparent clear
+        // Shadow mapping — enabled so the key light can drop a soft
+        // shadow under the ball as it moves around the room. PCFSoft
+        // gives a smooth penumbra without the hard pixel stair-step
+        // of basic shadow maps.
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         container.appendChild(renderer.domElement);
 
         // ── Lighting ───────────────────────────────────────────
-        // Hemisphere fill so the ball never goes black anywhere;
-        // directional key for the dimple highlights.
-        scene.add(new THREE.HemisphereLight(0xffffff, 0xcccccc, 0.9));
-        const key = new THREE.DirectionalLight(0xffffff, 1.1);
-        key.position.set(150, 200, 150);
+        // Three-light rig sized for the ball:
+        //   • hemisphere — sky/ground fill so shadowed dimples never
+        //     go pitch black; warm sky tint + cool ground tint reads
+        //     more "real" than a flat grey
+        //   • key — main directional from upper-left-front, casts the
+        //     shadow onto the floor/walls
+        //   • fill — cooler counter-bounce from the opposite side so
+        //     the dark side of the ball still shows form
+        //   • rim — small specular accent from behind to separate
+        //     the ball silhouette from the back wall
+        scene.add(new THREE.HemisphereLight(0xfff4e5, 0x2a3340, 0.65));
+        const key = new THREE.DirectionalLight(0xffffff, 1.6);
+        key.position.set(180, 240, 220);
+        key.castShadow = true;
+        // Orthographic shadow camera tuned to the room bounds so the
+        // ball's shadow has enough resolution and doesn't get clipped
+        // when the ball is at a far corner.
+        key.shadow.mapSize.set(1024, 1024);
+        key.shadow.camera.near = 50;
+        key.shadow.camera.far = 900;
+        key.shadow.camera.left   = -HALF_X * 1.4;
+        key.shadow.camera.right  =  HALF_X * 1.4;
+        key.shadow.camera.top    =  HALF_Y * 1.4;
+        key.shadow.camera.bottom = -HALF_Y * 1.4;
+        key.shadow.bias = -0.0008;
+        key.shadow.radius = 6;        // PCFSoft blur radius
         scene.add(key);
-        const fill = new THREE.DirectionalLight(0xffffff, 0.45);
-        fill.position.set(-200, -100, -100);
+        const fill = new THREE.DirectionalLight(0xb8d4ff, 0.55);
+        fill.position.set(-200, -60, 120);
         scene.add(fill);
+        const rim = new THREE.DirectionalLight(0xffffff, 0.6);
+        rim.position.set(0, 80, -300);
+        scene.add(rim);
 
         // ── Room walls ─────────────────────────────────────────
         // 5 inward-facing planes form the room; the 6th (front) is
@@ -278,54 +308,64 @@ export function GolfballViewer({ decalDataUrl, onError }) {
               ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(w, y + 0.5); ctx.stroke();
             }
 
-            // Rounded inset shadow — instead of 4 linear edge
-            // gradients (which read as a sharp-cornered box) we
-            // compute per-pixel distance to a rounded inner rect
-            // and darken based on that. The shadow band hugs the
-            // rounded shape, so corners visually curve as a single
-            // fillet instead of two perpendicular bars crossing.
-            //
-            // Algorithm: rounded-rect SDF (signed distance field)
-            //   dx = max(|p.x - cx| - halfW + r, 0)
-            //   dy = max(|p.y - cy| - halfH + r, 0)
-            //   dist_to_inner_rect = sqrt(dx² + dy²) - r
-            // For pixels OUTSIDE the rounded inner rect, dist > 0 →
-            // dist=0 at the rounded boundary, dist=large at the
-            // texture edge. Map dist [0..band] → alpha [0..peak]
-            // with ease-in so the shadow is soft near the inner
-            // boundary and strongest at the texture edge.
-            const cornerRadius = Math.min(w, h) * 0.35; // inner rounded-rect radius
-            const band = Math.min(w, h) * 0.40;         // how far the shadow extends in
-            const peakAlpha = 0.32;                     // max darkness at the edge
-            const halfW = w / 2, halfH = h / 2;
-            const innerHalfW = halfW - cornerRadius;
-            const innerHalfH = halfH - cornerRadius;
+            // Soft edge vignette with rounded inner corners — the
+            // shadow is painted INSIDE a clip path defined as
+            // "full rect MINUS rounded-rect", so the inner boundary
+            // of the shaded area is a rounded rect by construction.
+            // Inside that band we draw the 4 linear gradient edges
+            // (the soft falloff that reads well); the clip makes
+            // sure the corners curve instead of forming an L.
+            const fade = 0.35;
+            const edgeShadow = (g) => {
+              g.addColorStop(0.00, 'rgba(0,0,0,0.30)');
+              g.addColorStop(0.20, 'rgba(0,0,0,0.18)');
+              g.addColorStop(0.50, 'rgba(0,0,0,0.07)');
+              g.addColorStop(0.80, 'rgba(0,0,0,0.02)');
+              g.addColorStop(1.00, 'rgba(0,0,0,0)');
+            };
 
-            const img = ctx.getImageData(0, 0, w, h);
-            const data = img.data;
-            for (let y = 0; y < h; y++) {
-              const py = y - halfH;
-              const ayBase = Math.abs(py) - innerHalfH;
-              for (let x = 0; x < w; x++) {
-                const px = x - halfW;
-                const ax = Math.abs(px) - innerHalfW;
-                const dx = ax > 0 ? ax : 0;
-                const dy = ayBase > 0 ? ayBase : 0;
-                const dist = Math.sqrt(dx * dx + dy * dy) - cornerRadius;
-                if (dist <= 0) continue;             // inside the rounded rect — no shadow
-                const t = Math.min(1, dist / band);
-                // easeInQuad — slow start (gentle near the curve)
-                // ramping to full at the wall edge
-                const a = peakAlpha * t * t;
-                // Source-over blend: out = src*a + dst*(1-a), with src=black(0)
-                const idx = (y * w + x) * 4;
-                const inv = 1 - a;
-                data[idx]     = data[idx]     * inv;
-                data[idx + 1] = data[idx + 1] * inv;
-                data[idx + 2] = data[idx + 2] * inv;
-              }
-            }
-            ctx.putImageData(img, 0, 0);
+            ctx.save();
+            // Build the "frame with rounded inner hole" clip:
+            //   outer = full texture rect (CW)
+            //   inner = rounded rect (CCW) — even-odd cuts it out
+            const innerInset = Math.min(w, h) * fade * 0.30;
+            const innerR     = Math.min(w, h) * fade * 0.85;
+            const ix = innerInset, iy = innerInset;
+            const iw = w - innerInset * 2, ih = h - innerInset * 2;
+            const rr = Math.min(innerR, iw / 2, ih / 2);
+            const path = new Path2D();
+            // outer rect, clockwise
+            path.moveTo(0, 0);
+            path.lineTo(w, 0);
+            path.lineTo(w, h);
+            path.lineTo(0, h);
+            path.closePath();
+            // inner rounded rect, counter-clockwise (so even-odd punches it)
+            path.moveTo(ix + rr, iy);
+            path.lineTo(ix + iw - rr, iy);
+            path.arcTo(ix + iw, iy,           ix + iw, iy + rr,      rr);
+            path.lineTo(ix + iw, iy + ih - rr);
+            path.arcTo(ix + iw, iy + ih,      ix + iw - rr, iy + ih, rr);
+            path.lineTo(ix + rr, iy + ih);
+            path.arcTo(ix, iy + ih,           ix, iy + ih - rr,      rr);
+            path.lineTo(ix, iy + rr);
+            path.arcTo(ix, iy,                ix + rr, iy,           rr);
+            path.closePath();
+            ctx.clip(path, 'evenodd');
+
+            // Now paint the 4 directional gradients — they only show
+            // inside the frame region, and the inner boundary follows
+            // the rounded rect.
+            let g = ctx.createLinearGradient(0, 0, w * fade, 0); edgeShadow(g);
+            ctx.fillStyle = g; ctx.fillRect(0, 0, w * fade, h);
+            g = ctx.createLinearGradient(w, 0, w - w * fade, 0); edgeShadow(g);
+            ctx.fillStyle = g; ctx.fillRect(w - w * fade, 0, w * fade, h);
+            g = ctx.createLinearGradient(0, 0, 0, h * fade); edgeShadow(g);
+            ctx.fillStyle = g; ctx.fillRect(0, 0, w, h * fade);
+            g = ctx.createLinearGradient(0, h, 0, h - h * fade); edgeShadow(g);
+            ctx.fillStyle = g; ctx.fillRect(0, h - h * fade, w, h * fade);
+
+            ctx.restore();
 
             const tex = new THREE.CanvasTexture(cv);
             tex.colorSpace = THREE.SRGBColorSpace;
@@ -337,17 +377,25 @@ export function GolfballViewer({ decalDataUrl, onError }) {
 
           function makeWall(widthWU, heightWU) {
             const tex = makeWallTexture(widthWU, heightWU);
-            // MeshBasicMaterial — NO scene lighting applied. The
-            // baked texture is the entire visual: flat fill + grid
-            // + edge shadow. Scene lights (which still illuminate
-            // the ball) don't darken this surface.
-            const mat = new THREE.MeshBasicMaterial({
-              map: tex,
+            // MeshStandardMaterial with the texture set as EMISSIVE
+            // (not albedo). Emissive isn't affected by lighting, so
+            // the wall's fill stays the EXACT background color — but
+            // standard materials can still receive shadows. Albedo
+            // is pure black so no direct light brightens the wall.
+            // Net result: walls look unlit, but the ball drops a
+            // visible shadow on them as it moves.
+            const mat = new THREE.MeshStandardMaterial({
+              color: 0x000000,
+              emissive: 0xffffff,
+              emissiveMap: tex,
+              roughness: 1,
+              metalness: 0,
               side: THREE.FrontSide,
-              transparent: false,
             });
             objectsToDispose.push(mat);
-            return new THREE.Mesh(new THREE.PlaneGeometry(widthWU, heightWU), mat);
+            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(widthWU, heightWU), mat);
+            mesh.receiveShadow = true;
+            return mesh;
           }
 
           const wT = HALF_X * 2;
@@ -395,11 +443,18 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         ballMesh = new THREE.Mesh(
           model.geometry.clone(),
           new THREE.MeshStandardMaterial({
-            color: 0xffffff,
-            roughness: 0.42,
-            metalness: 0,
+            color: 0xf6f6f6,
+            // Slight emissive so the shadow-side never fully grays
+            // out. Roughness lowered so the dimples catch a crisper
+            // highlight (a real golfball is fairly glossy plastic).
+            emissive: 0x101418,
+            emissiveIntensity: 0.4,
+            roughness: 0.28,
+            metalness: 0.02,
           }),
         );
+        ballMesh.castShadow = true;
+        ballMesh.receiveShadow = false;
         // The OBJ ships at an arbitrary size; rescale so its bounding-
         // box diameter is ~100 units (matches our camera framing).
         ballMesh.geometry.computeBoundingSphere();
