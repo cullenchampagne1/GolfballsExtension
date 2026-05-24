@@ -142,6 +142,7 @@ export function CRMCreateContact({ onClosed, bindClose }) {
   const toast = useToast();
   const draggable = useDevSetting('crmCreateContact.draggable') ?? true;
   const forceMock = useDevSetting('crmCreateContact.useMock') ?? false;
+  const requireAccount = useDevSetting('crmCreateContact.requireAccount') ?? true;
   // Detect once at mount — if the user toggles `useMock` they get the
   // new mode on the next open, which is fine.
   const useMock = forceMock || !detectExtensionContext();
@@ -157,6 +158,10 @@ export function CRMCreateContact({ onClosed, bindClose }) {
   const [linkedIn, setLinkedIn]     = useState('');
   const [accountText, setAccountText] = useState('');
   const [accountId, setAccountId]   = useState('');
+  // Website is the account's web address. Required server-side when
+  // creating a NEW account (no matching ID picked); harmless to send
+  // when an existing account is linked.
+  const [accountWebsite, setAccountWebsite] = useState('');
   const [address, setAddress]       = useState('');
   const [city, setCity]             = useState('');
   const [postal, setPostal]         = useState('');
@@ -178,7 +183,7 @@ export function CRMCreateContact({ onClosed, bindClose }) {
   const [statusMsg, setStatusMsg]   = useState('');     // footer hint
   const [statusTone, setStatusTone] = useState('info'); // 'info' | 'ok' | 'err'
   const [submittedId, setSubmittedId] = useState(null);
-  const [invalid, setInvalid]       = useState({ firstName: false, lastName: false, email: false });
+  const [invalid, setInvalid]       = useState({ firstName: false, lastName: false, email: false, account: false, accountWebsite: false });
 
   // ── Account autocomplete. ───────────────────────────────────
   const [acResults, setAcResults] = useState(null); // null = closed, [] = no matches, [...] = matches
@@ -260,16 +265,29 @@ export function CRMCreateContact({ onClosed, bindClose }) {
   // ── Submit. ─────────────────────────────────────────────────
   const onSubmit = async () => {
     // Required-fields validation up front.
+    // Website is required when CREATING a new account (no accountId
+    // means we're going to spin up one); the API rejects new-account
+    // creation without a web address. Linking an existing account
+    // (accountId present) skips this rule.
+    const needsWebsite = !accountId && !!accountText.trim();
     const nextInvalid = {
       firstName: !firstName.trim(),
       lastName:  !lastName.trim(),
       email:     !email.trim(),
+      account:   requireAccount && !accountText.trim(),
+      accountWebsite: needsWebsite && !accountWebsite.trim(),
     };
     setInvalid(nextInvalid);
-    if (nextInvalid.firstName || nextInvalid.lastName || nextInvalid.email) {
-      setStatusMsg('Required fields are missing.');
+    const anyInvalid = Object.values(nextInvalid).some(Boolean);
+    if (anyInvalid) {
+      const msg = nextInvalid.account
+        ? 'An account is required.'
+        : nextInvalid.accountWebsite
+          ? 'Add the account website so we can create it.'
+          : 'Required fields are missing.';
+      setStatusMsg(msg);
       setStatusTone('err');
-      toast?.warning?.('Fill in the required fields marked *');
+      toast?.warning?.(msg);
       return;
     }
 
@@ -280,7 +298,7 @@ export function CRMCreateContact({ onClosed, bindClose }) {
     const payload = {
       AccountLookup:    accountText.trim(),
       AccountLookup_ID: accountId || '',
-      AccountWebAddress: '',
+      AccountWebAddress: accountWebsite.trim(),
       MainAddress:      address.trim(),
       MainCity:         city.trim(),
       MainPostal:       postal.trim(),
@@ -439,15 +457,18 @@ export function CRMCreateContact({ onClosed, bindClose }) {
           <Field label="Company"><Input value={company} onChange={setCompany} placeholder="Acme Industries" /></Field>
         </Grid3>
 
-        {/* ── Account & Location ── */}
+        {/* ── Account & Location ──
+            Account + Website + LinkedIn on one row so the account
+            block reads together. The API requires a website when
+            we're creating a NEW account (no accountId picked); the
+            field is therefore conditionally required and the red
+            outline + message fires only in that case. */}
         <SectionHdr>Account &amp; Location</SectionHdr>
         <Grid3>
-          <Field label="LinkedIn URL">
-            <Input value={linkedIn} onChange={setLinkedIn} placeholder="https://linkedin.com/in/…" />
-          </Field>
           <Field
-            label={accountId ? 'Account lookup · linked' : 'Account lookup'}
-            hint={acStatus === 'error' ? 'Search unavailable' : undefined}
+            label={accountId ? 'Account · linked' : 'Account'}
+            required={requireAccount}
+            error={invalid.account ? 'Required' : (acStatus === 'error' ? 'Search unavailable' : null)}
           >
             <AccountAutocomplete
               value={accountText}
@@ -455,19 +476,38 @@ export function CRMCreateContact({ onClosed, bindClose }) {
               status={acStatus}
               results={acResults}
               highlight={acHighlight}
-              onInput={onAccountInput}
+              error={requireAccount && !accountText.trim()}
+              onInput={(v) => { onAccountInput(v); setInvalid((i) => ({ ...i, account: false })); }}
               onKeyDown={onAccountKeyDown}
-              onPick={pickAccount}
+              onPick={(item) => { pickAccount(item); setInvalid((i) => ({ ...i, account: false, accountWebsite: false })); }}
               onUnlink={() => { setAccountId(''); setAccountText(''); }}
               onHighlight={setAcHighlight}
               onClose={() => setAcResults(null)}
             />
           </Field>
-          <Field label="Address"><Input value={address} onChange={setAddress} placeholder="482 Brannan St #310" /></Field>
+          <Field
+            label="Account website"
+            hint={accountId ? 'Linked — website on file' : 'Required if creating a new account'}
+            error={invalid.accountWebsite ? 'Required when creating a new account' : null}
+          >
+            <Input
+              value={accountWebsite}
+              onChange={(v) => { setAccountWebsite(v); setInvalid((i) => ({ ...i, accountWebsite: false })); }}
+              placeholder="https://acme.com"
+              disabled={!!accountId}
+              error={invalid.accountWebsite || (!accountId && !!accountText.trim() && !accountWebsite.trim())}
+            />
+          </Field>
+          <Field label="LinkedIn URL">
+            <Input value={linkedIn} onChange={setLinkedIn} placeholder="https://linkedin.com/in/…" />
+          </Field>
         </Grid3>
         <Grid3>
+          <Field label="Address"><Input value={address} onChange={setAddress} placeholder="482 Brannan St #310" /></Field>
           <Field label="City"><Input value={city} onChange={setCity} placeholder="San Francisco" /></Field>
           <Field label="Postal"><Input value={postal} onChange={setPostal} placeholder="94107" /></Field>
+        </Grid3>
+        <Grid3>
           <Field label="Country">
             <Dropdown value={country} onChange={setCountry} options={toDdOpts(COUNTRIES)} />
           </Field>
@@ -596,7 +636,7 @@ function Grid3({ children }) {
    Custom: composes the design-system Input with an absolutely-
    positioned results panel underneath. Closes on outside click. */
 function AccountAutocomplete({
-  value, accountId, status, results, highlight,
+  value, accountId, status, results, highlight, error,
   onInput, onKeyDown, onPick, onUnlink, onHighlight, onClose,
 }) {
   const wrapRef = useRef(null);
@@ -615,6 +655,7 @@ function AccountAutocomplete({
         value={value}
         onChange={onInput}
         onKeyDown={onKeyDown}
+        error={!!error}
         placeholder={status === 'error' ? 'Type account name…' : 'Search account name…'}
         leading={accountId
           ? <I.check size={11} style={{ color: 'var(--gb-brand-label)' }} />

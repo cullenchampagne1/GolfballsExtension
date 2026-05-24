@@ -36,9 +36,46 @@ const DEFAULT_PHYSICS = {
 
 /* Shared modal-card visual — same surface, border, radius, and
    font lockdown whether we're inside Throwable or a centered wrapper. */
+/* Inject themed-scrollbar rules once. Any scrollable descendant of
+   `.gb-modal-card` inherits a thin, theme-aware track + thumb so we
+   never see the OS-default scrollbar (which fights light/dark modes
+   and looks out of place in the modal chrome). */
+const SCROLLBAR_CSS = `
+  .gb-modal-card *::-webkit-scrollbar { width: 8px; height: 8px; }
+  .gb-modal-card *::-webkit-scrollbar-track {
+    background: transparent;
+    border-radius: 8px;
+  }
+  .gb-modal-card *::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--gb-text-primary) 16%, transparent);
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    transition: background .15s;
+  }
+  .gb-modal-card *::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--gb-text-primary) 32%, transparent);
+    background-clip: padding-box;
+  }
+  .gb-modal-card *::-webkit-scrollbar-corner { background: transparent; }
+  .gb-modal-card * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--gb-text-primary) 18%, transparent) transparent; }
+`;
+function injectScrollbarStyles() {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById('gb-modal-scroll-css')) return;
+  const el = document.createElement('style');
+  el.id = 'gb-modal-scroll-css';
+  el.textContent = SCROLLBAR_CSS;
+  document.head.appendChild(el);
+}
+
 function ModalCard({ cssWidth, children }) {
+  // Inject the themed-scrollbar stylesheet on first mount. Safe to
+  // call multiple times — the guard in injectScrollbarStyles dedupes.
+  useEffect(injectScrollbarStyles, []);
   return (
     <motion.div
+      className="gb-modal-card"
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95, transition: T.base }}
