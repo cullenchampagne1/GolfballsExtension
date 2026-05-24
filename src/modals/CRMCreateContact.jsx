@@ -183,7 +183,20 @@ export function CRMCreateContact({ onClosed, bindClose }) {
   const [statusMsg, setStatusMsg]   = useState('');     // footer hint
   const [statusTone, setStatusTone] = useState('info'); // 'info' | 'ok' | 'err'
   const [submittedId, setSubmittedId] = useState(null);
+  // `invalid` is the post-submit error state — gets set when the user
+  // hits Create and a required field is empty. Cleared on edit.
   const [invalid, setInvalid]       = useState({ firstName: false, lastName: false, email: false, account: false, accountWebsite: false });
+  // `touched` is per-field — flipped on blur. The red outline + error
+  // message only appears once the field has been touched-and-left empty
+  // (or the user attempted submit). Before that, the asterisk alone
+  // signals "required" without coloring the input red on first paint.
+  const [touched, setTouched] = useState({ firstName: false, lastName: false, email: false, account: false, accountWebsite: false });
+  const markTouched = (key) => () => setTouched((t) => (t[key] ? t : { ...t, [key]: true }));
+  // Convenience: a field is "in error" if EITHER the user has touched
+  // and left it empty (touched && empty) OR the submit handler flagged
+  // it (invalid). Submit also forces touched=true on every required
+  // field so the visuals stay consistent after a blocked submit.
+  const showErr = (key, empty) => empty && (touched[key] || invalid[key]);
 
   // ── Account autocomplete. ───────────────────────────────────
   const [acResults, setAcResults] = useState(null); // null = closed, [] = no matches, [...] = matches
@@ -278,6 +291,17 @@ export function CRMCreateContact({ onClosed, bindClose }) {
       accountWebsite: requireAccount && accountIsNew && !accountWebsite.trim(),
     };
     setInvalid(nextInvalid);
+    // After a submit attempt, flag every required field as touched so
+    // the red outlines + messages surface even if the user never
+    // focused them. Independent of `invalid` — touched stays sticky.
+    setTouched((t) => ({
+      ...t,
+      firstName: true,
+      lastName:  true,
+      email:     true,
+      account:   requireAccount,
+      accountWebsite: requireAccount && !accountId,
+    }));
     const anyInvalid = Object.values(nextInvalid).some(Boolean);
     if (anyInvalid) {
       const msg = nextInvalid.account
@@ -413,41 +437,58 @@ export function CRMCreateContact({ onClosed, bindClose }) {
         {/* ── Contact Info ── */}
         <SectionHdr>Contact Info</SectionHdr>
         <Grid3>
-          {/* Required fields are outlined red while empty. Once the user
-              fills them in, the red drops; if they submit empty, the
-              error MESSAGE also surfaces beneath the input. */}
+          {/* Required fields show only an asterisk on first paint. The
+              red outline + "Required" message appear ONLY after the user
+              has touched the field (focus + blur empty) or attempted to
+              submit. As soon as they type, the touched flag resets so
+              the live "empty" state isn't punished mid-typing. */}
           <Field
             label="First name" required
-            error={invalid.firstName ? 'Required' : null}
+            error={showErr('firstName', !firstName.trim()) ? 'Required' : null}
           >
             <Input
               value={firstName}
-              onChange={(v) => { setFirstName(v); setInvalid((i) => ({ ...i, firstName: false })); }}
+              onChange={(v) => {
+                setFirstName(v);
+                setInvalid((i) => ({ ...i, firstName: false }));
+                if (v) setTouched((t) => ({ ...t, firstName: false }));
+              }}
+              onBlur={markTouched('firstName')}
               placeholder="First name"
-              error={!firstName.trim()}
+              error={showErr('firstName', !firstName.trim())}
               autoFocus
             />
           </Field>
           <Field
             label="Last name" required
-            error={invalid.lastName ? 'Required' : null}
+            error={showErr('lastName', !lastName.trim()) ? 'Required' : null}
           >
             <Input
               value={lastName}
-              onChange={(v) => { setLastName(v); setInvalid((i) => ({ ...i, lastName: false })); }}
+              onChange={(v) => {
+                setLastName(v);
+                setInvalid((i) => ({ ...i, lastName: false }));
+                if (v) setTouched((t) => ({ ...t, lastName: false }));
+              }}
+              onBlur={markTouched('lastName')}
               placeholder="Last name"
-              error={!lastName.trim()}
+              error={showErr('lastName', !lastName.trim())}
             />
           </Field>
           <Field
             label="Email" required
-            error={invalid.email ? 'Required' : null}
+            error={showErr('email', !email.trim()) ? 'Required' : null}
           >
             <Input
               value={email}
-              onChange={(v) => { setEmail(v); setInvalid((i) => ({ ...i, email: false })); }}
+              onChange={(v) => {
+                setEmail(v);
+                setInvalid((i) => ({ ...i, email: false }));
+                if (v) setTouched((t) => ({ ...t, email: false }));
+              }}
+              onBlur={markTouched('email')}
               placeholder="name@example.com"
-              error={!email.trim()}
+              error={showErr('email', !email.trim())}
             />
           </Field>
         </Grid3>
@@ -468,7 +509,11 @@ export function CRMCreateContact({ onClosed, bindClose }) {
           <Field
             label={accountId ? 'Account · linked' : 'Account'}
             required={requireAccount}
-            error={invalid.account ? 'Required' : (acStatus === 'error' ? 'Search unavailable' : null)}
+            error={
+              showErr('account', requireAccount && !accountText.trim())
+                ? 'Required'
+                : (acStatus === 'error' ? 'Search unavailable' : null)
+            }
           >
             <AccountAutocomplete
               value={accountText}
@@ -476,10 +521,19 @@ export function CRMCreateContact({ onClosed, bindClose }) {
               status={acStatus}
               results={acResults}
               highlight={acHighlight}
-              error={requireAccount && !accountText.trim()}
-              onInput={(v) => { onAccountInput(v); setInvalid((i) => ({ ...i, account: false })); }}
+              error={showErr('account', requireAccount && !accountText.trim())}
+              onInput={(v) => {
+                onAccountInput(v);
+                setInvalid((i) => ({ ...i, account: false }));
+                if (v) setTouched((t) => ({ ...t, account: false }));
+              }}
+              onBlurField={markTouched('account')}
               onKeyDown={onAccountKeyDown}
-              onPick={(item) => { pickAccount(item); setInvalid((i) => ({ ...i, account: false, accountWebsite: false })); }}
+              onPick={(item) => {
+                pickAccount(item);
+                setInvalid((i) => ({ ...i, account: false, accountWebsite: false }));
+                setTouched((t) => ({ ...t, account: false, accountWebsite: false }));
+              }}
               onUnlink={() => { setAccountId(''); setAccountText(''); }}
               onHighlight={setAcHighlight}
               onClose={() => setAcResults(null)}
@@ -489,14 +543,23 @@ export function CRMCreateContact({ onClosed, bindClose }) {
             label={accountId ? 'Account website · linked' : 'Account website'}
             required={requireAccount && !accountId}
             hint={accountId ? 'Linked — website on file' : undefined}
-            error={invalid.accountWebsite ? 'Required' : null}
+            error={
+              showErr('accountWebsite', requireAccount && !accountId && !accountWebsite.trim())
+                ? 'Required'
+                : null
+            }
           >
             <Input
               value={accountWebsite}
-              onChange={(v) => { setAccountWebsite(v); setInvalid((i) => ({ ...i, accountWebsite: false })); }}
+              onChange={(v) => {
+                setAccountWebsite(v);
+                setInvalid((i) => ({ ...i, accountWebsite: false }));
+                if (v) setTouched((t) => ({ ...t, accountWebsite: false }));
+              }}
+              onBlur={markTouched('accountWebsite')}
               placeholder="https://acme.com"
               disabled={!!accountId}
-              error={requireAccount && !accountId && !accountWebsite.trim()}
+              error={showErr('accountWebsite', requireAccount && !accountId && !accountWebsite.trim())}
             />
           </Field>
           <Field label="LinkedIn URL">
@@ -638,7 +701,7 @@ function Grid3({ children }) {
    positioned results panel underneath. Closes on outside click. */
 function AccountAutocomplete({
   value, accountId, status, results, highlight, error,
-  onInput, onKeyDown, onPick, onUnlink, onHighlight, onClose,
+  onInput, onKeyDown, onPick, onUnlink, onHighlight, onClose, onBlurField,
 }) {
   const wrapRef = useRef(null);
   useEffect(() => {
@@ -656,6 +719,7 @@ function AccountAutocomplete({
         value={value}
         onChange={onInput}
         onKeyDown={onKeyDown}
+        onBlur={onBlurField}
         error={!!error}
         placeholder={status === 'error' ? 'Type account name…' : 'Search account name…'}
         leading={accountId
