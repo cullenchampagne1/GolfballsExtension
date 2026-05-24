@@ -1247,12 +1247,27 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // offset from the body center; that fed back through the
           // angular term and inverted the apparent linear direction.)
           const zero = new CANNON.Vec3(0, 0, 0);
+          // Cap post-impulse velocity to MAX_BLAST_SPEED so a tiny
+          // body (confetti, mass 0.03) doesn't get Δv = impulse/mass
+          // = thousands of units/sec → tunnels right through the walls
+          // in a single physics step. cannon-es uses discrete collision
+          // so anything moving more than ~wall_thickness per step
+          // escapes. 600 units/sec at 60Hz = 10 units/frame, well
+          // under the wall thickness.
+          const MAX_BLAST_SPEED = 600;
           for (const t of targets) {
             const inv = t.d > 1e-3 ? 1 / t.d : 0;
             const ix = t.dx * inv * t.falloff;
             const iy = t.dy * inv * t.falloff;
             const iz = t.dz * inv * t.falloff;
             t.body.applyImpulse(new CANNON.Vec3(ix, iy, iz), zero);
+            // Clamp the resulting velocity.
+            const v = t.body.velocity;
+            const sp = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+            if (sp > MAX_BLAST_SPEED) {
+              const k = MAX_BLAST_SPEED / sp;
+              v.x *= k; v.y *= k; v.z *= k;
+            }
             t.body.wakeUp();
           }
 
@@ -1888,18 +1903,24 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               const buoyF = floatRatio * body.mass * G * frac;
               body.applyForce(new CANNON.Vec3(0, buoyF, 0), new CANNON.Vec3(0, 0, 0));
 
-              // Quadratic drag — F_drag = -0.5 * Cd * |v| * v * frac
+              // Quadratic drag — F = -0.5 * Cd * |v| * v * frac
+              // Clamp magnitude so a single frame of drag can't reverse
+              // the body's velocity (which causes oscillation + tunneling
+              // for low-mass bodies right after an explosion impulse).
               const vx = body.velocity.x, vy = body.velocity.y, vz = body.velocity.z;
               const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
-              if (speed > 0.1) {
-                const dragMag = 0.5 * dragCoef * speed * speed * frac;
+              if (speed > 0.5) {
+                let dragMag = 0.5 * dragCoef * speed * speed * frac;
+                // Cap drag impulse per frame to ≤ 60% of body momentum.
+                const maxDrag = body.mass * speed * 0.6 / Math.max(dt, 1e-3);
+                if (dragMag > maxDrag) dragMag = maxDrag;
                 const inv = 1 / speed;
                 body.applyForce(
                   new CANNON.Vec3(-dragMag * vx * inv, -dragMag * vy * inv, -dragMag * vz * inv),
                   new CANNON.Vec3(0, 0, 0),
                 );
               }
-              // Angular damping — water is viscous, things stop spinning.
+              // Angular damping — water is viscous.
               const ad = 1 - frac * 0.12;
               body.angularVelocity.x *= ad;
               body.angularVelocity.y *= ad;
@@ -1907,14 +1928,15 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               body.wakeUp();
             };
 
-            // Tuned floatRatios: <1 sinks, >1 floats.
-            // Drag scales by approximate cross-section area / mass.
+            // floatRatio < 1 sinks, > 1 floats.
+            // Tuned so gravity wins decisively for ball + bombs.
             if (ballBody.type === CANNON.Body.DYNAMIC) {
-              applyWaterForces(ballBody, targetRadius * state.scale, 0.45, 0.8);
+              applyWaterForces(ballBody, targetRadius * state.scale, 0.30, 0.5);
             }
-            for (const b of bombs)           applyWaterForces(b.body, b.radius, 0.50, 0.6);
-            for (const sb of spawnedBalls)   applyWaterForces(sb.body, SPAWN_R, 1.45, 0.4);
-            for (const cp of confettiPieces) applyWaterForces(cp.body, CONFETTI_W * 0.5, 3.5, 1.2);
+            // Bombs MUST sink — floatRatio 0.25 → net downward = 0.75*m*g
+            for (const b of bombs)           applyWaterForces(b.body, b.radius, 0.25, 0.4);
+            for (const sb of spawnedBalls)   applyWaterForces(sb.body, SPAWN_R, 1.6, 0.25);
+            for (const cp of confettiPieces) applyWaterForces(cp.body, CONFETTI_W * 0.5, 4.0, 0.4);
 
             // Push shader uniforms.
             waterMesh.visible = true;
@@ -1926,27 +1948,35 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             waterMesh.visible = false;
           }
 
-          /* ── Underwater detection (camera/eye-line based) ──────── */
-          // Treat camera Y as the eye. If the water surface at the
-          // camera's XZ projected ray midpoint is above the camera,
-          // we're "looking through water" → drive the underwater pass.
-          let cameraSubmersion = 0;
+          /* ── Underwater detection ───────────────────────────────
+             Camera is fixed straight-on at (0, 0, 520), so it never
+             physically enters the water. The "underwater" feel needs
+             to come from the BALL being submerged — that's where the
+             user's eye is. Use the ball's submersion fraction. */
+          let underTint = 0;
           if (hasWater) {
-            // Read surface height where the camera ray hits z=0 plane.
-            const surfY = surfaceHeightAt(0, 0);
-            cameraSubmersion = Math.max(0, Math.min(1, (surfY - camera.position.y + 50) / 250));
+            const surfY = surfaceHeightAt(ballBody.position.x, ballBody.position.z);
+            const r = targetRadius * state.scale;
+            const bot = ballBody.position.y - r;
+            const top = ballBody.position.y + r;
+            if (bot < surfY) {
+              // 0 at just touching, 1 at fully submerged
+              underTint = Math.min(1, (surfY - bot) / (r * 2));
+            }
           }
-          underwaterFracRef.current = cameraSubmersion;
+          underwaterFracRef.current = underTint;
           if (nowMs - lastUnderwaterUpdateRef.current > 80) {
             lastUnderwaterUpdateRef.current = nowMs;
-            setUnderwaterFrac(cameraSubmersion);
+            setUnderwaterFrac(underTint);
           }
 
           const stepNeeded = throwModeRef.current || bombs.length > 0
             || spawnedBalls.length > 0 || confettiPieces.length > 0 || hasWater
             || streamDroplets.length > 0;
           if (stepNeeded) {
-            world.step(1 / 60, dt, 3);
+            // Sub-step the solver more aggressively (max 6 substeps)
+            // so fast bodies don't tunnel through walls after impulse.
+            world.step(1 / 120, dt, 6);
             // Sync the ball — only when throwMode is on AND we're
             // not actively dragging it (drag owns the transform).
             if (throwModeRef.current && !state.dragging) {
@@ -2448,27 +2478,65 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         </div>
       )}
 
-      {/* Underwater overlay — kicks in when camera ray hits water.
-          The main water effect comes from the shader's refraction;
-          this overlay adds the secondary "lens" feel: peripheral
-          chromatic vignette + subtle blue saturation bias. */}
+      {/* Underwater overlay — fires when the ball is submerged.
+          Strong blue tint + animated caustic streaks so above vs
+          below water is unmistakable visually. */}
       {underwaterFrac > 0.01 && (
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute', inset: 0,
-            pointerEvents: 'none',
-            background: `radial-gradient(ellipse at center,
-              rgba(40,140,220,${(underwaterFrac * 0.18).toFixed(3)}) 0%,
-              rgba(10,70,170,${(underwaterFrac * 0.42).toFixed(3)}) 60%,
-              rgba(0,30,90,${(underwaterFrac * 0.65).toFixed(3)}) 100%)`,
-            backdropFilter: `saturate(${1 + underwaterFrac * 0.4}) hue-rotate(${(underwaterFrac * 12).toFixed(1)}deg)`,
-            WebkitBackdropFilter: `saturate(${1 + underwaterFrac * 0.4}) hue-rotate(${(underwaterFrac * 12).toFixed(1)}deg)`,
-            mixBlendMode: 'multiply',
-            transition: 'background 0.25s, backdrop-filter 0.25s',
-            zIndex: 5,
-          }}
-        />
+        <>
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute', inset: 0,
+              pointerEvents: 'none',
+              background: `linear-gradient(180deg,
+                rgba(20, 110, 200, ${(underwaterFrac * 0.55).toFixed(3)}) 0%,
+                rgba(5, 60, 150, ${(underwaterFrac * 0.70).toFixed(3)}) 60%,
+                rgba(0, 25, 80, ${(underwaterFrac * 0.85).toFixed(3)}) 100%)`,
+              transition: 'background 0.18s',
+              zIndex: 5,
+            }}
+          />
+          {/* Animated caustic streaks — moving diagonal bright bands
+              read instantly as "looking up through water". */}
+          <div
+            aria-hidden
+            className="gb-water-caustics"
+            style={{
+              position: 'absolute', inset: 0,
+              pointerEvents: 'none',
+              opacity: underwaterFrac * 0.45,
+              background: `repeating-linear-gradient(135deg,
+                rgba(255,255,255,0) 0px,
+                rgba(255,255,255,0) 18px,
+                rgba(180,220,255,0.35) 22px,
+                rgba(255,255,255,0) 28px,
+                rgba(255,255,255,0) 60px)`,
+              backgroundSize: '300px 300px',
+              animation: 'gbWaterCaustics 6s linear infinite',
+              mixBlendMode: 'screen',
+              zIndex: 5,
+            }}
+          />
+          {/* Edge vignette — focuses attention on the center and
+              implies the lens distortion of looking through water. */}
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute', inset: 0,
+              pointerEvents: 'none',
+              background: `radial-gradient(ellipse at center,
+                transparent 30%,
+                rgba(0, 20, 60, ${(underwaterFrac * 0.55).toFixed(3)}) 100%)`,
+              zIndex: 5,
+            }}
+          />
+          <style>{`
+            @keyframes gbWaterCaustics {
+              0%   { background-position: 0 0; }
+              100% { background-position: 300px 200px; }
+            }
+          `}</style>
+        </>
       )}
     </div>
   );
