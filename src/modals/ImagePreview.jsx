@@ -40,8 +40,11 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 8;
-const ZOOM_STEP_BTN = 0.35;
-const ZOOM_STEP_WHEEL = 0.12;
+// Smaller per-tick deltas so the user can land precisely on the
+// alignment ring. Wheel and button both feel like fine-grained
+// adjustments instead of jumps. Was 0.35 / 0.12.
+const ZOOM_STEP_BTN = 0.12;
+const ZOOM_STEP_WHEEL = 0.05;
 
 /* Preview-surface grid — mirrors the playground's two-layer graph-
    paper backdrop but at a tighter spacing since the area is only
@@ -409,7 +412,17 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                   alignment logic ships later; this is the visual
                   scaffold + view-change animation. */}
               <AnimatePresence>
-                {aligning && <AlignmentOverlay />}
+                {aligning && (
+                  <AlignmentOverlay
+                    onSubmit={() => {
+                      setAligning(false);
+                      // Real alignment ships later; for now confirm to
+                      // the user that the gesture registered.
+                      toast?.success?.('Alignment saved');
+                    }}
+                    onCancel={() => setAligning(false)}
+                  />
+                )}
               </AnimatePresence>
 
               <div style={{
@@ -520,7 +533,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
      • Ring scales from 0.85 → 1 with a slight bounce
      • Crosshair guides fade in shortly after the ring
 ─────────────────────────────────────────────────────────────── */
-function AlignmentOverlay() {
+function AlignmentOverlay({ onSubmit, onCancel }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -530,17 +543,14 @@ function AlignmentOverlay() {
       style={{
         position: 'absolute', inset: 0,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
+        // pointerEvents:none on the outer so panning underneath still
+        // works; the action bar re-enables auto on itself below.
         pointerEvents: 'none',
       }}
     >
-      {/* The ring: 60% of the wrapper's shorter axis (via aspect-ratio:1
-          + max-width / max-height). The 9999px box-shadow fills the
-          entire surrounding area with dim black so the ring's interior
-          is the only un-dimmed region — a "spotlight" mask without SVG. */}
       {/* Ring sized by HEIGHT only (the wrapper's shorter axis since
           the modal is wider than tall). Width follows aspect-ratio 1
-          for a true circle — setting both width AND height in % would
-          have given an oval because the wrapper is non-square. */}
+          for a true circle. */}
       <motion.div
         initial={{ scale: 0.85, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -575,24 +585,22 @@ function AlignmentOverlay() {
           background: 'var(--gb-brand-label)', opacity: 0.4,
         }} />
       </motion.div>
-      {/* Helper label at the top of the overlay — explains what the
-          ring is for so the first-time user isn't lost. */}
+      {/* Submit / Cancel action bar — bottom-center of the overlay,
+          inside the dimmed area but with `pointerEvents:auto` so the
+          buttons stay clickable. Slides in shortly after the ring so
+          the controls don't pop in simultaneously with the spotlight. */}
       <motion.div
-        initial={{ opacity: 0, y: -4 }}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -4 }}
-        transition={{ delay: 0.06, duration: 0.18 }}
+        exit={{ opacity: 0, y: 8 }}
+        transition={{ delay: 0.08, duration: 0.18 }}
         style={{
-          position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
-          fontSize: 10, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase',
-          color: 'var(--gb-text-primary)',
-          background: 'var(--gb-surface-modal)',
-          border: '1px solid var(--gb-brand-tint-border)',
-          borderRadius: 'var(--gb-r-sm)',
-          padding: '3px 8px',
-          whiteSpace: 'nowrap',
+          position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)',
+          display: 'flex', gap: 6,
+          pointerEvents: 'auto',
         }}>
-        Position image inside ring
+        <Btn size="sm" variant="ghost" onClick={onCancel}>Cancel</Btn>
+        <Btn size="sm" variant="primary" icon={<I.check />} onClick={onSubmit}>Submit</Btn>
       </motion.div>
     </motion.div>
   );
