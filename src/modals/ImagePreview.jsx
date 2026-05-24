@@ -126,6 +126,10 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   const wrapRef = useRef(null);      // the 340px preview surface (drag + wheel target)
   const viewportRef = useRef(null);  // inner transform layer (translate + scale applied here)
   const viewerRef = useRef(null);    // GolfballViewer imperative handle — .snapshot() returns a PNG dataURL
+  // Mirrors the viewer's internal sceneKey so the fun-menu drawer can
+  // hide while an HDRI scene is up (no walls = nothing for bombs to
+  // bounce off, so we don't even offer the tool).
+  const [viewerSceneKey, setViewerSceneKey] = useState(null);
 
   // Image load wiring. The <img>'s onLoad/onError flips status. We
   // pre-resolve URLs that are already cached so the spinner doesn't
@@ -531,6 +535,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                 <GolfballViewer
                   ref={viewerRef}
                   decalDataUrl={decalDataUrl}
+                  onSceneChange={setViewerSceneKey}
                   onError={() => {
                     toast?.error?.('Failed to load 3D viewer');
                     setView('2d');
@@ -713,7 +718,9 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
               inside the 2D branch (the previous bug) means it never
               shows in 3D. Anchoring it directly to the wrapRef div
               also keeps it stable across view transitions. */}
-          {view === '3d' && (
+          {/* Hidden while an HDRI scene is up — no walls to hold
+              bombs, so the bomb tool would be meaningless there. */}
+          {view === '3d' && !viewerSceneKey && (
             <ViewerToolbox viewerRef={viewerRef} />
           )}
         </div>
@@ -1089,38 +1096,34 @@ const BombIcon = (p) => (
 );
 
 /* ── ViewerToolbox ──────────────────────────────────────────────
-   Collapsible drawer in the bottom-right of the 3D preview area.
-   The toggle chip matches the zoom chip language (surface-modal
-   background, border ring, r-sm radius). Items inside the drawer
-   are TOOL TOGGLES — clicking one enters that tool's "mode", and
-   any subsequent click on the canvas applies it. Clicking the
-   same item again exits the mode. Mutual exclusion is enforced:
-   `activeTool` holds at most one tool name, so picking a new tool
-   replaces the previous one rather than stacking.
+   Bottom-right "fun" drawer. Behaves as a single connected dropup:
+   the toggle chip pins to the bottom; clicking it slides a stack
+   of tool chips up from behind it, sharing borders so the result
+   reads as one rounded strip with internal dividers (no gaps,
+   matching the dropdown language elsewhere in the system).
 
-   Active tools:
-     • bomb — each canvas click spawns a bomb at the cursor that
-       falls under gravity and obeys collisions. No drag, no
-       follow-cursor bump — pure click-to-place. */
+   Closing the drawer also CLEARS the active tool — if a user
+   picked the bomb tool and then closes the drawer to get it out
+   of the way, leaving the tool armed is surprising. Closing means
+   "I'm done" everywhere in the app.
+
+   Active tool semantics:
+     • bomb — each canvas click spawns a bomb at the cursor. Click-
+       to-place, no drag. */
 function ViewerToolbox({ viewerRef }) {
   const [open, setOpen] = useState(false);
   const [activeTool, setActiveTool] = useState(null); // null | 'bomb'
 
   // Global pointerdown listener while a tool is active. Spawns the
   // tool's effect when the user clicks on the canvas surface — but
-  // NOT when the click lands on a UI button layered above it (the
-  // toolbox chips, the gravity/scene toggles in the viewer's top-
-  // right strip). Without this guard, clicking the toolbox chip to
-  // close the drawer would also drop a bomb at the chip's
-  // coordinates, because the chip lives inside the canvas's
-  // bounding rect and containsPoint() returns true.
+  // NOT when the click lands on UI chrome (any <button>, or any
+  // element tagged data-viewer-ui="true"). Without this guard,
+  // clicking the toolbox chip to close the drawer would also drop a
+  // bomb at the chip's coordinates because the chip lives inside
+  // the canvas's bounding rect.
   useEffect(() => {
     if (!activeTool) return undefined;
     const onDown = (e) => {
-      // Skip clicks on UI chrome — any <button>, or any element
-      // tagged data-viewer-ui="true" (the viewer's top-right
-      // controls strip uses this so the entire wrapper is excluded,
-      // not just the button hit-targets).
       if (e.target?.closest?.('button, [data-viewer-ui="true"]')) return;
       const v = viewerRef.current;
       if (!v?.containsPoint?.({ clientX: e.clientX, clientY: e.clientY })) return;
@@ -1130,77 +1133,181 @@ function ViewerToolbox({ viewerRef }) {
     return () => window.removeEventListener('pointerdown', onDown);
   }, [activeTool, viewerRef]);
 
-  // Tool toggle — clicking the same tool deactivates, clicking a
-  // different tool replaces (mutual exclusion baked in).
+  // Closing the drawer wipes the armed tool. Same rule for both
+  // explicit close and any future programmatic close.
+  const setOpenAndMaybeClear = (next) => {
+    setOpen(next);
+    if (!next) setActiveTool(null);
+  };
   const toggleTool = (name) => setActiveTool((t) => (t === name ? null : name));
 
+  // List of tools — one row each in the drawer. Add more entries
+  // (icon + key + label) here; the chip wiring is generic.
+  const tools = [
+    { key: 'bomb', icon: <BombIcon size={14} /> },
+  ];
+
+  return (
+    <ConnectedDrawer
+      anchor="bottom-right"
+      open={open}
+      onToggle={setOpenAndMaybeClear}
+      toggleIcon={<ToolboxIcon size={14} />}
+      toggleActive={open || !!activeTool}
+    >
+      {tools.map((t) => (
+        <DrawerChip
+          key={t.key}
+          icon={t.icon}
+          active={activeTool === t.key}
+          onClick={() => toggleTool(t.key)}
+        />
+      ))}
+    </ConnectedDrawer>
+  );
+}
+
+/* ── ConnectedDrawer ─────────────────────────────────────────
+   A single-strip "dropdown/dropup" used by both the bomb tool
+   drawer and the scene drawer. Items + toggle share the same
+   border and surface color so the whole thing reads as one chip,
+   not a disjoint stack. Inner edges have no rounding so they
+   visually fuse with their neighbors.
+
+   anchor: 'bottom-right' | 'bottom-left'
+     determines which corner the toggle pins to AND which end of
+     the strip is the visually flat one. Both anchors open by
+     unfurling AWAY from the screen edge — bottom-anchored open
+     UPWARD (dropup), so the toggle is always the bottom-most
+     chip in the strip. Animation slides + fades the items in.
+
+   The toggle is rendered as the LAST DOM child but pinned at the
+   bottom via flex-direction:column-reverse, so it sits visually
+   under the items while staying the obvious anchor. */
+function ConnectedDrawer({ anchor, open, onToggle, toggleIcon, toggleActive, children }) {
+  const isRight = anchor === 'bottom-right';
   return (
     <div style={{
-      position: 'absolute', bottom: 8, right: 8,
-      display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4,
-      zIndex: 3,
+      position: 'absolute', bottom: 8,
+      [isRight ? 'right' : 'left']: 8,
+      display: 'flex', flexDirection: 'column-reverse',
+      alignItems: isRight ? 'flex-end' : 'flex-start',
+      zIndex: 6,
     }}>
+      <DrawerToggle
+        icon={toggleIcon}
+        active={toggleActive}
+        open={open}
+        onClick={() => onToggle(!open)}
+      />
       <AnimatePresence initial={false}>
         {open && (
           <motion.div
-            key="toolbox-items"
-            initial={{ opacity: 0, y: 6, scale: 0.92 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 6, scale: 0.92 }}
+            key="items"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-            style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+            style={{ display: 'flex', flexDirection: 'column-reverse', overflow: 'hidden' }}
           >
-            <ToolboxChip
-              icon={<BombIcon size={14} />}
-              active={activeTool === 'bomb'}
-              onClick={() => toggleTool('bomb')}
-            />
+            {React.Children.map(children, (child, i, all) => {
+              if (!React.isValidElement(child)) return child;
+              const isFirstFromTop = i === all.length - 1; // top of the visible strip
+              return React.cloneElement(child, {
+                _connectedTop: isFirstFromTop,
+                _connectedBottom: false,
+                _connectedInternal: !isFirstFromTop,
+              });
+            })}
           </motion.div>
         )}
       </AnimatePresence>
-      <ToolboxChip
-        icon={<ToolboxIcon size={14} />}
-        active={open}
-        onClick={() => setOpen((o) => !o)}
-      />
     </div>
   );
 }
 
-/* Single chip used by ViewerToolbox — same surface language as
-   ZoomChipBtn but square + larger so the icon reads well. The
-   active state pulses a soft brand-tint glow so the user can
-   tell a tool is armed at a glance. */
-function ToolboxChip({ icon, active, onClick }) {
+/* Toggle chip — same surface language as the body chips but
+   gets the BOTTOM rounded corners when the drawer is open (so the
+   strip reads as one continuous shape) and full rounding when
+   closed. */
+function DrawerToggle({ icon, active, open, onClick }) {
   const [hovered, setHovered] = useState(false);
   const color  = active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)';
   const border = active ? 'var(--gb-brand-label)' : 'var(--gb-border-default)';
   const bg     = active
     ? 'var(--gb-brand-tint-soft)'
     : (hovered ? 'var(--gb-fill-soft)' : 'var(--gb-surface-modal)');
+  // When the drawer is OPEN, only the bottom corners round; the
+  // top corners go flat so they butt cleanly into the items above.
+  const radius = open
+    ? '0 0 var(--gb-r-sm) var(--gb-r-sm)'
+    : 'var(--gb-r-sm)';
   return (
-    <motion.button
+    <button
       type="button"
+      data-viewer-ui="true"
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      animate={active
-        ? { boxShadow: ['0 0 0 0 var(--gb-brand-tint-soft)', '0 0 0 6px transparent', '0 0 0 0 var(--gb-brand-tint-soft)'] }
-        : { boxShadow: '0 0 0 0 transparent' }}
-      transition={active ? { duration: 1.4, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.12 }}
       style={{
         width: 26, height: 26, padding: 0,
-        color,
-        background: bg,
+        color, background: bg,
         border: `1px solid ${border}`,
-        borderRadius: 'var(--gb-r-sm)',
+        borderRadius: radius,
         cursor: 'pointer',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'background-color .12s, color .12s, border-color .12s',
-        touchAction: 'none',
+        transition: 'background-color .12s, color .12s, border-color .12s, border-radius .12s',
       }}
     >
       {icon}
-    </motion.button>
+    </button>
+  );
+}
+
+/* Body chip inside a connected drawer. Drops its bottom border
+   so it doesn't double-up against the next chip below it; the
+   topmost item keeps its full top rounding, the rest are flat. */
+function DrawerChip({ icon, active, onClick, _connectedTop, _connectedBottom, _connectedInternal }) {
+  const [hovered, setHovered] = useState(false);
+  const color  = active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)';
+  const border = active ? 'var(--gb-brand-label)' : 'var(--gb-border-default)';
+  const bg     = active
+    ? 'var(--gb-brand-tint-soft)'
+    : (hovered ? 'var(--gb-fill-soft)' : 'var(--gb-surface-modal)');
+  // Top item gets the top rounded; bottom item gets the bottom
+  // rounded; internal items get flat. The toggle handles its own
+  // corner roundness based on `open`.
+  const radius = _connectedTop
+    ? 'var(--gb-r-sm) var(--gb-r-sm) 0 0'
+    : _connectedBottom
+      ? '0 0 var(--gb-r-sm) var(--gb-r-sm)'
+      : '0';
+  return (
+    <button
+      type="button"
+      data-viewer-ui="true"
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        width: 26, height: 26, padding: 0,
+        color, background: bg,
+        border: `1px solid ${border}`,
+        // Drop the bottom border on internal/top items so the next
+        // chip's top border doesn't stack with this one — the strip
+        // reads as one solid outline.
+        borderBottomWidth: _connectedTop || _connectedInternal ? 0 : 1,
+        borderRadius: radius,
+        cursor: 'pointer',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'background-color .12s, color .12s, border-color .12s',
+        position: 'relative',
+        // Active-state inset glow — replaces the box-shadow keyframe
+        // pulse, which caused chips to flicker as the shadow animated.
+        boxShadow: active ? 'inset 0 0 0 1px var(--gb-brand-tint-soft)' : 'none',
+      }}
+    >
+      {icon}
+    </button>
   );
 }
