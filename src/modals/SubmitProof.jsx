@@ -567,7 +567,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
   return (
     <FloatingPanel
       width={hasGallery ? 1000 : 720}
-      maxHeight={520}
+      maxHeight={620}
       backdrop
       draggable={draggable}
       onClose={onClosed}
@@ -661,7 +661,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           across the gallery. */}
       <div style={{
         display: 'flex',
-        height: 'min(50vh, 380px)',
+        height: 'min(60vh, 480px)',
         minHeight: 0, flex: 1,
       }}>
         {/* LEFT COLUMN — scroll area on top, footer pinned at bottom. */}
