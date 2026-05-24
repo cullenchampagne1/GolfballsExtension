@@ -146,10 +146,21 @@ const MOCK_ARTISTS = [
   { val: '44', txt: 'Ren Atelier' },
 ];
 const MOCK_GALLERY = [
-  { name: 'Acme Logo v3',    proofLink: '#', thumbUrl: '', status: 'Approved' },
-  { name: 'Acme Logo v2',    proofLink: '#', thumbUrl: '', status: 'Revised' },
-  { name: 'Pre-prod sample', proofLink: '#', thumbUrl: '', status: 'Pending' },
+  { name: 'Acme Logo v3',    proofLink: '#', thumbUrl: '', status: 'Approved', label: 'v3' },
+  { name: 'Acme Logo v2',    proofLink: '#', thumbUrl: '', status: 'Revised',  label: 'v2' },
+  { name: 'Acme Logo v1',    proofLink: '#', thumbUrl: '', status: 'Rejected', label: 'v1' },
+  { name: 'Pre-prod sample', proofLink: '#', thumbUrl: '', status: 'Pending',  label: 'pre' },
 ];
+
+// Tone mapping for the status pill — matches the design's per-status
+// colors. Falls back to 'neutral' for anything unrecognised.
+const STATUS_TONE = {
+  Approved: 'brand',
+  Revised:  'warning',
+  Rejected: 'error',
+  Pending:  'neutral',
+};
+function statusTone(status) { return STATUS_TONE[status] || 'neutral'; }
 
 /* ───────────────────────────────────────────────────────────────
    Public component
@@ -301,7 +312,25 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
         setReps([]);
         setArtists([]);
         setDropdownsFailed(true);
-        toast?.warning?.('Sales rep / artist lookup unavailable — switched to text input', { duration: 4500 });
+        // Action toast — primary CTA "Use template data" swaps in the
+        // mock rep + artist lists so the dropdowns repopulate and the
+        // user can keep working as if the call had succeeded. This is
+        // a CHOICE, not a fix: the live server is still down, so a
+        // real submit will still fail, but the form is now demo-able.
+        toast?.action?.({
+          tone: 'warning',
+          title: 'Couldn’t load reps & artists',
+          message: 'The CRM directory didn’t respond. Switched to text input — or use template data instead.',
+          primary: 'Use template data',
+          secondary: 'Keep text input',
+          icon: <I.alert />,
+          duration: null, // sticky — user must dismiss
+          onPrimary: () => {
+            setReps(MOCK_REPS);
+            setArtists(MOCK_ARTISTS);
+            setDropdownsFailed(false);
+          },
+        });
       }
       // ── Gallery (existing proofs for this customer) ──
       const cust = (customerIdProp || customerId || '').trim();
@@ -327,7 +356,16 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
         if (!alive) return;
         setGallery([]);
         setGalleryFailed(true);
-        toast?.warning?.('Previous proofs unavailable', { duration: 3500 });
+        toast?.action?.({
+          tone: 'warning',
+          title: 'Couldn’t load previous proofs',
+          message: 'The customer’s proof history didn’t respond. Want to see what the gallery would look like?',
+          primary: 'Use template data',
+          secondary: 'Skip gallery',
+          icon: <I.alert />,
+          duration: null,
+          onPrimary: () => setGallery(MOCK_GALLERY),
+        });
       }
     })();
     return () => { alive = false; };
@@ -964,7 +1002,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
               letterSpacing: 1, color: 'var(--gb-text-muted)', marginBottom: 12,
             }}>Previous Proofs ({gallery.length})</div>
             {gallery.map((p, i) => (
-              <GalleryItem key={i} proof={p} />
+              <GalleryItem key={i} proof={p} index={i} />
             ))}
           </div>
         )}
@@ -1325,43 +1363,100 @@ function DynamicItemBlock({ item, suffix, fields, data, autoName, customName, on
   );
 }
 
-function GalleryItem({ proof }) {
+/* GalleryItem — square thumbnail card with the 3D-sphere faux logo
+   when no real thumbnail is available. Sphere uses brand + canvas
+   tokens (theme-aware), with an inset shadow for depth and a centered
+   monospace label (e.g. "v3"). Below the thumbnail sits a pill row
+   with the proof name + status badge + open-arrow.
+   Adapted from SubmitProofView in the design handoff
+   (surfaces-3.jsx ~line 519). */
+function GalleryItem({ proof, index = 0 }) {
+  const label = proof.label || (proof.name?.match(/v\d+/i)?.[0] || '');
+  // Alternating bg gradient so adjacent thumbnails read as distinct.
+  const bg = index % 2
+    ? 'linear-gradient(135deg, var(--gb-surface-2) 0%, var(--gb-surface-canvas) 50%, var(--gb-surface-2) 100%)'
+    : 'linear-gradient(135deg, var(--gb-surface-2) 0%, var(--gb-surface-canvas) 100%)';
   return (
     <a
       href={proof.proofLink || '#'}
       target="_blank"
       rel="noopener noreferrer"
       style={{
-        display: 'block',
+        display: 'flex', flexDirection: 'column', gap: 6,
         textDecoration: 'none',
         marginBottom: 14,
       }}
     >
+      {/* Square thumbnail container */}
       <div style={{
-        width: '100%', aspectRatio: '1', borderRadius: 'var(--gb-r-md)',
-        background: 'var(--gb-surface-2)',
+        width: '100%', aspectRatio: '1',
+        borderRadius: 'var(--gb-r-md)',
+        background: bg,
         border: '1px solid var(--gb-border-subtle)',
-        overflow: 'hidden',
-        marginBottom: 6,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        position: 'relative', overflow: 'hidden',
       }}>
         {proof.thumbUrl ? (
-          <img src={proof.thumbUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img
+            src={proof.thumbUrl}
+            alt=""
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+          />
         ) : (
+          // Faux 3D sphere — radial gradient gives the highlight on
+          // the upper-left, inset shadow rounds the bottom. Brand
+          // color blended into surface for the sphere body so it
+          // recolors across themes. Label sits dead-center.
           <div style={{
-            width: '100%', height: '100%',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'var(--gb-text-ghost)', fontSize: 11,
-          }}>No thumbnail</div>
+            width: '60%', aspectRatio: '1',
+            borderRadius: '50%',
+            background: `radial-gradient(circle at 35% 30%,
+              color-mix(in srgb, var(--gb-brand-label) 28%, var(--gb-surface-canvas)) 0%,
+              var(--gb-surface-canvas) 75%)`,
+            boxShadow: 'inset 0 -10px 30px rgba(0,0,0,0.45)',
+            position: 'relative',
+          }}>
+            {label && (
+              <div style={{
+                position: 'absolute', top: '50%', left: '50%',
+                transform: 'translate(-50%, -50%)',
+                fontSize: 18, fontWeight: 800,
+                color: 'color-mix(in srgb, var(--gb-brand-label) 70%, transparent)',
+                fontFamily: 'var(--gb-font-mono)',
+                letterSpacing: -0.5,
+                whiteSpace: 'nowrap',
+              }}>{label}</div>
+            )}
+          </div>
         )}
       </div>
+
+      {/* Info pill — name + status badge + chevron */}
       <div style={{
-        fontSize: 11, fontWeight: 600,
-        color: 'var(--gb-text-primary)',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>{proof.name}</div>
-      {proof.status && (
-        <div style={{ fontSize: 10, color: 'var(--gb-text-tertiary)', marginTop: 2 }}>{proof.status}</div>
-      )}
+        display: 'flex', alignItems: 'center', gap: 6,
+        background: 'var(--gb-surface-2)',
+        border: '1px solid var(--gb-border-subtle)',
+        borderRadius: 18, padding: '4px 6px 4px 10px',
+      }}>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div style={{
+            fontSize: 11, fontWeight: 600,
+            color: 'var(--gb-text-primary)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>{proof.name}</div>
+          {proof.status && (
+            <Tag tone={statusTone(proof.status)} size="xs">{proof.status}</Tag>
+          )}
+        </div>
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: 22, height: 22, borderRadius: '50%',
+          color: 'var(--gb-text-muted)',
+        }}>
+          <I.chevr size={11} />
+        </span>
+      </div>
     </a>
   );
 }

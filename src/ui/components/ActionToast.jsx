@@ -34,8 +34,25 @@ const TONES = {
 };
 
 export function ActionToast({
-  tone = 'brand', title, message, primary, secondary, onDismiss, size = 'md',
+  tone = 'brand', title, message, primary, secondary,
+  // onPrimary fires when the user clicks the primary CTA; falls back
+  // to onDismiss so existing call sites keep working. onSecondary
+  // overrides the secondary button's default dismiss behavior.
+  onPrimary, onSecondary, onDismiss,
+  // icon override — pass a ReactNode (e.g. <I.bolt />, <I.alert />)
+  // to swap the default check glyph. Stays inside the tone-tinted
+  // icon tile so the visual rhythm matches.
+  icon,
+  size = 'md',
 }) {
+  const handlePrimary = () => {
+    if (onPrimary) onPrimary();
+    onDismiss?.();
+  };
+  const handleSecondary = () => {
+    if (onSecondary) onSecondary();
+    onDismiss?.();
+  };
   const s = SIZES[size] || SIZES.md;
   const t = TONES[tone] || TONES.brand;
   return (
@@ -54,7 +71,10 @@ export function ActionToast({
           background: t.bg, color: t.fg,
           border: `1px solid ${t.bd}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-        }}><I.check size={s.iconSvg} /></div>
+        }}>{icon
+          ? React.cloneElement(icon, { size: s.iconSvg })
+          : <I.check size={s.iconSvg} />
+        }</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: s.title, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{title}</div>
           <div style={{ fontSize: s.msg, color: 'var(--gb-text-tertiary)', marginTop: 2, lineHeight: 1.45 }}>{message}</div>
@@ -68,9 +88,9 @@ export function ActionToast({
         borderTop: '1px solid var(--gb-border-subtle)',
         background: t.bg,
       }}>
-        {secondary && <Btn variant="ghost" size={s.btn} onClick={onDismiss}>{secondary}</Btn>}
+        {secondary && <Btn variant="ghost" size={s.btn} onClick={handleSecondary}>{secondary}</Btn>}
         <div style={{ flex: 1 }} />
-        <Btn variant="tinted" status={tone} size={s.btn} icon={<I.bolt />} onClick={onDismiss}>{primary}</Btn>
+        <Btn variant="tinted" status={tone} size={s.btn} icon={<I.bolt />} onClick={handlePrimary}>{primary}</Btn>
       </div>
     </div>
   );
