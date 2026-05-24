@@ -6,6 +6,7 @@ import {
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { GolfballViewer } from './GolfballViewer.jsx';
+import { LiquidDrawer } from '../ui/components/LiquidDrawer.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    ImagePreview — port of content/logo-extractor.js's logo modal.
@@ -38,6 +39,16 @@ import { GolfballViewer } from './GolfballViewer.jsx';
      • Submit Proof           — stub toast (will hand off to the real
                                 Submit Proof modal once that lands)
 ─────────────────────────────────────────────────────────────── */
+
+/* Frosted-glass token — matches the LiquidDrawer capsule aesthetic so
+   every overlay element (chips, icon buttons) reads as one design family.
+   color-mix adapts automatically across all 4 themes. */
+const GLASS_BG         = 'color-mix(in srgb, var(--gb-surface-canvas) 62%, transparent)';
+const GLASS_BG_FB      = 'rgba(20, 22, 26, 0.62)';
+const GLASS_BORDER     = 'color-mix(in srgb, var(--gb-text-primary) 12%, transparent)';
+const GLASS_FILTER     = 'blur(18px) saturate(160%)';
+const GLASS_SHADOW     = '0 4px 14px -6px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.05) inset';
+const GLASS_RADIUS     = 9; // px — slightly tighter than the capsule's 14
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 8;
@@ -627,16 +638,12 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                 position: 'absolute', top: 8, right: 8,
                 display: 'flex', gap: 4,
               }}>
-                <IconBtn
-                  size="sm"
-                  tooltip={aligning ? 'Exit alignment' : 'Align to circle'}
+                <GlassIconBtn
                   icon={<AlignIcon />}
                   active={aligning}
                   onClick={() => setAligning((a) => !a)}
                 />
-                <IconBtn
-                  size="sm"
-                  tooltip={view === '3d' ? 'Back to image' : (decalDataUrl ? 'View in 3D' : 'Align first to enable 3D')}
+                <GlassIconBtn
                   icon={<CubeIcon />}
                   active={view === '3d'}
                   onClick={on3DToggle}
@@ -652,10 +659,14 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                   position: 'absolute', top: 8, left: 10,
                   fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
                   color: 'var(--gb-text-secondary)',
-                  background: 'var(--gb-surface-modal)',
-                  border: '1px solid var(--gb-border-default)',
-                  borderRadius: 'var(--gb-r-sm)',
-                  padding: '2px 6px',
+                  background: GLASS_BG_FB,
+                  backgroundImage: GLASS_BG,
+                  backdropFilter: GLASS_FILTER,
+                  WebkitBackdropFilter: GLASS_FILTER,
+                  border: `1px solid ${GLASS_BORDER}`,
+                  borderRadius: GLASS_RADIUS,
+                  boxShadow: GLASS_SHADOW,
+                  padding: '2px 7px',
                   pointerEvents: 'none',
                   fontFamily: 'var(--gb-font-mono)',
                 }}>{imageSize.w}×{imageSize.h}</div>
@@ -681,10 +692,14 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                     position: 'absolute', bottom: 8, left: 10,
                     fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
                     color: 'var(--gb-text-secondary)',
-                    background: 'var(--gb-surface-modal)',
-                    border: '1px solid var(--gb-border-default)',
-                    borderRadius: 'var(--gb-r-sm)',
-                    padding: '2px 6px',
+                    background: GLASS_BG_FB,
+                    backgroundImage: GLASS_BG,
+                    backdropFilter: GLASS_FILTER,
+                    WebkitBackdropFilter: GLASS_FILTER,
+                    border: `1px solid ${GLASS_BORDER}`,
+                    borderRadius: GLASS_RADIUS,
+                    boxShadow: GLASS_SHADOW,
+                    padding: '2px 7px',
                     pointerEvents: 'none',
                     fontFamily: 'var(--gb-font-mono)',
                   }}>{zoomLevel}%</div>
@@ -1002,11 +1017,8 @@ function AlignmentOverlay() {
 }
 
 /* ── ZoomChipBtn ────────────────────────────────────────────────
-   Plain button styled to match the zoom-readout chip: same
-   `surface-modal` background, `border-default` border, `r-sm`
-   radius, mono font. The three zoom controls + the % readout
-   read as one unified strip. Tooltip prop is accepted and ignored
-   so existing call sites keep working without re-tagging. */
+   Frosted-glass zoom button — matches the LiquidDrawer capsule
+   aesthetic so all overlay chrome reads as one family. */
 function ZoomChipBtn({ children, tooltip: _tooltip, onClick }) {
   const [hovered, setHovered] = useState(false);
   return (
@@ -1016,20 +1028,69 @@ function ZoomChipBtn({ children, tooltip: _tooltip, onClick }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        minWidth: 22, height: 20, padding: '0 6px',
+        minWidth: 22, height: 22, padding: '0 7px',
         fontSize: 11, fontWeight: 700, letterSpacing: 0.4,
         fontFamily: 'var(--gb-font-mono)',
-        color: 'var(--gb-text-secondary)',
-        background: hovered ? 'var(--gb-fill-soft)' : 'var(--gb-surface-modal)',
-        border: '1px solid var(--gb-border-default)',
-        borderRadius: 'var(--gb-r-sm)',
+        color: hovered ? 'var(--gb-text-primary)' : 'var(--gb-text-secondary)',
+        background: hovered
+          ? 'color-mix(in srgb, var(--gb-surface-canvas) 78%, transparent)'
+          : GLASS_BG_FB,
+        backgroundImage: GLASS_BG,
+        backdropFilter: GLASS_FILTER,
+        WebkitBackdropFilter: GLASS_FILTER,
+        border: `1px solid ${GLASS_BORDER}`,
+        borderRadius: GLASS_RADIUS,
+        boxShadow: GLASS_SHADOW,
         cursor: 'pointer',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         lineHeight: 1,
-        transition: 'background-color .12s',
+        outline: 'none',
+        transition: 'color .12s, background-color .12s',
+        WebkitTapHighlightColor: 'transparent',
       }}
     >
       {children}
+    </button>
+  );
+}
+
+/* ── GlassIconBtn ───────────────────────────────────────────────
+   Frosted-glass square icon button for the top-right overlay
+   controls (align, 3D toggle). Replaces IconBtn inside the
+   preview surface so all glass elements share the same aesthetic.
+   `active` applies a white pip highlight identical to the
+   LiquidDrawer's active pip. */
+function GlassIconBtn({ icon, active, onClick }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      data-viewer-ui="true"
+      style={{
+        width: 26, height: 26, padding: 0,
+        color: active ? '#ffffff' : (hovered ? 'var(--gb-text-primary)' : 'var(--gb-text-secondary)'),
+        background: active
+          ? 'rgba(255,255,255,0.20)'
+          : (hovered ? 'color-mix(in srgb, var(--gb-surface-canvas) 78%, transparent)' : GLASS_BG_FB),
+        backgroundImage: active ? undefined : GLASS_BG,
+        backdropFilter: GLASS_FILTER,
+        WebkitBackdropFilter: GLASS_FILTER,
+        border: `1px solid ${active ? 'rgba(255,255,255,0.22)' : GLASS_BORDER}`,
+        borderRadius: GLASS_RADIUS,
+        boxShadow: active
+          ? '0 0 0 1px rgba(255,255,255,0.22) inset, 0 0 14px -2px rgba(255,255,255,0.35)'
+          : GLASS_SHADOW,
+        cursor: 'pointer',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        outline: 'none',
+        transition: 'color .12s, background-color .12s, border-color .12s, box-shadow .12s',
+        WebkitTapHighlightColor: 'transparent',
+      }}
+    >
+      {icon}
     </button>
   );
 }
