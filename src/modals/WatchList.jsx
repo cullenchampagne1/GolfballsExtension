@@ -623,8 +623,8 @@ function TaskEditor({ draft, onChange, onCommit, onCancel, isNew }) {
       style={{ overflow: 'hidden', listStyle: 'none' }}
     >
       <Card padding={12} style={{
-        borderColor: 'var(--gb-brand-tint-border)',
-        background: 'var(--gb-brand-tint-soft)',
+        borderColor: 'var(--gb-border-default)',
+        background: 'var(--gb-surface-2)',
         display: 'flex', flexDirection: 'column', gap: 8,
       }}>
         <Input
