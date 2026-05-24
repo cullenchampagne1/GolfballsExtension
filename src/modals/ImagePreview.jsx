@@ -1107,14 +1107,21 @@ function ViewerToolbox({ viewerRef }) {
   const [activeTool, setActiveTool] = useState(null); // null | 'bomb'
 
   // Global pointerdown listener while a tool is active. Spawns the
-  // tool's effect wherever the user clicks on the canvas. The
-  // listener is attached at the window level so it sees clicks even
-  // if other handlers stopPropagation upstream of the wrap — and
-  // self-cancels if the cursor isn't over the canvas (e.g., user
-  // clicks the chip itself to deactivate).
+  // tool's effect when the user clicks on the canvas surface — but
+  // NOT when the click lands on a UI button layered above it (the
+  // toolbox chips, the gravity/scene toggles in the viewer's top-
+  // right strip). Without this guard, clicking the toolbox chip to
+  // close the drawer would also drop a bomb at the chip's
+  // coordinates, because the chip lives inside the canvas's
+  // bounding rect and containsPoint() returns true.
   useEffect(() => {
     if (!activeTool) return undefined;
     const onDown = (e) => {
+      // Skip clicks on UI chrome — any <button>, or any element
+      // tagged data-viewer-ui="true" (the viewer's top-right
+      // controls strip uses this so the entire wrapper is excluded,
+      // not just the button hit-targets).
+      if (e.target?.closest?.('button, [data-viewer-ui="true"]')) return;
       const v = viewerRef.current;
       if (!v?.containsPoint?.({ clientX: e.clientX, clientY: e.clientY })) return;
       if (activeTool === 'bomb') v.dropBomb?.({ clientX: e.clientX, clientY: e.clientY });
