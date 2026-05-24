@@ -79,19 +79,40 @@ export function FloatingPanel({ children, width = 480, backdrop = true, onClose,
                  timeConstant = longer slide. The bounce* settings shape
                  the wall rebound (stiffness 320 / damping 18 ≈ a firm
                  bounce that settles in ~400ms). */
-              dragElastic={0.2}
+              dragElastic={0.4}
               dragConstraints={wrapperRef}
+              /* Bounce-heavy inertia profile — "ice-hockey rink" feel.
+                 power=0.6 gives a longer initial slide from a flick;
+                 timeConstant=260 controls how quickly friction takes
+                 over (higher = slides further). bounceStiffness=800
+                 with near-zero bounceDamping (2) makes the wall hit
+                 nearly elastic — the panel rebounds with most of its
+                 speed intact instead of sticking to the boundary. Spring
+                 still decays (Motion doesn't truly reverse velocity on
+                 constraint hit) but with these values you get multiple
+                 visible bounces per flick. */
               dragTransition={{
-                power: 0.4,
-                timeConstant: 220,
-                bounceStiffness: 320,
-                bounceDamping: 18,
+                power: 0.6,
+                timeConstant: 260,
+                bounceStiffness: 800,
+                bounceDamping: 2,
               }}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95, transition: T.base }}
               transition={T.bounce}
               style={{
+                // `all: revert-layer` resets every inherited / browser-default
+                // property to its un-styled state BEFORE our own styles paint
+                // on top. Critical for content-script injection: host pages
+                // like golfballs.com ship aggressive resets (e.g.
+                // `* { border-radius: 0 !important }` in some legacy CSS)
+                // that would otherwise flatten our rounded corners + inputs.
+                // revert-layer is safer than `all: initial` because it lets
+                // the user-agent default come through (font rendering, focus
+                // outlines on inner controls, etc.) which we then override
+                // explicitly per-property.
+                all: 'revert-layer',
                 pointerEvents: 'auto',
                 width: cssWidth,
                 maxHeight: 'calc(100vh - 32px)',
@@ -113,6 +134,7 @@ export function FloatingPanel({ children, width = 480, backdrop = true, onClose,
                 // mounted on a busy site that sets body { font-size: 12px }.
                 fontSize: 13,
                 lineHeight: 1.4,
+                color: 'var(--gb-text-secondary)',
               }}
             >
               {children}
