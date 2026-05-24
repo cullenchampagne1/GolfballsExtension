@@ -94,6 +94,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   // Hit test — is a CSS point inside the live 3D canvas? Lets the
   // parent decide whether the drop happened over the viewer.
   const containsPointRef = useRef(null);
+  // MutationObserver that watches the document element for theme
+  // changes and rebakes wall textures. Held on a ref so the
+  // effect's teardown can disconnect it across re-runs.
+  const themeObserverRef = useRef(null);
   React.useImperativeHandle(ref, () => ({
     snapshot: (...args) => snapshotRef.current?.(...args),
     dropBomb: (...args) => dropBombRef.current?.(...args),
@@ -277,12 +281,6 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // edges/seams pick up shading. The material is therefore
         // MeshBasicMaterial (no lighting) so nothing dims the fill.
         {
-          // Sample design tokens once for the bakes below.
-          const cs = getComputedStyle(document.documentElement);
-          const surface = cs.getPropertyValue('--gb-surface-canvas').trim() || '#0e0f10';
-          const minor = cs.getPropertyValue('--gb-border-subtle').trim() || '#1a1c1f';
-          const major = cs.getPropertyValue('--gb-border-default').trim() || '#26292d';
-
           /* Bake a wall texture sized to the wall's actual aspect
              ratio so the grid stays square + the edge vignette
              reads symmetrically. The base color matches the
@@ -291,8 +289,17 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
              linear gradients (one per edge) that fall off from
              opaque-dark at the edge to fully transparent ~22% of the
              way in. Result: walls visually disappear into the
-             background and only the corners catch shadow. */
+             background and only the corners catch shadow.
+
+             Reads design tokens FROM THE LIVE DOCUMENT on every call
+             (not at outer scope) so rebakeWalls() picks up the new
+             theme after the user flips themes. */
           function makeWallTexture(widthWU, heightWU) {
+            const cs = getComputedStyle(document.documentElement);
+            const surface = cs.getPropertyValue('--gb-surface-canvas').trim() || '#0e0f10';
+            const minor = cs.getPropertyValue('--gb-border-subtle').trim() || '#1a1c1f';
+            const major = cs.getPropertyValue('--gb-border-default').trim() || '#26292d';
+
             // Texture resolution: 4 px per world unit, capped, so big
             // walls don't blow out the upload size.
             const PXPU = 3;
@@ -422,8 +429,29 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
 
             const mesh = new THREE.Mesh(geo, mat);
             mesh.receiveShadow = true;
+            // Stash bake dims so rebakeWalls() can regenerate the
+            // texture with the SAME aspect ratio after a theme flip.
+            mesh.userData.wallBakeWidth = widthWU;
+            mesh.userData.wallBakeHeight = heightWU;
             return mesh;
           }
+
+          /* Rebake every wall's emissive texture using the current
+             document theme tokens. Called when a theme change is
+             detected by the MutationObserver below; cheap enough at
+             that frequency (a handful of canvas paints + GPU upload). */
+          const rebakeWalls = () => {
+            for (const mesh of wallMeshes) {
+              const w = mesh.userData.wallBakeWidth;
+              const h = mesh.userData.wallBakeHeight;
+              if (!w || !h) continue;
+              const oldTex = mesh.material.emissiveMap;
+              const newTex = makeWallTexture(w, h);
+              mesh.material.emissiveMap = newTex;
+              mesh.material.needsUpdate = true;
+              if (oldTex) oldTex.dispose();
+            }
+          };
 
           /* Apply the rounded-box snap to a wall AFTER it's been
              positioned/rotated into the room. Each vertex is taken
@@ -496,6 +524,22 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // Stash the wall meshes so the snapshot routine can hide
           // them temporarily — the snapshot is ball-only.
           wallMeshes.push(floor, ceil, back, left, right);
+
+          /* Theme observer — rebake wall textures whenever the live
+             theme changes. The token sheet flips via either a new
+             data-theme attribute on <html> or inline style overrides
+             on the same element. Watch BOTH:
+               • attributeFilter: ['data-theme', 'style'] catches all
+                 entry points in lib/theme.js (applyTheme writes both
+                 the variant attribute and per-token style props).
+             Stashed on themeObserverRef so the effect's teardown can
+             disconnect it. */
+          const themeObserver = new MutationObserver(() => rebakeWalls());
+          themeObserver.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['data-theme', 'style'],
+          });
+          themeObserverRef.current = themeObserver;
 
           // No front wall — user looks INTO the room from outside.
           // The 6th cannon plane still bounces the ball back from the
@@ -689,14 +733,112 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           restitution: 0.55,
         }));
 
-        // bombs: array of { group, body, radius }. Populated by
-        // dropBombRef.current below. Render loop iterates it each
-        // frame to sync mesh transforms from physics.
+        // bombs: array of { group, body, radius, sparkMat, fuseStart }
+        // Render loop drives fuse animation, syncs physics to mesh,
+        // and triggers explode() when fuseStart + FUSE_MS elapses.
         const bombs = [];
+        // particles: short-lived burst sprites spawned at explosion.
+        // Each is { mesh, vel, life, maxLife } — pure visual, no
+        // physics (manual position += vel*dt + light gravity drag).
+        const particles = [];
         const ndc = new THREE.Vector2();
         const ray = new THREE.Raycaster();
         const dropPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0); // z = 0
         const hitPoint = new THREE.Vector3();
+
+        // Tunables for the explosion. FUSE_MS is the visible burn
+        // time before detonation. BLAST_R + IMPULSE_BASE control how
+        // hard nearby bodies get punched; force falls off with 1/(d+1).
+        const FUSE_MS = 2500;
+        const BLAST_R = 240;
+        const IMPULSE_BASE = 950;
+        const PARTICLE_COUNT = 36;
+        const PARTICLE_LIFE_MS = 950;
+
+        /* Detonate a bomb: apply radial impulse to the ball + every
+           OTHER bomb in range, spawn a particle burst, then remove
+           the bomb's mesh + physics body from the world.
+
+           Impulse direction is from the bomb's center to the target
+           body's center; magnitude scales with IMPULSE_BASE / (d+1)
+           and is zero past BLAST_R. The ball gets a smaller share
+           (it's much heavier) so the room doesn't fling it across
+           on a near-miss; bombs are lighter so they scatter visibly. */
+        const tmpDir = new THREE.Vector3();
+        const explode = (bomb) => {
+          const origin = bomb.body.position;
+
+          // Affected bodies: every bomb except the one detonating,
+          // plus the ball (only when it's DYNAMIC — kinematic ball
+          // is static while gravity is off, so don't poke it).
+          const targets = [];
+          for (const other of bombs) {
+            if (other === bomb) continue;
+            const dx = other.body.position.x - origin.x;
+            const dy = other.body.position.y - origin.y;
+            const dz = other.body.position.z - origin.z;
+            const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (d > BLAST_R) continue;
+            targets.push({ body: other.body, dx, dy, dz, d, falloff: IMPULSE_BASE / (d + 1) });
+          }
+          {
+            const dx = ballBody.position.x - origin.x;
+            const dy = ballBody.position.y - origin.y;
+            const dz = ballBody.position.z - origin.z;
+            const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (d <= BLAST_R && ballBody.type === CANNON.Body.DYNAMIC) {
+              targets.push({ body: ballBody, dx, dy, dz, d, falloff: IMPULSE_BASE * 0.55 / (d + 1) });
+            }
+          }
+          for (const t of targets) {
+            const inv = t.d > 1e-3 ? 1 / t.d : 0;
+            const ix = t.dx * inv * t.falloff;
+            const iy = t.dy * inv * t.falloff;
+            const iz = t.dz * inv * t.falloff;
+            t.body.applyImpulse(new CANNON.Vec3(ix, iy, iz), t.body.position);
+            t.body.wakeUp();
+          }
+
+          // Particle burst. Each particle is a tiny emissive sphere
+          // shot in a random outward direction with a small Z-bias
+          // so the burst reads as volumetric rather than flat.
+          for (let i = 0; i < PARTICLE_COUNT; i++) {
+            const theta = Math.random() * Math.PI * 2;
+            const phi = (Math.random() - 0.5) * Math.PI * 0.6; // shallow elevation
+            const speed = 280 + Math.random() * 220;
+            tmpDir.set(
+              Math.cos(theta) * Math.cos(phi),
+              Math.sin(phi) + 0.25,                 // bias up a bit
+              Math.sin(theta) * Math.cos(phi) * 0.55, // squash Z so we see the burst
+            ).normalize();
+            const geo = new THREE.SphereGeometry(1.6 + Math.random() * 1.5, 6, 6);
+            const mat = new THREE.MeshBasicMaterial({
+              color: Math.random() < 0.55 ? 0xffb347 : 0xff5722,
+              transparent: true,
+              opacity: 1,
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(origin.x, origin.y, origin.z);
+            scene.add(mesh);
+            particles.push({
+              mesh,
+              vel: tmpDir.clone().multiplyScalar(speed),
+              life: PARTICLE_LIFE_MS,
+              maxLife: PARTICLE_LIFE_MS,
+            });
+          }
+
+          // Strip the bomb out of bombs[] + the world.
+          const idx = bombs.indexOf(bomb);
+          if (idx >= 0) bombs.splice(idx, 1);
+          scene.remove(bomb.group);
+          world.removeBody(bomb.body);
+          // Dispose materials/geometry created for this bomb. The
+          // sphereGeometry / standard materials were pushed to
+          // objectsToDispose at spawn — leave the global dispose
+          // pass to free them on unmount; that's idempotent.
+        };
+
         dropBombRef.current = ({ clientX, clientY }) => {
           const canvas = renderer.domElement;
           const r = canvas.getBoundingClientRect();
@@ -722,11 +864,12 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.9 }),
           );
           mFuse.position.y = BOMB_R + 4;
+          const sparkMat = new THREE.MeshStandardMaterial({
+            color: 0xffb347, emissive: 0xff7a1a, emissiveIntensity: 1.4, roughness: 0.4,
+          });
           const mSpark = new THREE.Mesh(
             new THREE.SphereGeometry(2, 12, 10),
-            new THREE.MeshStandardMaterial({
-              color: 0xffb347, emissive: 0xff7a1a, emissiveIntensity: 1.4, roughness: 0.4,
-            }),
+            sparkMat,
           );
           mSpark.position.y = BOMB_R + 10;
           bombGroup.add(mBody, mFuse, mSpark);
@@ -751,7 +894,14 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           cBody.position.set(hitPoint.x, hitPoint.y, hitPoint.z);
           world.addBody(cBody);
 
-          bombs.push({ group: bombGroup, body: cBody, radius: BOMB_R });
+          bombs.push({
+            group: bombGroup,
+            body: cBody,
+            radius: BOMB_R,
+            spark: mSpark,
+            sparkMat,
+            fuseStart: performance.now(),
+          });
         };
 
         ballBody = new CANNON.Body({
@@ -919,6 +1069,54 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             for (const b of bombs) {
               b.group.position.set(b.body.position.x, b.body.position.y, b.body.position.z);
               b.group.quaternion.set(b.body.quaternion.x, b.body.quaternion.y, b.body.quaternion.z, b.body.quaternion.w);
+            }
+          }
+
+          /* ── Fuse animation + detonation ───────────────────────
+             For each bomb, drive the spark's emissive intensity and
+             scale on a 0→1 ramp keyed off (now - fuseStart) / FUSE_MS.
+             A subtle saw-wave overlay makes it pulse faster as it
+             gets closer to zero. When t hits 1, explode().
+
+             Iterate backwards so explode()'s splice doesn't skip a
+             bomb. */
+          for (let i = bombs.length - 1; i >= 0; i--) {
+            const b = bombs[i];
+            const t = Math.min(1, (nowMs - b.fuseStart) / FUSE_MS);
+            // Pulse rate ramps from ~2Hz to ~10Hz as the fuse burns.
+            const pulseHz = 2 + t * 8;
+            const pulse = 0.5 + 0.5 * Math.sin((nowMs / 1000) * pulseHz * Math.PI * 2);
+            // Base brightness + scale ramps with t; pulse adds wobble.
+            b.sparkMat.emissiveIntensity = 1.0 + t * 3.5 + pulse * (0.4 + t * 1.2);
+            b.spark.scale.setScalar(1 + t * 0.9 + pulse * (0.15 + t * 0.4));
+            if (t >= 1) explode(b);
+          }
+
+          /* ── Particle update ───────────────────────────────────
+             Integrate position with a mild gravity drag + air
+             damping, fade opacity over life, remove when expired.
+             Particles are independent of physics — they pass through
+             the ball/walls so the burst reads as visual flair, not a
+             second physics system. */
+          if (particles.length > 0) {
+            const PARTICLE_GRAV = 380;
+            const PARTICLE_DAMP = Math.pow(0.92, dt * 60);
+            for (let i = particles.length - 1; i >= 0; i--) {
+              const p = particles[i];
+              p.vel.y -= PARTICLE_GRAV * dt;
+              p.vel.multiplyScalar(PARTICLE_DAMP);
+              p.mesh.position.x += p.vel.x * dt;
+              p.mesh.position.y += p.vel.y * dt;
+              p.mesh.position.z += p.vel.z * dt;
+              p.life -= dt * 1000;
+              const k = Math.max(0, p.life / p.maxLife);
+              p.mesh.material.opacity = k;
+              if (p.life <= 0) {
+                scene.remove(p.mesh);
+                p.mesh.geometry.dispose();
+                p.mesh.material.dispose();
+                particles.splice(i, 1);
+              }
             }
           }
 
@@ -1150,6 +1348,8 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
       snapshotRef.current = null;
       dropBombRef.current = null;
       containsPointRef.current = null;
+      themeObserverRef.current?.disconnect();
+      themeObserverRef.current = null;
       cleanupRef.current?.();
       cleanupRef.current = null;
     };
