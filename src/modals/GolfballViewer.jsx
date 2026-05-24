@@ -425,17 +425,31 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         const onPDown = (e) => {
           if (e.button !== 0) return;
           state.dragging = true;
+          // Snapshot EVERYTHING the move handler will need: pointer
+          // start, ball position at start, ball rotation at start.
+          // Without snapshotting on EVERY pointerdown, a stale value
+          // from a previous drag (e.g. dragStartQuat from a release
+          // that never fired onPUp) would carry into the new drag
+          // and the ball would jump.
           state.dragStart = {
             px: e.clientX,
             py: e.clientY,
-            wx: throwModeRef.current ? ballBody.position.x : 0,
-            wy: throwModeRef.current ? ballBody.position.y : 0,
+            wx: ballBody.position.x,
+            wy: ballBody.position.y,
+            mode: throwModeRef.current,
           };
+          state.dragStartQuat = ballGroup.quaternion.clone();
           state.history = [{ t: performance.now(), x: e.clientX, y: e.clientY }];
+
           if (throwModeRef.current) {
-            // Stop the body's motion while held so drag is in control.
+            // Convert to KINEMATIC: cannon-es no longer applies
+            // gravity / collisions move the body. We own position
+            // entirely while holding it; the body acts as a sensor.
+            // On release, switch back to DYNAMIC and seed velocity.
+            ballBody.type = CANNON.Body.KINEMATIC;
             ballBody.velocity.set(0, 0, 0);
             ballBody.angularVelocity.set(0, 0, 0);
+            ballBody.wakeUp();
           }
           try { renderer.domElement.setPointerCapture(e.pointerId); } catch {}
         };
@@ -445,33 +459,36 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           const dxPx = e.clientX - state.dragStart.px;
           const dyPx = e.clientY - state.dragStart.py;
 
+          // Mode change mid-drag invalidates dragStart anchors. End
+          // the drag cleanly so the new mode starts fresh on the
+          // user's next press. (Pre-edit, throw toggle during a drag
+          // produced the "ball teleports to cursor" symptom because
+          // `wx`/`wy` were 0 from the original mode but body position
+          // had drifted from the new mode's physics.)
+          if (state.dragStart.mode !== throwModeRef.current) {
+            state.dragging = false;
+            state.dragStartQuat = null;
+            return;
+          }
+
           if (throwModeRef.current) {
-            // Move the cannon body — let cannon-es handle wall
-            // overshoot via its own collision pass next step.
+            // Move the kinematic body. Mirror to ballGroup so the
+            // render reflects the drag without waiting for the next
+            // world.step.
             ballBody.position.x = state.dragStart.wx + dxPx * 0.7;
             ballBody.position.y = state.dragStart.wy - dyPx * 0.7;
             ballBody.position.z = 0;
-            // Mirror to render so user sees the drag immediately
-            // (next frame's render-loop sync happens AFTER step,
-            // which would lag by one frame).
             ballGroup.position.set(ballBody.position.x, ballBody.position.y, 0);
           } else {
-            // Quaternion delta — rotate the ball around the X axis
-            // for vertical drag, Y axis for horizontal. Pre-multiply
-            // so the rotation is applied in world space, which feels
-            // like trackball-style "drag the surface".
+            // Quaternion delta from drag-start. premultiply applies
+            // the rotation in world space, which feels like trackball
+            // "drag the surface".
             tmpQuat.setFromEuler(new THREE.Euler(
               dyPx * ROTATE_SENSITIVITY,
               dxPx * ROTATE_SENSITIVITY,
               0,
               'XYZ',
             ));
-            // Start from the rotation we had at drag-start; if we
-            // hadn't stashed it, repeated tiny moves would accumulate
-            // and the ball would spin away from the cursor.
-            if (!state.dragStartQuat) {
-              state.dragStartQuat = ballGroup.quaternion.clone();
-            }
             ballGroup.quaternion.copy(state.dragStartQuat).premultiply(tmpQuat);
           }
           const now = performance.now();
@@ -487,6 +504,22 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           state.dragging = false;
           state.dragStartQuat = null;
           try { renderer.domElement.releasePointerCapture(e.pointerId); } catch {}
+
+          // ALWAYS restore the body to DYNAMIC so future physics
+          // ticks apply gravity again. Even if we didn't switch it
+          // (e.g. a mode-change mid-drag aborted), it's a no-op.
+          if (ballBody.type === CANNON.Body.KINEMATIC) {
+            ballBody.type = CANNON.Body.DYNAMIC;
+            // Sync the rendered rotation onto the body — the user
+            // may have re-positioned the ball after rotating it,
+            // and we want the throw to inherit that orientation.
+            ballBody.quaternion.set(
+              ballGroup.quaternion.x,
+              ballGroup.quaternion.y,
+              ballGroup.quaternion.z,
+              ballGroup.quaternion.w,
+            );
+          }
 
           // In throw mode, seed velocity from the recent drag arc so
           // releasing flings the ball. In normal mode, nothing — the
