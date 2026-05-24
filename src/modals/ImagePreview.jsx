@@ -133,6 +133,10 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   const [pendingPick, setPendingPick] = useState(null);
   const [editedDataUrl, setEditedDataUrl] = useState(null);
   const [colorSwaps, setColorSwaps] = useState([]);
+  // Live preview of the pending swap — replaces displayUrl while the
+  // popover is open so the user can dial in tolerance / color visually
+  // before committing. Cleared on Cancel; promoted to editedDataUrl on Apply.
+  const [previewDataUrl, setPreviewDataUrl] = useState(null);
   // Persisted decal — the cropped+masked PNG built from the most
   // recent Save Alignment. Null until the user saves once; cleared
   // when the source URL changes. Feeds the 3D viewer as a decal.
@@ -216,6 +220,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
     setColorSwaps([]);
     setEyedropping(false);
     setPendingPick(null);
+    setPreviewDataUrl(null);
     scaleRef.current = 1; txRef.current = 0; tyRef.current = 0;
     rotationRef.current = 0; setRotation(0);
     setZoomLevel(100);
@@ -224,8 +229,8 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   }, [effectiveUrl]);
 
   // The image source actually shown / downloaded / used as the decal.
-  // Once any color swap has been applied, editedDataUrl wins.
-  const displayUrl = editedDataUrl || effectiveUrl;
+  // Preview (live swap in popover) > committed edits > original.
+  const displayUrl = previewDataUrl || editedDataUrl || effectiveUrl;
 
   /* Sample a pixel color from the loaded <img>. Returns {r,g,b} from
      the natural-pixel space (intrinsic source resolution), regardless
@@ -262,11 +267,11 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
     }
   }
 
-  /* Run a color swap on the current displayUrl (working image) and
-     return a new dataURL with all matching pixels recolored. Pixels
-     within `tolerance` RGB distance of `from` get replaced with `to`.
+  /* Run a color swap on a given source image URL and return a new
+     dataURL with all matching pixels recolored. Pixels within
+     `tolerance` RGB distance of `from` get replaced with `to`.
      Preserves alpha so transparent regions stay transparent. */
-  function applyColorSwap(fromRgb, toRgb, tolerance) {
+  function applyColorSwap(fromRgb, toRgb, tolerance, sourceUrl = (editedDataUrl || effectiveUrl)) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
@@ -298,7 +303,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
         }
       };
       img.onerror = reject;
-      img.src = displayUrl;
+      img.src = sourceUrl;
     });
   }
 
@@ -865,18 +870,26 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                   pick={pendingPick}
                   wrapRef={wrapRef}
                   swapCount={colorSwaps.length}
-                  onCancel={() => setPendingPick(null)}
-                  onApply={async (newColor, tolerance) => {
+                  onPreview={async (newColor, tolerance) => {
                     try {
                       const url = await applyColorSwap(pendingPick.color, newColor, tolerance);
-                      setEditedDataUrl(url);
+                      setPreviewDataUrl(url);
+                    } catch (e) {
+                      // CORS or other failure — silently skip preview update.
+                    }
+                  }}
+                  onCancel={() => {
+                    setPreviewDataUrl(null);
+                    setPendingPick(null);
+                  }}
+                  onApply={(newColor, tolerance) => {
+                    // Preview is already the result we want — promote it.
+                    if (previewDataUrl) {
+                      setEditedDataUrl(previewDataUrl);
                       setColorSwaps((prev) => [...prev, { from: pendingPick.color, to: newColor, tolerance }]);
+                      setPreviewDataUrl(null);
                       setPendingPick(null);
                       toast?.success?.('Color swapped');
-                    } catch (e) {
-                      console.warn('[ImagePreview] color swap failed:', e);
-                      toast?.error?.('Color swap failed (CORS?)');
-                      setPendingPick(null);
                     }
                   }}
                 />
@@ -1562,23 +1575,60 @@ const ResetIcon = (p) => (
    design-system color picker (themable, matches Settings page),
    a tolerance slider, and Apply / Cancel. Clamps inside the
    wrapRef bounds so it never spills past the preview surface. */
-function SwapPopover({ pick, wrapRef, swapCount, onCancel, onApply }) {
+function SwapPopover({ pick, wrapRef, swapCount, onPreview, onCancel, onApply }) {
   const [newColor, setNewColor] = React.useState(rgbToHex(pick.color));
   const [tolerance, setTolerance] = React.useState(30);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const newSwatchRef = useRef(null);
   React.useEffect(() => { setNewColor(rgbToHex(pick.color)); }, [pick.color]);
 
+  // Popover position — initial anchor is near the click, draggable
+  // afterward via the header. Clamped inside the wrapper bounds.
   const wrap = wrapRef.current;
   const wrapperW = wrap?.clientWidth ?? 320;
   const wrapperH = wrap?.clientHeight ?? 320;
   const POPOVER_W = 226;
   const POPOVER_H = 140;
-  const left = Math.max(6, Math.min(wrapperW - POPOVER_W - 6, pick.x + 12));
-  const top  = Math.max(6, Math.min(wrapperH - POPOVER_H - 6, pick.y + 12));
+  const [pos, setPos] = React.useState(() => ({
+    left: Math.max(6, Math.min(wrapperW - POPOVER_W - 6, pick.x + 12)),
+    top:  Math.max(6, Math.min(wrapperH - POPOVER_H - 6, pick.y + 12)),
+  }));
+  // Drag state for the header handle.
+  const dragRef = useRef(null);
+  const onDragStart = (e) => {
+    if (e.button !== 0) return;
+    dragRef.current = {
+      px: e.clientX, py: e.clientY,
+      left: pos.left, top: pos.top,
+    };
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+  };
+  const onDragMove = (e) => {
+    if (!dragRef.current) return;
+    const dx = e.clientX - dragRef.current.px;
+    const dy = e.clientY - dragRef.current.py;
+    const nextLeft = Math.max(6, Math.min(wrapperW - POPOVER_W - 6, dragRef.current.left + dx));
+    const nextTop  = Math.max(6, Math.min(wrapperH - POPOVER_H - 6, dragRef.current.top  + dy));
+    setPos({ left: nextLeft, top: nextTop });
+  };
+  const onDragEnd = (e) => {
+    dragRef.current = null;
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+  };
 
   const pickedHex = rgbToHex(pick.color);
   const toRgb = hexToRgb(newColor);
+
+  // Debounced live preview — refresh on color/tolerance change but
+  // skip redundant work while the slider is being dragged at high
+  // frequency. 90ms feels responsive without thrashing the canvas.
+  React.useEffect(() => {
+    const id = setTimeout(() => {
+      onPreview?.(toRgb, tolerance);
+    }, 90);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newColor, tolerance]);
 
   return (
     <motion.div
@@ -1588,7 +1638,7 @@ function SwapPopover({ pick, wrapRef, swapCount, onCancel, onApply }) {
       transition={{ duration: 0.14, ease: [0.4, 0, 0.2, 1] }}
       style={{
         position: 'absolute',
-        left, top,
+        left: pos.left, top: pos.top,
         width: POPOVER_W,
         zIndex: 7,
         padding: 10,
@@ -1600,11 +1650,24 @@ function SwapPopover({ pick, wrapRef, swapCount, onCancel, onApply }) {
         fontFamily: 'var(--gb-font-sans)',
       }}
     >
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        fontSize: 9.5, fontWeight: 700, letterSpacing: 0.5,
-        textTransform: 'uppercase', color: 'var(--gb-text-muted)',
-      }}>
+      {/* Drag handle — header row doubles as the grip. cursor:move
+          on the row, but the buttons inside (color swatch button)
+          override to pointer so they remain clickable. */}
+      <div
+        onPointerDown={onDragStart}
+        onPointerMove={onDragMove}
+        onPointerUp={onDragEnd}
+        onPointerCancel={onDragEnd}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          fontSize: 9.5, fontWeight: 700, letterSpacing: 0.5,
+          textTransform: 'uppercase', color: 'var(--gb-text-muted)',
+          cursor: dragRef.current ? 'grabbing' : 'grab',
+          userSelect: 'none',
+          marginBottom: -2,
+        }}
+      >
+        <DragHandleDots />
         <span>Swap color {swapCount > 0 ? `· #${swapCount + 1}` : ''}</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1671,6 +1734,18 @@ function SwapPopover({ pick, wrapRef, swapCount, onCancel, onApply }) {
     </motion.div>
   );
 }
+
+/* Six-dot drag handle, standard "grip" affordance. */
+const DragHandleDots = () => (
+  <svg width="9" height="13" viewBox="0 0 9 13" fill="currentColor" aria-hidden>
+    <circle cx="2" cy="2"  r="1" />
+    <circle cx="7" cy="2"  r="1" />
+    <circle cx="2" cy="6.5" r="1" />
+    <circle cx="7" cy="6.5" r="1" />
+    <circle cx="2" cy="11" r="1" />
+    <circle cx="7" cy="11" r="1" />
+  </svg>
+);
 
 function rgbToHex({ r, g, b }) {
   const h = (v) => v.toString(16).padStart(2, '0');
