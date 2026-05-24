@@ -1,588 +1,731 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  FloatingPanel, ModalHeader, Btn, Card, Input, Tag, I,
+  FloatingPanel, ModalHeader, Btn, Card, Input, Tag, Dot, Dropdown, I,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
-import { useDevSetting } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
-   WatchList — React port of content/watchlist-modal.js, rebuilt
-   to match the redesign in design_handoff/Golfballs Extension
-   Redesign.html (WatchListView in surfaces-1.jsx).
+   WatchList — task-list modal, built to match the TaskListView
+   from the redesign (Golfballs Extension Redesign.html → surfaces-2.jsx).
 
-   Visual structure per row:
-     • 26×26 type-icon tile on the LEFT, color-shifted on critical
-     • meta row: tiny type tag, mono ID, age, optional CRITICAL badge
-     • name (or short title)
-     • reason text
-     • action row: Open · Edit reason · Resolve (right-aligned)
+   Task shape:
+     {
+       id:        string
+       title:     string                            (required)
+       done:      bool                              (default false)
+       doneAt:    number?                           (Date.now when marked done)
+       priority:  'high' | 'med' | 'low'            (default 'med')
+       due:       string?                           (free-form: 'Today 2pm', 'Apr 2', etc.)
+       createdAt: number
+       context:   null
+                | { type: 'order',   id: string }
+                | { type: 'contact', id: string, name?: string }
+                | { type: 'account', id: string, name?: string }
+     }
 
-   Top toolbar: search input + filter button.
+   Tasks can be standalone OR tied to an order/contact/account.
+   The context renders inline as "Order #29103" / "Contact #4421 ·
+   Marcus Chen" / "Account #2188 · Acme".
 
-   Three urgency tiers gated by dev settings (hours):
-     watchList.thresholdModerateH  (default 1)
-     watchList.thresholdHighH       (default 4)
-     watchList.thresholdCriticalH   (default 6)
+   Filters: All · Active · High priority · Completed.
+   Each filter chip carries a live count badge.
 
-   Storage: chrome.storage.local with `watchList` key when available,
-   localStorage fallback for the playground.
+   Storage: chrome.storage.local with `watchList` key when available;
+   localStorage fallback so the playground page works without
+   chrome.storage.
 ─────────────────────────────────────────────────────────────── */
 
-function getTimerInfo(addedAt, nowMs, thresholdsMs) {
-  const ms = Math.max(0, nowMs - addedAt);
-  const s  = Math.floor(ms / 1000);
-  const h  = Math.floor(s / 3600);
-  const d  = Math.floor(h / 24);
-  const m  = Math.floor((s % 3600) / 60);
-  const sc = s % 60;
-
-  // Compact age label: <1m → seconds, <1h → minutes, <1d → "Xh Ym",
-  // ≥1d → "Xd". Mirrors the design which uses "8h", "1d", "22d".
-  let age;
-  if (d > 0)        age = `${d}d`;
-  else if (h > 0)   age = `${h}h ${m}m`;
-  else if (m > 0)   age = `${m}m ${sc}s`;
-  else              age = `${sc}s`;
-
-  const urgency =
-    ms >= thresholdsMs.critical ? 'critical' :
-    ms >= thresholdsMs.high     ? 'high'     :
-    ms >= thresholdsMs.moderate ? 'moderate' : 'normal';
-  return { age, urgency };
-}
-
-/* ── Storage shim — chrome.storage.local when available, localStorage
-   fallback so the modal works inside the playground page too. */
 const STORAGE_KEY = 'watchList';
 const hasChromeStorage = (() => {
   try { return typeof chrome !== 'undefined' && !!chrome.storage?.local; }
   catch { return false; }
 })();
-function loadWatchList() {
+
+function loadTasks() {
   return new Promise((resolve) => {
     if (hasChromeStorage) {
-      chrome.storage.local.get(STORAGE_KEY, (data) => resolve(data?.[STORAGE_KEY] || []));
+      chrome.storage.local.get(STORAGE_KEY, (data) => resolve(normalize(data?.[STORAGE_KEY] || [])));
       return;
     }
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      resolve(raw ? JSON.parse(raw) : []);
+      resolve(normalize(raw ? JSON.parse(raw) : []));
     } catch { resolve([]); }
   });
 }
-function saveWatchList(list) {
+function saveTasks(list) {
   if (hasChromeStorage) { chrome.storage.local.set({ [STORAGE_KEY]: list }); return; }
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch {}
 }
-function subscribeWatchList(onChange) {
+function subscribeTasks(onChange) {
   if (hasChromeStorage) {
     const fn = (changes, area) => {
-      if (area === 'local' && changes[STORAGE_KEY]) onChange(changes[STORAGE_KEY].newValue || []);
+      if (area === 'local' && changes[STORAGE_KEY]) onChange(normalize(changes[STORAGE_KEY].newValue || []));
     };
     chrome.storage.onChanged.addListener(fn);
     return () => chrome.storage.onChanged.removeListener(fn);
   }
   const fn = (e) => {
     if (e.key === STORAGE_KEY) {
-      try { onChange(e.newValue ? JSON.parse(e.newValue) : []); } catch {}
+      try { onChange(normalize(e.newValue ? JSON.parse(e.newValue) : [])); } catch {}
     }
   };
   window.addEventListener('storage', fn);
   return () => window.removeEventListener('storage', fn);
 }
 
-function buildEntityUrl(item) {
-  if (item.orderUrl) return item.orderUrl;
-  const id = item.orderId || '';
-  if (!id) return '';
-  const t = item.entityType || 'order';
-  if (t === 'contact') return `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=240&customerID=${id}`;
-  if (t === 'account') return `https://api.golfballs.com/golfballs/adminNew/default.aspx?Page=271&accountID=${id}`;
-  return '';
+/* Normalize legacy watch-list entries (entityType/orderId/reason
+   shape) into the new task shape so old persisted data keeps working. */
+function normalize(list) {
+  return (list || []).map((raw) => {
+    if (raw && typeof raw === 'object' && (raw.title || raw.priority !== undefined)) {
+      // Already a task.
+      return {
+        id: raw.id || `t-${Math.random().toString(36).slice(2, 9)}`,
+        title: String(raw.title || '').trim() || 'Untitled task',
+        done: !!raw.done,
+        doneAt: raw.doneAt || null,
+        priority: raw.priority || 'med',
+        due: raw.due || '',
+        createdAt: raw.createdAt || Date.now(),
+        context: raw.context || null,
+      };
+    }
+    // Legacy shape from the original watchlist-modal.js: convert.
+    const t = raw?.entityType || 'order';
+    const ctx = raw?.orderId
+      ? { type: t, id: String(raw.orderId), ...(raw.name ? { name: raw.name } : {}) }
+      : null;
+    return {
+      id: raw?.id || `t-${Math.random().toString(36).slice(2, 9)}`,
+      title: String(raw?.reason || 'Untitled task').slice(0, 120),
+      done: false,
+      doneAt: null,
+      priority: 'med',
+      due: '',
+      createdAt: raw?.addedAt || Date.now(),
+      context: ctx,
+    };
+  });
 }
 
-function entityName(item) {
-  // Prefer a friendly display name when present (added by future
-  // capture flows); else use the entity id.
-  if (item.name) return item.name;
-  const t = item.entityType || 'order';
-  const id = item.orderId || '';
-  if (t === 'order')   return id ? `Order ${id}` : 'Order';
-  if (t === 'contact') return id ? `Contact ${id}` : 'Contact';
-  if (t === 'account') return id ? `Account ${id}` : 'Account';
-  return id || 'Item';
+function newTask(partial = {}) {
+  return {
+    id: `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    title: '',
+    done: false,
+    doneAt: null,
+    priority: 'med',
+    due: '',
+    createdAt: Date.now(),
+    context: null,
+    ...partial,
+  };
+}
+
+/* Did the task get marked done in the last 24h? Used for the "1
+   completed today" subtitle count. */
+function isDoneToday(task, nowMs) {
+  if (!task.done || !task.doneAt) return false;
+  return (nowMs - task.doneAt) < 24 * 3600 * 1000;
 }
 
 /* ── Public component ────────────────────────────────────────── */
 export function WatchList({ onClosed, bindClose }) {
   const toast = useToast();
 
-  // Dev-setting-driven thresholds. Values come back in hours, converted
-  // to ms here. Live — flipping the setting reflects immediately because
-  // the next render re-reads them.
-  const modH  = Number(useDevSetting('watchList.thresholdModerateH') ?? 1);
-  const highH = Number(useDevSetting('watchList.thresholdHighH')     ?? 4);
-  const critH = Number(useDevSetting('watchList.thresholdCriticalH') ?? 6);
-  // Defensive: make sure they don't cross (moderate ≤ high ≤ critical),
-  // otherwise tier transitions look wrong.
-  const thresholdsMs = useMemo(() => {
-    const m = modH;
-    const h = Math.max(m, highH);
-    const c = Math.max(h, critH);
-    return { moderate: m * 3600000, high: h * 3600000, critical: c * 3600000 };
-  }, [modH, highH, critH]);
-
-  const [items, setItems] = useState([]);
+  const [tasks, setTasks] = useState([]);
   const [loaded, setLoaded] = useState(false);
+  const [filter, setFilter] = useState('active'); // 'all' | 'active' | 'high' | 'done'
+  const [editingId, setEditingId] = useState(null); // task id currently in edit mode (or '__new')
+  const [draft, setDraft] = useState(null);         // { title, due, priority, context }
   const [resolvingIds, setResolvingIds] = useState(() => new Set());
-  // Edit-reason inline state: which item id is being edited + draft text.
-  const [editingId, setEditingId] = useState(null);
-  const [editDraft, setEditDraft] = useState('');
-  // Filter state — matches the design's "All" button. For now just a
-  // single quick filter; can grow into a dropdown later.
-  const [filter, setFilter] = useState('all'); // 'all' | 'critical'
-  const [search, setSearch] = useState('');
-  const [confirmClear, setConfirmClear] = useState(false);
-  const confirmTimerRef = useRef(null);
-  const [now, setNow] = useState(() => Date.now());
+  const now = Date.now(); // used for done-today calc; static per render is fine
 
   // Load + subscribe.
   useEffect(() => {
     let alive = true;
-    loadWatchList().then((list) => {
-      if (alive) { setItems(list); setLoaded(true); }
-    });
-    return subscribeWatchList((next) => { if (alive) setItems(next); });
+    loadTasks().then((list) => { if (alive) { setTasks(list); setLoaded(true); } });
+    return subscribeTasks((next) => { if (alive) setTasks(next); });
   }, []);
-
-  // Tick timers — 1s while any item exists.
-  useEffect(() => {
-    if (items.length === 0) return undefined;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [items.length]);
 
   const persist = useCallback((next) => {
-    setItems(next);
-    saveWatchList(next);
+    setTasks(next);
+    saveTasks(next);
   }, []);
 
-  const resolve = useCallback((id) => {
-    setResolvingIds((prev) => { const n = new Set(prev); n.add(id); return n; });
+  // Counts for the filter chips.
+  const counts = useMemo(() => {
+    const all = tasks.length;
+    const active = tasks.filter((t) => !t.done).length;
+    const high = tasks.filter((t) => !t.done && t.priority === 'high').length;
+    const done = tasks.filter((t) => t.done).length;
+    return { all, active, high, done };
+  }, [tasks]);
+
+  const completedToday = useMemo(
+    () => tasks.filter((t) => isDoneToday(t, now)).length,
+    [tasks, now],
+  );
+
+  // Derived filtered list.
+  const visible = useMemo(() => {
+    const filtered = tasks.filter((t) => {
+      if (filter === 'active') return !t.done;
+      if (filter === 'high')   return !t.done && t.priority === 'high';
+      if (filter === 'done')   return t.done;
+      return true;
+    });
+    // Done items sink to the bottom; active sorted by priority then created.
+    const pri = { high: 0, med: 1, low: 2 };
+    return [...filtered].sort((a, b) => {
+      if (a.done !== b.done) return a.done ? 1 : -1;
+      const pa = pri[a.priority] ?? 1;
+      const pb = pri[b.priority] ?? 1;
+      if (pa !== pb) return pa - pb;
+      return a.createdAt - b.createdAt;
+    });
+  }, [tasks, filter]);
+
+  // ── Actions ────────────────────────────────────────────────
+  const toggleDone = (id) => {
+    setTasks((cur) => {
+      const next = cur.map((t) => t.id === id
+        ? { ...t, done: !t.done, doneAt: !t.done ? Date.now() : null }
+        : t);
+      saveTasks(next);
+      return next;
+    });
+  };
+
+  const deleteTask = (id) => {
+    setResolvingIds((p) => { const n = new Set(p); n.add(id); return n; });
     setTimeout(() => {
-      setResolvingIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
-      setItems((cur) => {
-        const next = cur.filter((i) => i.id !== id);
-        saveWatchList(next);
+      setResolvingIds((p) => { const n = new Set(p); n.delete(id); return n; });
+      setTasks((cur) => {
+        const next = cur.filter((t) => t.id !== id);
+        saveTasks(next);
         return next;
       });
     }, 260);
-  }, []);
-
-  const startEditReason = (item) => {
-    setEditingId(item.id);
-    setEditDraft(item.reason || '');
   };
-  const commitEditReason = () => {
-    if (!editingId) return;
-    setItems((cur) => {
-      const next = cur.map((i) => i.id === editingId ? { ...i, reason: editDraft.trim() } : i);
-      saveWatchList(next);
-      return next;
+
+  const startNew = () => {
+    setEditingId('__new');
+    setDraft({ title: '', due: '', priority: 'med', context: null });
+  };
+  const startEdit = (task) => {
+    setEditingId(task.id);
+    setDraft({
+      title: task.title,
+      due: task.due || '',
+      priority: task.priority || 'med',
+      context: task.context || null,
     });
-    setEditingId(null);
-    setEditDraft('');
   };
-  const cancelEditReason = () => { setEditingId(null); setEditDraft(''); };
-
-  const onClearAll = () => {
-    if (!confirmClear) {
-      setConfirmClear(true);
-      clearTimeout(confirmTimerRef.current);
-      confirmTimerRef.current = setTimeout(() => setConfirmClear(false), 2500);
+  const cancelEdit = () => { setEditingId(null); setDraft(null); };
+  const commitEdit = () => {
+    if (!editingId || !draft) return;
+    const title = (draft.title || '').trim();
+    if (!title) {
+      // Empty title → treat as cancel; for an in-progress new task, drop it.
+      cancelEdit();
       return;
     }
-    clearTimeout(confirmTimerRef.current);
-    setConfirmClear(false);
-    setResolvingIds(new Set(items.map((i) => i.id)));
-    setTimeout(() => {
-      persist([]);
-      setResolvingIds(new Set());
-    }, 320);
+    if (editingId === '__new') {
+      const t = newTask({
+        title,
+        due: draft.due,
+        priority: draft.priority,
+        context: draft.context,
+      });
+      persist([...tasks, t]);
+    } else {
+      const next = tasks.map((t) => t.id === editingId
+        ? { ...t, title, due: draft.due, priority: draft.priority, context: draft.context }
+        : t);
+      persist(next);
+    }
+    cancelEdit();
   };
-  useEffect(() => () => clearTimeout(confirmTimerRef.current), []);
 
-  // Derived list — sort oldest-first, then filter.
-  const filtered = useMemo(() => {
-    const sorted = [...items].sort((a, b) => a.addedAt - b.addedAt);
-    const q = search.trim().toLowerCase();
-    return sorted.filter((it) => {
-      if (filter === 'critical') {
-        const ageMs = now - it.addedAt;
-        if (ageMs < thresholdsMs.critical) return false;
-      }
-      if (!q) return true;
-      const hay = `${it.reason || ''} ${it.orderId || ''} ${entityName(it)} ${it.entityType || ''}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [items, filter, search, now, thresholdsMs.critical]);
+  // ── Render ────────────────────────────────────────────────
+  const FILTERS = [
+    { key: 'all',    label: 'All',           n: counts.all    },
+    { key: 'active', label: 'Active',        n: counts.active },
+    { key: 'high',   label: 'High priority', n: counts.high   },
+    { key: 'done',   label: 'Completed',     n: counts.done   },
+  ];
 
-  const criticalCount = items.filter((i) => (now - i.addedAt) >= thresholdsMs.critical).length;
-  const hasCritical = criticalCount > 0;
-  const subtitle = items.length === 0
-    ? 'Nothing on the watch list'
-    : `${items.length} ${items.length === 1 ? 'item' : 'items'}${criticalCount > 0 ? ` · ${criticalCount} critical` : ''}`;
+  const subtitle = tasks.length === 0
+    ? 'Nothing yet — add a task to get started'
+    : `${counts.active} active${completedToday > 0 ? ` · ${completedToday} completed today` : ''}`;
 
   return (
-    <FloatingPanel width={520} backdrop onClose={onClosed} bindClose={bindClose}>
+    <FloatingPanel width={560} backdrop onClose={onClosed} bindClose={bindClose}>
       <ModalHeader
         accent
-        icon={<I.eye size={14} />}
-        title="Watch List"
+        icon={<TaskIcon size={13} />}
+        title="My Task List"
         subtitle={subtitle}
       />
 
-      {/* Toolbar — search + quick filter. Matches the redesign. */}
+      {/* Filter bar — segmented chips with count badges + New task. */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
+        display: 'flex', alignItems: 'center', gap: 6,
         padding: '10px 14px',
         background: 'var(--gb-surface-1)',
         borderBottom: '1px solid var(--gb-border-subtle)',
         flexShrink: 0,
       }}>
-        <Input
-          placeholder="Search reason or ID…"
-          value={search}
-          onChange={setSearch}
-          leading={<I.search size={12} />}
-          style={{ flex: 1 }}
-        />
+        {FILTERS.map((f) => (
+          <FilterChip
+            key={f.key}
+            label={f.label}
+            count={f.n}
+            active={filter === f.key}
+            onClick={() => setFilter(f.key)}
+          />
+        ))}
+        <div style={{ flex: 1 }} />
         <Btn
           size="sm"
-          variant={filter === 'critical' ? 'tinted' : 'secondary'}
-          status={filter === 'critical' ? 'error' : undefined}
-          icon={<I.filter size={11} />}
-          onClick={() => setFilter((f) => f === 'critical' ? 'all' : 'critical')}
-        >
-          {filter === 'critical' ? `Critical (${criticalCount})` : 'All'}
-        </Btn>
+          variant="tinted"
+          status="brand"
+          icon={<I.plus size={11} />}
+          onClick={startNew}
+          disabled={editingId === '__new'}
+        >New task</Btn>
       </div>
 
       {/* Body */}
       <div style={{
-        maxHeight: 'min(54vh, 460px)',
+        maxHeight: 'min(56vh, 480px)',
         overflowY: 'auto', overflowX: 'hidden',
         padding: 8,
       }}>
-        {loaded && filtered.length === 0 ? (
-          <EmptyState searching={!!search || filter !== 'all'} />
-        ) : (
-          <motion.ul layout style={{
-            margin: 0, padding: 0, listStyle: 'none',
-            display: 'flex', flexDirection: 'column', gap: 6,
-          }}>
-            <AnimatePresence initial={false}>
-              {filtered.map((item, idx) => {
-                const { age, urgency } = getTimerInfo(item.addedAt, now, thresholdsMs);
-                return (
-                  <WatchItem
-                    key={item.id}
-                    item={item}
-                    age={age}
-                    urgency={urgency}
-                    index={idx}
-                    isResolving={resolvingIds.has(item.id)}
-                    isEditing={editingId === item.id}
-                    editDraft={editDraft}
-                    onEditDraft={setEditDraft}
-                    onStartEdit={() => startEditReason(item)}
-                    onCommitEdit={commitEditReason}
-                    onCancelEdit={cancelEditReason}
-                    onResolve={() => resolve(item.id)}
-                  />
-                );
-              })}
-            </AnimatePresence>
-          </motion.ul>
-        )}
-      </div>
-
-      {/* Footer — hint + clear-all */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '10px 14px',
-        borderTop: '1px solid var(--gb-border-subtle)',
-        background: 'var(--gb-surface-1)',
-      }}>
-        <div style={{
-          flex: 1,
-          fontSize: 10.5, fontWeight: 500,
-          color: 'var(--gb-text-tertiary)',
-          display: 'flex', alignItems: 'center', gap: 6,
+        <motion.ul layout style={{
+          margin: 0, padding: 0, listStyle: 'none',
+          display: 'flex', flexDirection: 'column', gap: 4,
         }}>
-          <I.alert size={11} />
-          <span>Sorted oldest first</span>
-        </div>
-        <AnimatePresence initial={false}>
-          {items.length > 0 && (
-            <motion.div
-              key="clear-btn"
-              initial={{ opacity: 0, x: 8 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 8 }}
-              transition={{ duration: 0.16 }}
-            >
-              <Btn
-                size="sm"
-                variant={confirmClear ? 'tinted' : 'secondary'}
-                status={confirmClear ? 'error' : undefined}
-                onClick={onClearAll}
-                icon={confirmClear ? <I.alert /> : <I.trash />}
-              >
-                {confirmClear ? 'Confirm clear all' : 'Clear all'}
-              </Btn>
-            </motion.div>
-          )}
-        </AnimatePresence>
+          <AnimatePresence initial={false}>
+            {editingId === '__new' && (
+              <TaskEditor
+                key="__new"
+                draft={draft}
+                onChange={setDraft}
+                onCommit={commitEdit}
+                onCancel={cancelEdit}
+                isNew
+              />
+            )}
+            {visible.map((task, i) => (
+              editingId === task.id ? (
+                <TaskEditor
+                  key={task.id}
+                  draft={draft}
+                  onChange={setDraft}
+                  onCommit={commitEdit}
+                  onCancel={cancelEdit}
+                />
+              ) : (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  index={i}
+                  isResolving={resolvingIds.has(task.id)}
+                  onToggle={() => toggleDone(task.id)}
+                  onEdit={() => startEdit(task)}
+                  onDelete={() => deleteTask(task.id)}
+                />
+              )
+            ))}
+            {loaded && visible.length === 0 && editingId !== '__new' && (
+              <EmptyState
+                key="empty"
+                filter={filter}
+                onNew={startNew}
+              />
+            )}
+          </AnimatePresence>
+        </motion.ul>
       </div>
     </FloatingPanel>
   );
 }
 
-/* ── WatchItem ────────────────────────────────────────────────── */
+/* ── FilterChip ──────────────────────────────────────────────── */
+function FilterChip({ label, count, active, onClick }) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      whileTap={{ scale: 0.97 }}
+      animate={{
+        backgroundColor: active ? 'var(--gb-fill-soft)' : 'rgba(0,0,0,0)',
+        color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
+        borderColor: active ? 'var(--gb-border-default)' : 'rgba(0,0,0,0)',
+      }}
+      transition={{ duration: 0.18 }}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        padding: '5px 10px',
+        borderRadius: 'var(--gb-r-sm)',
+        border: '1px solid transparent',
+        fontSize: 11.5, fontWeight: 600,
+        cursor: 'pointer',
+        outline: 'none',
+        fontFamily: 'inherit',
+      }}
+    >
+      {label}
+      <Tag tone={active ? 'brand' : 'neutral'} size="xs">{count}</Tag>
+    </motion.button>
+  );
+}
 
-function WatchItem({
-  item, age, urgency, index, isResolving,
-  isEditing, editDraft, onEditDraft, onStartEdit, onCommitEdit, onCancelEdit,
-  onResolve,
-}) {
-  const isCrit = urgency === 'critical';
-  const type = item.entityType || 'order';
-  const link = buildEntityUrl(item);
-  const name = entityName(item);
-  const idLabel = item.orderId ? `#${item.orderId}` : '';
+/* ── TaskRow ─────────────────────────────────────────────────── */
+function TaskRow({ task, index, isResolving, onToggle, onEdit, onDelete }) {
+  const link = contextUrl(task.context);
+  const dueColor = dueLabelColor(task);
 
   return (
     <motion.li
       layout
       initial={{ opacity: 0, y: 6 }}
       animate={isResolving
-        ? { opacity: 0, x: 20, height: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0 }
-        : { opacity: 1, y: 0 }
+        ? { opacity: 0, x: 18, height: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0 }
+        : { opacity: task.done ? 0.55 : 1, y: 0 }
       }
-      exit={{ opacity: 0, x: 20, height: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0 }}
+      exit={{ opacity: 0, x: 18, height: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0 }}
       transition={isResolving
         ? { duration: 0.26, ease: [0.4, 0, 0.2, 1] }
-        : { duration: 0.22, delay: Math.min(index, 8) * 0.03, ease: [0.4, 0, 0.2, 1] }
+        : { duration: 0.22, delay: Math.min(index, 8) * 0.025, ease: [0.4, 0, 0.2, 1] }
       }
       style={{ overflow: 'hidden', listStyle: 'none' }}
     >
-      <Card padding={10} style={{
-        borderColor: isCrit ? 'var(--gb-error-tint-border)' : 'var(--gb-border-subtle)',
-        background: isCrit ? 'var(--gb-error-tint-soft)' : undefined,
-        transition: 'border-color .3s, background-color .3s',
+      <div style={{
+        display: 'flex', alignItems: 'flex-start', gap: 11,
+        padding: '11px 12px',
+        background: 'var(--gb-surface-1)',
+        border: '1px solid var(--gb-border-default)',
+        borderRadius: 'var(--gb-r-md)',
+        transition: 'border-color .2s, background-color .2s',
       }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-          {/* Type icon tile — replaces the text "Order"/"Contact"/"Account"
-              label to save vertical space, per request. */}
-          <EntityIconTile type={type} critical={isCrit} />
+        {/* 18×18 checkbox */}
+        <TaskCheckbox done={task.done} onToggle={onToggle} />
 
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {/* Meta row */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              marginBottom: 2,
-              flexWrap: 'wrap',
-            }}>
-              {idLabel && (
-                <span style={{
-                  fontFamily: 'var(--gb-font-mono)',
-                  fontSize: 10.5, fontWeight: 700,
-                  color: 'var(--gb-text-secondary)',
-                  letterSpacing: 0.2,
-                }}>{idLabel}</span>
-              )}
-              {idLabel && (
-                <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>·</span>
-              )}
-              <UrgencyAge age={age} urgency={urgency} />
-              {isCrit && <Tag tone="error" size="sm">CRITICAL</Tag>}
-            </div>
-
-            {/* Name */}
-            {link ? (
-              <a
-                href={link}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'inline-block',
-                  fontSize: 12.5, fontWeight: 600,
-                  color: 'var(--gb-text-primary)',
-                  textDecoration: 'none',
-                  letterSpacing: 0.1,
-                  marginTop: 1,
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--gb-brand-label)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--gb-text-primary)'; }}
-              >{name}</a>
-            ) : (
-              <div style={{
-                fontSize: 12.5, fontWeight: 600,
-                color: 'var(--gb-text-primary)',
-                marginTop: 1,
-              }}>{name}</div>
-            )}
-
-            {/* Reason — inline-edit on click of "Edit reason". */}
-            {isEditing ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
-                <Input
-                  value={editDraft}
-                  onChange={onEditDraft}
-                  autoFocus
-                  placeholder="Why is this on the watch list?"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter')  { e.preventDefault(); onCommitEdit(); }
-                    if (e.key === 'Escape') { e.preventDefault(); onCancelEdit(); }
+        {/* Title + meta */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontSize: 12.5, fontWeight: 600,
+            color: 'var(--gb-text-primary)',
+            textDecoration: task.done ? 'line-through' : 'none',
+            wordBreak: 'break-word',
+          }}>{task.title}</div>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            marginTop: 4, flexWrap: 'wrap',
+          }}>
+            <Dot tone={
+              task.priority === 'high' ? 'error' :
+              task.priority === 'med'  ? 'warning' : 'muted'
+            } />
+            {task.context ? (
+              link ? (
+                <a
+                  href={link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    fontSize: 10.5, fontWeight: 500,
+                    color: 'var(--gb-text-tertiary)',
+                    textDecoration: 'none',
                   }}
-                />
-                <div style={{ display: 'flex', gap: 5 }}>
-                  <Btn size="sm" variant="tinted" status="brand" icon={<I.check size={10} />} onClick={onCommitEdit}>Save</Btn>
-                  <Btn size="sm" variant="ghost" onClick={onCancelEdit}>Cancel</Btn>
-                </div>
-              </div>
-            ) : item.reason ? (
-              <div style={{
-                fontSize: 11.5,
-                color: 'var(--gb-text-tertiary)',
-                marginTop: 3, lineHeight: 1.4,
-                wordBreak: 'break-word',
-              }}>{item.reason}</div>
+                  onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--gb-brand-label)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--gb-text-tertiary)'; }}
+                >{formatContext(task.context)}</a>
+              ) : (
+                <span style={{
+                  fontSize: 10.5, fontWeight: 500,
+                  color: 'var(--gb-text-tertiary)',
+                }}>{formatContext(task.context)}</span>
+              )
             ) : (
-              <div style={{
-                fontSize: 11.5,
+              <span style={{
+                fontSize: 10.5, fontWeight: 500,
                 color: 'var(--gb-text-ghost)',
-                marginTop: 3, fontStyle: 'italic',
-              }}>No reason given — click Edit to add one.</div>
+                fontStyle: 'italic',
+              }}>Standalone</span>
             )}
-
-            {/* Action row */}
-            {!isEditing && (
-              <div style={{
-                display: 'flex', gap: 4,
-                marginTop: 7,
-              }}>
-                {link && (
-                  <Btn
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => window.open(link, '_blank', 'noopener')}
-                  >Open</Btn>
-                )}
-                <Btn size="sm" variant="ghost" onClick={onStartEdit}>Edit reason</Btn>
-                <Btn
-                  size="sm"
-                  variant="ghost"
-                  onClick={onResolve}
-                  icon={<I.check size={10} />}
-                  style={{ marginLeft: 'auto' }}
-                >Resolve</Btn>
-              </div>
+            {task.due && (
+              <>
+                <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>·</span>
+                <span style={{
+                  fontSize: 10.5, fontWeight: 600,
+                  color: dueColor,
+                }}>{task.due}</span>
+              </>
             )}
           </div>
+        </div>
+
+        {/* Edit + delete */}
+        <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+          <Btn
+            variant="ghost"
+            size="sm"
+            icon={<I.edit size={11} />}
+            onClick={onEdit}
+            style={{ height: 26, width: 26, padding: 0 }}
+            title="Edit task"
+          />
+          <Btn
+            variant="ghost"
+            size="sm"
+            icon={<I.trash size={11} />}
+            onClick={onDelete}
+            style={{ height: 26, width: 26, padding: 0 }}
+            title="Delete task"
+          />
+        </div>
+      </div>
+    </motion.li>
+  );
+}
+
+/* ── TaskCheckbox — 18×18 rounded square, brand-fill when done. */
+function TaskCheckbox({ done, onToggle }) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onToggle}
+      whileTap={{ scale: 0.88 }}
+      aria-pressed={done}
+      style={{
+        width: 18, height: 18,
+        marginTop: 1, flexShrink: 0,
+        padding: 0, cursor: 'pointer',
+        background: done ? 'var(--gb-brand-tint-medium)' : 'transparent',
+        border: '1.5px solid ' + (done ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'),
+        borderRadius: 5,
+        color: 'var(--gb-brand-label)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        outline: 'none',
+        transition: 'background-color .15s, border-color .15s',
+      }}
+    >
+      <AnimatePresence initial={false}>
+        {done && (
+          <motion.span
+            key="ck"
+            initial={{ opacity: 0, scale: 0.6 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.6 }}
+            transition={{ duration: 0.14 }}
+            style={{ display: 'flex' }}
+          >
+            <I.check size={11} />
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </motion.button>
+  );
+}
+
+/* ── TaskEditor — inline editor row used for both "new" + "edit". */
+function TaskEditor({ draft, onChange, onCommit, onCancel, isNew }) {
+  const titleRef = useRef(null);
+  useEffect(() => { titleRef.current?.focus?.(); }, []);
+
+  const set = (patch) => onChange({ ...draft, ...patch });
+  const ctx = draft.context;
+
+  // Local context-builder state. Type picker drives the id/name fields.
+  const ctxType = ctx?.type || 'none';
+  const setCtxType = (type) => {
+    if (type === 'none') set({ context: null });
+    else set({ context: { type, id: ctx?.id || '', name: ctx?.name || '' } });
+  };
+
+  return (
+    <motion.li
+      layout
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -4, height: 0, paddingTop: 0, paddingBottom: 0, marginTop: 0, marginBottom: 0 }}
+      transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+      style={{ overflow: 'hidden', listStyle: 'none' }}
+    >
+      <Card padding={12} style={{
+        borderColor: 'var(--gb-brand-tint-border)',
+        background: 'var(--gb-brand-tint-soft)',
+        display: 'flex', flexDirection: 'column', gap: 8,
+      }}>
+        <Input
+          nativeRef={titleRef}
+          value={draft.title}
+          onChange={(v) => set({ title: v })}
+          placeholder={isNew ? 'New task title…' : 'Task title'}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault(); onCommit();
+            } else if (e.key === 'Escape') {
+              e.preventDefault(); onCancel();
+            }
+          }}
+        />
+
+        {/* Priority + due on one row */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <FieldLabel>Priority</FieldLabel>
+            <PrioritySelect
+              value={draft.priority}
+              onChange={(v) => set({ priority: v })}
+            />
+          </div>
+          <div style={{ flex: 1.4, minWidth: 0 }}>
+            <FieldLabel>Due</FieldLabel>
+            <Input
+              value={draft.due}
+              onChange={(v) => set({ due: v })}
+              placeholder="Today 2pm · Tomorrow · Apr 2"
+            />
+          </div>
+        </div>
+
+        {/* Context — type + id (+ optional friendly name for contacts/accounts) */}
+        <div>
+          <FieldLabel>Linked to</FieldLabel>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Dropdown
+              value={ctxType}
+              onChange={(v) => setCtxType(v)}
+              options={[
+                { id: 'none',    label: 'Standalone' },
+                { id: 'order',   label: 'Order'      },
+                { id: 'contact', label: 'Contact'    },
+                { id: 'account', label: 'Account'    },
+              ]}
+              style={{ width: 130 }}
+            />
+            {ctxType !== 'none' && (
+              <Input
+                value={ctx?.id || ''}
+                onChange={(v) => set({ context: { ...(ctx || { type: ctxType }), id: v } })}
+                placeholder={ctxType === 'order' ? 'Order # (29103)' : `${ctxType[0].toUpperCase() + ctxType.slice(1)} ID`}
+                style={{ flex: 0.9 }}
+              />
+            )}
+            {(ctxType === 'contact' || ctxType === 'account') && (
+              <Input
+                value={ctx?.name || ''}
+                onChange={(v) => set({ context: { ...(ctx || { type: ctxType }), name: v } })}
+                placeholder={ctxType === 'contact' ? 'Name (optional)' : 'Account name (optional)'}
+                style={{ flex: 1 }}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+          <Btn size="sm" variant="ghost" onClick={onCancel} style={{ flex: 0 }}>Cancel</Btn>
+          <div style={{ flex: 1 }} />
+          <Btn
+            size="sm"
+            variant="tinted"
+            status="brand"
+            icon={<I.check size={10} />}
+            onClick={onCommit}
+            disabled={!draft.title.trim()}
+          >{isNew ? 'Add task' : 'Save'}</Btn>
         </div>
       </Card>
     </motion.li>
   );
 }
 
-/* ── EntityIconTile — 26×26 rounded square with the type glyph. ───── */
-function EntityIconTile({ type, critical }) {
+function FieldLabel({ children }) {
   return (
-    <div
-      title={type[0].toUpperCase() + type.slice(1)}
-      style={{
-        width: 26, height: 26,
-        flexShrink: 0,
-        marginTop: 1,
-        borderRadius: 'var(--gb-r-sm)',
-        background: critical ? 'var(--gb-error-tint-medium)' : 'var(--gb-fill-soft)',
-        border: '1px solid ' + (critical ? 'var(--gb-error-tint-border)' : 'var(--gb-border-subtle)'),
-        color: critical ? 'var(--gb-error-fg)' : 'var(--gb-text-tertiary)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'background-color .3s, border-color .3s, color .3s',
-      }}
-    >
-      {type === 'order' ? <DocIcon size={12} /> :
-       type === 'contact' ? <I.user size={12} /> :
-       <UsersIcon size={12} />}
+    <div style={{
+      fontSize: 9.5, fontWeight: 700, letterSpacing: 0.5,
+      textTransform: 'uppercase',
+      color: 'var(--gb-text-muted)',
+      marginBottom: 4,
+    }}>{children}</div>
+  );
+}
+
+function PrioritySelect({ value, onChange }) {
+  const opts = [
+    { value: 'high', label: 'High', tone: 'error'   },
+    { value: 'med',  label: 'Med',  tone: 'warning' },
+    { value: 'low',  label: 'Low',  tone: 'muted'   },
+  ];
+  return (
+    <div style={{
+      display: 'flex', gap: 4,
+      padding: 3,
+      background: 'var(--gb-surface-2)',
+      border: '1px solid var(--gb-border-default)',
+      borderRadius: 'var(--gb-r-sm)',
+    }}>
+      {opts.map((o) => {
+        const active = value === o.value;
+        return (
+          <motion.button
+            key={o.value}
+            type="button"
+            onClick={() => onChange(o.value)}
+            whileTap={{ scale: 0.95 }}
+            animate={{
+              backgroundColor: active ? 'var(--gb-surface-modal)' : 'rgba(0,0,0,0)',
+              color: active ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)',
+            }}
+            transition={{ duration: 0.15 }}
+            style={{
+              flex: 1,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+              padding: '4px 8px',
+              border: 'none', outline: 'none',
+              borderRadius: 'var(--gb-r-xs)',
+              fontSize: 11, fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              boxShadow: active ? '0 1px 2px rgba(0,0,0,0.18)' : 'none',
+            }}
+          >
+            <Dot tone={o.tone} size={6} />
+            {o.label}
+          </motion.button>
+        );
+      })}
     </div>
   );
 }
 
-/* ── UrgencyAge — the compact ticking age pill (Xd / Xh Ym / Xm Xs). ── */
-function UrgencyAge({ age, urgency }) {
-  const styles = {
-    normal: {
-      color: 'var(--gb-brand-label)',
-      background: 'var(--gb-brand-tint-soft)',
-      borderColor: 'var(--gb-brand-tint-border)',
-    },
-    moderate: {
-      color: 'var(--gb-warning-fg)',
-      background: 'var(--gb-warning-tint-soft)',
-      borderColor: 'var(--gb-warning-tint-border)',
-    },
-    high: {
-      color: '#e07b30',
-      background: 'rgba(224, 123, 48, 0.12)',
-      borderColor: 'rgba(224, 123, 48, 0.3)',
-    },
-    critical: {
-      color: 'var(--gb-error-fg)',
-      background: 'var(--gb-error-tint-medium)',
-      borderColor: 'var(--gb-error-tint-border)',
-    },
-  }[urgency] || {};
+function EmptyState({ filter, onNew }) {
+  const map = {
+    all:    { strong: 'No tasks yet',                hint: 'Add a task to get started.' },
+    active: { strong: 'No active tasks',             hint: 'Everything is done or filtered out.' },
+    high:   { strong: 'No high-priority tasks',      hint: 'Nothing urgent in your queue.' },
+    done:   { strong: 'No completed tasks yet',      hint: 'Finish a task and it shows up here.' },
+  };
+  const copy = map[filter] || map.all;
   return (
-    <motion.span
-      animate={{
-        ...styles,
-        opacity: urgency === 'critical' ? [1, 0.6, 1] : 1,
-      }}
-      transition={{
-        backgroundColor: { duration: 0.6 },
-        color:           { duration: 0.6 },
-        borderColor:     { duration: 0.6 },
-        opacity: urgency === 'critical'
-          ? { duration: 1.9, ease: 'easeInOut', repeat: Infinity }
-          : { duration: 0.3 },
-      }}
-      style={{
-        fontSize: 9.5, fontWeight: 800, letterSpacing: 0.4,
-        padding: '1px 6px',
-        borderRadius: 'var(--gb-r-xs)',
-        border: '1px solid transparent',
-        fontVariantNumeric: 'tabular-nums',
-        whiteSpace: 'nowrap',
-        fontFamily: 'var(--gb-font-mono)',
-        textTransform: 'uppercase',
-      }}
-    >{age}</motion.span>
-  );
-}
-
-function EmptyState({ searching }) {
-  return (
-    <motion.div
+    <motion.li
+      key="empty-state"
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25 }}
       style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center',
-        gap: 10, padding: '32px 20px',
+        listStyle: 'none',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+        padding: '36px 20px',
         textAlign: 'center',
         color: 'var(--gb-text-tertiary)',
       }}
@@ -595,41 +738,66 @@ function EmptyState({ searching }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: 'var(--gb-text-secondary)',
       }}>
-        <I.eye size={18} />
+        <TaskIcon size={18} />
       </div>
       <div>
         <strong style={{
           display: 'block',
           color: 'var(--gb-text-primary)',
           fontSize: 13, fontWeight: 700,
-        }}>{searching ? 'No matches' : 'Nothing on the watch list'}</strong>
-        <p style={{
-          margin: '4px 0 0', fontSize: 11.5, lineHeight: 1.55,
-          maxWidth: 260,
-        }}>
-          {searching
-            ? 'Try a different search term or clear the filter.'
-            : <>Use <em>Watch Order</em>, <em>Watch Contact</em>, or <em>Watch Account</em> in the extension popup to flag items.</>}
-        </p>
+        }}>{copy.strong}</strong>
+        <p style={{ margin: '4px 0 0', fontSize: 11.5, lineHeight: 1.55, maxWidth: 280 }}>{copy.hint}</p>
       </div>
-    </motion.div>
+      {filter === 'all' && (
+        <Btn
+          size="sm"
+          variant="tinted"
+          status="brand"
+          icon={<I.plus size={11} />}
+          onClick={onNew}
+        >New task</Btn>
+      )}
+    </motion.li>
   );
 }
 
-/* Inline glyphs not in the shared icon registry. */
-const DocIcon = (p) => (
-  <svg width={p?.size || 12} height={p?.size || 12} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-    <polyline points="14 2 14 8 20 8" />
-  </svg>
-);
-const UsersIcon = (p) => (
-  <svg width={p?.size || 12} height={p?.size || 12} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-    <circle cx="9" cy="7" r="4" />
-    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-  </svg>
-);
+/* ── Context helpers ─────────────────────────────────────────── */
+function contextUrl(ctx) {
+  if (!ctx?.id) return '';
+  const id = String(ctx.id);
+  if (ctx.type === 'order')   return `https://api.golfballs.com/golfballs/adminNew/default.aspx?Page=222&orderID=${id}`;
+  if (ctx.type === 'contact') return `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=240&customerID=${id}`;
+  if (ctx.type === 'account') return `https://api.golfballs.com/golfballs/adminNew/default.aspx?Page=271&accountID=${id}`;
+  return '';
+}
+function formatContext(ctx) {
+  if (!ctx) return '';
+  const id = ctx.id ? `#${ctx.id}` : '';
+  const cap = ctx.type[0].toUpperCase() + ctx.type.slice(1);
+  if (ctx.name) return `${cap} ${id} · ${ctx.name}`;
+  return `${cap} ${id}`.trim();
+}
+
+/* Color the due date red when it looks "urgent today", brand
+   when the task is done, tertiary otherwise. Mirrors the design's
+   `due === 'Today 2pm' ? error : tertiary` rule but a little smarter. */
+function dueLabelColor(task) {
+  if (task.done) return 'var(--gb-brand-label)';
+  const d = (task.due || '').toLowerCase();
+  if (!d) return 'var(--gb-text-tertiary)';
+  if (d.startsWith('today') && /\d/.test(d)) return 'var(--gb-error-fg)'; // "Today 2pm"
+  if (d === 'today') return 'var(--gb-warning-fg)';
+  if (d.includes('overdue')) return 'var(--gb-error-fg)';
+  return 'var(--gb-text-tertiary)';
+}
+
+/* Task icon — checklist glyph, used in header + empty state. */
+function TaskIcon({ size = 13 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l3 3L22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </svg>
+  );
+}
