@@ -870,72 +870,267 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // Each is { mesh, body } — blastable by bombs, pile up on floor.
         const confettiPieces = [];
 
-        /* ── Water ───────────────────────────────────────────────
-           A translucent plane tracks `waterLevel` (Y world units).
-           While the tool is held, level rises AND a stream of droplet
-           particles falls from the cursor to the surface (the "pour").
-           Level never drains — it stays wherever it was left.
+        /* ══════════════════════════════════════════════════════════
+           WATER — heightfield fluid + shader.
 
-           Buoyancy per-frame: F = G * mass * scale * submersionFrac
-             scale < 1  → sinks  (golf ball, bombs)
-             scale > 1  → floats (color balls, confetti)
-
-           Pour stream: small cyan spheres spawn at cursor world pos
-           each frame and fall to the water surface, then vanish. They
-           are purely visual — no physics bodies. */
-        const WATER_RISE_RATE = 60;   // world-units/sec while pouring
+           The water surface is a 2D heightfield: a GRID×GRID array of
+           heights and velocities sampled in the XZ plane spanning the
+           room. Each frame we:
+             1. Run the wave equation:   v += k*(neighbors_avg − h)
+                                          h += v*dt
+                with damping so ripples die out naturally.
+             2. Inject height where the cursor pumps water in.
+             3. Push height DOWN where objects displace the surface
+                (creates real splash waves spreading outward).
+             4. Inject impulse where bombs detonate underwater
+                (concentric shock rings).
+             5. Apply quadratic drag to every underwater body so
+                explosions actually dissipate underwater.
+             6. Upload the heightfield to a data texture for the
+                custom water shader (refraction + Fresnel + depth tint).
+           ════════════════════════════════════════════════════════ */
         const FLOOR_Y = -HALF_Y;
+        const GRID_RES = 128;             // cells per axis — 16k cells total
+        const CELL_X = (HALF_X * 2) / GRID_RES;
+        const CELL_Z = (HALF_Z * 2) / GRID_RES;
 
-        let waterLevel = FLOOR_Y;     // starts at floor (invisible)
-        let waterPourWorld = new THREE.Vector3(0, 0, 0); // cursor in world space
+        // Two arrays per heightfield: current heights (above baseLevel)
+        // and per-cell velocities. Stored as Float32 for simd-friendly
+        // iteration. Width-major: idx = z*GRID_RES + x.
+        const heights    = new Float32Array(GRID_RES * GRID_RES);
+        const velocities = new Float32Array(GRID_RES * GRID_RES);
+        const WAVE_SPEED = 0.30;      // wave equation stiffness
+        const WAVE_DAMP  = 0.985;     // per-frame velocity damping
+        let baseLevel = FLOOR_Y - 4;  // global water level (rises while pouring)
+        const POUR_FILL_RATE = 30;    // base level rise (units/sec)
+        const POUR_HEIGHT_INJECT = 14; // height injected at cursor cells/frame
 
-        // Water surface mesh — full room width/depth.
-        const waterGeo = new THREE.PlaneGeometry(HALF_X * 2, HALF_Z * 2, 32, 32);
-        const waterMat = new THREE.MeshStandardMaterial({
-          color: 0x1a8cff,
+        // Heightfield data texture — fed into the shader as a
+        // displacement + normal source.
+        const heightTexData = new Float32Array(GRID_RES * GRID_RES);
+        const heightTex = new THREE.DataTexture(
+          heightTexData, GRID_RES, GRID_RES,
+          THREE.RedFormat, THREE.FloatType,
+        );
+        heightTex.minFilter = THREE.LinearFilter;
+        heightTex.magFilter = THREE.LinearFilter;
+        heightTex.wrapS = THREE.ClampToEdgeWrapping;
+        heightTex.wrapT = THREE.ClampToEdgeWrapping;
+        heightTex.needsUpdate = true;
+        objectsToDispose.push(heightTex);
+
+        // Scene render target for screen-space refraction. The water
+        // shader samples this to compose what's behind the surface
+        // with refraction offset and depth-based blue absorption.
+        const sceneRT = new THREE.WebGLRenderTarget(1, 1, {
+          minFilter: THREE.LinearFilter,
+          magFilter: THREE.LinearFilter,
+          format: THREE.RGBAFormat,
+          type: THREE.UnsignedByteType,
+          depthBuffer: true,
+        });
+        const sizeSceneRT = () => {
+          const cw = renderer.domElement.width;
+          const ch = renderer.domElement.height;
+          if (sceneRT.width !== cw || sceneRT.height !== ch) {
+            sceneRT.setSize(cw, ch);
+          }
+        };
+        objectsToDispose.push(sceneRT);
+
+        /* Water surface mesh — high-poly plane subdivided enough that
+           per-vertex heightfield sampling produces a believable
+           silhouette without blocky stairstepping. */
+        const waterGeo = new THREE.PlaneGeometry(
+          HALF_X * 2, HALF_Z * 2, GRID_RES - 1, GRID_RES - 1,
+        );
+        const waterUniforms = {
+          uTime:        { value: 0 },
+          uHeightTex:   { value: heightTex },
+          uHeightScale: { value: 1.0 },        // multiplier on heightfield values
+          uBaseLevel:   { value: baseLevel },  // shader needs this to read submerged depth
+          uSceneTex:    { value: sceneRT.texture },
+          uResolution:  { value: new THREE.Vector2(1, 1) },
+          uCameraPos:   { value: new THREE.Vector3() },
+          uShallowCol:  { value: new THREE.Color(0x2bb6ff) },
+          uDeepCol:     { value: new THREE.Color(0x002850) },
+          uFresnelBias: { value: 0.04 },
+          uFresnelPow:  { value: 4.5 },
+          uRefractStr:  { value: 0.018 },
+          uFloorY:      { value: FLOOR_Y },
+          uGridX:       { value: HALF_X },
+          uGridZ:       { value: HALF_Z },
+        };
+        const waterMat = new THREE.ShaderMaterial({
+          uniforms: waterUniforms,
           transparent: true,
-          opacity: 0.38,
-          roughness: 0.05,
-          metalness: 0.1,
-          side: THREE.FrontSide,
           depthWrite: false,
+          side: THREE.DoubleSide,
+          vertexShader: /* glsl */`
+            uniform sampler2D uHeightTex;
+            uniform float uHeightScale;
+            uniform float uBaseLevel;
+            varying vec3 vWorldPos;
+            varying vec2 vUv;
+            varying vec3 vNormal;
+            void main() {
+              vUv = uv;
+              // Sample the heightfield + neighbors for normals via finite difference.
+              float h  = texture2D(uHeightTex, uv).r * uHeightScale;
+              vec2 px = vec2(1.0 / 128.0, 0.0);
+              vec2 py = vec2(0.0, 1.0 / 128.0);
+              float hl = texture2D(uHeightTex, uv - px).r * uHeightScale;
+              float hr = texture2D(uHeightTex, uv + px).r * uHeightScale;
+              float hd = texture2D(uHeightTex, uv - py).r * uHeightScale;
+              float hu = texture2D(uHeightTex, uv + py).r * uHeightScale;
+              vec3 n = normalize(vec3(hl - hr, 8.0, hd - hu));
+              vNormal = n;
+              vec3 displaced = position + vec3(0.0, h, 0.0);
+              vec4 wp = modelMatrix * vec4(displaced, 1.0);
+              vWorldPos = wp.xyz;
+              gl_Position = projectionMatrix * viewMatrix * wp;
+            }
+          `,
+          fragmentShader: /* glsl */`
+            precision highp float;
+            uniform sampler2D uSceneTex;
+            uniform vec2 uResolution;
+            uniform vec3 uCameraPos;
+            uniform vec3 uShallowCol;
+            uniform vec3 uDeepCol;
+            uniform float uFresnelBias;
+            uniform float uFresnelPow;
+            uniform float uRefractStr;
+            uniform float uFloorY;
+            uniform float uTime;
+            varying vec3 vWorldPos;
+            varying vec3 vNormal;
+            varying vec2 vUv;
+            void main() {
+              // Screen-space UV for sampling the scene texture beneath us.
+              vec2 screenUv = gl_FragCoord.xy / uResolution;
+
+              // Refraction offset from the surface normal's XZ tilt.
+              vec2 refractOffset = vec2(vNormal.x, vNormal.z) * uRefractStr;
+              vec3 refracted = texture2D(uSceneTex, screenUv + refractOffset).rgb;
+
+              // Depth absorption — deeper water = more blue tint.
+              // Estimated depth = water surface height − floor.
+              float depth = max(0.0, vWorldPos.y - uFloorY);
+              float depthFrac = clamp(depth / 220.0, 0.0, 1.0);
+              vec3 waterColor = mix(uShallowCol, uDeepCol, depthFrac);
+              vec3 absorbed = mix(refracted, waterColor, depthFrac * 0.85);
+
+              // Fresnel: more reflection at grazing angles.
+              vec3 V = normalize(uCameraPos - vWorldPos);
+              float fres = uFresnelBias + (1.0 - uFresnelBias)
+                         * pow(1.0 - max(dot(vNormal, V), 0.0), uFresnelPow);
+
+              // Specular highlight — fake sun reflection on wave peaks.
+              vec3 lightDir = normalize(vec3(0.4, 0.9, 0.3));
+              vec3 H = normalize(V + lightDir);
+              float spec = pow(max(dot(vNormal, H), 0.0), 80.0);
+
+              vec3 reflection = mix(uShallowCol * 1.3, vec3(1.0), 0.4);
+              vec3 col = mix(absorbed, reflection, fres) + spec * 0.6;
+
+              // Alpha — water is mostly opaque when deep, more
+              // translucent at the very edge of fill.
+              float alpha = mix(0.78, 0.95, depthFrac);
+              gl_FragColor = vec4(col, alpha);
+            }
+          `,
         });
         const waterMesh = new THREE.Mesh(waterGeo, waterMat);
         waterMesh.rotation.x = -Math.PI / 2;
-        waterMesh.position.y = FLOOR_Y - 4;
+        waterMesh.position.y = baseLevel;
         waterMesh.visible = false;
-        waterMesh.receiveShadow = false;
+        waterMesh.renderOrder = 10; // render after opaque scene so refraction works
         scene.add(waterMesh);
         objectsToDispose.push(waterGeo, waterMat);
 
-        // Stream droplets — visual only, no physics.
-        // Each: { mesh, velY, life, maxLife }
-        const streamDroplets = [];
-        let streamSpawnTimer = 0;
+        // Pour cursor world position — updated by hold handler.
+        const waterPourWorld = new THREE.Vector3(0, 0, 0);
+        let pourActive = false;
+
+        // Helper: convert (x, z) world coords → grid (i, j).
+        const xToGridI = (wx) => Math.round(((wx + HALF_X) / (HALF_X * 2)) * (GRID_RES - 1));
+        const zToGridJ = (wz) => Math.round(((wz + HALF_Z) / (HALF_Z * 2)) * (GRID_RES - 1));
+
+        /* Inject height into a circular region centered at grid (ci,cj).
+           Used by cursor pump AND object displacement. */
+        const injectHeight = (ci, cj, radius, amount) => {
+          const r2 = radius * radius;
+          const i0 = Math.max(0, ci - radius);
+          const i1 = Math.min(GRID_RES - 1, ci + radius);
+          const j0 = Math.max(0, cj - radius);
+          const j1 = Math.min(GRID_RES - 1, cj + radius);
+          for (let j = j0; j <= j1; j++) {
+            for (let i = i0; i <= i1; i++) {
+              const d2 = (i - ci) * (i - ci) + (j - cj) * (j - cj);
+              if (d2 > r2) continue;
+              const falloff = 1 - Math.sqrt(d2) / radius;
+              heights[j * GRID_RES + i] += amount * falloff;
+            }
+          }
+        };
+
+        /* Inject impulse (velocity) — for bomb shockwaves. Positive
+           amount pushes water UP at the center, negative pushes DOWN. */
+        const injectImpulse = (ci, cj, radius, amount) => {
+          const r2 = radius * radius;
+          const i0 = Math.max(0, ci - radius);
+          const i1 = Math.min(GRID_RES - 1, ci + radius);
+          const j0 = Math.max(0, cj - radius);
+          const j1 = Math.min(GRID_RES - 1, cj + radius);
+          for (let j = j0; j <= j1; j++) {
+            for (let i = i0; i <= i1; i++) {
+              const d2 = (i - ci) * (i - ci) + (j - cj) * (j - cj);
+              if (d2 > r2) continue;
+              const falloff = 1 - Math.sqrt(d2) / radius;
+              velocities[j * GRID_RES + i] += amount * falloff;
+            }
+          }
+        };
+
+        // Read the water surface height at world (wx, wz). Combines
+        // global baseLevel with the heightfield perturbation.
+        const surfaceHeightAt = (wx, wz) => {
+          if (wx < -HALF_X || wx > HALF_X || wz < -HALF_Z || wz > HALF_Z) return baseLevel;
+          const i = xToGridI(wx);
+          const j = zToGridJ(wz);
+          return baseLevel + heights[j * GRID_RES + i];
+        };
 
         pourWaterAtRef.current = (pos) => {
-          // Raycast cursor onto z=0 plane to get world pour position.
           const canvas = renderer.domElement;
           const r = canvas.getBoundingClientRect();
           if (pos.clientX < r.left || pos.clientX > r.right ||
-              pos.clientY < r.top  || pos.clientY > r.bottom) return;
+              pos.clientY < r.top  || pos.clientY > r.bottom) {
+            pourActive = false;
+            return;
+          }
           ndc.x =  ((pos.clientX - r.left) / r.width)  * 2 - 1;
           ndc.y = -((pos.clientY - r.top)  / r.height) * 2 + 1;
           ray.setFromCamera(ndc, camera);
           ray.ray.intersectPlane(dropPlane, hitPoint);
           waterPourWorld.set(
-            Math.max(-HALF_X + 10, Math.min(HALF_X - 10, hitPoint.x)),
+            Math.max(-HALF_X + 8, Math.min(HALF_X - 8, hitPoint.x)),
             hitPoint.y,
-            Math.max(-HALF_Z + 10, Math.min(HALF_Z - 10, hitPoint.z)),
+            Math.max(-HALF_Z + 8, Math.min(HALF_Z - 8, hitPoint.z)),
           );
+          pourActive = true;
         };
 
         drainWaterRef.current = () => {
-          waterLevel = FLOOR_Y;
+          baseLevel = FLOOR_Y - 4;
           waterActiveRef.current = false;
+          pourActive = false;
           waterMesh.visible = false;
-          waterMesh.position.y = FLOOR_Y - 4;
-          // Remove stream droplets.
+          waterMesh.position.y = baseLevel;
+          heights.fill(0);
+          velocities.fill(0);
+          // Remove pour stream droplets.
           for (const d of streamDroplets) {
             scene.remove(d.mesh);
             d.mesh.geometry.dispose();
@@ -943,6 +1138,14 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           }
           streamDroplets.length = 0;
         };
+
+        /* Pour stream — visual water droplets gushing from the cursor.
+           Each droplet is a small sphere with physics-driven fall.
+           When it hits the water surface (or floor if no water yet)
+           it vanishes and INJECTS height into the heightfield at the
+           impact cell, creating real splash ripples. */
+        const streamDroplets = [];
+        let streamSpawnTimer = 0;
         const ndc = new THREE.Vector2();
         const ray = new THREE.Raycaster();
         const dropPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0); // z = 0
@@ -971,6 +1174,25 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         const explode = (bomb) => {
           const origin = bomb.body.position;
 
+          /* Underwater shockwave — if the bomb detonates beneath the
+             water surface, push a massive radial impulse into the
+             heightfield. This sends a visible shock ring across the
+             pool AND reduces the body impulse (water absorbs energy). */
+          let underwaterBlast = false;
+          if (baseLevel > FLOOR_Y) {
+            const surfY = surfaceHeightAt(origin.x, origin.z);
+            if (origin.y < surfY) {
+              underwaterBlast = true;
+              const ci = xToGridI(origin.x);
+              const cj = zToGridJ(origin.z);
+              // Big upward shock at center, ring of upward push around it.
+              injectHeight(ci, cj, 18, 22);
+              injectImpulse(ci, cj, 14, 35);
+              // Outer falloff ring — pushes outward wave.
+              injectImpulse(ci, cj, 28, 10);
+            }
+          }
+
           // Affected bodies: every bomb except the one detonating,
           // plus the ball (only when it's DYNAMIC — kinematic ball
           // is static while gravity is off, so don't poke it).
@@ -978,7 +1200,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // Quadratic-ish 1/(d+1) was too punishing near the bomb —
           // the user reported "very little effect on the ball." Linear
           // means a near-hit actually flings, and a far hit is a nudge.
-          const falloff = (d) => Math.max(0, 1 - d / BLAST_R) * IMPULSE_BASE;
+          // Water absorbs explosion energy — underwater blasts hit
+          // ~45% as hard on physics bodies (rest goes into the shock ring).
+          const energyScale = underwaterBlast ? 0.45 : 1.0;
+          const falloff = (d) => Math.max(0, 1 - d / BLAST_R) * IMPULSE_BASE * energyScale;
 
           const targets = [];
           for (const other of bombs) {
@@ -1490,48 +1715,57 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             }
           }
 
-          /* ── Water level + pour stream + buoyancy ────────────────
-             Level rises while held. Droplet stream spawns from cursor
-             world pos, falls to surface, vanishes. No drain.
+          /* ── Water heightfield simulation ────────────────────────
+             Order each frame:
+               1. Raise baseLevel while pouring (water "fills" the box).
+               2. Spawn / advance pour-stream droplets; on hit, inject
+                  height into the heightfield.
+               3. Object displacement — push down cells under each
+                  submerged body, proportional to submerged volume.
+               4. Wave equation: v += k*(neighbor_avg − h);  h += v*dt
+                  with damping + edge clamping.
+               5. Quadratic drag on every underwater body.
+               6. Buoyancy force (proper Archimedes: F = ρ * g * V_submerged).
+               7. Upload heightfield to GPU texture for the shader.   */
 
-             Buoyancy: F_up = G * mass * scale * frac (per-frame).
-             scale < 1 → net gravity wins → sinks (ball, bombs).
-             scale > 1 → net buoyancy wins → floats (color balls, confetti).
-             Ball has scale 0.35 → always sinks hard regardless of depth. */
-          if (waterActiveRef.current) {
-            waterLevel = Math.min(HALF_Y - 4, waterLevel + WATER_RISE_RATE * dt);
+          if (waterActiveRef.current && pourActive) {
+            baseLevel = Math.min(HALF_Y - 6, baseLevel + POUR_FILL_RATE * dt);
+            // Inject height at the cursor cell so the pour visibly
+            // pumps water in (creates a spout + outward ripples).
+            const ci = xToGridI(waterPourWorld.x);
+            const cj = zToGridJ(waterPourWorld.z);
+            injectHeight(ci, cj, 4, POUR_HEIGHT_INJECT * dt * 60);
           }
 
-          const hasWater = waterLevel > FLOOR_Y + 1;
+          const hasWater = baseLevel > FLOOR_Y;
 
-          // Pour stream — spawn droplets from cursor toward the surface.
-          if (waterActiveRef.current && hasWater) {
+          /* ── Pour stream droplets ──────────────────────────────── */
+          if (waterActiveRef.current && pourActive) {
             streamSpawnTimer += dt * 1000;
-            // Spawn a burst of droplets every 28ms while pouring.
-            while (streamSpawnTimer >= 28) {
-              streamSpawnTimer -= 28;
+            while (streamSpawnTimer >= 22) {
+              streamSpawnTimer -= 22;
               const count = 3 + Math.floor(Math.random() * 3);
               for (let si = 0; si < count; si++) {
-                const r = 2.2 + Math.random() * 2;
+                const r = 2 + Math.random() * 2.2;
                 const dGeo = new THREE.SphereGeometry(r, 6, 5);
                 const dMat = new THREE.MeshBasicMaterial({
                   color: 0x55aaff,
                   transparent: true,
-                  opacity: 0.72 + Math.random() * 0.2,
+                  opacity: 0.7 + Math.random() * 0.2,
                 });
                 const dMesh = new THREE.Mesh(dGeo, dMat);
-                // Start slightly above cursor, with lateral scatter.
                 dMesh.position.set(
-                  waterPourWorld.x + (Math.random() - 0.5) * 14,
-                  waterPourWorld.y + 10 + Math.random() * 20,
-                  waterPourWorld.z + (Math.random() - 0.5) * 14,
+                  waterPourWorld.x + (Math.random() - 0.5) * 10,
+                  waterPourWorld.y + 8 + Math.random() * 16,
+                  waterPourWorld.z + (Math.random() - 0.5) * 10,
                 );
                 scene.add(dMesh);
                 streamDroplets.push({
                   mesh: dMesh,
-                  velY: -(200 + Math.random() * 120), // downward
-                  life: 1200,
-                  maxLife: 1200,
+                  velX: (Math.random() - 0.5) * 30,
+                  velY: -(180 + Math.random() * 80),
+                  velZ: (Math.random() - 0.5) * 30,
+                  life: 1500,
                 });
               }
             }
@@ -1539,14 +1773,27 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             streamSpawnTimer = 0;
           }
 
-          // Advance droplets — fall, vanish when they hit water surface.
+          // Advance droplets; on impact with water surface or floor,
+          // inject height (real splash) and remove the droplet.
           for (let di = streamDroplets.length - 1; di >= 0; di--) {
             const d = streamDroplets[di];
+            d.velY -= 500 * dt;
+            d.mesh.position.x += d.velX * dt;
             d.mesh.position.y += d.velY * dt;
-            d.velY -= 400 * dt; // gravity on the stream
+            d.mesh.position.z += d.velZ * dt;
             d.life -= dt * 1000;
-            // Kill when hitting water surface or time expires.
-            if (d.mesh.position.y <= waterLevel + 1 || d.life <= 0) {
+
+            const surfY = hasWater ? surfaceHeightAt(d.mesh.position.x, d.mesh.position.z) : FLOOR_Y;
+            if (d.mesh.position.y <= surfY + 0.5 || d.life <= 0) {
+              if (d.mesh.position.y <= surfY + 0.5) {
+                // Splash — inject a small height pulse at impact cell.
+                const ci = xToGridI(d.mesh.position.x);
+                const cj = zToGridJ(d.mesh.position.z);
+                if (ci >= 0 && ci < GRID_RES && cj >= 0 && cj < GRID_RES) {
+                  injectHeight(ci, cj, 2, 1.5);
+                  injectImpulse(ci, cj, 2, -8);
+                }
+              }
               scene.remove(d.mesh);
               d.mesh.geometry.dispose();
               d.mesh.material.dispose();
@@ -1555,69 +1802,144 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           }
 
           if (hasWater) {
-            waterMesh.visible = true;
-            waterMesh.position.y = waterLevel;
-
-            // Animated surface ripples — stronger near the pour point.
-            const wPos = waterGeo.attributes.position;
-            const wTime = nowMs / 1000;
-            const pourX = waterPourWorld.x;
-            for (let wi = 0; wi < wPos.count; wi++) {
-              const wx = wPos.getX(wi);
-              const wz = wPos.getY(wi); // rotated plane: local Y = world Z
-              const dist = Math.hypot(wx - pourX, wz) / HALF_X;
-              const ripple = Math.sin(wx * 0.045 + wTime * 3.2) * 2.2
-                           + Math.cos(wz * 0.038 + wTime * 2.5) * 1.8
-                           + Math.sin(dist * 8 - wTime * 5) * (waterActiveRef.current ? 4 : 1.5);
-              wPos.setZ(wi, ripple);
-            }
-            wPos.needsUpdate = true;
-            waterGeo.computeVertexNormals();
-            waterMat.opacity = 0.33 + 0.05 * Math.sin(nowMs / 1000 * 1.9);
-
-            const G = 650;
-            const applyBuoyancy = (body, radius, scale) => {
+            /* ── Object displacement → splash waves ────────────── */
+            const displaceFromBody = (body, radius) => {
               if (body.type === CANNON.Body.STATIC || body.type === CANNON.Body.KINEMATIC) return;
-              const frac = Math.min(1, Math.max(0,
-                ((waterLevel + radius) - body.position.y) / (radius * 2)));
-              if (frac <= 0) return;
-              // Water drag — kill lateral velocity in proportion to submersion.
-              const drag = 1 - frac * 0.08;
-              body.velocity.x *= drag;
-              body.velocity.z *= drag;
-              body.applyForce(new CANNON.Vec3(0, G * body.mass * scale * frac, 0),
-                              new CANNON.Vec3(0, 0, 0));
+              const surfY = surfaceHeightAt(body.position.x, body.position.z);
+              const top = body.position.y + radius;
+              const bot = body.position.y - radius;
+              if (bot >= surfY || top <= surfY - 30) return; // fully above water or fully buried
+              // Submersion ratio for displacement amount.
+              const subFrac = Math.min(1, Math.max(0, (surfY - bot) / (radius * 2)));
+              // Radius in grid cells ~ body radius / cell size.
+              const gridR = Math.max(2, Math.round(radius / Math.max(CELL_X, CELL_Z)));
+              const ci = xToGridI(body.position.x);
+              const cj = zToGridJ(body.position.z);
+              // Body's vertical velocity drives the splash impulse —
+              // fast entry = big splash, slow drift = ripples.
+              const vy = body.velocity.y;
+              const splashImpulse = -vy * subFrac * 0.012;
+              if (Math.abs(splashImpulse) > 0.01) {
+                injectImpulse(ci, cj, gridR, splashImpulse);
+              }
+              // Continuous displacement — body still sitting in water
+              // pushes the local cells down by its volume above the bed.
+              injectHeight(ci, cj, gridR, -subFrac * 0.08 * dt * 60);
+            };
+
+            if (ballBody.type === CANNON.Body.DYNAMIC) {
+              displaceFromBody(ballBody, targetRadius * state.scale);
+            }
+            for (const b of bombs) displaceFromBody(b.body, b.radius);
+            for (const sb of spawnedBalls) displaceFromBody(sb.body, SPAWN_R);
+            for (const cp of confettiPieces) displaceFromBody(cp.body, CONFETTI_W * 0.5);
+
+            /* ── Wave equation step ────────────────────────────── */
+            for (let j = 1; j < GRID_RES - 1; j++) {
+              const row = j * GRID_RES;
+              for (let i = 1; i < GRID_RES - 1; i++) {
+                const idx = row + i;
+                const avg = (
+                  heights[idx - 1] + heights[idx + 1]
+                  + heights[idx - GRID_RES] + heights[idx + GRID_RES]
+                ) * 0.25;
+                velocities[idx] = (velocities[idx] + (avg - heights[idx]) * WAVE_SPEED) * WAVE_DAMP;
+              }
+            }
+            // Apply velocity to height + clamp.
+            for (let k = 0; k < heights.length; k++) {
+              heights[k] += velocities[k];
+              // Clamp peaks so a runaway wave can't blow past the ceiling.
+              if (heights[k] > 35) heights[k] = 35;
+              if (heights[k] < -35) heights[k] = -35;
+            }
+            // Boundary cells — clamp to zero so waves reflect.
+            for (let i = 0; i < GRID_RES; i++) {
+              heights[i] = heights[GRID_RES + i] * 0.5;
+              heights[(GRID_RES - 1) * GRID_RES + i] = heights[(GRID_RES - 2) * GRID_RES + i] * 0.5;
+              heights[i * GRID_RES] = heights[i * GRID_RES + 1] * 0.5;
+              heights[i * GRID_RES + (GRID_RES - 1)] = heights[i * GRID_RES + (GRID_RES - 2)] * 0.5;
+            }
+
+            // Upload heightfield to GPU.
+            heightTexData.set(heights);
+            heightTex.needsUpdate = true;
+
+            /* ── Buoyancy + quadratic drag ─────────────────────────
+               Physics:
+                 ρ_body = body.mass / V_full
+                 V_sub  = V_full * frac
+                 F_buoy = ρ_water * g * V_sub  (upward)
+                        = (ρ_water / ρ_body) * body.mass * g * frac
+               We parameterize each body type by `floatRatio = ρ_water/ρ_body`:
+                   floatRatio < 1  → buoyancy weaker than gravity → SINKS
+                   floatRatio > 1  → buoyancy stronger than gravity → FLOATS
+               Cannon already integrates body.mass*g downward, so we
+               just add F_buoy upward. */
+            const G = 650;
+            const applyWaterForces = (body, radius, floatRatio, dragCoef) => {
+              if (body.type === CANNON.Body.STATIC || body.type === CANNON.Body.KINEMATIC) return;
+              const surfY = surfaceHeightAt(body.position.x, body.position.z);
+              const bot = body.position.y - radius;
+              if (bot >= surfY) return;
+              const submerged = Math.min(radius * 2, surfY - bot);
+              const frac = submerged / (radius * 2);
+
+              const buoyF = floatRatio * body.mass * G * frac;
+              body.applyForce(new CANNON.Vec3(0, buoyF, 0), new CANNON.Vec3(0, 0, 0));
+
+              // Quadratic drag — F_drag = -0.5 * Cd * |v| * v * frac
+              const vx = body.velocity.x, vy = body.velocity.y, vz = body.velocity.z;
+              const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
+              if (speed > 0.1) {
+                const dragMag = 0.5 * dragCoef * speed * speed * frac;
+                const inv = 1 / speed;
+                body.applyForce(
+                  new CANNON.Vec3(-dragMag * vx * inv, -dragMag * vy * inv, -dragMag * vz * inv),
+                  new CANNON.Vec3(0, 0, 0),
+                );
+              }
+              // Angular damping — water is viscous, things stop spinning.
+              const ad = 1 - frac * 0.12;
+              body.angularVelocity.x *= ad;
+              body.angularVelocity.y *= ad;
+              body.angularVelocity.z *= ad;
               body.wakeUp();
             };
 
-            // Golf ball & bombs: scale 0.35 → always sinks (G*1*0.35 << G*1).
+            // Tuned floatRatios: <1 sinks, >1 floats.
+            // Drag scales by approximate cross-section area / mass.
             if (ballBody.type === CANNON.Body.DYNAMIC) {
-              applyBuoyancy(ballBody, targetRadius * state.scale, 0.35);
+              applyWaterForces(ballBody, targetRadius * state.scale, 0.45, 0.8);
             }
-            for (const b of bombs) applyBuoyancy(b.body, b.radius, 0.35);
-            // Color balls: scale 1.6 → floats.
-            for (const sb of spawnedBalls) applyBuoyancy(sb.body, SPAWN_R, 1.6);
-            // Confetti: scale 2.5 → floats hard.
-            for (const cp of confettiPieces) applyBuoyancy(cp.body, CONFETTI_W * 0.5, 2.5);
+            for (const b of bombs)           applyWaterForces(b.body, b.radius, 0.50, 0.6);
+            for (const sb of spawnedBalls)   applyWaterForces(sb.body, SPAWN_R, 1.45, 0.4);
+            for (const cp of confettiPieces) applyWaterForces(cp.body, CONFETTI_W * 0.5, 3.5, 1.2);
 
-            // Track how submerged the camera viewpoint is — drive the
-            // blue tint overlay based on whether the water line is above
-            // the camera's lower half of the frame (approximated as
-            // waterLevel vs a fixed "eye height" near floor center).
-            const camEye = -HALF_Y * 0.2; // near-floor reference height
-            const tint = Math.min(1, Math.max(0,
-              (waterLevel - camEye) / (HALF_Y * 1.2)));
-            underwaterFracRef.current = tint;
-            if (nowMs - lastUnderwaterUpdateRef.current > 80) {
-              lastUnderwaterUpdateRef.current = nowMs;
-              setUnderwaterFrac(tint);
-            }
+            // Push shader uniforms.
+            waterMesh.visible = true;
+            waterMesh.position.y = baseLevel;
+            waterUniforms.uTime.value = nowMs / 1000;
+            waterUniforms.uBaseLevel.value = baseLevel;
+            waterUniforms.uCameraPos.value.copy(camera.position);
           } else {
             waterMesh.visible = false;
-            if (underwaterFracRef.current > 0) {
-              underwaterFracRef.current = 0;
-              setUnderwaterFrac(0);
-            }
+          }
+
+          /* ── Underwater detection (camera/eye-line based) ──────── */
+          // Treat camera Y as the eye. If the water surface at the
+          // camera's XZ projected ray midpoint is above the camera,
+          // we're "looking through water" → drive the underwater pass.
+          let cameraSubmersion = 0;
+          if (hasWater) {
+            // Read surface height where the camera ray hits z=0 plane.
+            const surfY = surfaceHeightAt(0, 0);
+            cameraSubmersion = Math.max(0, Math.min(1, (surfY - camera.position.y + 50) / 250));
+          }
+          underwaterFracRef.current = cameraSubmersion;
+          if (nowMs - lastUnderwaterUpdateRef.current > 80) {
+            lastUnderwaterUpdateRef.current = nowMs;
+            setUnderwaterFrac(cameraSubmersion);
           }
 
           const stepNeeded = throwModeRef.current || bombs.length > 0
@@ -1709,6 +2031,21 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // Scale is independent of mode — wheel-driven only.
           ballGroup.scale.setScalar(state.scale);
 
+          /* ── Two-pass render for refraction ────────────────────
+             When water is present we need the scene WITHOUT water
+             rendered into a texture, then re-render with water on top
+             sampling that texture for refraction. When there's no
+             water, skip the off-screen pass entirely (free perf). */
+          if (hasWater) {
+            waterMesh.visible = false;
+            sizeSceneRT();
+            renderer.setRenderTarget(sceneRT);
+            renderer.render(scene, camera);
+            renderer.setRenderTarget(null);
+            waterMesh.visible = true;
+            waterUniforms.uResolution.value.set(sceneRT.width, sceneRT.height);
+            waterUniforms.uSceneTex.value = sceneRT.texture;
+          }
           renderer.render(scene, camera);
 
           const now = performance.now();
@@ -2111,18 +2448,24 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         </div>
       )}
 
-      {/* Underwater tint — blue vignette that builds as the water level
-          rises. pointer-events:none so it never blocks the canvas. */}
+      {/* Underwater overlay — kicks in when camera ray hits water.
+          The main water effect comes from the shader's refraction;
+          this overlay adds the secondary "lens" feel: peripheral
+          chromatic vignette + subtle blue saturation bias. */}
       {underwaterFrac > 0.01 && (
         <div
           aria-hidden
           style={{
             position: 'absolute', inset: 0,
             pointerEvents: 'none',
-            background: `rgba(10, 80, 200, ${(underwaterFrac * 0.45).toFixed(3)})`,
-            // Stronger at the edges to mimic peripheral lens distortion.
-            boxShadow: `inset 0 0 ${80 + underwaterFrac * 120}px ${40 + underwaterFrac * 80}px rgba(0, 60, 180, ${(underwaterFrac * 0.55).toFixed(3)})`,
-            transition: 'background 0.3s, box-shadow 0.3s',
+            background: `radial-gradient(ellipse at center,
+              rgba(40,140,220,${(underwaterFrac * 0.18).toFixed(3)}) 0%,
+              rgba(10,70,170,${(underwaterFrac * 0.42).toFixed(3)}) 60%,
+              rgba(0,30,90,${(underwaterFrac * 0.65).toFixed(3)}) 100%)`,
+            backdropFilter: `saturate(${1 + underwaterFrac * 0.4}) hue-rotate(${(underwaterFrac * 12).toFixed(1)}deg)`,
+            WebkitBackdropFilter: `saturate(${1 + underwaterFrac * 0.4}) hue-rotate(${(underwaterFrac * 12).toFixed(1)}deg)`,
+            mixBlendMode: 'multiply',
+            transition: 'background 0.25s, backdrop-filter 0.25s',
             zIndex: 5,
           }}
         />
