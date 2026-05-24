@@ -126,6 +126,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
 
   const wrapRef = useRef(null);      // the 340px preview surface (drag + wheel target)
   const viewportRef = useRef(null);  // inner transform layer (translate + scale applied here)
+  const viewerRef = useRef(null);    // GolfballViewer imperative handle — .snapshot() returns a PNG dataURL
 
   // Image load wiring. The <img>'s onLoad/onError flips status. We
   // pre-resolve URLs that are already cached so the spinner doesn't
@@ -422,6 +423,44 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
     toast?.info?.('Submit Proof — coming soon', { tone: 'info' });
   };
 
+  /* 3D snapshot helpers. The GolfballViewer exposes .snapshot()
+     which renders the ball ONLY (no walls, transparent background)
+     at the user's current rotation/scale into a square PNG dataURL.
+     - Copy   → blob → clipboard.write([{ 'image/png': blob }])
+     - Download → anchor click with download attribute */
+  const snapshotName = () => {
+    // Best-effort filename: <stem>-3d.png from the source URL, or
+    // a timestamped fallback for blob/data sources.
+    const stem = (() => {
+      try {
+        const last = effectiveUrl.split('/').pop() || '';
+        const base = last.split('?')[0].split('#')[0];
+        const dot = base.lastIndexOf('.');
+        return dot > 0 ? base.slice(0, dot) : base;
+      } catch { return ''; }
+    })();
+    return (stem || `golfball-${Date.now()}`) + '-3d.png';
+  };
+  const onCopy3D = async () => {
+    const url = viewerRef.current?.snapshot?.(1024);
+    if (!url) { toast?.error?.('3D viewer not ready'); return; }
+    try {
+      const blob = await (await fetch(url)).blob();
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      toast?.success?.('Snapshot copied');
+    } catch (e) {
+      toast?.error?.('Copy failed: ' + (e?.message || e));
+    }
+  };
+  const onDownload3D = () => {
+    const url = viewerRef.current?.snapshot?.(1024);
+    if (!url) { toast?.error?.('3D viewer not ready'); return; }
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = snapshotName();
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+
   // Subtitle copy reflects the active state so the user always knows
   // what they're looking at without reading code.
   const subtitle =
@@ -491,6 +530,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                 style={{ position: 'absolute', inset: 0, transformOrigin: 'center' }}
               >
                 <GolfballViewer
+                  ref={viewerRef}
                   decalDataUrl={decalDataUrl}
                   onError={() => {
                     toast?.error?.('Failed to load 3D viewer');
@@ -787,7 +827,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                   size="sm"
                   variant="secondary"
                   icon={<I.copy />}
-                  onClick={() => toast?.info?.('Copy 3D snapshot — coming soon', { tone: 'info' })}
+                  onClick={onCopy3D}
                 >
                   Copy
                 </Btn>
@@ -796,7 +836,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                   variant="tinted"
                   status="brand"
                   icon={<DownloadIcon />}
-                  onClick={() => toast?.info?.('Download 3D snapshot — coming soon', { tone: 'info' })}
+                  onClick={onDownload3D}
                 >
                   Download
                 </Btn>
