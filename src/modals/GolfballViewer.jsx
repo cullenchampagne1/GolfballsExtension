@@ -80,6 +80,48 @@ async function loadThreeAndModel() {
   return { ...cache.three, model };
 }
 
+/* Build a CanvasTexture that mirrors the playground page's two-layer
+   line grid (minor every 16, major every 64) so the room walls blend
+   visually with the page background behind the canvas. Reads the
+   current values of --gb-border-default + --gb-border-subtle off
+   the document so the texture re-themes with the user's variant.
+   `THREE` is passed in because this runs inside the effect after
+   the dynamic Three.js import. */
+function makeGridTexture(THREE) {
+  const TILE = 192;            // each tile spans 3 major squares (192/64)
+  const MINOR = 16;
+  const MAJOR = 64;
+  const cv = document.createElement('canvas');
+  cv.width = TILE; cv.height = TILE;
+  const ctx = cv.getContext('2d');
+  // Sample design tokens off the document so the texture stays
+  // in-theme. Fallbacks match the dark variant baseline.
+  const cs = getComputedStyle(document.documentElement);
+  const minor = cs.getPropertyValue('--gb-border-subtle').trim() || '#1a1c1f';
+  const major = cs.getPropertyValue('--gb-border-default').trim() || '#26292d';
+  const surface = cs.getPropertyValue('--gb-surface-canvas').trim() || '#0e0f10';
+  ctx.fillStyle = surface;
+  ctx.fillRect(0, 0, TILE, TILE);
+  ctx.lineWidth = 1;
+  // Minor grid
+  ctx.strokeStyle = minor;
+  for (let i = 0; i <= TILE; i += MINOR) {
+    ctx.beginPath(); ctx.moveTo(i + 0.5, 0); ctx.lineTo(i + 0.5, TILE); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i + 0.5); ctx.lineTo(TILE, i + 0.5); ctx.stroke();
+  }
+  // Major grid (drawn over the minor so brighter lines win at intersections)
+  ctx.strokeStyle = major;
+  for (let i = 0; i <= TILE; i += MAJOR) {
+    ctx.beginPath(); ctx.moveTo(i + 0.5, 0); ctx.lineTo(i + 0.5, TILE); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, i + 0.5); ctx.lineTo(TILE, i + 0.5); ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
 export function GolfballViewer({ decalDataUrl, onError }) {
   const containerRef = useRef(null);
   // 'loading' until Three.js + the model finish; then 'ready'. 'error'
@@ -121,15 +163,14 @@ export function GolfballViewer({ decalDataUrl, onError }) {
     const mountStart = performance.now();
     const MIN_LOADING_MS = 2000;
 
-    /* Box bounds in world units — defines the 3D play area. Must be
-       larger than the ball radius (100) on every axis or the ball
-       clips through the wall. Floor is the BOTTOM of this box at
-       y = -HALF_Y; with a 100-radius ball the resting center sits at
-       y = -HALF_Y + 100, so HALF_Y also controls how far the ball
-       falls before landing. */
-    const HALF_X = 220;
-    const HALF_Y = 180;
-    const HALF_Z = 120;
+    /* Box bounds in world units — defines the 3D play area. Sized
+       to roughly fill the camera viewport (480 units away, 40° FOV)
+       so the user is looking INTO a room rather than at a small box
+       floating in space. The ball radius is 100; the box has to be
+       comfortably larger on every axis or the ball clips through. */
+    const HALF_X = 260;
+    const HALF_Y = 175;
+    const HALF_Z = 180;
     const SCALE_MIN = 0.4;
     const SCALE_MAX = 2.5;
     const ROTATE_SENSITIVITY = 0.008;  // radians per CSS px of drag
@@ -197,46 +238,80 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         fill.position.set(-200, -100, -100);
         scene.add(fill);
 
-        // ── Box edges ──────────────────────────────────────────
-        // Subtle wireframe at the play-area boundary so the user has
-        // spatial reference — they can see "the ball is in a box"
-        // without the box being a solid wall that obscures the
-        // background. EdgesGeometry from a Box gives 12 edges; we
-        // render them as low-opacity LineSegments so the box reads
-        // as a faint outline. Material color matches the design-
-        // system border so it themes correctly.
+        // ── Room walls ─────────────────────────────────────────
+        // Build 5 inward-facing textured planes (back, floor, ceiling,
+        // left, right) to form a room the user looks INTO. The 6th
+        // plane (front, between camera and ball) is intentionally
+        // omitted so the user can see in. Each plane uses the same
+        // grid texture as the playground page background — when
+        // viewed at an angle the lights cast subtle shading on the
+        // grid, giving the depth cue you'd get from a real room.
+        //
+        // Planes use MeshStandardMaterial so they pick up the scene's
+        // hemisphere + directional lights; the resulting shading
+        // gradient across each wall is what reads as "depth without
+        // a solid background change".
         {
-          const boxGeom = new THREE.BoxGeometry(HALF_X * 2, HALF_Y * 2, HALF_Z * 2);
-          const edges = new THREE.EdgesGeometry(boxGeom);
-          const edgeMat = new THREE.LineBasicMaterial({
-            color: 0xffffff,
-            transparent: true,
-            opacity: 0.18,
-          });
-          const boxLines = new THREE.LineSegments(edges, edgeMat);
-          scene.add(boxLines);
-          objectsToDispose.push(boxGeom, edges, edgeMat);
+          const tex = makeGridTexture(THREE);
+          objectsToDispose.push(tex);
 
-          // Bottom-edge highlight — a SECOND line ring just for the
-          // four floor edges, brighter than the rest. Gives the user
-          // an unambiguous "this is the floor" cue without painting a
-          // full plane that would mask the background grid behind.
-          const floorPts = new Float32Array([
-            -HALF_X, -HALF_Y, -HALF_Z,   HALF_X, -HALF_Y, -HALF_Z,
-             HALF_X, -HALF_Y, -HALF_Z,   HALF_X, -HALF_Y,  HALF_Z,
-             HALF_X, -HALF_Y,  HALF_Z,  -HALF_X, -HALF_Y,  HALF_Z,
-            -HALF_X, -HALF_Y,  HALF_Z,  -HALF_X, -HALF_Y, -HALF_Z,
-          ]);
-          const floorGeom = new THREE.BufferGeometry();
-          floorGeom.setAttribute('position', new THREE.BufferAttribute(floorPts, 3));
-          const floorMat = new THREE.LineBasicMaterial({
-            color: 0xffffff,
-            transparent: true,
-            opacity: 0.42,
-          });
-          const floorRing = new THREE.LineSegments(floorGeom, floorMat);
-          scene.add(floorRing);
-          objectsToDispose.push(floorGeom, floorMat);
+          // Texture repeat tuned so each tile is ~96 world units —
+          // matches the playground's 64px major grid at roughly the
+          // same visual density when the wall sits at typical depth.
+          function makeWall(width, height, repeatX, repeatY) {
+            const t = tex.clone();
+            t.needsUpdate = true;
+            t.wrapS = THREE.RepeatWrapping;
+            t.wrapT = THREE.RepeatWrapping;
+            t.repeat.set(repeatX, repeatY);
+            const mat = new THREE.MeshStandardMaterial({
+              map: t,
+              roughness: 0.95,
+              metalness: 0,
+              side: THREE.FrontSide,
+            });
+            objectsToDispose.push(t, mat);
+            return new THREE.Mesh(new THREE.PlaneGeometry(width, height), mat);
+          }
+          const wT = HALF_X * 2;
+          const hT = HALF_Y * 2;
+          const dT = HALF_Z * 2;
+          // Per-wall repeat — tile world-units / ~96px-per-tile so the
+          // grid density stays even regardless of wall size.
+          const TILE_WU = 96;
+
+          // Floor (y = -HALF_Y, facing up)
+          const floor = makeWall(wT, dT, wT / TILE_WU, dT / TILE_WU);
+          floor.rotation.x = -Math.PI / 2;
+          floor.position.set(0, -HALF_Y, 0);
+          scene.add(floor);
+
+          // Ceiling (y = +HALF_Y, facing down)
+          const ceil = makeWall(wT, dT, wT / TILE_WU, dT / TILE_WU);
+          ceil.rotation.x = Math.PI / 2;
+          ceil.position.set(0, HALF_Y, 0);
+          scene.add(ceil);
+
+          // Back wall (z = -HALF_Z, facing toward camera = +Z)
+          const back = makeWall(wT, hT, wT / TILE_WU, hT / TILE_WU);
+          back.position.set(0, 0, -HALF_Z);
+          scene.add(back);
+
+          // Left wall (x = -HALF_X, facing +X)
+          const left = makeWall(dT, hT, dT / TILE_WU, hT / TILE_WU);
+          left.rotation.y = Math.PI / 2;
+          left.position.set(-HALF_X, 0, 0);
+          scene.add(left);
+
+          // Right wall (x = +HALF_X, facing -X)
+          const right = makeWall(dT, hT, dT / TILE_WU, hT / TILE_WU);
+          right.rotation.y = -Math.PI / 2;
+          right.position.set(HALF_X, 0, 0);
+          scene.add(right);
+
+          // No front wall — user looks INTO the room from outside.
+          // The 6th cannon plane still bounces the ball back from the
+          // front edge though, so it can't escape toward the camera.
         }
 
         // ── Ball ───────────────────────────────────────────────
