@@ -107,6 +107,12 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   // Hit test — is a CSS point inside the live 3D canvas? Lets the
   // parent decide whether the drop happened over the viewer.
   const containsPointRef = useRef(null);
+  // Ball-pit spawner: hold-to-spawn colored physics balls from cursor.
+  const spawnBallAtRef = useRef(null);   // ({clientX,clientY}) — spawn one ball now
+  const spawnBallActiveRef = useRef(false); // true while the button is held
+  // Confetti rain: toggle on/off, reactive to explosions.
+  const confettiActiveRef = useRef(false);
+  const setConfettiRef = useRef(null);   // (bool) — turn rain on/off
   // MutationObserver that watches the document element for theme
   // changes and rebakes wall textures. Held on a ref so the
   // effect's teardown can disconnect it across re-runs.
@@ -115,6 +121,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
     snapshot: (...args) => snapshotRef.current?.(...args),
     dropBomb: (...args) => dropBombRef.current?.(...args),
     containsPoint: (...args) => containsPointRef.current?.(...args),
+    spawnBallAt: (...args) => spawnBallAtRef.current?.(...args),
+    get spawnBallActive() { return spawnBallActiveRef.current; },
+    set spawnBallActive(v) { spawnBallActiveRef.current = v; },
+    setConfetti: (v) => setConfettiRef.current?.(v),
   }), []);
   // 'loading' until Three.js + the model finish; then 'ready'. 'error'
   // surfaces a basic message instead of an empty canvas.
@@ -832,6 +842,12 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // Each is { mesh, vel, life, maxLife } — pure visual, no
         // physics (manual position += vel*dt + light gravity drag).
         const particles = [];
+        // spawnedBalls: colored mini-balls from the ball-pit tool.
+        // Each is { mesh, body } — full physics, blastable by bombs.
+        const spawnedBalls = [];
+        // confettiPieces: flat physics boxes raining from the ceiling.
+        // Each is { mesh, body } — blastable by bombs, pile up on floor.
+        const confettiPieces = [];
         const ndc = new THREE.Vector2();
         const ray = new THREE.Raycaster();
         const dropPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0); // z = 0
@@ -885,11 +901,23 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             const dz = ballBody.position.z - origin.z;
             const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (d <= BLAST_R && ballBody.type === CANNON.Body.DYNAMIC) {
-              // Multiply (not divide) by BALL_IMPULSE_SHARE — the
-              // ball is heavier and bigger, it needs MORE impulse to
-              // visibly move, not less.
               targets.push({ body: ballBody, dx, dy, dz, d, falloff: falloff(d) * BALL_IMPULSE_SHARE });
             }
+          }
+          // Spawned balls and confetti scatter in the blast.
+          for (const sb of spawnedBalls) {
+            const dx = sb.body.position.x - origin.x;
+            const dy = sb.body.position.y - origin.y;
+            const dz = sb.body.position.z - origin.z;
+            const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (d <= BLAST_R) targets.push({ body: sb.body, dx, dy, dz, d, falloff: falloff(d) });
+          }
+          for (const cp of confettiPieces) {
+            const dx = cp.body.position.x - origin.x;
+            const dy = cp.body.position.y - origin.y;
+            const dz = cp.body.position.z - origin.z;
+            const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (d <= BLAST_R * 1.4) targets.push({ body: cp.body, dx, dy, dz, d, falloff: falloff(d) * 2.2 });
           }
           // applyImpulse(impulse, relativePoint): relativePoint is
           // an offset from the body center in WORLD orientation. Pass
@@ -1014,6 +1042,89 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             sparkMat,
             fuseStart: performance.now(),
           });
+        };
+
+        /* ── Ball-pit spawner ─────────────────────────────────────
+           Spawns one small colored physics ball at the cursor's world-
+           space position (raycasted onto z=0 plane). Called once per
+           second while the tool button is held in ViewerToolbox.
+           Each ball is a real cannon-es Sphere so it stacks, rolls,
+           and reacts to bomb explosions exactly like the main ball. */
+        const BALL_COLORS = [
+          0xff3b30, 0xff9500, 0xffcc00, 0x34c759, 0x30d158,
+          0x5ac8fa, 0x007aff, 0xaf52de, 0xff2d55, 0xffd60a,
+          0x64d2ff, 0xbf5af2, 0xff6961, 0xffb340, 0x30b0c7,
+        ];
+        const SPAWN_R = 20;
+
+        spawnBallAtRef.current = ({ clientX, clientY }) => {
+          if (sceneKeyRef.current) return;
+          const canvas = renderer.domElement;
+          const r = canvas.getBoundingClientRect();
+          ndc.x =  ((clientX - r.left) / r.width)  * 2 - 1;
+          ndc.y = -((clientY - r.top)  / r.height) * 2 + 1;
+          ray.setFromCamera(ndc, camera);
+          ray.ray.intersectPlane(dropPlane, hitPoint);
+
+          const margin = SPAWN_R + 2;
+          hitPoint.x = Math.max(-HALF_X + margin, Math.min(HALF_X - margin, hitPoint.x));
+          hitPoint.y = Math.max(-HALF_Y + margin, Math.min(HALF_Y - margin, hitPoint.y));
+          hitPoint.z = 0;
+
+          const color = BALL_COLORS[Math.floor(Math.random() * BALL_COLORS.length)];
+          const geo = new THREE.SphereGeometry(SPAWN_R, 16, 12);
+          const mat = new THREE.MeshStandardMaterial({
+            color,
+            roughness: 0.35,
+            metalness: 0.05,
+            emissive: color,
+            emissiveIntensity: 0.08,
+          });
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.castShadow = true;
+          mesh.position.copy(hitPoint);
+          scene.add(mesh);
+
+          const cBody = new CANNON.Body({
+            mass: 0.4,
+            shape: new CANNON.Sphere(SPAWN_R),
+            material: ballMaterial,
+            linearDamping: 0.04,
+            angularDamping: 0.15,
+          });
+          cBody.position.set(hitPoint.x, hitPoint.y, hitPoint.z);
+          // Small random initial velocity so balls don't all stack in one column.
+          cBody.velocity.set(
+            (Math.random() - 0.5) * 60,
+            (Math.random() - 0.5) * 60,
+            0,
+          );
+          world.addBody(cBody);
+          spawnedBalls.push({ mesh, body: cBody });
+          objectsToDispose.push(geo, mat);
+        };
+
+        /* ── Confetti rain ────────────────────────────────────────
+           While active, one confetti piece spawns every ~60ms from a
+           random X position at the ceiling (y = HALF_Y). Each piece is
+           a flat CANNON.Box (thin slab) with very low mass so air drag
+           makes it flutter. The render loop syncs mesh ↔ body each frame.
+           Explosion impulse scatters them like leaves. */
+        const CONFETTI_COLORS = [
+          0xff3b30, 0xff9500, 0xffcc00, 0x34c759, 0x5ac8fa,
+          0x007aff, 0xaf52de, 0xff2d55, 0xffd60a, 0x64d2ff,
+          0xff6b6b, 0x4ecdc4, 0x45b7d1, 0xf9ca24, 0xf0932b,
+          0x6ab04c, 0xeb4d4b, 0x7bed9f, 0x70a1ff, 0xff6348,
+        ];
+        let confettiSpawnTimer = 0;
+        const CONFETTI_INTERVAL = 55; // ms between spawns
+        const CONFETTI_W = 10;
+        const CONFETTI_H = 5;
+        const CONFETTI_DEPTH = 1;
+
+        setConfettiRef.current = (active) => {
+          confettiActiveRef.current = active;
+          confettiSpawnTimer = 0;
         };
 
         ballBody = new CANNON.Body({
@@ -1180,7 +1291,79 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
              world has to integrate every frame even if the ball is
              at rest. While dragging the active target, that body
              is kinematic and we mirror its pose from the pointer. */
-          const stepNeeded = throwModeRef.current || bombs.length > 0;
+          /* ── Confetti spawn ──────────────────────────────────────
+             Drip one piece per CONFETTI_INTERVAL while rain is active.
+             Each piece starts at the ceiling with a slight random tilt
+             and a gentle downward + random lateral velocity. */
+          if (confettiActiveRef.current) {
+            confettiSpawnTimer += dt * 1000;
+            if (confettiSpawnTimer >= CONFETTI_INTERVAL) {
+              confettiSpawnTimer = 0;
+              const color = CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)];
+              const geo = new THREE.PlaneGeometry(CONFETTI_W, CONFETTI_H);
+              const mat = new THREE.MeshBasicMaterial({
+                color,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.92,
+              });
+              const mesh = new THREE.Mesh(geo, mat);
+              mesh.castShadow = false;
+              const sx = (Math.random() - 0.5) * HALF_X * 1.8;
+              const sy = HALF_Y - 4;
+              const sz = (Math.random() - 0.5) * HALF_Z * 0.6;
+              mesh.position.set(sx, sy, sz);
+              // Random initial tilt so pieces look natural at spawn.
+              mesh.rotation.set(
+                Math.random() * Math.PI,
+                Math.random() * Math.PI,
+                Math.random() * Math.PI,
+              );
+              scene.add(mesh);
+
+              const halfW = CONFETTI_W / 2;
+              const halfH = CONFETTI_H / 2;
+              const halfD = CONFETTI_DEPTH / 2;
+              const cBody = new CANNON.Body({
+                mass: 0.03,
+                shape: new CANNON.Box(new CANNON.Vec3(halfW, halfH, halfD)),
+                material: ballMaterial,
+                linearDamping: 0.55,
+                angularDamping: 0.45,
+              });
+              cBody.position.set(sx, sy, sz);
+              cBody.quaternion.set(
+                mesh.quaternion.x,
+                mesh.quaternion.y,
+                mesh.quaternion.z,
+                mesh.quaternion.w,
+              );
+              // Gentle initial drift: fall + lateral wobble.
+              cBody.velocity.set(
+                (Math.random() - 0.5) * 40,
+                -20 - Math.random() * 30,
+                (Math.random() - 0.5) * 20,
+              );
+              cBody.angularVelocity.set(
+                (Math.random() - 0.5) * 4,
+                (Math.random() - 0.5) * 4,
+                (Math.random() - 0.5) * 4,
+              );
+              world.addBody(cBody);
+              confettiPieces.push({ mesh, body: cBody });
+              objectsToDispose.push(geo, mat);
+
+              // Cap total confetti to keep perf reasonable.
+              if (confettiPieces.length > 300) {
+                const old = confettiPieces.shift();
+                scene.remove(old.mesh);
+                world.removeBody(old.body);
+              }
+            }
+          }
+
+          const stepNeeded = throwModeRef.current || bombs.length > 0
+            || spawnedBalls.length > 0 || confettiPieces.length > 0;
           if (stepNeeded) {
             world.step(1 / 60, dt, 3);
             // Sync the ball — only when throwMode is on AND we're
@@ -1203,6 +1386,16 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             for (const b of bombs) {
               b.group.position.set(b.body.position.x, b.body.position.y, b.body.position.z);
               b.group.quaternion.set(b.body.quaternion.x, b.body.quaternion.y, b.body.quaternion.z, b.body.quaternion.w);
+            }
+            // Sync spawned balls.
+            for (const sb of spawnedBalls) {
+              sb.mesh.position.set(sb.body.position.x, sb.body.position.y, sb.body.position.z);
+              sb.mesh.quaternion.set(sb.body.quaternion.x, sb.body.quaternion.y, sb.body.quaternion.z, sb.body.quaternion.w);
+            }
+            // Sync confetti pieces.
+            for (const cp of confettiPieces) {
+              cp.mesh.position.set(cp.body.position.x, cp.body.position.y, cp.body.position.z);
+              cp.mesh.quaternion.set(cp.body.quaternion.x, cp.body.quaternion.y, cp.body.quaternion.z, cp.body.quaternion.w);
             }
           }
 
@@ -1482,6 +1675,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
       snapshotRef.current = null;
       dropBombRef.current = null;
       containsPointRef.current = null;
+      spawnBallAtRef.current = null;
+      setConfettiRef.current = null;
+      confettiActiveRef.current = false;
+      spawnBallActiveRef.current = false;
       themeObserverRef.current?.disconnect();
       themeObserverRef.current = null;
       cleanupRef.current?.();
