@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  FloatingPanel, ModalHeader, Btn, Card, Input, Tag, Dot, Dropdown, I,
+  FloatingPanel, ModalHeader, Btn, Card, Input, Tag, Dot, Dropdown, Segmented, I,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 
@@ -613,9 +613,16 @@ function TaskEditor({ draft, onChange, onCommit, onCancel, isNew }) {
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <FieldLabel>Priority</FieldLabel>
-            <PrioritySelect
+            <Segmented
+              full
+              size="md"
               value={draft.priority}
               onChange={(v) => set({ priority: v })}
+              options={[
+                { id: 'high', label: 'High', icon: <Dot tone="error" /> },
+                { id: 'med',  label: 'Med',  icon: <Dot tone="warning" /> },
+                { id: 'low',  label: 'Low',  icon: <Dot tone="muted" /> },
+              ]}
             />
           </div>
           <div style={{ flex: 1.4, minWidth: 0 }}>
@@ -688,54 +695,6 @@ function FieldLabel({ children }) {
       color: 'var(--gb-text-muted)',
       marginBottom: 4,
     }}>{children}</div>
-  );
-}
-
-function PrioritySelect({ value, onChange }) {
-  const opts = [
-    { value: 'high', label: 'High', tone: 'error'   },
-    { value: 'med',  label: 'Med',  tone: 'warning' },
-    { value: 'low',  label: 'Low',  tone: 'muted'   },
-  ];
-  return (
-    <div style={{
-      display: 'flex', gap: 4,
-      padding: 3,
-      background: 'var(--gb-surface-2)',
-      border: '1px solid var(--gb-border-default)',
-      borderRadius: 'var(--gb-r-sm)',
-    }}>
-      {opts.map((o) => {
-        const active = value === o.value;
-        return (
-          <motion.button
-            key={o.value}
-            type="button"
-            onClick={() => onChange(o.value)}
-            whileTap={{ scale: 0.95 }}
-            animate={{
-              backgroundColor: active ? 'var(--gb-surface-modal)' : 'rgba(0,0,0,0)',
-              color: active ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)',
-            }}
-            transition={{ duration: 0.15 }}
-            style={{
-              flex: 1,
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-              padding: '4px 8px',
-              border: 'none', outline: 'none',
-              borderRadius: 'var(--gb-r-xs)',
-              fontSize: 11, fontWeight: 600,
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-              boxShadow: active ? '0 1px 2px rgba(0,0,0,0.18)' : 'none',
-            }}
-          >
-            <Dot tone={o.tone} size={6} />
-            {o.label}
-          </motion.button>
-        );
-      })}
-    </div>
   );
 }
 
