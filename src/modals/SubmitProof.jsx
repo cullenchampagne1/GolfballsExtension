@@ -508,7 +508,6 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
               counts={itemCounts}
               error={showErr('items', selectedItems.length === 0)}
               onAdd={(it) => {
-                console.log('[SubmitProof] onAdd fired with:', it);
                 addItem(it);
                 setInvalid((i) => ({ ...i, items: false }));
                 setTouched((t) => ({ ...t, items: false }));
@@ -734,6 +733,60 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             <Input size="xs" value={notes} onChange={setNotes} placeholder="Write N/A if unneeded" />
           </Field>
 
+          {/* Attached images — lives INSIDE the form scroll container,
+              below the last question. Scrolls with the rest of the
+              form. Background matches the form surface so the section
+              reads as part of the questionnaire, not as separate chrome.
+              No upload UI here — image acquisition lives entirely in
+              ImagePreview. */}
+          <AnimatePresence initial={false}>
+            {images.length > 0 && (
+              <motion.div
+                key="image-list"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+                style={{ overflow: 'hidden' }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
+                    textTransform: 'uppercase',
+                    color: 'var(--gb-text-muted)',
+                  }}>
+                    <span>Attached images</span>
+                    <Tag tone="neutral" size="xs" mono>{images.length}</Tag>
+                  </div>
+                  {/* Inline non-hosted warning — sits ABOVE the image
+                      chips so the user reads it before the list. */}
+                  {hasUnhostedImage && (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '5px 8px',
+                      background: 'var(--gb-warning-tint-soft)',
+                      border: '1px solid var(--gb-warning-tint-border)',
+                      borderRadius: 'var(--gb-r-sm)',
+                      color: 'var(--gb-warning-fg)',
+                      fontSize: 10.5, fontWeight: 600,
+                    }}>
+                      <I.alert size={11} />
+                      <span>Non-hosted images won&apos;t render in email templates — only embedded link previews will.</span>
+                    </div>
+                  )}
+                  {images.map((img) => (
+                    <SourceImageChip
+                      key={img.id}
+                      imageData={img}
+                      onRemove={() => removeImage(img.id)}
+                    />
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Results panel (shown after a successful submit) */}
           {stage === 'results' && results.length > 0 && (
             <ResultsPanel results={results} onClose={() => bindCloseRef.current?.()} />
@@ -760,76 +813,6 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           </div>
         )}
       </div>
-
-      {/* Attached images — pinned BELOW the body, above the footer.
-          List view of every image carried in from ImagePreview. Each
-          row: thumbnail · short caption · Remove. Pure presentation —
-          users cannot upload here (delegated to ImagePreview). */}
-      <AnimatePresence initial={false}>
-        {images.length > 0 && (
-          <motion.div
-            key="image-list"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-            style={{ overflow: 'hidden', flexShrink: 0 }}
-          >
-            <div style={{
-              borderTop: '1px solid var(--gb-border-subtle)',
-              background: 'var(--gb-surface-1)',
-              padding: '8px 12px',
-              display: 'flex', flexDirection: 'column', gap: 4,
-            }}>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
-                textTransform: 'uppercase',
-                color: 'var(--gb-text-muted)',
-                marginBottom: 2,
-              }}>
-                <span>Attached images</span>
-                <Tag tone="neutral" size="xs" mono>{images.length}</Tag>
-              </div>
-              {images.map((img) => (
-                <SourceImageChip
-                  key={img.id}
-                  imageData={img}
-                  onRemove={() => removeImage(img.id)}
-                />
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Slim warning bar — surfaces when any attached image isn't
-          hosted (i.e. is a dataURL). Hosted URLs render fine in email
-          templates; dataURLs get stripped by mail clients. */}
-      <AnimatePresence initial={false}>
-        {hasUnhostedImage && (
-          <motion.div
-            key="unhosted-warning"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.18 }}
-            style={{ overflow: 'hidden', flexShrink: 0 }}
-          >
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '6px 12px',
-              background: 'var(--gb-warning-tint-soft)',
-              borderTop: '1px solid var(--gb-warning-tint-border)',
-              color: 'var(--gb-warning-fg)',
-              fontSize: 10.5, fontWeight: 600,
-            }}>
-              <I.alert size={11} />
-              <span>Non-hosted images won&apos;t render in email templates — only embedded link previews will.</span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Footer */}
       <div style={{
@@ -976,7 +959,7 @@ function ItemMultiSelect({ items, counts, error, onAdd, onRemove, onTouch }) {
                 >
                   <button
                     type="button"
-                    onMouseDown={(e) => { console.log('[ItemMultiSelect] option mousedown:', it); e.preventDefault(); onAdd(it); }}
+                    onMouseDown={(e) => { e.preventDefault(); onAdd(it); }}
                     style={{
                       flex: 1, textAlign: 'left',
                       background: 'transparent', border: 'none', padding: 0,
@@ -1049,7 +1032,6 @@ function ToggleTag({ on, onClick, icon, children }) {
    skipped — they're a request, not a deliverable. Each block has its
    own delete button that pulls the item out of selectedItems. */
 function DynamicFieldsList({ selectedItems, dynData, onUpdate, onRemove }) {
-  console.log('[DynamicFieldsList] render — selectedItems:', selectedItems);
   // Build instance numbers per item so duplicates get " · 2" / " · 3".
   const counts = {};
   const seen = {};
@@ -1060,35 +1042,31 @@ function DynamicFieldsList({ selectedItems, dynData, onUpdate, onRemove }) {
     const suffix = counts[item] > 1 ? ` · ${seen[item]}` : '';
     return { item, idx, fields, suffix };
   });
+  // No outer height wrapper — nested AnimatePresence on the OUTER
+  // motion.div was measuring height:auto BEFORE the inner items
+  // finished entering, leaving the container collapsed to 0. The
+  // inner AnimatePresence drives each block's enter/exit on its own
+  // and the parent grows naturally with its content.
+  if (blocks.length === 0) return null;
   return (
-    <AnimatePresence initial={false}>
-      {blocks.length > 0 && (
-        <motion.div
-          key="dyn-list"
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-          style={{ overflow: 'hidden' }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-            <AnimatePresence initial={false}>
-              {blocks.map(({ item, idx, fields, suffix }) => (
-                <DynamicItemBlock
-                  key={`${item}-${idx}`}
-                  item={item}
-                  suffix={suffix}
-                  fields={fields}
-                  data={dynData[idx] || {}}
-                  onChange={(fieldId, v) => onUpdate(idx, fieldId, v)}
-                  onRemove={() => onRemove(idx)}
-                />
-              ))}
-            </AnimatePresence>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 6,
+      marginTop: 4,
+    }}>
+      <AnimatePresence initial={false}>
+        {blocks.map(({ item, idx, fields, suffix }) => (
+          <DynamicItemBlock
+            key={`${item}-${idx}`}
+            item={item}
+            suffix={suffix}
+            fields={fields}
+            data={dynData[idx] || {}}
+            onChange={(fieldId, v) => onUpdate(idx, fieldId, v)}
+            onRemove={() => onRemove(idx)}
+          />
+        ))}
+      </AnimatePresence>
+    </div>
   );
 }
 
