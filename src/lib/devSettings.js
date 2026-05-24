@@ -85,6 +85,18 @@ export const DEV_SETTINGS = [
     default: 0,
     min:     -180, max: 180, step: 1,
   },
+  /* ── Watch list housekeeping ──────────────────────────────────
+     Completed items auto-purge after N days so the "Completed"
+     filter doesn't grow forever. Counted from each item's doneAt
+     timestamp. 0 disables auto-delete entirely. */
+  {
+    key:     'watchList.autoDeleteCompletedDays',
+    label:   'Watch list: auto-delete completed items after (days)',
+    desc:    'Completed watch-list items are quietly purged after this many days. Counted from when the item was marked done. 0 disables auto-delete (keep forever).',
+    type:    'number',
+    default: 5,
+    min:     0, max: 365, step: 1,
+  },
   {
     key:     'marginCalc.minAllowedMargin',
     label:   'Margin calculator: minimum allowed margin',

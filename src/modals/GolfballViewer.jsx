@@ -368,15 +368,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
            the React effect that watches lightColor state. Idempotent
            — safe to call repeatedly. HDRI scene mode zeroes the
            intensities elsewhere; we only write colors/intensities for
-           room mode here so the scene path keeps full control.
-
-           Also drives the WALL emissive multiplier so the room itself
-           picks up the same tint — without this the ball glows red
-           inside a perfectly neutral box, which reads as broken. We
-           pull the override toward white by `WALL_TINT_BLEND` so the
-           grid/vignette stay readable rather than getting drowned. */
-        const WALL_TINT_BLEND = 0.45;   // 0 = no tint, 1 = full override color
-        const _wallC = new THREE.Color();
+           room mode here so the scene path keeps full control. The
+           walls are emissive-mapped (MeshBasicMaterial-equivalent) so
+           they intentionally do NOT pick up any tint — only the ball
+           reacts. */
         const applyLighting = () => {
           if (sceneKeyRef.current) return; // HDRI scene owns lighting
           const variant = document.documentElement.dataset.theme || 'dark';
@@ -390,19 +385,6 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           rim.color.set(override || p.rim);
           rim.intensity = p.rimI;
           fill.intensity = p.fillI;
-          // Tint the walls toward the override (or the theme's key
-          // color, more subtly, so light themes still feel warm and
-          // dark themes stay cool even without an explicit override).
-          const target = override || (variant === 'light' || variant === 'cream' ? p.key : null);
-          if (target) {
-            _wallC.set(target).lerp(new THREE.Color(0xffffff), 1 - WALL_TINT_BLEND);
-          } else {
-            _wallC.setHex(0xffffff);
-          }
-          for (const mesh of wallMeshes) {
-            mesh.material.emissive.copy(_wallC);
-            mesh.material.needsUpdate = true;
-          }
         };
         applyLighting();
         applyLightingRef.current = applyLighting;
