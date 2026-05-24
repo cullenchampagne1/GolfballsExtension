@@ -55,13 +55,25 @@ function seedWatchListSamples() {
   })();
 
   const now = Date.now();
+  // Build ISO-ish "YYYY-MM-DDTHH:MM" strings from offsets so the seed
+  // adapts to whatever day the playground is opened.
+  const iso = (offsetDays, hour, minute = 0) => {
+    const d = new Date(now + offsetDays * 24 * 3600 * 1000);
+    d.setHours(hour, minute, 0, 0);
+    const yy = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    return `${yy}-${mo}-${dd}T${hh}:${mi}`;
+  };
   const samples = [
-    { id: 'pg-1', title: 'Call Acme — confirm reorder dates',  priority: 'high', due: 'Today 2pm', done: false, createdAt: now - 3 * 60 * 1000,        context: { type: 'contact', id: '4421', name: 'Marcus Chen' } },
-    { id: 'pg-2', title: 'Send proof revision to TaylorMade',  priority: 'med',  due: 'Today',     done: false, createdAt: now - 25 * 60 * 1000,       context: { type: 'order',   id: '29103' } },
-    { id: 'pg-3', title: 'Follow up on Net-30 invoice',         priority: 'high', due: 'Tomorrow',  done: false, createdAt: now - 2 * 60 * 60 * 1000,  context: { type: 'account', id: '2188', name: 'Acme Industries' } },
-    { id: 'pg-4', title: 'Quote new logo color count',          priority: 'low',  due: 'Apr 2',     done: false, createdAt: now - 4 * 60 * 60 * 1000,  context: { type: 'contact', id: '4517', name: 'Pebble Beach Resort' } },
-    { id: 'pg-5', title: 'Prep weekly customer recap',          priority: 'low',  due: '',          done: false, createdAt: now - 6 * 60 * 60 * 1000,  context: null },
-    { id: 'pg-6', title: 'Confirm setup fee waived',            priority: 'low',  due: 'Done',      done: true,  createdAt: now - 9 * 60 * 60 * 1000, doneAt: now - 30 * 60 * 1000, context: { type: 'order', id: '29512' } },
+    { id: 'pg-1', title: 'Call Acme — confirm reorder dates',  priority: 'high', due: iso(0, 14, 0),   done: false, createdAt: now - 3 * 60 * 1000,       context: { type: 'contact', id: '4421', name: 'Marcus Chen' } },
+    { id: 'pg-2', title: 'Send proof revision to TaylorMade',  priority: 'med',  due: iso(0, 17, 0),   done: false, createdAt: now - 25 * 60 * 1000,      context: { type: 'order',   id: '29103' } },
+    { id: 'pg-3', title: 'Follow up on Net-30 invoice',         priority: 'high', due: iso(1, 9, 30),   done: false, createdAt: now - 2 * 60 * 60 * 1000, context: { type: 'account', id: '2188', name: 'Acme Industries' } },
+    { id: 'pg-4', title: 'Quote new logo color count',          priority: 'low',  due: iso(4, 17, 0),   done: false, createdAt: now - 4 * 60 * 60 * 1000, context: { type: 'contact', id: '4517', name: 'Pebble Beach Resort' } },
+    { id: 'pg-5', title: 'Prep weekly customer recap',          priority: 'low',  due: '',              done: false, createdAt: now - 6 * 60 * 60 * 1000, context: null },
+    { id: 'pg-6', title: 'Confirm setup fee waived',            priority: 'low',  due: iso(-1, 16, 0),  done: true,  createdAt: now - 9 * 60 * 60 * 1000, doneAt: now - 30 * 60 * 1000, context: { type: 'order', id: '29512' } },
   ];
 
   const apply = (existing) => {

@@ -128,6 +128,16 @@ function newTask(partial = {}) {
   };
 }
 
+/* Remove completed tasks whose doneAt is older than `days`. 0 = keep
+   all. Returns the same array reference if nothing changed (lets the
+   caller short-circuit re-renders + storage writes). */
+function pruneCompleted(list, days) {
+  if (!days || days <= 0 || !Array.isArray(list)) return list;
+  const cutoff = Date.now() - days * 24 * 3600 * 1000;
+  const kept = list.filter((t) => !(t.done && t.doneAt && t.doneAt < cutoff));
+  return kept.length === list.length ? list : kept;
+}
+
 /* Did the task get marked done in the last 24h? Used for the "1
    completed today" subtitle count. */
 function isDoneToday(task, nowMs) {
@@ -147,12 +157,22 @@ export function WatchList({ onClosed, bindClose }) {
   const [resolvingIds, setResolvingIds] = useState(() => new Set());
   const now = Date.now(); // used for done-today calc; static per render is fine
 
-  // Load + subscribe.
+  // Auto-delete completed items after N days (0 = keep forever).
+  const autoDeleteDays = Number(useDevSetting('watchList.autoDeleteCompletedDays') ?? 5);
+
+  // Load + subscribe + prune stale completed items.
   useEffect(() => {
     let alive = true;
-    loadTasks().then((list) => { if (alive) { setTasks(list); setLoaded(true); } });
-    return subscribeTasks((next) => { if (alive) setTasks(next); });
-  }, []);
+    loadTasks().then((list) => {
+      if (!alive) return;
+      const pruned = pruneCompleted(list, autoDeleteDays);
+      if (pruned !== list) saveTasks(pruned);
+      setTasks(pruned);
+      setLoaded(true);
+    });
+    return subscribeTasks((next) => { if (alive) setTasks(pruneCompleted(next, autoDeleteDays)); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoDeleteDays]);
 
   const persist = useCallback((next) => {
     setTasks(next);
