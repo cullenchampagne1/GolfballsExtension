@@ -339,22 +339,56 @@ export function GolfballViewer({ decalDataUrl, onError }) {
             return tex;
           }
 
-          // How far the corners bow OUT from the wall plane (in world
-          // units along the wall's normal). The mesh becomes a shallow
-          // bowl — flat across the middle, curving smoothly toward
-          // the inside of the room at the edges and corners.
-          const BOWL_DEPTH = 24;
-          const BOWL_FALLOFF = 0.42;   // fraction of half-extent that's curved
+          // ── Rounded room — actual geometry, no seams ──────────
+          // We build each wall as a high-subdivision plane, position
+          // it into the room, then deform its WORLD-SPACE vertices
+          // so any vertex within ROUND_R of the inner rounded box
+          // surface gets snapped onto that surface. Because every
+          // wall runs the same deformation against the same global
+          // surface definition, vertices from adjacent walls that
+          // started at the same world point END at the same world
+          // point → seams stay welded.
+          //
+          // The inner rounded box is defined by:
+          //   • flat planes at ±(HALF_* - ROUND_R) on each axis
+          //   • 12 cylindrical edges of radius ROUND_R running along
+          //     each box edge axis
+          //   • 8 spherical corners of radius ROUND_R at each corner
+          // For any point P inside the original box but within
+          // ROUND_R of the box surface, the nearest point ON the
+          // rounded surface is: clamp P to the inner rect, then push
+          // outward by ROUND_R along the direction from the clamped
+          // point to P. (Standard rounded-box SDF nearest-surface.)
+          const ROUND_R = 72;
+          const INNER_X = HALF_X - ROUND_R;
+          const INNER_Y = HALF_Y - ROUND_R;
+          const INNER_Z = HALF_Z - ROUND_R;
 
-          /* Build a subdivided plane (default 48×48) whose vertices
-             are displaced along +Z by a smooth corner bow. Each vert
-             gets a falloff factor based on how close it is to the
-             edge on each axis; multiplying the two factors gives a
-             classic rounded-rect-corner curve (strong only where BOTH
-             axes are near an edge), then a smaller edge bow is added
-             so the straight edges curve too. The result, viewed
-             through any wall, is real curved geometry — corners look
-             rounded because they ARE rounded. */
+          // Snap a world-space point onto the rounded inner box
+          // surface. Vertices that started flush with the wall (the
+          // ones that need rounding) all map to the same surface, so
+          // adjacent walls share corners exactly.
+          const tmpV = new THREE.Vector3();
+          const snapToRoundedBox = (p) => {
+            // Distance from box center along each axis, clamped into
+            // the inner rect — that's the nearest point on the inner
+            // rounded-box's "core" (the rectangular box you'd inflate
+            // by ROUND_R to get the rounded shape).
+            const cx = Math.max(-INNER_X, Math.min(INNER_X, p.x));
+            const cy = Math.max(-INNER_Y, Math.min(INNER_Y, p.y));
+            const cz = Math.max(-INNER_Z, Math.min(INNER_Z, p.z));
+            // Direction from core to the original point
+            const dx = p.x - cx;
+            const dy = p.y - cy;
+            const dz = p.z - cz;
+            const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (len < 1e-6) return; // P is inside the inner core — no snap
+            const k = ROUND_R / len;
+            p.x = cx + dx * k;
+            p.y = cy + dy * k;
+            p.z = cz + dz * k;
+          };
+
           function makeWall(widthWU, heightWU) {
             const tex = makeWallTexture(widthWU, heightWU);
             const mat = new THREE.MeshStandardMaterial({
@@ -367,47 +401,40 @@ export function GolfballViewer({ decalDataUrl, onError }) {
             });
             objectsToDispose.push(mat);
 
-            const SEGS = 48;
+            // High subdivision so the rounded corner reads smooth.
+            const SEGS = 64;
             const geo = new THREE.PlaneGeometry(widthWU, heightWU, SEGS, SEGS);
-            const pos = geo.attributes.position;
-            const halfW = widthWU / 2;
-            const halfH = heightWU / 2;
-            // smoothstep eases the curve in, so the flat middle
-            // blends seamlessly into the bowed edges
-            const smoothstep = (t) => t * t * (3 - 2 * t);
-            for (let i = 0; i < pos.count; i++) {
-              const x = pos.getX(i);
-              const y = pos.getY(i);
-              // Per-axis "how close to the edge" in [0..1] where 1 is at the edge
-              const tx = Math.min(1, Math.abs(x) / halfW);
-              const ty = Math.min(1, Math.abs(y) / halfH);
-              // Only the outer BOWL_FALLOFF fraction bows; remap so
-              // tx<thresh contributes 0, tx=1 contributes 1
-              const remap = (t) => {
-                const thresh = 1 - BOWL_FALLOFF;
-                if (t <= thresh) return 0;
-                return smoothstep((t - thresh) / BOWL_FALLOFF);
-              };
-              const ex = remap(tx);
-              const ey = remap(ty);
-              // Edge bow (gentle): max(ex, ey) — straight edges curve
-              // Corner bow (strong): ex * ey — pops at the corners
-              const bow = Math.max(ex, ey) * 0.35 + ex * ey * 0.65;
-              // Displace AWAY from the room interior (-Z in local
-              // space, since +Z is the inward-facing normal). The
-              // corners physically recede, so the room reads as
-              // having rounded inner corners — actual geometry,
-              // not a texture trick.
-              pos.setZ(i, -BOWL_DEPTH * bow);
-            }
-            pos.needsUpdate = true;
-            geo.computeVertexNormals();
             objectsToDispose.push(geo);
 
             const mesh = new THREE.Mesh(geo, mat);
             mesh.receiveShadow = true;
             return mesh;
           }
+
+          /* Apply the rounded-box snap to a wall AFTER it's been
+             positioned/rotated into the room. Each vertex is taken
+             to world space, snapped onto the rounded inner box, then
+             converted back to the mesh's local space and written
+             back. We then recompute normals so the lighting follows
+             the new curvature. Because the snap function depends only
+             on world position (not which wall it is), adjacent walls
+             that share a corner vertex in world space will both map
+             it to the same rounded-corner point — seams stay tight. */
+          const roundWall = (mesh) => {
+            mesh.updateMatrixWorld(true);
+            const geo = mesh.geometry;
+            const pos = geo.attributes.position;
+            const inv = mesh.matrixWorld.clone().invert();
+            for (let i = 0; i < pos.count; i++) {
+              tmpV.set(pos.getX(i), pos.getY(i), pos.getZ(i));
+              tmpV.applyMatrix4(mesh.matrixWorld);
+              snapToRoundedBox(tmpV);
+              tmpV.applyMatrix4(inv);
+              pos.setXYZ(i, tmpV.x, tmpV.y, tmpV.z);
+            }
+            pos.needsUpdate = true;
+            geo.computeVertexNormals();
+          };
 
           const wT = HALF_X * 2;
           const hT = HALF_Y * 2;
@@ -441,6 +468,13 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           right.rotation.y = -Math.PI / 2;
           right.position.set(HALF_X, 0, 0);
           scene.add(right);
+
+          // Apply rounded-box deformation now that all walls are
+          // positioned. Every vertex within ROUND_R of an edge gets
+          // snapped onto the rounded surface; vertices from different
+          // walls at the same world point land at the same destination
+          // so the seams stay welded.
+          [floor, ceil, back, left, right].forEach(roundWall);
 
           // No front wall — user looks INTO the room from outside.
           // The 6th cannon plane still bounces the ball back from the
