@@ -1706,29 +1706,23 @@ const SCENE_ICONS = {
 };
 
 /* ── SceneDrawer ──────────────────────────────────────────────
-   Bottom-left connected dropup. Toggle pins at the bottom-left;
-   scene chips slide up from behind it, sharing borders so the
-   strip reads as one rounded shape (matching the dropdown
-   language used by the bomb drawer at bottom-right).
+   Top-LEFT connected dropdown. The toggle pins to the top-left
+   corner of the canvas; scene chips slide DOWN from below it,
+   sharing borders so the whole thing reads as one rounded strip.
 
-   `active` is the currently-selected SCENES key (or null). When
-   the user closes the drawer, `onPick(null)` runs to clear the
-   selection — leaving a scene armed after closing the drawer is
-   surprising. Clicking the same scene chip while it's already
-   active also clears it (toggle behavior). */
+   Closing the drawer clears the active scene — leaving a scene
+   armed after the drawer disappears would be surprising.
+   Clicking an already-active scene chip also clears it. */
 function SceneDrawer({ active, onPick }) {
   const [open, setOpen] = React.useState(false);
   const handleToggleDrawer = (next) => {
     setOpen(next);
-    // Closing the drawer also clears the active scene — same rule
-    // the bomb drawer follows for its armed tool. Leaving a scene
-    // armed after the drawer disappears is surprising.
     if (!next && active) onPick(null);
   };
   return (
     <div style={{
-      position: 'absolute', bottom: 8, left: 8, zIndex: 6,
-      display: 'flex', flexDirection: 'column-reverse', alignItems: 'flex-start',
+      position: 'absolute', top: 8, left: 8, zIndex: 6,
+      display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
     }}>
       <SceneToggle
         active={open || !!active}
@@ -1743,19 +1737,19 @@ function SceneDrawer({ active, onPick }) {
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-            style={{ display: 'flex', flexDirection: 'column-reverse', overflow: 'hidden' }}
+            style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
           >
             {SCENES.map((s, i) => {
               const Icon = SCENE_ICONS[s.icon] || SceneIcon;
-              const isTopOfStrip = i === SCENES.length - 1;
+              const isBottomOfStrip = i === SCENES.length - 1;
               return (
                 <SceneRowChip
                   key={s.key}
                   glyph={<Icon size={13} />}
                   active={active === s.key}
                   onClick={() => onPick(s.key)}
-                  connectedTop={isTopOfStrip}
-                  connectedInternal={!isTopOfStrip}
+                  connectedBottom={isBottomOfStrip}
+                  connectedInternal={!isBottomOfStrip}
                 />
               );
             })}
@@ -1773,8 +1767,11 @@ function SceneToggle({ active, open, onClick }) {
   const bg     = active
     ? 'var(--gb-brand-tint-soft)'
     : (hovered ? 'var(--gb-fill-soft)' : 'var(--gb-surface-modal)');
+  // Top-left DROPDOWN: when open, the toggle's bottom corners go
+  // flat so it visually joins the chips below; top corners stay
+  // rounded so the strip's outer outline is one rounded shape.
   const radius = open
-    ? '0 0 var(--gb-r-sm) var(--gb-r-sm)'
+    ? 'var(--gb-r-sm) var(--gb-r-sm) 0 0'
     : 'var(--gb-r-sm)';
   return (
     <button
@@ -1787,6 +1784,9 @@ function SceneToggle({ active, open, onClick }) {
         width: 26, height: 26, padding: 0,
         color, background: bg,
         border: `1px solid ${border}`,
+        // When open, drop the bottom border so it merges with the
+        // first chip's top edge (no double line in the seam).
+        borderBottomWidth: open ? 0 : 1,
         borderRadius: radius,
         cursor: 'pointer',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -1798,15 +1798,17 @@ function SceneToggle({ active, open, onClick }) {
   );
 }
 
-function SceneRowChip({ glyph, active, onClick, connectedTop, connectedInternal }) {
+function SceneRowChip({ glyph, active, onClick, connectedBottom, connectedInternal }) {
   const [hovered, setHovered] = React.useState(false);
   const color  = active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)';
   const border = active ? 'var(--gb-brand-label)' : 'var(--gb-border-default)';
   const bg     = active
     ? 'var(--gb-brand-tint-soft)'
     : (hovered ? 'var(--gb-fill-soft)' : 'var(--gb-surface-modal)');
-  const radius = connectedTop
-    ? 'var(--gb-r-sm) var(--gb-r-sm) 0 0'
+  // Dropdown layout: bottom chip rounds its bottom corners;
+  // every other chip is flat (the toggle handles top rounding).
+  const radius = connectedBottom
+    ? '0 0 var(--gb-r-sm) var(--gb-r-sm)'
     : '0';
   return (
     <button
@@ -1819,17 +1821,14 @@ function SceneRowChip({ glyph, active, onClick, connectedTop, connectedInternal 
         width: 26, height: 26, padding: 0,
         color, background: bg,
         border: `1px solid ${border}`,
-        // Drop the bottom border so it doesn't double up against
-        // the chip below — the visible outline reads as a single
-        // strip rather than stacked chips.
-        borderBottomWidth: connectedTop || connectedInternal ? 0 : 1,
+        // Internal chips drop their bottom border so the seam with
+        // the next chip below is a single line. Only the bottom
+        // chip keeps its full border (its 1px is the strip's base).
+        borderBottomWidth: connectedInternal ? 0 : 1,
         borderRadius: radius,
         cursor: 'pointer',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         transition: 'background-color .12s, color .12s, border-color .12s',
-        // Steady inset glow when armed; no animated keyframes here
-        // — the old `boxShadow` motion-loop made chips flicker as
-        // the shadow keyframes transitioned to "transparent."
         boxShadow: active ? 'inset 0 0 0 1px var(--gb-brand-tint-soft)' : 'none',
       }}
     >
