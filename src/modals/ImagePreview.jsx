@@ -327,7 +327,14 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
             <>
               <div style={{
                 position: 'absolute', top: 8, right: 8,
+                display: 'flex', gap: 4,
               }}>
+                <IconBtn
+                  size="sm"
+                  tooltip="Auto-align (coming soon)"
+                  icon={<AlignIcon />}
+                  onClick={() => toast?.info?.('Auto-align — coming soon', { tone: 'info' })}
+                />
                 <IconBtn
                   size="sm"
                   tooltip="View in 3D (coming soon)"
@@ -447,6 +454,18 @@ const DownloadIcon = (p) => (
     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
     <polyline points="7 10 12 15 17 10" />
     <line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+);
+// Crosshair-in-box — reads as "auto-align / center". Couldn't reuse a
+// shared icon (the icon registry doesn't have anything alignment-flavored
+// yet) so inlined here next to the cube.
+const AlignIcon = (p) => (
+  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="4" y="4" width="16" height="16" rx="2" />
+    <line x1="12" y1="4" x2="12" y2="20" />
+    <line x1="4" y1="12" x2="20" y2="12" />
+    <circle cx="12" cy="12" r="1.5" />
   </svg>
 );
 // Isometric cube — reads as "3D" without needing a dedicated label.
