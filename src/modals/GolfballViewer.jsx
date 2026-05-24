@@ -80,8 +80,15 @@ async function loadThreeAndModel() {
   return { ...cache.three, model };
 }
 
-export function GolfballViewer({ decalDataUrl, onError }) {
+export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, onError }, ref) {
   const containerRef = useRef(null);
+  // Imperative snapshot handle — set by the WebGL effect once the
+  // scene is ready. Parent calls snapshotRef.current() to capture a
+  // square, transparent PNG of the ball at its current rotation.
+  const snapshotRef = useRef(null);
+  React.useImperativeHandle(ref, () => ({
+    snapshot: (...args) => snapshotRef.current?.(...args),
+  }), []);
   // 'loading' until Three.js + the model finish; then 'ready'. 'error'
   // surfaces a basic message instead of an empty canvas.
   const [status, setStatus] = useState('loading');
@@ -129,6 +136,7 @@ export function GolfballViewer({ decalDataUrl, onError }) {
     let disposed = false;
     let renderer, scene, camera, ballMesh, decalMesh, ballGroup, animationId;
     let world, ballBody;  // cannon-es physics world + sphere body
+    const wallMeshes = []; // populated after wall construction; used by snapshot() to hide chrome
     const objectsToDispose = [];
     const mountStart = performance.now();
     const MIN_LOADING_MS = 2000;
@@ -460,6 +468,10 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           // the X/Y fillet so they meet at the curve.
           [floor, ceil, left, right].forEach(roundWall);
 
+          // Stash the wall meshes so the snapshot routine can hide
+          // them temporarily — the snapshot is ball-only.
+          wallMeshes.push(floor, ceil, back, left, right);
+
           // No front wall — user looks INTO the room from outside.
           // The 6th cannon plane still bounces the ball back from the
           // front edge though, so it can't escape toward the camera.
@@ -556,6 +568,65 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           ballGroup.add(decalMesh);
           objectsToDispose.push(decalGeo, decalMat);
         }
+
+        /* ── Snapshot ────────────────────────────────────────────
+           Render the ball (no walls, no shadows, fully transparent
+           background) to an offscreen square canvas and return a
+           PNG dataURL. Used by ImagePreview's Copy / Download
+           buttons in the 3D action strip.
+
+           We spin up a SEPARATE WebGLRenderer for this so we don't
+           perturb the live canvas size/clear color/shadow state.
+           Three.js scenes can be shared across renderers without
+           any GPU resource conflict — both renderers compile their
+           own programs against the same geometry/material objects.
+        */
+        snapshotRef.current = (size = 1024) => {
+          // Frame the ball precisely on the camera at its current
+          // scale. Camera FOV = 40°, distance 520. Visible half-
+          // height at the ball plane = 520 * tan(20°) ≈ 189. We
+          // want the ball (radius 100 * state.scale) to fill ~90%
+          // of the snapshot, so push the snapshot camera closer:
+          const snapCam = camera.clone();
+          const ballRadiusVisual = 100 * state.scale;
+          const padFraction = 0.92;             // how much of the frame the ball occupies
+          const visHalfH = ballRadiusVisual / padFraction;
+          // distance for ortho-equivalent framing under perspective:
+          // visHalfH = dist * tan(FOV/2)
+          const dist = visHalfH / Math.tan((camera.fov * Math.PI / 180) / 2);
+          snapCam.position.set(0, 0, dist);
+          snapCam.aspect = 1;
+          snapCam.lookAt(0, 0, 0);
+          snapCam.updateProjectionMatrix();
+
+          // Hide chrome — walls only. The ball/decal stay visible.
+          const prevVis = wallMeshes.map((m) => m.visible);
+          wallMeshes.forEach((m) => { m.visible = false; });
+
+          const snapCanvas = document.createElement('canvas');
+          snapCanvas.width = size;
+          snapCanvas.height = size;
+          const snapRenderer = new THREE.WebGLRenderer({
+            canvas: snapCanvas,
+            antialias: true,
+            alpha: true,
+            preserveDrawingBuffer: true,  // required for toDataURL
+          });
+          snapRenderer.setPixelRatio(1);
+          snapRenderer.setSize(size, size, false);
+          snapRenderer.setClearColor(0x000000, 0);
+          snapRenderer.outputColorSpace = renderer.outputColorSpace;
+          snapRenderer.toneMapping = renderer.toneMapping;
+          snapRenderer.render(scene, snapCam);
+          const dataUrl = snapCanvas.toDataURL('image/png');
+
+          // Restore + dispose the snapshot renderer (its GL context
+          // is throwaway; the scene's resources are reference-counted
+          // by Three.js so they're untouched).
+          snapRenderer.dispose();
+          wallMeshes.forEach((m, i) => { m.visible = prevVis[i]; });
+          return dataUrl;
+        };
 
         /* ── cannon-es physics world ─────────────────────────────
            One sphere body for the ball + 6 static planes for the box
@@ -969,6 +1040,7 @@ export function GolfballViewer({ decalDataUrl, onError }) {
 
     return () => {
       disposed = true;
+      snapshotRef.current = null;
       cleanupRef.current?.();
       cleanupRef.current = null;
     };
@@ -1110,7 +1182,7 @@ export function GolfballViewer({ decalDataUrl, onError }) {
       )}
     </div>
   );
-}
+});
 
 /* ── LoadingBall ────────────────────────────────────────────────
    Placeholder splash shown while Three.js + the OBJ file are
