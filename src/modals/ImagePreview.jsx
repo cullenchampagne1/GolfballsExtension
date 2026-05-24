@@ -130,6 +130,10 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   // hide while an HDRI scene is up (no walls = nothing for bombs to
   // bounce off, so we don't even offer the tool).
   const [viewerSceneKey, setViewerSceneKey] = useState(null);
+  // Mirrors the viewer's throwMode so the fun menu is only available
+  // when gravity is on — bombs only do something meaningful when
+  // physics is running.
+  const [viewerThrowMode, setViewerThrowMode] = useState(false);
 
   // Image load wiring. The <img>'s onLoad/onError flips status. We
   // pre-resolve URLs that are already cached so the spinner doesn't
@@ -536,6 +540,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                   ref={viewerRef}
                   decalDataUrl={decalDataUrl}
                   onSceneChange={setViewerSceneKey}
+                  onThrowChange={setViewerThrowMode}
                   onError={() => {
                     toast?.error?.('Failed to load 3D viewer');
                     setView('2d');
@@ -718,11 +723,26 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
               inside the 2D branch (the previous bug) means it never
               shows in 3D. Anchoring it directly to the wrapRef div
               also keeps it stable across view transitions. */}
-          {/* Hidden while an HDRI scene is up — no walls to hold
-              bombs, so the bomb tool would be meaningless there. */}
-          {view === '3d' && !viewerSceneKey && (
-            <ViewerToolbox viewerRef={viewerRef} />
-          )}
+          {/* Fun menu — only available when gravity is on AND no
+              HDRI scene is up. Bombs are meaningless without physics
+              and have nothing to bounce off in a skybox. The
+              AnimatePresence gives the drawer a soft fade+slide on
+              entry/exit so it doesn't pop in/out when the user
+              toggles gravity. */}
+          <AnimatePresence>
+            {view === '3d' && viewerThrowMode && !viewerSceneKey && (
+              <motion.div
+                key="fun-menu"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.7 }}
+                style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 6 }}
+              >
+                <ViewerToolbox viewerRef={viewerRef} />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Decode error — only when a real URL was passed AND it failed.
@@ -1096,21 +1116,20 @@ const BombIcon = (p) => (
 );
 
 /* ── ViewerToolbox ──────────────────────────────────────────────
-   Bottom-RIGHT connected dropup. The toggle pins at the bottom-right
-   corner of the canvas; tool chips slide UP from above it, sharing
-   borders so the strip reads as one rounded shape. Mirrors the
-   SceneDrawer's connected-dropdown language at the top-left.
+   Bottom-right frosted-glass dropup. Picks a "fun" tool that arms
+   on canvas clicks. Visual chrome is owned by <LiquidDrawer> for
+   consistency with the scene drawer at the top-left.
 
-   Closing the drawer clears the active tool. Active tool semantics:
+   Closing the drawer clears the armed tool. Tools (today):
      • bomb — each canvas click spawns a bomb at the cursor. */
 function ViewerToolbox({ viewerRef }) {
   const [open, setOpen] = useState(false);
   const [activeTool, setActiveTool] = useState(null); // null | 'bomb'
 
-  // Global pointerdown listener while a tool is active. Spawns the
+  // Global pointerdown listener while a tool is armed. Spawns the
   // tool's effect on canvas clicks; skips clicks on UI chrome
-  // (buttons / data-viewer-ui) so closing the drawer or clicking
-  // a chip doesn't double as a bomb-drop.
+  // (buttons / data-viewer-ui) so closing the drawer or clicking a
+  // chip doesn't double as a bomb-drop.
   useEffect(() => {
     if (!activeTool) return undefined;
     const onDown = (e) => {
@@ -1127,127 +1146,20 @@ function ViewerToolbox({ viewerRef }) {
     setOpen(next);
     if (!next) setActiveTool(null);
   };
-  const toggleTool = (name) => setActiveTool((t) => (t === name ? null : name));
 
-  // Add tools here. Each entry: { key, icon }.
   const tools = [
-    { key: 'bomb', icon: <BombIcon size={14} /> },
+    { key: 'bomb', icon: <BombIcon size={14} />, active: activeTool === 'bomb' },
   ];
 
   return (
-    <div style={{
-      position: 'absolute', bottom: 8, right: 8, zIndex: 6,
-      display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
-    }}>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div
-            key="tool-items"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-            style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
-          >
-            {tools.map((t, i) => {
-              const isTopOfStrip = i === 0;
-              return (
-                <ToolRowChip
-                  key={t.key}
-                  icon={t.icon}
-                  active={activeTool === t.key}
-                  onClick={() => toggleTool(t.key)}
-                  connectedTop={isTopOfStrip}
-                />
-              );
-            })}
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <ToolToggle
-        icon={<ToolboxIcon size={14} />}
-        active={open || !!activeTool}
-        open={open}
-        onClick={() => handleToggleDrawer(!open)}
-      />
-    </div>
-  );
-}
-
-/* Toggle for the bottom-right dropup. When the drawer is open, the
-   toggle's TOP corners go flat so it visually fuses with the chip
-   above it; bottom corners stay rounded so the strip's outer outline
-   is one rounded shape. Top border drops when open so there's no
-   double line at the seam with the chip above. */
-function ToolToggle({ icon, active, open, onClick }) {
-  const [hovered, setHovered] = useState(false);
-  const color  = active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)';
-  const border = active ? 'var(--gb-brand-label)' : 'var(--gb-border-default)';
-  const bg     = active
-    ? 'var(--gb-brand-tint-soft)'
-    : (hovered ? 'var(--gb-fill-soft)' : 'var(--gb-surface-modal)');
-  const radius = open
-    ? '0 0 var(--gb-r-sm) var(--gb-r-sm)'
-    : 'var(--gb-r-sm)';
-  return (
-    <button
-      type="button"
-      data-viewer-ui="true"
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        width: 26, height: 26, padding: 0,
-        color, background: bg,
-        border: `1px solid ${border}`,
-        borderTopWidth: open ? 0 : 1,
-        borderRadius: radius,
-        cursor: 'pointer',
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'background-color .12s, color .12s, border-color .12s, border-radius .12s',
-      }}
-    >
-      {icon}
-    </button>
-  );
-}
-
-/* Body chip in the bottom-right dropup. Top chip rounds its TOP
-   corners (the visible top of the strip); internal chips are
-   flat. Bottom border always stays so it merges into the toggle
-   below. */
-function ToolRowChip({ icon, active, onClick, connectedTop }) {
-  const [hovered, setHovered] = useState(false);
-  const color  = active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)';
-  const border = active ? 'var(--gb-brand-label)' : 'var(--gb-border-default)';
-  const bg     = active
-    ? 'var(--gb-brand-tint-soft)'
-    : (hovered ? 'var(--gb-fill-soft)' : 'var(--gb-surface-modal)');
-  const radius = connectedTop
-    ? 'var(--gb-r-sm) var(--gb-r-sm) 0 0'
-    : '0';
-  return (
-    <button
-      type="button"
-      data-viewer-ui="true"
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        width: 26, height: 26, padding: 0,
-        color, background: bg,
-        border: `1px solid ${border}`,
-        // Drop the bottom border so the seam with the chip / toggle
-        // below is a single line, not two stacked borders.
-        borderBottomWidth: 0,
-        borderRadius: radius,
-        cursor: 'pointer',
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'background-color .12s, color .12s, border-color .12s',
-        boxShadow: active ? 'inset 0 0 0 1px var(--gb-brand-tint-soft)' : 'none',
-      }}
-    >
-      {icon}
-    </button>
+    <LiquidDrawer
+      anchor="bottom-right"
+      open={open}
+      onOpenChange={handleToggleDrawer}
+      toggleIcon={<ToolboxIcon size={14} />}
+      items={tools}
+      onPick={(key) => setActiveTool((cur) => (cur === key ? null : key))}
+      ariaLabel="Fun tools"
+    />
   );
 }
