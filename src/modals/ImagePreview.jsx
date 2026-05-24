@@ -690,6 +690,13 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
       onClose={onClosed}
       bindClose={bindClose}
     >
+      {/* userSelect:none on the wrapper kills the stray text-selection
+          that happens when the user click-drags through controls in this
+          modal (zoom buttons, color picker, alignment chips). Selection
+          ranges were leaking onto the header/labels behind. Inputs the
+          user actually types in (e.g. the hex field in the color picker)
+          live in a portal outside this tree, so they still allow selection. */}
+      <div style={{ userSelect: 'none', WebkitUserSelect: 'none' }}>
       <ModalHeader
         icon={<ImageIcon />}
         title="Logo Extractor"
@@ -1214,6 +1221,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
         >
           Submit Proof
         </Btn>
+      </div>
       </div>
     </FloatingPanel>
   );
