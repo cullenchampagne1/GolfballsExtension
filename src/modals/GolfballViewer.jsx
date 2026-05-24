@@ -170,6 +170,12 @@ export function GolfballViewer({ decalDataUrl, onError }) {
       dragStart: { px: 0, py: 0, wx: 0, wy: 0 },
       history: [],
       lastMode: false,
+      // Active "return to rest" tween. Populated when gravity flips
+      // off so the ball slides + rotates + rescales smoothly back to
+      // its default position/orientation/scale instead of snapping.
+      // Shape: { start, dur, fromPos, fromQuat, fromScale, toPos,
+      //          toQuat, toScale }. null when no tween is in flight.
+      returnTween: null,
     };
 
     (async () => {
@@ -272,28 +278,52 @@ export function GolfballViewer({ decalDataUrl, onError }) {
               ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(w, y + 0.5); ctx.stroke();
             }
 
-            // Edge vignette — 4 directional gradients, each from
-            // dark-opaque at the edge to transparent at ~22% in.
-            // Using rgba black so the shadow darkens whatever's
-            // below regardless of theme.
-            const fade = 0.22;
-            const shadow = (g) => {
-              g.addColorStop(0,    'rgba(0,0,0,0.55)');
-              g.addColorStop(0.35, 'rgba(0,0,0,0.18)');
-              g.addColorStop(1,    'rgba(0,0,0,0)');
+            // Edge vignette — 4 directional gradients per edge with
+            // a smooth ease-out falloff (more stops + lower peak
+            // opacity than before, so seams read as gentle shading,
+            // not heavy bands). Then 4 radial gradients at the
+            // corners curve the darkening inward so corners read as
+            // rounded fillets instead of sharp 90° intersections.
+            const fade = 0.35;
+            const edgeShadow = (g) => {
+              g.addColorStop(0.00, 'rgba(0,0,0,0.30)');
+              g.addColorStop(0.20, 'rgba(0,0,0,0.18)');
+              g.addColorStop(0.50, 'rgba(0,0,0,0.07)');
+              g.addColorStop(0.80, 'rgba(0,0,0,0.02)');
+              g.addColorStop(1.00, 'rgba(0,0,0,0)');
             };
             // Left edge
-            let g = ctx.createLinearGradient(0, 0, w * fade, 0); shadow(g);
+            let g = ctx.createLinearGradient(0, 0, w * fade, 0); edgeShadow(g);
             ctx.fillStyle = g; ctx.fillRect(0, 0, w * fade, h);
             // Right edge
-            g = ctx.createLinearGradient(w, 0, w - w * fade, 0); shadow(g);
+            g = ctx.createLinearGradient(w, 0, w - w * fade, 0); edgeShadow(g);
             ctx.fillStyle = g; ctx.fillRect(w - w * fade, 0, w * fade, h);
             // Top edge
-            g = ctx.createLinearGradient(0, 0, 0, h * fade); shadow(g);
+            g = ctx.createLinearGradient(0, 0, 0, h * fade); edgeShadow(g);
             ctx.fillStyle = g; ctx.fillRect(0, 0, w, h * fade);
             // Bottom edge
-            g = ctx.createLinearGradient(0, h, 0, h - h * fade); shadow(g);
+            g = ctx.createLinearGradient(0, h, 0, h - h * fade); edgeShadow(g);
             ctx.fillStyle = g; ctx.fillRect(0, h - h * fade, w, h * fade);
+
+            // Corner radials — paint a soft round darkening centered
+            // ON the corner so the falloff curves inward instead of
+            // forming a hard L where two linear edges cross. Radius
+            // is tied to the shorter side so it stays proportional on
+            // wide walls (floor/ceiling).
+            const cornerR = Math.min(w, h) * 0.42;
+            const cornerShadow = (cx, cy) => {
+              const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, cornerR);
+              cg.addColorStop(0.00, 'rgba(0,0,0,0.28)');
+              cg.addColorStop(0.35, 'rgba(0,0,0,0.12)');
+              cg.addColorStop(0.70, 'rgba(0,0,0,0.03)');
+              cg.addColorStop(1.00, 'rgba(0,0,0,0)');
+              ctx.fillStyle = cg;
+              ctx.fillRect(cx - cornerR, cy - cornerR, cornerR * 2, cornerR * 2);
+            };
+            cornerShadow(0, 0);     // top-left
+            cornerShadow(w, 0);     // top-right
+            cornerShadow(0, h);     // bottom-left
+            cornerShadow(w, h);     // bottom-right
 
             const tex = new THREE.CanvasTexture(cv);
             tex.colorSpace = THREE.SRGBColorSpace;
@@ -531,13 +561,53 @@ export function GolfballViewer({ decalDataUrl, onError }) {
               );
               ballBody.wakeUp();
             } else {
+              // Gravity OFF — stop physics immediately, then TWEEN
+              // the visual ball from wherever it landed back to its
+              // dev-settings default pose (origin, default rotation,
+              // default scale) over ~450ms with an ease-out. Snapping
+              // felt jarring; the slide reads as "settling".
               ballBody.sleep();
               ballBody.position.set(0, 0, 0);
               ballBody.velocity.set(0, 0, 0);
               ballBody.angularVelocity.set(0, 0, 0);
-              ballGroup.position.set(0, 0, 0);
-              ballGroup.quaternion.identity();
-              state.scale = 1;
+              const targetQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+                initialBallRef.current.rotX,
+                initialBallRef.current.rotY,
+                initialBallRef.current.rotZ,
+                'XYZ',
+              ));
+              state.returnTween = {
+                start: nowMs,
+                dur: 450,
+                fromPos: ballGroup.position.clone(),
+                fromQuat: ballGroup.quaternion.clone(),
+                fromScale: state.scale,
+                toPos: new THREE.Vector3(0, 0, 0),
+                toQuat: targetQuat,
+                toScale: initialBallRef.current.scale,
+              };
+            }
+          }
+
+          /* ── Return-to-rest tween ──────────────────────────────
+             Runs after gravity flips off. Drives the visual group
+             smoothly toward the default pose; cleared on completion
+             OR if the user starts a new drag / re-enables gravity. */
+          if (state.returnTween) {
+            if (state.dragging || throwModeRef.current) {
+              // Interaction interrupts the settle — drop the tween.
+              state.returnTween = null;
+            } else {
+              const rt = state.returnTween;
+              const tRaw = (nowMs - rt.start) / rt.dur;
+              const t = Math.min(1, Math.max(0, tRaw));
+              // easeOutCubic
+              const e = 1 - Math.pow(1 - t, 3);
+              ballGroup.position.lerpVectors(rt.fromPos, rt.toPos, e);
+              tmpQuat.slerpQuaternions(rt.fromQuat, rt.toQuat, e);
+              ballGroup.quaternion.copy(tmpQuat);
+              state.scale = rt.fromScale + (rt.toScale - rt.fromScale) * e;
+              if (t >= 1) state.returnTween = null;
             }
           }
 
