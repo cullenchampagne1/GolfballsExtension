@@ -247,14 +247,13 @@ export function ImagePreview({
   // pre-resolve URLs that are already cached so the spinner doesn't
   // flash for a sub-frame on instant loads.
   const onImgLoad = (e) => {
-    console.log('[ImagePreview] img onLoad fired');
     setStatus('ready');
     // Capture intrinsic dimensions — naturalWidth/Height are the
     // source pixels, not the rendered ones. These feed the size chip.
     const img = e.currentTarget;
     if (img?.naturalWidth) setImageSize({ w: img.naturalWidth, h: img.naturalHeight });
   };
-  const onImgError = () => { console.log('[ImagePreview] img onError fired'); setStatus(usingFallback ? 'ready' : 'error'); };
+  const onImgError = () => setStatus(usingFallback ? 'ready' : 'error');
 
   /* Replace the visible image with a new dataURL. Resets everything
      derived from the previous image (zoom/pan, color swaps, decal,
@@ -262,7 +261,6 @@ export function ImagePreview({
      pipeline. Because editedDataUrl outranks the original url in
      `displayUrl`, we don't have to touch the prop chain — just set it. */
   const replaceImage = (dataUrl) => {
-    console.log('[ImagePreview] replaceImage called, dataUrl length:', dataUrl?.length, 'starts:', dataUrl?.slice(0, 40));
     setStatus('loading');
     setImageSize(null);
     setDecalDataUrl(null);
@@ -303,7 +301,6 @@ export function ImagePreview({
     }
   };
   const onWrapDrop = (e) => {
-    console.log('[ImagePreview] onWrapDrop fired, files:', e.dataTransfer?.files?.length);
     if (view === '3d') return;
     e.preventDefault();
     dragDepthRef.current = 0;
