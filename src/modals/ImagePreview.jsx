@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   FloatingPanel, ModalHeader, IconBtn, Btn, Callout, Spinner,
-  I, T, Slider,
+  I, T, Slider, Input,
 } from '../ui/index.js';
 import { ColorPickerPopover as DSColorPickerPopover } from '../ui/components/ColorPicker.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
