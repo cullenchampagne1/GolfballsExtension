@@ -808,23 +808,14 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           decalTexture.wrapT = THREE.ClampToEdgeWrapping;
           objectsToDispose.push(decalTexture);
 
-          // DecalGeometry samples mesh.matrixWorld at construction time, and
-          // at this point in the effect it hasn't been baked yet — so the
-          // projection runs in mesh-LOCAL space, not world space. We scale
-          // the projector params to the geometry's own bounding sphere so
-          // the box lands on the real surface regardless of the OBJ's
-          // authored scale (old ball was ~100u radius, Blender exports are
-          // typically <1u). decalMesh inherits ballMesh's scale+position
-          // below, so the result still lands at world (0,0,100) after the
-          // ball's transform is applied.
-          const sphereR = bsphere.radius;
-          const decalPosition = new THREE.Vector3(
-            bsphere.center.x,
-            bsphere.center.y,
-            bsphere.center.z + sphereR * 0.999,
-          );
+          // Camera is straight-on at +Z, so the decal projects from
+          // +Z directly toward the ball center along -Z. Default
+          // identity Euler aims the projection box's -Z axis at the
+          // origin, which IS the ball center — the print lands flat
+          // on the camera-facing face of the ball.
+          const decalPosition = new THREE.Vector3(0, 0, targetRadius * 0.999);
           const decalOrientation = new THREE.Euler(0, 0, 0);
-          const decalSize = new THREE.Vector3(sphereR * 0.7, sphereR * 0.7, sphereR * 2);
+          const decalSize = new THREE.Vector3(targetRadius * 0.7, targetRadius * 0.7, targetRadius * 2);
 
           const decalGeo = new DecalGeometry(ballMesh, decalPosition, decalOrientation, decalSize);
           const decalMat = new THREE.MeshStandardMaterial({
