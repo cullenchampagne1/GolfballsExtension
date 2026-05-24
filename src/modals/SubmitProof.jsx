@@ -517,34 +517,6 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             />
           </Field>
 
-          {/* Per-item dynamic fields — appears IMMEDIATELY below the
-              items dropdown so the user sees their selections expand
-              into a question block. One block per selected item (so
-              duplicates render twice with " · 2"-style instance
-              counters), each with its own delete button. */}
-          <DynamicFieldsList
-            selectedItems={selectedItems}
-            dynData={dynData}
-            onUpdate={updateDyn}
-            onRemove={(idx) => {
-              setSelectedItems((s) => {
-                const next = s.slice();
-                next.splice(idx, 1);
-                return next;
-              });
-              setDynData((d) => {
-                // Re-key remaining items so indices stay tight after removal.
-                const next = {};
-                Object.keys(d).forEach((k) => {
-                  const ki = parseInt(k, 10);
-                  if (ki < idx) next[ki] = d[k];
-                  else if (ki > idx) next[ki - 1] = d[k];
-                });
-                return next;
-              });
-            }}
-          />
-
           {/* Order / cust / name */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             <Field label="Order #">
@@ -722,6 +694,33 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             </div>
           </Field>
 
+          {/* Per-item dynamic fields — one block per selected item.
+              Duplicates render with " · 2"-style instance counters,
+              each block has its own delete button. Sits right after
+              Flags so it picks up where the static questions end. */}
+          <DynamicFieldsList
+            selectedItems={selectedItems}
+            dynData={dynData}
+            onUpdate={updateDyn}
+            onRemove={(idx) => {
+              setSelectedItems((s) => {
+                const next = s.slice();
+                next.splice(idx, 1);
+                return next;
+              });
+              setDynData((d) => {
+                // Re-key remaining entries so indices stay tight after removal.
+                const next = {};
+                Object.keys(d).forEach((k) => {
+                  const ki = parseInt(k, 10);
+                  if (ki < idx) next[ki] = d[k];
+                  else if (ki > idx) next[ki - 1] = d[k];
+                });
+                return next;
+              });
+            }}
+          />
+
           {/* Links + notes */}
           <Field label="Item link" hint="N/A for white balls unless special alignment">
             <Input size="xs" value={itemLink} onChange={setItemLink} placeholder="https://…" />
@@ -733,59 +732,47 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             <Input size="xs" value={notes} onChange={setNotes} placeholder="Write N/A if unneeded" />
           </Field>
 
-          {/* Attached images — lives INSIDE the form scroll container,
+          {/* Attached images — INSIDE the form scroll container,
               below the last question. Scrolls with the rest of the
-              form. Background matches the form surface so the section
-              reads as part of the questionnaire, not as separate chrome.
-              No upload UI here — image acquisition lives entirely in
-              ImagePreview. */}
-          <AnimatePresence initial={false}>
-            {images.length > 0 && (
-              <motion.div
-                key="image-list"
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-                style={{ overflow: 'hidden' }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 6,
-                    fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
-                    textTransform: 'uppercase',
-                    color: 'var(--gb-text-muted)',
-                  }}>
-                    <span>Attached images</span>
-                    <Tag tone="neutral" size="xs" mono>{images.length}</Tag>
-                  </div>
-                  {/* Inline non-hosted warning — sits ABOVE the image
-                      chips so the user reads it before the list. */}
-                  {hasUnhostedImage && (
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      padding: '5px 8px',
-                      background: 'var(--gb-warning-tint-soft)',
-                      border: '1px solid var(--gb-warning-tint-border)',
-                      borderRadius: 'var(--gb-r-sm)',
-                      color: 'var(--gb-warning-fg)',
-                      fontSize: 10.5, fontWeight: 600,
-                    }}>
-                      <I.alert size={11} />
-                      <span>Non-hosted images won&apos;t render in email templates — only embedded link previews will.</span>
-                    </div>
-                  )}
-                  {images.map((img) => (
-                    <SourceImageChip
-                      key={img.id}
-                      imageData={img}
-                      onRemove={() => removeImage(img.id)}
-                    />
-                  ))}
+              form. Plain conditional div (no AnimatePresence wrapper —
+              the previous height-auto motion.div was measuring 0 and
+              staying collapsed). */}
+          {images.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
+                textTransform: 'uppercase',
+                color: 'var(--gb-text-muted)',
+              }}>
+                <span>Attached images</span>
+                <Tag tone="neutral" size="xs" mono>{images.length}</Tag>
+              </div>
+              {/* Inline non-hosted warning — sits ABOVE the image
+                  chips so the user reads it before the list. */}
+              {hasUnhostedImage && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '5px 8px',
+                  background: 'var(--gb-warning-tint-soft)',
+                  border: '1px solid var(--gb-warning-tint-border)',
+                  borderRadius: 'var(--gb-r-sm)',
+                  color: 'var(--gb-warning-fg)',
+                  fontSize: 10.5, fontWeight: 600,
+                }}>
+                  <I.alert size={11} />
+                  <span>Non-hosted images won&apos;t render in email templates — only embedded link previews will.</span>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              )}
+              {images.map((img) => (
+                <SourceImageChip
+                  key={img.id}
+                  imageData={img}
+                  onRemove={() => removeImage(img.id)}
+                />
+              ))}
+            </div>
+          )}
 
           {/* Results panel (shown after a successful submit) */}
           {stage === 'results' && results.length > 0 && (
