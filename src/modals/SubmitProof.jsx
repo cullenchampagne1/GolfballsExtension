@@ -648,12 +648,18 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
         }
       />
 
-      <div style={{ display: 'flex', minHeight: 0, flex: 1 }}>
-        {/* LEFT — form. Tightened spacing + xs Input sizing so the
-            modal stays compact (was ballooning to 620px tall). */}
+      {/* Body row — fixed height so the form scroll AND the gallery
+          scroll always end at the same Y. Was using separate maxHeight
+          values on each column (form: 520, gallery: 620), which made
+          the form cut off mid-content while the gallery had more room. */}
+      <div style={{
+        display: 'flex',
+        height: 'min(62vh, 520px)',
+        minHeight: 0, flex: 1,
+      }}>
+        {/* LEFT — form. */}
         <div style={{
           flex: 1, minWidth: 0,
-          maxHeight: 'min(62vh, 520px)',
           overflowY: 'auto', overflowX: 'hidden',
           padding: 12,
           display: 'flex', flexDirection: 'column', gap: 6,
@@ -998,7 +1004,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
                 background: 'var(--gb-surface-1)',
                 borderLeft: '1px solid var(--gb-border-subtle)',
                 overflow: 'hidden',
-                maxHeight: 'min(72vh, 620px)',
+                height: '100%',
               }}
             >
               {/* Inner div carries the padding + scroll so the outer
@@ -1008,7 +1014,8 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
                 width: 280,
                 padding: '14px 14px 20px',
                 overflowY: 'auto',
-                maxHeight: 'min(72vh, 620px)',
+                height: '100%',
+                boxSizing: 'border-box',
               }}>
                 <div style={{
                   fontSize: 10, fontWeight: 800, textTransform: 'uppercase',
