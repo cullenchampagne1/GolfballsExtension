@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useDevSetting, useDevSettings } from '../lib/devSettings.js';
+import { useDevSetting } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    GolfballViewer — Three.js scene that renders a golf ball with
@@ -32,7 +32,7 @@ import { useDevSetting, useDevSettings } from '../lib/devSettings.js';
 // dynamic import system; we just need our own cache for the parsed
 // model geometry. Lazy-initialized on first mount.
 const cache = {
-  three: null,           // resolved { THREE, OrbitControls, OBJLoader, DecalGeometry }
+  three: null,           // resolved { THREE, OBJLoader, DecalGeometry, CANNON }
   modelPromise: null,    // in-flight or resolved Promise<THREE.Mesh>
 };
 
@@ -41,14 +41,15 @@ async function loadThreeAndModel() {
     return { ...cache.three, model: await cache.modelPromise };
   }
   // Parallel-load engine + helpers + model so first-mount latency is
-  // dominated by whichever is slowest, not the sum.
-  const [THREE, { OrbitControls }, { OBJLoader }, { DecalGeometry }] = await Promise.all([
+  // dominated by whichever is slowest, not the sum. cannon-es is
+  // pulled in here too so throw mode has zero extra wait when toggled.
+  const [THREE, { OBJLoader }, { DecalGeometry }, CANNON] = await Promise.all([
     import('three'),
-    import('three/examples/jsm/controls/OrbitControls.js'),
     import('three/examples/jsm/loaders/OBJLoader.js'),
     import('three/examples/jsm/geometries/DecalGeometry.js'),
+    import('cannon-es'),
   ]);
-  cache.three = { THREE, OrbitControls, OBJLoader, DecalGeometry };
+  cache.three = { THREE, OBJLoader, DecalGeometry, CANNON };
 
   // Kick off the model fetch+parse exactly once. The OBJ is web-
   // accessible so chrome.runtime.getURL gives a load-anywhere URL.
@@ -107,93 +108,57 @@ export function GolfballViewer({ decalDataUrl, onError }) {
   // doesn't linger with its last reading.
   useEffect(() => { if (!debugEnabled) setDebug(null); }, [debugEnabled]);
 
-  // Camera defaults are dev-settings-driven so the team can dial in
-  // framing per-install without touching code. Read once at mount —
-  // changing these values while the viewer is open won't reframe the
-  // existing scene (the user can still orbit). They take effect on
-  // the next 3D-view open, which is the saner UX (no surprise yanks).
-  const [dev] = useDevSettings();
-  const initialCameraRef = useRef(null);
-  if (!initialCameraRef.current) {
-    initialCameraRef.current = {
-      camera: [
-        Number(dev['golfballViewer.cameraX'] ?? 0),
-        Number(dev['golfballViewer.cameraY'] ?? 408.9),
-        Number(dev['golfballViewer.cameraZ'] ?? 0),
-      ],
-      target: [
-        Number(dev['golfballViewer.targetX'] ?? 0),
-        Number(dev['golfballViewer.targetY'] ?? 100),
-        Number(dev['golfballViewer.targetZ'] ?? 0),
-      ],
-    };
-  }
+  // Camera is fixed: side view, ball centered, decal facing the
+  // camera. No more mode-switching cameras or user-controlled orbit.
+  // The dev-setting registry entries for camera x/y/z + target stay
+  // in place for future tuning but aren't read here.
 
   useEffect(() => {
     let disposed = false;
     let renderer, scene, camera, ballMesh, decalMesh, ballGroup, animationId;
+    let world, ballBody;  // cannon-es physics world + sphere body
     const objectsToDispose = [];
-    // Record the moment this effect started so we can hold the
-    // loading splash for at least MIN_LOADING_MS, hiding any
-    // first-frame ball-teleport while Three.js is still wiring up
-    // its initial camera transform. The splash fades out naturally
-    // via React's status flip; until then, the ball is rendering
-    // behind it at its correct final position.
     const mountStart = performance.now();
     const MIN_LOADING_MS = 2000;
 
-    /* Unified input/physics state. Kept in a closure (not React state)
-       because the render loop runs at 60fps and per-frame setStates
-       would tank React. Two interaction modes share this same state:
+    /* Box bounds in world units — defines the 3D play area. The
+       camera is fixed pointing at the origin so these bounds map
+       directly to "visible screen edges". cannon-es planes form the
+       6 walls; the ball bounces inside. */
+    const HALF_X = 140;
+    const HALF_Y = 95;
+    const HALF_Z = 80;
+    const SCALE_MIN = 0.4;
+    const SCALE_MAX = 2.5;
+    const ROTATE_SENSITIVITY = 0.008;  // radians per CSS px of drag
+    const THROW_SCALE = 0.55;
+    const MAX_THROW_SPEED = 1500;
+
+    /* Closure-scoped state. The two modes share these but use them
+       differently:
 
          normal mode (throwMode=false):
-           • drag moves the ball horizontally (world X) + vertically
-             (world Y in side-cam; world Z in top-cam)
-           • wheel zooms by changing ballGroup.scale (no camera change)
+           • drag rotates the ballGroup in place via quaternion deltas
+           • wheel scales the ballGroup
+           • physics world is NOT stepped — ball sits at origin
 
          throw mode (throwMode=true):
-           • camera flies to side view so gravity (world -Y) reads as
-             "down on screen"
-           • drag captures velocity; release throws + gravity applies
-           • walls bounce; floor bounce damped extra so the ball
-             eventually rests
-
-       The `mode` field mirrors throwModeRef so the loop can see
-       transitions and reset state at the boundaries. */
-    const physics = {
-      pos: { x: 0, y: 0, z: 0 },       // ballGroup.position offsets
-      vel: { x: 0, y: 0 },              // linear velocity (only x/y used)
-      scale: 1,                         // ballGroup.scale multiplier (wheel zoom)
-      angVel: { x: 0, y: 0, z: 0 },
+           • physics world IS stepped each frame
+           • drag = grab the cannon body (kinematic-ish) + capture
+             velocity; release re-enables dynamic body with that velocity
+           • wheel still scales (cosmetic — also resizes the physics
+             sphere shape so collisions match) */
+    const state = {
+      scale: 1,
       dragging: false,
-      dragStart: { px: 0, py: 0, posX: 0, posY: 0 },
+      dragStart: { px: 0, py: 0, wx: 0, wy: 0 },
       history: [],
       lastMode: false,
     };
-    // Default world bounds for both modes. X is horizontal across
-    // the viewport; Y/Z depend on the camera. In side-cam (throw
-    // mode) Y is vertical. In top-cam (normal mode) Z is vertical.
-    const WALL_X = 140;
-    const WALL_TOP = 90;     // ceiling
-    const WALL_FLOOR = -90;  // floor (also where gravity rests the ball)
-    const RESTITUTION = 0.62;
-    const FLOOR_RESTITUTION = 0.55;  // softer bounce for "lands and rolls" feel
-    const FRICTION = 0.992;          // air drag — very mild
-    const ANG_FRICTION = 0.985;
-    const GRAVITY = 900;             // world units per second² downward
-    const MAX_SPEED = 2000;
-    const THROW_SCALE = 0.55;
-    const REST_SPEED = 3;            // below this, the ball is considered at rest
-
-    // Min/max scale clamps for wheel zoom. The ball's natural radius
-    // is targetRadius (100); a 0.4–2.5 scale range keeps it usable
-    // without letting it overflow the viewport entirely.
-    const SCALE_MIN = 0.4;
-    const SCALE_MAX = 2.5;
 
     (async () => {
       try {
-        const { THREE, DecalGeometry, model } = await loadThreeAndModel();
+        const { THREE, DecalGeometry, CANNON, model } = await loadThreeAndModel();
         if (disposed) return;
         const container = containerRef.current;
         if (!container) return;
@@ -204,9 +169,12 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         // around the ball. Matches the playground's design-canvas vibe.
 
         const { clientWidth: w, clientHeight: h } = container;
+        // Camera is fixed at side view looking straight at the ball
+        // along -Z. Decal projects onto +Z (camera-facing) so we never
+        // need to reorient; whatever you see is what gets painted.
         camera = new THREE.PerspectiveCamera(38, w / h, 0.1, 1000);
-        // Camera position is set AFTER the ball + decal so we can frame
-        // the actual print area. Placed below in the controls setup.
+        camera.position.set(0, 0, 360);
+        camera.lookAt(0, 0, 0);
 
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setPixelRatio(window.devicePixelRatio);
@@ -271,14 +239,14 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           decalTexture.wrapT = THREE.ClampToEdgeWrapping;
           objectsToDispose.push(decalTexture);
 
-          // Project from straight up (+Y axis) down through the ball's
-          // top pole. The decal "size" is the projection box (X = U
-          // size on the ball surface, Y = V size, Z = projection depth).
-          // Using equal X/Y keeps the decal circular; tall Z (= target
-          // radius * 2) ensures the decal wraps the curvature without
-          // missing surface area.
-          const decalPosition = new THREE.Vector3(0, targetRadius * 0.999, 0);  // just above the surface
-          const decalOrientation = new THREE.Euler(-Math.PI / 2, 0, 0);          // face downward
+          // Project the decal from +Z (toward the camera) onto the
+          // front face of the ball. With the camera fixed at +Z,
+          // whatever the user sees IS the print area — no orient/look
+          // gymnastics. The projection-box X/Y define the decal's
+          // on-surface size; Z is the projection depth (= 2x radius
+          // so the wrap reaches around the curvature cleanly).
+          const decalPosition = new THREE.Vector3(0, 0, targetRadius * 0.999);
+          const decalOrientation = new THREE.Euler(0, 0, 0);
           const decalSize = new THREE.Vector3(targetRadius * 0.65, targetRadius * 0.65, targetRadius * 2);
 
           const decalGeo = new DecalGeometry(ballMesh, decalPosition, decalOrientation, decalSize);
@@ -303,50 +271,66 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           objectsToDispose.push(decalGeo, decalMat);
         }
 
-        // ── Camera framing ─────────────────────────────────────
-        // We OWN the input pipeline now (no OrbitControls). Drag = move
-        // the ball, wheel = scale it, throw-mode toggle switches the
-        // camera between top-down (default, see the print head-on) and
-        // side view (gravity reads as 'down on screen' so the ball can
-        // visibly fall to the floor).
-        //
-        // The two camera positions are interpolated each frame via
-        // simple lerp toward `targetCamPos` / `targetLookAt`; we don't
-        // need an animation library since the values themselves
-        // smoothly chase a target every frame.
-        const { camera: cam0, target: tgt0 } = initialCameraRef.current;
-        const TOPDOWN_CAM = new THREE.Vector3(cam0[0], cam0[1], cam0[2]);
-        const TOPDOWN_LOOK = new THREE.Vector3(tgt0[0], tgt0[1], tgt0[2]);
-        // Side view: camera shifted around to look at the ball
-        // horizontally. Y matches the ball's centerline (0), Z is the
-        // distance from the ball. Look-at is the ball center so the
-        // floor at y=WALL_FLOOR is visibly below the ball.
-        const SIDE_CAM = new THREE.Vector3(0, 30, 360);
-        const SIDE_LOOK = new THREE.Vector3(0, 0, 0);
-        camera.position.copy(TOPDOWN_CAM);
-        camera.lookAt(TOPDOWN_LOOK);
+        /* ── cannon-es physics world ─────────────────────────────
+           One sphere body for the ball + 6 static planes for the box
+           walls. World is stepped each frame ONLY when throw mode is
+           on; otherwise the ball sits at the origin and is driven
+           by drag-rotation.
 
-        const targetCamPos = TOPDOWN_CAM.clone();
-        const targetLookAt = TOPDOWN_LOOK.clone();
-        const currentLookAt = TOPDOWN_LOOK.clone();
+           bodyMaterial restitution=0.6 gives a satisfying bounce
+           without infinite oscillation; air friction 0.05 makes the
+           ball slow naturally on the floor. Gravity is -y. */
+        world = new CANNON.World();
+        world.gravity.set(0, -650, 0);
+        world.broadphase = new CANNON.NaiveBroadphase();
+
+        const ballMaterial = new CANNON.Material('ball');
+        const wallMaterial = new CANNON.Material('wall');
+        world.addContactMaterial(new CANNON.ContactMaterial(ballMaterial, wallMaterial, {
+          friction: 0.05,
+          restitution: 0.6,
+        }));
+
+        ballBody = new CANNON.Body({
+          mass: 1,
+          shape: new CANNON.Sphere(targetRadius),
+          material: ballMaterial,
+          linearDamping: 0.06,
+          angularDamping: 0.18,
+          // Start the body sleeping (no physics applied) until throw
+          // mode turns on. We control sleep state manually each frame.
+          allowSleep: true,
+        });
+        ballBody.position.set(0, 0, 0);
+        ballBody.sleep();
+        world.addBody(ballBody);
+
+        // Six walls — planes oriented inward, positioned at +/-HALF_* on each axis.
+        // CANNON.Plane is infinite; we use position + quaternion to put it where we want.
+        function addWall(pos, axis, angle) {
+          const wall = new CANNON.Body({ mass: 0, material: wallMaterial });
+          wall.addShape(new CANNON.Plane());
+          wall.quaternion.setFromAxisAngle(new CANNON.Vec3(axis[0], axis[1], axis[2]), angle);
+          wall.position.set(pos[0], pos[1], pos[2]);
+          world.addBody(wall);
+        }
+        // Floor (Y = -HALF_Y), pointing up
+        addWall([0, -HALF_Y, 0], [1, 0, 0], -Math.PI / 2);
+        // Ceiling (Y = +HALF_Y), pointing down
+        addWall([0,  HALF_Y, 0], [1, 0, 0],  Math.PI / 2);
+        // Left wall (X = -HALF_X), pointing right
+        addWall([-HALF_X, 0, 0], [0, 1, 0],  Math.PI / 2);
+        // Right wall (X = +HALF_X), pointing left
+        addWall([ HALF_X, 0, 0], [0, 1, 0], -Math.PI / 2);
+        // Back wall (Z = -HALF_Z), pointing toward camera
+        addWall([0, 0, -HALF_Z], [0, 1, 0], 0);
+        // Front wall (Z = +HALF_Z), pointing away from camera
+        addWall([0, 0,  HALF_Z], [0, 1, 0], Math.PI);
 
         // ── Render loop ────────────────────────────────────────
-        // Debug HUD pulls camera/target state once every ~100ms so React
-        // re-renders are bounded; the WebGL frame loop is independent.
         let lastDebugTs = 0;
         let lastFrameTs = performance.now();
-        // Reusable axis vector for world-space rotation each frame.
-        // Allocated once to avoid per-frame GC churn.
-        const tmpAxis = new THREE.Vector3();
-
-        /* Apply state → ballGroup transform. Called every frame after
-           the physics step so position/scale changes always reflect
-           the latest values. Rotation accumulates via rotateOnWorldAxis
-           in the physics step itself (we don't reset rotation here). */
-        function applyBallTransform() {
-          ballGroup.position.set(physics.pos.x, physics.pos.y, physics.pos.z);
-          ballGroup.scale.setScalar(physics.scale);
-        }
+        const tmpQuat = new THREE.Quaternion();
 
         const render = () => {
           if (disposed) return;
@@ -354,138 +338,75 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           const dt = Math.min(0.05, (nowMs - lastFrameTs) / 1000);
           lastFrameTs = nowMs;
 
-          /* ── Mode-transition side effects ─────────────────────
-             When throwMode flips, reset velocity (so a half-thrown
-             ball doesn't keep flying after the user exits), retarget
-             the camera, and on flip-OFF snap the ball back to its
-             centered+1.0 default. On flip-ON, drop the ball from its
-             current screen position so gravity has somewhere to go. */
-          if (throwModeRef.current !== physics.lastMode) {
-            physics.lastMode = throwModeRef.current;
-            physics.vel.x = 0;
-            physics.vel.y = 0;
-            physics.angVel.x = physics.angVel.y = physics.angVel.z = 0;
+          /* ── Mode transitions ──────────────────────────────────
+             flip ON: take whatever rotation the user set, copy it
+             to the cannon body, place body at origin. World starts
+             stepping. Ball falls from origin via gravity.
+             flip OFF: stop the world, snap ball back to identity
+             rotation at origin, reset scale. */
+          if (throwModeRef.current !== state.lastMode) {
+            state.lastMode = throwModeRef.current;
             if (throwModeRef.current) {
-              targetCamPos.copy(SIDE_CAM);
-              targetLookAt.copy(SIDE_LOOK);
-              // Carry over the ball's screen-space x position so the
-              // user doesn't see it jump on mode switch. y is set to
-              // 0 (centered) so gravity has room to act.
-              physics.pos.y = 0;
-              physics.pos.z = 0;
+              ballBody.position.set(0, 0, 0);
+              ballBody.velocity.set(0, 0, 0);
+              ballBody.angularVelocity.set(0, 0, 0);
+              // Mirror whatever quaternion the user spun the ball
+              // into during normal-mode rotation onto the physics
+              // body so the print orientation is preserved.
+              ballBody.quaternion.set(
+                ballGroup.quaternion.x,
+                ballGroup.quaternion.y,
+                ballGroup.quaternion.z,
+                ballGroup.quaternion.w,
+              );
+              ballBody.wakeUp();
             } else {
-              targetCamPos.copy(TOPDOWN_CAM);
-              targetLookAt.copy(TOPDOWN_LOOK);
-              // Snap-back to centered + default scale per the UX
-              // decision: throw mode is a play mode, not a workflow.
-              physics.pos.x = 0; physics.pos.y = 0; physics.pos.z = 0;
-              physics.scale = 1;
-              ballGroup.quaternion.identity();  // clear any spin orientation
+              ballBody.sleep();
+              ballBody.position.set(0, 0, 0);
+              ballBody.velocity.set(0, 0, 0);
+              ballBody.angularVelocity.set(0, 0, 0);
+              ballGroup.position.set(0, 0, 0);
+              ballGroup.quaternion.identity();
+              state.scale = 1;
             }
           }
 
-          // Camera lerp toward the active target. Faster lerp = more
-          // urgent transition; 0.12 lands in ~200ms at 60fps.
-          camera.position.lerp(targetCamPos, 0.12);
-          currentLookAt.lerp(targetLookAt, 0.12);
-          camera.lookAt(currentLookAt);
-
-          /* ── Physics step ─────────────────────────────────────
-             Throw mode: gravity always applies, even while the user
-             is dragging — otherwise grabbing a falling ball "freezes"
-             it mid-air which reads as the ball sticking to the cursor.
-             Drag moves the ball directly (pos was set in onPMove),
-             but gravity still accumulates velocity each frame so the
-             instant the user releases, the ball continues falling
-             naturally + any flick velocity from the throw.
-             Normal mode: nothing — drag is the only motion. */
-          if (ballGroup) {
-            if (throwModeRef.current) {
-              // Gravity ALWAYS accumulates into vel — even while the
-              // user is dragging — so the ball doesn't freeze mid-air
-              // when grabbed. On release, the ball keeps its momentum.
-              physics.vel.y -= GRAVITY * dt;
-
-              // Position integration + collision: ONLY when not
-              // dragging. Drag owns position directly (set in onPMove)
-              // so it doesn't fight the physics writer. Walls + floor
-              // also only care about non-dragged motion.
-              if (!physics.dragging) {
-                physics.pos.x += physics.vel.x * dt;
-                physics.pos.y += physics.vel.y * dt;
-
-                // Side walls — mirror overshoot back inside.
-                if (physics.pos.x < -WALL_X) {
-                  physics.pos.x = -WALL_X + (-WALL_X - physics.pos.x);
-                  physics.vel.x = -physics.vel.x * RESTITUTION;
-                } else if (physics.pos.x > WALL_X) {
-                  physics.pos.x = WALL_X - (physics.pos.x - WALL_X);
-                  physics.vel.x = -physics.vel.x * RESTITUTION;
-                }
-                // Floor — softer bounce so the ball settles instead of
-                // perpetually pogo-sticking. Ceiling = symmetric wall.
-                if (physics.pos.y < WALL_FLOOR) {
-                  physics.pos.y = WALL_FLOOR + (WALL_FLOOR - physics.pos.y);
-                  physics.vel.y = -physics.vel.y * FLOOR_RESTITUTION;
-                  // Friction on horizontal vel when bouncing off floor —
-                  // mimics rolling friction so the ball stops sliding.
-                  physics.vel.x *= 0.85;
-                } else if (physics.pos.y > WALL_TOP) {
-                  physics.pos.y = WALL_TOP - (physics.pos.y - WALL_TOP);
-                  physics.vel.y = -physics.vel.y * RESTITUTION;
-                }
-
-                // Air drag — barely any so flicks travel fast.
-                const decay = Math.pow(FRICTION, dt * 60);
-                physics.vel.x *= decay;
-                physics.vel.y *= decay;
-
-                // Rest detection: if the ball is on the floor with
-                // negligible vertical bounce energy and tiny horizontal
-                // motion, zero out velocity entirely (otherwise gravity
-                // keeps re-pulling and we'd jitter forever).
-                if (Math.abs(physics.pos.y - WALL_FLOOR) < 1 && Math.abs(physics.vel.y) < REST_SPEED * 2) {
-                  physics.vel.y = 0;
-                  physics.pos.y = WALL_FLOOR;
-                  if (Math.abs(physics.vel.x) < REST_SPEED) physics.vel.x = 0;
-                }
-              } else {
-                // While dragging: cap accumulated vel.y so a long hold
-                // doesn't build up infinite downward speed that yanks
-                // the ball off-screen the instant the user releases.
-                if (physics.vel.y < -MAX_SPEED) physics.vel.y = -MAX_SPEED;
-              }
-            }
-
-            // Angular velocity decay + apply rotation regardless of
-            // mode (in case the ball was thrown and is now decaying).
-            const angSpeed = Math.hypot(physics.angVel.x, physics.angVel.y, physics.angVel.z);
-            if (angSpeed > 0.01) {
-              const angDecay = Math.pow(ANG_FRICTION, dt * 60);
-              tmpAxis.set(physics.angVel.x, physics.angVel.y, physics.angVel.z).normalize();
-              ballGroup.rotateOnWorldAxis(tmpAxis, angSpeed * dt);
-              physics.angVel.x *= angDecay;
-              physics.angVel.y *= angDecay;
-              physics.angVel.z *= angDecay;
+          /* ── Throw-mode physics step ───────────────────────────
+             World.step every frame. While dragging, the body is
+             kinematic-ish: position is set directly from pointer,
+             velocity is recalculated on next move. cannon-es runs
+             collisions automatically. */
+          if (throwModeRef.current) {
+            world.step(1 / 60, dt, 3);
+            if (!state.dragging) {
+              ballGroup.position.set(
+                ballBody.position.x,
+                ballBody.position.y,
+                ballBody.position.z,
+              );
+              ballGroup.quaternion.set(
+                ballBody.quaternion.x,
+                ballBody.quaternion.y,
+                ballBody.quaternion.z,
+                ballBody.quaternion.w,
+              );
             }
           }
 
-          applyBallTransform();
+          // Scale is independent of mode — wheel-driven only.
+          ballGroup.scale.setScalar(state.scale);
+
           renderer.render(scene, camera);
 
           const now = performance.now();
           if (debugEnabledRef.current && now - lastDebugTs > 100) {
             lastDebugTs = now;
-            const offset = camera.position.clone().sub(currentLookAt);
-            const r = offset.length();
-            const polarDeg = Math.acos(Math.max(-1, Math.min(1, offset.y / r))) * 180 / Math.PI;
-            const azimuthDeg = Math.atan2(offset.x, offset.z) * 180 / Math.PI;
             setDebug({
               pos: [camera.position.x, camera.position.y, camera.position.z],
-              target: [currentLookAt.x, currentLookAt.y, currentLookAt.z],
-              dist: r,
-              azimuth: azimuthDeg,
-              polar: polarDeg,
+              target: [0, 0, 0],
+              dist: camera.position.length(),
+              azimuth: 0,
+              polar: 90,
               radius: targetRadius,
             });
           }
@@ -494,102 +415,114 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         render();
 
         /* ── Canvas input handlers ───────────────────────────────
-           Both modes use the same drag-to-move + wheel-to-scale
-           pipeline; throw mode adds velocity capture on release so
-           the physics loop has something to integrate.
-
-           Pointer-to-world mapping: 1 CSS pixel ≈ PX_TO_WORLD world
-           units of ball motion. Tuned by feel against the default
-           camera framing — large enough that small drags read as
-           motion, small enough that you can land precisely. */
-        const PX_TO_WORLD = 0.7;
+           Drag behavior splits by mode:
+             • normal mode → drag rotates the ballGroup in place
+               via quaternion deltas (no translation, no physics)
+             • throw mode → drag moves the cannon body around in
+               world X/Y space; release seeds linear+angular velocity
+           Wheel always scales the ballGroup. */
 
         const onPDown = (e) => {
           if (e.button !== 0) return;
-          physics.dragging = true;
-          // Anchor: where the pointer is grabbing relative to the
-          // ball's current position. Subsequent moves translate the
-          // ball by the delta-from-grab so there's no jump on first
-          // move (even if the user clicked off the ball).
-          physics.dragStart = {
+          state.dragging = true;
+          state.dragStart = {
             px: e.clientX,
             py: e.clientY,
-            posX: physics.pos.x,
-            posY: physics.pos.y,
+            wx: throwModeRef.current ? ballBody.position.x : 0,
+            wy: throwModeRef.current ? ballBody.position.y : 0,
           };
-          physics.history = [{ t: performance.now(), x: e.clientX, y: e.clientY }];
-          // Clear any existing throw velocity so the ball respects the
-          // user's grab gesture (otherwise you'd be fighting the ball's
-          // pre-existing inertia). In throw mode gravity is the only
-          // force we keep accumulating during the drag — see the
-          // physics step's vel.y -= GRAVITY*dt branch.
-          physics.vel.x = 0;
-          physics.vel.y = 0;
-          physics.angVel.x = physics.angVel.y = physics.angVel.z = 0;
+          state.history = [{ t: performance.now(), x: e.clientX, y: e.clientY }];
+          if (throwModeRef.current) {
+            // Stop the body's motion while held so drag is in control.
+            ballBody.velocity.set(0, 0, 0);
+            ballBody.angularVelocity.set(0, 0, 0);
+          }
           try { renderer.domElement.setPointerCapture(e.pointerId); } catch {}
         };
 
         const onPMove = (e) => {
-          if (!physics.dragging) return;
-          // Drag delta in CSS px → world units. y is inverted because
-          // screen y grows downward but our world y grows upward (so
-          // dragging up moves the ball up).
-          const dx = (e.clientX - physics.dragStart.px) * PX_TO_WORLD;
-          const dy = -(e.clientY - physics.dragStart.py) * PX_TO_WORLD;
-          physics.pos.x = physics.dragStart.posX + dx;
-          physics.pos.y = physics.dragStart.posY + dy;
-          // History trim: only the last 80ms of pointer samples
-          // matter for the throw-release velocity estimate.
+          if (!state.dragging) return;
+          const dxPx = e.clientX - state.dragStart.px;
+          const dyPx = e.clientY - state.dragStart.py;
+
+          if (throwModeRef.current) {
+            // Move the cannon body — let cannon-es handle wall
+            // overshoot via its own collision pass next step.
+            ballBody.position.x = state.dragStart.wx + dxPx * 0.7;
+            ballBody.position.y = state.dragStart.wy - dyPx * 0.7;
+            ballBody.position.z = 0;
+            // Mirror to render so user sees the drag immediately
+            // (next frame's render-loop sync happens AFTER step,
+            // which would lag by one frame).
+            ballGroup.position.set(ballBody.position.x, ballBody.position.y, 0);
+          } else {
+            // Quaternion delta — rotate the ball around the X axis
+            // for vertical drag, Y axis for horizontal. Pre-multiply
+            // so the rotation is applied in world space, which feels
+            // like trackball-style "drag the surface".
+            tmpQuat.setFromEuler(new THREE.Euler(
+              dyPx * ROTATE_SENSITIVITY,
+              dxPx * ROTATE_SENSITIVITY,
+              0,
+              'XYZ',
+            ));
+            // Start from the rotation we had at drag-start; if we
+            // hadn't stashed it, repeated tiny moves would accumulate
+            // and the ball would spin away from the cursor.
+            if (!state.dragStartQuat) {
+              state.dragStartQuat = ballGroup.quaternion.clone();
+            }
+            ballGroup.quaternion.copy(state.dragStartQuat).premultiply(tmpQuat);
+          }
           const now = performance.now();
-          physics.history.push({ t: now, x: e.clientX, y: e.clientY });
+          state.history.push({ t: now, x: e.clientX, y: e.clientY });
           const cutoff = now - 80;
-          while (physics.history.length > 2 && physics.history[0].t < cutoff) {
-            physics.history.shift();
+          while (state.history.length > 2 && state.history[0].t < cutoff) {
+            state.history.shift();
           }
         };
 
         const onPUp = (e) => {
-          if (!physics.dragging) return;
-          physics.dragging = false;
+          if (!state.dragging) return;
+          state.dragging = false;
+          state.dragStartQuat = null;
           try { renderer.domElement.releasePointerCapture(e.pointerId); } catch {}
-          // Only seed velocity in throw mode. In normal mode the ball
-          // just stays where the user dragged it.
-          if (!throwModeRef.current) { physics.history = []; return; }
-          const h = physics.history;
+
+          // In throw mode, seed velocity from the recent drag arc so
+          // releasing flings the ball. In normal mode, nothing — the
+          // ball stays at whatever rotation the user landed on.
+          if (!throwModeRef.current) { state.history = []; return; }
+          const h = state.history;
           if (h.length >= 2) {
             const last = h[h.length - 1];
             const first = h[0];
             const dtMs = last.t - first.t;
             if (dtMs > 0) {
-              let vxPx = (last.x - first.x) / (dtMs / 1000) * THROW_SCALE;
-              let vyPx = (last.y - first.y) / (dtMs / 1000) * THROW_SCALE;
-              let velX = vxPx * PX_TO_WORLD;
-              let velY = -vyPx * PX_TO_WORLD;
-              const speed = Math.hypot(velX, velY);
-              if (speed > MAX_SPEED) {
-                const k = MAX_SPEED / speed;
-                velX *= k; velY *= k;
+              let vx = (last.x - first.x) / (dtMs / 1000) * THROW_SCALE * 0.7;
+              let vy = -(last.y - first.y) / (dtMs / 1000) * THROW_SCALE * 0.7;
+              const speed = Math.hypot(vx, vy);
+              if (speed > MAX_THROW_SPEED) {
+                const k = MAX_THROW_SPEED / speed;
+                vx *= k; vy *= k;
               }
-              physics.vel.x = velX;
-              physics.vel.y = velY;
-              // Spin axis perpendicular to throw direction within the
-              // view plane → reads as top-spin when thrown horizontally.
-              const ANG_PER_UNIT = 0.022;
-              physics.angVel.x = velY * ANG_PER_UNIT;
-              physics.angVel.y = -velX * ANG_PER_UNIT;
+              ballBody.velocity.set(vx, vy, 0);
+              // Angular: top-spin axis perpendicular to throw vector
+              const ANG_PER_UNIT = 0.025;
+              ballBody.angularVelocity.set(
+                vy * ANG_PER_UNIT,
+                -vx * ANG_PER_UNIT,
+                0,
+              );
             }
           }
-          physics.history = [];
+          state.history = [];
+          ballBody.wakeUp();
         };
 
-        /* Wheel = scale the ball (NOT zoom the camera). Camera stays
-           fixed; the ball grows/shrinks within its viewport bounds. */
         const onWheel = (e) => {
           e.preventDefault();
-          // Negative deltaY = scroll up = bigger. Scale factor per
-          // tick is gentle so users can land precisely.
           const factor = e.deltaY < 0 ? 1.08 : 1 / 1.08;
-          physics.scale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, physics.scale * factor));
+          state.scale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, state.scale * factor));
         };
 
         renderer.domElement.addEventListener('pointerdown', onPDown);
