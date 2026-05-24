@@ -28,6 +28,11 @@ import React, { useEffect, useRef, useState } from 'react';
    rendered the bake. These constants are baked in below — if
    the bake is re-rendered with a different camera, recompute
    them via Blender's bpy_extras.world_to_camera_view().
+
+   The viewer wraps the composed canvas in the same pan/zoom
+   pattern as ImagePreview's 2D image surface: wheel-zoom around
+   cursor, drag-to-pan, double-click for 1× ↔ 2× toggle, zoom
+   chips in the bottom-right, percent readout bottom-left.
 ─────────────────────────────────────────────────────────────── */
 
 const BAKE_PATH = 'icons/mockup_base.png';
@@ -40,19 +45,38 @@ const BAKE_H = 1080;
 const BALL_CENTER_X = 540;
 const BALL_CENTER_Y = 540;
 const BALL_RADIUS_PX = 268;       // ~3px overscan vs the 261.3 silhouette so the warp covers a small feather
-// Fraction of ball diameter the logo covers. Bumped from 0.7 → 0.85
-// so the print reads bigger on the mockup; at 0.85 the curvature
-// foreshortening at the logo edge is still <5%, visually
-// indistinguishable from a geodesic warp.
-const LOGO_SIZE = 0.85;
+// Fraction of ball diameter the logo covers. At 0.95 the curvature
+// foreshortening at the logo edge approaches the limb and the flat
+// warp shows ~5% distortion at the corners — visually acceptable
+// for typical square/rectangular logos; bumping higher (toward 1.0)
+// starts to look unnatural as the logo wraps around the silhouette.
+const LOGO_SIZE = 0.95;
+
+// Pan/zoom — mirrors ImagePreview's 2D image surface so the two
+// preview modes feel identical to the user.
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 8;
+const ZOOM_STEP_BTN = 0.12;
+const ZOOM_STEP_WHEEL = 0.05;
 
 export const GrassMockupComposer = React.forwardRef(function GrassMockupComposer(
   { decalDataUrl, onError },
   ref,
 ) {
   const canvasRef = useRef(null);
+  const wrapRef = useRef(null);
+  const viewportRef = useRef(null);
+  // Pan/zoom state mirrored in refs so the transform writer doesn't
+  // pay re-render cost while the user is dragging. The percent
+  // readout is the only thing that needs state.
+  const scaleRef = useRef(1);
+  const txRef = useRef(0);
+  const tyRef = useRef(0);
+  const dragRef = useRef(null);
+  const [zoomLevel, setZoomLevel] = useState(100);
   const [status, setStatus] = useState('loading');
 
+  /* ── compose pipeline ──────────────────────────────────── */
   useEffect(() => {
     if (!decalDataUrl) {
       setStatus('loading');
@@ -83,6 +107,95 @@ export const GrassMockupComposer = React.forwardRef(function GrassMockupComposer
     return () => { cancelled = true; };
   }, [decalDataUrl, onError]);
 
+  /* ── pan/zoom helpers (mirror ImagePreview) ────────────── */
+  function applyTransform(animate) {
+    const el = viewportRef.current;
+    if (!el) return;
+    el.style.transition = animate ? 'transform .18s cubic-bezier(.25,.8,.25,1)' : 'none';
+    el.style.transform = `translate(${txRef.current}px, ${tyRef.current}px) scale(${scaleRef.current})`;
+  }
+  function clampPan() {
+    const c = wrapRef.current;
+    if (!c) return;
+    const cw = c.clientWidth;
+    const ch = c.clientHeight;
+    // Match the 2D image's clamp: the rendered surface's edges stay
+    // inside the wrapper so the user can't drag the canvas off-screen.
+    const maxX = Math.max(0, (cw * scaleRef.current - cw) / 2);
+    const maxY = Math.max(0, (ch * scaleRef.current - ch) / 2);
+    txRef.current = Math.max(-maxX, Math.min(maxX, txRef.current));
+    tyRef.current = Math.max(-maxY, Math.min(maxY, tyRef.current));
+  }
+  function zoom(delta, originX, originY) {
+    const prev = scaleRef.current;
+    const next = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, prev * (1 + delta)));
+    if (next === prev) return;
+    const c = wrapRef.current;
+    if (c && originX != null && originY != null) {
+      // Pivot around the cursor so the user's focal point stays put.
+      const ratio = next / prev - 1;
+      const cw = c.clientWidth;
+      const ch = c.clientHeight;
+      txRef.current -= (originX - cw / 2 - txRef.current) * ratio;
+      tyRef.current -= (originY - ch / 2 - tyRef.current) * ratio;
+    }
+    scaleRef.current = next;
+    clampPan();
+    applyTransform(false);
+    setZoomLevel(Math.round(next * 100));
+  }
+  function resetZoom() {
+    scaleRef.current = 1; txRef.current = 0; tyRef.current = 0;
+    applyTransform(true);
+    setZoomLevel(100);
+  }
+
+  /* ── wheel-zoom (passive:false so we can preventDefault) ── */
+  useEffect(() => {
+    const c = wrapRef.current;
+    if (!c || status !== 'ready') return undefined;
+    const onWheel = (e) => {
+      e.preventDefault();
+      const rect = c.getBoundingClientRect();
+      const ox = e.clientX - rect.left;
+      const oy = e.clientY - rect.top;
+      zoom(e.deltaY < 0 ? ZOOM_STEP_WHEEL : -ZOOM_STEP_WHEEL, ox, oy);
+    };
+    c.addEventListener('wheel', onWheel, { passive: false });
+    return () => c.removeEventListener('wheel', onWheel);
+  }, [status]);
+
+  /* ── drag-to-pan ─────────────────────────────────────── */
+  const onPointerDown = (e) => {
+    if (e.button !== 0 || status !== 'ready') return;
+    if (e.target?.closest?.('button')) return;
+    dragRef.current = { x: e.clientX, y: e.clientY, tx: txRef.current, ty: tyRef.current };
+    try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch {}
+  };
+  const onPointerMove = (e) => {
+    if (!dragRef.current) return;
+    txRef.current = dragRef.current.tx + (e.clientX - dragRef.current.x);
+    tyRef.current = dragRef.current.ty + (e.clientY - dragRef.current.y);
+    clampPan();
+    applyTransform(false);
+  };
+  const onPointerUp = (e) => {
+    dragRef.current = null;
+    try { e.currentTarget.releasePointerCapture?.(e.pointerId); } catch {}
+  };
+  const onDoubleClick = (e) => {
+    if (status !== 'ready') return;
+    if (e.target?.closest?.('button')) return;
+    // Toggle 1× ↔ 2× for a quick zoom-in shortcut — same as 2D view.
+    if (scaleRef.current !== 1 || txRef.current !== 0 || tyRef.current !== 0) {
+      resetZoom();
+    } else {
+      scaleRef.current = 2;
+      applyTransform(true);
+      setZoomLevel(200);
+    }
+  };
+
   React.useImperativeHandle(ref, () => ({
     snapshot: () => {
       const c = canvasRef.current;
@@ -91,42 +204,151 @@ export const GrassMockupComposer = React.forwardRef(function GrassMockupComposer
   }), []);
 
   return (
-    <div style={{
-      position: 'absolute', inset: 0,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'var(--gb-surface-canvas, #0e0f10)',
-    }}>
-      <canvas
-        ref={canvasRef}
-        width={BAKE_W}
-        height={BAKE_H}
+    <div
+      ref={wrapRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onDoubleClick={onDoubleClick}
+      style={{
+        position: 'absolute', inset: 0,
+        overflow: 'hidden',
+        background: 'var(--gb-surface-canvas, #0e0f10)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        cursor: status === 'ready' ? (dragRef.current ? 'grabbing' : 'grab') : 'default',
+        userSelect: 'none', WebkitUserSelect: 'none',
+        touchAction: 'none',
+      }}
+    >
+      <div
+        ref={viewportRef}
         style={{
-          maxWidth: '100%', maxHeight: '100%',
-          width: 'auto', height: 'auto',
-          objectFit: 'contain',
-          display: status === 'ready' ? 'block' : 'none',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: '100%', height: '100%',
+          transformOrigin: 'center center',
+          willChange: 'transform',
         }}
-      />
+      >
+        <canvas
+          ref={canvasRef}
+          width={BAKE_W}
+          height={BAKE_H}
+          style={{
+            maxWidth: '100%', maxHeight: '100%',
+            width: 'auto', height: 'auto',
+            objectFit: 'contain',
+            display: status === 'ready' ? 'block' : 'none',
+            pointerEvents: 'none',  // drag/wheel handled by wrap
+          }}
+        />
+      </div>
       {status === 'loading' && (
         <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: 'var(--gb-text-muted, #888)', fontSize: 13,
-          letterSpacing: 0.2,
         }}>Composing mockup…</div>
       )}
       {status === 'error' && (
         <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: 'var(--gb-status-danger, #f55)', fontSize: 13,
         }}>Mockup failed to load</div>
+      )}
+
+      {/* Zoom chips + percent readout — mirror the 2D image surface
+          so users see the same UI when switching between modes. */}
+      {status === 'ready' && (
+        <>
+          <ZoomReadout level={zoomLevel} />
+          <ZoomChipCluster
+            onMinus={() => {
+              const c = wrapRef.current;
+              zoom(-ZOOM_STEP_BTN, c ? c.clientWidth / 2 : 0, c ? c.clientHeight / 2 : 0);
+            }}
+            onReset={resetZoom}
+            onPlus={() => {
+              const c = wrapRef.current;
+              zoom(ZOOM_STEP_BTN, c ? c.clientWidth / 2 : 0, c ? c.clientHeight / 2 : 0);
+            }}
+          />
+        </>
       )}
     </div>
   );
 });
 
+/* Glass-tag styling matched to ImagePreview's chips so the two
+   preview modes are visually consistent without importing across
+   modal boundaries (those constants live as locals over there). */
+const GLASS_BG = 'color-mix(in srgb, var(--gb-surface-1) 70%, transparent)';
+const GLASS_FILTER = 'blur(8px) saturate(1.2)';
+const GLASS_BORDER = 'color-mix(in srgb, var(--gb-border-default) 60%, transparent)';
+const GLASS_RADIUS = '8px';
+const GLASS_SHADOW = '0 2px 8px rgba(0, 0, 0, 0.18)';
+
+function ZoomReadout({ level }) {
+  return (
+    <div style={{
+      position: 'absolute', bottom: 8, left: 10,
+      fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
+      color: 'var(--gb-text-secondary)',
+      background: GLASS_BG,
+      backdropFilter: GLASS_FILTER,
+      WebkitBackdropFilter: GLASS_FILTER,
+      border: `1px solid ${GLASS_BORDER}`,
+      borderRadius: GLASS_RADIUS,
+      boxShadow: GLASS_SHADOW,
+      padding: '2px 7px',
+      pointerEvents: 'none',
+      fontFamily: 'var(--gb-font-mono)',
+    }}>{level}%</div>
+  );
+}
+
+function ZoomChipCluster({ onMinus, onReset, onPlus }) {
+  return (
+    <div style={{
+      position: 'absolute', bottom: 8, right: 8,
+      display: 'flex', gap: 4,
+    }}>
+      <ZoomChip onClick={onMinus}>−</ZoomChip>
+      <ZoomChip onClick={onReset}>1:1</ZoomChip>
+      <ZoomChip onClick={onPlus}>+</ZoomChip>
+    </div>
+  );
+}
+
+function ZoomChip({ children, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onPointerDown={(e) => e.stopPropagation()}
+      style={{
+        minWidth: 24, height: 22,
+        padding: '0 7px',
+        fontSize: 11, fontWeight: 600,
+        color: 'var(--gb-text-primary)',
+        background: GLASS_BG,
+        backdropFilter: GLASS_FILTER,
+        WebkitBackdropFilter: GLASS_FILTER,
+        border: `1px solid ${GLASS_BORDER}`,
+        borderRadius: GLASS_RADIUS,
+        boxShadow: GLASS_SHADOW,
+        cursor: 'pointer',
+        fontFamily: 'var(--gb-font-mono)',
+        lineHeight: 1,
+      }}
+    >{children}</button>
+  );
+}
+
 function loadImage(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    // crossOrigin only matters when the source is a remote URL — for
-    // chrome.runtime.getURL() and data: URLs it's a no-op but harmless.
     img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error(`Failed to load image: ${src.slice(0, 60)}`));
@@ -144,8 +366,6 @@ function compose(canvas, baseImg, logoImg) {
   const baseData = ctx.getImageData(0, 0, BAKE_W, BAKE_H);
   const bd = baseData.data;
 
-  // Rasterize the logo to an offscreen canvas so we can sample its
-  // pixels directly. Bilinear sampling below assumes 8-bit RGBA.
   const lc = document.createElement('canvas');
   lc.width = logoImg.naturalWidth;
   lc.height = logoImg.naturalHeight;
@@ -169,16 +389,12 @@ function compose(canvas, baseImg, logoImg) {
       const nx = (px - cx) / R;
       const ny = (py - cy) / R;
       const r2 = nx * nx + ny * ny;
-      if (r2 > 1.0) continue;  // outside ball silhouette
+      if (r2 > 1.0) continue;
 
-      // Camera-axis flat projection — for logos ≤70% of the ball
-      // diameter the curvature foreshortening is <3% at the edge,
-      // visually indistinguishable from a geodesic warp.
       const u = nx / LOGO_SIZE + 0.5;
       const v = ny / LOGO_SIZE + 0.5;
       if (u < 0 || u >= 1 || v < 0 || v >= 1) continue;
 
-      // Bilinear sample the logo at (u, v)
       const sxF = u * (LW - 1);
       const syF = v * (LH - 1);
       const sx0 = Math.floor(sxF);
@@ -203,12 +419,6 @@ function compose(canvas, baseImg, logoImg) {
       const lb = ld[i00 + 2] * w00 + ld[i10 + 2] * w10 + ld[i01 + 2] * w01 + ld[i11 + 2] * w11;
       const la = ld[i00 + 3] * w00 + ld[i10 + 3] * w10 + ld[i01 + 3] * w01 + ld[i11 + 3] * w11;
 
-      // Multiply blend: base pixel is `white × lighting = lighting`,
-      // logo color is the print's hue/saturation. base × logo / 255
-      // gives `logo × lighting` — i.e. the logo shaded by the same
-      // light + dimple shadows as the underlying white ball.
-      // Honor the logo's alpha so PNGs with transparent edges blend
-      // smoothly into the surrounding white-ball region.
       const alpha = la / 255;
       const inv = 1 - alpha;
       const i = (py * BAKE_W + px) * 4;
@@ -218,7 +428,6 @@ function compose(canvas, baseImg, logoImg) {
       bd[i]     = baseR * inv + (baseR * lr / 255) * alpha;
       bd[i + 1] = baseG * inv + (baseG * lg / 255) * alpha;
       bd[i + 2] = baseB * inv + (baseB * lb / 255) * alpha;
-      // alpha channel of the base render is opaque — leave it.
     }
   }
 
