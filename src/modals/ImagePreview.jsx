@@ -161,11 +161,14 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
     return () => c.removeEventListener('wheel', onWheel);
   }, [status]);
 
-  // Drag-to-pan (only when zoomed in past 1.0).
+  // Drag-to-pan at ANY zoom level. clampPan() keeps the image's edges
+  // from escaping the wrapper so the user can't drag the image fully
+  // off-screen, but no gate on the zoom level — even a 1x image can
+  // be nudged inside its viewport so the user always feels they have
+  // tactile control over positioning.
   const dragRef = useRef(null);
   const onPointerDown = (e) => {
     if (e.button !== 0 || status !== 'ready') return;
-    if (scaleRef.current <= 1.001) return;
     dragRef.current = { x: e.clientX, y: e.clientY, tx: txRef.current, ty: tyRef.current };
     try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch {}
   };
@@ -266,7 +269,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
             borderRadius: 'var(--gb-r-md)',
             overflow: 'hidden',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: status === 'ready' && scaleRef.current > 1 ? (dragRef.current ? 'grabbing' : 'grab') : 'default',
+            cursor: status === 'ready' ? (dragRef.current ? 'grabbing' : 'grab') : 'default',
             userSelect: 'none',
           }}
         >
@@ -314,9 +317,24 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
 
           {/* Floating zoom controls — only visible once the image is
               actually viewable. Use the design-system IconBtn so the
-              styling matches the rest of the modal chrome. */}
+              styling matches the rest of the modal chrome.
+
+              Top-right slot holds a 3D-view trigger that's wired up
+              later (placeholder toast for now). Bottom-left is the
+              zoom-level chip; bottom-right is the −/1:1/+ control
+              cluster. */}
           {status === 'ready' && (
             <>
+              <div style={{
+                position: 'absolute', top: 8, right: 8,
+              }}>
+                <IconBtn
+                  size="sm"
+                  tooltip="View in 3D (coming soon)"
+                  icon={<CubeIcon />}
+                  onClick={() => toast?.info?.('3D view — coming soon', { tone: 'info' })}
+                />
+              </div>
               <div style={{
                 position: 'absolute', bottom: 8, left: 10,
                 fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
@@ -429,5 +447,15 @@ const DownloadIcon = (p) => (
     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
     <polyline points="7 10 12 15 17 10" />
     <line x1="12" y1="15" x2="12" y2="3" />
+  </svg>
+);
+// Isometric cube — reads as "3D" without needing a dedicated label.
+// Three-rhombus arrangement is the standard cube-corner glyph.
+const CubeIcon = (p) => (
+  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+    <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+    <line x1="12" y1="22.08" x2="12" y2="12" />
   </svg>
 );
