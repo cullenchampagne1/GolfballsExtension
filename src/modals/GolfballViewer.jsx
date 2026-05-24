@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import { useDevSetting, useDevSettings } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
@@ -94,6 +94,15 @@ export function GolfballViewer({ decalDataUrl, onError }) {
   useEffect(() => { debugEnabledRef.current = debugEnabled; }, [debugEnabled]);
   const [debug, setDebug] = useState(null);
   const [debugCopied, setDebugCopied] = useState(false);
+  // Throw mode — toggled by the in-frame chip button. When on:
+  //   • OrbitControls are disabled so drag = throw, not orbit
+  //   • The render loop integrates ball velocity + angular velocity
+  //   • Walls bounce the ball back inward (4-wall x/y box)
+  // Mirrored to a ref so the long-lived render closure picks up
+  // changes without re-running the WebGL init effect.
+  const [throwMode, setThrowMode] = useState(false);
+  const throwModeRef = useRef(false);
+  useEffect(() => { throwModeRef.current = throwMode; }, [throwMode]);
   // Clear stale snapshot the moment the flag flips off so the HUD
   // doesn't linger with its last reading.
   useEffect(() => { if (!debugEnabled) setDebug(null); }, [debugEnabled]);
@@ -122,8 +131,45 @@ export function GolfballViewer({ decalDataUrl, onError }) {
 
   useEffect(() => {
     let disposed = false;
-    let renderer, scene, camera, controls, ballMesh, decalMesh, animationId;
+    let renderer, scene, camera, controls, ballMesh, decalMesh, ballGroup, animationId;
     const objectsToDispose = [];
+    // Record the moment this effect started so we can hold the
+    // loading splash for at least MIN_LOADING_MS, hiding any
+    // first-frame ball-teleport while Three.js is still wiring up
+    // its initial camera transform. The splash fades out naturally
+    // via React's status flip; until then, the ball is rendering
+    // behind it at its correct final position.
+    const mountStart = performance.now();
+    const MIN_LOADING_MS = 2000;
+
+    /* Physics state for throw mode. Kept in a closure here (not React
+       state) because the render loop runs at 60fps and we'd thrash
+       React if every frame triggered a setState. The HUD reads from
+       throwModeRef + this state via the loop. */
+    const physics = {
+      // Linear motion in world units (pos.x = x offset of ballGroup)
+      pos: { x: 0, y: 0 },
+      vel: { x: 0, y: 0 },
+      // Angular velocity in radians/sec around each axis. Applied via
+      // rotateOnWorldAxis each frame so axes stay world-aligned even
+      // as the ball rotates underneath.
+      angVel: { x: 0, y: 0, z: 0 },
+      // Drag tracking. dragging flag short-circuits the physics loop
+      // while the pointer is held; release seeds velocity from the
+      // recent pointer-move history.
+      dragging: false,
+      dragOffset: { x: 0, y: 0 },
+      history: [],
+    };
+    // Wall bounds in world units (4-wall box, no z movement). Sized
+    // so the ball stays comfortably inside the camera frustum.
+    const WALL_X = 140;
+    const WALL_Y = 100;
+    const RESTITUTION = 0.78;
+    const FRICTION = 0.97;
+    const ANG_FRICTION = 0.965;
+    const MAX_SPEED = 1500;
+    const THROW_SCALE = 0.45;
 
     (async () => {
       try {
@@ -181,7 +227,14 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         // Recenter the geometry on the origin so OrbitControls rotates
         // around the ball's middle, not its model-space center.
         ballMesh.position.set(-bsphere.center.x * scale, -bsphere.center.y * scale, -bsphere.center.z * scale);
-        scene.add(ballMesh);
+        // Wrap ball+decal in a Group so throw-mode translates and
+        // rotates the whole assembly together. The mesh's recentering
+        // offset lives INSIDE the group so the group's origin is the
+        // visual center of the ball — clean pivot for rotation +
+        // wall-collision math.
+        ballGroup = new THREE.Group();
+        ballGroup.add(ballMesh);
+        scene.add(ballGroup);
         objectsToDispose.push(ballMesh.material);
 
         // ── Decal — projected onto the top pole ────────────────
@@ -220,10 +273,13 @@ export function GolfballViewer({ decalDataUrl, onError }) {
             metalness: 0,
           });
           decalMesh = new THREE.Mesh(decalGeo, decalMat);
-          // Decal must match the ball's transform so its UV mapping aligns.
+          // Decal must match the ball's transform so its UV mapping
+          // aligns. Added to the same Group as the ball so throw-mode
+          // translation/rotation moves them together; otherwise the
+          // decal would stay glued to the origin.
           decalMesh.position.copy(ballMesh.position);
           decalMesh.scale.copy(ballMesh.scale);
-          scene.add(decalMesh);
+          ballGroup.add(decalMesh);
           objectsToDispose.push(decalGeo, decalMat);
         }
 
@@ -264,9 +320,72 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         // Debug HUD pulls camera/target state once every ~100ms so React
         // re-renders are bounded; the WebGL frame loop is independent.
         let lastDebugTs = 0;
+        let lastFrameTs = performance.now();
+        // Reusable axis vector for world-space rotation each frame.
+        // Allocated once to avoid per-frame GC churn.
+        const tmpAxis = new THREE.Vector3();
         const render = () => {
           if (disposed) return;
+          const nowMs = performance.now();
+          const dt = Math.min(0.05, (nowMs - lastFrameTs) / 1000);
+          lastFrameTs = nowMs;
+
+          // OrbitControls is only useful when NOT throwing. We toggle
+          // .enabled rather than detaching the controller so the same
+          // instance retains its damping state across mode flips.
+          controls.enabled = !throwModeRef.current;
           controls.update();
+
+          // Physics step — only runs in throw mode, and only when the
+          // user isn't currently dragging (drag updates pos directly).
+          if (throwModeRef.current && !physics.dragging && ballGroup) {
+            const speed = Math.hypot(physics.vel.x, physics.vel.y);
+            if (speed > 0.5) {
+              // Integrate linear
+              physics.pos.x += physics.vel.x * dt;
+              physics.pos.y += physics.vel.y * dt;
+              // Wall bounce — mirror overshoot back inside the wall
+              // so the ball doesn't stick flush at the boundary.
+              if (physics.pos.x < -WALL_X) {
+                physics.pos.x = -WALL_X + (-WALL_X - physics.pos.x);
+                physics.vel.x = -physics.vel.x * RESTITUTION;
+              } else if (physics.pos.x > WALL_X) {
+                physics.pos.x = WALL_X - (physics.pos.x - WALL_X);
+                physics.vel.x = -physics.vel.x * RESTITUTION;
+              }
+              if (physics.pos.y < -WALL_Y) {
+                physics.pos.y = -WALL_Y + (-WALL_Y - physics.pos.y);
+                physics.vel.y = -physics.vel.y * RESTITUTION;
+              } else if (physics.pos.y > WALL_Y) {
+                physics.pos.y = WALL_Y - (physics.pos.y - WALL_Y);
+                physics.vel.y = -physics.vel.y * RESTITUTION;
+              }
+              // Friction decay calibrated to 60fps so frame rate
+              // doesn't change the feel: friction^(dt / (1/60)).
+              const decay = Math.pow(FRICTION, dt * 60);
+              physics.vel.x *= decay;
+              physics.vel.y *= decay;
+            } else {
+              physics.vel.x = 0;
+              physics.vel.y = 0;
+            }
+            // Apply translation to the ball group every frame so
+            // wall bounces are picked up even if drag also moved it.
+            ballGroup.position.set(physics.pos.x, physics.pos.y, 0);
+
+            // Angular velocity — rotate around world axes so the
+            // spin direction stays consistent as the ball moves.
+            const angSpeed = Math.hypot(physics.angVel.x, physics.angVel.y, physics.angVel.z);
+            if (angSpeed > 0.01) {
+              const angDecay = Math.pow(ANG_FRICTION, dt * 60);
+              tmpAxis.set(physics.angVel.x, physics.angVel.y, physics.angVel.z).normalize();
+              ballGroup.rotateOnWorldAxis(tmpAxis, angSpeed * dt);
+              physics.angVel.x *= angDecay;
+              physics.angVel.y *= angDecay;
+              physics.angVel.z *= angDecay;
+            }
+          }
+
           renderer.render(scene, camera);
           const now = performance.now();
           if (debugEnabledRef.current && now - lastDebugTs > 100) {
@@ -291,6 +410,93 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         };
         render();
 
+        /* ── Throw input (canvas pointer events) ─────────────────
+           Active only while throw mode is on (`throwModeRef`). We
+           capture pointer events on the renderer's canvas because
+           OrbitControls's own pointer handlers are disabled in this
+           mode (controls.enabled = false in the render loop above).
+
+           Pointer-to-world mapping: 1 CSS pixel of pointer travel
+           translates to PX_TO_WORLD units of ball motion. Tuned by
+           feel so a sharp flick across the canvas sends the ball
+           bouncing several times before stopping. */
+        const PX_TO_WORLD = 0.7;
+        const onPDown = (e) => {
+          if (!throwModeRef.current) return;
+          if (e.button !== 0) return;
+          physics.dragging = true;
+          // Stash the pointer's starting position relative to the
+          // current ball position so subsequent moves translate the
+          // ball by the delta-from-grab — no jump on first move.
+          physics.dragOffset = {
+            x: e.clientX - physics.pos.x / PX_TO_WORLD,
+            y: e.clientY + physics.pos.y / PX_TO_WORLD,  // +y because canvas y goes down
+          };
+          physics.history = [{ t: performance.now(), x: e.clientX, y: e.clientY }];
+          physics.vel = { x: 0, y: 0 };
+          physics.angVel = { x: 0, y: 0, z: 0 };
+          try { renderer.domElement.setPointerCapture(e.pointerId); } catch {}
+        };
+        const onPMove = (e) => {
+          if (!physics.dragging) return;
+          // Convert pointer → world coords, then translate the ball
+          // group directly while dragging (physics step is skipped
+          // for `dragging` so we don't fight the user).
+          physics.pos.x = (e.clientX - physics.dragOffset.x) * PX_TO_WORLD;
+          physics.pos.y = -(e.clientY - physics.dragOffset.y) * PX_TO_WORLD;
+          ballGroup.position.set(physics.pos.x, physics.pos.y, 0);
+          const now = performance.now();
+          physics.history.push({ t: now, x: e.clientX, y: e.clientY });
+          // Trim to last 80ms — older samples don't reflect the throw arc.
+          const cutoff = now - 80;
+          while (physics.history.length > 2 && physics.history[0].t < cutoff) {
+            physics.history.shift();
+          }
+        };
+        const onPUp = (e) => {
+          if (!physics.dragging) return;
+          physics.dragging = false;
+          // Average velocity over the kept history window → seed
+          // linear vel + angular vel. Angular vel direction is
+          // perpendicular to the throw direction (cross with world
+          // +Z = view normal), so the ball spins as a thrown puck
+          // would — top-spin for forward, side-spin for left/right.
+          const h = physics.history;
+          if (h.length >= 2) {
+            const last = h[h.length - 1];
+            const first = h[0];
+            const dtMs = last.t - first.t;
+            if (dtMs > 0) {
+              let vxPx = (last.x - first.x) / (dtMs / 1000) * THROW_SCALE;
+              let vyPx = (last.y - first.y) / (dtMs / 1000) * THROW_SCALE;
+              let velX = vxPx * PX_TO_WORLD;
+              let velY = -vyPx * PX_TO_WORLD;
+              const speed = Math.hypot(velX, velY);
+              if (speed > MAX_SPEED) {
+                const k = MAX_SPEED / speed;
+                velX *= k; velY *= k;
+              }
+              physics.vel.x = velX;
+              physics.vel.y = velY;
+              // Angular: rotate around an axis perpendicular to
+              // motion within the view plane. (velX along world X,
+              // velY along world Y) ⇒ spin axis = (velY, -velX, 0)
+              // normalized * angSpeed. Magnitude scaled from linear
+              // speed so faster throws spin faster.
+              const ANG_PER_UNIT = 0.018;  // rad/sec per world-unit/sec of linear
+              physics.angVel.x = velY * ANG_PER_UNIT;
+              physics.angVel.y = -velX * ANG_PER_UNIT;
+              physics.angVel.z = 0;
+            }
+          }
+          physics.history = [];
+          try { renderer.domElement.releasePointerCapture(e.pointerId); } catch {}
+        };
+        renderer.domElement.addEventListener('pointerdown', onPDown);
+        renderer.domElement.addEventListener('pointermove', onPMove);
+        renderer.domElement.addEventListener('pointerup', onPUp);
+        renderer.domElement.addEventListener('pointercancel', onPUp);
+
         // ── Resize observer ────────────────────────────────────
         // Keep canvas size in sync with its parent (DraggablePanel,
         // throw, etc. can change preview area dimensions in theory).
@@ -310,6 +516,10 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           if (animationId) cancelAnimationFrame(animationId);
           if (controls) controls.dispose();
           if (renderer) {
+            renderer.domElement?.removeEventListener('pointerdown', onPDown);
+            renderer.domElement?.removeEventListener('pointermove', onPMove);
+            renderer.domElement?.removeEventListener('pointerup', onPUp);
+            renderer.domElement?.removeEventListener('pointercancel', onPUp);
             renderer.dispose();
             if (renderer.domElement?.parentNode) {
               renderer.domElement.parentNode.removeChild(renderer.domElement);
@@ -317,7 +527,14 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           }
           objectsToDispose.forEach((o) => o?.dispose?.());
         };
-        setStatus('ready');
+        // Hold the loading splash for the full MIN_LOADING_MS even
+        // if Three.js + the model loaded faster. By the time we flip
+        // to 'ready', the WebGL canvas has had several frames to paint
+        // the ball at its final camera-framed position, so the fade
+        // reveals a settled scene instead of a teleporting model.
+        const elapsed = performance.now() - mountStart;
+        const remaining = Math.max(0, MIN_LOADING_MS - elapsed);
+        setTimeout(() => { if (!disposed) setStatus('ready'); }, remaining);
       } catch (e) {
         console.error('[GolfballViewer] load failed', e);
         if (!disposed) {
@@ -346,13 +563,56 @@ export function GolfballViewer({ decalDataUrl, onError }) {
       position: 'absolute', inset: 0,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      {status === 'loading' && <LoadingBall />}
+      {/* Fade the splash out smoothly when the load completes so the
+          settled scene reveals naturally beneath instead of snap-cutting. */}
+      <AnimatePresence>
+        {status === 'loading' && (
+          <motion.div
+            key="loading-splash"
+            initial={{ opacity: 1 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.45, ease: [0.4, 0, 0.2, 1] }}
+            style={{ position: 'absolute', inset: 0, zIndex: 4 }}
+          >
+            <LoadingBall />
+          </motion.div>
+        )}
+      </AnimatePresence>
       {status === 'error' && (
         <div style={{
           fontSize: 12, color: 'var(--gb-error-fg)', textAlign: 'center', padding: 20,
         }}>
           Failed to load 3D viewer.
         </div>
+      )}
+
+      {/* Throw-mode toggle — small in-frame chip pinned top-right of
+          the viewport, mirroring the chip styling from ImagePreview's
+          align/3D controls. Disabled while the loading splash is up
+          so the user can't toggle into a half-initialized scene. */}
+      {status === 'ready' && (
+        <button
+          type="button"
+          onClick={() => setThrowMode((v) => !v)}
+          title={throwMode ? 'Exit throw mode' : 'Throw ball'}
+          style={{
+            position: 'absolute', top: 8, right: 8, zIndex: 6,
+            minWidth: 28, height: 24, padding: '0 8px',
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            fontFamily: 'var(--gb-font-mono)', fontSize: 10, fontWeight: 700,
+            letterSpacing: 0.4,
+            color: throwMode ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+            background: throwMode ? 'var(--gb-brand-tint-medium)' : 'var(--gb-surface-modal)',
+            border: '1px solid ' + (throwMode ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'),
+            borderRadius: 'var(--gb-r-sm)',
+            cursor: 'pointer',
+            lineHeight: 1,
+          }}
+        >
+          <BounceIcon size={11} />
+          <span>{throwMode ? 'THROWING' : 'THROW'}</span>
+        </button>
       )}
 
       {/* Debug HUD — top-left overlay showing the camera's current
@@ -430,10 +690,29 @@ export function GolfballViewer({ decalDataUrl, onError }) {
    Pure CSS + Motion (no Three.js dependency yet — that's still
    loading) so this paints the instant the component mounts.
 ─────────────────────────────────────────────────────────────── */
+// Arrow-arc icon for the throw chip — reads as motion/bounce.
+const BounceIcon = (p) => (
+  <svg width={p.size || 11} height={p.size || 11} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 18c4-10 14-10 18 0" />
+    <circle cx="3" cy="18" r="1.5" fill="currentColor" />
+    <polyline points="15 5 21 5 21 11" />
+  </svg>
+);
+
 function LoadingBall() {
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
+      // Full-cover backdrop so the Three.js canvas behind us is
+      // entirely hidden during load. Without this the user can see
+      // the ball pop into its final position through the gaps of the
+      // splash, which reads as a teleport. Surface-canvas matches the
+      // playground/modal canvas tone so the splash blends with the
+      // surrounding modal chrome.
+      position: 'absolute', inset: 0,
+      background: 'var(--gb-surface-canvas)',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      gap: 14,
       color: 'var(--gb-text-muted)', fontSize: 12,
     }}>
       <motion.div
