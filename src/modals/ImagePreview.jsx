@@ -1116,20 +1116,16 @@ const BombIcon = (p) => (
 );
 
 /* ── ViewerToolbox ──────────────────────────────────────────────
-   Bottom-right frosted-glass dropup. Picks a "fun" tool that arms
-   on canvas clicks. Visual chrome is owned by <LiquidDrawer> for
-   consistency with the scene drawer at the top-left.
-
-   Closing the drawer clears the armed tool. Tools (today):
-     • bomb — each canvas click spawns a bomb at the cursor. */
+   Bottom-right frosted-glass dropup built on <LiquidDrawer>. Same
+   sliding-pip semantics as the scene drawer: pick a tool → pip
+   slides to it; pick it again → pip slides back to the toggle
+   and the drawer collapses. */
 function ViewerToolbox({ viewerRef }) {
   const [open, setOpen] = useState(false);
   const [activeTool, setActiveTool] = useState(null); // null | 'bomb'
 
   // Global pointerdown listener while a tool is armed. Spawns the
-  // tool's effect on canvas clicks; skips clicks on UI chrome
-  // (buttons / data-viewer-ui) so closing the drawer or clicking a
-  // chip doesn't double as a bomb-drop.
+  // tool's effect on canvas clicks; skips clicks on UI chrome.
   useEffect(() => {
     if (!activeTool) return undefined;
     const onDown = (e) => {
@@ -1142,23 +1138,32 @@ function ViewerToolbox({ viewerRef }) {
     return () => window.removeEventListener('pointerdown', onDown);
   }, [activeTool, viewerRef]);
 
-  const handleToggleDrawer = (next) => {
+  const handleOpenChange = (next) => {
     setOpen(next);
-    if (!next) setActiveTool(null);
+    if (!next && activeTool) setActiveTool(null);
+  };
+  const handlePick = (key) => {
+    if (key === activeTool) {
+      setActiveTool(null);
+      setOpen(false);
+    } else {
+      setActiveTool(key);
+    }
   };
 
   const tools = [
-    { key: 'bomb', icon: <BombIcon size={14} />, active: activeTool === 'bomb' },
+    { key: 'bomb', icon: <BombIcon size={14} /> },
   ];
 
   return (
     <LiquidDrawer
       anchor="bottom-right"
       open={open}
-      onOpenChange={handleToggleDrawer}
+      onOpenChange={handleOpenChange}
       toggleIcon={<ToolboxIcon size={14} />}
       items={tools}
-      onPick={(key) => setActiveTool((cur) => (cur === key ? null : key))}
+      activeKey={activeTool}
+      onPick={handlePick}
       ariaLabel="Fun tools"
     />
   );
