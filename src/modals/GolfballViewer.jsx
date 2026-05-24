@@ -1519,6 +1519,16 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                              release seeds linear+angular velocity */
         const onPDown = (e) => {
           if (e.button !== 0) return;
+          // Raycast against the ball mesh — only start a drag when the
+          // pointer actually lands on the ball, not empty canvas space.
+          const cvs = renderer.domElement;
+          const cr = cvs.getBoundingClientRect();
+          ndc.x =  ((e.clientX - cr.left) / cr.width)  * 2 - 1;
+          ndc.y = -((e.clientY - cr.top)  / cr.height) * 2 + 1;
+          ray.setFromCamera(ndc, camera);
+          const hits = ray.intersectObject(ballGroup, true);
+          if (hits.length === 0) return;
+
           state.dragging = true;
           state.dragStart = {
             px: e.clientX,
