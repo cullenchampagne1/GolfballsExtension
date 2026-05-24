@@ -391,52 +391,69 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           camera.lookAt(currentLookAt);
 
           /* ── Physics step ─────────────────────────────────────
-             Runs only when NOT dragging (drag drives position direct).
-             Throw mode: gravity + floor bounce + wall bounce + friction.
+             Throw mode: gravity always applies, even while the user
+             is dragging — otherwise grabbing a falling ball "freezes"
+             it mid-air which reads as the ball sticking to the cursor.
+             Drag moves the ball directly (pos was set in onPMove),
+             but gravity still accumulates velocity each frame so the
+             instant the user releases, the ball continues falling
+             naturally + any flick velocity from the throw.
              Normal mode: nothing — drag is the only motion. */
-          if (!physics.dragging && ballGroup) {
+          if (ballGroup) {
             if (throwModeRef.current) {
-              // Apply gravity to velocity (world -Y is down on screen
-              // in the side view).
+              // Gravity ALWAYS accumulates into vel — even while the
+              // user is dragging — so the ball doesn't freeze mid-air
+              // when grabbed. On release, the ball keeps its momentum.
               physics.vel.y -= GRAVITY * dt;
 
-              // Integrate
-              physics.pos.x += physics.vel.x * dt;
-              physics.pos.y += physics.vel.y * dt;
+              // Position integration + collision: ONLY when not
+              // dragging. Drag owns position directly (set in onPMove)
+              // so it doesn't fight the physics writer. Walls + floor
+              // also only care about non-dragged motion.
+              if (!physics.dragging) {
+                physics.pos.x += physics.vel.x * dt;
+                physics.pos.y += physics.vel.y * dt;
 
-              // Side walls — mirror overshoot back inside.
-              if (physics.pos.x < -WALL_X) {
-                physics.pos.x = -WALL_X + (-WALL_X - physics.pos.x);
-                physics.vel.x = -physics.vel.x * RESTITUTION;
-              } else if (physics.pos.x > WALL_X) {
-                physics.pos.x = WALL_X - (physics.pos.x - WALL_X);
-                physics.vel.x = -physics.vel.x * RESTITUTION;
-              }
-              // Floor — softer bounce so the ball settles instead of
-              // perpetually pogo-sticking. Ceiling = symmetric wall.
-              if (physics.pos.y < WALL_FLOOR) {
-                physics.pos.y = WALL_FLOOR + (WALL_FLOOR - physics.pos.y);
-                physics.vel.y = -physics.vel.y * FLOOR_RESTITUTION;
-                // Friction on horizontal vel when bouncing off floor —
-                // mimics rolling friction so the ball stops sliding.
-                physics.vel.x *= 0.85;
-              } else if (physics.pos.y > WALL_TOP) {
-                physics.pos.y = WALL_TOP - (physics.pos.y - WALL_TOP);
-                physics.vel.y = -physics.vel.y * RESTITUTION;
-              }
+                // Side walls — mirror overshoot back inside.
+                if (physics.pos.x < -WALL_X) {
+                  physics.pos.x = -WALL_X + (-WALL_X - physics.pos.x);
+                  physics.vel.x = -physics.vel.x * RESTITUTION;
+                } else if (physics.pos.x > WALL_X) {
+                  physics.pos.x = WALL_X - (physics.pos.x - WALL_X);
+                  physics.vel.x = -physics.vel.x * RESTITUTION;
+                }
+                // Floor — softer bounce so the ball settles instead of
+                // perpetually pogo-sticking. Ceiling = symmetric wall.
+                if (physics.pos.y < WALL_FLOOR) {
+                  physics.pos.y = WALL_FLOOR + (WALL_FLOOR - physics.pos.y);
+                  physics.vel.y = -physics.vel.y * FLOOR_RESTITUTION;
+                  // Friction on horizontal vel when bouncing off floor —
+                  // mimics rolling friction so the ball stops sliding.
+                  physics.vel.x *= 0.85;
+                } else if (physics.pos.y > WALL_TOP) {
+                  physics.pos.y = WALL_TOP - (physics.pos.y - WALL_TOP);
+                  physics.vel.y = -physics.vel.y * RESTITUTION;
+                }
 
-              // Air drag — barely any so flicks travel fast.
-              const decay = Math.pow(FRICTION, dt * 60);
-              physics.vel.x *= decay;
-              physics.vel.y *= decay;
+                // Air drag — barely any so flicks travel fast.
+                const decay = Math.pow(FRICTION, dt * 60);
+                physics.vel.x *= decay;
+                physics.vel.y *= decay;
 
-              // Rest detection: if the ball is on the floor with
-              // negligible vertical bounce energy and tiny horizontal
-              // motion, zero out velocity entirely.
-              if (Math.abs(physics.pos.y - WALL_FLOOR) < 1 && Math.abs(physics.vel.y) < REST_SPEED * 2) {
-                physics.vel.y = 0;
-                physics.pos.y = WALL_FLOOR;
-                if (Math.abs(physics.vel.x) < REST_SPEED) physics.vel.x = 0;
+                // Rest detection: if the ball is on the floor with
+                // negligible vertical bounce energy and tiny horizontal
+                // motion, zero out velocity entirely (otherwise gravity
+                // keeps re-pulling and we'd jitter forever).
+                if (Math.abs(physics.pos.y - WALL_FLOOR) < 1 && Math.abs(physics.vel.y) < REST_SPEED * 2) {
+                  physics.vel.y = 0;
+                  physics.pos.y = WALL_FLOOR;
+                  if (Math.abs(physics.vel.x) < REST_SPEED) physics.vel.x = 0;
+                }
+              } else {
+                // While dragging: cap accumulated vel.y so a long hold
+                // doesn't build up infinite downward speed that yanks
+                // the ball off-screen the instant the user releases.
+                if (physics.vel.y < -MAX_SPEED) physics.vel.y = -MAX_SPEED;
               }
             }
 
@@ -501,8 +518,11 @@ export function GolfballViewer({ decalDataUrl, onError }) {
             posY: physics.pos.y,
           };
           physics.history = [{ t: performance.now(), x: e.clientX, y: e.clientY }];
-          // Clear velocity so the ball doesn't continue any prior throw
-          // motion mid-grab.
+          // Clear any existing throw velocity so the ball respects the
+          // user's grab gesture (otherwise you'd be fighting the ball's
+          // pre-existing inertia). In throw mode gravity is the only
+          // force we keep accumulating during the drag — see the
+          // physics step's vel.y -= GRAVITY*dt branch.
           physics.vel.x = 0;
           physics.vel.y = 0;
           physics.angVel.x = physics.angVel.y = physics.angVel.z = 0;
