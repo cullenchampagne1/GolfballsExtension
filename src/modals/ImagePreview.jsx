@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   FloatingPanel, ModalHeader, IconBtn, Btn, Callout, Spinner,
@@ -1582,38 +1583,49 @@ function SwapPopover({ pick, wrapRef, swapCount, onPreview, onCancel, onApply })
   const newSwatchRef = useRef(null);
   React.useEffect(() => { setNewColor(rgbToHex(pick.color)); }, [pick.color]);
 
-  // Popover position — initial anchor is near the click, draggable
-  // afterward via the header. Clamped inside the wrapper bounds.
-  const wrap = wrapRef.current;
-  const wrapperW = wrap?.clientWidth ?? 320;
-  const wrapperH = wrap?.clientHeight ?? 320;
+  // Popover position is FIXED viewport coords and rendered via a
+  // portal to document.body, so it can be dragged anywhere on screen
+  // — outside the image preview, outside the modal, anywhere.
+  // Initial anchor is the click point converted to viewport coords.
   const POPOVER_W = 226;
   const POPOVER_H = 140;
-  const [pos, setPos] = React.useState(() => ({
-    left: Math.max(6, Math.min(wrapperW - POPOVER_W - 6, pick.x + 12)),
-    top:  Math.max(6, Math.min(wrapperH - POPOVER_H - 6, pick.y + 12)),
-  }));
-  // Drag state for the header handle.
+  const [pos, setPos] = React.useState(() => {
+    const wrap = wrapRef.current;
+    const r = wrap?.getBoundingClientRect();
+    const cx = (r?.left ?? 0) + pick.x + 12;
+    const cy = (r?.top  ?? 0) + pick.y + 12;
+    return { left: cx, top: cy };
+  });
   const dragRef = useRef(null);
   const onDragStart = (e) => {
     if (e.button !== 0) return;
-    dragRef.current = {
+    e.preventDefault();
+    e.stopPropagation();
+    const start = {
       px: e.clientX, py: e.clientY,
       left: pos.left, top: pos.top,
     };
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
-  };
-  const onDragMove = (e) => {
-    if (!dragRef.current) return;
-    const dx = e.clientX - dragRef.current.px;
-    const dy = e.clientY - dragRef.current.py;
-    const nextLeft = Math.max(6, Math.min(wrapperW - POPOVER_W - 6, dragRef.current.left + dx));
-    const nextTop  = Math.max(6, Math.min(wrapperH - POPOVER_H - 6, dragRef.current.top  + dy));
-    setPos({ left: nextLeft, top: nextTop });
-  };
-  const onDragEnd = (e) => {
-    dragRef.current = null;
-    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+    dragRef.current = start;
+    const onMove = (ev) => {
+      const dx = ev.clientX - start.px;
+      const dy = ev.clientY - start.py;
+      // Clamp to viewport only — popover can leave the modal/preview.
+      const maxLeft = Math.max(0, window.innerWidth  - POPOVER_W);
+      const maxTop  = Math.max(0, window.innerHeight - POPOVER_H);
+      setPos({
+        left: Math.max(0, Math.min(maxLeft, start.left + dx)),
+        top:  Math.max(0, Math.min(maxTop,  start.top  + dy)),
+      });
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   };
 
   const pickedHex = rgbToHex(pick.color);
@@ -1630,17 +1642,17 @@ function SwapPopover({ pick, wrapRef, swapCount, onPreview, onCancel, onApply })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newColor, tolerance]);
 
-  return (
+  return createPortal(
     <motion.div
-      initial={{ opacity: 0, scale: 0.95, y: -4 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.14, ease: [0.4, 0, 0.2, 1] }}
       style={{
-        position: 'absolute',
+        position: 'fixed',
         left: pos.left, top: pos.top,
         width: POPOVER_W,
-        zIndex: 7,
+        zIndex: 2147483600,
         padding: 10,
         background: 'var(--gb-surface-modal)',
         border: '1px solid var(--gb-border-default)',
@@ -1654,16 +1666,15 @@ function SwapPopover({ pick, wrapRef, swapCount, onPreview, onCancel, onApply })
           on the row, but the buttons inside (color swatch button)
           override to pointer so they remain clickable. */}
       <div
+        data-viewer-ui="true"
         onPointerDown={onDragStart}
-        onPointerMove={onDragMove}
-        onPointerUp={onDragEnd}
-        onPointerCancel={onDragEnd}
         style={{
           display: 'flex', alignItems: 'center', gap: 6,
           fontSize: 9.5, fontWeight: 700, letterSpacing: 0.5,
           textTransform: 'uppercase', color: 'var(--gb-text-muted)',
-          cursor: dragRef.current ? 'grabbing' : 'grab',
+          cursor: 'grab',
           userSelect: 'none',
+          touchAction: 'none',
           marginBottom: -2,
         }}
       >
@@ -1731,7 +1742,8 @@ function SwapPopover({ pick, wrapRef, swapCount, onPreview, onCancel, onApply })
           style={{ flex: 1 }}
         >Apply</Btn>
       </div>
-    </motion.div>
+    </motion.div>,
+    document.body,
   );
 }
 
