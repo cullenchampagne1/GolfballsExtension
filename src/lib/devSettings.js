@@ -47,6 +47,60 @@ export const DEV_SETTINGS = [
     type:    'bool',
     default: false,
   },
+
+  /* ── 3D viewer camera defaults ────────────────────────────────
+     Six knobs (camera xyz + target xyz) defining where the camera
+     lands on initial 3D-view open. Defaults are the user's dialed-
+     in pole-down framing copied straight out of the debug HUD;
+     each is editable per-installation via the dev settings table. */
+  {
+    key:     'golfballViewer.cameraX',
+    label:   'Golfball viewer: camera X',
+    desc:    'Default camera X position (world units; ball radius = 100).',
+    type:    'number',
+    default: 0,
+    min:     -1000, max: 1000, step: 1,
+  },
+  {
+    key:     'golfballViewer.cameraY',
+    label:   'Golfball viewer: camera Y',
+    desc:    'Default camera Y position (world units; ball radius = 100).',
+    type:    'number',
+    default: 408.9,
+    min:     -1000, max: 1000, step: 1,
+  },
+  {
+    key:     'golfballViewer.cameraZ',
+    label:   'Golfball viewer: camera Z',
+    desc:    'Default camera Z position (world units; ball radius = 100).',
+    type:    'number',
+    default: 0,
+    min:     -1000, max: 1000, step: 1,
+  },
+  {
+    key:     'golfballViewer.targetX',
+    label:   'Golfball viewer: target X',
+    desc:    'OrbitControls target X (the point the camera orbits around).',
+    type:    'number',
+    default: 0,
+    min:     -500, max: 500, step: 1,
+  },
+  {
+    key:     'golfballViewer.targetY',
+    label:   'Golfball viewer: target Y',
+    desc:    'OrbitControls target Y (the point the camera orbits around).',
+    type:    'number',
+    default: 100,
+    min:     -500, max: 500, step: 1,
+  },
+  {
+    key:     'golfballViewer.targetZ',
+    label:   'Golfball viewer: target Z',
+    desc:    'OrbitControls target Z (the point the camera orbits around).',
+    type:    'number',
+    default: 0,
+    min:     -500, max: 500, step: 1,
+  },
   {
     key:     'marginCalc.minAllowedMargin',
     label:   'Margin calculator: minimum allowed margin',
