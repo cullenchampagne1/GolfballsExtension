@@ -750,8 +750,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // time before detonation. BLAST_R + IMPULSE_BASE control how
         // hard nearby bodies get punched; force falls off with 1/(d+1).
         const FUSE_MS = 2500;
-        const BLAST_R = 240;
-        const IMPULSE_BASE = 950;
+        const BLAST_R = 280;
+        const IMPULSE_BASE = 3800;        // bomb impulse @ contact (linear falloff to 0 at BLAST_R)
+        const BALL_IMPULSE_SHARE = 1.6;   // ball-mass=1 vs bomb-mass=0.6, multiply so a close blast actually flings it
         const PARTICLE_COUNT = 36;
         const PARTICLE_LIFE_MS = 950;
 
@@ -771,6 +772,12 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // Affected bodies: every bomb except the one detonating,
           // plus the ball (only when it's DYNAMIC — kinematic ball
           // is static while gravity is off, so don't poke it).
+          // Linear falloff: full force at contact, zero past BLAST_R.
+          // Quadratic-ish 1/(d+1) was too punishing near the bomb —
+          // the user reported "very little effect on the ball." Linear
+          // means a near-hit actually flings, and a far hit is a nudge.
+          const falloff = (d) => Math.max(0, 1 - d / BLAST_R) * IMPULSE_BASE;
+
           const targets = [];
           for (const other of bombs) {
             if (other === bomb) continue;
@@ -779,7 +786,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             const dz = other.body.position.z - origin.z;
             const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (d > BLAST_R) continue;
-            targets.push({ body: other.body, dx, dy, dz, d, falloff: IMPULSE_BASE / (d + 1) });
+            targets.push({ body: other.body, dx, dy, dz, d, falloff: falloff(d) });
           }
           {
             const dx = ballBody.position.x - origin.x;
@@ -787,15 +794,26 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             const dz = ballBody.position.z - origin.z;
             const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (d <= BLAST_R && ballBody.type === CANNON.Body.DYNAMIC) {
-              targets.push({ body: ballBody, dx, dy, dz, d, falloff: IMPULSE_BASE * 0.55 / (d + 1) });
+              // Multiply (not divide) by BALL_IMPULSE_SHARE — the
+              // ball is heavier and bigger, it needs MORE impulse to
+              // visibly move, not less.
+              targets.push({ body: ballBody, dx, dy, dz, d, falloff: falloff(d) * BALL_IMPULSE_SHARE });
             }
           }
+          // applyImpulse(impulse, relativePoint): relativePoint is
+          // an offset from the body center in WORLD orientation. Pass
+          // (0,0,0) so the impulse is centered — no spurious torque,
+          // pure outward linear push. (Previously we passed the body's
+          // world position, which cannon-es interprets as a massive
+          // offset from the body center; that fed back through the
+          // angular term and inverted the apparent linear direction.)
+          const zero = new CANNON.Vec3(0, 0, 0);
           for (const t of targets) {
             const inv = t.d > 1e-3 ? 1 / t.d : 0;
             const ix = t.dx * inv * t.falloff;
             const iy = t.dy * inv * t.falloff;
             const iz = t.dz * inv * t.falloff;
-            t.body.applyImpulse(new CANNON.Vec3(ix, iy, iz), t.body.position);
+            t.body.applyImpulse(new CANNON.Vec3(ix, iy, iz), zero);
             t.body.wakeUp();
           }
 
