@@ -193,9 +193,11 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   }
 
   // Wheel zoom — passive:false so we can preventDefault the page scroll.
+  // Skipped entirely in 3D mode so the GolfballViewer's own wheel
+  // handler (ball scale) receives events without competition.
   useEffect(() => {
     const c = wrapRef.current;
-    if (!c || status !== 'ready') return undefined;
+    if (!c || status !== 'ready' || view === '3d') return undefined;
     const onWheel = (e) => {
       e.preventDefault();
       const rect = c.getBoundingClientRect();
@@ -205,7 +207,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
     };
     c.addEventListener('wheel', onWheel, { passive: false });
     return () => c.removeEventListener('wheel', onWheel);
-  }, [status]);
+  }, [status, view]);
 
   // Drag-to-pan at ANY zoom level. clampPan() keeps the image's edges
   // from escaping the wrapper so the user can't drag the image fully
@@ -215,6 +217,11 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   const dragRef = useRef(null);
   const onPointerDown = (e) => {
     if (e.button !== 0 || status !== 'ready') return;
+    // 3D view owns its own input pipeline (drag = rotate or throw the
+    // ball, wheel = scale). If we capture pointer here in 3D mode the
+    // event never bubbles back to the canvas → the 3D handlers never
+    // get pointermove/pointerup → ball gets stuck under the cursor.
+    if (view === '3d') return;
     // Don't start a drag if the press originated on an interactive
     // overlay control (zoom buttons, 3D, align). The wrapper otherwise
     // captures the pointer via setPointerCapture below, which prevents
@@ -237,6 +244,9 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
     try { e.currentTarget.releasePointerCapture?.(e.pointerId); } catch {}
   };
   const onDoubleClick = (e) => {
+    // Same defense as onPointerDown — 3D view owns this gesture in
+    // its own canvas handlers (double-click = reset zoom, etc.).
+    if (view === '3d') return;
     // Ignore double-clicks that originated on overlay controls — two
     // rapid clicks on the zoom button were bubbling up and treating
     // the wrapper as the dblclick target, snapping zoom back to 1x.
