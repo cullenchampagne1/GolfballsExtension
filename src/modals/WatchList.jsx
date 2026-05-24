@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  FloatingPanel, ModalHeader, Btn, Card, Input, Tag, Dot, Dropdown, Segmented, I,
+  FloatingPanel, ModalHeader, Btn, Card, Input, Tag, Dot, Dropdown, Segmented,
+  DatePicker, formatHumanDate, I,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
+import { useDevSetting } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    WatchList — "My Watch List" modal. Visual structure mirrors
@@ -497,7 +499,7 @@ function TaskRow({ task, index, isResolving, onToggle, onEdit, onDelete }) {
                 <span style={{
                   fontSize: 10.5, fontWeight: 600,
                   color: dueColor,
-                }}>{task.due}</span>
+                }}>{formatHumanDate(task.due)}</span>
               </>
             )}
           </div>
@@ -627,10 +629,10 @@ function TaskEditor({ draft, onChange, onCommit, onCancel, isNew }) {
           </div>
           <div style={{ flex: 1.4, minWidth: 0 }}>
             <FieldLabel>Due</FieldLabel>
-            <Input
+            <DatePicker
               value={draft.due}
               onChange={(v) => set({ due: v })}
-              placeholder="Today 2pm · Tomorrow · Apr 2"
+              placeholder="No due date"
             />
           </div>
         </div>
@@ -768,11 +770,13 @@ function formatContext(ctx) {
    `due === 'Today 2pm' ? error : tertiary` rule but a little smarter. */
 function dueLabelColor(task) {
   if (task.done) return 'var(--gb-brand-label)';
-  const d = (task.due || '').toLowerCase();
-  if (!d) return 'var(--gb-text-tertiary)';
-  if (d.startsWith('today') && /\d/.test(d)) return 'var(--gb-error-fg)'; // "Today 2pm"
-  if (d === 'today') return 'var(--gb-warning-fg)';
-  if (d.includes('overdue')) return 'var(--gb-error-fg)';
+  if (!task.due) return 'var(--gb-text-tertiary)';
+  // ISO-aware: overdue = error, due within 24h = warning, else tertiary.
+  const d = new Date(task.due);
+  if (Number.isNaN(d.getTime())) return 'var(--gb-text-tertiary)';
+  const ms = d.getTime() - Date.now();
+  if (ms < 0)                     return 'var(--gb-error-fg)';     // overdue
+  if (ms < 24 * 3600 * 1000)      return 'var(--gb-warning-fg)';    // due today
   return 'var(--gb-text-tertiary)';
 }
 
