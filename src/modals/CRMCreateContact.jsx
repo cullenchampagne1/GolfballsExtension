@@ -395,14 +395,42 @@ export function CRMCreateContact({ onClosed, bindClose }) {
         {/* ── Contact Info ── */}
         <SectionHdr>Contact Info</SectionHdr>
         <Grid3>
-          <Field label="First name" required error={invalid.firstName ? 'Required' : null}>
-            <Input value={firstName} onChange={(v) => { setFirstName(v); setInvalid((i) => ({ ...i, firstName: false })); }} placeholder="First name" autoFocus />
+          {/* Required fields are outlined red while empty. Once the user
+              fills them in, the red drops; if they submit empty, the
+              error MESSAGE also surfaces beneath the input. */}
+          <Field
+            label="First name" required
+            error={invalid.firstName ? 'Required' : null}
+          >
+            <Input
+              value={firstName}
+              onChange={(v) => { setFirstName(v); setInvalid((i) => ({ ...i, firstName: false })); }}
+              placeholder="First name"
+              error={!firstName.trim()}
+              autoFocus
+            />
           </Field>
-          <Field label="Last name" required error={invalid.lastName ? 'Required' : null}>
-            <Input value={lastName} onChange={(v) => { setLastName(v); setInvalid((i) => ({ ...i, lastName: false })); }} placeholder="Last name" />
+          <Field
+            label="Last name" required
+            error={invalid.lastName ? 'Required' : null}
+          >
+            <Input
+              value={lastName}
+              onChange={(v) => { setLastName(v); setInvalid((i) => ({ ...i, lastName: false })); }}
+              placeholder="Last name"
+              error={!lastName.trim()}
+            />
           </Field>
-          <Field label="Email" required error={invalid.email ? 'Required' : null}>
-            <Input value={email} onChange={(v) => { setEmail(v); setInvalid((i) => ({ ...i, email: false })); }} placeholder="name@example.com" />
+          <Field
+            label="Email" required
+            error={invalid.email ? 'Required' : null}
+          >
+            <Input
+              value={email}
+              onChange={(v) => { setEmail(v); setInvalid((i) => ({ ...i, email: false })); }}
+              placeholder="name@example.com"
+              error={!email.trim()}
+            />
           </Field>
         </Grid3>
         <Grid3>
