@@ -1710,31 +1710,41 @@ const SCENE_ICONS = {
 };
 
 /* ── SceneDrawer ──────────────────────────────────────────────
-   Top-left frosted-glass dropdown. Picks an HDRI scene from the
-   SCENES registry. Visual chrome is owned by <LiquidDrawer> — a
-   tinted-blur capsule that expands from the toggle into a strip
-   of icon-only buttons; active item flips its icon to pure white
-   and shows a soft white inset highlight. Closing the drawer
-   clears the active scene so the user isn't left with a scene
-   armed once the chrome disappears. */
+   Top-left frosted-glass dropdown built on <LiquidDrawer>. The
+   active scene's pip slides between item slots; picking the same
+   scene again slides the pip back to the toggle slot and closes
+   the drawer (deselect + close as one motion). */
 function SceneDrawer({ active, onPick }) {
   const [open, setOpen] = React.useState(false);
-  const handleToggleDrawer = (next) => {
+  const handleOpenChange = (next) => {
     setOpen(next);
+    // Closing the drawer always returns the room — the pip animates
+    // back to the toggle as a result of activeKey going null.
     if (!next && active) onPick(null);
+  };
+  const handlePick = (key) => {
+    if (key === active) {
+      // Re-clicking the active scene: deselect AND close. The pip
+      // slides from item → toggle, the capsule then collapses.
+      onPick(null);
+      setOpen(false);
+    } else {
+      onPick(key);
+    }
   };
   const items = SCENES.map((s) => {
     const Icon = SCENE_ICONS[s.icon] || SceneIcon;
-    return { key: s.key, icon: <Icon size={14} />, active: active === s.key };
+    return { key: s.key, icon: <Icon size={14} /> };
   });
   return (
     <LiquidDrawer
       anchor="top-left"
       open={open}
-      onOpenChange={handleToggleDrawer}
+      onOpenChange={handleOpenChange}
       toggleIcon={<SceneIcon size={14} />}
       items={items}
-      onPick={(k) => onPick(k === active ? null : k)}
+      activeKey={active}
+      onPick={handlePick}
       ariaLabel="Scene"
     />
   );
