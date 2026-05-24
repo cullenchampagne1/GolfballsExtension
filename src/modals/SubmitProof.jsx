@@ -696,6 +696,31 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             <Input size="xs" value={notes} onChange={setNotes} placeholder="Write N/A if unneeded" />
           </Field>
 
+          {/* Attached image — only renders when one was carried in
+              from ImagePreview. Listed at the end of the form (after
+              the last question) instead of pinned as a separate strip.
+              No upload UI — image acquisition is delegated to
+              ImagePreview entirely. */}
+          <AnimatePresence initial={false}>
+            {imageData && (
+              <motion.div
+                key="attached-image"
+                initial={{ opacity: 0, height: 0, marginTop: -6 }}
+                animate={{ opacity: 1, height: 'auto', marginTop: 0 }}
+                exit={{ opacity: 0, height: 0, marginTop: -6 }}
+                transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+                style={{ overflow: 'hidden' }}
+              >
+                <Field label="Attached image">
+                  <SourceImageChip
+                    imageData={imageData}
+                    onRemove={() => setImageData(null)}
+                  />
+                </Field>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Results panel (shown after a successful submit) */}
           {stage === 'results' && results.length > 0 && (
             <ResultsPanel results={results} onClose={() => bindCloseRef.current?.()} />
@@ -722,17 +747,6 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           </div>
         )}
       </div>
-
-      {/* Source-image strip — bottom of the modal, ABOVE the footer.
-          Only renders when an image was carried in from ImagePreview.
-          User can clear it from here (but cannot upload — image
-          acquisition lives entirely in ImagePreview). */}
-      {imageData && (
-        <SourceImageChip
-          imageData={imageData}
-          onRemove={() => setImageData(null)}
-        />
-      )}
 
       {/* Footer */}
       <div style={{
@@ -778,34 +792,29 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
    Subcomponents
 ─────────────────────────────────────────────────────────────── */
 
-/* SourceImageChip — full-width strip pinned ABOVE the footer.
-   Thumbnail + short caption (dataUrl vs URL) + Remove. No upload UI:
-   image acquisition is delegated to ImagePreview. */
+/* SourceImageChip — in-form chip listed under the last question.
+   Thumbnail + caption + Remove. No upload UI — image acquisition
+   lives entirely in ImagePreview. */
 function SourceImageChip({ imageData, onRemove }) {
   const src = imageData.dataUrl || imageData.url;
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10,
-      padding: '8px 12px',
-      borderTop: '1px solid var(--gb-border-subtle)',
-      background: 'var(--gb-surface-1)',
-      flexShrink: 0,
+      padding: 6,
+      background: 'var(--gb-surface-2)',
+      border: '1px solid var(--gb-border-default)',
+      borderRadius: 'var(--gb-r-sm)',
     }}>
       <img
         src={src}
         alt=""
         style={{
-          width: 32, height: 32, objectFit: 'cover',
+          width: 28, height: 28, objectFit: 'cover',
           borderRadius: 'var(--gb-r-xs)',
           border: '1px solid var(--gb-border-subtle)',
           flexShrink: 0,
         }}
       />
-      <span style={{
-        fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
-        textTransform: 'uppercase',
-        color: 'var(--gb-text-muted)',
-      }}>Image</span>
       <span style={{
         flex: 1, fontSize: 10.5,
         color: 'var(--gb-text-tertiary)',
@@ -884,7 +893,7 @@ function ItemMultiSelect({ items, counts, error, onAdd, onRemove, onTouch }) {
                 >
                   <button
                     type="button"
-                    onClick={() => onAdd(it)}
+                    onMouseDown={(e) => { e.preventDefault(); onAdd(it); }}
                     style={{
                       flex: 1, textAlign: 'left',
                       background: 'transparent', border: 'none', padding: 0,
@@ -898,7 +907,7 @@ function ItemMultiSelect({ items, counts, error, onAdd, onRemove, onTouch }) {
                       <Tag tone="brand" size="xs" mono>{count}</Tag>
                       <button
                         type="button"
-                        onClick={() => onRemove(it)}
+                        onMouseDown={(e) => { e.preventDefault(); onRemove(it); }}
                         style={{
                           width: 18, height: 18, padding: 0,
                           background: 'transparent',
