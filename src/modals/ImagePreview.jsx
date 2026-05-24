@@ -119,6 +119,20 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   // on the image and the surrounding chrome dims so the user can
   // position the image inside the alignment ring.
   const [aligning, setAligning] = useState(false);
+  // Eyedropper / color-swap state.
+  //   eyedropping: true while the tool is armed (cursor over image becomes
+  //     crosshair; next click on the image samples a pixel).
+  //   pendingPick: { color, x, y } — the just-sampled color and where to
+  //     anchor the color-picker popover; user picks a replacement color,
+  //     hits Apply, and we run the swap on editedDataUrl.
+  //   editedDataUrl: the working image as a PNG dataURL after all swaps.
+  //     null when no swaps applied yet (use the original effectiveUrl).
+  //   colorSwaps: history of { from, to } for the Reset button.
+  const [eyedropping, setEyedropping] = useState(false);
+  const [pendingPick, setPendingPick] = useState(null);
+  const [editedDataUrl, setEditedDataUrl] = useState(null);
+  const [colorSwaps, setColorSwaps] = useState([]);
+  const COLOR_TOLERANCE = 30; // RGB distance in 0–255 space
   // Persisted decal — the cropped+masked PNG built from the most
   // recent Save Alignment. Null until the user saves once; cleared
   // when the source URL changes. Feeds the 3D viewer as a decal.
@@ -167,11 +181,94 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
     setImageSize(null);
     setDecalDataUrl(null);
     setView('2d');
+    setEditedDataUrl(null);
+    setColorSwaps([]);
+    setEyedropping(false);
+    setPendingPick(null);
     scaleRef.current = 1; txRef.current = 0; tyRef.current = 0;
     setZoomLevel(100);
     applyTransform(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [effectiveUrl]);
+
+  // The image source actually shown / downloaded / used as the decal.
+  // Once any color swap has been applied, editedDataUrl wins.
+  const displayUrl = editedDataUrl || effectiveUrl;
+
+  /* Sample a pixel color from the loaded <img>. Returns {r,g,b} from
+     the natural-pixel space (intrinsic source resolution), regardless
+     of zoom/pan. Coordinates are CSS pixels in the wrapRef space. */
+  function samplePixelAt(cssX, cssY) {
+    const wrap = wrapRef.current;
+    const img = wrap?.querySelector('img');
+    if (!wrap || !img || !imageSize) return null;
+    // Convert CSS point → image natural pixel coords using the same
+    // math as captureAlignment.
+    const wrapperW = wrap.clientWidth;
+    const wrapperH = wrap.clientHeight;
+    const natW = imageSize.w;
+    const natH = imageSize.h;
+    const fit = Math.min(0.85 * wrapperW / natW, 0.85 * wrapperH / natH);
+    const scale = scaleRef.current;
+    const tx = txRef.current;
+    const ty = tyRef.current;
+    const pxX = (cssX - wrapperW / 2 - tx) / scale / fit + natW / 2;
+    const pxY = (cssY - wrapperH / 2 - ty) / scale / fit + natH / 2;
+    if (pxX < 0 || pxX >= natW || pxY < 0 || pxY >= natH) return null;
+    // Draw the source image to a 1×1 canvas at the picked pixel.
+    const c = document.createElement('canvas');
+    c.width = natW; c.height = natH;
+    const ctx = c.getContext('2d');
+    try {
+      ctx.drawImage(img, 0, 0, natW, natH);
+      const d = ctx.getImageData(Math.floor(pxX), Math.floor(pxY), 1, 1).data;
+      return { r: d[0], g: d[1], b: d[2] };
+    } catch (e) {
+      // CORS-tainted canvas — same caveat as captureAlignment.
+      console.warn('[ImagePreview] eyedropper read failed:', e);
+      return null;
+    }
+  }
+
+  /* Run a color swap on the current displayUrl (working image) and
+     return a new dataURL with all matching pixels recolored. Pixels
+     within COLOR_TOLERANCE RGB distance of `from` get replaced with
+     `to`. Preserves alpha so transparent regions stay transparent. */
+  function applyColorSwap(fromRgb, toRgb) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth;
+        c.height = img.naturalHeight;
+        const ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        try {
+          const idata = ctx.getImageData(0, 0, c.width, c.height);
+          const d = idata.data;
+          const tol2 = COLOR_TOLERANCE * COLOR_TOLERANCE;
+          for (let i = 0; i < d.length; i += 4) {
+            if (d[i + 3] === 0) continue;
+            const dr = d[i]     - fromRgb.r;
+            const dg = d[i + 1] - fromRgb.g;
+            const db = d[i + 2] - fromRgb.b;
+            if (dr * dr + dg * dg + db * db <= tol2) {
+              d[i]     = toRgb.r;
+              d[i + 1] = toRgb.g;
+              d[i + 2] = toRgb.b;
+            }
+          }
+          ctx.putImageData(idata, 0, 0);
+          resolve(c.toDataURL('image/png'));
+        } catch (e) {
+          reject(e);
+        }
+      };
+      img.onerror = reject;
+      img.src = displayUrl;
+    });
+  }
 
   function applyTransform(animate) {
     const el = viewportRef.current;
@@ -238,18 +335,25 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   const dragRef = useRef(null);
   const onPointerDown = (e) => {
     if (e.button !== 0 || status !== 'ready') return;
-    // 3D view owns its own input pipeline (drag = rotate or throw the
-    // ball, wheel = scale). If we capture pointer here in 3D mode the
-    // event never bubbles back to the canvas → the 3D handlers never
-    // get pointermove/pointerup → ball gets stuck under the cursor.
     if (view === '3d') return;
-    // Don't start a drag if the press originated on an interactive
-    // overlay control (zoom buttons, 3D, align). The wrapper otherwise
-    // captures the pointer via setPointerCapture below, which prevents
-    // the underlying click from ever reaching those buttons. Same
-    // pattern Throwable uses to keep its own drag handle from eating
-    // close-button clicks.
     if (e.target?.closest?.('button, input, textarea, select, a')) return;
+    // Eyedropper mode — clicking the image samples a pixel and opens
+    // the color-picker popover instead of starting a drag.
+    if (eyedropping) {
+      const wrap = wrapRef.current;
+      if (!wrap) return;
+      const r = wrap.getBoundingClientRect();
+      const cssX = e.clientX - r.left;
+      const cssY = e.clientY - r.top;
+      const sample = samplePixelAt(cssX, cssY);
+      if (sample) {
+        setPendingPick({ color: sample, x: cssX, y: cssY });
+        setEyedropping(false);
+      } else {
+        toast?.warning?.('No pixel here — click on the image');
+      }
+      return;
+    }
     dragRef.current = { x: e.clientX, y: e.clientY, tx: txRef.current, ty: tyRef.current };
     try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch {}
   };
@@ -431,10 +535,23 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   };
   const onDownload = () => {
     const a = document.createElement('a');
-    a.href = effectiveUrl;
-    a.download = effectiveUrl.split('/').pop() || 'image';
-    a.target = '_blank';
-    a.rel = 'noopener';
+    a.href = displayUrl;
+    // If we're shipping the edited dataURL, give it a descriptive name.
+    if (editedDataUrl) {
+      const stem = (() => {
+        try {
+          const last = effectiveUrl.split('/').pop() || '';
+          const base = last.split('?')[0].split('#')[0];
+          const dot = base.lastIndexOf('.');
+          return dot > 0 ? base.slice(0, dot) : base;
+        } catch { return ''; }
+      })();
+      a.download = (stem || `image-${Date.now()}`) + '-edited.png';
+    } else {
+      a.download = effectiveUrl.split('/').pop() || 'image';
+      a.target = '_blank';
+      a.rel = 'noopener';
+    }
     document.body.appendChild(a); a.click(); a.remove();
   };
   const onSubmitProof = () => {
@@ -524,7 +641,9 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
             borderRadius: 'var(--gb-r-md)',
             overflow: 'hidden',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: status === 'ready' ? (dragRef.current ? 'grabbing' : 'grab') : 'default',
+            cursor: status === 'ready'
+              ? (eyedropping ? 'crosshair' : (dragRef.current ? 'grabbing' : 'grab'))
+              : 'default',
             userSelect: 'none',
           }}
         >
@@ -602,7 +721,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                 error so we don't paint a half-broken icon. */}
             {status !== 'error' && (
               <img
-                src={effectiveUrl}
+                src={displayUrl}
                 alt={url ? 'Extracted logo' : 'Sample preview'}
                 /* crossOrigin lets us read the loaded image back via
                    canvas getImageData (needed for the white-knockout
@@ -659,18 +778,77 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
               {imageSize && (
                 <div style={{
                   position: 'absolute', top: 8, left: 10,
-                  fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
-                  color: 'var(--gb-text-secondary)',
-                  background: GLASS_BG,
-                  backdropFilter: GLASS_FILTER,
-                  WebkitBackdropFilter: GLASS_FILTER,
-                  border: `1px solid ${GLASS_BORDER}`,
-                  borderRadius: GLASS_RADIUS,
-                  boxShadow: GLASS_SHADOW,
-                  padding: '2px 7px',
-                  pointerEvents: 'none',
-                  fontFamily: 'var(--gb-font-mono)',
-                }}>{imageSize.w}×{imageSize.h}</div>
+                  display: 'flex', alignItems: 'center', gap: 4,
+                }}>
+                  <div style={{
+                    fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
+                    color: 'var(--gb-text-secondary)',
+                    background: GLASS_BG,
+                    backdropFilter: GLASS_FILTER,
+                    WebkitBackdropFilter: GLASS_FILTER,
+                    border: `1px solid ${GLASS_BORDER}`,
+                    borderRadius: GLASS_RADIUS,
+                    boxShadow: GLASS_SHADOW,
+                    padding: '2px 7px',
+                    pointerEvents: 'none',
+                    fontFamily: 'var(--gb-font-mono)',
+                  }}>{imageSize.w}×{imageSize.h}</div>
+                  {/* Eyedropper — sample a pixel color, then a picker
+                      popover lets you swap all matching pixels. Stays
+                      next to the size chip so the top-left cluster
+                      reads as one "info / pick" group. */}
+                  <GlassIconBtn
+                    icon={<DropperIcon />}
+                    active={eyedropping}
+                    onClick={() => {
+                      if (eyedropping) {
+                        setEyedropping(false);
+                      } else {
+                        setEyedropping(true);
+                        setPendingPick(null);
+                      }
+                    }}
+                  />
+                  {/* Reset — only visible once at least one swap has
+                      been applied. Reverts to the original image. */}
+                  {colorSwaps.length > 0 && (
+                    <GlassIconBtn
+                      icon={<ResetIcon />}
+                      onClick={() => {
+                        setEditedDataUrl(null);
+                        setColorSwaps([]);
+                        setPendingPick(null);
+                        setEyedropping(false);
+                        toast?.info?.('Color swaps reset');
+                      }}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Color picker popover — appears at the pixel the user
+                  just sampled. Shows the picked swatch, a native color
+                  input for the replacement, Apply + Cancel. */}
+              {pendingPick && (
+                <ColorPickerPopover
+                  pick={pendingPick}
+                  wrapRef={wrapRef}
+                  swapCount={colorSwaps.length}
+                  onCancel={() => setPendingPick(null)}
+                  onApply={async (newColor) => {
+                    try {
+                      const url = await applyColorSwap(pendingPick.color, newColor);
+                      setEditedDataUrl(url);
+                      setColorSwaps((prev) => [...prev, { from: pendingPick.color, to: newColor }]);
+                      setPendingPick(null);
+                      toast?.success?.('Color swapped');
+                    } catch (e) {
+                      console.warn('[ImagePreview] color swap failed:', e);
+                      toast?.error?.('Color swap failed (CORS?)');
+                      setPendingPick(null);
+                    }
+                  }}
+                />
               )}
 
               {/* Alignment overlay — toggled by the Align button. A
@@ -1203,6 +1381,132 @@ const ConfettiIcon = (p) => (
     <rect x="14" y="13" width="3" height="5" rx="1" transform="rotate(-15 14 13)" />
   </svg>
 );
+
+/* Eyedropper glyph — pipette body + small drop tip. */
+const DropperIcon = (p) => (
+  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14.5 4.5l5 5" />
+    <path d="M17 2l5 5-3 3-5-5z" />
+    <path d="M14 6l-9 9v4h4l9-9" />
+  </svg>
+);
+
+/* Curved reset arrow. */
+const ResetIcon = (p) => (
+  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 12a9 9 0 1 0 3-6.7" />
+    <polyline points="3 4 3 9 8 9" />
+  </svg>
+);
+
+/* ── ColorPickerPopover ────────────────────────────────────────
+   Tooltip-style popover anchored at the user's last sample point.
+   Shows the sampled color, a native color input to pick the
+   replacement, and Apply / Cancel. Clamps inside the wrapRef
+   bounds so it never spills past the preview surface. */
+function ColorPickerPopover({ pick, wrapRef, swapCount, onCancel, onApply }) {
+  const [newColor, setNewColor] = React.useState(rgbToHex(pick.color));
+  // Re-initialize when a new pick comes in.
+  React.useEffect(() => { setNewColor(rgbToHex(pick.color)); }, [pick.color]);
+
+  // Position — anchor near the click, but clamp so the popover stays
+  // inside the wrapper.
+  const wrap = wrapRef.current;
+  const wrapperW = wrap?.clientWidth ?? 320;
+  const wrapperH = wrap?.clientHeight ?? 320;
+  const POPOVER_W = 200;
+  const POPOVER_H = 96;
+  const left = Math.max(6, Math.min(wrapperW - POPOVER_W - 6, pick.x + 12));
+  const top  = Math.max(6, Math.min(wrapperH - POPOVER_H - 6, pick.y + 12));
+
+  const pickedHex = rgbToHex(pick.color);
+  const toRgb = hexToRgb(newColor);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95, y: -4 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.14, ease: [0.4, 0, 0.2, 1] }}
+      style={{
+        position: 'absolute',
+        left, top,
+        width: POPOVER_W,
+        zIndex: 7,
+        padding: 10,
+        background: 'color-mix(in srgb, var(--gb-surface-canvas) 78%, transparent)',
+        backdropFilter: 'blur(20px) saturate(160%)',
+        WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+        border: '1px solid color-mix(in srgb, var(--gb-text-primary) 14%, transparent)',
+        borderRadius: 10,
+        boxShadow: '0 8px 24px -8px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.06) inset',
+        display: 'flex', flexDirection: 'column', gap: 8,
+        fontFamily: 'var(--gb-font-sans)',
+      }}
+    >
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        fontSize: 9.5, fontWeight: 700, letterSpacing: 0.5,
+        textTransform: 'uppercase', color: 'var(--gb-text-muted)',
+      }}>
+        <span>Swap color {swapCount > 0 ? `· #${swapCount + 1}` : ''}</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div title="Picked color" style={{
+          width: 28, height: 28, borderRadius: 6, background: pickedHex,
+          border: '1px solid rgba(255,255,255,0.18)',
+          boxShadow: '0 0 0 1px rgba(0,0,0,0.3)',
+        }} />
+        <span style={{ color: 'var(--gb-text-tertiary)', fontSize: 12 }}>→</span>
+        <label style={{
+          width: 28, height: 28, borderRadius: 6,
+          background: newColor,
+          border: '1px solid rgba(255,255,255,0.18)',
+          boxShadow: '0 0 0 1px rgba(0,0,0,0.3)',
+          cursor: 'pointer', position: 'relative', overflow: 'hidden',
+        }}>
+          <input
+            type="color"
+            value={newColor}
+            onChange={(e) => setNewColor(e.target.value)}
+            style={{
+              position: 'absolute', inset: 0, width: '100%', height: '100%',
+              opacity: 0, cursor: 'pointer', border: 'none', padding: 0,
+            }}
+          />
+        </label>
+        <span style={{
+          flex: 1,
+          fontFamily: 'var(--gb-font-mono)', fontSize: 10,
+          color: 'var(--gb-text-secondary)',
+          letterSpacing: 0.3,
+        }}>{newColor.toUpperCase()}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <Btn size="sm" variant="secondary" onClick={onCancel} style={{ flex: 1 }}>Cancel</Btn>
+        <Btn
+          size="sm"
+          variant="tinted"
+          status="brand"
+          onClick={() => onApply(toRgb)}
+          style={{ flex: 1 }}
+        >Apply</Btn>
+      </div>
+    </motion.div>
+  );
+}
+
+function rgbToHex({ r, g, b }) {
+  const h = (v) => v.toString(16).padStart(2, '0');
+  return `#${h(r)}${h(g)}${h(b)}`;
+}
+function hexToRgb(hex) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (!m) return { r: 0, g: 0, b: 0 };
+  return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
+}
 
 /* ── ViewerToolbox ──────────────────────────────────────────────
    Bottom-right frosted-glass dropup built on <LiquidDrawer>.
