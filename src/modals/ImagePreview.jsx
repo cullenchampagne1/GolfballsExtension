@@ -148,6 +148,15 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   const scaleRef = useRef(1);
   const txRef = useRef(0);
   const tyRef = useRef(0);
+  // Rotation in degrees — only meaningful while aligning. Lives as
+  // state so the slider re-renders; a ref mirrors it so applyTransform
+  // can read the latest value without a stale closure.
+  const [rotation, setRotation] = useState(0);
+  const rotationRef = useRef(0);
+  useEffect(() => { rotationRef.current = rotation; applyTransform(false); }, [rotation]);
+  // Snap rotation back to 0 whenever the user leaves alignment mode,
+  // so the 2D preview is always upright outside the align workflow.
+  useEffect(() => { if (!aligning && rotation !== 0) setRotation(0); }, [aligning]); // eslint-disable-line react-hooks/exhaustive-deps
   const [zoomLevel, setZoomLevel] = useState(100);
 
   const wrapRef = useRef(null);      // the 340px preview surface (drag + wheel target)
@@ -186,6 +195,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
     setEyedropping(false);
     setPendingPick(null);
     scaleRef.current = 1; txRef.current = 0; tyRef.current = 0;
+    rotationRef.current = 0; setRotation(0);
     setZoomLevel(100);
     applyTransform(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -274,7 +284,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
     const el = viewportRef.current;
     if (!el) return;
     el.style.transition = animate ? 'transform .18s cubic-bezier(.25,.8,.25,1)' : 'none';
-    el.style.transform  = `translate(${txRef.current}px, ${tyRef.current}px) scale(${scaleRef.current})`;
+    el.style.transform  = `translate(${txRef.current}px, ${tyRef.current}px) rotate(${rotationRef.current}deg) scale(${scaleRef.current})`;
   }
   function clampPan() {
     const c = wrapRef.current;
@@ -336,7 +346,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
   const onPointerDown = (e) => {
     if (e.button !== 0 || status !== 'ready') return;
     if (view === '3d') return;
-    if (e.target?.closest?.('button, input, textarea, select, a')) return;
+    if (e.target?.closest?.('button, input, textarea, select, a, [data-viewer-ui="true"]')) return;
     // Eyedropper mode — clicking the image samples a pixel and opens
     // the color-picker popover instead of starting a drag.
     if (eyedropping) {
@@ -375,7 +385,7 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
     // Ignore double-clicks that originated on overlay controls — two
     // rapid clicks on the zoom button were bubbling up and treating
     // the wrapper as the dblclick target, snapping zoom back to 1x.
-    if (e.target?.closest?.('button, input, textarea, select, a')) return;
+    if (e.target?.closest?.('button, input, textarea, select, a, [data-viewer-ui="true"]')) return;
     // Toggle 1x ↔ 2x for a quick zoom-in shortcut.
     if (scaleRef.current !== 1 || txRef.current !== 0 || tyRef.current !== 0) {
       resetZoom();
@@ -413,53 +423,51 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
     const wrapperW = wrap.clientWidth;
     const natW = imageSize.w;
     const natH = imageSize.h;
-    // Match the ring's actual rendered size in AlignmentOverlay:
-    //   height: 70% of wrapper, aspect-ratio 1, max 240
+    // Ring matches AlignmentOverlay (height 70% of wrapper, aspect 1, max 240).
     const ringDiameterWrapperPx = Math.min(wrapperH * 0.70, 240);
     const ringRadiusWrapperPx = ringDiameterWrapperPx / 2;
 
-    // fit = the px-per-natural-pixel ratio at scale=1
     const fit = Math.min(0.85 * wrapperW / natW, 0.85 * wrapperH / natH);
     const scale = scaleRef.current;
     const tx = txRef.current;
     const ty = tyRef.current;
+    const rotRad = (rotationRef.current * Math.PI) / 180;
 
-    // Image-space center of the ring (wrapper center, inverse-transformed)
-    const cx = (-tx) / scale / fit + natW / 2;
-    const cy = (-ty) / scale / fit + natH / 2;
-    const r  = ringRadiusWrapperPx / scale / fit;
+    const sourceImg = wrap.querySelector('img');
+    if (!sourceImg) return null;
 
-    // Crop rect in image natural pixels (square bounding the ring)
-    const cropX = cx - r;
-    const cropY = cy - r;
-    const cropSize = r * 2;
-
-    // Render the source image to an offscreen canvas, then extract the
-    // crop with a circular alpha mask. Decal output dimension capped at
-    // 1024 to keep texture upload + projection fast.
-    const OUT_SIZE = Math.min(1024, Math.max(256, Math.ceil(cropSize)));
+    // We re-create the viewport's transform pipeline on a canvas the
+    // size of the ring (circle) and crop. Output capped at 1024.
+    const OUT_SIZE = Math.min(1024, Math.max(256, Math.ceil(ringDiameterWrapperPx * 4)));
     const canvas = document.createElement('canvas');
     canvas.width = OUT_SIZE;
     canvas.height = OUT_SIZE;
     const ctx = canvas.getContext('2d');
 
-    // We draw the source image scaled+translated so the crop region
-    // lands at (0,0) → (OUT_SIZE, OUT_SIZE) of the canvas. Use the
-    // already-loaded <img> element rather than a fresh fetch.
-    const sourceImg = wrap.querySelector('img');
-    if (!sourceImg) return null;
+    // px-per-wrapper-pixel scaling for the output canvas.
+    const k = OUT_SIZE / ringDiameterWrapperPx;
 
-    // Circular clip so the decal alpha matches the ring shape.
+    // Origin at canvas center = wrapper center. The viewport stack is:
+    //   translate(tx, ty) · rotate(rot) · scale(scale)
+    // applied around the wrapper center. We mirror it here.
     ctx.save();
     ctx.beginPath();
     ctx.arc(OUT_SIZE / 2, OUT_SIZE / 2, OUT_SIZE / 2, 0, Math.PI * 2);
     ctx.clip();
-    // drawImage(src, sx, sy, sw, sh, dx, dy, dw, dh) — extracts a
-    // sub-rect of the source and stretches it into the canvas.
+    ctx.translate(OUT_SIZE / 2, OUT_SIZE / 2);
+    ctx.scale(k, k);              // wrapper-pixel → canvas-pixel
+    ctx.translate(tx, ty);
+    ctx.rotate(rotRad);
+    ctx.scale(scale, scale);
+    // The image is rendered (without our transform) at its natural-pixel
+    // size, scaled to fit. fit = wrapper-pixels-per-natural-pixel at scale=1.
+    // So in the un-rotated viewport space the image occupies a rect
+    // centered on the origin of size (natW*fit, natH*fit). We draw the
+    // source image into that rect.
     ctx.drawImage(
       sourceImg,
-      cropX, cropY, cropSize, cropSize,
-      0, 0, OUT_SIZE, OUT_SIZE,
+      -(natW * fit) / 2, -(natH * fit) / 2,
+      natW * fit, natH * fit,
     );
     ctx.restore();
 
@@ -863,6 +871,21 @@ export function ImagePreview({ url, itemLink, onClosed, bindClose }) {
                 {aligning && <AlignmentOverlay />}
               </AnimatePresence>
 
+              {/* Rotation slider — appears on the right edge while
+                  aligning. Lets the user spin the image inside the ring
+                  without using up cursor focus for a drag. Vertical
+                  thin track, frosted-glass to match the rest of the
+                  overlay UI. data-viewer-ui so the wrapper's drag
+                  handler ignores press events on it. */}
+              <AnimatePresence>
+                {aligning && (
+                  <RotationSlider
+                    value={rotation}
+                    onChange={setRotation}
+                  />
+                )}
+              </AnimatePresence>
+
               {/* Zoom readout + cluster are only meaningful in 2D
                   mode. In 3D the viewer owns wheel scaling and the
                   toolbox (bottom-right) takes over the slot. */}
@@ -1191,6 +1214,112 @@ function AlignmentOverlay() {
       {/* Submit / Cancel live OUTSIDE the overlay now — in a dashed
           action strip slid in above the Copy/Download row when align
           mode is active. See AlignmentActionStrip below. */}
+    </motion.div>
+  );
+}
+
+/* ── RotationSlider ─────────────────────────────────────────────
+   Vertical, minimal rotation slider for alignment mode. Lives on
+   the right edge of the preview surface. Pointer-drag updates the
+   value continuously; the track is a thin frosted pill, the thumb
+   a small white-filled dot. Range -180° → +180°; double-click on
+   the track resets to 0°. */
+function RotationSlider({ value, onChange }) {
+  const trackRef = useRef(null);
+  const draggingRef = useRef(false);
+
+  const valueFromY = (clientY) => {
+    const el = trackRef.current;
+    if (!el) return value;
+    const r = el.getBoundingClientRect();
+    const ratio = 1 - Math.max(0, Math.min(1, (clientY - r.top) / r.height));
+    return Math.round(ratio * 360 - 180);
+  };
+
+  const onPointerDown = (e) => {
+    e.stopPropagation();
+    draggingRef.current = true;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    onChange(valueFromY(e.clientY));
+  };
+  const onPointerMove = (e) => {
+    if (!draggingRef.current) return;
+    onChange(valueFromY(e.clientY));
+  };
+  const onPointerUp = (e) => {
+    draggingRef.current = false;
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+  };
+  const onDoubleClickReset = (e) => { e.stopPropagation(); onChange(0); };
+
+  // Thumb Y position: value -180 → bottom, +180 → top.
+  const pct = (180 - value) / 360;  // 0 at top, 1 at bottom
+  const TRACK_H = 130;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 6 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 6 }}
+      transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
+      data-viewer-ui="true"
+      style={{
+        position: 'absolute',
+        top: '50%', right: 10,
+        transform: 'translateY(-50%)',
+        zIndex: 6,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+        padding: '8px 6px',
+        background: GLASS_BG,
+        backdropFilter: GLASS_FILTER,
+        WebkitBackdropFilter: GLASS_FILTER,
+        border: `1px solid ${GLASS_BORDER}`,
+        borderRadius: GLASS_RADIUS,
+        boxShadow: GLASS_SHADOW,
+        pointerEvents: 'auto',
+        userSelect: 'none',
+      }}
+    >
+      <span style={{
+        fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
+        color: 'var(--gb-text-secondary)',
+        fontFamily: 'var(--gb-font-mono)',
+      }}>{value > 0 ? '+' : ''}{value}°</span>
+      <div
+        ref={trackRef}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onDoubleClick={onDoubleClickReset}
+        style={{
+          position: 'relative',
+          width: 4, height: TRACK_H,
+          borderRadius: 2,
+          background: 'color-mix(in srgb, var(--gb-text-primary) 18%, transparent)',
+          cursor: 'ns-resize',
+        }}
+      >
+        {/* Center tick — visual reference for the 0° middle. */}
+        <div style={{
+          position: 'absolute', left: -3, right: -3,
+          top: '50%', height: 1,
+          background: 'color-mix(in srgb, var(--gb-text-primary) 30%, transparent)',
+          transform: 'translateY(-0.5px)',
+          pointerEvents: 'none',
+        }} />
+        {/* Thumb */}
+        <div style={{
+          position: 'absolute',
+          left: '50%', top: `${pct * 100}%`,
+          width: 12, height: 12, borderRadius: '50%',
+          background: '#ffffff',
+          border: '1px solid color-mix(in srgb, var(--gb-text-primary) 25%, transparent)',
+          boxShadow: '0 0 0 1px rgba(255,255,255,0.22) inset, 0 2px 6px -1px rgba(0,0,0,0.4)',
+          transform: 'translate(-50%, -50%)',
+          pointerEvents: 'none',
+        }} />
+      </div>
     </motion.div>
   );
 }
