@@ -196,11 +196,13 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         // the camera up-and-forward so the print sits front-and-center
         // on first open instead of needing the user to orbit up. The
         // user can still drag to rotate freely from there.
+        // Print area is the top pole at world +Y. To see it head-on
+        // the camera needs to sit ABOVE the pole on the same +Y side
+        // of the ball, looking down. A pure top-down view reads as
+        // flat; tilt the camera slightly forward (+Z) so the ball's
+        // curvature is visible and the print sits front-and-center.
         const printPos = new THREE.Vector3(0, targetRadius, 0);
-        // Frame the print area with a bit of headroom — too close and
-        // the ball fills the frame; this gives the decal room to read
-        // without forcing the user to immediately scroll-zoom out.
-        camera.position.set(0, targetRadius * 1.8, targetRadius * 3.4);
+        camera.position.set(0, targetRadius * 3.0, targetRadius * 1.8);
         camera.lookAt(printPos);
 
         controls = new OrbitControls(camera, renderer.domElement);
@@ -211,7 +213,15 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         controls.minDistance = 160;
         controls.maxDistance = 600;
         controls.rotateSpeed = 0.7;
+        // update() ONCE here syncs internal spherical coords with the
+        // camera position we just set. Without this, the first frame
+        // can paint the camera at a stale orientation (Orbit re-derives
+        // its spherical from the camera vs target on first call); the
+        // user has to drag once before things look right.
         controls.update();
+        // Snapshot this as the default state so future reset()s land
+        // back here (also useful for any "reset view" UI we add later).
+        controls.saveState();
 
         // ── Render loop ────────────────────────────────────────
         const render = () => {
