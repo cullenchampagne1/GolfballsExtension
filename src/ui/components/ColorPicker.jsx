@@ -84,21 +84,31 @@ export function ColorPickerPopover({
   // Portal-to-body is required because the popover otherwise gets clipped
   // by sibling cards in the same stacking context (visible in the settings
   // page where multiple ColorSpotlights stack vertically).
+  // Popover height varies with whether `swatches` is passed; estimate
+  // a generous max so the flip decision below has something to compare
+  // against viewport space. ~210 covers SV square + hue + hex row;
+  // +30 per swatch row (≤10 per row).
   const [pos, setPos] = useState(null);
   useEffect(() => {
     function update() {
       const el = anchorRef?.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
+      const estH = 210 + (swatches?.length ? 30 : 0);
+      // Flip above the anchor when there isn't room below. Keeps the
+      // popover fully on-screen for triggers near the bottom edge
+      // (the GolfballViewer light chip lives at canvas bottom-left).
+      const roomBelow = window.innerHeight - r.bottom - offset;
+      const flipUp = roomBelow < estH && r.top > estH + offset;
       setPos({
-        top:  r.bottom + offset,
+        top:  flipUp ? r.top - offset - estH : r.bottom + offset,
         left: align === 'right' ? r.right - POPOVER_W : r.left,
       });
     }
     update();
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
-  }, [anchorRef, align, offset]);
+  }, [anchorRef, align, offset, swatches]);
 
   // Close on outside scroll (any scrollable in the editor — capture phase
   // catches nested ones). Scrolls inside the popover itself are ignored

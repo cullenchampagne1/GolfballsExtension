@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useDevSetting, useDevSettings } from '../lib/devSettings.js';
 import { LiquidDrawer } from '../ui/components/LiquidDrawer.jsx';
+import { ColorPickerPopover } from '../ui/components/ColorPicker.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    GolfballViewer — Three.js scene that renders a golf ball with
@@ -125,6 +126,16 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   // changes and rebakes wall textures. Held on a ref so the
   // effect's teardown can disconnect it across re-runs.
   const themeObserverRef = useRef(null);
+  // Manual override for the key/rim light tint. null = follow the
+  // current theme's auto-balanced default; a hex string forces both
+  // lights to that color so the user can color the ball at will. The
+  // applyLightingRef setter is wired up by the WebGL effect once the
+  // lights exist; the React state drives the picker UI.
+  const [lightColor, setLightColor] = useState(null);
+  const lightColorRef = useRef(null);
+  useEffect(() => { lightColorRef.current = lightColor; }, [lightColor]);
+  const applyLightingRef = useRef(null);
+  useEffect(() => { applyLightingRef.current?.(); }, [lightColor]);
   React.useImperativeHandle(ref, () => ({
     snapshot: (...args) => snapshotRef.current?.(...args),
     dropBomb: (...args) => dropBombRef.current?.(...args),
@@ -297,7 +308,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         container.appendChild(renderer.domElement);
 
         // ── Lighting ───────────────────────────────────────────
-        // Three-light rig sized for the ball:
+        // Four-light rig sized for the ball:
         //   • hemisphere — sky/ground fill so shadowed dimples never
         //     go pitch black; warm sky tint + cool ground tint reads
         //     more "real" than a flat grey
@@ -307,7 +318,15 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         //     the dark side of the ball still shows form
         //   • rim — small specular accent from behind to separate
         //     the ball silhouette from the back wall
-        scene.add(new THREE.HemisphereLight(0xfff4e5, 0x2a3340, 0.65));
+        //
+        // Sky/ground/key/fill/rim values flip with the document theme
+        // so the ball reads well on every surface (dark variants get
+        // a cool moody rig; light/cream get a warmer, slightly punchier
+        // one so the ball doesn't gray out against bright canvas).
+        // Applied via applyLighting() so theme observer + manual
+        // override (lightColorRef) can both drive the same path.
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0xffffff, 1);
+        scene.add(hemiLight);
         const keyLight = new THREE.DirectionalLight(0xffffff, 1.6);
         keyLight.position.set(180, 240, 220);
         keyLight.castShadow = true;
@@ -330,6 +349,42 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         const rim = new THREE.DirectionalLight(0xffffff, 0.6);
         rim.position.set(0, 80, -300);
         scene.add(rim);
+
+        /* Per-theme rig presets — sky/ground hemisphere tints + key
+           and rim default colors + per-light intensities. Light
+           variants need a warmer key (so the ball doesn't read as a
+           gray disc against bright canvas) and a brighter hemisphere
+           to fill the dimple shadows; dark variants stay cool. */
+        const LIGHT_PRESETS = {
+          dark:     { sky: 0xfff4e5, ground: 0x2a3340, hemi: 0.65, key: 0xffffff, keyI: 1.60, fillI: 0.55, rim: 0xffffff, rimI: 0.60 },
+          midnight: { sky: 0xeaf0ff, ground: 0x1a1f2e, hemi: 0.55, key: 0xeef2ff, keyI: 1.50, fillI: 0.60, rim: 0xc8d4ff, rimI: 0.55 },
+          light:    { sky: 0xffffff, ground: 0xe8eaf0, hemi: 1.05, key: 0xfff2dc, keyI: 1.85, fillI: 0.45, rim: 0xfff0d0, rimI: 0.75 },
+          cream:    { sky: 0xfff8ed, ground: 0xf0e6d4, hemi: 1.00, key: 0xffe9c2, keyI: 1.80, fillI: 0.40, rim: 0xffe2b0, rimI: 0.80 },
+        };
+
+        /* Apply the active theme preset, optionally overridden by a
+           manual key/rim color (lightColorRef). Called at init, on
+           every theme mutation (via the existing observer), and from
+           the React effect that watches lightColor state. Idempotent
+           — safe to call repeatedly. HDRI scene mode zeroes the
+           intensities elsewhere; we only write colors/intensities for
+           room mode here so the scene path keeps full control. */
+        const applyLighting = () => {
+          if (sceneKeyRef.current) return; // HDRI scene owns lighting
+          const variant = document.documentElement.dataset.theme || 'dark';
+          const p = LIGHT_PRESETS[variant] || LIGHT_PRESETS.dark;
+          hemiLight.color.setHex(p.sky);
+          hemiLight.groundColor.setHex(p.ground);
+          hemiLight.intensity = p.hemi;
+          const override = lightColorRef.current;
+          keyLight.color.set(override || p.key);
+          keyLight.intensity = p.keyI;
+          rim.color.set(override || p.rim);
+          rim.intensity = p.rimI;
+          fill.intensity = p.fillI;
+        };
+        applyLighting();
+        applyLightingRef.current = applyLighting;
 
         // ── Room walls ─────────────────────────────────────────
         // 5 inward-facing planes form the room; the 6th (front) is
@@ -596,7 +651,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                  the variant attribute and per-token style props).
              Stashed on themeObserverRef so the effect's teardown can
              disconnect it. */
-          const themeObserver = new MutationObserver(() => rebakeWalls());
+          const themeObserver = new MutationObserver(() => { rebakeWalls(); applyLighting(); });
           themeObserver.observe(document.documentElement, {
             attributes: true,
             attributeFilter: ['data-theme', 'style'],
@@ -667,10 +722,12 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           } else {
             scene.background = null;
             scene.environment = null;
-            keyLight.intensity = 1.6;
             keyLight.castShadow = true;
-            fill.intensity = 0.55;
-            rim.intensity = 0.6;
+            // Re-apply the active theme preset + any manual override.
+            // applyLighting() early-outs when sceneKey is set, so we
+            // intentionally call it AFTER applySceneMode finishes (the
+            // caller flips sceneKeyRef before invoking us).
+            applyLighting();
           }
         };
 
@@ -2431,6 +2488,20 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         />
       )}
 
+      {/* Light-color chip — bottom-left swatch that opens the design
+          system color picker for the key + rim lights. Hidden in HDRI
+          mode (the environment map owns all lighting; tinting room
+          lights would do nothing visible). The chip's swatch shows the
+          active override or a neutral white when on theme default;
+          shift-click resets back to the theme. */}
+      {status === 'ready' && !sceneKey && (
+        <LightColorChip
+          color={lightColor}
+          onChange={setLightColor}
+          onReset={() => setLightColor(null)}
+        />
+      )}
+
       {/* Debug HUD — top-left overlay showing the camera's current
           position, target, distance, and orbit angles. Lets you orbit
           the ball into a desired default framing and copy the values
@@ -2628,6 +2699,69 @@ function SceneDrawer({ active, onPick }) {
       onPick={handlePick}
       ariaLabel="Scene"
     />
+  );
+}
+
+/* ── LightColorChip ──────────────────────────────────────────
+   Small frosted-glass swatch at the canvas bottom-left. Click
+   opens the design-system ColorPickerPopover; drag-through
+   updates live so the user sees the ball re-light in real time.
+   When the color is null (= follow theme default), the swatch
+   shows a subtle gradient hint that no override is active. */
+const LCC_PALETTE = [
+  '#ffffff', '#fff2dc', '#ffe2b0', '#ffd6a3',
+  '#c8d4ff', '#a8c8ff', '#b4f0c8', '#f8b4d8',
+  '#ff8a8a', '#ffcc66',
+];
+function LightColorChip({ color, onChange, onReset }) {
+  const [open, setOpen] = React.useState(false);
+  const anchorRef = React.useRef(null);
+  const active = !!color;
+  return (
+    <div
+      data-viewer-ui="true"
+      style={{
+        position: 'absolute', bottom: 8, left: 8, zIndex: 6,
+        display: 'flex', alignItems: 'center', gap: 4,
+      }}
+    >
+      <button
+        ref={anchorRef}
+        type="button"
+        title={active ? 'Light color (shift-click to reset)' : 'Tint the light'}
+        onClick={(e) => {
+          if (e.shiftKey && active) { onReset(); return; }
+          setOpen((v) => !v);
+        }}
+        style={{
+          width: 24, height: 24, padding: 0,
+          borderRadius: '50%',
+          // Show the chosen color as a solid fill; on default, paint a
+          // soft sun-glyph gradient so the affordance still reads as
+          // "this controls the light."
+          background: active
+            ? color
+            : 'radial-gradient(circle at 35% 30%, #fff8e0 0%, #ffd98a 55%, #f0b04a 100%)',
+          border: '1px solid color-mix(in srgb, var(--gb-text-primary) 18%, transparent)',
+          boxShadow: '0 4px 14px -6px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.05) inset',
+          cursor: 'pointer',
+          outline: 'none',
+          WebkitTapHighlightColor: 'transparent',
+        }}
+      />
+      <AnimatePresence>
+        {open && (
+          <ColorPickerPopover
+            value={color || '#ffffff'}
+            onChange={onChange}
+            anchorRef={anchorRef}
+            swatches={LCC_PALETTE}
+            onClose={() => setOpen(false)}
+            align="left"
+          />
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
