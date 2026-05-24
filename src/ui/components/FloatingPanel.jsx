@@ -100,6 +100,11 @@ function ModalCard({ cssWidth, children }) {
         fontSize: 13,
         lineHeight: 1.4,
         color: 'var(--gb-text-secondary)',
+        // Animate width changes so modals that grow a sidebar (e.g.
+        // SubmitProof when the previous-proofs gallery loads) glide
+        // open instead of snapping. The mount/unmount opacity+scale
+        // animation above is unaffected — it uses transform.
+        transition: 'width 0.28s cubic-bezier(.4, 0, .2, 1)',
       }}
     >
       {children}

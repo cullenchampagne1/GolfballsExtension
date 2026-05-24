@@ -987,25 +987,45 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           )}
         </div>
 
-        {/* RIGHT — gallery (column inside the body row) */}
-        {hasGallery && (
-          <div style={{
-            width: 280, flexShrink: 0,
-            background: 'var(--gb-surface-1)',
-            borderLeft: '1px solid var(--gb-border-subtle)',
-            padding: '14px 14px 20px',
-            overflowY: 'auto',
-            maxHeight: 'min(72vh, 620px)',
-          }}>
-            <div style={{
-              fontSize: 10, fontWeight: 800, textTransform: 'uppercase',
-              letterSpacing: 1, color: 'var(--gb-text-muted)', marginBottom: 12,
-            }}>Previous Proofs ({gallery.length})</div>
-            {gallery.map((p, i) => (
-              <GalleryItem key={i} proof={p} index={i} />
-            ))}
-          </div>
-        )}
+        {/* RIGHT — gallery (column inside the body row). Animates
+            in/out from the right edge when the gallery loads / clears
+            (e.g. user clicks "Use template data" on the failure toast). */}
+        <AnimatePresence initial={false}>
+          {hasGallery && (
+            <motion.div
+              key="gallery"
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 280, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
+              style={{
+                flexShrink: 0,
+                background: 'var(--gb-surface-1)',
+                borderLeft: '1px solid var(--gb-border-subtle)',
+                overflow: 'hidden',
+                maxHeight: 'min(72vh, 620px)',
+              }}
+            >
+              {/* Inner div carries the padding + scroll so the outer
+                  width animation doesn't ripple padding across the
+                  transition (gives a clean slide). */}
+              <div style={{
+                width: 280,
+                padding: '14px 14px 20px',
+                overflowY: 'auto',
+                maxHeight: 'min(72vh, 620px)',
+              }}>
+                <div style={{
+                  fontSize: 10, fontWeight: 800, textTransform: 'uppercase',
+                  letterSpacing: 1, color: 'var(--gb-text-muted)', marginBottom: 12,
+                }}>Previous Proofs ({gallery.length})</div>
+                {gallery.map((p, i) => (
+                  <GalleryItem key={i} proof={p} index={i} />
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Footer */}
