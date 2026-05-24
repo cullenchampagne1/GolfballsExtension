@@ -8,6 +8,7 @@ import {
   ToastHost, useToast,
 } from '../ui/index.js';
 import { MarginCalc } from '../modals/MarginCalc.jsx';
+import { ImagePreview } from '../modals/ImagePreview.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    playground.jsx — in-extension modal playground.
@@ -31,7 +32,7 @@ const MODAL_REGISTRY = [
   { id: 'orderEdit',    label: 'Order Edit',      icon: 'edit',    wired: false },
   { id: 'watchList',    label: 'Watch List',      icon: 'eye',     wired: false },
   { id: 'emailPreview', label: 'Email Preview',   icon: 'mail',    wired: false },
-  { id: 'imageViewer',  label: 'Image Viewer',    icon: 'eye',     wired: false },
+  { id: 'imageViewer',  label: 'Image Viewer',    icon: 'eye',     wired: true  },
   { id: 'submitProof',  label: 'Submit Proof',    icon: 'send',    wired: false },
   { id: 'crmSearch',    label: 'CRM Search',      icon: 'search',  wired: false },
   { id: 'crmQuery',     label: 'CRM Query',       icon: 'filter',  wired: false },
@@ -329,6 +330,14 @@ function PlaygroundSurface() {
         {mounted === 'margin' && (
           <MarginCalc
             key="margin"
+            onClosed={() => setMounted(null)}
+          />
+        )}
+        {mounted === 'imageViewer' && (
+          /* No `url` passed → ImagePreview falls back to icons/photo_ball.jpg
+             so the modal opens fully populated for design iteration. */
+          <ImagePreview
+            key="imageViewer"
             onClosed={() => setMounted(null)}
           />
         )}
