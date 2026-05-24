@@ -1,62 +1,64 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  FloatingPanel, ModalHeader, Btn, I,
+  FloatingPanel, ModalHeader, Btn, Card, Input, Tag, I,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
+import { useDevSetting } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
-   WatchList — React port of content/watchlist-modal.js.
+   WatchList — React port of content/watchlist-modal.js, rebuilt
+   to match the redesign in design_handoff/Golfballs Extension
+   Redesign.html (WatchListView in surfaces-1.jsx).
 
-   Surfaces orders, contacts, and accounts flagged for follow-up.
-   Each item has a live ticking timer with four urgency tiers tied
-   to design-system tokens (brand → warning → orange → error).
+   Visual structure per row:
+     • 26×26 type-icon tile on the LEFT, color-shifted on critical
+     • meta row: tiny type tag, mono ID, age, optional CRITICAL badge
+     • name (or short title)
+     • reason text
+     • action row: Open · Edit reason · Resolve (right-aligned)
 
-     <1 hour   → normal   (brand)
-     1–4 hr    → moderate (warning amber)
-     4–6 hr    → high     (orange)
-     6+ hr     → critical (error red, pulses)
+   Top toolbar: search input + filter button.
 
-   Items are sorted oldest-first. Resolve animates a slide-out + height
-   collapse; Clear all needs a two-tap confirm. ESC + backdrop click
-   close the modal (handled by FloatingPanel).
+   Three urgency tiers gated by dev settings (hours):
+     watchList.thresholdModerateH  (default 1)
+     watchList.thresholdHighH       (default 4)
+     watchList.thresholdCriticalH   (default 6)
 
-   Storage:
-     • In the live extension, this reads/writes chrome.storage.local
-       under the `watchList` key.
-     • In the playground (no chrome.storage), an in-memory + localStorage
-       fallback keeps state stable across reloads.
+   Storage: chrome.storage.local with `watchList` key when available,
+   localStorage fallback for the playground.
 ─────────────────────────────────────────────────────────────── */
 
-// Urgency thresholds (ms)
-const T_MODERATE = 60 * 60 * 1000;
-const T_HIGH     = 4 * 60 * 60 * 1000;
-const T_CRITICAL = 6 * 60 * 60 * 1000;
-
-function getTimerInfo(addedAt, nowMs) {
-  const ms = nowMs - addedAt;
-  const s  = Math.max(0, Math.floor(ms / 1000));
+function getTimerInfo(addedAt, nowMs, thresholdsMs) {
+  const ms = Math.max(0, nowMs - addedAt);
+  const s  = Math.floor(ms / 1000);
   const h  = Math.floor(s / 3600);
+  const d  = Math.floor(h / 24);
   const m  = Math.floor((s % 3600) / 60);
   const sc = s % 60;
-  const text = h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${sc}s` : `${sc}s`;
+
+  // Compact age label: <1m → seconds, <1h → minutes, <1d → "Xh Ym",
+  // ≥1d → "Xd". Mirrors the design which uses "8h", "1d", "22d".
+  let age;
+  if (d > 0)        age = `${d}d`;
+  else if (h > 0)   age = `${h}h ${m}m`;
+  else if (m > 0)   age = `${m}m ${sc}s`;
+  else              age = `${sc}s`;
+
   const urgency =
-    ms >= T_CRITICAL ? 'critical' :
-    ms >= T_HIGH     ? 'high'     :
-    ms >= T_MODERATE ? 'moderate' : 'normal';
-  return { text, urgency };
+    ms >= thresholdsMs.critical ? 'critical' :
+    ms >= thresholdsMs.high     ? 'high'     :
+    ms >= thresholdsMs.moderate ? 'moderate' : 'normal';
+  return { age, urgency };
 }
 
-/* ── Storage shim ─────────────────────────────────────────────
-   The extension uses chrome.storage.local for cross-tab sync; the
-   playground has no extension API so we fall back to localStorage
-   (in-memory state already lives in React, this just persists). */
+/* ── Storage shim — chrome.storage.local when available, localStorage
+   fallback so the modal works inside the playground page too. */
 const STORAGE_KEY = 'watchList';
 const hasChromeStorage = (() => {
   try { return typeof chrome !== 'undefined' && !!chrome.storage?.local; }
   catch { return false; }
 })();
-
 function loadWatchList() {
   return new Promise((resolve) => {
     if (hasChromeStorage) {
@@ -70,23 +72,17 @@ function loadWatchList() {
   });
 }
 function saveWatchList(list) {
-  if (hasChromeStorage) {
-    chrome.storage.local.set({ [STORAGE_KEY]: list });
-    return;
-  }
+  if (hasChromeStorage) { chrome.storage.local.set({ [STORAGE_KEY]: list }); return; }
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch {}
 }
 function subscribeWatchList(onChange) {
   if (hasChromeStorage) {
     const fn = (changes, area) => {
-      if (area === 'local' && changes[STORAGE_KEY]) {
-        onChange(changes[STORAGE_KEY].newValue || []);
-      }
+      if (area === 'local' && changes[STORAGE_KEY]) onChange(changes[STORAGE_KEY].newValue || []);
     };
     chrome.storage.onChanged.addListener(fn);
     return () => chrome.storage.onChanged.removeListener(fn);
   }
-  // localStorage 'storage' event fires only across tabs — fine for parity.
   const fn = (e) => {
     if (e.key === STORAGE_KEY) {
       try { onChange(e.newValue ? JSON.parse(e.newValue) : []); } catch {}
@@ -96,7 +92,6 @@ function subscribeWatchList(onChange) {
   return () => window.removeEventListener('storage', fn);
 }
 
-/* Entity helpers — types map to admin URLs in the live extension. */
 function buildEntityUrl(item) {
   if (item.orderUrl) return item.orderUrl;
   const id = item.orderId || '';
@@ -106,10 +101,14 @@ function buildEntityUrl(item) {
   if (t === 'account') return `https://api.golfballs.com/golfballs/adminNew/default.aspx?Page=271&accountID=${id}`;
   return '';
 }
-function entityLabel(item) {
+
+function entityName(item) {
+  // Prefer a friendly display name when present (added by future
+  // capture flows); else use the entity id.
+  if (item.name) return item.name;
   const t = item.entityType || 'order';
   const id = item.orderId || '';
-  if (t === 'order')   return id ? `#${id}` : 'Order';
+  if (t === 'order')   return id ? `Order ${id}` : 'Order';
   if (t === 'contact') return id ? `Contact ${id}` : 'Contact';
   if (t === 'account') return id ? `Account ${id}` : 'Account';
   return id || 'Item';
@@ -118,18 +117,37 @@ function entityLabel(item) {
 /* ── Public component ────────────────────────────────────────── */
 export function WatchList({ onClosed, bindClose }) {
   const toast = useToast();
+
+  // Dev-setting-driven thresholds. Values come back in hours, converted
+  // to ms here. Live — flipping the setting reflects immediately because
+  // the next render re-reads them.
+  const modH  = Number(useDevSetting('watchList.thresholdModerateH') ?? 1);
+  const highH = Number(useDevSetting('watchList.thresholdHighH')     ?? 4);
+  const critH = Number(useDevSetting('watchList.thresholdCriticalH') ?? 6);
+  // Defensive: make sure they don't cross (moderate ≤ high ≤ critical),
+  // otherwise tier transitions look wrong.
+  const thresholdsMs = useMemo(() => {
+    const m = modH;
+    const h = Math.max(m, highH);
+    const c = Math.max(h, critH);
+    return { moderate: m * 3600000, high: h * 3600000, critical: c * 3600000 };
+  }, [modH, highH, critH]);
+
   const [items, setItems] = useState([]);
   const [loaded, setLoaded] = useState(false);
-  // resolvingIds collects items mid-exit-animation so AnimatePresence can
-  // play their out-animation BEFORE we remove them from the source list.
   const [resolvingIds, setResolvingIds] = useState(() => new Set());
-  // Confirm gate for Clear All — two-tap pattern.
+  // Edit-reason inline state: which item id is being edited + draft text.
+  const [editingId, setEditingId] = useState(null);
+  const [editDraft, setEditDraft] = useState('');
+  // Filter state — matches the design's "All" button. For now just a
+  // single quick filter; can grow into a dropdown later.
+  const [filter, setFilter] = useState('all'); // 'all' | 'critical'
+  const [search, setSearch] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
   const confirmTimerRef = useRef(null);
-  // Tick state — refreshes timer labels + urgency tiers every second.
   const [now, setNow] = useState(() => Date.now());
 
-  // Load + subscribe to storage.
+  // Load + subscribe.
   useEffect(() => {
     let alive = true;
     loadWatchList().then((list) => {
@@ -151,16 +169,9 @@ export function WatchList({ onClosed, bindClose }) {
   }, []);
 
   const resolve = useCallback((id) => {
-    setResolvingIds((prev) => {
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
-    // After the exit animation, remove for real + persist.
+    setResolvingIds((prev) => { const n = new Set(prev); n.add(id); return n; });
     setTimeout(() => {
-      setResolvingIds((prev) => {
-        const n = new Set(prev); n.delete(id); return n;
-      });
+      setResolvingIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
       setItems((cur) => {
         const next = cur.filter((i) => i.id !== id);
         saveWatchList(next);
@@ -168,6 +179,22 @@ export function WatchList({ onClosed, bindClose }) {
       });
     }, 260);
   }, []);
+
+  const startEditReason = (item) => {
+    setEditingId(item.id);
+    setEditDraft(item.reason || '');
+  };
+  const commitEditReason = () => {
+    if (!editingId) return;
+    setItems((cur) => {
+      const next = cur.map((i) => i.id === editingId ? { ...i, reason: editDraft.trim() } : i);
+      saveWatchList(next);
+      return next;
+    });
+    setEditingId(null);
+    setEditDraft('');
+  };
+  const cancelEditReason = () => { setEditingId(null); setEditDraft(''); };
 
   const onClearAll = () => {
     if (!confirmClear) {
@@ -178,7 +205,6 @@ export function WatchList({ onClosed, bindClose }) {
     }
     clearTimeout(confirmTimerRef.current);
     setConfirmClear(false);
-    // Mark every visible item resolving for a coordinated fade-out.
     setResolvingIds(new Set(items.map((i) => i.id)));
     setTimeout(() => {
       persist([]);
@@ -187,86 +213,92 @@ export function WatchList({ onClosed, bindClose }) {
   };
   useEffect(() => () => clearTimeout(confirmTimerRef.current), []);
 
-  // Sorted oldest-first.
-  const sorted = React.useMemo(
-    () => [...items].sort((a, b) => a.addedAt - b.addedAt),
-    [items],
-  );
-  const hasCritical = items.some((i) => (now - i.addedAt) >= T_CRITICAL);
-  const countLabel =
-    items.length === 0 ? 'Empty' :
-    items.length === 1 ? '1 item' : `${items.length} items`;
+  // Derived list — sort oldest-first, then filter.
+  const filtered = useMemo(() => {
+    const sorted = [...items].sort((a, b) => a.addedAt - b.addedAt);
+    const q = search.trim().toLowerCase();
+    return sorted.filter((it) => {
+      if (filter === 'critical') {
+        const ageMs = now - it.addedAt;
+        if (ageMs < thresholdsMs.critical) return false;
+      }
+      if (!q) return true;
+      const hay = `${it.reason || ''} ${it.orderId || ''} ${entityName(it)} ${it.entityType || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [items, filter, search, now, thresholdsMs.critical]);
+
+  const criticalCount = items.filter((i) => (now - i.addedAt) >= thresholdsMs.critical).length;
+  const hasCritical = criticalCount > 0;
+  const subtitle = items.length === 0
+    ? 'Nothing on the watch list'
+    : `${items.length} ${items.length === 1 ? 'item' : 'items'}${criticalCount > 0 ? ` · ${criticalCount} critical` : ''}`;
 
   return (
-    <FloatingPanel width={780} backdrop onClose={onClosed} bindClose={bindClose}>
+    <FloatingPanel width={520} backdrop onClose={onClosed} bindClose={bindClose}>
       <ModalHeader
-        icon={<ClockIcon />}
+        accent
+        icon={<I.eye size={14} />}
         title="Watch List"
-        subtitle="Orders, contacts & accounts needing follow-up"
-        right={
-          <motion.span
-            layout
-            animate={{
-              backgroundColor: hasCritical
-                ? 'var(--gb-error-tint-medium)'
-                : 'var(--gb-fill-soft)',
-              color: hasCritical
-                ? 'var(--gb-error-fg)'
-                : 'var(--gb-text-secondary)',
-              borderColor: hasCritical
-                ? 'var(--gb-error-tint-border)'
-                : 'var(--gb-border-default)',
-            }}
-            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-            style={{
-              fontSize: 10, fontWeight: 800, letterSpacing: 0.4,
-              padding: '4px 10px', borderRadius: 'var(--gb-r-sm)',
-              border: '1px solid transparent',
-              fontFamily: 'var(--gb-font-mono)',
-              whiteSpace: 'nowrap',
-            }}
-          >{countLabel}</motion.span>
-        }
+        subtitle={subtitle}
       />
 
-      {/* Legend bar — visual key for the four urgency tiers. */}
+      {/* Toolbar — search + quick filter. Matches the redesign. */}
       <div style={{
-        display: 'flex', gap: 14, alignItems: 'center',
-        padding: '8px 16px',
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '10px 14px',
         background: 'var(--gb-surface-1)',
         borderBottom: '1px solid var(--gb-border-subtle)',
+        flexShrink: 0,
       }}>
-        <LegendDot color="var(--gb-brand-label)"   label="<1 hr" />
-        <LegendDot color="var(--gb-warning-fg)"     label="1-4 hr" />
-        <LegendDot color="#e07b30"                  label="4-6 hr" />
-        <LegendDot color="var(--gb-error-fg)"       label="6+ hr" />
+        <Input
+          placeholder="Search reason or ID…"
+          value={search}
+          onChange={setSearch}
+          leading={<I.search size={12} />}
+          style={{ flex: 1 }}
+        />
+        <Btn
+          size="sm"
+          variant={filter === 'critical' ? 'tinted' : 'secondary'}
+          status={filter === 'critical' ? 'error' : undefined}
+          icon={<I.filter size={11} />}
+          onClick={() => setFilter((f) => f === 'critical' ? 'all' : 'critical')}
+        >
+          {filter === 'critical' ? `Critical (${criticalCount})` : 'All'}
+        </Btn>
       </div>
 
-      {/* Body — scrollable list. Max height keeps the footer pinned. */}
+      {/* Body */}
       <div style={{
-        maxHeight: 'min(52vh, 480px)',
+        maxHeight: 'min(54vh, 460px)',
         overflowY: 'auto', overflowX: 'hidden',
-        padding: '12px 14px',
+        padding: 8,
       }}>
-        {loaded && sorted.length === 0 ? (
-          <EmptyState />
+        {loaded && filtered.length === 0 ? (
+          <EmptyState searching={!!search || filter !== 'all'} />
         ) : (
           <motion.ul layout style={{
             margin: 0, padding: 0, listStyle: 'none',
             display: 'flex', flexDirection: 'column', gap: 6,
           }}>
             <AnimatePresence initial={false}>
-              {sorted.map((item, idx) => {
-                const { text, urgency } = getTimerInfo(item.addedAt, now);
-                const isResolving = resolvingIds.has(item.id);
+              {filtered.map((item, idx) => {
+                const { age, urgency } = getTimerInfo(item.addedAt, now, thresholdsMs);
                 return (
                   <WatchItem
                     key={item.id}
                     item={item}
-                    timerText={text}
+                    age={age}
                     urgency={urgency}
                     index={idx}
-                    isResolving={isResolving}
+                    isResolving={resolvingIds.has(item.id)}
+                    isEditing={editingId === item.id}
+                    editDraft={editDraft}
+                    onEditDraft={setEditDraft}
+                    onStartEdit={() => startEditReason(item)}
+                    onCommitEdit={commitEditReason}
+                    onCancelEdit={cancelEditReason}
                     onResolve={() => resolve(item.id)}
                   />
                 );
@@ -276,16 +308,16 @@ export function WatchList({ onClosed, bindClose }) {
         )}
       </div>
 
-      {/* Footer — hint + clear all */}
+      {/* Footer — hint + clear-all */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10,
-        padding: '10px 16px',
+        padding: '10px 14px',
         borderTop: '1px solid var(--gb-border-subtle)',
         background: 'var(--gb-surface-1)',
       }}>
         <div style={{
           flex: 1,
-          fontSize: 11, fontWeight: 500,
+          fontSize: 10.5, fontWeight: 500,
           color: 'var(--gb-text-tertiary)',
           display: 'flex', alignItems: 'center', gap: 6,
         }}>
@@ -293,7 +325,7 @@ export function WatchList({ onClosed, bindClose }) {
           <span>Sorted oldest first</span>
         </div>
         <AnimatePresence initial={false}>
-          {sorted.length > 0 && (
+          {items.length > 0 && (
             <motion.div
               key="clear-btn"
               initial={{ opacity: 0, x: 8 }}
@@ -318,113 +350,180 @@ export function WatchList({ onClosed, bindClose }) {
   );
 }
 
-/* ── Subcomponents ───────────────────────────────────────────── */
+/* ── WatchItem ────────────────────────────────────────────────── */
 
-function WatchItem({ item, timerText, urgency, index, isResolving, onResolve }) {
-  const link = buildEntityUrl(item);
-  const label = entityLabel(item);
-  const type = item.entityType || 'order';
+function WatchItem({
+  item, age, urgency, index, isResolving,
+  isEditing, editDraft, onEditDraft, onStartEdit, onCommitEdit, onCancelEdit,
+  onResolve,
+}) {
   const isCrit = urgency === 'critical';
+  const type = item.entityType || 'order';
+  const link = buildEntityUrl(item);
+  const name = entityName(item);
+  const idLabel = item.orderId ? `#${item.orderId}` : '';
 
   return (
     <motion.li
       layout
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={isResolving
-        ? { opacity: 0, x: 24, height: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0 }
+        ? { opacity: 0, x: 20, height: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0 }
         : { opacity: 1, y: 0 }
       }
-      exit={{ opacity: 0, x: 24, height: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0 }}
+      exit={{ opacity: 0, x: 20, height: 0, marginTop: 0, marginBottom: 0, paddingTop: 0, paddingBottom: 0 }}
       transition={isResolving
         ? { duration: 0.26, ease: [0.4, 0, 0.2, 1] }
-        : { duration: 0.22, delay: Math.min(index, 8) * 0.035, ease: [0.4, 0, 0.2, 1] }
+        : { duration: 0.22, delay: Math.min(index, 8) * 0.03, ease: [0.4, 0, 0.2, 1] }
       }
-      style={{
-        position: 'relative',
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '9px 12px',
-        background: isCrit ? 'var(--gb-error-tint-soft)' : 'var(--gb-surface-1)',
-        border: '1px solid ' + (isCrit ? 'var(--gb-error-tint-border)' : 'var(--gb-border-subtle)'),
-        borderRadius: 'var(--gb-r-md)',
-        overflow: 'hidden',
-        transition: 'background-color 0.3s, border-color 0.3s',
-      }}
+      style={{ overflow: 'hidden', listStyle: 'none' }}
     >
-      <UrgencyTimer text={timerText} urgency={urgency} />
-      <TypeBadge type={type} />
-      <div style={{
-        flex: 1, minWidth: 0,
-        display: 'flex', alignItems: 'center', gap: 8,
-        flexWrap: 'wrap',
-        fontSize: 13, lineHeight: 1.4,
-        color: 'var(--gb-text-secondary)',
+      <Card padding={10} style={{
+        borderColor: isCrit ? 'var(--gb-error-tint-border)' : 'var(--gb-border-subtle)',
+        background: isCrit ? 'var(--gb-error-tint-soft)' : undefined,
+        transition: 'border-color .3s, background-color .3s',
       }}>
-        {link ? (
-          <a
-            href={link}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              fontSize: 13, fontWeight: 700,
-              color: 'var(--gb-brand-label)',
-              textDecoration: 'none',
-              letterSpacing: 0.2,
-              flexShrink: 0,
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}
-          >{label}</a>
-        ) : (
-          <span style={{
-            fontSize: 13, fontWeight: 700,
-            color: 'var(--gb-text-primary)',
-            flexShrink: 0,
-          }}>{label}</span>
-        )}
-        {item.reason && (
-          <span style={{
-            fontSize: 12.5,
-            color: 'var(--gb-text-tertiary)',
-            fontWeight: 500,
-          }}>{item.reason}</span>
-        )}
-      </div>
-      <motion.button
-        type="button"
-        whileTap={{ scale: 0.95 }}
-        onClick={onResolve}
-        style={{
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          padding: '5px 10px',
-          fontSize: 11, fontWeight: 600,
-          color: 'var(--gb-text-tertiary)',
-          background: 'transparent',
-          border: '1px solid var(--gb-border-default)',
-          borderRadius: 'var(--gb-r-sm)',
-          cursor: 'pointer',
-          flexShrink: 0,
-          transition: 'background-color .15s, border-color .15s, color .15s',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = 'var(--gb-fill-soft)';
-          e.currentTarget.style.color = 'var(--gb-text-primary)';
-          e.currentTarget.style.borderColor = 'var(--gb-border-strong)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = 'transparent';
-          e.currentTarget.style.color = 'var(--gb-text-tertiary)';
-          e.currentTarget.style.borderColor = 'var(--gb-border-default)';
-        }}
-      >
-        <I.check size={11} />
-        Resolve
-      </motion.button>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          {/* Type icon tile — replaces the text "Order"/"Contact"/"Account"
+              label to save vertical space, per request. */}
+          <EntityIconTile type={type} critical={isCrit} />
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Meta row */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              marginBottom: 2,
+              flexWrap: 'wrap',
+            }}>
+              {idLabel && (
+                <span style={{
+                  fontFamily: 'var(--gb-font-mono)',
+                  fontSize: 10.5, fontWeight: 700,
+                  color: 'var(--gb-text-secondary)',
+                  letterSpacing: 0.2,
+                }}>{idLabel}</span>
+              )}
+              {idLabel && (
+                <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>·</span>
+              )}
+              <UrgencyAge age={age} urgency={urgency} />
+              {isCrit && <Tag tone="error" size="sm">CRITICAL</Tag>}
+            </div>
+
+            {/* Name */}
+            {link ? (
+              <a
+                href={link}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-block',
+                  fontSize: 12.5, fontWeight: 600,
+                  color: 'var(--gb-text-primary)',
+                  textDecoration: 'none',
+                  letterSpacing: 0.1,
+                  marginTop: 1,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--gb-brand-label)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--gb-text-primary)'; }}
+              >{name}</a>
+            ) : (
+              <div style={{
+                fontSize: 12.5, fontWeight: 600,
+                color: 'var(--gb-text-primary)',
+                marginTop: 1,
+              }}>{name}</div>
+            )}
+
+            {/* Reason — inline-edit on click of "Edit reason". */}
+            {isEditing ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6 }}>
+                <Input
+                  value={editDraft}
+                  onChange={onEditDraft}
+                  autoFocus
+                  placeholder="Why is this on the watch list?"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter')  { e.preventDefault(); onCommitEdit(); }
+                    if (e.key === 'Escape') { e.preventDefault(); onCancelEdit(); }
+                  }}
+                />
+                <div style={{ display: 'flex', gap: 5 }}>
+                  <Btn size="sm" variant="tinted" status="brand" icon={<I.check size={10} />} onClick={onCommitEdit}>Save</Btn>
+                  <Btn size="sm" variant="ghost" onClick={onCancelEdit}>Cancel</Btn>
+                </div>
+              </div>
+            ) : item.reason ? (
+              <div style={{
+                fontSize: 11.5,
+                color: 'var(--gb-text-tertiary)',
+                marginTop: 3, lineHeight: 1.4,
+                wordBreak: 'break-word',
+              }}>{item.reason}</div>
+            ) : (
+              <div style={{
+                fontSize: 11.5,
+                color: 'var(--gb-text-ghost)',
+                marginTop: 3, fontStyle: 'italic',
+              }}>No reason given — click Edit to add one.</div>
+            )}
+
+            {/* Action row */}
+            {!isEditing && (
+              <div style={{
+                display: 'flex', gap: 4,
+                marginTop: 7,
+              }}>
+                {link && (
+                  <Btn
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => window.open(link, '_blank', 'noopener')}
+                  >Open</Btn>
+                )}
+                <Btn size="sm" variant="ghost" onClick={onStartEdit}>Edit reason</Btn>
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  onClick={onResolve}
+                  icon={<I.check size={10} />}
+                  style={{ marginLeft: 'auto' }}
+                >Resolve</Btn>
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
     </motion.li>
   );
 }
 
-function UrgencyTimer({ text, urgency }) {
-  // Per-urgency styling. The 'critical' tier pulses subtly via opacity.
+/* ── EntityIconTile — 26×26 rounded square with the type glyph. ───── */
+function EntityIconTile({ type, critical }) {
+  return (
+    <div
+      title={type[0].toUpperCase() + type.slice(1)}
+      style={{
+        width: 26, height: 26,
+        flexShrink: 0,
+        marginTop: 1,
+        borderRadius: 'var(--gb-r-sm)',
+        background: critical ? 'var(--gb-error-tint-medium)' : 'var(--gb-fill-soft)',
+        border: '1px solid ' + (critical ? 'var(--gb-error-tint-border)' : 'var(--gb-border-subtle)'),
+        color: critical ? 'var(--gb-error-fg)' : 'var(--gb-text-tertiary)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'background-color .3s, border-color .3s, color .3s',
+      }}
+    >
+      {type === 'order' ? <DocIcon size={12} /> :
+       type === 'contact' ? <I.user size={12} /> :
+       <UsersIcon size={12} />}
+    </div>
+  );
+}
+
+/* ── UrgencyAge — the compact ticking age pill (Xd / Xh Ym / Xm Xs). ── */
+function UrgencyAge({ age, urgency }) {
   const styles = {
     normal: {
       color: 'var(--gb-brand-label)',
@@ -432,13 +531,13 @@ function UrgencyTimer({ text, urgency }) {
       borderColor: 'var(--gb-brand-tint-border)',
     },
     moderate: {
-      color: '#fce8b2',
-      background: 'rgba(224, 160, 48, 0.15)',
-      borderColor: 'rgba(224, 160, 48, 0.3)',
+      color: 'var(--gb-warning-fg)',
+      background: 'var(--gb-warning-tint-soft)',
+      borderColor: 'var(--gb-warning-tint-border)',
     },
     high: {
-      color: '#fcdab2',
-      background: 'rgba(224, 123, 48, 0.15)',
+      color: '#e07b30',
+      background: 'rgba(224, 123, 48, 0.12)',
       borderColor: 'rgba(224, 123, 48, 0.3)',
     },
     critical: {
@@ -447,90 +546,35 @@ function UrgencyTimer({ text, urgency }) {
       borderColor: 'var(--gb-error-tint-border)',
     },
   }[urgency] || {};
-
   return (
     <motion.span
-      layout
       animate={{
         ...styles,
-        opacity: urgency === 'critical' ? [1, 0.55, 1] : 1,
+        opacity: urgency === 'critical' ? [1, 0.6, 1] : 1,
       }}
       transition={{
         backgroundColor: { duration: 0.6 },
-        color: { duration: 0.6 },
-        borderColor: { duration: 0.6 },
+        color:           { duration: 0.6 },
+        borderColor:     { duration: 0.6 },
         opacity: urgency === 'critical'
           ? { duration: 1.9, ease: 'easeInOut', repeat: Infinity }
           : { duration: 0.3 },
       }}
       style={{
-        fontSize: 10, fontWeight: 800, letterSpacing: 0.5,
-        padding: '3px 8px',
-        borderRadius: 'var(--gb-r-sm)',
+        fontSize: 9.5, fontWeight: 800, letterSpacing: 0.4,
+        padding: '1px 6px',
+        borderRadius: 'var(--gb-r-xs)',
         border: '1px solid transparent',
         fontVariantNumeric: 'tabular-nums',
         whiteSpace: 'nowrap',
-        flexShrink: 0,
         fontFamily: 'var(--gb-font-mono)',
+        textTransform: 'uppercase',
       }}
-    >{text}</motion.span>
+    >{age}</motion.span>
   );
 }
 
-function TypeBadge({ type }) {
-  const config = {
-    order: {
-      label: 'Order',
-      color: 'var(--gb-brand-label)',
-      background: 'var(--gb-brand-tint-soft)',
-      borderColor: 'var(--gb-brand-tint-border)',
-    },
-    contact: {
-      label: 'Contact',
-      color: '#60a0d8',
-      background: 'rgba(96, 150, 200, 0.12)',
-      borderColor: 'rgba(96, 150, 200, 0.3)',
-    },
-    account: {
-      label: 'Account',
-      color: '#b87cdc',
-      background: 'rgba(180, 120, 220, 0.12)',
-      borderColor: 'rgba(180, 120, 220, 0.3)',
-    },
-  }[type] || { label: 'Order' };
-  return (
-    <span style={{
-      fontSize: 9, fontWeight: 800, letterSpacing: 0.6,
-      textTransform: 'uppercase',
-      padding: '2px 6px',
-      borderRadius: 'var(--gb-r-xs)',
-      color: config.color,
-      background: config.background,
-      border: `1px solid ${config.borderColor}`,
-      flexShrink: 0, lineHeight: 1.4,
-    }}>{config.label}</span>
-  );
-}
-
-function LegendDot({ color, label }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 6,
-      fontSize: 9.5, fontWeight: 800, letterSpacing: 0.5,
-      textTransform: 'uppercase',
-      color: 'var(--gb-text-tertiary)',
-    }}>
-      <span style={{
-        width: 6, height: 6, borderRadius: '50%',
-        background: color,
-        boxShadow: `0 0 6px ${color}`,
-      }} />
-      {label}
-    </div>
-  );
-}
-
-function EmptyState() {
+function EmptyState({ searching }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
@@ -538,47 +582,54 @@ function EmptyState() {
       transition={{ duration: 0.3 }}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        gap: 12, padding: '36px 20px',
+        gap: 10, padding: '32px 20px',
         textAlign: 'center',
         color: 'var(--gb-text-tertiary)',
       }}
     >
       <div style={{
-        width: 44, height: 44,
+        width: 40, height: 40,
         background: 'var(--gb-surface-2)',
         border: '1px solid var(--gb-border-default)',
         borderRadius: 'var(--gb-r-md)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: 'var(--gb-text-secondary)',
       }}>
-        <I.eye size={20} />
+        <I.eye size={18} />
       </div>
       <div>
         <strong style={{
           display: 'block',
           color: 'var(--gb-text-primary)',
-          fontSize: 14, fontWeight: 700,
-        }}>Nothing on the watch list</strong>
+          fontSize: 13, fontWeight: 700,
+        }}>{searching ? 'No matches' : 'Nothing on the watch list'}</strong>
         <p style={{
-          margin: '6px 0 0', fontSize: 12.5, lineHeight: 1.6,
-          maxWidth: 280,
+          margin: '4px 0 0', fontSize: 11.5, lineHeight: 1.55,
+          maxWidth: 260,
         }}>
-          Use <em>Watch Order</em>, <em>Watch Contact</em>, or <em>Watch Account</em> in
-          the extension popup to flag items that need follow-up.
+          {searching
+            ? 'Try a different search term or clear the filter.'
+            : <>Use <em>Watch Order</em>, <em>Watch Contact</em>, or <em>Watch Account</em> in the extension popup to flag items.</>}
         </p>
       </div>
     </motion.div>
   );
 }
 
-/* Clock icon — header glyph, not in shared icon set. */
-const ClockIcon = (p) => (
-  <svg
-    width={p?.size || 16} height={p?.size || 16}
-    viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
-  >
-    <circle cx="12" cy="12" r="10" />
-    <polyline points="12 6 12 12 16 14" />
+/* Inline glyphs not in the shared icon registry. */
+const DocIcon = (p) => (
+  <svg width={p?.size || 12} height={p?.size || 12} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+    <polyline points="14 2 14 8 20 8" />
+  </svg>
+);
+const UsersIcon = (p) => (
+  <svg width={p?.size || 12} height={p?.size || 12} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
   </svg>
 );
