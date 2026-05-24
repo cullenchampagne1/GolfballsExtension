@@ -1258,15 +1258,18 @@ function RotationSlider({ value, onChange }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, x: 6 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 6 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
       transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
       data-viewer-ui="true"
       style={{
         position: 'absolute',
+        // top: 50% + translateY(-50%) would collide with framer-motion's
+        // transform writes. Use marginTop on a known height instead so
+        // we never need our own transform string.
         top: '50%', right: 10,
-        transform: 'translateY(-50%)',
+        marginTop: -((TRACK_H + 18 + 12) / 2), // half of (track + label + padding) — keeps the center on the wrapper midline
         zIndex: 6,
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
         padding: '8px 6px',
