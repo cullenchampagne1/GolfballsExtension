@@ -121,13 +121,15 @@ export function GolfballViewer({ decalDataUrl, onError }) {
     const mountStart = performance.now();
     const MIN_LOADING_MS = 2000;
 
-    /* Box bounds in world units — defines the 3D play area. The
-       camera is fixed pointing at the origin so these bounds map
-       directly to "visible screen edges". cannon-es planes form the
-       6 walls; the ball bounces inside. */
-    const HALF_X = 140;
-    const HALF_Y = 95;
-    const HALF_Z = 80;
+    /* Box bounds in world units — defines the 3D play area. Must be
+       larger than the ball radius (100) on every axis or the ball
+       clips through the wall. Floor is the BOTTOM of this box at
+       y = -HALF_Y; with a 100-radius ball the resting center sits at
+       y = -HALF_Y + 100, so HALF_Y also controls how far the ball
+       falls before landing. */
+    const HALF_X = 220;
+    const HALF_Y = 180;
+    const HALF_Z = 120;
     const SCALE_MIN = 0.4;
     const SCALE_MAX = 2.5;
     const ROTATE_SENSITIVITY = 0.008;  // radians per CSS px of drag
@@ -169,12 +171,14 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         // around the ball. Matches the playground's design-canvas vibe.
 
         const { clientWidth: w, clientHeight: h } = container;
-        // Camera is fixed at side view looking straight at the ball
-        // along -Z. Decal projects onto +Z (camera-facing) so we never
-        // need to reorient; whatever you see is what gets painted.
-        camera = new THREE.PerspectiveCamera(38, w / h, 0.1, 1000);
-        camera.position.set(0, 0, 360);
-        camera.lookAt(0, 0, 0);
+        // Camera tilted above the ball looking slightly down so the
+        // floor is visible below. ~25° tilt is enough for spatial
+        // reference (you see the floor + ball relationship) without
+        // making the front of the ball foreshorten too much. Position
+        // is pulled back to fit the larger HALF_* box in frame.
+        camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 2000);
+        camera.position.set(0, 180, 480);
+        camera.lookAt(0, -40, 0);
 
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setPixelRatio(window.devicePixelRatio);
@@ -192,6 +196,48 @@ export function GolfballViewer({ decalDataUrl, onError }) {
         const fill = new THREE.DirectionalLight(0xffffff, 0.45);
         fill.position.set(-200, -100, -100);
         scene.add(fill);
+
+        // ── Box edges ──────────────────────────────────────────
+        // Subtle wireframe at the play-area boundary so the user has
+        // spatial reference — they can see "the ball is in a box"
+        // without the box being a solid wall that obscures the
+        // background. EdgesGeometry from a Box gives 12 edges; we
+        // render them as low-opacity LineSegments so the box reads
+        // as a faint outline. Material color matches the design-
+        // system border so it themes correctly.
+        {
+          const boxGeom = new THREE.BoxGeometry(HALF_X * 2, HALF_Y * 2, HALF_Z * 2);
+          const edges = new THREE.EdgesGeometry(boxGeom);
+          const edgeMat = new THREE.LineBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.18,
+          });
+          const boxLines = new THREE.LineSegments(edges, edgeMat);
+          scene.add(boxLines);
+          objectsToDispose.push(boxGeom, edges, edgeMat);
+
+          // Bottom-edge highlight — a SECOND line ring just for the
+          // four floor edges, brighter than the rest. Gives the user
+          // an unambiguous "this is the floor" cue without painting a
+          // full plane that would mask the background grid behind.
+          const floorPts = new Float32Array([
+            -HALF_X, -HALF_Y, -HALF_Z,   HALF_X, -HALF_Y, -HALF_Z,
+             HALF_X, -HALF_Y, -HALF_Z,   HALF_X, -HALF_Y,  HALF_Z,
+             HALF_X, -HALF_Y,  HALF_Z,  -HALF_X, -HALF_Y,  HALF_Z,
+            -HALF_X, -HALF_Y,  HALF_Z,  -HALF_X, -HALF_Y, -HALF_Z,
+          ]);
+          const floorGeom = new THREE.BufferGeometry();
+          floorGeom.setAttribute('position', new THREE.BufferAttribute(floorPts, 3));
+          const floorMat = new THREE.LineBasicMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.42,
+          });
+          const floorRing = new THREE.LineSegments(floorGeom, floorMat);
+          scene.add(floorRing);
+          objectsToDispose.push(floorGeom, floorMat);
+        }
 
         // ── Ball ───────────────────────────────────────────────
         // Clone the cached geometry so multiple GolfballViewer mounts
@@ -239,15 +285,26 @@ export function GolfballViewer({ decalDataUrl, onError }) {
           decalTexture.wrapT = THREE.ClampToEdgeWrapping;
           objectsToDispose.push(decalTexture);
 
-          // Project the decal from +Z (toward the camera) onto the
-          // front face of the ball. With the camera fixed at +Z,
-          // whatever the user sees IS the print area — no orient/look
-          // gymnastics. The projection-box X/Y define the decal's
-          // on-surface size; Z is the projection depth (= 2x radius
-          // so the wrap reaches around the curvature cleanly).
-          const decalPosition = new THREE.Vector3(0, 0, targetRadius * 0.999);
-          const decalOrientation = new THREE.Euler(0, 0, 0);
-          const decalSize = new THREE.Vector3(targetRadius * 0.65, targetRadius * 0.65, targetRadius * 2);
+          // Project the decal from the camera's general direction so
+          // the print faces the viewer. Camera sits at (0, 180, 480)
+          // looking down-and-forward; normalizing that vector and
+          // placing the decal source at radius distance along it puts
+          // the print on the visible face of the ball.
+          //
+          // decalOrientation is derived from the projection direction:
+          // a Vector3.lookAt-equivalent Euler so DecalGeometry's
+          // projection-box faces the ball center. Built by constructing
+          // a temporary Object3D and reading its rotation.
+          const camDir = new THREE.Vector3(0, 180, 480).normalize();
+          const decalPosition = camDir.clone().multiplyScalar(targetRadius * 0.999);
+          const orienter = new THREE.Object3D();
+          orienter.position.copy(decalPosition);
+          orienter.lookAt(0, 0, 0);
+          // DecalGeometry projects along -Z of its orientation, so the
+          // lookAt-derived Euler aims the projection axis at the ball
+          // center. No extra rotation tweak needed.
+          const decalOrientation = orienter.rotation;
+          const decalSize = new THREE.Vector3(targetRadius * 0.7, targetRadius * 0.7, targetRadius * 2);
 
           const decalGeo = new DecalGeometry(ballMesh, decalPosition, decalOrientation, decalSize);
           const decalMat = new THREE.MeshStandardMaterial({
