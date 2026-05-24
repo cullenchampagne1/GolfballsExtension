@@ -4,23 +4,22 @@ import { I } from '../icons.jsx';
 import { ColorPickerPopover } from './ColorPicker.jsx';
 
 /**
- * ColorSpotlight — full-height swatch + name + hex input + reset.
+ * ColorSpotlight — single-row swatch + name + hex input + reset.
  *
- * The picked color is the card's own background-image gradient (solid for the
- * swatch column, transparent past it). A background is painted across the
- * element's whole box by the browser, so the color always fills top-to-bottom
- * — no flex-stretch or percentage-height child that can leave a sliver.
- *
- * Clicking the swatch opens the design-system ColorPicker popover (no native
- * OS picker). Drag the popover's hue + S/V controls to update live.
+ * Compact list-row layout that matches FeatureSpotlight / CollapsibleSection
+ * vertical rhythm. Older versions stacked name → desc → hex input on three
+ * lines with a full-bleed swatch column; that ate too much vertical space
+ * when stacking 8 theme colors. New layout: square swatch on the left, name
+ * (+ optional desc) flex-filling the middle, hex input + reset pushed to
+ * the right. Clicking the swatch opens the DS color picker popover.
  *
  * Props: value, defaultValue, name, desc, varName, onChange,
  *   size 'sm'|'md'|'lg' (default 'md').
  */
 const SIZES = {
-  sm: { sw: 64,  pad: 11, name: 12,   varF: 9,   desc: 10.5, hexW: 84,  hexH: 26, min: 64 },
-  md: { sw: 88,  pad: 14, name: 13.5, varF: 9.5, desc: 11,   hexW: 92,  hexH: 28, min: 80 },
-  lg: { sw: 108, pad: 16, name: 15,   varF: 10,  desc: 11.5, hexW: 104, hexH: 30, min: 92 },
+  sm: { sw: 28, pad: 8,  name: 11.5, varF: 9,    desc: 10,   hexW: 78,  hexH: 24, gap: 8  },
+  md: { sw: 32, pad: 10, name: 12.5, varF: 9.5,  desc: 10.5, hexW: 88,  hexH: 26, gap: 10 },
+  lg: { sw: 36, pad: 12, name: 13.5, varF: 10,   desc: 11,   hexW: 96,  hexH: 28, gap: 12 },
 };
 
 export function ColorSpotlight({ value, defaultValue, name, desc, varName, onChange, size = 'md' }) {
@@ -46,38 +45,42 @@ export function ColorSpotlight({ value, defaultValue, name, desc, varName, onCha
     <div
       style={{
         position: 'relative',
-        backgroundColor: 'var(--gb-surface-1)',
-        backgroundImage: `linear-gradient(to right, ${value || 'transparent'} ${s.sw}px, transparent ${s.sw}px)`,
+        background: 'var(--gb-surface-1)',
         border: '1px solid ' + (modified ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'),
-        borderRadius: 'var(--gb-r-lg)',
-        boxShadow: modified ? '0 0 0 4px var(--gb-brand-tint-soft)' : 'none',
-        overflow: 'visible',  // let the popover escape the card bounds
+        borderRadius: 'var(--gb-r-md)',
+        boxShadow: modified ? '0 0 0 3px var(--gb-brand-tint-soft)' : 'none',
+        padding: s.pad,
+        display: 'flex', alignItems: 'center', gap: s.gap,
+        overflow: 'visible',
         transition: 'border-color var(--gb-anim), box-shadow var(--gb-anim)',
       }}
     >
-      {/* Clickable swatch region — opens the design-system color popover. */}
+      {/* Square swatch — opens the design-system color popover. */}
       <button
         ref={swatchRef}
         type="button"
         onClick={() => setPickerOpen((v) => !v)}
         style={{
-          position: 'absolute', left: 0, top: 0, bottom: 0, width: s.sw,
-          padding: 0, background: 'transparent', border: 'none',
-          cursor: 'pointer',
+          width: s.sw, height: s.sw, flexShrink: 0,
+          padding: 0, cursor: 'pointer',
+          background: value || 'transparent',
+          border: '1px solid var(--gb-border-default)',
+          borderRadius: 'var(--gb-r-sm)',
+          position: 'relative',
         }}
+        title={modified ? 'Edited' : 'Default'}
       >
         {modified && (
           <span style={{
-            position: 'absolute', bottom: 6, right: 6,
-            padding: '2px 6px', borderRadius: 99,
-            background: 'rgba(0,0,0,.55)', color: '#fff',
-            fontSize: 8.5, fontWeight: 800, letterSpacing: 0.6,
-            textTransform: 'uppercase', backdropFilter: 'blur(4px)',
-          }}>EDITED</span>
+            position: 'absolute', bottom: -3, right: -3,
+            width: 8, height: 8, borderRadius: '50%',
+            background: 'var(--gb-brand-label)',
+            border: '2px solid var(--gb-surface-1)',
+          }} />
         )}
       </button>
 
-      {/* Popover anchored to the swatch — fixed position relative to the card. */}
+      {/* Popover anchored to the swatch. */}
       <AnimatePresence>
         {pickerOpen && (
           <ColorPickerPopover
@@ -90,52 +93,59 @@ export function ColorSpotlight({ value, defaultValue, name, desc, varName, onCha
         )}
       </AnimatePresence>
 
-      {/* Body — offset past the swatch column. */}
-      <div style={{
-        marginLeft: s.sw, minHeight: s.min, padding: s.pad,
-        display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <span style={{ fontSize: s.name, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{name}</span>
+      {/* Name + optional desc on a single column. flex:1 pushes the hex
+          input + reset to the right edge. minWidth:0 lets the desc
+          ellipsis cleanly rather than blowing out the row. */}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+          <span style={{
+            fontSize: s.name, fontWeight: 600, color: 'var(--gb-text-primary)',
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>{name}</span>
           {varName && (
-            <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: s.varF, color: 'var(--gb-text-ghost)' }}>
-              {varName}
-            </span>
+            <span style={{
+              fontFamily: 'var(--gb-font-mono)', fontSize: s.varF,
+              color: 'var(--gb-text-ghost)', flexShrink: 0,
+            }}>{varName}</span>
           )}
         </div>
         {desc && (
-          <div style={{ fontSize: s.desc, color: 'var(--gb-text-tertiary)', lineHeight: 1.5 }}>{desc}</div>
+          <div style={{
+            fontSize: s.desc, color: 'var(--gb-text-muted)', lineHeight: 1.4,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>{desc}</div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto' }}>
-          <input
-            value={inputValue}
-            onChange={handleInputChange}
-            onBlur={handleInputBlur}
-            style={{
-              width: s.hexW, height: s.hexH, padding: '0 9px',
-              background: 'var(--gb-surface-2)',
-              border: '1px solid var(--gb-border-default)',
-              borderRadius: 'var(--gb-r-sm)',
-              fontFamily: 'var(--gb-font-mono)', fontSize: 11, fontWeight: 600,
-              color: 'var(--gb-text-secondary)', letterSpacing: 0.5, outline: 'none',
-            }}
-          />
-          {modified && (
-            <button
-              onClick={() => onChange?.(defaultValue)}
-              style={{
-                padding: '4px 9px', height: s.hexH, borderRadius: 'var(--gb-r-sm)',
-                background: 'transparent', border: '1px solid var(--gb-border-default)',
-                color: 'var(--gb-text-muted)', fontSize: 10.5, fontWeight: 600,
-                fontFamily: 'inherit', cursor: 'pointer',
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-              }}
-            >
-              <I.refresh size={10} /> Reset
-            </button>
-          )}
-        </div>
       </div>
+
+      {/* Hex input — pushed right by flex:1 on the body. */}
+      <input
+        value={inputValue}
+        onChange={handleInputChange}
+        onBlur={handleInputBlur}
+        style={{
+          width: s.hexW, height: s.hexH, padding: '0 9px', flexShrink: 0,
+          background: 'var(--gb-surface-2)',
+          border: '1px solid var(--gb-border-default)',
+          borderRadius: 'var(--gb-r-sm)',
+          fontFamily: 'var(--gb-font-mono)', fontSize: 11, fontWeight: 600,
+          color: 'var(--gb-text-secondary)', letterSpacing: 0.5, outline: 'none',
+        }}
+      />
+      {modified && (
+        <button
+          onClick={() => onChange?.(defaultValue)}
+          title="Reset to default"
+          style={{
+            width: s.hexH, height: s.hexH, flexShrink: 0, padding: 0,
+            borderRadius: 'var(--gb-r-sm)',
+            background: 'transparent', border: '1px solid var(--gb-border-default)',
+            color: 'var(--gb-text-muted)', cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <I.refresh size={11} />
+        </button>
+      )}
     </div>
   );
 }
