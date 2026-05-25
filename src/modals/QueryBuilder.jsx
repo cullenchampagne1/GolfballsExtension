@@ -1,9 +1,44 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   FloatingPanel, ModalHeader, ModalFooter, Btn, Input, Dropdown, IconBtn, I,
 } from '../ui/index.js';
+import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
+
+/* ── Saved-queries storage ───────────────────────────────────────
+   Mirrors the legacy content/crm-query-builder.js storage at
+   `chrome.storage.local.crmSavedQueries` so any queries the user
+   already saved against the old vanilla-JS modal continue to load
+   here. Outside an extension context (playground, dev), we transparently
+   fall back to localStorage under the same key. */
+const QB_STORAGE_KEY = 'crmSavedQueries';
+const hasChromeStorage = () => {
+  try { return typeof chrome !== 'undefined' && !!chrome.storage?.local; } catch { return false; }
+};
+
+async function loadSavedQueries() {
+  if (hasChromeStorage()) {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(QB_STORAGE_KEY, (data) => {
+        resolve(Array.isArray(data?.[QB_STORAGE_KEY]) ? data[QB_STORAGE_KEY] : []);
+      });
+    });
+  }
+  try {
+    const raw = localStorage.getItem(QB_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+async function persistSavedQueries(list) {
+  if (hasChromeStorage()) {
+    return new Promise((resolve) => {
+      chrome.storage.local.set({ [QB_STORAGE_KEY]: list }, resolve);
+    });
+  }
+  try { localStorage.setItem(QB_STORAGE_KEY, JSON.stringify(list)); } catch {}
+}
 
 /* ───────────────────────────────────────────────────────────────
    QueryBuilder — React port of content/crm-query-builder.js.
@@ -198,10 +233,25 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], onAp
   // Draggable preference mirrors CRMSearch so users get the same
   // behavior in both modals from a single setting.
   const draggable = useDevSetting('crmSearch.draggable') ?? false;
+  const toast = useToast();
 
   const [conditions, setConditions] = useState(() =>
     initialConditions.length ? initialConditions.map((c) => ({ ...c, id: ++_nextId })) : [newCondition()]
   );
+  // Saved-queries panel. List loaded on mount; flipping `savedOpen`
+  // toggles the collapsible body. saveName drives the Save button.
+  const [savedQueries, setSavedQueries] = useState([]);
+  const [savedOpen, setSavedOpen] = useState(false);
+  const [saveName, setSaveName] = useState('');
+
+  // Load saved queries once on mount so the panel is populated before
+  // the user expands it. Fire-and-forget; if storage fails we just
+  // show "No saved queries yet."
+  useEffect(() => {
+    let alive = true;
+    loadSavedQueries().then((list) => { if (alive) setSavedQueries(list); });
+    return () => { alive = false; };
+  }, []);
 
   const bindCloseRef = useRef(null);
   const handleBindClose = useCallback((fn) => {
@@ -225,16 +275,71 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], onAp
 
   const handleApply = () => {
     if (!canApply) return;
-    onApply?.({
+    const payload = {
       label,
       solrFq,
       // Strip the auto-incremented client id when handing back — caller
       // doesn't need it and we'll re-issue on re-open.
       conditions: conditions.map(({ id: _id, ...rest }) => rest),
-    });
+    };
+    if (typeof onApply === 'function') {
+      onApply(payload);
+    } else {
+      // Standalone mode (e.g. playground): nothing to apply to.
+      // Gracefully fall back to a toast that shows the compiled query
+      // so the user can still see their work.
+      toast?.info?.(`Query ready: ${solrFq}`, { duration: 4500, placement: 'top-center' });
+    }
     bindCloseRef.current?.();
   };
   const handleClear = () => setConditions([newCondition()]);
+
+  /* Copy the compiled fq= to the clipboard so users can paste into
+     custom CRM queries or scripts. Defensively falls back to a toast
+     when clipboard API is blocked (e.g., insecure context). */
+  const handleCopy = async () => {
+    if (!canApply) return;
+    try {
+      await navigator.clipboard?.writeText(solrFq);
+      toast?.success?.('Query copied to clipboard', { duration: 2200 });
+    } catch (err) {
+      toast?.warning?.(`Couldn't copy: ${err?.message || 'clipboard blocked'}`, { duration: 3500 });
+    }
+  };
+
+  /* Save / load / delete — mirror the legacy QB's behavior so users
+     with existing saved queries see them here. Saving uses the same
+     `crmSavedQueries` storage key + the same entry shape (id, name,
+     query, conditions, savedAt). Re-saving with the same name
+     REPLACES the existing entry (matches the legacy "replace same-name"
+     behavior — prevents drift between near-duplicates). */
+  const canSave = !!saveName.trim() && canApply;
+  const handleSave = async () => {
+    if (!canSave) return;
+    const name = saveName.trim();
+    const entry = {
+      id: Date.now().toString(36),
+      name,
+      query: solrFq,
+      conditions: conditions.map(({ id: _id, ...rest }) => rest),
+      savedAt: Date.now(),
+    };
+    const updated = [entry, ...savedQueries.filter((q) => q.name !== name)];
+    setSavedQueries(updated);
+    await persistSavedQueries(updated);
+    toast?.success?.(`Saved "${name}"`, { duration: 2200 });
+  };
+  const handleLoad = (q) => {
+    if (!q?.conditions?.length) return;
+    setConditions(q.conditions.map((c) => ({ ...c, id: ++_nextId })));
+    setSaveName(q.name);
+    toast?.info?.(`Loaded "${q.name}"`, { duration: 1800 });
+  };
+  const handleDelete = async (id) => {
+    const updated = savedQueries.filter((q) => q.id !== id);
+    setSavedQueries(updated);
+    await persistSavedQueries(updated);
+  };
 
   return (
     <FloatingPanel
@@ -308,6 +413,115 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], onAp
         }} title={solrFq}>
           {canApply ? solrFq : '— add a condition above —'}
         </code>
+        <Btn
+          size="xs" variant="ghost"
+          icon={<I.copy size={10} />}
+          disabled={!canApply}
+          onClick={handleCopy}
+        >Copy</Btn>
+      </div>
+
+      {/* Save bar — name input + Save button. Disabled until the name
+          is non-empty AND the query has at least one valid condition. */}
+      <div style={{
+        padding: '10px 18px',
+        borderTop: '1px solid var(--gb-border-subtle)',
+        background: 'var(--gb-surface-1)',
+        flexShrink: 0,
+        display: 'flex', alignItems: 'center', gap: 8,
+      }}>
+        <Input
+          size="sm"
+          value={saveName}
+          onChange={setSaveName}
+          placeholder="Name this query to save it…"
+          style={{ flex: 1 }}
+        />
+        <Btn
+          size="sm" variant="secondary"
+          icon={<SaveIcon size={11} />}
+          disabled={!canSave}
+          onClick={handleSave}
+        >Save</Btn>
+      </div>
+
+      {/* Saved-queries collapsible panel. Clicking the header toggles
+          the list; each row has Load/Delete. Mirrors the legacy QB's
+          saved-queries panel so users with old saved entries see them
+          here. */}
+      <div style={{
+        borderTop: '1px solid var(--gb-border-subtle)',
+        background: 'var(--gb-surface-canvas)',
+        flexShrink: 0,
+      }}>
+        <button
+          type="button"
+          onClick={() => setSavedOpen((o) => !o)}
+          style={{
+            width: '100%',
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '8px 18px',
+            background: 'transparent', border: 'none',
+            color: 'var(--gb-text-secondary)',
+            cursor: 'pointer',
+            fontSize: 11.5, fontWeight: 600,
+            textAlign: 'left',
+          }}
+        >
+          <span style={{
+            fontSize: 9.5, fontWeight: 700, letterSpacing: 0.8,
+            textTransform: 'uppercase',
+            color: 'var(--gb-text-muted)',
+          }}>Saved Queries</span>
+          {savedQueries.length > 0 && (
+            <span style={{
+              fontFamily: 'var(--gb-font-mono)', fontSize: 10,
+              color: 'var(--gb-text-tertiary)',
+            }}>{savedQueries.length}</span>
+          )}
+          <div style={{ flex: 1 }} />
+          <motion.span
+            animate={{ rotate: savedOpen ? 180 : 0 }}
+            transition={{ duration: 0.18 }}
+            style={{ display: 'inline-flex' }}
+          >
+            <ChevronIcon size={10} />
+          </motion.span>
+        </button>
+        <AnimatePresence initial={false}>
+          {savedOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              style={{ overflow: 'hidden' }}
+            >
+              <div style={{
+                maxHeight: 140, overflowY: 'auto',
+                padding: '4px 18px 10px',
+              }}>
+                {savedQueries.length === 0 ? (
+                  <div style={{
+                    padding: '12px 0',
+                    fontSize: 11.5, fontStyle: 'italic',
+                    color: 'var(--gb-text-muted)',
+                    textAlign: 'center',
+                  }}>No saved queries yet.</div>
+                ) : (
+                  savedQueries.map((q) => (
+                    <SavedQueryRow
+                      key={q.id}
+                      query={q}
+                      onLoad={() => handleLoad(q)}
+                      onDelete={() => handleDelete(q.id)}
+                    />
+                  ))
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <ModalFooter>
@@ -322,10 +536,69 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], onAp
           disabled={!canApply}
           onClick={handleApply}
         >
-          Apply filter
+          {onApply ? 'Apply filter' : 'Done'}
         </Btn>
       </ModalFooter>
     </FloatingPanel>
+  );
+}
+
+/* ── SavedQueryRow ─────────────────────────────────────────────── */
+function SavedQueryRow({ query, onLoad, onDelete }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '6px 8px',
+      borderRadius: 'var(--gb-r-xs)',
+      transition: 'background-color .15s',
+    }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--gb-surface-1)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: 12, fontWeight: 600,
+          color: 'var(--gb-text-primary)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{query.name}</div>
+        <div style={{
+          fontSize: 10, fontFamily: 'var(--gb-font-mono)',
+          color: 'var(--gb-text-muted)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }} title={query.query}>{query.query}</div>
+      </div>
+      <Btn size="xs" variant="ghost" onClick={onLoad}>Load</Btn>
+      <IconBtn size="xs" variant="ghost" danger icon={<I.close size={10} />} onClick={onDelete} tooltip="Delete" />
+    </div>
+  );
+}
+
+/* Inline chevron icon — used in the saved-queries collapsible header.
+   Stroke matches the design system's other small chev glyphs. */
+function ChevronIcon({ size = 10, style }) {
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+      style={style}
+    >
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+}
+
+/* Inline save / disk icon — used in the Save button. */
+function SaveIcon({ size = 12, style }) {
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+      style={style}
+    >
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+      <polyline points="17 21 17 13 7 13 7 21" />
+      <polyline points="7 3 7 8 15 8" />
+    </svg>
   );
 }
 

@@ -338,6 +338,9 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           secondary: 'Skip gallery',
           icon: <I.alert />,
           duration: null,
+          // Center this template-data prompt so it reads as a modal-
+          // adjacent decision instead of a peripheral system notice.
+          placement: 'top-center',
           onPrimary: () => setGallery(MOCK_GALLERY),
         });
       };

@@ -13,6 +13,7 @@ import { WatchList } from '../modals/WatchList.jsx';
 import { CRMCreateContact } from '../modals/CRMCreateContact.jsx';
 import { SubmitProof } from '../modals/SubmitProof.jsx';
 import { CRMSearch } from '../modals/CRMSearch.jsx';
+import { QueryBuilder } from '../modals/QueryBuilder.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    playground.jsx — in-extension modal playground.
@@ -39,7 +40,7 @@ const MODAL_REGISTRY = [
   { id: 'imageViewer',  label: 'Image Viewer',    icon: 'eye',     wired: true  },
   { id: 'submitProof',  label: 'Submit Proof',    icon: 'send',    wired: true  },
   { id: 'crmSearch',    label: 'CRM Search',      icon: 'search',  wired: true  },
-  { id: 'crmQuery',     label: 'CRM Query',       icon: 'filter',  wired: false },
+  { id: 'crmQuery',     label: 'CRM Query',       icon: 'filter',  wired: true  },
   { id: 'crmContact',   label: 'New Contact',     icon: 'user',    wired: true  },
   { id: 'taskList',     label: 'Tasks',           icon: 'check',   wired: false },
   { id: 'phoneFinder',  label: 'Phone Finder',    icon: 'search',  wired: false },
@@ -447,6 +448,17 @@ function PlaygroundSurface() {
         {mounted === 'crmSearch' && (
           <CRMSearch
             key="crmSearch"
+            onClosed={() => setMounted(null)}
+          />
+        )}
+        {mounted === 'crmQuery' && (
+          /* Standalone Query Builder. With no `onApply` prop, clicking
+             Apply falls back to a toast that surfaces the compiled
+             fq= — so the modal is testable without a parent CRM
+             search. Re-uses the same saved-queries storage so anything
+             saved here shows up in the in-context QB and vice versa. */
+          <QueryBuilder
+            key="crmQuery"
             onClosed={() => setMounted(null)}
           />
         )}
