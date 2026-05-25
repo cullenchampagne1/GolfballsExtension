@@ -214,21 +214,31 @@ export function CallLog({
               No call templates configured. Open the Notes editor to add one.
             </EmptyHint>
           ) : (
+            /* Scroll container — caps the section's vertical
+               footprint so a rep with 20+ templates doesn't push
+               the custom-log form off-screen. paddingRight keeps
+               content from sliding under the scrollbar. */
             <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-              gap: 5,
+              maxHeight: 220,
+              overflowY: 'auto',
+              paddingRight: 4,
               marginTop: 6,
             }}>
-              {templates.map((tpl) => (
-                <PresetGridButton
-                  key={tpl.id}
-                  tpl={tpl}
-                  busy={busyId === tpl.id}
-                  disabled={anyBusy && busyId !== tpl.id}
-                  onPick={() => handlePresetClick(tpl)}
-                />
-              ))}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                gap: 5,
+              }}>
+                {templates.map((tpl) => (
+                  <PresetGridButton
+                    key={tpl.id}
+                    tpl={tpl}
+                    busy={busyId === tpl.id}
+                    disabled={anyBusy && busyId !== tpl.id}
+                    onPick={() => handlePresetClick(tpl)}
+                  />
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -249,33 +259,39 @@ export function CallLog({
         <div>
           <SectionLabel>Custom log</SectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
-            {/* Direction gets its own row — at the modal's 480px
-                width the segmented control was crammed when sharing
-                a row with the category dropdown. Full width = both
-                pills readable, icons visible. */}
-            <Field label="Direction">
-              <Segmented
-                size="sm"
-                value={String(direction)}
-                onChange={(v) => setDirection(parseInt(v, 10) | 0)}
-                options={CALL_DIRECTION_OPTIONS.map((o) => ({
-                  ...o,
-                  icon: o.id === '1' ? <Inbound /> : <Outbound />,
-                }))}
-                full
-              />
-            </Field>
-
-            <Field label="Category" required>
-              <Dropdown
-                size="sm"
-                searchable
-                value={String(category)}
-                options={CALL_CATEGORY_OPTIONS}
-                placeholder="Select category…"
-                onChange={(v) => setCategory(parseInt(v, 10) || 0)}
-              />
-            </Field>
+            {/* Direction + Category share a row to save vertical
+                space. Heights are forced to 28px so the bottoms
+                align — Segmented size="sm" defaults to ~20px tall
+                while Dropdown size="sm" is 28px (inputBaseStyle's
+                heights map), so we explicitly stretch Segmented to
+                match. alignItems:end on the grid handles the
+                Field-label height variance (if one label wraps,
+                the controls still bottom-align). */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'end' }}>
+              <Field label="Direction">
+                <Segmented
+                  size="sm"
+                  value={String(direction)}
+                  onChange={(v) => setDirection(parseInt(v, 10) | 0)}
+                  options={CALL_DIRECTION_OPTIONS.map((o) => ({
+                    ...o,
+                    icon: o.id === '1' ? <Inbound /> : <Outbound />,
+                  }))}
+                  full
+                  style={{ height: 28 }}
+                />
+              </Field>
+              <Field label="Category" required>
+                <Dropdown
+                  size="sm"
+                  searchable
+                  value={String(category)}
+                  options={CALL_CATEGORY_OPTIONS}
+                  placeholder="Select category…"
+                  onChange={(v) => setCategory(parseInt(v, 10) || 0)}
+                />
+              </Field>
+            </div>
 
             <Field label="Subject">
               <Input
