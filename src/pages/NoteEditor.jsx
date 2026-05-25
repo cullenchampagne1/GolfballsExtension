@@ -9,6 +9,7 @@ import {
   BodyVar,
   I, Icon,
 } from '../ui/index.js';
+import { CALL_CATEGORY_OPTIONS } from '../lib/callLog.js';
 
 /* ─────────────────────────────────────────────────────────────
    NoteEditor — the production quick-note template editor page.
@@ -55,34 +56,9 @@ const PRIORITY_OPTIONS = [
   { id: '3', label: 'Low' },
 ];
 
-/* CRM enum IDs ported verbatim from legacy editor.html. */
-const CALL_CATEGORY_OPTIONS = [
-  { id: '0',  label: 'Select' },
-  { id: '1',  label: 'Product Question' },
-  { id: '2',  label: 'Order Status' },
-  { id: '3',  label: 'Place Order' },
-  { id: '5',  label: 'Transfer' },
-  { id: '16', label: 'Order Payment' },
-  { id: '17', label: 'Turnaround Time' },
-  { id: '18', label: 'Art' },
-  { id: '21', label: 'Prior Year Followup' },
-  { id: '27', label: 'Returning VoiceMail' },
-  { id: '29', label: 'Tournament Lead' },
-  { id: '30', label: 'Form Lead Followup' },
-  { id: '35', label: 'General Question' },
-  { id: '36', label: 'Order Issues' },
-  { id: '37', label: 'CSR Backup' },
-  { id: '39', label: 'Discovery' },
-  { id: '40', label: 'Opportunity' },
-  { id: '41', label: 'Returns/Reprints' },
-  { id: '49', label: 'Charge Error' },
-  { id: '50', label: 'Fraud Inquiry' },
-  { id: '51', label: 'International Orders' },
-  { id: '52', label: 'Profanity' },
-  { id: '53', label: 'Order Change' },
-  { id: '54', label: 'Cancelation' },
-  { id: '55', label: 'Website Concerns' },
-];
+/* CRM enum IDs are imported from src/lib/callLog.js so the modal +
+   the editor both pull the same canonical list. If you need to add
+   a category, add it there. */
 
 /* ── Variable-chip insert helper ─────────────────────────────
    Tracks the last-focused input + caret so chip clicks insert the

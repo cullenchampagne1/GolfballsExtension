@@ -105,6 +105,121 @@ function seedWatchListSamples() {
   }
 }
 
+/* Playground seed for noteTemplates (call_log subType). Mirrors the
+   shape stored by the Notes editor (src/pages/NoteEditor.jsx) so the
+   CallLog modal renders REAL preset rows in the playground instead
+   of an empty state. No-op if templates already exist — the user's
+   real templates win. Merges into the existing noteTemplates array
+   if there are non-call_log entries already saved (notes, tasks). */
+const NOTE_TEMPLATES_KEY = 'noteTemplates';
+function seedCallLogTemplates() {
+  const hasChromeStorage = (() => {
+    try { return typeof chrome !== 'undefined' && !!chrome.storage?.local; }
+    catch { return false; }
+  })();
+
+  const now = Date.now();
+  const samples = [
+    {
+      id: 'pg-cl-1',
+      name: 'Reached — placed order',
+      subType: 'call_log',
+      enabled: true,
+      subject: 'Reached customer — placed order',
+      body: 'Spoke with customer. Took the order over the phone — see order details.',
+      callDirection: 0,        // Outbound
+      callCategory: 3,         // Place Order
+      callVoicemail: false,
+      callStep1: 'Verify shipping address',
+      callStep2: '',
+      callStep3: '',
+      callStep4: '',
+      updatedAt: now,
+    },
+    {
+      id: 'pg-cl-2',
+      name: 'Reached — sent quote',
+      subType: 'call_log',
+      enabled: true,
+      subject: 'Reached customer — quoted product',
+      body: 'Walked the customer through pricing. Emailing a quote.',
+      callDirection: 0,
+      callCategory: 1,         // Product Question
+      callVoicemail: false,
+      callStep1: 'Send quote email',
+      callStep2: 'Follow up in 3 days',
+      updatedAt: now,
+    },
+    {
+      id: 'pg-cl-3',
+      name: 'Left voicemail — promo',
+      subType: 'call_log',
+      enabled: true,
+      subject: 'Voicemail — promo follow-up',
+      body: 'Left voicemail about current Bridgestone / Srixon promo pricing.',
+      callDirection: 0,
+      callCategory: 21,        // Prior Year Followup
+      callVoicemail: true,
+      updatedAt: now,
+    },
+    {
+      id: 'pg-cl-4',
+      name: 'No answer',
+      subType: 'call_log',
+      enabled: true,
+      subject: 'No answer',
+      body: 'Called — no answer, no voicemail box configured.',
+      callDirection: 0,
+      callCategory: 35,        // General Question
+      callVoicemail: false,
+      updatedAt: now,
+    },
+    {
+      id: 'pg-cl-5',
+      name: 'Inbound — order status',
+      subType: 'call_log',
+      enabled: true,
+      subject: 'Customer called about order status',
+      body: 'Customer called in asking about their order. Confirmed ship date.',
+      callDirection: 1,        // Inbound
+      callCategory: 2,         // Order Status
+      callVoicemail: false,
+      updatedAt: now,
+    },
+  ];
+
+  // Merge strategy: preserve any non-call_log templates the user has,
+  // only inject the sample call_log set when no call_log templates
+  // already exist. This way re-opening the playground after editing
+  // a template doesn't overwrite the rep's work.
+  //
+  // Returns a Promise that resolves when the seed is durable so the
+  // caller can mount the modal AFTER the templates are readable.
+  return new Promise((resolve) => {
+    const apply = (existing) => {
+      const arr = Array.isArray(existing) ? existing : [];
+      const hasCallLog = arr.some((t) => t?.subType === 'call_log');
+      if (hasCallLog) { resolve(); return; }
+      const next = [...arr, ...samples];
+      if (hasChromeStorage) {
+        chrome.storage.local.set({ [NOTE_TEMPLATES_KEY]: next }, () => resolve());
+      } else {
+        try { localStorage.setItem(NOTE_TEMPLATES_KEY, JSON.stringify(next)); } catch {}
+        resolve();
+      }
+    };
+
+    if (hasChromeStorage) {
+      chrome.storage.local.get(NOTE_TEMPLATES_KEY, (data) => apply(data?.[NOTE_TEMPLATES_KEY]));
+    } else {
+      try {
+        const raw = localStorage.getItem(NOTE_TEMPLATES_KEY);
+        apply(raw ? JSON.parse(raw) : null);
+      } catch { apply(null); }
+    }
+  });
+}
+
 /* Notification test pane registry — one entry per fire-button. Each entry's
    `run` receives the toast API and dispatches the matching variant with
    realistic test data. Grouped by variant for the test pane's section
@@ -342,7 +457,7 @@ function PlaygroundSurface() {
         hint: 'Dial via tel: + log the outcome',
         smartFor: ['contact', 'account'],
         kbd: '⌘⇧C',
-        handler: () => {
+        handler: async () => {
           // Mock phone for the playground demo. In the real extension
           // this'll come from the contact's saved CRM record.
           const mockPhone = '(415) 555-0142';
@@ -354,6 +469,9 @@ function PlaygroundSurface() {
           if (typeof window !== 'undefined') {
             window.open(`tel:${digits}`, '_blank');
           }
+          // Seed the demo call_log templates so Quick Log has content
+          // in the playground. No-op if the rep already has templates.
+          await seedCallLogTemplates();
           // Now mount the log modal so the rep can record the outcome.
           setCallContext({
             contactName: actionRegistry.getPageLabel() || 'Contact',
@@ -493,13 +611,17 @@ function PlaygroundSurface() {
       // (no smart action upstream), seed a default contact context so
       // the modal renders with realistic-looking content for design
       // iteration. The smart-action path overrides this with real
-      // page data before setMounted.
-      if (entry.id === 'callLog' && !callContext) {
-        setCallContext({
-          contactName: 'Marcus Chen',
-          contactType: 'contact',
-          phone: '(415) 555-0142',
-        });
+      // page data before setMounted. Also seed sample noteTemplates
+      // so the Quick Log section has rows instead of an empty state.
+      if (entry.id === 'callLog') {
+        seedCallLogTemplates();
+        if (!callContext) {
+          setCallContext({
+            contactName: 'Marcus Chen',
+            contactType: 'contact',
+            phone: '(415) 555-0142',
+          });
+        }
       }
       setMounted(entry.id);
       return;
@@ -682,6 +804,18 @@ function PlaygroundSurface() {
             contactName={callContext.contactName}
             contactType={callContext.contactType}
             phone={callContext.phone}
+            /* Playground submit mock — simulates the CRM POST round-trip.
+               In production this'll be wired to the real Page=272 form
+               submitter (see src/vanilla/call-log-panel.js's submitCallLog
+               for the bytes). The shape the modal sends in is the same
+               either way: a full Template object with callDirection +
+               callCategory + subject + body + callVoicemail. */
+            onSubmit={async (template) => {
+              await new Promise((r) => setTimeout(r, 450));
+              // eslint-disable-next-line no-console
+              console.log('[playground] CallLog submit', template);
+              return { ok: true };
+            }}
             onClosed={() => { setMounted(null); setCallContext(null); }}
           />
         )}
