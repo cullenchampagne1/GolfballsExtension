@@ -12,6 +12,7 @@ import { ImagePreview } from '../modals/ImagePreview.jsx';
 import { WatchList } from '../modals/WatchList.jsx';
 import { CRMCreateContact } from '../modals/CRMCreateContact.jsx';
 import { SubmitProof } from '../modals/SubmitProof.jsx';
+import { CRMSearch } from '../modals/CRMSearch.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    playground.jsx — in-extension modal playground.
@@ -37,7 +38,7 @@ const MODAL_REGISTRY = [
   { id: 'emailPreview', label: 'Email Preview',   icon: 'mail',    wired: false },
   { id: 'imageViewer',  label: 'Image Viewer',    icon: 'eye',     wired: true  },
   { id: 'submitProof',  label: 'Submit Proof',    icon: 'send',    wired: true  },
-  { id: 'crmSearch',    label: 'CRM Search',      icon: 'search',  wired: false },
+  { id: 'crmSearch',    label: 'CRM Search',      icon: 'search',  wired: true  },
   { id: 'crmQuery',     label: 'CRM Query',       icon: 'filter',  wired: false },
   { id: 'crmContact',   label: 'New Contact',     icon: 'user',    wired: true  },
   { id: 'taskList',     label: 'Tasks',           icon: 'check',   wired: false },
@@ -441,6 +442,12 @@ function PlaygroundSurface() {
             key="submitProofForm"
             image={proofImage}
             onClosed={() => { setMounted(null); setProofImage(null); }}
+          />
+        )}
+        {mounted === 'crmSearch' && (
+          <CRMSearch
+            key="crmSearch"
+            onClosed={() => setMounted(null)}
           />
         )}
       </AnimatePresence>
