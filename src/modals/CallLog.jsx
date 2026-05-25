@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   FloatingPanel, ModalHeader,
   Btn, Dropdown, Input, Textarea, Segmented, Field, SectionLabel,
-  FeatureSpotlight, StepsEditor, CollapsibleSection,
+  SwitchTag, StepsEditor, CollapsibleSection,
   I, Icon, useToast,
 } from '../ui/index.js';
 import {
@@ -217,9 +217,10 @@ export function CallLog({
             /* Scroll container — caps the section's vertical
                footprint so a rep with 20+ templates doesn't push
                the custom-log form off-screen. paddingRight keeps
-               content from sliding under the scrollbar. */
+               content from sliding under the scrollbar. 168px
+               shows ~4 rows of 30px buttons before scrolling. */
             <div style={{
-              maxHeight: 220,
+              maxHeight: 168,
               overflowY: 'auto',
               paddingRight: 4,
               marginTop: 6,
@@ -291,14 +292,37 @@ export function CallLog({
               </Field>
             </div>
 
-            <Field label="Subject">
+            {/* Subject + Voicemail switch tag share a label row.
+                Voicemail used to live in its own FeatureSpotlight
+                row which took ~50px of vertical space for a single
+                boolean — folding it into the Subject row reclaims
+                that for the rest of the form. SwitchTag handles the
+                hover/active styling so it reads as an inline action,
+                not just static text. */}
+            <div>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                gap: 6, marginBottom: 4,
+              }}>
+                <div style={{
+                  fontSize: 11, fontWeight: 600,
+                  color: 'var(--gb-text-secondary)',
+                }}>Subject</div>
+                <SwitchTag
+                  size="xs"
+                  on={voicemail}
+                  label="Voicemail"
+                  icon={<MicIcon />}
+                  onClick={() => setVoicemail((v) => !v)}
+                />
+              </div>
               <Input
                 size="sm"
                 value={subject}
                 onChange={setSubject}
                 placeholder="Brief subject for the activity log…"
               />
-            </Field>
+            </div>
 
             <Field label="Description">
               <Textarea
@@ -309,18 +333,6 @@ export function CallLog({
                 resize="vertical"
               />
             </Field>
-
-            {/* Voicemail toggle — same FeatureSpotlight component the
-                Notes editor's call_log panel uses. Keeps the two
-                surfaces visually identical for the same flag. */}
-            <FeatureSpotlight
-              size="xs"
-              on={voicemail}
-              icon={<MicIcon />}
-              name="Left voicemail"
-              desc="Logs the call with a voicemail flag."
-              onChange={setVoicemail}
-            />
 
             {/* Next-step actions — up to 4. Shared StepsEditor
                 component used by both the editor and the modal so
