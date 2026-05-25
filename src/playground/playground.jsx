@@ -16,6 +16,7 @@ import { CRMSearch } from '../modals/CRMSearch.jsx';
 import { QueryBuilder } from '../modals/QueryBuilder.jsx';
 import { TaskList } from '../modals/TaskList.jsx';
 import { CallLog } from '../modals/CallLog.jsx';
+import { submitCallLog } from '../lib/submitCallLog.js';
 import { ActionsShelf } from '../ui/components/ActionsShelf.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { findPhone } from '../lib/findPhone.js';
@@ -804,18 +805,24 @@ function PlaygroundSurface() {
             contactName={callContext.contactName}
             contactType={callContext.contactType}
             phone={callContext.phone}
-            /* Playground submit mock — simulates the CRM POST round-trip.
-               In production this'll be wired to the real Page=272 form
-               submitter (see src/vanilla/call-log-panel.js's submitCallLog
-               for the bytes). The shape the modal sends in is the same
-               either way: a full Template object with callDirection +
-               callCategory + subject + body + callVoicemail. */
-            onSubmit={async (template) => {
-              await new Promise((r) => setTimeout(r, 450));
-              // eslint-disable-next-line no-console
-              console.log('[playground] CallLog submit', template);
-              return { ok: true };
-            }}
+            /* Use the SAME submitCallLog the production content-script
+               uses. In the playground there's no contactId/employeeId
+               on the page (and the CRM URL isn't reachable from a
+               regular tab), so submitCallLog will short-circuit with
+               a clear "Missing contact ID, employee ID…" error that
+               the modal surfaces as a toast. Mirrors exactly what the
+               rep would see in production if smart-detection ever
+               returned an incomplete context — no divergence between
+               sandbox + production code paths. */
+            onSubmit={(template) => submitCallLog({
+              template,
+              context: {
+                contactId:  callContext.contactId  || '',
+                phone:      (callContext.phone || '').replace(/\D/g, ''),
+                contactName: callContext.contactName,
+                employeeId: callContext.employeeId || '',
+              },
+            })}
             onClosed={() => { setMounted(null); setCallContext(null); }}
           />
         )}
