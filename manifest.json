@@ -61,6 +61,7 @@
         "react-dist/content/margin-calc.js",
         "react-dist/content/crm-search.js",
         "react-dist/content/crm-create-contact.js",
+        "react-dist/content/actions-shelf.js",
         "src/vanilla/main.js"
       ],
       "all_frames": false
