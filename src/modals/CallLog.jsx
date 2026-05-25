@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   FloatingPanel, ModalHeader,
   Btn, Dropdown, Input, Textarea, Segmented, Field, SectionLabel,
-  SwitchTag, StepsEditor, CollapsibleSection,
+  SwitchTag, CollapsibleSection,
   I, Icon, useToast,
 } from '../ui/index.js';
 import {
@@ -88,9 +88,6 @@ export function CallLog({
   const [subject, setSubject]     = useState('');
   const [body, setBody]           = useState('');
   const [voicemail, setVoicemail] = useState(false);
-  /* Steps are edited as an array for ergonomic add / remove and
-     flattened back to callStep1..4 on save (see buildCustomTemplate). */
-  const [steps, setSteps] = useState(['']);
   const [savingCustom, setSavingCustom] = useState(false);
 
   const bindCloseRef = useRef(null);
@@ -159,7 +156,6 @@ export function CallLog({
       callDirection: direction,
       callCategory: category,
       callVoicemail: voicemail,
-      steps,
     });
     try {
       const result = await onSubmit(synthetic);
@@ -292,22 +288,20 @@ export function CallLog({
               </Field>
             </div>
 
-            {/* Subject + Voicemail switch tag share a label row.
-                Voicemail used to live in its own FeatureSpotlight
-                row which took ~50px of vertical space for a single
-                boolean — folding it into the Subject row reclaims
-                that for the rest of the form. SwitchTag handles the
-                hover/active styling so it reads as an inline action,
-                not just static text. */}
-            <div>
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                gap: 6, marginBottom: 4,
-              }}>
-                <div style={{
-                  fontSize: 11, fontWeight: 600,
-                  color: 'var(--gb-text-secondary)',
-                }}>Subject</div>
+            {/* Subject input + inline Voicemail switch tag share
+                the SAME row. The Input flexes to fill remaining
+                width while the SwitchTag pins to the right at its
+                natural size. Cuts a whole row out of the form
+                versus stacking voicemail below. */}
+            <Field label="Subject">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Input
+                  size="sm"
+                  value={subject}
+                  onChange={setSubject}
+                  placeholder="Brief subject for the activity log…"
+                  style={{ flex: 1, minWidth: 0 }}
+                />
                 <SwitchTag
                   size="xs"
                   on={voicemail}
@@ -316,13 +310,7 @@ export function CallLog({
                   onClick={() => setVoicemail((v) => !v)}
                 />
               </div>
-              <Input
-                size="sm"
-                value={subject}
-                onChange={setSubject}
-                placeholder="Brief subject for the activity log…"
-              />
-            </div>
+            </Field>
 
             <Field label="Description">
               <Textarea
@@ -333,20 +321,6 @@ export function CallLog({
                 resize="vertical"
               />
             </Field>
-
-            {/* Next-step actions — up to 4. Shared StepsEditor
-                component used by both the editor and the modal so
-                the input shape (numbered chip + Input + trash) is
-                identical to what the rep configured. */}
-            <div>
-              <SectionLabel>
-                Next-step actions
-                <span style={{ fontSize: 10, color: 'var(--gb-text-muted)', fontWeight: 500, textTransform: 'none', letterSpacing: 0, marginLeft: 6 }}>
-                  up to 4
-                </span>
-              </SectionLabel>
-              <StepsEditor steps={steps} onChange={setSteps} />
-            </div>
 
             {/* Save lives INSIDE the collapsible — it's only useful
                 when the form is visible, and putting it here keeps
