@@ -127,6 +127,13 @@ export function FloatingPanel({
   // of content. Same px-or-CSS shape as maxHeight; still clamped to the
   // viewport on small screens.
   height,
+  // Submodal pattern: when `visible` is false the panel stays mounted
+  // (so its internal state — selections, search results, scroll —
+  // survives) but animates out of view and turns off pointer events.
+  // The host can flip it back to true and the panel slides back in.
+  // Default true preserves existing behavior for the dozen callers that
+  // don't know about this prop.
+  visible = true,
 }) {
   const [open, setOpen] = useState(true);
   // dragHandleRef is published via context so ModalHeader (or any inner
@@ -187,10 +194,10 @@ export function FloatingPanel({
               unmistakably above any sibling fixed-position decoration. */}
           <motion.div
             initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            animate={{ opacity: visible ? 1 : 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
-            onClick={!draggable ? requestClose : undefined}
+            onClick={!draggable && visible ? requestClose : undefined}
             style={{
               position: 'fixed', inset: 0, zIndex: 999990,
               // Draggable mode = click-through so the page stays usable.
@@ -209,6 +216,20 @@ export function FloatingPanel({
             }}
           />
           <FloatingPanelContext.Provider value={ctx}>
+            {/* Submodal hide: when `visible` is false the wrapper fades
+                + turns off pointer events but the children stay mounted
+                so the modal's state survives the round trip. Used by
+                CRMSearch when it surfaces the Query Builder as a child
+                modal: CRMSearch hides for the duration, QB renders, on
+                QB close CRMSearch fades back in with selections + search
+                results still intact. */}
+            <motion.div
+              animate={{ opacity: visible ? 1 : 0 }}
+              transition={{ duration: 0.18 }}
+              style={{
+                pointerEvents: visible ? 'auto' : 'none',
+              }}
+            >
             {draggable ? (
               /* Throwable owns position — physics loop integrates velocity,
                  bounces off viewport walls, decays via friction. The
@@ -243,6 +264,7 @@ export function FloatingPanel({
                 </div>
               </div>
             )}
+            </motion.div>
           </FloatingPanelContext.Provider>
         </>
       )}

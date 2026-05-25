@@ -173,6 +173,7 @@ export function CRMSearch({ onClosed, bindClose }) {
         secondary: 'Dismiss',
         icon: <I.alert />,
         duration: null,
+        placement: 'top-center',
         onPrimary: () => {
           // Bump the gen too so any pending stale searches don't clobber.
           searchGenRef.current++;
@@ -293,11 +294,17 @@ export function CRMSearch({ onClosed, bindClose }) {
     : 'Search contacts & accounts · select · run campaigns';
 
   return (
+    <>
     <FloatingPanel
       width={1000}
       height={640}
       backdrop
       draggable={draggable}
+      // Submodal pattern: hide CRMSearch while the Query Builder is up.
+      // Both panels stay mounted; CRMSearch fades out so the QB sits
+      // alone in the viewport, then fades back when QB closes — with
+      // search results / selection state intact.
+      visible={!qbOpen}
       onClose={onClosed}
       bindClose={handleBindClose}
     >
@@ -430,18 +437,21 @@ export function CRMSearch({ onClosed, bindClose }) {
         />
       </div>
 
-      {/* Query Builder overlay — sibling so it portals to its own z-layer
-          on top of CRMSearch. Mount/unmount on open so the conditions
-          state is preserved per session: when the user re-opens, we
-          pass the previously applied filter's conditions back in. */}
-      {qbOpen && (
-        <QueryBuilder
-          initialConditions={qbFilter?.conditions || []}
-          onClosed={() => setQbOpen(false)}
-          onApply={applyQbFilter}
-        />
-      )}
     </FloatingPanel>
+
+    {/* Query Builder lives as a SIBLING of CRMSearch — not inside the
+        FloatingPanel children — so the submodal visibility toggle on
+        CRMSearch doesn't also hide the QB. When qbOpen flips true,
+        CRMSearch fades out, QB renders. On close, QB unmounts and
+        CRMSearch fades back in. */}
+    {qbOpen && (
+      <QueryBuilder
+        initialConditions={qbFilter?.conditions || []}
+        onClosed={() => setQbOpen(false)}
+        onApply={applyQbFilter}
+      />
+    )}
+    </>
   );
 }
 
