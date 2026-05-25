@@ -140,6 +140,20 @@ export const DEV_SETTINGS = [
     default: false,
   },
   {
+    key:     'taskList.draggable',
+    label:   'Task List: draggable mode',
+    desc:    'When on, the Task List modal is a draggable tool window. When off, it sits centered with a solid backdrop that closes on outside-click.',
+    type:    'bool',
+    default: false,
+  },
+  {
+    key:     'taskList.useMock',
+    label:   'Task List: force mock mode',
+    desc:    'Bypass the live Page=349 task scrape and use canned tasks. Useful for playground previews or when the API is down. Auto-mocks when not in an extension context.',
+    type:    'bool',
+    default: false,
+  },
+  {
     key:     'submitProof.draggable',
     label:   'Submit Proof: draggable mode',
     desc:    'When on, the Submit Proof modal is a draggable tool window. When off, it sits centered with a solid backdrop that closes on outside-click.',

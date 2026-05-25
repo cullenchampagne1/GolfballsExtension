@@ -14,6 +14,7 @@ import { CRMCreateContact } from '../modals/CRMCreateContact.jsx';
 import { SubmitProof } from '../modals/SubmitProof.jsx';
 import { CRMSearch } from '../modals/CRMSearch.jsx';
 import { QueryBuilder } from '../modals/QueryBuilder.jsx';
+import { TaskList } from '../modals/TaskList.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    playground.jsx — in-extension modal playground.
@@ -42,7 +43,7 @@ const MODAL_REGISTRY = [
   { id: 'crmSearch',    label: 'CRM Search',      icon: 'search',  wired: true  },
   { id: 'crmQuery',     label: 'CRM Query',       icon: 'filter',  wired: true  },
   { id: 'crmContact',   label: 'New Contact',     icon: 'user',    wired: true  },
-  { id: 'taskList',     label: 'Tasks',           icon: 'check',   wired: false },
+  { id: 'taskList',     label: 'Tasks',           icon: 'check',   wired: true  },
   { id: 'phoneFinder',  label: 'Phone Finder',    icon: 'search',  wired: false },
   { id: 'calendar',     label: 'Calendar',        icon: 'cog',     wired: false },
 ];
@@ -459,6 +460,12 @@ function PlaygroundSurface() {
              saved here shows up in the in-context QB and vice versa. */
           <QueryBuilder
             key="crmQuery"
+            onClosed={() => setMounted(null)}
+          />
+        )}
+        {mounted === 'taskList' && (
+          <TaskList
+            key="taskList"
             onClosed={() => setMounted(null)}
           />
         )}
