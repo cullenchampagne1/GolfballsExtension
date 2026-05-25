@@ -28,22 +28,27 @@ export function ModalHeader({ icon, title, subtitle, right, tone, accent = true,
   const panel = useContext(FloatingPanelContext);
   const handleClose = onClose || panel?.requestClose;
   const t = TONES[tone || (accent ? 'brand' : 'neutral')] || TONES.brand;
+  // Only wire the drag-handle ref + show the grab cursor when the
+  // hosting panel actually supports dragging. A non-draggable modal
+  // (centered, click-outside-to-close) shouldn't tease a grab affordance
+  // that does nothing.
+  const isDraggable = !!(panel && panel.draggable);
 
-  // Inside a FloatingPanel, the header IS the throw handle. Throwable
-  // wires its pointer listeners to whatever DOM node ends up in this
-  // ref; attaching it here makes the title bar the only grabbable
-  // region (clicks on inner buttons short-circuit Throwable's own
-  // interactive-element guard).
+  // Inside a FloatingPanel that's draggable, the header IS the throw
+  // handle. Throwable wires its pointer listeners to whatever DOM node
+  // ends up in this ref; attaching it here makes the title bar the
+  // only grabbable region (clicks on inner buttons short-circuit
+  // Throwable's own interactive-element guard).
   return (
     <div
-      ref={panel?.dragHandleRef}
+      ref={isDraggable ? panel.dragHandleRef : undefined}
       style={{
         padding: '14px 16px', flexShrink: 0,
         background: 'var(--gb-surface-2)',
         borderBottom: '1px solid var(--gb-border-subtle)',
         display: 'flex', alignItems: 'center', gap: 12,
-        cursor: panel ? 'grab' : undefined,
-        userSelect: panel ? 'none' : undefined,
+        cursor: isDraggable ? 'grab' : undefined,
+        userSelect: isDraggable ? 'none' : undefined,
       }}
     >
       {icon && (

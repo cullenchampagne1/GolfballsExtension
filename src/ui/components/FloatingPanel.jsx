@@ -147,7 +147,11 @@ export function FloatingPanel({
     return () => document.removeEventListener('keydown', onKey);
   }, [requestClose]);
 
-  const ctx = useMemo(() => ({ dragHandleRef, requestClose }), [requestClose]);
+  // Expose `draggable` through context so inner components (chiefly
+  // ModalHeader) know whether they should wire themselves as a drag
+  // handle. Without this, a centered/non-draggable modal still shows
+  // a grab cursor on the header — confusing because nothing happens.
+  const ctx = useMemo(() => ({ dragHandleRef, requestClose, draggable }), [requestClose, draggable]);
   const cssWidth = typeof width === 'number' ? `min(${width}px, calc(100vw - 32px))` : width;
   const cssMaxHeight = maxHeight == null
     ? 'calc(100vh - 32px)'

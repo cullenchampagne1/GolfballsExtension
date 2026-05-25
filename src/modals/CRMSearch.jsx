@@ -331,8 +331,7 @@ export function CRMSearch({ onClosed, bindClose }) {
         />
         <Btn
           size="sm"
-          variant="tinted"
-          status="brand"
+          variant="secondary"
           icon={<FunnelIcon />}
           onClick={openQueryBuilder}
         >Query Builder</Btn>
