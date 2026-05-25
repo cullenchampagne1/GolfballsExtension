@@ -50,7 +50,6 @@ const MODAL_REGISTRY = [
   { id: 'crmContact',   label: 'New Contact',     icon: 'user',    wired: true  },
   { id: 'taskList',     label: 'Tasks',           icon: 'check',   wired: true  },
   { id: 'callLog',      label: 'Call Log',        icon: 'phone',   wired: true  },
-  { id: 'phoneFinder',  label: 'Phone Finder',    icon: 'search',  wired: false },
   { id: 'calendar',     label: 'Calendar',        icon: 'cog',     wired: false },
 ];
 
