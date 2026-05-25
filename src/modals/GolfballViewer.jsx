@@ -117,6 +117,12 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   // Water pour: hold to fill, release to stop. Level persists.
   const waterActiveRef = useRef(false);
   const pourWaterAtRef = useRef(null);   // ({clientX,clientY}) — set pour position
+  // Cursor-push: when set to a non-null {clientX,clientY}, the render
+  // loop raycasts to the water plane each frame and subtracts a Gaussian
+  // bump from the heightfield centered at the hit point — "finger pressed
+  // into water". null = no push. Setting to null releases the depression
+  // and the wave equation closes it back up naturally.
+  const pushWaterAtRef = useRef(null);
   const drainWaterRef  = useRef(null);   // () — drain all water instantly
   // Clear every item in the room (bombs, balls, confetti, water,
   // particles) but leave the main ball untouched. Called when the
@@ -153,6 +159,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
     get waterActive() { return waterActiveRef.current; },
     set waterActive(v) { waterActiveRef.current = v; },
     pourWaterAt: (...args) => pourWaterAtRef.current?.(...args),
+    pushWaterAt: (...args) => pushWaterAtRef.current?.(...args),
     drainWater: () => drainWaterRef.current?.(),
     clearRoomItems: () => clearRoomItemsRef.current?.(),
     explodeBallAt: (...args) => explodeBallAtRef.current?.(...args),
@@ -161,13 +168,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   // 'loading' until Three.js + the model finish; then 'ready'. 'error'
   // surfaces a basic message instead of an empty canvas.
   const [status, setStatus] = useState('loading');
-  // Underwater tint — clipped to the water line. waterLineTop is the
-  // CSS-px Y coord (from container top) of the projected water surface,
-  // so the tint div can be positioned with `top: waterLineTop`. -1
-  // means no water (don't render the overlay).
-  const [waterLineTop, setWaterLineTop] = useState(-1);
-  const waterLineTopRef = useRef(-1);
-  const lastWaterLineUpdateRef = useRef(0);
+  // (Underwater tint is now a real WebGL pass — see the underwaterQuad
+  // in the scene setup below. The old React state + DOM-overlayed div
+  // for clipping a blue gradient at waterLineTop has been removed.)
   // Debug HUD is gated behind a developer setting (default off). When
   // off, the render loop also skips publishing snapshot state so we
   // avoid the ~10Hz React re-renders entirely. Mirror the flag to a
@@ -1148,6 +1151,92 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         scene.add(waterMesh);
         objectsToDispose.push(waterGeo, waterMat);
 
+        /* ── Underwater tint (replaces the CSS blue-gradient div) ─────
+           Fullscreen quad in clip-space — its vertex shader bypasses
+           Three.js's projection so the same NDC quad always fills the
+           viewport regardless of camera transform. Renders LAST
+           (renderOrder = 999) on top of the water mesh and everything
+           else, applying a depth-attenuated water tint to pixels below
+           the projected water line.
+
+           Improvements over the CSS div:
+             • Beer's-law alpha so the tint darkens exponentially with
+               depth-from-surface — far more "real water" than a fixed
+               linear gradient.
+             • Soft caustic wobble at the surface band (a thin animated
+               sine ripple) to sell the water line as a refractive
+               interface rather than a flat color stop.
+             • Uses the water shader's own uShallowCol/uDeepCol uniforms
+               so the tint stays consistent with the water surface
+               material when those colors are tuned.
+
+           Set `mesh.visible = hasWater` each frame so the quad only
+           paints when there's water to show. */
+        const underwaterQuadGeo = new THREE.PlaneGeometry(2, 2);
+        objectsToDispose.push(underwaterQuadGeo);
+        const underwaterUniforms = {
+          uTime:        { value: 0 },
+          uWaterLineNDC:{ value: -1 },                 // -1 = below screen (no tint)
+          uShallowCol:  waterUniforms.uShallowCol,     // share so retunes track
+          uDeepCol:     waterUniforms.uDeepCol,
+        };
+        const underwaterMat = new THREE.ShaderMaterial({
+          uniforms: underwaterUniforms,
+          transparent: true,
+          depthTest: false,
+          depthWrite: false,
+          vertexShader: /* glsl */`
+            varying vec2 vUv;
+            void main() {
+              vUv = uv;
+              // Bypass modelView/projection — pass position straight to
+              // clip space so the quad fills the viewport regardless of
+              // where the camera is or what it's looking at.
+              gl_Position = vec4(position, 1.0);
+            }
+          `,
+          fragmentShader: /* glsl */`
+            precision highp float;
+            uniform float uWaterLineNDC;   // -1 .. +1 (Y of the water surface in NDC)
+            uniform vec3  uShallowCol;
+            uniform vec3  uDeepCol;
+            uniform float uTime;
+            varying vec2 vUv;
+            void main() {
+              // vUv is 0..1; convert to NDC.y in -1..+1.
+              float ndcY = vUv.y * 2.0 - 1.0;
+              if (ndcY > uWaterLineNDC) discard;       // above water — pass through
+
+              // 0 at the water line, 1 at the bottom of the screen.
+              float bandH = uWaterLineNDC + 1.0;       // total NDC distance below the line
+              float depthFrac = clamp((uWaterLineNDC - ndcY) / max(bandH, 1e-3), 0.0, 1.0);
+
+              // Beer's law absorption — the deeper the pixel, the more
+              // light is absorbed. 2.5 is the absorption coefficient;
+              // ~93% opacity at the bottom of the screen.
+              float alpha = 1.0 - exp(-2.5 * depthFrac);
+
+              // Shallow→deep color blend.
+              vec3 col = mix(uShallowCol, uDeepCol, smoothstep(0.0, 1.0, depthFrac));
+
+              // Surface caustic: a thin animated ripple at the water
+              // line, fades out within 6% of the band. Sells the line
+              // as a refractive boundary instead of a flat color stop.
+              float surfBand = 1.0 - smoothstep(0.0, 0.06, depthFrac);
+              float caustic = sin(vUv.x * 26.0 + uTime * 1.8) * 0.5 + 0.5;
+              col += vec3(0.05, 0.10, 0.16) * caustic * surfBand * 0.55;
+
+              gl_FragColor = vec4(col, alpha);
+            }
+          `,
+        });
+        const underwaterQuad = new THREE.Mesh(underwaterQuadGeo, underwaterMat);
+        underwaterQuad.frustumCulled = false;          // never cull (NDC coords don't fit Three.js's bbox math)
+        underwaterQuad.renderOrder = 999;
+        underwaterQuad.visible = false;
+        scene.add(underwaterQuad);
+        objectsToDispose.push(underwaterMat);
+
         // Pour cursor world position — updated by hold handler.
         const waterPourWorld = new THREE.Vector3(0, 0, 0);
         let pourActive = false;
@@ -1219,6 +1308,44 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             Math.max(-HALF_Z + 8, Math.min(HALF_Z - 8, hitPoint.z)),
           );
           pourActive = true;
+        };
+
+        /* Cursor-push: each call updates an internal target world point
+           that the render loop reads to inject a negative-height bump
+           into the heightfield. Pass `null` to release the depression —
+           the existing wave equation propagates the displacement outward
+           and the surface heals naturally. The plane we raycast against
+           is the live water surface (baseLevel), so a tall pour and a
+           low pool both feel pushable from the right screen position. */
+        let pushActive = false;
+        const pushTarget = new THREE.Vector3(0, 0, 0);
+        const pushPlane  = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        pushWaterAtRef.current = (pos) => {
+          if (!pos) { pushActive = false; return; }
+          const canvas = renderer.domElement;
+          const r = canvas.getBoundingClientRect();
+          if (pos.clientX < r.left || pos.clientX > r.right ||
+              pos.clientY < r.top  || pos.clientY > r.bottom) {
+            pushActive = false;
+            return;
+          }
+          // Update plane to live water surface so the raycast hits where
+          // the user expects after pouring (baseLevel rises as the pool
+          // fills).
+          pushPlane.constant = -baseLevel;
+          ndc.x =  ((pos.clientX - r.left) / r.width)  * 2 - 1;
+          ndc.y = -((pos.clientY - r.top)  / r.height) * 2 + 1;
+          ray.setFromCamera(ndc, camera);
+          if (!ray.ray.intersectPlane(pushPlane, hitPoint)) {
+            pushActive = false;
+            return;
+          }
+          pushTarget.set(
+            Math.max(-HALF_X + 6, Math.min(HALF_X - 6, hitPoint.x)),
+            hitPoint.y,
+            Math.max(-HALF_Z + 6, Math.min(HALF_Z - 6, hitPoint.z)),
+          );
+          pushActive = true;
         };
 
         drainWaterRef.current = () => {
@@ -2223,6 +2350,23 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
 
           const hasWater = baseLevel > FLOOR_Y;
 
+          /* ── Cursor-push depression ──────────────────────────────
+             When the consumer has set a push target (via pushWaterAt)
+             AND there's water to push, subtract a small Gaussian bump
+             from the heightfield at the target each frame. The wave
+             equation handles the rest — water flows in from the sides
+             and a stable dimple forms under the cursor. Releasing the
+             push (passing null) stops the negative injection; the
+             dimple heals as neighboring height feeds back in. */
+          if (hasWater && pushActive) {
+            const ci = xToGridI(pushTarget.x);
+            const cj = zToGridJ(pushTarget.z);
+            // Same per-frame scaling pattern as pour (×dt×60 = "per
+            // logical 60-fps frame"), but negative and smaller radius
+            // so it reads as a finger-press, not a drain.
+            injectHeight(ci, cj, 6, -8 * dt * 60);
+          }
+
           /* ── Pour stream droplets ──────────────────────────────── */
           if (waterActiveRef.current && pourActive) {
             streamSpawnTimer += dt * 1000;
@@ -2420,27 +2564,21 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             waterMesh.visible = false;
           }
 
-          /* ── Water line projection → screen-space Y ─────────────
+          /* ── Water line projection → underwater shader uniform ──
              Project the water surface (at world Y = baseLevel) into
-             clip space, convert to a CSS pixel offset from the top
-             of the canvas. The React overlay clips its blue tint to
-             everything BELOW that Y, so above-water pixels stay clean. */
-          let waterLinePx = -1;
+             clip space, hand the NDC.y directly to the underwater
+             overlay shader. The shader discards anything above this
+             line so above-water pixels stay clean; below it, depth-
+             attenuated water tint paints over the rendered scene. */
           if (hasWater) {
-            // Pick a sample point on the water surface plane in front
-            // of the camera so the projection is well-defined.
-            const sampleZ = 0;
-            const wp = new THREE.Vector3(0, baseLevel, sampleZ);
+            const wp = new THREE.Vector3(0, baseLevel, 0);
             wp.project(camera);
-            // wp.y is now in NDC [-1, +1] with +1 = top of screen.
-            // CSS Y from top = (1 - wp.y) / 2 * height.
-            const containerH = renderer.domElement.clientHeight;
-            waterLinePx = Math.round((1 - wp.y) * 0.5 * containerH);
-          }
-          waterLineTopRef.current = waterLinePx;
-          if (nowMs - lastWaterLineUpdateRef.current > 50) {
-            lastWaterLineUpdateRef.current = nowMs;
-            setWaterLineTop(waterLinePx);
+            // wp.y is the water surface in NDC, -1..+1 (+1 = top of screen).
+            underwaterUniforms.uWaterLineNDC.value = wp.y;
+            underwaterUniforms.uTime.value = nowMs / 1000;
+            underwaterQuad.visible = true;
+          } else {
+            underwaterQuad.visible = false;
           }
 
           const stepNeeded = throwModeRef.current || bombs.length > 0
@@ -2889,6 +3027,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
       confettiActiveRef.current = false;
       spawnBallActiveRef.current = false;
       pourWaterAtRef.current = null;
+      pushWaterAtRef.current = null;
       drainWaterRef.current = null;
       clearRoomItemsRef.current = null;
       explodeBallAtRef.current = null;
@@ -3068,23 +3207,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         </div>
       )}
 
-      {/* Below-the-water-line blue tint — clipped to start at the
-          projected water surface, so only the submerged portion of
-          the frame is tinted. Pure visual; pointer-events:none. */}
-      {waterLineTop >= 0 && (
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            left: 0, right: 0,
-            top: Math.max(0, waterLineTop),
-            bottom: 0,
-            pointerEvents: 'none',
-            background: 'linear-gradient(180deg, rgba(20, 110, 200, 0.35) 0%, rgba(5, 60, 150, 0.55) 100%)',
-            zIndex: 5,
-          }}
-        />
-      )}
+      {/* (CSS underwater tint removed — now rendered as a depth-
+          attenuated fullscreen WebGL pass inside the Three.js scene.
+          See the underwaterQuad creation block above.) */}
     </div>
   );
 });
