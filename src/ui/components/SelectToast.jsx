@@ -100,7 +100,21 @@ export function SelectToast({
             fontStyle: 'italic',
           }}>No items to pick</div>
         ) : items.map((item) => (
-          <SelectRow key={item.id} item={item} size={s} onPick={onPick} />
+          <SelectRow
+            key={item.id}
+            item={item}
+            size={s}
+            onPick={(picked) => {
+              // Fire the caller's handler FIRST so it can read item.raw
+              // before we tear the toast down. Then dismiss — picking IS
+              // the dismissal signal, so leaving the toast mounted reads
+              // as "did my click register?" The caller's handler usually
+              // fires its own follow-up toast (success/error) which lands
+              // in a fresh slot anyway.
+              if (onPick) onPick(picked);
+              if (onDismiss) onDismiss();
+            }}
+          />
         ))}
       </div>
     </div>
