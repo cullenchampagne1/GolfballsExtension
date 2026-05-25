@@ -49,7 +49,10 @@ const VARIANT_DEFAULTS = {
   step:   { placement: 'top-right',  duration: null },
   tray:   { placement: 'top-right',  duration: null },
   edge:   { placement: 'top-edge',   duration: null },
-  select: { placement: 'top-right',  duration: null },
+  // Select toasts are decision prompts — center them so the user
+  // treats them as a focused choice instead of dismissing them as
+  // ambient peripheral noise (like a regular action toast).
+  select: { placement: 'top-center', duration: null },
 };
 
 /* Maximum simultaneously rendered toasts per placement. Older entries
