@@ -2272,10 +2272,15 @@ function ViewerToolbox({ viewerRef }) {
     }
   }, [activeTool, viewerRef]);
 
-  // Drain water when switching away from the water tool.
+  // Drain water when switching away from the water tool. Also release
+  // any in-flight cursor-push depression when switching INTO the water
+  // tool (otherwise the last push position keeps depressing while the
+  // user is also pouring — visually noisy).
   useEffect(() => {
     if (activeTool !== 'water') {
       if (viewerRef.current) viewerRef.current.waterActive = false;
+    } else {
+      viewerRef.current?.pushWaterAt?.(null);
     }
   }, [activeTool, viewerRef]);
 
@@ -2325,6 +2330,14 @@ function ViewerToolbox({ viewerRef }) {
       lastCursorRef.current = { clientX: e.clientX, clientY: e.clientY };
       if (activeTool === 'water' && viewerRef.current?.waterActive) {
         viewerRef.current.pourWaterAt?.({ clientX: e.clientX, clientY: e.clientY });
+      } else if (viewerRef.current && activeTool !== 'water') {
+        // Cursor-push: whenever the water tool is OFF and the cursor
+        // moves over the canvas, the viewer's heightfield gets a
+        // negative bump under the cursor each frame. Touch contains
+        // its own bounds check (returns gracefully if pos is outside
+        // the canvas), so we can fire unconditionally on every move
+        // and let the viewer decide whether to act.
+        viewerRef.current.pushWaterAt?.({ clientX: e.clientX, clientY: e.clientY });
       }
     };
 
