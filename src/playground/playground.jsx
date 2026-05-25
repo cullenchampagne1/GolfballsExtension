@@ -18,6 +18,7 @@ import { TaskList } from '../modals/TaskList.jsx';
 import { ActionsShelf } from '../ui/components/ActionsShelf.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { findPhone } from '../lib/findPhone.js';
+import { useFeatureFlag } from '../lib/useFeatureFlag.js';
 
 /* ───────────────────────────────────────────────────────────────
    playground.jsx — in-extension modal playground.
@@ -277,6 +278,13 @@ function PlaygroundSurface() {
   const notify = useSettingNotification();
   const toast = useToast();
 
+  // Find-phone is gated on a feature flag so admins can disable the
+  // action without rebuilding. Default-on outside an extension context
+  // (the playground in a browser tab has no chrome.storage). When the
+  // flag is OFF the action never registers, so it doesn't appear in
+  // the shelf list at all — exactly what we want.
+  const phoneFinderEnabled = useFeatureFlag('phoneFinderEnabled');
+
   // Selected horizontal placement applied to the next toast fire. Edge
   // toasts ignore this — they have their own dedicated top-edge placement.
   // The same constant feeds the Segmented switcher in the test pane.
@@ -306,7 +314,6 @@ function PlaygroundSurface() {
     const SearchG = (p) => (<RegSvg {...p}><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></RegSvg>);
     const UserG   = (p) => (<RegSvg {...p}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></RegSvg>);
     const NoteG   = (p) => (<RegSvg {...p}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></RegSvg>);
-    const PhoneG  = (p) => (<RegSvg {...p}><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.13.96.37 1.9.72 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0122 16.92z"/></RegSvg>);
     const ListG   = (p) => (<RegSvg {...p}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></RegSvg>);
     const EyeG    = (p) => (<RegSvg {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></RegSvg>);
     const TrashG  = (p) => (<RegSvg {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></RegSvg>);
@@ -325,54 +332,6 @@ function PlaygroundSurface() {
         smartFor: ['contact'],
         kbd: '⌘T',
         handler: () => toast?.info?.('Quick task — coming soon'),
-      }),
-      actionRegistry.register({
-        id: 'demo-find-phone',
-        label: 'Find phone for Marcus',
-        icon: <PhoneG />,
-        hint: 'Scan orders for the right number',
-        smartFor: ['contact'],
-        badge: { label: 'CRM', tone: 'brand' },
-        handler: () => findPhone({
-          contactName: 'Marcus Chen',
-          // Playground mocks — return canned order HTML so the picker
-          // surfaces the right candidates without hitting the network.
-          // Real contact pages will swap these for chrome.runtime
-          // fetchRaw calls + the actual /Contact/Update.ajax write.
-          fetchOrderLinks: async () => ([
-            'mock://order/A-1001',
-            'mock://order/A-1002',
-            'mock://order/A-1003',
-          ]),
-          fetchOrderPage: async (url) => {
-            // Synthesize plausible CRM-style HTML with phones + names.
-            const MOCK = {
-              'mock://order/A-1001': {
-                name: 'Marcus Chen', phone: '(415) 555-0142',
-              },
-              'mock://order/A-1002': {
-                name: 'Acme Industries Receiving', phone: '(415) 555-0107',
-              },
-              'mock://order/A-1003': {
-                name: 'Marcus Chen', phone: '(415) 555-0142',     // dupe — should dedupe
-              },
-            };
-            const e = MOCK[url] || {};
-            const html = `
-              <table id="customerInfo">
-                <tr><td>Name</td><td class="darkText">${e.name || ''}</td></tr>
-                <tr><td>Phone</td><td class="darkText">${e.phone || ''}</td></tr>
-              </table>
-            `;
-            return { html, url };
-          },
-          saveContact: async (phone) => {
-            // Mock save — surface what *would* happen on a live contact.
-            await new Promise((r) => setTimeout(r, 250));
-            return { ok: true, phone };
-          },
-          toast,
-        }),
       }),
       actionRegistry.register({
         id: 'demo-add-note',
@@ -424,6 +383,67 @@ function PlaygroundSurface() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /* ── Find-phone action — gated on `phoneFinderEnabled`. Lives in its
+       own effect so flipping the flag at runtime (via the popup) adds
+       or removes the entry from the shelf without remounting any other
+       action. When the flag is off we register nothing and return a
+       no-op cleanup — the shelf list won't include find-phone at all. */
+  React.useEffect(() => {
+    if (!phoneFinderEnabled) return undefined;
+    const PhoneG = ({ size = 13, stroke = 2 }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round">
+        <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.13.96.37 1.9.72 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0122 16.92z"/>
+      </svg>
+    );
+
+    // Mock orders the demo handler scans. Each page returns HTML
+    // shaped like the real CRM's order page (table#customerInfo with
+    // Name + Phone rows) so extractPhonesFromOrderHtml exercises the
+    // structured-parse path, not just the regex fallback.
+    const mockOrderPage = (name, phone) => (`
+      <html><body>
+        <table id="customerInfo">
+          <tr><td>Name</td>  <td class="darkText">${name}</td></tr>
+          <tr><td>Phone</td> <td class="darkText">${phone}</td></tr>
+        </table>
+      </body></html>
+    `);
+
+    const unsub = actionRegistry.register({
+      id: 'demo-find-phone',
+      label: 'Find phone for Marcus',
+      icon: <PhoneG />,
+      hint: 'Scan orders for the right number',
+      smartFor: ['contact'],
+      badge: { label: 'CRM', tone: 'brand' },
+      handler: () => findPhone({
+        contactName: 'Marcus Chen',
+        // 3 mock orders → 2 unique phone numbers + 1 duplicate (so the
+        // dedupe path runs). One has a shipping-address name, one doesn't.
+        fetchOrderLinks: async () => ([
+          'mock://order/A-1001',
+          'mock://order/A-1002',
+          'mock://order/A-1003',
+        ]),
+        fetchOrderPage: async (url) => {
+          await new Promise((r) => setTimeout(r, 180));
+          if (url.endsWith('A-1001')) return { html: mockOrderPage('Marcus Chen',  '(415) 555-0142'), url };
+          if (url.endsWith('A-1002')) return { html: mockOrderPage('Acme Receiving', '(212) 555-0188'), url };
+          // Dupe of the first — exercises the seen-set dedupe path.
+          return { html: mockOrderPage('Marcus Chen', '(415) 555-0142'), url };
+        },
+        saveContact: async (_phone) => {
+          await new Promise((r) => setTimeout(r, 250));
+          return { ok: true };
+        },
+        toast,
+      }),
+    });
+
+    return () => unsub();
+  }, [phoneFinderEnabled, toast]);
 
   const launch = (entry) => {
     if (entry.wired) {
