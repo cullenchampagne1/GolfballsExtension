@@ -82,17 +82,18 @@ if (!window.__gbActionsShelfLoaded) {
   }
 
   /* ── Context-bound action registration ──────────────────────
-     "Call ${name}" embeds the contact's name in the label so the
-     button text reads strongly on its own (the shelf also shows
-     the page label as a header, but having the name on the
-     button itself reads as a clearer affordance). When the page
-     changes — or when the same contact page rebuilds its
-     name labels via postback — we unregister the previous
-     action + register a fresh one with the new label.
+     "Call ${name}" + "Quick task for ${name}" both embed the
+     contact's name in the label so the button text reads strongly
+     on its own (the shelf also shows the page label as a header,
+     but having the name on the button itself reads as a clearer
+     affordance). When the page changes — or when the same contact
+     page rebuilds its name labels via postback — we unregister
+     the previous action + register a fresh one with the new label.
 
-     The unsub fn for the previously-registered action sits on
-     this module-scoped var so each syncContext call can find it. */
+     Each context-bound action keeps its own unsub fn in a module-
+     scoped var so the next syncContext can swap it. */
   let _callActionUnsub = null;
+  let _taskActionUnsub = null;
 
   function registerCallAction(pageType, displayName) {
     if (_callActionUnsub) { _callActionUnsub(); _callActionUnsub = null; }
@@ -129,6 +130,28 @@ if (!window.__gbActionsShelfLoaded) {
     });
   }
 
+  function registerTaskAction(pageType, displayName) {
+    if (_taskActionUnsub) { _taskActionUnsub(); _taskActionUnsub = null; }
+    if (pageType !== 'contact' && pageType !== 'account') return;
+
+    const labelName = displayName || (pageType === 'account' ? 'account' : 'contact');
+    _taskActionUnsub = actionRegistry.register({
+      id: 'gb-quick-task',
+      label: `Quick task for ${labelName}`,
+      icon: <I.check size={13} />,
+      hint: 'Create a CRM task from a preset or custom form',
+      smartFor: ['contact', 'account'],
+      handler: async () => {
+        // Modal reads contactId / employeeId fresh from the DOM
+        // via readTaskContext(); no override needed for the
+        // common path.
+        if (typeof window.__gbShowQuickTaskModal === 'function') {
+          await window.__gbShowQuickTaskModal();
+        }
+      },
+    });
+  }
+
   /* ── Sync the page context + context-bound actions ──────────
      Called on initial load + on every URL or DOM change. Idempotent
      when nothing actually changed (actionRegistry.setPage no-ops
@@ -154,6 +177,7 @@ if (!window.__gbActionsShelfLoaded) {
     }
     actionRegistry.setPage(key, label, subLabel);
     registerCallAction(type, label);
+    registerTaskAction(type, label);
   }
 
   /* ── Mount the shelf overlay ────────────────────────────────

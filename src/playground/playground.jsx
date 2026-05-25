@@ -17,6 +17,8 @@ import { QueryBuilder } from '../modals/QueryBuilder.jsx';
 import { TaskList } from '../modals/TaskList.jsx';
 import { CallLog } from '../modals/CallLog.jsx';
 import { submitCallLog } from '../lib/submitCallLog.js';
+import { QuickTask } from '../modals/QuickTask.jsx';
+import { submitQuickTask } from '../lib/submitQuickTask.js';
 import { ActionsShelf } from '../ui/components/ActionsShelf.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { findPhone } from '../lib/findPhone.js';
@@ -51,6 +53,7 @@ const MODAL_REGISTRY = [
   { id: 'crmContact',   label: 'New Contact',     icon: 'user',    wired: true  },
   { id: 'taskList',     label: 'Tasks',           icon: 'check',   wired: true  },
   { id: 'callLog',      label: 'Call Log',        icon: 'phone',   wired: true  },
+  { id: 'quickTask',    label: 'Quick Task',      icon: 'check',   wired: true  },
   { id: 'calendar',     label: 'Calendar',        icon: 'cog',     wired: false },
 ];
 
@@ -120,12 +123,7 @@ function seedCallLogTemplates() {
   })();
 
   const now = Date.now();
-  /* TEMPORARY 5x multiplier — exercises the Quick Log scroll
-     container in the modal. Each base template gets four extra
-     clones with the "(copy N)" suffix + a unique id so React keys
-     don't collide. Remove this block (collapse back to `const samples
-     = BASE_SAMPLES`) once we're happy with the scroll behavior. */
-  const BASE_SAMPLES = [
+  const samples = [
     {
       id: 'pg-cl-1',
       name: 'Reached — placed order',
@@ -193,17 +191,6 @@ function seedCallLogTemplates() {
       updatedAt: now,
     },
   ];
-  // 5x clone — total 25 templates so the Quick Log scroll fires.
-  const samples = [];
-  for (let copy = 0; copy < 5; copy++) {
-    for (const base of BASE_SAMPLES) {
-      samples.push({
-        ...base,
-        id: copy === 0 ? base.id : `${base.id}-copy-${copy}`,
-        name: copy === 0 ? base.name : `${base.name} (${copy + 1})`,
-      });
-    }
-  }
 
   // Merge strategy: preserve any non-call_log templates the user
   // has (notes / tasks they care about), but ALWAYS refresh the
@@ -218,6 +205,103 @@ function seedCallLogTemplates() {
     const apply = (existing) => {
       const arr = Array.isArray(existing) ? existing : [];
       const preserved = arr.filter((t) => t?.subType !== 'call_log');
+      const next = [...preserved, ...samples];
+      if (hasChromeStorage) {
+        chrome.storage.local.set({ [NOTE_TEMPLATES_KEY]: next }, () => resolve());
+      } else {
+        try { localStorage.setItem(NOTE_TEMPLATES_KEY, JSON.stringify(next)); } catch {}
+        resolve();
+      }
+    };
+
+    if (hasChromeStorage) {
+      chrome.storage.local.get(NOTE_TEMPLATES_KEY, (data) => apply(data?.[NOTE_TEMPLATES_KEY]));
+    } else {
+      try {
+        const raw = localStorage.getItem(NOTE_TEMPLATES_KEY);
+        apply(raw ? JSON.parse(raw) : null);
+      } catch { apply(null); }
+    }
+  });
+}
+
+/* Same merge pattern as seedCallLogTemplates, but for task
+   templates. Refreshes the playground's task samples on every
+   open so changes to this seed take effect on next load. */
+function seedQuickTaskTemplates() {
+  const hasChromeStorage = (() => {
+    try { return typeof chrome !== 'undefined' && !!chrome.storage?.local; }
+    catch { return false; }
+  })();
+
+  const now = Date.now();
+  const samples = [
+    {
+      id: 'pg-task-1',
+      name: 'Follow up',
+      subType: 'task',
+      enabled: true,
+      subject: 'Follow up on recent conversation',
+      body: 'Check in to see if there are any open questions.',
+      daysOut: 3,
+      priority: 2,             // Medium
+      categoryId: 0,
+      updatedAt: now,
+    },
+    {
+      id: 'pg-task-2',
+      name: 'Send quote',
+      subType: 'task',
+      enabled: true,
+      subject: 'Send quote — pricing approved',
+      body: 'Pull pricing for the items discussed and email it.',
+      daysOut: 1,
+      priority: 1,             // High
+      categoryId: 0,
+      updatedAt: now,
+    },
+    {
+      id: 'pg-task-3',
+      name: 'Send proof',
+      subType: 'task',
+      enabled: true,
+      subject: 'Send art proof for review',
+      body: 'Generate art proof and email customer for sign-off.',
+      daysOut: 2,
+      priority: 1,
+      categoryId: 0,
+      updatedAt: now,
+    },
+    {
+      id: 'pg-task-4',
+      name: 'Check on shipment',
+      subType: 'task',
+      enabled: true,
+      subject: 'Confirm shipment arrived',
+      body: 'Verify the order landed on time and the customer is happy.',
+      daysOut: 7,
+      priority: 3,             // Low
+      categoryId: 0,
+      updatedAt: now,
+    },
+    {
+      id: 'pg-task-5',
+      name: 'Quarterly check-in',
+      subType: 'task',
+      enabled: true,
+      subject: 'Quarterly relationship check-in',
+      body: 'Touch base, see what\'s upcoming, plant seeds for next order.',
+      daysOut: 90,
+      priority: 3,
+      categoryId: 0,
+      updatedAt: now,
+    },
+  ];
+
+  return new Promise((resolve) => {
+    const apply = (existing) => {
+      const arr = Array.isArray(existing) ? existing : [];
+      const preserved = arr.filter((t) => t?.subType !== 'task');
       const next = [...preserved, ...samples];
       if (hasChromeStorage) {
         chrome.storage.local.set({ [NOTE_TEMPLATES_KEY]: next }, () => resolve());
@@ -413,6 +497,10 @@ function PlaygroundSurface() {
   // should log against. Set by the "Call {name}" smart action handler
   // before mounting the modal; cleared on close.
   const [callContext, setCallContext] = useState(null);
+  // Same pattern for the QuickTask modal — name + type are enough for
+  // the playground; submitQuickTask will refuse for lack of contactId/
+  // employeeId, which is the desired sandbox behavior.
+  const [taskContext, setTaskContext] = useState(null);
   const notify = useSettingNotification();
   const toast = useToast();
 
@@ -451,10 +539,8 @@ function PlaygroundSurface() {
     );
     const SearchG = (p) => (<RegSvg {...p}><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></RegSvg>);
     const UserG   = (p) => (<RegSvg {...p}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></RegSvg>);
-    const NoteG   = (p) => (<RegSvg {...p}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></RegSvg>);
     const ListG   = (p) => (<RegSvg {...p}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></RegSvg>);
     const EyeG    = (p) => (<RegSvg {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></RegSvg>);
-    const TrashG  = (p) => (<RegSvg {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></RegSvg>);
 
     // Page-context demo: pretend we're on a contact page. The shelf
     // header reflects this, and any action with `smartFor: ['contact']`
@@ -500,21 +586,20 @@ function PlaygroundSurface() {
         },
       }),
       actionRegistry.register({
-        id: 'demo-add-task',
-        label: 'Quick task for Marcus',
-        icon: <ListG />,
-        hint: 'Create a follow-up task with today\'s date',
-        smartFor: ['contact'],
-        kbd: '⌘T',
-        handler: () => toast?.info?.('Quick task — coming soon'),
-      }),
-      actionRegistry.register({
-        id: 'demo-add-note',
-        label: 'Add note',
-        icon: <NoteG />,
+        id: 'demo-quick-task',
+        label: `Quick task for ${pageLabel}`,
+        icon: <I.check size={13} />,
+        hint: 'Create a CRM task from a preset or custom form',
         smartFor: ['contact', 'account'],
-        kbd: '⌘N',
-        handler: () => toast?.info?.('Notes — coming soon'),
+        kbd: '⌘T',
+        handler: async () => {
+          await seedQuickTaskTemplates();
+          setTaskContext({
+            contactName: actionRegistry.getPageLabel() || 'Contact',
+            contactType: actionRegistry.getPage() || 'contact',
+          });
+          setMounted('quickTask');
+        },
       }),
       actionRegistry.register({
         id: 'demo-crm-search',
@@ -542,13 +627,6 @@ function PlaygroundSurface() {
         label: 'Create new contact',
         icon: <UserG />,
         handler: () => launch({ id: 'crmCreateContact', wired: true }),
-      }),
-      actionRegistry.register({
-        id: 'demo-archive',
-        label: 'Archive contact',
-        icon: <TrashG />,
-        category: 'danger',
-        handler: () => toast?.warning?.('Archive — not really wired'),
       }),
     ];
 
@@ -638,6 +716,15 @@ function PlaygroundSurface() {
             contactName: 'Marcus Chen',
             contactType: 'contact',
             phone: '(415) 555-0142',
+          });
+        }
+      }
+      if (entry.id === 'quickTask') {
+        seedQuickTaskTemplates();
+        if (!taskContext) {
+          setTaskContext({
+            contactName: 'Marcus Chen',
+            contactType: 'contact',
           });
         }
       }
@@ -814,6 +901,28 @@ function PlaygroundSurface() {
           <TaskList
             key="taskList"
             onClosed={() => setMounted(null)}
+          />
+        )}
+        {mounted === 'quickTask' && taskContext && (
+          <QuickTask
+            key="quickTask"
+            contactName={taskContext.contactName}
+            contactType={taskContext.contactType}
+            /* Same dep-injection pattern as CallLog: use the real
+               submitQuickTask. In the playground we have no
+               contactId/employeeId, so it short-circuits with a
+               "Missing contact ID, employee ID..." toast — same
+               error a real contact page would surface if smart-
+               detection ever returned an incomplete context. */
+            onSubmit={(template) => submitQuickTask({
+              template,
+              context: {
+                contactId:  taskContext.contactId  || '',
+                contactName: taskContext.contactName,
+                employeeId: taskContext.employeeId || '',
+              },
+            })}
+            onClosed={() => { setMounted(null); setTaskContext(null); }}
           />
         )}
         {mounted === 'callLog' && callContext && (
