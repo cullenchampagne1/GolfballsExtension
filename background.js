@@ -525,15 +525,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           { target: { tabId: orderTabId }, files: [
         'theme.js',
         'libs/flatpickr.js',
-        'content/notifications.js',
-        'content/calendar.js',
-        'content/smart-detection.js',
-        'content/variable-resolution.js',
-        'content/logo-extractor.js',
-        'content/charge-modal.js',
-        'content/order-edit-modal.js',
-        'content/page-utils.js',
-        'content/main.js'
+        'src/vanilla/notifications.js',
+        'src/vanilla/calendar.js',
+        'src/vanilla/smart-detection.js',
+        'src/vanilla/variable-resolution.js',
+        'src/vanilla/modals/logo-extractor.js',
+        'src/vanilla/modals/charge-modal.js',
+        'src/vanilla/modals/order-edit-modal.js',
+        'src/vanilla/page-utils.js',
+        'src/vanilla/main.js'
       ] },
           () => {
             chrome.tabs.sendMessage(orderTabId, { action: 'enterPickMode' });
