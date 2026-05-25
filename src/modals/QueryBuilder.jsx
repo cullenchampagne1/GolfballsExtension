@@ -219,6 +219,15 @@ function conditionToLabel(field, c) {
   }
 }
 
+/* Single-condition label — same logic as compileToLabel but for one
+   condition at a time. Exported so CRMSearch can render each active
+   filter as its own removable tag instead of one bulk label. */
+export function describeCondition(c) {
+  const field = QB_FIELDS.find((f) => f.key === c.fieldKey);
+  if (!field) return null;
+  return conditionToLabel(field, c);
+}
+
 export function compileToLabel(conditions) {
   const parts = conditions.map((c) => {
     const field = QB_FIELDS.find((f) => f.key === c.fieldKey);
@@ -525,6 +534,22 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], onAp
       </div>
 
       <ModalFooter>
+        {/* Footer hint — clarifies how multiple conditions combine and
+            the negation semantics of "is not set". Mirrors the legacy
+            QB's .__gb-qb-foot-hint row so users coming from the old
+            tool see the same affordance. */}
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          fontSize: 10.5,
+          color: 'var(--gb-text-muted)',
+          flexShrink: 1, minWidth: 0,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          <InfoCircleIcon size={11} />
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            Conditions joined with AND · "is not set" applies negation automatically
+          </span>
+        </div>
         <Btn variant="ghost" size="sm" onClick={handleClear}>Reset</Btn>
         <div style={{ flex: 1 }} />
         <Btn variant="ghost" size="sm" onClick={() => bindCloseRef.current?.()}>Cancel</Btn>
@@ -638,12 +663,18 @@ function ConditionRow({ index, condition, isLast, canDelete, onChange, onRemove 
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
       }}>
+        {/* Row-number badge — circular brand-tinted disc, mirrors the
+            legacy QB's .qb-row-num. Gives the rows a clean visual
+            hierarchy and a hover affordance for "this is row N". */}
         <span style={{
-          width: 18, flexShrink: 0,
-          fontSize: 10, fontWeight: 700, letterSpacing: 0.2,
-          color: 'var(--gb-text-muted)',
-          textAlign: 'right',
+          width: 22, height: 22, flexShrink: 0,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          borderRadius: '50%',
+          background: 'var(--gb-brand-tint-soft)',
+          color: 'var(--gb-brand-label)',
+          fontSize: 11, fontWeight: 700,
           fontFamily: 'var(--gb-font-mono)',
+          fontVariantNumeric: 'tabular-nums',
         }}>{index + 1}</span>
 
         <div style={{
@@ -828,6 +859,20 @@ function ValueEditor({ field, condition, onChange }) {
 
 /* Inline funnel icon — same shape as the one in CRMSearch's toolbar
    so users get the visual continuity that "this is the same feature." */
+function InfoCircleIcon({ size = 11, style }) {
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      style={style}
+    >
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+  );
+}
+
 function FunnelIcon({ size = 12, style }) {
   return (
     <svg

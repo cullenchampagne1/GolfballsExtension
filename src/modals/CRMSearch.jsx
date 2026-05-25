@@ -5,7 +5,7 @@ import {
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
-import { QueryBuilder } from './QueryBuilder.jsx';
+import { QueryBuilder, describeCondition, compileToSolr, compileToLabel } from './QueryBuilder.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    CRMSearch — React port of content/crm-search-modal.js.
@@ -232,6 +232,23 @@ export function CRMSearch({ onClosed, bindClose }) {
     setQbOpen(false);
   };
 
+  // Drop a single condition out of the active QB filter. If it's the
+  // last one, clear the whole filter (so the bar animates out and the
+  // next search runs unfiltered). Recompiles solrFq + label from what
+  // remains so the in-flight search uses the trimmed filter.
+  const removeFilterCondition = useCallback((idx) => {
+    setQbFilter((cur) => {
+      if (!cur?.conditions?.length) return null;
+      const next = cur.conditions.filter((_, i) => i !== idx);
+      if (!next.length) return null;
+      return {
+        conditions: next,
+        solrFq: compileToSolr(next),
+        label:  compileToLabel(next),
+      };
+    });
+  }, []);
+
   // ── Export CSV — selected rows → downloadable file ────────────
   // Columns match QB_FIELDS so the exported file has the same data
   // surface users can filter on in the Query Builder.
@@ -351,12 +368,12 @@ export function CRMSearch({ onClosed, bindClose }) {
         >Search</Btn>
       </div>
 
-      {/* QB filter bar — shows the block(s) produced by Query Builder.
-          Hidden until the QB has output a filter (so until that's wired
-          up, this stays collapsed). Lets the user see what's narrowing
-          their results and clear it without re-opening the QB modal. */}
+      {/* Filter bar — one tag per active condition produced by the
+          Query Builder. Each tag's ✕ drops that single condition from
+          the filter; when the last one goes, qbFilter clears entirely.
+          Lets users prune the filter inline without reopening QB. */}
       <AnimatePresence initial={false}>
-        {qbFilter && (
+        {qbFilter && qbFilter.conditions?.length > 0 && (
           <motion.div
             key="qb-bar"
             initial={{ opacity: 0, height: 0 }}
@@ -369,25 +386,24 @@ export function CRMSearch({ onClosed, bindClose }) {
               padding: '8px 14px',
               borderBottom: '1px solid var(--gb-border-subtle)',
               background: 'var(--gb-brand-tint-soft)',
-              display: 'flex', alignItems: 'center', gap: 8,
+              display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
               fontSize: 11.5,
             }}>
               <FunnelIcon style={{ color: 'var(--gb-brand-label)' }} />
               <span style={{ color: 'var(--gb-brand-label)', fontWeight: 700, flexShrink: 0 }}>
-                QB filter active:
+                Filter:
               </span>
-              <span style={{
-                color: 'var(--gb-text-secondary)',
-                fontFamily: 'var(--gb-font-mono)',
-                fontSize: 11,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                flex: 1,
-              }}>
-                {qbFilter.label || '—'}
-              </span>
-              <Btn size="xs" variant="ghost" icon={<I.close size={10} />} onClick={() => setQbFilter(null)}>
-                Clear
-              </Btn>
+              {qbFilter.conditions.map((c, idx) => {
+                const lbl = describeCondition(c);
+                if (!lbl) return null;
+                return (
+                  <ConditionTag
+                    key={`${c.fieldKey}_${c.op}_${idx}`}
+                    label={lbl}
+                    onRemove={() => removeFilterCondition(idx)}
+                  />
+                );
+              })}
             </div>
           </motion.div>
         )}
@@ -620,6 +636,62 @@ function Checkbox({ checked, onChange }) {
         )}
       </AnimatePresence>
     </button>
+  );
+}
+
+/* Single active-condition tag with a remove button. Sized to fit the
+   filter bar and pick up the brand-tint surface from its parent. The
+   ✕ stops propagation so clicking it doesn't bubble to anything in
+   the bar. Used inside the bar's wrap-flow so many tags wrap onto a
+   second line cleanly when the filter is busy. */
+function ConditionTag({ label, onRemove }) {
+  return (
+    <motion.span
+      layout
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      transition={{ duration: 0.14 }}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        padding: '3px 4px 3px 8px',
+        background: 'var(--gb-surface-1)',
+        border: '1px solid var(--gb-brand-tint-border, var(--gb-border-default))',
+        borderRadius: 'var(--gb-r-xs, 4px)',
+        color: 'var(--gb-text-secondary)',
+        fontSize: 10.5,
+        fontFamily: 'var(--gb-font-mono)',
+        fontWeight: 500,
+        lineHeight: 1.4,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onRemove?.(); }}
+        title="Remove this condition"
+        style={{
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          width: 14, height: 14, padding: 0,
+          background: 'transparent', border: 'none',
+          color: 'var(--gb-text-muted)',
+          borderRadius: 3,
+          cursor: 'pointer',
+          transition: 'background-color .12s, color .12s',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--gb-surface-2)';
+          e.currentTarget.style.color = 'var(--gb-error-fg)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = 'var(--gb-text-muted)';
+        }}
+      >
+        <I.close size={9} />
+      </button>
+    </motion.span>
   );
 }
 
