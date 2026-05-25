@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   FloatingPanel, ModalHeader,
   Btn, Dropdown, Input, Textarea, Segmented, Field, SectionLabel,
-  SwitchTag, CollapsibleSection,
+  PillTag, CollapsibleSection,
   I, Icon, useToast,
 } from '../ui/index.js';
 import {
@@ -288,11 +288,14 @@ export function CallLog({
               </Field>
             </div>
 
-            {/* Subject input + inline Voicemail switch tag share
-                the SAME row. The Input flexes to fill remaining
-                width while the SwitchTag pins to the right at its
-                natural size. Cuts a whole row out of the form
-                versus stacking voicemail below. */}
+            {/* Subject input + inline Voicemail toggle share the
+                SAME row. The Input flexes to fill remaining width
+                while the PillTag pins to the right at the same
+                28px height as the input (Input size="sm" maps to
+                28px via inputBaseStyle, so we override PillTag's
+                default padding to match). PillTag's on/off state
+                is conveyed entirely by the tint — brand when on,
+                neutral when off — no embedded switch widget. */}
             <Field label="Subject">
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Input
@@ -302,13 +305,14 @@ export function CallLog({
                   placeholder="Brief subject for the activity log…"
                   style={{ flex: 1, minWidth: 0 }}
                 />
-                <SwitchTag
-                  size="xs"
+                <PillTag
                   on={voicemail}
-                  label="Voicemail"
                   icon={<MicIcon />}
                   onClick={() => setVoicemail((v) => !v)}
-                />
+                  style={{ height: 28, padding: '0 10px', flexShrink: 0 }}
+                >
+                  Voicemail
+                </PillTag>
               </div>
             </Field>
 
