@@ -15,6 +15,8 @@ import { SubmitProof } from '../modals/SubmitProof.jsx';
 import { CRMSearch } from '../modals/CRMSearch.jsx';
 import { QueryBuilder } from '../modals/QueryBuilder.jsx';
 import { TaskList } from '../modals/TaskList.jsx';
+import { ActionsShelf } from '../ui/components/ActionsShelf.jsx';
+import { actionRegistry } from '../lib/actionRegistry.js';
 
 /* ───────────────────────────────────────────────────────────────
    playground.jsx — in-extension modal playground.
@@ -288,6 +290,100 @@ function PlaygroundSurface() {
     if (next.has(g)) next.delete(g); else next.add(g);
     return next;
   });
+
+  /* ── Seed the ActionsShelf with demo actions + a fake page context.
+       Lets you see the registry-driven drawer with real content in the
+       playground without depending on smart-detection running on a
+       golfballs.com page. setPage triggers the "smart for this page"
+       group to filter actions whose smartFor includes 'contact'.
+       Unregisters on unmount so HMR doesn't double-up entries. */
+  React.useEffect(() => {
+    const RegSvg = ({ children, size = 13, stroke = 2 }) => (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round">{children}</svg>
+    );
+    const SearchG = (p) => (<RegSvg {...p}><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></RegSvg>);
+    const UserG   = (p) => (<RegSvg {...p}><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></RegSvg>);
+    const NoteG   = (p) => (<RegSvg {...p}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></RegSvg>);
+    const PhoneG  = (p) => (<RegSvg {...p}><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.13.96.37 1.9.72 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.35 1.85.59 2.81.72A2 2 0 0122 16.92z"/></RegSvg>);
+    const ListG   = (p) => (<RegSvg {...p}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></RegSvg>);
+    const EyeG    = (p) => (<RegSvg {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></RegSvg>);
+    const TrashG  = (p) => (<RegSvg {...p}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></RegSvg>);
+
+    // Page-context demo: pretend we're on a contact page. The shelf
+    // header reflects this, and any action with `smartFor: ['contact']`
+    // floats into the Smart group.
+    actionRegistry.setPage('contact', 'Marcus Chen', 'Contact · Acme Industries');
+
+    const unsubs = [
+      actionRegistry.register({
+        id: 'demo-add-task',
+        label: 'Quick task for Marcus',
+        icon: <ListG />,
+        hint: 'Create a follow-up task with today\'s date',
+        smartFor: ['contact'],
+        kbd: '⌘T',
+        handler: () => toast?.info?.('Quick task — coming soon'),
+      }),
+      actionRegistry.register({
+        id: 'demo-call-marcus',
+        label: 'Call Marcus',
+        icon: <PhoneG />,
+        hint: 'Dial last known number · 415-555-0142',
+        smartFor: ['contact'],
+        badge: { label: 'CRM', tone: 'brand' },
+        handler: () => toast?.info?.('Call panel — coming soon'),
+      }),
+      actionRegistry.register({
+        id: 'demo-add-note',
+        label: 'Add note',
+        icon: <NoteG />,
+        smartFor: ['contact', 'account'],
+        kbd: '⌘N',
+        handler: () => toast?.info?.('Notes — coming soon'),
+      }),
+      actionRegistry.register({
+        id: 'demo-crm-search',
+        label: 'Open CRM Search',
+        icon: <SearchG />,
+        hint: 'Find another contact or account',
+        kbd: '⌘K',
+        handler: () => launch({ id: 'crmSearch', wired: true }),
+      }),
+      actionRegistry.register({
+        id: 'demo-task-list',
+        label: 'Open Task List',
+        icon: <ListG />,
+        hint: 'Your open tasks',
+        handler: () => launch({ id: 'taskList', wired: true }),
+      }),
+      actionRegistry.register({
+        id: 'demo-watch-list',
+        label: 'Open Watch List',
+        icon: <EyeG />,
+        handler: () => launch({ id: 'watchList', wired: true }),
+      }),
+      actionRegistry.register({
+        id: 'demo-new-contact',
+        label: 'Create new contact',
+        icon: <UserG />,
+        handler: () => launch({ id: 'crmCreateContact', wired: true }),
+      }),
+      actionRegistry.register({
+        id: 'demo-archive',
+        label: 'Archive contact',
+        icon: <TrashG />,
+        category: 'danger',
+        handler: () => toast?.warning?.('Archive — not really wired'),
+      }),
+    ];
+
+    return () => {
+      for (const u of unsubs) u();
+      actionRegistry.setPage(null, '', '');
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const launch = (entry) => {
     if (entry.wired) {
@@ -596,6 +692,17 @@ function PlaygroundSurface() {
         </Btn>
       </div>
     </DraggablePanel>
+
+    {/* ── Actions Shelf (bottom-right) ──────────────────────────
+        Floating shelf that reads the live actionRegistry. The
+        playground seeds a few demo actions + a placeholder page
+        context on mount (see PlaygroundApp below) so the shelf
+        opens with real content instead of an empty list.
+
+        The shelf renders OUTSIDE the scaled wrapper so its
+        position:fixed anchors to the viewport at native scale —
+        anything inside the wrapper would be 0.74× of its style. */}
+    <ActionsShelf />
     </div>
   );
 }
