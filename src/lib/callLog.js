@@ -140,8 +140,17 @@ export function subscribeToCallTemplates(handler) {
  *  shape as a stored Template so consumers (the submit fn) can
  *  treat preset and custom logs uniformly — the only difference
  *  is the id ("custom-…") and that it isn't persisted to
- *  noteTemplates. */
-export function buildCustomTemplate({ subject, body, callDirection, callCategory, callVoicemail }) {
+ *  noteTemplates.
+ *
+ *  `steps` is an array of up-to-4 next-step strings; the function
+ *  flattens it to the legacy callStep1..4 keys expected on a
+ *  stored template. */
+export function buildCustomTemplate({
+  subject, body,
+  callDirection, callCategory, callVoicemail,
+  steps = [],
+} = {}) {
+  const safeSteps = Array.isArray(steps) ? steps : [];
   return {
     id: `custom-${Date.now()}`,
     name: (subject || '').trim() || 'Custom call log',
@@ -152,5 +161,9 @@ export function buildCustomTemplate({ subject, body, callDirection, callCategory
     callDirection: callDirection | 0,
     callCategory: parseInt(callCategory, 10) || 0,
     callVoicemail: !!callVoicemail,
+    callStep1: (safeSteps[0] || '').trim(),
+    callStep2: (safeSteps[1] || '').trim(),
+    callStep3: (safeSteps[2] || '').trim(),
+    callStep4: (safeSteps[3] || '').trim(),
   };
 }

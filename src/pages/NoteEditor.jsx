@@ -7,6 +7,7 @@ import {
   TYPE_ICONS,
   SectionLabel, Card,
   BodyVar,
+  StepsEditor,
   I, Icon,
 } from '../ui/index.js';
 import { CALL_CATEGORY_OPTIONS } from '../lib/callLog.js';
@@ -108,45 +109,8 @@ function VarChips({ targets = ['date', 'time'], nativeEl, value, onChange }) {
 
 /* ── Call-log step rows: numbered pill + input + delete; trailing
        dashed "Add step N/4" when there's room. */
-function StepsEditor({ steps, onChange }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-      {steps.map((s, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <div style={{
-            width: 20, height: 20, borderRadius: 5, flexShrink: 0,
-            background: s ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)',
-            border: '1px solid ' + (s ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'),
-            color: s ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 10, fontWeight: 800, fontFamily: 'var(--gb-font-mono)',
-          }}>
-            {i + 1}
-          </div>
-          <Input
-            value={s}
-            placeholder={i === 0 ? 'e.g. Send follow-up email' : 'Optional next step…'}
-            size="sm"
-            onChange={(v) => {
-              const next = [...steps];
-              next[i] = v;
-              onChange(next);
-            }}
-            style={{ flex: 1 }}
-          />
-          <IconBtn size="sm" icon={<I.trash />} danger
-            onClick={() => onChange(steps.filter((_, j) => j !== i))} />
-        </div>
-      ))}
-      {steps.length < 4 && (
-        <Btn variant="dashed" size="sm" icon={<I.plus />} full
-          onClick={() => onChange([...steps, ''])}>
-          Add step {steps.length + 1}/4
-        </Btn>
-      )}
-    </div>
-  );
-}
+/* StepsEditor lives in src/ui/components/StepsEditor.jsx so this
+   editor + the Call Log modal share one implementation. */
 
 /* ════════════════════════════════════════════════════════════
    SUBTYPE PANELS — each owns its own native refs so chip clicks
