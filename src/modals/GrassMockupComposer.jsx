@@ -39,18 +39,31 @@ const BAKE_PATH = 'icons/mockup_base.png';
 const BAKE_W = 1080;
 const BAKE_H = 1080;
 // Ball position in the bake — square 1080×1080 frame, ball centered.
-// Camera 41mm lens on 36mm sensor, at 3.2m from ball, pitched 35°
-// below horizontal, f/2.8 DoF, animation action detached during the
-// bake so transforms actually applied.
+// Camera 41mm lens on 36mm sensor, at 3.6m from ball, pitched 10°
+// (fairway-level), sunset_fairway HDRI, f/2.8 DoF. Animation action
+// detached during bake so transforms actually applied. Ball sits at
+// world z=0.55 (slightly nestled into short grass).
 const BALL_CENTER_X = 540;
 const BALL_CENTER_Y = 540;
-const BALL_RADIUS_PX = 268;       // ~3px overscan vs the 261.3 silhouette so the warp covers a small feather
-// Fraction of ball diameter the logo covers. At 0.95 the curvature
-// foreshortening at the logo edge approaches the limb and the flat
-// warp shows ~5% distortion at the corners — visually acceptable
-// for typical square/rectangular logos; bumping higher (toward 1.0)
-// starts to look unnatural as the logo wraps around the silhouette.
+// Silhouette radius for the 3.6m distance is 231.1px (focal 1230 × R 0.665
+// / sqrt(D² − R²)). 4px overscan so the warp covers a small feather.
+const BALL_RADIUS_PX = 235;
+// Fraction of ball diameter the logo covers. >1 means the logo source
+// extends past the ball silhouette; the warp clips it to the visible
+// cap. Keep at the value the user has dialed in.
 const LOGO_SIZE = 1.2;
+
+// Specular-highlight threshold. The baked ball was pure-white Principled
+// BSDF, so its rendered pixels = (white × diffuse) + specular_white. Above
+// this brightness the contribution is mostly specular reflection of the
+// HDRI sun — we want THAT to stay near-white on a colored print, not get
+// tinted with the logo. Below this it's diffuse shading that DOES pick up
+// the logo's color via multiply.
+const SPECULAR_THRESHOLD = 200;
+// Silhouette feather radius in pixels. Smooths the boundary where the
+// print region meets the unmodified base render so the logo doesn't
+// terminate in a hard aliased edge at the ball's limb.
+const EDGE_FEATHER_PX = 2.0;
 
 // Pan/zoom — mirrors ImagePreview's 2D image surface so the two
 // preview modes feel identical to the user.
@@ -356,10 +369,31 @@ function loadImage(src) {
   });
 }
 
-/* The single-pass composite. Single-threaded canvas pixel loop —
-   ~600k pixels inside the ball disc at the bake resolution, so
-   ~25ms on modern hardware. Plenty fast for a one-shot compose;
-   if needed we could move this to a WebGL shader later. */
+/* Compose the user's logo onto the baked ball.
+
+   Lighting model:
+     The baked ball was rendered as pure white Principled BSDF, so each
+     base pixel = (white × diffuse_lighting) + specular_white. That means:
+       - Below SPECULAR_THRESHOLD, the brightness represents DIFFUSE
+         shading (dimple shadows, hemisphere fill). This SHOULD pick up
+         the logo's color — a colored print darkened by dimple shadows.
+       - Above SPECULAR_THRESHOLD, the brightness represents SPECULAR
+         reflection (HDRI sun glint on the smooth plastic). Specular
+         highlights on real white plastic stay near-white regardless of
+         the ink color underneath — your printed ball still has white
+         highlights on a red logo, not red highlights.
+
+     We split each pixel into diffuse + specular components, multiply
+     diffuse by the logo color, and add specular back as-is. Result reads
+     as a real ink print: shading shapes the color, highlights stay clean.
+
+   Silhouette feather:
+     Within EDGE_FEATHER_PX of the ball's limb the print is alpha-blended
+     so it doesn't terminate in a hard aliased edge against the grass.
+
+   Single-pass canvas loop — ~170k pixels inside the ball disc, ~10ms
+   on modern hardware. Plenty fast for a one-shot compose; could move
+   to a WebGL shader later if we add per-frame effects. */
 function compose(canvas, baseImg, logoImg) {
   const ctx = canvas.getContext('2d');
   ctx.drawImage(baseImg, 0, 0);
@@ -391,10 +425,22 @@ function compose(canvas, baseImg, logoImg) {
       const r2 = nx * nx + ny * ny;
       if (r2 > 1.0) continue;
 
+      // Silhouette edge feather: weight ramps 0→1 from limb (r=1) to
+      // EDGE_FEATHER_PX inward. Inside that band the print blends with
+      // the unmodified base; full-strength once we're past the band.
+      const r = Math.sqrt(r2);
+      const distFromEdgePx = (1.0 - r) * R;
+      const edgeWeight = Math.min(1.0, distFromEdgePx / EDGE_FEATHER_PX);
+      if (edgeWeight <= 0) continue;
+
+      // Camera-axis flat UV — for a flat sticker-style print this is
+      // physically correct; a real screen print on a sphere projects
+      // along the camera's optical axis with foreshortening at the limb.
       const u = nx / LOGO_SIZE + 0.5;
       const v = ny / LOGO_SIZE + 0.5;
       if (u < 0 || u >= 1 || v < 0 || v >= 1) continue;
 
+      // Bilinear sample the logo at (u, v).
       const sxF = u * (LW - 1);
       const syF = v * (LH - 1);
       const sx0 = Math.floor(sxF);
@@ -403,31 +449,48 @@ function compose(canvas, baseImg, logoImg) {
       const fy = syF - sy0;
       const sx1 = Math.min(sx0 + 1, LW - 1);
       const sy1 = Math.min(sy0 + 1, LH - 1);
-
       const i00 = (sy0 * LW + sx0) * 4;
       const i10 = (sy0 * LW + sx1) * 4;
       const i01 = (sy1 * LW + sx0) * 4;
       const i11 = (sy1 * LW + sx1) * 4;
-
       const w00 = (1 - fx) * (1 - fy);
       const w10 = fx * (1 - fy);
       const w01 = (1 - fx) * fy;
       const w11 = fx * fy;
-
       const lr = ld[i00]     * w00 + ld[i10]     * w10 + ld[i01]     * w01 + ld[i11]     * w11;
       const lg = ld[i00 + 1] * w00 + ld[i10 + 1] * w10 + ld[i01 + 1] * w01 + ld[i11 + 1] * w11;
       const lb = ld[i00 + 2] * w00 + ld[i10 + 2] * w10 + ld[i01 + 2] * w01 + ld[i11 + 2] * w11;
       const la = ld[i00 + 3] * w00 + ld[i10 + 3] * w10 + ld[i01 + 3] * w01 + ld[i11 + 3] * w11;
 
-      const alpha = la / 255;
-      const inv = 1 - alpha;
+      const logoAlpha = la / 255;
+      if (logoAlpha < 0.005) continue;
+      const printAlpha = logoAlpha * edgeWeight;
+      const inv = 1 - printAlpha;
+
       const i = (py * BAKE_W + px) * 4;
       const baseR = bd[i];
       const baseG = bd[i + 1];
       const baseB = bd[i + 2];
-      bd[i]     = baseR * inv + (baseR * lr / 255) * alpha;
-      bd[i + 1] = baseG * inv + (baseG * lg / 255) * alpha;
-      bd[i + 2] = baseB * inv + (baseB * lb / 255) * alpha;
+
+      // Split per-channel: anything brighter than SPECULAR_THRESHOLD is
+      // specular contribution, the rest is diffuse. The diffuse part
+      // gets multiplied by the logo color (logo × lighting); the specular
+      // part is added back untouched so highlights stay near-white on
+      // a colored print.
+      const specR = baseR > SPECULAR_THRESHOLD ? baseR - SPECULAR_THRESHOLD : 0;
+      const specG = baseG > SPECULAR_THRESHOLD ? baseG - SPECULAR_THRESHOLD : 0;
+      const specB = baseB > SPECULAR_THRESHOLD ? baseB - SPECULAR_THRESHOLD : 0;
+      const diffR = baseR - specR;
+      const diffG = baseG - specG;
+      const diffB = baseB - specB;
+
+      const printR = (diffR * lr) / 255 + specR;
+      const printG = (diffG * lg) / 255 + specG;
+      const printB = (diffB * lb) / 255 + specB;
+
+      bd[i]     = baseR * inv + printR * printAlpha;
+      bd[i + 1] = baseG * inv + printG * printAlpha;
+      bd[i + 2] = baseB * inv + printB * printAlpha;
     }
   }
 
