@@ -57,6 +57,7 @@
         "react-dist/content/task-list.js",
         "src/vanilla/phone-finder.js",
         "src/vanilla/call-log-panel.js",
+        "react-dist/content/call-log.js",
         "react-dist/content/margin-calc.js",
         "react-dist/content/crm-search.js",
         "react-dist/content/crm-create-contact.js",
