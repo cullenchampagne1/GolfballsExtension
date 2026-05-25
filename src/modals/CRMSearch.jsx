@@ -221,13 +221,67 @@ export function CRMSearch({ onClosed, bindClose }) {
   // The original modal hides itself, opens content/crm-query-builder.js's
   // overlay, then on confirm sets a Solr fq filter + a preview label.
   // For now we toast that it's coming and leave qbFilter null.
+  // NOTE: toast.info() takes (message: string, opts) — passing an opts
+  // object as the first arg was rendering "[object Object]" and tripping
+  // a render-side error in the toast host.
   const openQueryBuilder = () => {
-    toast?.info?.({
-      title: 'Query Builder',
-      message: 'Coming soon — for now use the search input + type dropdown.',
-      duration: 4000,
-    });
+    toast?.info?.('Query Builder — coming soon', { duration: 3500 });
   };
+
+  // ── Export CSV — selected rows → downloadable file ────────────
+  // Columns match QB_FIELDS so the exported file has the same data
+  // surface users can filter on in the Query Builder.
+  const exportSelectedCSV = useCallback(() => {
+    const rows = results.filter((r) => selected.has(r.id));
+    if (!rows.length) {
+      toast?.warning?.('No rows selected', { duration: 2500 });
+      return;
+    }
+    const columns = [
+      { key: 'id',                  label: 'ID' },
+      { key: 'recordType_s',        label: 'Record Type' },
+      { key: 'contactName_t',       label: 'Contact Name' },
+      { key: 'accountName_t',       label: 'Account Name' },
+      { key: 'accountID_s',         label: 'Account ID' },
+      { key: 'emails_tps',          label: 'Email' },
+      { key: 'phones_ss',           label: 'Phone' },
+      { key: 'salesRep_s',          label: 'Sales Rep' },
+      { key: 'salesRepID_s',        label: 'Sales Rep ID' },
+      { key: 'podID_i',             label: 'Pod ID' },
+      { key: 'role_s',              label: 'Role' },
+      { key: 'orderCount_i',        label: 'Order Count' },
+      { key: 'yearToDateRevenue_f', label: 'YTD Revenue' },
+      { key: 'priorYearRevenue_f',  label: 'Prior Year Revenue' },
+      { key: 'lastOrderDate_dt',    label: 'Last Order Date' },
+      { key: 'nextTaskDate_dt',     label: 'Next Task Date' },
+    ];
+    // RFC 4180 escaping: wrap in quotes if the value contains a quote,
+    // comma, or newline; double up any embedded quotes. Multi-value
+    // fields (Solr arrays like emails_tps) get joined with "; ".
+    const esc = (v) => {
+      if (v == null) return '';
+      const raw = Array.isArray(v) ? v.join('; ') : String(v);
+      return /[",\n\r]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw;
+    };
+    const lines = [
+      columns.map((c) => esc(c.label)).join(','),
+      ...rows.map((r) => columns.map((c) => esc(r[c.key])).join(',')),
+    ];
+    // Prepend BOM so Excel opens UTF-8 files correctly.
+    const csv = '﻿' + lines.join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `crm-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    // Give the browser a beat to start the download before we revoke
+    // the blob URL — Safari especially is finicky if you revoke too soon.
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    toast?.success?.(`Exported ${rows.length} row${rows.length === 1 ? '' : 's'} to CSV`);
+  }, [results, selected, toast]);
 
   // ── Render ───────────────────────────────────────────────────
   const selCount = selected.size;
@@ -274,7 +328,8 @@ export function CRMSearch({ onClosed, bindClose }) {
         />
         <Btn
           size="sm"
-          variant="ghost"
+          variant="tinted"
+          status="brand"
           icon={<FunnelIcon />}
           onClick={openQueryBuilder}
         >Query Builder</Btn>
@@ -353,7 +408,7 @@ export function CRMSearch({ onClosed, bindClose }) {
               <div style={{ flex: 1 }} />
               <Btn size="sm" variant="ghost" icon={<MegaphoneIcon />}>Run campaign</Btn>
               <Btn size="sm" variant="ghost" icon={<I.mail size={11} />}>Email selected</Btn>
-              <Btn size="sm" variant="ghost" icon={<I.copy size={11} />}>Export CSV</Btn>
+              <Btn size="sm" variant="ghost" icon={<I.copy size={11} />} onClick={exportSelectedCSV}>Export CSV</Btn>
             </div>
           </motion.div>
         )}
