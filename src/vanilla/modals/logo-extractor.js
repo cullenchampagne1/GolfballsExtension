@@ -215,34 +215,44 @@ if (window.__gbLoaded_logoExtractor) {} else { window.__gbLoaded_logoExtractor =
   function __gbEnsureHoverBtn() {
     if (__gbHoverBtn) return __gbHoverBtn;
 
+    // Liquid-glass circle button. Same color tokens / blur values as the
+    // overlay chips on the React ImagePreview so the page-injected hover
+    // affordance reads as part of the same UI family. The "View Logo"
+    // label is dropped — the icon alone fits on top of small thumbnails
+    // without obscuring them. Click handler below preserves the existing
+    // behavior (calls into __gbExtractAndShow), only the chrome changes.
     const btn = document.createElement('div');
     btn.id = '__gb-img-hover-btn';
     btn.innerHTML = `
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
         <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
       </svg>
-      <span>View Logo</span>
     `;
     btn.style.cssText = `
-      position: fixed !important; display: flex !important; align-items: center !important; justify-content: center !important; gap: 6px !important;
-      background: rgba(17,17,17,.85) !important; backdrop-filter: blur(12px) !important; -webkit-backdrop-filter: blur(12px) !important;
-      color: var(--gb-brand-label, #7db82a) !important; border: 1px solid rgba(var(--gb-brand-label-rgb, 125,184,42), .4) !important;
-      border-radius: 18px !important; padding: 8px 16px !important; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
-      font-size: 11.5px !important; font-weight: 700 !important; line-height: 1 !important; letter-spacing: 0.25px !important;
+      position: fixed !important; display: flex !important; align-items: center !important; justify-content: center !important;
+      width: 32px !important; height: 32px !important;
+      background: color-mix(in srgb, var(--gb-surface-1, #1a1a1a) 70%, transparent) !important;
+      backdrop-filter: blur(8px) saturate(1.2) !important; -webkit-backdrop-filter: blur(8px) saturate(1.2) !important;
+      color: var(--gb-brand-label, #7db82a) !important;
+      border: 1px solid color-mix(in srgb, var(--gb-border-default, #444) 60%, transparent) !important;
+      border-radius: 50% !important; padding: 0 !important;
       cursor: pointer !important; z-index: 999990 !important; pointer-events: auto !important;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.55), 0 0 14px rgba(var(--gb-brand-label-rgb, 125,184,42),0.18) !important;
-      opacity: 0 !important; transition: opacity .15s ease, transform .18s cubic-bezier(.34,1.4,.64,1), box-shadow .18s ease, background .15s ease, color .15s ease !important;
-      transform: scale(.88) translateY(3px) !important; white-space: nowrap !important; user-select: none !important;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.04) !important;
+      opacity: 0 !important;
+      transition: opacity .15s ease, transform .18s cubic-bezier(.34,1.4,.64,1), background .15s ease, color .15s ease, border-color .15s ease !important;
+      transform: scale(.88) translateY(3px) !important; user-select: none !important;
     `;
 
     btn.addEventListener('mouseenter', () => {
       clearTimeout(__gbHoverHideTimer);
-      btn.style.setProperty('background', 'var(--gb-brand-dark, #5f7d18)', 'important');
-      btn.style.setProperty('color', '#fff', 'important');
+      btn.style.setProperty('background', 'color-mix(in srgb, var(--gb-brand-label, #7db82a) 30%, var(--gb-surface-1, #1a1a1a))', 'important');
+      btn.style.setProperty('color', '#ffffff', 'important');
+      btn.style.setProperty('border-color', 'color-mix(in srgb, var(--gb-brand-label, #7db82a) 70%, transparent)', 'important');
     });
     btn.addEventListener('mouseleave', () => {
-      btn.style.setProperty('background', 'rgba(17,17,17,.85)', 'important');
+      btn.style.setProperty('background', 'color-mix(in srgb, var(--gb-surface-1, #1a1a1a) 70%, transparent)', 'important');
       btn.style.setProperty('color', 'var(--gb-brand-label, #7db82a)', 'important');
+      btn.style.setProperty('border-color', 'color-mix(in srgb, var(--gb-border-default, #444) 60%, transparent)', 'important');
       __gbHoverHideTimer = setTimeout(__gbHideHoverBtn, 100);
     });
     
@@ -279,7 +289,9 @@ if (window.__gbLoaded_logoExtractor) {} else { window.__gbLoaded_logoExtractor =
   function __gbPositionHoverBtn(img) {
     const btn  = __gbEnsureHoverBtn();
     const rect = img.getBoundingClientRect();
-    const bw = btn.offsetWidth  || 104;
+    // Circular 32×32 button — fallbacks match the cssText above so the
+    // first paint lands in the right spot even before offset measurement.
+    const bw = btn.offsetWidth  || 32;
     const bh = btn.offsetHeight || 32;
     btn.style.left = Math.round(rect.left + (rect.width  - bw) / 2) + 'px';
     btn.style.top  = Math.round(rect.top  + (rect.height - bh) / 2) + 'px';

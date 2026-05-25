@@ -259,13 +259,13 @@ function PopupApp() {
           chrome.scripting.executeScript(
             { target: { tabId: currentTab.id },
               files: [
-                'theme.js', 'libs/flatpickr.js', 'content/notifications.js',
-                'content/calendar.js', 'content/smart-detection.js',
-                'content/variable-resolution.js', 'content/logo-extractor.js',
-                'content/charge-modal.js', 'content/order-edit-modal.js',
-                'content/email-preview.js', 'content/page-utils.js',
-                'content/watchlist-modal.js', 'content/crm-query-builder.js',
-                'content/main.js',
+                'theme.js', 'libs/flatpickr.js', 'src/vanilla/notifications.js',
+                'src/vanilla/calendar.js', 'src/vanilla/smart-detection.js',
+                'src/vanilla/variable-resolution.js', 'src/vanilla/modals/logo-extractor.js',
+                'src/vanilla/modals/charge-modal.js', 'src/vanilla/modals/order-edit-modal.js',
+                'src/vanilla/modals/email-preview.js', 'src/vanilla/page-utils.js',
+                'react-dist/content/watch-list.js', 'src/vanilla/modals/crm-query-builder.js',
+                'src/vanilla/main.js',
               ] },
             askForPageInfo,
           );
