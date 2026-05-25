@@ -130,7 +130,7 @@ export const DEV_SETTINGS = [
     label:   'CRM Search: draggable mode',
     desc:    'When on, the CRM Search modal is a draggable tool window. When off, it sits centered with a solid backdrop that closes on outside-click.',
     type:    'bool',
-    default: true,
+    default: false,
   },
   {
     key:     'crmSearch.useMock',
