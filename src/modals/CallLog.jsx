@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   FloatingPanel, ModalHeader,
   Btn, Dropdown, Input, Textarea, Segmented, Field, SectionLabel,
-  FeatureSpotlight, StepsEditor,
+  FeatureSpotlight, StepsEditor, CollapsibleSection,
   I, Icon, useToast,
 } from '../ui/index.js';
 import {
@@ -243,22 +243,20 @@ export function CallLog({
           )}
         </div>
 
-        {/* ── "or" divider ─────────────────────────────────── */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 10,
-          color: 'var(--gb-text-muted)',
-          fontSize: 9.5, fontWeight: 700, letterSpacing: 1,
-          textTransform: 'uppercase',
-        }}>
-          <span style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
-          <span>or custom</span>
-          <span style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
-        </div>
-
-        {/* ── Custom log — full-fidelity form ─────────────── */}
-        <div>
-          <SectionLabel>Custom log</SectionLabel>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 4 }}>
+        {/* ── Custom log — collapsed by default ────────────
+            Quick Log is the primary path (one-tap submit), so we
+            keep it always-visible up top and tuck Custom Log into
+            a collapsible section. Most reps use a preset; the
+            minority who need an ad-hoc log expand this. The save
+            button lives INSIDE the collapsed body so it doesn't
+            clutter the modal footer when the form isn't visible. */}
+        <CollapsibleSection
+          icon={<I.edit />}
+          title="Custom log"
+          subtitle="No preset fits? Build a one-off entry."
+          defaultOpen={false}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
             {/* Direction + Category share a row to save vertical
                 space. Heights are forced to 28px so the bottoms
                 align — Segmented size="sm" defaults to ~20px tall
@@ -337,11 +335,30 @@ export function CallLog({
               </SectionLabel>
               <StepsEditor steps={steps} onChange={setSteps} />
             </div>
+
+            {/* Save lives INSIDE the collapsible — it's only useful
+                when the form is visible, and putting it here keeps
+                the modal footer minimal (Cancel + tel: hint) when
+                the rep is just picking a preset. */}
+            <Btn
+              size="sm"
+              variant="primary"
+              full
+              icon={<I.send />}
+              onClick={handleCustomSubmit}
+              disabled={anyBusy}
+            >
+              {savingCustom ? 'Saving…' : 'Save custom log'}
+            </Btn>
           </div>
-        </div>
+        </CollapsibleSection>
       </div>
 
-      {/* ── Footer ─────────────────────────────────────────── */}
+      {/* ── Footer — minimal now that Save lives inside the
+            Custom Log collapsible. tel: hint left, Cancel right.
+            Reps who just want to dismiss without logging hit
+            Cancel (or the header close button); preset clicks
+            auto-close on success. */}
       <div style={{
         padding: 12,
         borderTop: '1px solid var(--gb-border-subtle)',
@@ -354,12 +371,7 @@ export function CallLog({
         }}>
           {phone ? `Dialed ${phone} via tel:` : 'No phone — log only'}
         </span>
-        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          <Btn size="sm" variant="secondary" onClick={animatedClose} disabled={anyBusy}>Cancel</Btn>
-          <Btn size="sm" variant="primary"   onClick={handleCustomSubmit} disabled={anyBusy}>
-            {savingCustom ? 'Saving…' : 'Save custom log'}
-          </Btn>
-        </div>
+        <Btn size="sm" variant="secondary" onClick={animatedClose} disabled={anyBusy}>Cancel</Btn>
       </div>
     </FloatingPanel>
   );
