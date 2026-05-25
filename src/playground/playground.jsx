@@ -120,7 +120,12 @@ function seedCallLogTemplates() {
   })();
 
   const now = Date.now();
-  const samples = [
+  /* TEMPORARY 5x multiplier — exercises the Quick Log scroll
+     container in the modal. Each base template gets four extra
+     clones with the "(copy N)" suffix + a unique id so React keys
+     don't collide. Remove this block (collapse back to `const samples
+     = BASE_SAMPLES`) once we're happy with the scroll behavior. */
+  const BASE_SAMPLES = [
     {
       id: 'pg-cl-1',
       name: 'Reached — placed order',
@@ -188,20 +193,32 @@ function seedCallLogTemplates() {
       updatedAt: now,
     },
   ];
+  // 5x clone — total 25 templates so the Quick Log scroll fires.
+  const samples = [];
+  for (let copy = 0; copy < 5; copy++) {
+    for (const base of BASE_SAMPLES) {
+      samples.push({
+        ...base,
+        id: copy === 0 ? base.id : `${base.id}-copy-${copy}`,
+        name: copy === 0 ? base.name : `${base.name} (${copy + 1})`,
+      });
+    }
+  }
 
-  // Merge strategy: preserve any non-call_log templates the user has,
-  // only inject the sample call_log set when no call_log templates
-  // already exist. This way re-opening the playground after editing
-  // a template doesn't overwrite the rep's work.
+  // Merge strategy: preserve any non-call_log templates the user
+  // has (notes / tasks they care about), but ALWAYS refresh the
+  // call_log set so changes to the playground seed take effect on
+  // the next open. Reps don't edit call_log templates from the
+  // playground — they edit them in the Notes editor — so blowing
+  // away the playground's call_log samples is safe.
   //
   // Returns a Promise that resolves when the seed is durable so the
   // caller can mount the modal AFTER the templates are readable.
   return new Promise((resolve) => {
     const apply = (existing) => {
       const arr = Array.isArray(existing) ? existing : [];
-      const hasCallLog = arr.some((t) => t?.subType === 'call_log');
-      if (hasCallLog) { resolve(); return; }
-      const next = [...arr, ...samples];
+      const preserved = arr.filter((t) => t?.subType !== 'call_log');
+      const next = [...preserved, ...samples];
       if (hasChromeStorage) {
         chrome.storage.local.set({ [NOTE_TEMPLATES_KEY]: next }, () => resolve());
       } else {
