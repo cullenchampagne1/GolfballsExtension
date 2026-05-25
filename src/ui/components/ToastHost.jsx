@@ -6,6 +6,7 @@ import { ActionToast } from './ActionToast.jsx';
 import { StepToast } from './StepToast.jsx';
 import { TrayToast } from './TrayToast.jsx';
 import { EdgeToast } from './EdgeToast.jsx';
+import { SelectToast } from './SelectToast.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    ToastHost — the global notification manager.
@@ -48,6 +49,7 @@ const VARIANT_DEFAULTS = {
   step:   { placement: 'top-right',  duration: null },
   tray:   { placement: 'top-right',  duration: null },
   edge:   { placement: 'top-edge',   duration: null },
+  select: { placement: 'top-right',  duration: null },
 };
 
 /* Maximum simultaneously rendered toasts per placement. Older entries
@@ -80,6 +82,7 @@ function ToastBody({ entry, dismiss }) {
     case 'step':   return <StepToast   {...props} />;
     case 'tray':   return <TrayToast   {...props} />;
     case 'edge':   return <EdgeToast   {...props} />;
+    case 'select': return <SelectToast {...props} />;
     default:       return null;
   }
 }
@@ -153,6 +156,7 @@ export function ToastHost({ children, maxPerPlacement = MAX_PER_PLACEMENT, insta
     step:   (opts = {})          => push('step',   opts),
     tray:   (opts = {})          => push('tray',   opts),
     edge:   (message, opts = {}) => push('edge',   { message, ...opts }),
+    select: (opts = {})          => push('select', opts),
     // Shorthand wrappers — always pill with the named tone
     success: (message, opts = {}) => push('pill', { message, tone: 'success', ...opts }),
     info:    (message, opts = {}) => push('pill', { message, tone: 'info',    ...opts }),

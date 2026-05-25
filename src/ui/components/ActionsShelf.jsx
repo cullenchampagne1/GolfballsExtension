@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { useActionRegistry, actionRegistry } from '../../lib/actionRegistry.js';
 
 /* ───────────────────────────────────────────────────────────────
@@ -31,9 +32,11 @@ function useShelfKeyframes() {
     if (document.getElementById('gb-actions-shelf-keyframes')) return;
     const s = document.createElement('style');
     s.id = 'gb-actions-shelf-keyframes';
+    // Row stagger still uses CSS keyframes (per-row animation-delay is
+    // ugly under motion/react). The panel's own enter/exit is now
+    // motion-driven so we get a clean exit animation too. See below.
     s.textContent = `
       @keyframes gb-as-row-in   { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-      @keyframes gb-as-panel-in { from { opacity: 0; transform: translateY(10px) scale(.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
       @keyframes gb-as-twinkle  { 0%, 100% { opacity: .35; transform: scale(.85); } 50% { opacity: 1; transform: scale(1.05); } }
       @keyframes gb-as-glow     { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
     `;
@@ -434,8 +437,16 @@ export function ActionsShelf({
         fontFamily: 'var(--gb-font-sans)',
       }}
     >
+      <AnimatePresence>
       {open && (
-        <div
+        <motion.div
+          // Enter: panel rises + scales in from bottom-right
+          // Exit: scales back down and fades to nothing
+          // Same spring curve as the design's keyframe entry; the exit
+          // is slightly faster and more linear so it closes cleanly.
+          initial={{ opacity: 0, y: 10, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: 0.22, ease: [0.34, 1.4, 0.64, 1] } }}
+          exit={{    opacity: 0, y: 6, scale: 0.96, transition: { duration: 0.14, ease: [0.4, 0, 0.2, 1] } }}
           style={{
             position: 'absolute',
             bottom: 'calc(100% + 10px)',
@@ -448,7 +459,6 @@ export function ActionsShelf({
             boxShadow: '0 24px 64px rgba(0,0,0,.55), 0 0 0 1px var(--gb-fill-faint), 0 0 40px rgba(143,206,46,.04)',
             overflow: 'hidden',
             transformOrigin: 'bottom right',
-            animation: 'gb-as-panel-in .26s cubic-bezier(.34,1.4,.64,1) both',
             display: 'flex', flexDirection: 'column',
           }}
         >
@@ -554,8 +564,9 @@ export function ActionsShelf({
             </span>
             <Kbd>esc</Kbd>
           </div>
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       <ShelfTrigger
         variant={variant}

@@ -17,6 +17,7 @@ import { QueryBuilder } from '../modals/QueryBuilder.jsx';
 import { TaskList } from '../modals/TaskList.jsx';
 import { ActionsShelf } from '../ui/components/ActionsShelf.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
+import { findPhone } from '../lib/findPhone.js';
 
 /* ───────────────────────────────────────────────────────────────
    playground.jsx — in-extension modal playground.
@@ -326,13 +327,52 @@ function PlaygroundSurface() {
         handler: () => toast?.info?.('Quick task — coming soon'),
       }),
       actionRegistry.register({
-        id: 'demo-call-marcus',
-        label: 'Call Marcus',
+        id: 'demo-find-phone',
+        label: 'Find phone for Marcus',
         icon: <PhoneG />,
-        hint: 'Dial last known number · 415-555-0142',
+        hint: 'Scan orders for the right number',
         smartFor: ['contact'],
         badge: { label: 'CRM', tone: 'brand' },
-        handler: () => toast?.info?.('Call panel — coming soon'),
+        handler: () => findPhone({
+          contactName: 'Marcus Chen',
+          // Playground mocks — return canned order HTML so the picker
+          // surfaces the right candidates without hitting the network.
+          // Real contact pages will swap these for chrome.runtime
+          // fetchRaw calls + the actual /Contact/Update.ajax write.
+          fetchOrderLinks: async () => ([
+            'mock://order/A-1001',
+            'mock://order/A-1002',
+            'mock://order/A-1003',
+          ]),
+          fetchOrderPage: async (url) => {
+            // Synthesize plausible CRM-style HTML with phones + names.
+            const MOCK = {
+              'mock://order/A-1001': {
+                name: 'Marcus Chen', phone: '(415) 555-0142',
+              },
+              'mock://order/A-1002': {
+                name: 'Acme Industries Receiving', phone: '(415) 555-0107',
+              },
+              'mock://order/A-1003': {
+                name: 'Marcus Chen', phone: '(415) 555-0142',     // dupe — should dedupe
+              },
+            };
+            const e = MOCK[url] || {};
+            const html = `
+              <table id="customerInfo">
+                <tr><td>Name</td><td class="darkText">${e.name || ''}</td></tr>
+                <tr><td>Phone</td><td class="darkText">${e.phone || ''}</td></tr>
+              </table>
+            `;
+            return { html, url };
+          },
+          saveContact: async (phone) => {
+            // Mock save — surface what *would* happen on a live contact.
+            await new Promise((r) => setTimeout(r, 250));
+            return { ok: true, phone };
+          },
+          toast,
+        }),
       }),
       actionRegistry.register({
         id: 'demo-add-note',
