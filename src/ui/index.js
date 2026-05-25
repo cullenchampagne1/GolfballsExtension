@@ -35,6 +35,7 @@ export { DatePicker, formatHumanDate, parseDateValue, serializeDateValue } from 
 export { SwitchTag } from './components/SwitchTag.jsx';
 export { Segmented } from './components/Segmented.jsx';
 export { Tabs } from './components/Tabs.jsx';
+export { StepsEditor } from './components/StepsEditor.jsx';
 export { SettingNotificationHost, useSettingNotification } from './components/SettingNotification.jsx';
 export { PillToast } from './components/PillToast.jsx';
 export { ActionToast } from './components/ActionToast.jsx';
