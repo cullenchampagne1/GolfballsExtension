@@ -15,6 +15,7 @@ import { SubmitProof } from '../modals/SubmitProof.jsx';
 import { CRMSearch } from '../modals/CRMSearch.jsx';
 import { QueryBuilder } from '../modals/QueryBuilder.jsx';
 import { TaskList } from '../modals/TaskList.jsx';
+import { CallLog } from '../modals/CallLog.jsx';
 import { ActionsShelf } from '../ui/components/ActionsShelf.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { findPhone } from '../lib/findPhone.js';
@@ -48,6 +49,7 @@ const MODAL_REGISTRY = [
   { id: 'crmQuery',     label: 'CRM Query',       icon: 'filter',  wired: true  },
   { id: 'crmContact',   label: 'New Contact',     icon: 'user',    wired: true  },
   { id: 'taskList',     label: 'Tasks',           icon: 'check',   wired: true  },
+  { id: 'callLog',      label: 'Call Log',        icon: 'phone',   wired: true  },
   { id: 'phoneFinder',  label: 'Phone Finder',    icon: 'search',  wired: false },
   { id: 'calendar',     label: 'Calendar',        icon: 'cog',     wired: false },
 ];
@@ -275,6 +277,10 @@ function PlaygroundSurface() {
   // Carries the image (if any) the user loaded in ImagePreview when
   // they click Submit Proof — handed to SubmitProof on the swap.
   const [proofImage, setProofImage] = useState(null);
+  // Carries the contact context (name + phone) that the CallLog modal
+  // should log against. Set by the "Call {name}" smart action handler
+  // before mounting the modal; cleared on close.
+  const [callContext, setCallContext] = useState(null);
   const notify = useSettingNotification();
   const toast = useToast();
 
@@ -323,7 +329,41 @@ function PlaygroundSurface() {
     // floats into the Smart group.
     actionRegistry.setPage('contact', 'Marcus Chen', 'Contact · Acme Industries');
 
+    // Read the current page label so "Call {name}" reflects the
+    // active contact/account. The page is set above (setPage) so
+    // this is fresh — for a real content-script the same pattern
+    // re-registers when smart-detection updates the page.
+    const pageLabel = actionRegistry.getPageLabel() || 'contact';
+
     const unsubs = [
+      actionRegistry.register({
+        id: 'demo-call-contact',
+        label: `Call ${pageLabel}`,
+        icon: <I.phone size={13} />,
+        hint: 'Dial via tel: + log the outcome',
+        smartFor: ['contact', 'account'],
+        kbd: '⌘⇧C',
+        handler: () => {
+          // Mock phone for the playground demo. In the real extension
+          // this'll come from the contact's saved CRM record.
+          const mockPhone = '(415) 555-0142';
+          const digits = mockPhone.replace(/\D/g, '');
+          // `tel:` in a _blank target hands the dial off to whatever
+          // app owns the protocol (3CX desktop / PWA / FaceTime) without
+          // navigating the current tab away — the rep stays on the
+          // contact page so they can keep working.
+          if (typeof window !== 'undefined') {
+            window.open(`tel:${digits}`, '_blank');
+          }
+          // Now mount the log modal so the rep can record the outcome.
+          setCallContext({
+            contactName: actionRegistry.getPageLabel() || 'Contact',
+            contactType: actionRegistry.getPage() || 'contact',
+            phone: mockPhone,
+          });
+          setMounted('callLog');
+        },
+      }),
       actionRegistry.register({
         id: 'demo-add-task',
         label: 'Quick task for Marcus',
@@ -450,6 +490,18 @@ function PlaygroundSurface() {
       // Seed sample watchlist data on first open so the modal shows
       // its full design instead of an empty state in the playground.
       if (entry.id === 'watchList') seedWatchListSamples();
+      // When the Call Log is opened directly from the modal toolbar
+      // (no smart action upstream), seed a default contact context so
+      // the modal renders with realistic-looking content for design
+      // iteration. The smart-action path overrides this with real
+      // page data before setMounted.
+      if (entry.id === 'callLog' && !callContext) {
+        setCallContext({
+          contactName: 'Marcus Chen',
+          contactType: 'contact',
+          phone: '(415) 555-0142',
+        });
+      }
       setMounted(entry.id);
       return;
     }
@@ -623,6 +675,15 @@ function PlaygroundSurface() {
           <TaskList
             key="taskList"
             onClosed={() => setMounted(null)}
+          />
+        )}
+        {mounted === 'callLog' && callContext && (
+          <CallLog
+            key="callLog"
+            contactName={callContext.contactName}
+            contactType={callContext.contactType}
+            phone={callContext.phone}
+            onClosed={() => { setMounted(null); setCallContext(null); }}
           />
         )}
       </AnimatePresence>
