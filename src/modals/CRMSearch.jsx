@@ -5,6 +5,7 @@ import {
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
+import { QueryBuilder } from './QueryBuilder.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    CRMSearch — React port of content/crm-search-modal.js.
@@ -217,15 +218,17 @@ export function CRMSearch({ onClosed, bindClose }) {
     return next;
   });
 
-  // Query Builder open handler — stubbed until QB is ported to React.
-  // The original modal hides itself, opens content/crm-query-builder.js's
-  // overlay, then on confirm sets a Solr fq filter + a preview label.
-  // For now we toast that it's coming and leave qbFilter null.
-  // NOTE: toast.info() takes (message: string, opts) — passing an opts
-  // object as the first arg was rendering "[object Object]" and tripping
-  // a render-side error in the toast host.
-  const openQueryBuilder = () => {
-    toast?.info?.('Query Builder — coming soon', { duration: 3500 });
+  // Query Builder overlay state. When open, renders <QueryBuilder>
+  // alongside CRMSearch (both portaled by FloatingPanel so they sit
+  // on the same z-stack as backdrops). On Apply, the QB hands back
+  // { label, solrFq, conditions } — we stash the whole thing as
+  // qbFilter so the QB filter bar renders + the next search reuses
+  // the conditions (and re-opening the QB pre-populates them).
+  const [qbOpen, setQbOpen] = useState(false);
+  const openQueryBuilder = () => setQbOpen(true);
+  const applyQbFilter = (filter) => {
+    setQbFilter(filter);   // triggers the auto re-run effect
+    setQbOpen(false);
   };
 
   // ── Export CSV — selected rows → downloadable file ────────────
@@ -427,6 +430,18 @@ export function CRMSearch({ onClosed, bindClose }) {
           onToggleAll={toggleAll}
         />
       </div>
+
+      {/* Query Builder overlay — sibling so it portals to its own z-layer
+          on top of CRMSearch. Mount/unmount on open so the conditions
+          state is preserved per session: when the user re-opens, we
+          pass the previously applied filter's conditions back in. */}
+      {qbOpen && (
+        <QueryBuilder
+          initialConditions={qbFilter?.conditions || []}
+          onClosed={() => setQbOpen(false)}
+          onApply={applyQbFilter}
+        />
+      )}
     </FloatingPanel>
   );
 }
@@ -437,7 +452,7 @@ export function CRMSearch({ onClosed, bindClose }) {
    would let users filter on something they can't see — and the
    reverse confuses people about what filters are available — so
    keep these in lock-step. */
-const COLS = '30px 1.3fr 1.1fr 80px 1.3fr 0.9fr 70px 0.9fr 0.9fr 110px';
+const COLS = '30px 1.3fr 1.1fr 80px 1.9fr 70px 0.9fr 0.9fr 110px';
 
 function ResultsTable({ rows, status, query, total, selected, allChecked, onToggle, onToggleAll }) {
   return (
@@ -460,7 +475,6 @@ function ResultsTable({ rows, status, query, total, selected, allChecked, onTogg
         <div>Account</div>
         <div>Type</div>
         <div>Email</div>
-        <div>Sales Rep</div>
         <div>Orders</div>
         <div>YTD Rev</div>
         <div>PY Rev</div>
@@ -555,11 +569,6 @@ function ResultRow({ row, isSelected, onToggle }) {
         </Tag>
       </div>
       <div style={mono}>{email}</div>
-      <div style={{
-        color: 'var(--gb-text-tertiary)',
-        fontSize: 11.5,
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>{rep}</div>
       <div style={mono}>{row.orderCount_i ?? '—'}</div>
       <div style={{ ...mono, color: 'var(--gb-text-secondary)' }}>{fmtMoney(row.yearToDateRevenue_f)}</div>
       <div style={mono}>{fmtMoney(row.priorYearRevenue_f)}</div>
