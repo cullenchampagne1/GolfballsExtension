@@ -280,7 +280,7 @@
             </div>
           </div>
 
-          <div id="__gb-charge-err" style="display:none; color:var(--gb-error,#c86060); font-size:13px; font-weight:500; background:rgba(var(--gb-error-rgb, 200,96,96),0.15); padding:14px 16px; border-radius:10px; border:1px solid rgba(var(--gb-error-rgb, 200,96,96),0.3); line-height:1.5;"></div>
+          <div id="__gb-charge-err" style="display:none; color:var(--gb-error,#c86060); font-size:13px; font-weight:500; background:rgba(var(--gb-error-rgb, 200,96,96),0.15); padding:14px 16px; border-radius:10px !important; border:1px solid rgba(var(--gb-error-rgb, 200,96,96),0.3); line-height:1.5;"></div>
 
           <div style="margin-top: 4px;">
             <div style="font-size:9px; font-weight:800; color:rgba(255,255,255,.5); margin-bottom:10px; text-transform:uppercase; letter-spacing:0.8px;">Payment Methods</div>

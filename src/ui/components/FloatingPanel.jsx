@@ -44,11 +44,11 @@ const SCROLLBAR_CSS = `
   .gb-modal-card *::-webkit-scrollbar { width: 8px; height: 8px; }
   .gb-modal-card *::-webkit-scrollbar-track {
     background: transparent;
-    border-radius: 8px;
+    border-radius: 8px !important;
   }
   .gb-modal-card *::-webkit-scrollbar-thumb {
     background: color-mix(in srgb, var(--gb-text-primary) 16%, transparent);
-    border-radius: 8px;
+    border-radius: 8px !important;
     border: 2px solid transparent;
     background-clip: padding-box;
     transition: background .15s;

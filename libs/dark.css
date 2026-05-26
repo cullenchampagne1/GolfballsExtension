@@ -11,7 +11,7 @@
   border: 0;
   font-size: 14px;
   line-height: 24px;
-  border-radius: 5px;
+  border-radius: 5px !important;
   position: absolute;
   width: 307.875px;
   -webkit-box-sizing: border-box;
@@ -358,7 +358,7 @@
   line-height: inherit;
   height: auto;
   border: 0;
-  border-radius: 0;
+  border-radius: 0 !important;
   vertical-align: initial;
   -webkit-appearance: textfield;
   -moz-appearance: textfield;
@@ -378,7 +378,7 @@
   appearance: menulist;
   background: #3f4458;
   border: none;
-  border-radius: 0;
+  border-radius: 0 !important;
   box-sizing: border-box;
   color: inherit;
   cursor: pointer;
@@ -500,7 +500,7 @@ span.flatpickr-weekday {
 .flatpickr-day {
   background: none;
   border: 1px solid transparent;
-  border-radius: 150px;
+  border-radius: 150px !important;
   -webkit-box-sizing: border-box;
           box-sizing: border-box;
   color: rgba(255,255,255,0.95);
@@ -575,12 +575,12 @@ span.flatpickr-weekday {
 .flatpickr-day.selected.startRange,
 .flatpickr-day.startRange.startRange,
 .flatpickr-day.endRange.startRange {
-  border-radius: 50px 0 0 50px;
+  border-radius: 50px 0 0 50px !important;
 }
 .flatpickr-day.selected.endRange,
 .flatpickr-day.startRange.endRange,
 .flatpickr-day.endRange.endRange {
-  border-radius: 0 50px 50px 0;
+  border-radius: 0 50px 50px 0 !important;
 }
 .flatpickr-day.selected.startRange + .endRange:not(:nth-child(7n+1)),
 .flatpickr-day.startRange.startRange + .endRange:not(:nth-child(7n+1)),
@@ -591,10 +591,10 @@ span.flatpickr-weekday {
 .flatpickr-day.selected.startRange.endRange,
 .flatpickr-day.startRange.startRange.endRange,
 .flatpickr-day.endRange.startRange.endRange {
-  border-radius: 50px;
+  border-radius: 50px !important;
 }
 .flatpickr-day.inRange {
-  border-radius: 0;
+  border-radius: 0 !important;
   -webkit-box-shadow: -5px 0 0 #646c8c, 5px 0 0 #646c8c;
           box-shadow: -5px 0 0 #646c8c, 5px 0 0 #646c8c;
 }
@@ -616,7 +616,7 @@ span.flatpickr-weekday {
   color: rgba(255,255,255,0.1);
 }
 .flatpickr-day.week.selected {
-  border-radius: 0;
+  border-radius: 0 !important;
   -webkit-box-shadow: -5px 0 0 #80cbc4, 5px 0 0 #80cbc4;
           box-shadow: -5px 0 0 #80cbc4, 5px 0 0 #80cbc4;
 }
@@ -711,7 +711,7 @@ span.flatpickr-weekday {
   -webkit-box-shadow: none;
           box-shadow: none;
   border: 0;
-  border-radius: 0;
+  border-radius: 0 !important;
   text-align: center;
   margin: 0;
   padding: 0;

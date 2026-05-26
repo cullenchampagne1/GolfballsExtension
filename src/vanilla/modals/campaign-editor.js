@@ -1964,7 +1964,7 @@ window.__gbShowCampaignEditor = async function(onUpdateCallback, onCloseCallback
     // Show summary at the bottom
     const fired = results.filter(r => r.status === 'fired');
     const summaryEl = document.createElement('div');
-    summaryEl.style.cssText = 'padding:16px;margin-top:12px;border-radius:10px;text-align:center;font-size:13px;font-weight:600;animation:__gbSbSlide .3s ease;';
+    summaryEl.style.cssText = 'padding:16px;margin-top:12px;border-radius:10px !important;text-align:center;font-size:13px;font-weight:600;animation:__gbSbSlide .3s ease;';
     if (fired.length) {
       summaryEl.style.background = 'rgba(125,184,42,.1)';
       summaryEl.style.border = '1px solid rgba(125,184,42,.3)';
