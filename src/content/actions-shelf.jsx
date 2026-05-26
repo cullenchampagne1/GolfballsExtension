@@ -193,6 +193,7 @@ if (!window.__gbActionsShelfLoaded) {
   if (!document.getElementById(HOST_ID)) {
     const host = document.createElement('div');
     host.id = HOST_ID;
+    host.setAttribute('data-gb-scale', 'shelf');
     document.body.appendChild(host);
     createRoot(host).render(
       <ToastHost installGlobal={false}>

@@ -3,8 +3,11 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   SectionLabel, Card, Callout, Btn, Input, Dropdown, Field,
   FeatureSpotlight, ExpandableFeature, ColorSpotlight, Switch, Dot, I,
-  CollapsibleChecklist,
+  CollapsibleChecklist, Slider,
 } from '../ui/index.js';
+import {
+  SCALE_CATEGORIES, DEFAULT_SCALES, loadScales, saveScales, applyScales,
+} from '../lib/scales.js';
 import {
   THEME_VARIANTS, THEME_COLORS, DEFAULT_THEME,
   loadTheme, applyTheme, saveTheme, currentColor,
@@ -103,6 +106,46 @@ function VariantCard({ variant, active, onClick }) {
 }
 
 /* ── Keyboard Shortcut Input ─────────────────────────────────── */
+function UiScaleRow({ label, hint, value, onChange }) {
+  const pct = Math.round((value || 1) * 100);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)' }}>{label}</div>
+        <div style={{ flex: 1, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>{hint}</div>
+        <button
+          type="button"
+          onClick={() => onChange(1)}
+          disabled={pct === 100}
+          style={{
+            background: pct === 100 ? 'var(--gb-fill-soft)' : 'transparent',
+            border: '1px solid var(--gb-border-default)',
+            borderRadius: 'var(--gb-r-sm)',
+            color: pct === 100 ? 'var(--gb-text-muted)' : 'var(--gb-brand-label)',
+            padding: '2px 8px',
+            fontSize: 10, fontWeight: 700, fontFamily: 'var(--gb-font-mono)',
+            cursor: pct === 100 ? 'default' : 'pointer',
+            minWidth: 48, textAlign: 'center',
+          }}
+          title={pct === 100 ? '' : 'Reset to 100%'}
+        >
+          {pct}%
+        </button>
+      </div>
+      <Slider
+        value={pct}
+        min={50}
+        max={150}
+        step={5}
+        unit="%"
+        showValue={false}
+        ticks={[50, 75, 100, 125, 150]}
+        onChange={(v) => onChange(Math.max(0.5, Math.min(1.5, v / 100)))}
+      />
+    </div>
+  );
+}
+
 function KeyboardShortcutRow({ label, desc, value, onChange }) {
   const enabled = !!value;
   const handleInput = (e) => {
@@ -526,6 +569,7 @@ export function SettingsPanel() {
   const [devSearch, setDevSearch] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
   const [paStatus, setPaStatus] = useState(null);
+  const [scales, setScales] = useState(DEFAULT_SCALES);
 
   /* Sort registry alphabetically once; filter on the user's query
      case-insensitively against label / desc / key so they can find a
@@ -548,7 +592,25 @@ export function SettingsPanel() {
     loadKeyboardShortcuts().then(setShortcuts);
     loadCustomPages().then(setCustomPages);
     loadDevSettings().then(setDevSettings);
+    loadScales().then(setScales);
   }, [refreshKey]);
+
+  /* UI-scale commit — local state + persist + apply to this document
+     immediately so the rep sees the change without waiting for the
+     storage.onChanged round-trip. Other open tabs get the update via
+     the chrome.storage.onChanged listener wired in ensureScales(). */
+  const setScale = (id, value) => {
+    const next = { ...scales, [id]: value };
+    setScales(next);
+    saveScales(next);
+    applyScales(next);
+  };
+  const resetScales = () => {
+    setScales(DEFAULT_SCALES);
+    saveScales(DEFAULT_SCALES);
+    applyScales(DEFAULT_SCALES);
+    window.__gbToast?.success('UI scale reset to 100% across the board');
+  };
 
   function setDevSetting(key, value) {
     const next = { ...devSettings, [key]: value };
@@ -625,6 +687,26 @@ export function SettingsPanel() {
             <FeatureSpotlight key={f.key} on={!!flags[f.key]} icon={getIcon(f.icon)} name={f.name} desc={f.desc} onChange={() => toggleFlag(f.key)} />
           ))}
         </div>
+      </section>
+
+      {/* UI Scale — independent zoom per extension surface. Lets the
+          rep run the host CRM at one browser zoom and the extension
+          UI at another, dialed in per surface. */}
+      <section>
+        <SectionLabel action={<Btn variant="ghost" size="xs" onClick={resetScales}>Reset All</Btn>}>UI Scale</SectionLabel>
+        <Card>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: 12 }}>
+            {SCALE_CATEGORIES.map((c) => (
+              <UiScaleRow
+                key={c.id}
+                label={c.label}
+                hint={c.hint}
+                value={scales[c.id] ?? 1}
+                onChange={(v) => setScale(c.id, v)}
+              />
+            ))}
+          </div>
+        </Card>
       </section>
 
       {/* Keyboard Shortcuts */}

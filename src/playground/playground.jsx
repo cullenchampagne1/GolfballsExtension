@@ -935,6 +935,7 @@ purgePlaygroundTemplateSeeds();
 
 function mount() {
   const host = document.getElementById('playground-root');
+  if (host) host.setAttribute('data-gb-scale', 'playground');
   if (!host) return;
   createRoot(host).render(<PlaygroundApp />);
 }

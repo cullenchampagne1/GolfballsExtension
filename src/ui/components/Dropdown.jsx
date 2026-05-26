@@ -188,7 +188,7 @@ export function Dropdown({
                 />
               </div>
             )}
-            <div className="gb-dd-list" style={{ maxHeight: pos.maxListHeight, overflowY: 'auto', padding: 4, scrollbarWidth: 'none' }}>
+            <div className="gb-dd-list" data-gb-scale="popovers" style={{ maxHeight: pos.maxListHeight, overflowY: 'auto', padding: 4, scrollbarWidth: 'none' }}>
               {filtered.length === 0 ? (
                 <div style={{ padding: '10px 8px', fontSize: 11.5, color: 'var(--gb-text-muted)', textAlign: 'center' }}>
                   No matches

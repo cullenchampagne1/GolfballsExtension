@@ -1174,6 +1174,7 @@ ensureTheme();
 function mount() {
   const host = document.getElementById('popup-root');
   if (!host) return;
+  host.setAttribute('data-gb-scale', 'popup');
   createRoot(host).render(
     <ToastHost>
       <PopupApp />

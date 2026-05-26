@@ -458,6 +458,7 @@ function VarMenu({ variables, onPick, onClose, anchorRef }) {
   return createPortal(
     <div
       className="gb-rte-portal"
+      data-gb-scale="popovers"
       onMouseDown={e => e.stopPropagation()}
       style={{
         position: 'fixed', top: pos.top, right: pos.right, zIndex: 2147483400,
