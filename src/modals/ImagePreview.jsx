@@ -1483,7 +1483,7 @@ export function ImagePreview({
             size="sm"
             variant="primary"
             icon={<DownloadIcon />}
-            onClick={onDownload}
+            onClick={inViewerMode ? onDownload3D : onDownload}
             style={{ flex: 1, minWidth: 0, width: 'auto' }}
           >
             Download
