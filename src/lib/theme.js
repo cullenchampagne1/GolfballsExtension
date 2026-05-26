@@ -1,4 +1,5 @@
 import themeCss from '../ui/theme.css?inline';
+import { startForceImportantBorderRadius } from './forceImportantBorderRadius.js';
 
 /* ───────────────────────────────────────────────────────────────
    theme.js — the design-system theme runtime.
@@ -96,6 +97,7 @@ export function saveTheme(theme) {
  */
 export function ensureTheme() {
   injectSheet();
+  startForceImportantBorderRadius();
   loadTheme().then(applyTheme);
   try {
     chrome.storage.onChanged.addListener((changes, area) => {

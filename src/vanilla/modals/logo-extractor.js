@@ -679,31 +679,40 @@ if (window.__gbLoaded_logoExtractor) {} else { window.__gbLoaded_logoExtractor =
   }
 
   function __gbExtractAndShow(rawSrc, directUrl, itemLink) {
-    const modal   = __gbBuildModal();
-    const spinner = modal.querySelector('#__gb-spinner');
-    const preview = modal.querySelector('#__gb-preview-img');
-    const errBox  = modal.querySelector('#__gb-modal-err');
-    const actions = modal.querySelector('#__gb-modal-actions');
-    const proofBtn = modal.querySelector('#__gb-btn-proof');
-    const sub     = modal.querySelector('#__gb-modal-sub');
-
-    modal.querySelector('#__gb-modal-close').addEventListener('click', () => __gbCloseModal(modal));
-    modal.addEventListener('click', e => { if (e.target === modal) __gbCloseModal(modal); });
-    const keyClose = e => { if (e.key === 'Escape') { __gbCloseModal(modal); document.removeEventListener('keydown', keyClose); } };
-    document.addEventListener('keydown', keyClose);
-
-    if (directUrl) {
-      sub.textContent = 'Loading original file…';
-      __gbLoadImageViaBackground(directUrl, (dataUrl) => {
-        __gbRevealContent(modal, spinner, preview, actions, proofBtn, sub, dataUrl, directUrl, itemLink, 'Original file');
-      }, () => {
-        __gbRevealContent(modal, spinner, preview, actions, proofBtn, sub,
-          'data:application/octet-stream;base64,', directUrl, itemLink, 'File (no preview)');
-      });
+    if (typeof window.__gbOpenImagePreview !== 'function') {
+      console.error('[gb] __gbOpenImagePreview missing — image-preview.js not loaded?');
       return;
     }
 
-    __gbExtractViaCandidates(rawSrc, modal, spinner, preview, errBox, actions, proofBtn, sub, itemLink);
+    if (directUrl) {
+      window.__gbOpenImagePreview({ url: directUrl, itemLink });
+      return;
+    }
+
+    const tokenOrPath = __gbFindOverlayTokenOrPath(rawSrc);
+    if (!tokenOrPath) {
+      window.__gbOpenImagePreview({ url: rawSrc, itemLink });
+      return;
+    }
+
+    // Probe candidates via the background script so the modal opens with
+    // a known-reachable URL instead of a broken-image flash. The dataUrl
+    // from the probe is discarded — we pass the original URL so the
+    // React modal's Copy URL / Download actions get a real link.
+    const candidates = __gbBuildAbsoluteCandidates(tokenOrPath);
+    let idx = 0;
+    const tryNext = () => {
+      if (idx >= candidates.length) {
+        window.__gbOpenImagePreview({ url: candidates[0] || rawSrc, itemLink });
+        return;
+      }
+      const url = candidates[idx++];
+      __gbLoadImageViaBackground(url,
+        () => window.__gbOpenImagePreview({ url, itemLink }),
+        () => tryNext()
+      );
+    };
+    tryNext();
   }
 
   function __gbExtractViaCandidates(rawSrc, modal, spinner, preview, errBox, actions, proofBtn, sub, itemLink) {

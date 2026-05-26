@@ -76,7 +76,7 @@ function ensureStyle() {
     .gb-rte-content::-webkit-scrollbar { width: 6px; height: 6px; }
     .gb-rte-content::-webkit-scrollbar-track { background: transparent; }
     .gb-rte-content::-webkit-scrollbar-thumb {
-      background: var(--gb-border-default); border-radius: 6px;
+      background: var(--gb-border-default); border-radius: 6px !important;
     }
     .gb-rte-content::-webkit-scrollbar-thumb:hover { background: var(--gb-border-strong); }
     /* Matches BodyVar.jsx (size 'md') — the canonical body-content
@@ -85,7 +85,7 @@ function ensureStyle() {
        known at chip-render time inside contenteditable). */
     .gb-rte-chip {
       display: inline-flex; align-items: stretch; vertical-align: baseline;
-      margin: 0 1px; border-radius: var(--gb-r-sm); overflow: hidden;
+      margin: 0 1px; border-radius: var(--gb-r-sm) !important; overflow: hidden;
       border: 1px solid var(--gb-brand-tint-border);
       background: var(--gb-brand-tint-soft);
       line-height: 1.4;
