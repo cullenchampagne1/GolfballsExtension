@@ -318,6 +318,7 @@ function DatePickerPopover({ value, anchorRef, onChange, onClose, includeTime })
     <motion.div
       ref={ref}
       className="gb-datepicker"
+      data-gb-scale="popovers"
       initial={{ opacity: 0, y: -4, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -4, scale: 0.97 }}

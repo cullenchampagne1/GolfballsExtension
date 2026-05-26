@@ -18,6 +18,8 @@ export function mountFloating(id, render) {
   }
   const host = document.createElement('div');
   host.id = id;
+  // Modal mount roots opt in to the "modals" UI-scale slider.
+  host.setAttribute('data-gb-scale', 'modals');
   document.body.appendChild(host);
 
   const root = createRoot(host);
