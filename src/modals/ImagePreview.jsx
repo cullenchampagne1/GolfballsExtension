@@ -132,8 +132,12 @@ export function ImagePreview({
   const toast = useToast();
   const draggable = useDevSetting('imageViewer.draggable') ?? false;
 
-  // load-state machine for the preview area + subtitle copy
-  const [status, setStatus] = useState('loading');
+  // load-state machine for the preview area + subtitle copy.
+  // Seed from the initial `url` so a no-url mount (popup / playground
+  // Submit-Proof entry) renders straight into the drop-zone view —
+  // otherwise the spinner flashes for one paint before useEffect
+  // re-classifies it as 'empty'.
+  const [status, setStatus] = useState(() => (url ? 'loading' : 'empty'));
   const [copied, setCopied] = useState(false);
   // Natural image dimensions in px — captured at load time, displayed
   // in the top-left chip so the user has the source size at a glance

@@ -421,11 +421,14 @@ function PopupApp() {
           ignoreProof={ignoreProof}
           ignorePageContext={ignorePageContext}
           onOpenWatchAdd={() => setWatchModalOpen(true)}
-          onOpenProof={async () => {
+          onOpenProof={() => {
             if (!tab) return;
             const orderId    = pageInfo.orderNo   || '';
             const customerId = pageInfo.contactId || pageInfo.accountId || '';
-            await sendMessage(tab.id, { action: 'showImagePreview', orderId, customerId });
+            // Fire-and-forget: the content-script handler returns true
+            // without sendResponse, so awaiting hangs the popup. Closing
+            // immediately lets the modal mount unobstructed on the host page.
+            chrome.tabs.sendMessage(tab.id, { action: 'showImagePreview', orderId, customerId });
             window.close();
           }}
         />
