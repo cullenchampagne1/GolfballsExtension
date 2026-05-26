@@ -274,6 +274,16 @@ window.__gbContentReady = true;
       return true;
     }
 
+    if (msg.action === 'showImagePreview') {
+      if (typeof window.__gbOpenImagePreview === 'function') {
+        window.__gbOpenImagePreview({
+          orderId:    msg.orderId    || '',
+          customerId: msg.customerId || '',
+        });
+      }
+      return true;
+    }
+
     if (msg.action === 'devFireNotification') {
       const { type = 'info', msg: message = 'Test notification', dur = 4000 } = msg;
       const handle = showGbNotification(message, type, dur);
