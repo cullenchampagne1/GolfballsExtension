@@ -20,7 +20,15 @@ const ROOT_ID_PREFIX = '__gb-';
 const CLASS_PREFIX = 'gb-';
 let started = false;
 
+/* On extension-owned pages (popup.html, editor.html, playground.html,
+   charge.html) we OWN every element — no host-page DOM to be careful
+   around — so we can patch everything. On content-script context
+   (chrome injected into golfballs.com pages) we have to walk up and
+   confirm the element is part of an extension subtree first. */
+const IS_OWN_PAGE = typeof location !== 'undefined' && location.protocol === 'chrome-extension:';
+
 function isExtensionElement(el) {
+  if (IS_OWN_PAGE) return true;
   let cur = el;
   while (cur && cur.nodeType === 1 && cur !== document.documentElement) {
     if (typeof cur.id === 'string' && cur.id.startsWith(ROOT_ID_PREFIX)) return true;

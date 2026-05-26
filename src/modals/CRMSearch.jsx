@@ -136,7 +136,13 @@ export function CRMSearch({ onClosed, bindClose }) {
         });
         if (qb) docs = docs.slice(0, 3);
       } else {
-        const qStr = `q=${encodeURIComponent(term || '*:*')}`;
+        // Server prepends `q=` to the `str` field itself, so we send the
+        // bare term/query expression here. Passing `q=jordan` would make
+        // the server see `q=q=jordan` and edismax matches nothing. Multi-
+        // word terms get phrase-quoted to match the legacy behavior.
+        const qStr = term
+          ? (term.includes(' ') ? `"${term}"` : term)
+          : '*:*';
         let body = `${qStr}&sort=lastOrderDate_dt desc&rows=${ROWS}&qf=${encodeURIComponent(QF)}&q.op=AND&sow=false&defType=edismax`;
         if (qb?.solrFq) body += `&fq=${encodeURIComponent(qb.solrFq)}`;
         const res = await fetch(ENDPOINT, {
