@@ -659,6 +659,10 @@ function PlaygroundSurface() {
           <ImagePreview
             key="imageViewer"
             onClosed={() => setMounted(null)}
+            onLaunchSubmitProof={(payload) => {
+              setProofImage(payload || null);
+              setMounted('submitProofForm');
+            }}
           />
         )}
         {mounted === 'watchList' && (
