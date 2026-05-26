@@ -623,30 +623,6 @@ export function TaskList({ onClosed, bindClose }) {
           disabled={!hasSelection}
           onClick={openSelectedTabs}
         >Open Tabs</Btn>
-        {/* Push-days input — feeds both the per-row "Push Out N days"
-            label/action AND the bulk-push action. Shared so the user
-            can dial it in once and apply across rows. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--gb-text-muted)' }}>
-          Push
-          <input
-            type="number"
-            min="1"
-            value={pushDays}
-            onChange={(e) => setPushDays(Math.max(1, parseInt(e.target.value, 10) || 1))}
-            style={{
-              width: 44, height: 24,
-              padding: '0 6px',
-              background: 'var(--gb-surface-2)',
-              border: '1px solid var(--gb-border-default)',
-              borderRadius: 'var(--gb-r-sm)',
-              color: 'var(--gb-text-primary)',
-              fontSize: 11, fontWeight: 600, fontFamily: 'var(--gb-font-mono)',
-              outline: 'none',
-              textAlign: 'center',
-            }}
-          />
-          d
-        </div>
         <Btn
           size="sm"
           variant="ghost"
@@ -658,10 +634,13 @@ export function TaskList({ onClosed, bindClose }) {
 
       {/* Quick-Task floating menu — portal'd so it can escape any
           overflow clipping on the modal body. Anchored to whichever
-          trigger button opened it via `qt.anchor`. */}
+          trigger button opened it via `qt.anchor`. The pushDays
+          number lives INSIDE the menu now (inline number input on
+          the Push Out row) so the footer stays uncluttered. */}
       <QuickTaskMenu
         qt={qt}
         pushDays={pushDays}
+        setPushDays={setPushDays}
         taskTpls={taskTpls}
         selectedCount={selCount}
         getTask={(id) => tasks.find((t) => t.id === id)}
@@ -1032,7 +1011,7 @@ function dateInputToApi(val) {
   return `${m}/${d}/${y}`;
 }
 
-function QuickTaskMenu({ qt, pushDays, taskTpls, selectedCount, getTask, onClose, onNavigate, onAction }) {
+function QuickTaskMenu({ qt, pushDays, setPushDays, taskTpls, selectedCount, getTask, onClose, onNavigate, onAction }) {
   const ref = useRef(null);
   const dateRef = useRef(null);
   const [dateVal, setDateVal] = useState(todayInput);
@@ -1144,6 +1123,50 @@ function QuickTaskMenu({ qt, pushDays, taskTpls, selectedCount, getTask, onClose
     </button>
   );
 
+  /* Push-Out row with an inline day-count input. The whole row is a
+     click target that fires the push action with the current days
+     value; the input gets pointer + key events isolated so typing in
+     it doesn't trigger the action or the menu's outside-click close. */
+  const PushRow = ({ pushDays, setPushDays, onClick }) => (
+    <div
+      onClick={onClick}
+      style={{
+        ...itemStyle,
+        color: 'var(--gb-info-fg)',
+        cursor: 'pointer',
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--gb-fill-hover)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+    >
+      <CalIcon />
+      <span>Push Out</span>
+      <input
+        type="number"
+        min="1"
+        value={pushDays}
+        onChange={(e) => setPushDays(Math.max(1, parseInt(e.target.value, 10) || 1))}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onFocus={(e) => e.target.select()}
+        style={{
+          width: 38, height: 22, padding: '0 4px',
+          background: 'var(--gb-surface-2)',
+          border: '1px solid var(--gb-border-default)',
+          borderRadius: 'var(--gb-r-sm)',
+          color: 'var(--gb-text-primary)',
+          fontSize: 11, fontWeight: 700, fontFamily: 'var(--gb-font-mono)',
+          outline: 'none',
+          textAlign: 'center',
+          MozAppearance: 'textfield',
+        }}
+      />
+      <span style={{ flex: 1, fontSize: 12, color: 'var(--gb-info-fg)' }}>
+        {pushDays === 1 ? 'day' : 'days'}
+      </span>
+    </div>
+  );
+
   let body = null;
   if (qt.mode === 'main' && task) {
     body = (
@@ -1163,10 +1186,9 @@ function QuickTaskMenu({ qt, pushDays, taskTpls, selectedCount, getTask, onClose
             onClick={() => onAction('complete', { taskId: task.id })}
           />
         )}
-        <Item
-          icon={<CalIcon />}
-          label={`Push Out ${pushDays} day${pushDays === 1 ? '' : 's'}`}
-          accent="var(--gb-info-fg)"
+        <PushRow
+          pushDays={pushDays}
+          setPushDays={setPushDays}
           onClick={() => onAction('push', { taskId: task.id, days: pushDays })}
         />
         <Item
@@ -1194,10 +1216,9 @@ function QuickTaskMenu({ qt, pushDays, taskTpls, selectedCount, getTask, onClose
           accent="var(--gb-success-fg)"
           onClick={() => onAction('bulk-complete')}
         />
-        <Item
-          icon={<CalIcon />}
-          label={`Push Out ${pushDays} day${pushDays === 1 ? '' : 's'}`}
-          accent="var(--gb-info-fg)"
+        <PushRow
+          pushDays={pushDays}
+          setPushDays={setPushDays}
           onClick={() => onAction('bulk-push', { days: pushDays })}
         />
         <Item
@@ -1300,6 +1321,7 @@ function QuickTaskMenu({ qt, pushDays, taskTpls, selectedCount, getTask, onClose
       <motion.div
         ref={ref}
         key="qt-menu"
+        className="gb-qtm"
         initial={{ opacity: 0, y: placeAbove ? 4 : -4, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, scale: 0.97 }}

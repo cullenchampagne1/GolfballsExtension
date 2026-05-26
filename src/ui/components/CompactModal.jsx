@@ -82,6 +82,7 @@ export function CompactModal({
 
   return createPortal(
     <motion.div
+      className="gb-compact-modal"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={T.base}
       onClick={closeOnBackdrop ? onClose : undefined}
