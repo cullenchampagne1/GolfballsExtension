@@ -217,10 +217,12 @@ export function QuickTask({
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
             {/* Priority + Due date share a row. DatePicker defaults
-                to 30px tall; we force it down to 28px via the style
-                prop so it bottoms-align with the Dropdown (sm=28px
-                from inputBaseStyle). includeTime is off — task due
-                dates are date-only in the CRM. */}
+                to 30px tall + content-box sizing — without
+                box-sizing override, height:28 plus the 1+1 border
+                renders at 30 total, mismatching the Dropdown which
+                IS border-box (via inputBaseStyle). Forcing
+                boxSizing: 'border-box' makes height:28 the OUTSIDE
+                dimension on both, so the bottoms align cleanly. */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'end' }}>
               <Field label="Priority">
                 <Dropdown
@@ -230,13 +232,13 @@ export function QuickTask({
                   onChange={(v) => setPriority(parseInt(v, 10) || DEFAULT_PRIORITY)}
                 />
               </Field>
-              <Field label="Due date" hint="Blank = today">
+              <Field label="Due date">
                 <DatePicker
                   value={dueDate}
                   onChange={setDueDate}
                   placeholder="Today"
                   includeTime={false}
-                  style={{ height: 28, fontSize: 11.5 }}
+                  style={{ height: 28, fontSize: 11.5, boxSizing: 'border-box' }}
                 />
               </Field>
             </div>

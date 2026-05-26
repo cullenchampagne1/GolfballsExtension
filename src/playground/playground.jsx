@@ -109,221 +109,45 @@ function seedWatchListSamples() {
   }
 }
 
-/* Playground seed for noteTemplates (call_log subType). Mirrors the
-   shape stored by the Notes editor (src/pages/NoteEditor.jsx) so the
-   CallLog modal renders REAL preset rows in the playground instead
-   of an empty state. No-op if templates already exist — the user's
-   real templates win. Merges into the existing noteTemplates array
-   if there are non-call_log entries already saved (notes, tasks). */
+/* One-time cleanup of templates that earlier playground builds
+   wrote into chrome.storage.local.noteTemplates. Those builds
+   seeded sample call_log + task templates with ids prefixed
+   `pg-cl-` and `pg-task-`. The playground no longer seeds; this
+   strip lets a returning user end up with ONLY their real
+   Notes-editor-configured templates the next time they open the
+   playground. Safe to run unconditionally — it only touches ids
+   that match our prefixes, so any real template stays put. */
 const NOTE_TEMPLATES_KEY = 'noteTemplates';
-function seedCallLogTemplates() {
+function purgePlaygroundTemplateSeeds() {
   const hasChromeStorage = (() => {
     try { return typeof chrome !== 'undefined' && !!chrome.storage?.local; }
     catch { return false; }
   })();
 
-  const now = Date.now();
-  const samples = [
-    {
-      id: 'pg-cl-1',
-      name: 'Reached — placed order',
-      subType: 'call_log',
-      enabled: true,
-      subject: 'Reached customer — placed order',
-      body: 'Spoke with customer. Took the order over the phone — see order details.',
-      callDirection: 0,        // Outbound
-      callCategory: 3,         // Place Order
-      callVoicemail: false,
-      callStep1: 'Verify shipping address',
-      callStep2: '',
-      callStep3: '',
-      callStep4: '',
-      updatedAt: now,
-    },
-    {
-      id: 'pg-cl-2',
-      name: 'Reached — sent quote',
-      subType: 'call_log',
-      enabled: true,
-      subject: 'Reached customer — quoted product',
-      body: 'Walked the customer through pricing. Emailing a quote.',
-      callDirection: 0,
-      callCategory: 1,         // Product Question
-      callVoicemail: false,
-      callStep1: 'Send quote email',
-      callStep2: 'Follow up in 3 days',
-      updatedAt: now,
-    },
-    {
-      id: 'pg-cl-3',
-      name: 'Left voicemail — promo',
-      subType: 'call_log',
-      enabled: true,
-      subject: 'Voicemail — promo follow-up',
-      body: 'Left voicemail about current Bridgestone / Srixon promo pricing.',
-      callDirection: 0,
-      callCategory: 21,        // Prior Year Followup
-      callVoicemail: true,
-      updatedAt: now,
-    },
-    {
-      id: 'pg-cl-4',
-      name: 'No answer',
-      subType: 'call_log',
-      enabled: true,
-      subject: 'No answer',
-      body: 'Called — no answer, no voicemail box configured.',
-      callDirection: 0,
-      callCategory: 35,        // General Question
-      callVoicemail: false,
-      updatedAt: now,
-    },
-    {
-      id: 'pg-cl-5',
-      name: 'Inbound — order status',
-      subType: 'call_log',
-      enabled: true,
-      subject: 'Customer called about order status',
-      body: 'Customer called in asking about their order. Confirmed ship date.',
-      callDirection: 1,        // Inbound
-      callCategory: 2,         // Order Status
-      callVoicemail: false,
-      updatedAt: now,
-    },
-  ];
+  const isSeed = (t) => {
+    const id = String(t?.id || '');
+    return id.startsWith('pg-cl-') || id.startsWith('pg-task-');
+  };
 
-  // Merge strategy: ONLY seed when there are zero call_log templates
-  // already. The Notes editor is where reps actually configure their
-  // real templates — we must never overwrite those. The playground
-  // samples are a first-run fallback so a fresh install can demo the
-  // modal, not a "refresh on every open" reset.
-  //
-  // Returns a Promise that resolves once durable so the caller can
-  // mount the modal AFTER any seed write is committed.
-  return new Promise((resolve) => {
-    const apply = (existing) => {
-      const arr = Array.isArray(existing) ? existing : [];
-      const hasCallLog = arr.some((t) => t?.subType === 'call_log');
-      if (hasCallLog) { resolve(); return; }
-      const next = [...arr, ...samples];
-      if (hasChromeStorage) {
-        chrome.storage.local.set({ [NOTE_TEMPLATES_KEY]: next }, () => resolve());
-      } else {
-        try { localStorage.setItem(NOTE_TEMPLATES_KEY, JSON.stringify(next)); } catch {}
-        resolve();
-      }
-    };
-
+  const apply = (existing) => {
+    const arr = Array.isArray(existing) ? existing : [];
+    const cleaned = arr.filter((t) => !isSeed(t));
+    if (cleaned.length === arr.length) return;  // nothing to strip
     if (hasChromeStorage) {
-      chrome.storage.local.get(NOTE_TEMPLATES_KEY, (data) => apply(data?.[NOTE_TEMPLATES_KEY]));
+      chrome.storage.local.set({ [NOTE_TEMPLATES_KEY]: cleaned });
     } else {
-      try {
-        const raw = localStorage.getItem(NOTE_TEMPLATES_KEY);
-        apply(raw ? JSON.parse(raw) : null);
-      } catch { apply(null); }
+      try { localStorage.setItem(NOTE_TEMPLATES_KEY, JSON.stringify(cleaned)); } catch {}
     }
-  });
-}
+  };
 
-/* Same merge pattern as seedCallLogTemplates, but for task
-   templates. Refreshes the playground's task samples on every
-   open so changes to this seed take effect on next load. */
-function seedQuickTaskTemplates() {
-  const hasChromeStorage = (() => {
-    try { return typeof chrome !== 'undefined' && !!chrome.storage?.local; }
-    catch { return false; }
-  })();
-
-  const now = Date.now();
-  const samples = [
-    {
-      id: 'pg-task-1',
-      name: 'Follow up',
-      subType: 'task',
-      enabled: true,
-      subject: 'Follow up on recent conversation',
-      body: 'Check in to see if there are any open questions.',
-      daysOut: 3,
-      priority: 2,             // Medium
-      categoryId: 0,
-      updatedAt: now,
-    },
-    {
-      id: 'pg-task-2',
-      name: 'Send quote',
-      subType: 'task',
-      enabled: true,
-      subject: 'Send quote — pricing approved',
-      body: 'Pull pricing for the items discussed and email it.',
-      daysOut: 1,
-      priority: 1,             // High
-      categoryId: 0,
-      updatedAt: now,
-    },
-    {
-      id: 'pg-task-3',
-      name: 'Send proof',
-      subType: 'task',
-      enabled: true,
-      subject: 'Send art proof for review',
-      body: 'Generate art proof and email customer for sign-off.',
-      daysOut: 2,
-      priority: 1,
-      categoryId: 0,
-      updatedAt: now,
-    },
-    {
-      id: 'pg-task-4',
-      name: 'Check on shipment',
-      subType: 'task',
-      enabled: true,
-      subject: 'Confirm shipment arrived',
-      body: 'Verify the order landed on time and the customer is happy.',
-      daysOut: 7,
-      priority: 3,             // Low
-      categoryId: 0,
-      updatedAt: now,
-    },
-    {
-      id: 'pg-task-5',
-      name: 'Quarterly check-in',
-      subType: 'task',
-      enabled: true,
-      subject: 'Quarterly relationship check-in',
-      body: 'Touch base, see what\'s upcoming, plant seeds for next order.',
-      daysOut: 90,
-      priority: 3,
-      categoryId: 0,
-      updatedAt: now,
-    },
-  ];
-
-  // Only seed when there are zero task templates already — same
-  // first-run-only fallback policy as the call_log seed. The Notes
-  // editor owns the rep's real task templates; we never overwrite.
-  return new Promise((resolve) => {
-    const apply = (existing) => {
-      const arr = Array.isArray(existing) ? existing : [];
-      const hasTask = arr.some((t) => t?.subType === 'task');
-      if (hasTask) { resolve(); return; }
-      const next = [...arr, ...samples];
-      if (hasChromeStorage) {
-        chrome.storage.local.set({ [NOTE_TEMPLATES_KEY]: next }, () => resolve());
-      } else {
-        try { localStorage.setItem(NOTE_TEMPLATES_KEY, JSON.stringify(next)); } catch {}
-        resolve();
-      }
-    };
-
-    if (hasChromeStorage) {
-      chrome.storage.local.get(NOTE_TEMPLATES_KEY, (data) => apply(data?.[NOTE_TEMPLATES_KEY]));
-    } else {
-      try {
-        const raw = localStorage.getItem(NOTE_TEMPLATES_KEY);
-        apply(raw ? JSON.parse(raw) : null);
-      } catch { apply(null); }
-    }
-  });
+  if (hasChromeStorage) {
+    chrome.storage.local.get(NOTE_TEMPLATES_KEY, (data) => apply(data?.[NOTE_TEMPLATES_KEY]));
+  } else {
+    try {
+      const raw = localStorage.getItem(NOTE_TEMPLATES_KEY);
+      apply(raw ? JSON.parse(raw) : null);
+    } catch {}
+  }
 }
 
 /* Notification test pane registry — one entry per fire-button. Each entry's
@@ -577,10 +401,11 @@ function PlaygroundSurface() {
           if (typeof window !== 'undefined') {
             window.open(`tel:${digits}`, '_blank');
           }
-          // Seed the demo call_log templates so Quick Log has content
-          // in the playground. No-op if the rep already has templates.
-          await seedCallLogTemplates();
-          // Now mount the log modal so the rep can record the outcome.
+          // Mount the log modal — the modal reads the rep's real
+          // call_log templates from chrome.storage.local.noteTemplates
+          // (configured via the Notes editor). Playground no longer
+          // injects sample data, so an empty Notes editor means an
+          // empty Quick Log section with a "configure in editor" hint.
           setCallContext({
             contactName: actionRegistry.getPageLabel() || 'Contact',
             contactType: actionRegistry.getPage() || 'contact',
@@ -597,7 +422,6 @@ function PlaygroundSurface() {
         smartFor: ['contact', 'account'],
         kbd: '⌘T',
         handler: async () => {
-          await seedQuickTaskTemplates();
           setTaskContext({
             contactName: actionRegistry.getPageLabel() || 'Contact',
             contactType: actionRegistry.getPage() || 'contact',
@@ -707,30 +531,24 @@ function PlaygroundSurface() {
       // Seed sample watchlist data on first open so the modal shows
       // its full design instead of an empty state in the playground.
       if (entry.id === 'watchList') seedWatchListSamples();
-      // When the Call Log is opened directly from the modal toolbar
-      // (no smart action upstream), seed a default contact context so
-      // the modal renders with realistic-looking content for design
-      // iteration. The smart-action path overrides this with real
-      // page data before setMounted. Also seed sample noteTemplates
-      // so the Quick Log section has rows instead of an empty state.
-      if (entry.id === 'callLog') {
-        seedCallLogTemplates();
-        if (!callContext) {
-          setCallContext({
-            contactName: 'Marcus Chen',
-            contactType: 'contact',
-            phone: '(415) 555-0142',
-          });
-        }
+      // When the Call Log / Quick Task modals are opened directly from
+      // the modal toolbar (no smart action upstream), seed a default
+      // contact context so the modal subtitle has a name. Templates
+      // come from chrome.storage.local.noteTemplates (the rep's real
+      // configured templates from the Notes editor) — playground
+      // doesn't inject sample data.
+      if (entry.id === 'callLog' && !callContext) {
+        setCallContext({
+          contactName: 'Marcus Chen',
+          contactType: 'contact',
+          phone: '(415) 555-0142',
+        });
       }
-      if (entry.id === 'quickTask') {
-        seedQuickTaskTemplates();
-        if (!taskContext) {
-          setTaskContext({
-            contactName: 'Marcus Chen',
-            contactType: 'contact',
-          });
-        }
+      if (entry.id === 'quickTask' && !taskContext) {
+        setTaskContext({
+          contactName: 'Marcus Chen',
+          contactType: 'contact',
+        });
       }
       setMounted(entry.id);
       return;
@@ -1109,6 +927,10 @@ function PlaygroundApp() {
 }
 
 ensureTheme();
+// Clear any leftover playground-seeded sample templates from earlier
+// builds that did `seedCallLogTemplates` / `seedQuickTaskTemplates`.
+// Idempotent — leaves the rep's real Notes-editor templates alone.
+purgePlaygroundTemplateSeeds();
 
 function mount() {
   const host = document.getElementById('playground-root');
