@@ -684,21 +684,31 @@ if (window.__gbLoaded_logoExtractor) {} else { window.__gbLoaded_logoExtractor =
       return;
     }
 
+    // We always fetch via the background service worker — content-script
+    // <img> tags get blocked as mixed content when the host page is HTTPS
+    // and the asset is `http://s.customizationapps.com/...`. The background
+    // returns a data URL which is same-origin (so the React modal's
+    // canvas-based eyedropper / color-swap also work CORS-clean).
+    // `url` is the original public URL — kept so Copy URL / Download
+    // hand back a real link, not the data URL.
+    const openWithBgFetch = (url) => {
+      __gbLoadImageViaBackground(url,
+        (dataUrl) => window.__gbOpenImagePreview({ url, dataUrl, itemLink }),
+        () => window.__gbOpenImagePreview({ url, itemLink })
+      );
+    };
+
     if (directUrl) {
-      window.__gbOpenImagePreview({ url: directUrl, itemLink });
+      openWithBgFetch(directUrl);
       return;
     }
 
     const tokenOrPath = __gbFindOverlayTokenOrPath(rawSrc);
     if (!tokenOrPath) {
-      window.__gbOpenImagePreview({ url: rawSrc, itemLink });
+      openWithBgFetch(rawSrc);
       return;
     }
 
-    // Probe candidates via the background script so the modal opens with
-    // a known-reachable URL instead of a broken-image flash. The dataUrl
-    // from the probe is discarded — we pass the original URL so the
-    // React modal's Copy URL / Download actions get a real link.
     const candidates = __gbBuildAbsoluteCandidates(tokenOrPath);
     let idx = 0;
     const tryNext = () => {
@@ -708,7 +718,7 @@ if (window.__gbLoaded_logoExtractor) {} else { window.__gbLoaded_logoExtractor =
       }
       const url = candidates[idx++];
       __gbLoadImageViaBackground(url,
-        () => window.__gbOpenImagePreview({ url, itemLink }),
+        (dataUrl) => window.__gbOpenImagePreview({ url, dataUrl, itemLink }),
         () => tryNext()
       );
     };

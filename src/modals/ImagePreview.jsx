@@ -106,7 +106,7 @@ const ImageIcon = (p) => (
 );
 
 export function ImagePreview({
-  url, itemLink, onClosed, bindClose,
+  url, dataUrl, itemLink, onClosed, bindClose,
   // When provided, the Submit Proof button routes through this
   // callback instead of firing the stub toast — lets a content-script
   // wrapper mount the real SubmitProof modal with the current image.
@@ -355,8 +355,10 @@ export function ImagePreview({
   }, [effectiveUrl]);
 
   // The image source actually shown / downloaded / used as the decal.
-  // Preview (live swap in popover) > committed edits > original.
-  const displayUrl = previewDataUrl || editedDataUrl || effectiveUrl;
+  // Preview (live swap in popover) > committed edits > caller-supplied
+  // dataUrl (background-fetched bytes, used to dodge mixed-content on
+  // http CDN URLs) > the public URL.
+  const displayUrl = previewDataUrl || editedDataUrl || dataUrl || effectiveUrl;
 
   /* Sample a pixel color from the loaded <img>. Returns {r,g,b} from
      the natural-pixel space (intrinsic source resolution), regardless

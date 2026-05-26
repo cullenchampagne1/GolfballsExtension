@@ -43,6 +43,7 @@ if (!window.__gbImagePreviewLoaded) {
       <ToastHost installGlobal={false}>
         <ImagePreview
           url={opts.url || ''}
+          dataUrl={opts.dataUrl || ''}
           itemLink={opts.itemLink || null}
           onClosed={onClosed}
           bindClose={bindClose}
