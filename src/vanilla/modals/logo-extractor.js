@@ -684,34 +684,45 @@ if (window.__gbLoaded_logoExtractor) {} else { window.__gbLoaded_logoExtractor =
       return;
     }
 
-    // Only forward the background-fetched dataUrl when the CDN actually
-    // returned image bytes. Order-page links often serve with
-    // application/octet-stream or text/html error pages, and the React
-    // modal blindly renders whatever's in `dataUrl` — a non-image MIME
-    // would surface as "Could not load". When the dataUrl isn't an
-    // image, we pass just `url` and let the modal's <img> load it
-    // directly (works because <img> on http CDN URLs isn't blocked as
-    // mixed content on the golfballs.com pages).
+    // Every fetch routes through the background service worker — content-
+    // script <img> tags get blocked as mixed content on https pages when
+    // the asset is http://s.customizationapps.com/..., and the CRM order
+    // pages are https-only. The bg-fetch path is also what the legacy
+    // modal used (verified against content/logo-extractor.js). The
+    // dataUrl coming back is same-origin so the modal's canvas-based
+    // eyedropper / color-swap also work CORS-clean. We pass the public
+    // `url` alongside so Copy URL / Download hand back a real link, not
+    // the base64 data URL.
+    //
+    // MIME gate: if the CDN responds with application/octet-stream or an
+    // HTML error page we don't want to render those bytes as if they
+    // were an image — fall through to opening the modal on the public
+    // URL itself and let it surface a load error if needed.
     const isImageDataUrl = (du) => /^data:image\//i.test(du || '');
+    const openWithBgFetch = (url) => {
+      __gbLoadImageViaBackground(url,
+        (dataUrl) => {
+          const safe = isImageDataUrl(dataUrl) ? dataUrl : '';
+          window.__gbOpenImagePreview({ url, dataUrl: safe, itemLink });
+        },
+        () => window.__gbOpenImagePreview({ url, itemLink })
+      );
+    };
 
     if (directUrl) {
-      // Direct links are usually .jpg/.png — pass the URL straight to
-      // the modal, no background round-trip needed. <img> will load it.
-      window.__gbOpenImagePreview({ url: directUrl, itemLink });
+      openWithBgFetch(directUrl);
       return;
     }
 
     const tokenOrPath = __gbFindOverlayTokenOrPath(rawSrc);
     if (!tokenOrPath) {
-      window.__gbOpenImagePreview({ url: rawSrc, itemLink });
+      openWithBgFetch(rawSrc);
       return;
     }
 
-    // Render.aspx case — there are multiple candidate hosts/casings.
-    // Probe each via the background script (which won't be blocked by
-    // mixed-content) to find one that actually serves image bytes, then
-    // hand the modal both the public URL (for Copy URL / Download) and
-    // the dataUrl (for CORS-clean canvas operations like the eyedropper).
+    // Render.aspx case — multiple candidate hosts/casings. Probe each
+    // via the background script (CORS / mixed-content immune) until
+    // one returns image bytes.
     const candidates = __gbBuildAbsoluteCandidates(tokenOrPath);
     let idx = 0;
     const tryNext = () => {
