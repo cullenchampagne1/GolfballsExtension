@@ -426,6 +426,90 @@ export function ActionsShelf({
     actions.danger.forEach((a) => rows.push({ kind: 'row', smart: false, action: { ...a, tone: 'danger' }, key: 'dg-' + a.id, index: idx++ }));
   }
 
+  /* ── Number-key shortcuts ────────────────────────────────────
+     Flatten to just the actionable rows in display order so the
+     keyboard listener can fire `actionRows[n-1].action` when the
+     user hits a number key 1-9. The shortcut number assigned to
+     each row also gets passed back to ActionRow so the row's
+     `kbd` slot renders the real shortcut (1, 2, 3…) instead of
+     a cosmetic `⌘K`-style string baked into the registration. */
+  const actionRows = rows.filter((r) => r.kind === 'row');
+  const shortcutFor = new Map();
+  actionRows.slice(0, 9).forEach((r, i) => shortcutFor.set(r.key, String(i + 1)));
+
+  /* Keyboard control:
+       • Tap Alt / Option alone → toggle the shelf open
+       • While the shelf is open, 1-9 → fire that action
+
+     The "Alt tapped alone" pattern is keydown-Alt followed by
+     keyup-Alt with NO other key in between. Without that gate, a
+     normal Alt+letter combo (Alt+Tab, Alt+F, etc.) would also
+     trigger the toggle on keyup, which would be infuriating.
+
+     We bail when typing in an input so number keys still type
+     into search boxes / textareas. */
+  useEffect(() => {
+    let altDownAt = 0;
+    let altCombined = false;
+    const TAP_WINDOW_MS = 500;
+
+    const isTypingTarget = (el) => {
+      if (!el) return false;
+      const tag = el.tagName && el.tagName.toLowerCase();
+      return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
+    };
+
+    const onKeyDown = (e) => {
+      // Track Alt-down before any input-target check so input
+      // focus doesn't block the Alt-tap toggle (Option in an
+      // input still summons the shelf).
+      if (e.key === 'Alt') {
+        if (!altDownAt) { altDownAt = Date.now(); altCombined = false; }
+        return;
+      }
+      // If anything else fires while Alt is held, it's NOT a
+      // lone tap — cancel the toggle intent.
+      if (altDownAt) altCombined = true;
+
+      // Number keys 1-9 trigger only while the shelf is open and
+      // ONLY when no modifier is held (so Alt+1 / Ctrl+1 / Cmd+1
+      // still pass through to the browser's tab-switch handlers).
+      if (open && /^[1-9]$/.test(e.key)
+          && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey
+          && !isTypingTarget(e.target)) {
+        const row = actionRows[parseInt(e.key, 10) - 1];
+        if (row) {
+          e.preventDefault();
+          e.stopPropagation();
+          try { row.action.handler && row.action.handler(); }
+          catch (err) { console.warn('ActionsShelf: shortcut handler threw', err); }
+          if (!row.action.keepOpen) setOpen(false);
+        }
+      }
+    };
+
+    const onKeyUp = (e) => {
+      if (e.key !== 'Alt') return;
+      const wasTap = altDownAt && !altCombined && (Date.now() - altDownAt) < TAP_WINDOW_MS;
+      altDownAt = 0;
+      altCombined = false;
+      if (wasTap) setOpen((v) => !v);
+    };
+
+    // Window blur (Cmd-Tab to another app while Alt was held) →
+    // wipe the half-state so the next Alt press starts clean.
+    const onBlur = () => { altDownAt = 0; altCombined = false; };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, [open, actionRows]);
+
   return (
     <div
       ref={ref}
@@ -530,7 +614,17 @@ export function ActionsShelf({
               if (r.kind === 'header-smart') return <SmartHeader key={r.key} count={r.count} />;
               if (r.kind === 'header')       return <GroupHeader  key={r.key} label={r.label} />;
               if (r.kind === 'divider')      return <div key={r.key} style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '6px 10px' }} />;
-              const action = showShortcuts ? r.action : { ...r.action, kbd: undefined };
+              /* Override `kbd` with the assigned number-key shortcut
+                 (1, 2, 3…). The string a caller passed to register()
+                 was cosmetic; the number reflects the actual key
+                 that fires the action when the shelf is open. Rows
+                 past the 9th get no shortcut (and no kbd badge). */
+              const num = shortcutFor.get(r.key);
+              const action = !showShortcuts
+                ? { ...r.action, kbd: undefined }
+                : num
+                  ? { ...r.action, kbd: num }
+                  : { ...r.action, kbd: undefined };
               return (
                 <ActionRow
                   key={r.key}
