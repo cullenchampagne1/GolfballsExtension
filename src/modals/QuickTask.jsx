@@ -3,6 +3,7 @@ import {
   FloatingPanel, ModalHeader,
   Btn, Dropdown, Input, Textarea, Field, SectionLabel,
   CollapsibleSection, Dot, TYPE_ICONS,
+  DatePicker, parseDateValue,
   I, useToast,
 } from '../ui/index.js';
 import {
@@ -56,7 +57,11 @@ export function QuickTask({
   const [subject, setSubject]     = useState('');
   const [body, setBody]           = useState('');
   const [priority, setPriority]   = useState(DEFAULT_PRIORITY);
-  const [daysOut, setDaysOut]     = useState('');     // string so empty = "today"
+  /* dueDate is an ISO-ish 'YYYY-MM-DD' string from DatePicker. We
+     convert it to a daysOut offset at submit time since the CRM
+     stores tasks with a days-from-today value (matches the editor's
+     `daysOut` field). Empty string = no date picked = "today". */
+  const [dueDate, setDueDate]     = useState('');
   const [categoryId, setCategoryId] = useState('0');  // mono number string
   const [savingCustom, setSavingCustom] = useState(false);
 
@@ -115,6 +120,20 @@ export function QuickTask({
       return;
     }
     setSavingCustom(true);
+    /* Convert the picked date → days-from-today integer. The CRM
+       template shape stores daysOut, not an absolute date, so the
+       round-trip works the same whether the rep picked a date here
+       or set daysOut in the Notes editor. Empty / past date ⇒ null
+       (today). */
+    let daysOut = null;
+    const picked = parseDateValue(dueDate);
+    if (picked) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      picked.setHours(0, 0, 0, 0);
+      const diff = Math.round((picked - today) / 86400000);
+      daysOut = diff > 0 ? diff : 0;
+    }
     const synthetic = buildCustomTaskTemplate({
       subject, body, priority, daysOut, categoryId,
     });
@@ -197,8 +216,11 @@ export function QuickTask({
           defaultOpen={false}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
-            {/* Priority + Days out share a row. Both controls land
-                at 28px (Dropdown size="sm" matches Input size="sm"). */}
+            {/* Priority + Due date share a row. DatePicker defaults
+                to 30px tall; we force it down to 28px via the style
+                prop so it bottoms-align with the Dropdown (sm=28px
+                from inputBaseStyle). includeTime is off — task due
+                dates are date-only in the CRM. */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'end' }}>
               <Field label="Priority">
                 <Dropdown
@@ -208,12 +230,13 @@ export function QuickTask({
                   onChange={(v) => setPriority(parseInt(v, 10) || DEFAULT_PRIORITY)}
                 />
               </Field>
-              <Field label="Due (days out)" hint="0 or blank = today">
-                <Input
-                  size="sm" mono
-                  value={daysOut}
-                  placeholder="0"
-                  onChange={(v) => setDaysOut(v.replace(/[^0-9]/g, ''))}
+              <Field label="Due date" hint="Blank = today">
+                <DatePicker
+                  value={dueDate}
+                  onChange={setDueDate}
+                  placeholder="Today"
+                  includeTime={false}
+                  style={{ height: 28, fontSize: 11.5 }}
                 />
               </Field>
             </div>
