@@ -213,6 +213,7 @@ export function ToastHost({ children, maxPerPlacement = MAX_PER_PLACEMENT, insta
             return (
               <div
                 key={placement}
+                className="gb-toast-host"
                 style={{
                   position: 'fixed',
                   zIndex: 2147483600,

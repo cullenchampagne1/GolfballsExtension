@@ -457,6 +457,7 @@ function VarMenu({ variables, onPick, onClose, anchorRef }) {
   if (!pos) return null;
   return createPortal(
     <div
+      className="gb-rte-portal"
       onMouseDown={e => e.stopPropagation()}
       style={{
         position: 'fixed', top: pos.top, right: pos.right, zIndex: 2147483400,
