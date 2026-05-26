@@ -388,7 +388,6 @@ function PlaygroundSurface() {
         icon: <I.phone size={13} />,
         hint: 'Dial via tel: + log the outcome',
         smartFor: ['contact', 'account'],
-        kbd: '⌘⇧C',
         handler: async () => {
           // Mock phone for the playground demo. In the real extension
           // this'll come from the contact's saved CRM record.
@@ -420,7 +419,6 @@ function PlaygroundSurface() {
         icon: <I.check size={13} />,
         hint: 'Create a CRM task from a preset or custom form',
         smartFor: ['contact', 'account'],
-        kbd: '⌘T',
         handler: async () => {
           setTaskContext({
             contactName: actionRegistry.getPageLabel() || 'Contact',
@@ -434,7 +432,6 @@ function PlaygroundSurface() {
         label: 'Open CRM Search',
         icon: <SearchG />,
         hint: 'Find another contact or account',
-        kbd: '⌘K',
         handler: () => launch({ id: 'crmSearch', wired: true }),
       }),
       actionRegistry.register({
