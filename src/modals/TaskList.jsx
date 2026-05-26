@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { createPortal } from 'react-dom';
 import {
   FloatingPanel, ModalHeader, Btn, Input, Dropdown, Tag, IconBtn, I,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
+import { loadTaskTemplates } from '../lib/quickTask.js';
+import { submitQuickTask } from '../lib/submitQuickTask.js';
 
 /* ───────────────────────────────────────────────────────────────
    TaskList — React port of content/task-list-modal.js.
@@ -140,6 +143,66 @@ function parseTasksFromHtml(html) {
 
 const PRIORITY_TONE = { 1: 'error', 2: 'warning', 3: 'info' };
 
+/* ── CRM task-update endpoints — ports of the legacy
+   tlCompleteTask / tlReopenTask / tlPushTaskDate / tlSetTaskDate.
+   Each fetches the task's current payload (Get.ajax), modifies
+   one field, and POSTs the whole thing back via Update.ajax. */
+const CRM_BASE = 'https://api.golfballs.com';
+
+function fmtMDY(d) {
+  return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
+async function fetchTaskRaw(id) {
+  const r = await fetch(`${CRM_BASE}/golfballs/crm/Admin/Task/Get.ajax?${id}`, { credentials: 'include' });
+  return r.json();
+}
+
+async function updateTaskWith(task, overrides) {
+  const params = {
+    TaskID:         String(task.TaskId),
+    Subject:        task.Subject,
+    Description:    task.Description,
+    LiveDate:       task.LiveDate,
+    DueDate:        task.DueDate,
+    taskCategoryID: String(task.taskCategoryID),
+    taskStatusID:   String(task.taskStatusID),
+    Priority:       String(task.Priority),
+    contactID:      String(task.contactID),
+    leadID:         task.leadID || '',
+    employeeID:     String(task.employeeID),
+    caseID:         task.caseID || 0,
+    ...overrides,
+  };
+  await fetch(`${CRM_BASE}/golfballs/crm/Admin/Task/Update.ajax?${encodeURIComponent(JSON.stringify(params))}`, { credentials: 'include' });
+}
+
+async function apiCompleteTask(id) {
+  const t = await fetchTaskRaw(id);
+  await updateTaskWith(t, { taskStatusID: '3' });
+}
+async function apiReopenTask(id) {
+  const t = await fetchTaskRaw(id);
+  await updateTaskWith(t, { taskStatusID: '1' });
+}
+async function apiPushTaskDate(id, daysOut) {
+  const t = await fetchTaskRaw(id);
+  const d = new Date(); d.setDate(d.getDate() + daysOut);
+  await updateTaskWith(t, { DueDate: fmtMDY(d) });
+  return fmtMDY(d);
+}
+async function apiSetTaskDate(id, dueDateStr) {
+  const t = await fetchTaskRaw(id);
+  await updateTaskWith(t, { DueDate: dueDateStr });
+}
+/* Fetches the task's contactID so we can attach a freshly-created
+   task to the same contact as the source row — submitQuickTask reads
+   contactId out of context, not the source task. */
+async function apiGetTaskContactId(id) {
+  const t = await fetchTaskRaw(id);
+  return String(t.contactID || 0);
+}
+
 export function TaskList({ onClosed, bindClose }) {
   const toast      = useToast();
   const draggable  = useDevSetting('taskList.draggable') ?? false;
@@ -154,6 +217,25 @@ export function TaskList({ onClosed, bindClose }) {
   const [selected, setSelected]   = useState(() => new Set());
   const [sortBy, setSortBy]       = useState('dueDate');
   const [sortDir, setSortDir]     = useState('asc');
+
+  /* Quick Task menu state. `qt` is null when closed; otherwise:
+     { mode: 'main'|'bulk'|'datePicker'|'templates', taskId, anchor, returnMode? }
+     • mode 'main'        — single-task root (Complete/Reopen, Push, Set Date, Add Task)
+     • mode 'bulk'        — bulk root over `selected` (Complete All, Push, Set Date, Add Task)
+     • mode 'datePicker'  — sub-panel; returnMode says where Back lands
+     • mode 'templates'   — sub-panel; returnMode same role */
+  const [qt, setQt] = useState(null);
+  const [pushDays, setPushDays] = useState(7);
+  const [taskTpls, setTaskTpls] = useState([]);
+  /* Per-row work-in-progress flag (Complete/Push/etc.). Lives outside
+     React state so the spinner doesn't trigger a re-render of the whole
+     table — Mutates on the trigger button directly via a ref. */
+  const busyRowsRef = useRef(new Set());
+  const [busyVersion, bumpBusy] = useState(0);
+  const markBusy = (id) => { busyRowsRef.current.add(id); bumpBusy((n) => n + 1); };
+  const clearBusy = (id) => { busyRowsRef.current.delete(id); bumpBusy((n) => n + 1); };
+
+  useEffect(() => { loadTaskTemplates().then(setTaskTpls).catch(() => setTaskTpls([])); }, []);
 
   const bindCloseRef = useRef(null);
   const handleBindClose = useCallback((fn) => {
@@ -290,12 +372,89 @@ export function TaskList({ onClosed, bindClose }) {
     }
     toast?.success?.(`Opened ${tasksToOpen.length} contact${tasksToOpen.length === 1 ? '' : 's'}`, { duration: 2200 });
   };
-  const onQuickTask = () => {
-    // Quick Task is a bulk task-template applier — pulls from the user's
-    // saved templates and creates a new task per selected row. The full
-    // template picker is still TODO; until it lands we surface a toast.
-    toast?.info?.('Quick Task — template picker coming soon', { duration: 2800, placement: 'top-center' });
+  const onQuickTask = (e) => {
+    // Bulk Quick Task — opens the floating menu rooted on the footer
+    // button. The menu handler dispatches the action across every
+    // selected row.
+    const anchor = e?.currentTarget?.getBoundingClientRect?.() || null;
+    setQt({ mode: 'bulk', taskId: 'bulk', anchor });
   };
+
+  /* Mutates one task in local state so the table reflects the change
+     without a full Refresh round-trip. id+patch shape matches the row
+     fields the table reads (status, due, dueDate). */
+  const patchTaskLocal = useCallback((id, patch) => {
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  }, []);
+
+  /* ── Quick-Task action dispatcher ────────────────────────────
+     Handles the leaves of the menu state machine. The menu owns its
+     own navigation (main → datePicker / templates → action); this
+     fires once the user lands on an actionable item. */
+  const runQuickAction = useCallback(async (action, payload = {}) => {
+    const isBulk = action.startsWith('bulk-');
+    const ids = isBulk ? Array.from(selected) : [payload.taskId];
+    if (!ids.length) { setQt(null); return; }
+
+    setQt(null);
+    for (const id of ids) markBusy(id);
+
+    /* Helper that pushes one task's mutation through the relevant CRM
+       endpoint, then patches local state on success. Errors are caught
+       per-row so a partial failure in a bulk run doesn't stop the rest. */
+    const runOne = async (id) => {
+      try {
+        if (action === 'complete' || action === 'bulk-complete') {
+          await apiCompleteTask(id);
+          patchTaskLocal(id, { status: 'Complete' });
+          setSelected((s) => { const n = new Set(s); n.delete(id); return n; });
+        } else if (action === 'reopen') {
+          await apiReopenTask(id);
+          patchTaskLocal(id, { status: 'New' });
+        } else if (action === 'push' || action === 'bulk-push') {
+          const dueStr = await apiPushTaskDate(id, payload.days);
+          const [m, d, y] = dueStr.split('/');
+          patchTaskLocal(id, { due: dueStr, dueDate: new Date(+y, +m - 1, +d) });
+        } else if (action === 'set-date' || action === 'bulk-set-date') {
+          await apiSetTaskDate(id, payload.date);
+          const [m, d, y] = payload.date.split('/');
+          patchTaskLocal(id, { due: payload.date, dueDate: new Date(+y, +m - 1, +d) });
+        } else if (action === 'create-task' || action === 'bulk-create-task') {
+          const contactId = await apiGetTaskContactId(id);
+          const employeeId = await new Promise((resolve) => {
+            try { chrome.storage.local.get('gbEmployeeId', (d) => resolve(d?.gbEmployeeId || '')); }
+            catch { resolve(''); }
+          });
+          const res = await submitQuickTask({
+            template: payload.template,
+            context:  { contactId, employeeId },
+          });
+          if (!res?.ok) throw new Error(res?.error || 'Create task failed');
+        }
+      } catch (err) {
+        toast?.error?.(`Task ${id}: ${err?.message || err}`, { duration: 4000 });
+      } finally {
+        clearBusy(id);
+      }
+    };
+
+    if (isBulk) {
+      // Run bulk actions sequentially — the CRM rate-limits concurrent
+      // Update.ajax hits, and serialising keeps row spinners predictable.
+      for (const id of ids) await runOne(id);
+      const n = ids.length;
+      if (action === 'bulk-complete')      toast?.success?.(`Completed ${n} task${n === 1 ? '' : 's'}`, { duration: 2400 });
+      else if (action === 'bulk-push')      toast?.success?.(`Pushed ${n} task${n === 1 ? '' : 's'} ${payload.days}d out`, { duration: 2400 });
+      else if (action === 'bulk-set-date')  toast?.success?.(`Set ${n} task${n === 1 ? '' : 's'} due ${payload.date}`, { duration: 2400 });
+      else if (action === 'bulk-create-task') toast?.success?.(`Created ${n} task${n === 1 ? '' : 's'} from “${payload.template?.name || 'template'}”`, { duration: 2800 });
+    } else {
+      await runOne(ids[0]);
+      if (action === 'create-task') {
+        toast?.success?.(`Task “${payload.template?.name || 'template'}” created`, { duration: 2800 });
+      }
+    }
+  }, [selected, patchTaskLocal, toast]);
+
   const onRunCampaign = () => {
     // Campaign run is similarly gated on the full campaign logic port.
     // The toast keeps the action discoverable without lying about state.
@@ -433,7 +592,12 @@ export function TaskList({ onClosed, bindClose }) {
           sortBy={sortBy}
           sortDir={sortDir}
           onSort={onSortClick}
+          onQuickMenu={(id, anchor) => setQt({ mode: 'main', taskId: id, anchor })}
+          busyRows={busyRowsRef.current}
         />
+        {/* re-render hook — busyVersion changes force the table to repick
+            up busyRowsRef without doing structural state churn */}
+        <span hidden>{busyVersion}</span>
       </div>
 
       {/* Footer — always-on row-level bulk actions. Quick Task creates
@@ -459,6 +623,30 @@ export function TaskList({ onClosed, bindClose }) {
           disabled={!hasSelection}
           onClick={openSelectedTabs}
         >Open Tabs</Btn>
+        {/* Push-days input — feeds both the per-row "Push Out N days"
+            label/action AND the bulk-push action. Shared so the user
+            can dial it in once and apply across rows. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--gb-text-muted)' }}>
+          Push
+          <input
+            type="number"
+            min="1"
+            value={pushDays}
+            onChange={(e) => setPushDays(Math.max(1, parseInt(e.target.value, 10) || 1))}
+            style={{
+              width: 44, height: 24,
+              padding: '0 6px',
+              background: 'var(--gb-surface-2)',
+              border: '1px solid var(--gb-border-default)',
+              borderRadius: 'var(--gb-r-sm)',
+              color: 'var(--gb-text-primary)',
+              fontSize: 11, fontWeight: 600, fontFamily: 'var(--gb-font-mono)',
+              outline: 'none',
+              textAlign: 'center',
+            }}
+          />
+          d
+        </div>
         <Btn
           size="sm"
           variant="ghost"
@@ -467,16 +655,30 @@ export function TaskList({ onClosed, bindClose }) {
           onClick={onQuickTask}
         >Quick Task</Btn>
       </div>
+
+      {/* Quick-Task floating menu — portal'd so it can escape any
+          overflow clipping on the modal body. Anchored to whichever
+          trigger button opened it via `qt.anchor`. */}
+      <QuickTaskMenu
+        qt={qt}
+        pushDays={pushDays}
+        taskTpls={taskTpls}
+        selectedCount={selCount}
+        getTask={(id) => tasks.find((t) => t.id === id)}
+        onClose={() => setQt(null)}
+        onNavigate={(next) => setQt((cur) => cur ? { ...cur, ...next } : null)}
+        onAction={runQuickAction}
+      />
     </FloatingPanel>
   );
 }
 
 /* ── TasksTable ──────────────────────────────────────────────
    Columns mirror the legacy modal's set + order: Checkbox, Account,
-   Contact, Due Date, Category, Priority, Subject, Status. */
-const COLS = '30px 1.3fr 1.1fr 100px 1.0fr 70px 1.5fr 90px';
+   Contact, Due Date, Category, Priority, Subject, Status, Action. */
+const COLS = '30px 1.3fr 1.1fr 100px 1.0fr 70px 1.5fr 90px 110px';
 
-function TasksTable({ rows, status, query, allChecked, selected, onToggle, onToggleAll, sortBy, sortDir, onSort }) {
+function TasksTable({ rows, status, query, allChecked, selected, onToggle, onToggleAll, sortBy, sortDir, onSort, onQuickMenu, busyRows }) {
   return (
     <div>
       {/* Sticky header — sortable. Click a label to set sort; click
@@ -502,6 +704,7 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
         <SortHeader col={SORT_COLS.priority} sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
         <SortHeader col={SORT_COLS.subject}  sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
         <div>Status</div>
+        <div style={{ textAlign: 'right' }}>Action</div>
       </div>
 
       {status === 'loading' && (
@@ -523,7 +726,9 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
           key={t.id}
           task={t}
           isSelected={selected.has(t.id)}
+          isBusy={busyRows?.has(t.id) || false}
           onToggle={() => onToggle(t.id)}
+          onQuickMenu={onQuickMenu}
         />
       ))}
     </div>
@@ -554,7 +759,7 @@ function SortHeader({ col, sortBy, sortDir, onSort }) {
   );
 }
 
-function TaskRow({ task, isSelected, onToggle }) {
+function TaskRow({ task, isSelected, isBusy, onToggle, onQuickMenu }) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const overdue  = task.dueDate < today && task.status !== 'Complete';
   const dueToday = task.dueDate.toDateString() === today.toDateString();
@@ -642,6 +847,43 @@ function TaskRow({ task, isSelected, onToggle }) {
         <Tag tone={complete ? 'success' : 'info'} size="xs">
           {complete ? 'Complete' : 'New'}
         </Tag>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          type="button"
+          data-checkbox /* reuses TaskRow's "don't toggle on click" sentinel */
+          onClick={(e) => {
+            e.stopPropagation();
+            const rect = e.currentTarget.getBoundingClientRect();
+            onQuickMenu?.(task.id, rect);
+          }}
+          disabled={isBusy}
+          style={{
+            height: 26, padding: '0 8px',
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            background: 'var(--gb-surface-2)',
+            border: '1px solid var(--gb-border-default)',
+            borderRadius: 'var(--gb-r-sm)',
+            color: 'var(--gb-text-secondary)',
+            fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
+            cursor: isBusy ? 'wait' : 'pointer',
+            opacity: isBusy ? 0.6 : 1,
+            transition: 'background-color .12s, color .12s, border-color .12s',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--gb-surface-3)'; e.currentTarget.style.color = 'var(--gb-text-primary)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--gb-surface-2)'; e.currentTarget.style.color = 'var(--gb-text-secondary)'; }}
+        >
+          {isBusy ? (
+            <Spinner />
+          ) : (
+            <>
+              Quick Task
+              <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </>
+          )}
+        </button>
       </div>
     </div>
   );
@@ -739,3 +981,345 @@ const MegaphoneIcon = ({ size = 11 }) => (
     <path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
   </svg>
 );
+
+/* ── QuickTaskMenu ───────────────────────────────────────────
+   Floating menu used by both the per-row Quick Task button and
+   the bulk Quick Task button in the footer. Portal'd to body so
+   it can escape the modal's overflow:hidden clipping. */
+const CalIcon = ({ size = 13 }) => (
+  <svg width={size} height={size} fill="none" stroke="currentColor"
+    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+    <rect x="3" y="4" width="18" height="18" rx="2" />
+    <line x1="16" y1="2" x2="16" y2="6" />
+    <line x1="8" y1="2" x2="8" y2="6" />
+    <line x1="3" y1="10" x2="21" y2="10" />
+  </svg>
+);
+const CheckIcon = ({ size = 13 }) => (
+  <svg width={size} height={size} fill="none" stroke="currentColor"
+    strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+);
+const PlusIcon = ({ size = 13 }) => (
+  <svg width={size} height={size} fill="none" stroke="currentColor"
+    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="16" />
+    <line x1="8" y1="12" x2="16" y2="12" />
+  </svg>
+);
+const ChevRight = ({ size = 11 }) => (
+  <svg width={size} height={size} fill="none" stroke="currentColor"
+    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+    <polyline points="9 18 15 12 9 6" />
+  </svg>
+);
+const ChevLeft = ({ size = 11 }) => (
+  <svg width={size} height={size} fill="none" stroke="currentColor"
+    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+    <polyline points="15 18 9 12 15 6" />
+  </svg>
+);
+
+function todayInput() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function dateInputToApi(val) {
+  if (!val) return null;
+  const [y, m, d] = val.split('-');
+  return `${m}/${d}/${y}`;
+}
+
+function QuickTaskMenu({ qt, pushDays, taskTpls, selectedCount, getTask, onClose, onNavigate, onAction }) {
+  const ref = useRef(null);
+  const dateRef = useRef(null);
+  const [dateVal, setDateVal] = useState(todayInput);
+
+  /* Click-outside dismiss. Captures on capture phase so a click on the
+     same trigger that opened us doesn't immediately reopen + close in
+     the same gesture (the trigger calls setQt → we'd close, then the
+     trigger's own onClick fires and reopens — unless we ignore clicks
+     that originate inside .qt-trigger / data-qt-trigger). */
+  useEffect(() => {
+    if (!qt) return;
+    const onDown = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) onClose();
+    };
+    // Use a microtask so the same click that opened the menu doesn't immediately close it
+    const id = setTimeout(() => document.addEventListener('mousedown', onDown), 0);
+    return () => { clearTimeout(id); document.removeEventListener('mousedown', onDown); };
+  }, [qt, onClose]);
+
+  // Reset the date input each time we enter the datePicker pane.
+  useEffect(() => {
+    if (qt?.mode === 'datePicker') {
+      setDateVal(todayInput());
+      setTimeout(() => dateRef.current?.focus(), 30);
+    }
+  }, [qt?.mode]);
+
+  if (!qt || !qt.anchor) return null;
+
+  // Position: below the anchor by default. Flip above if the menu
+  // would clip the viewport.
+  const MENU_W = 190;
+  const MENU_H_EST = qt.mode === 'templates' ? 260 : 200;
+  const anchor = qt.anchor;
+  const spaceBelow = window.innerHeight - anchor.bottom;
+  const placeAbove = spaceBelow < MENU_H_EST + 12;
+  const top = placeAbove ? Math.max(8, anchor.top - MENU_H_EST - 6) : anchor.bottom + 6;
+  const left = Math.min(
+    Math.max(8, anchor.right - MENU_W),
+    window.innerWidth - MENU_W - 8
+  );
+
+  const task = qt.taskId && qt.taskId !== 'bulk' ? getTask(qt.taskId) : null;
+  const isComplete = task?.status === 'Complete';
+  const isBulk = qt.taskId === 'bulk';
+
+  const itemStyle = {
+    padding: '8px 10px',
+    fontSize: 12, fontWeight: 500,
+    color: 'var(--gb-text-secondary)',
+    cursor: 'pointer',
+    borderRadius: 'var(--gb-r-sm)',
+    display: 'flex', alignItems: 'center', gap: 8,
+    transition: 'background-color .1s, color .1s',
+    whiteSpace: 'nowrap',
+    background: 'transparent',
+    border: 'none',
+    width: '100%',
+    fontFamily: 'inherit',
+    textAlign: 'left',
+  };
+  const Item = ({ icon, label, accent, onClick, trailing }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        ...itemStyle,
+        color: accent || itemStyle.color,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--gb-fill-hover)'; e.currentTarget.style.color = accent ? accent : 'var(--gb-text-primary)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = accent || 'var(--gb-text-secondary)'; }}
+    >
+      {icon}
+      <span style={{ flex: 1 }}>{label}</span>
+      {trailing}
+    </button>
+  );
+
+  const Header = ({ children }) => (
+    <div style={{
+      padding: '6px 10px 5px',
+      fontSize: 9.5, fontWeight: 700,
+      textTransform: 'uppercase', letterSpacing: 0.6,
+      color: 'var(--gb-text-muted)',
+      display: 'flex', alignItems: 'center', gap: 6,
+      borderBottom: '1px solid var(--gb-border-subtle)',
+      marginBottom: 3,
+    }}>{children}</div>
+  );
+
+  const Back = ({ onClick }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        ...itemStyle,
+        color: 'var(--gb-text-muted)',
+        fontWeight: 600,
+        fontSize: 11.5,
+        borderBottom: '1px solid var(--gb-border-subtle)',
+        marginBottom: 3,
+        borderRadius: 0,
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--gb-fill-hover)'; e.currentTarget.style.color = 'var(--gb-text-primary)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--gb-text-muted)'; }}
+    >
+      <ChevLeft />
+      Back
+    </button>
+  );
+
+  let body = null;
+  if (qt.mode === 'main' && task) {
+    body = (
+      <>
+        <Header><CheckIcon size={10} /> Quick Task</Header>
+        {isComplete ? (
+          <Item
+            icon={<svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.49"/></svg>}
+            label="Reopen"
+            onClick={() => onAction('reopen', { taskId: task.id })}
+          />
+        ) : (
+          <Item
+            icon={<CheckIcon />}
+            label="Complete"
+            accent="var(--gb-success-fg)"
+            onClick={() => onAction('complete', { taskId: task.id })}
+          />
+        )}
+        <Item
+          icon={<CalIcon />}
+          label={`Push Out ${pushDays} day${pushDays === 1 ? '' : 's'}`}
+          accent="var(--gb-info-fg)"
+          onClick={() => onAction('push', { taskId: task.id, days: pushDays })}
+        />
+        <Item
+          icon={<CalIcon />}
+          label="Set Date"
+          accent="var(--gb-info-fg)"
+          trailing={<ChevRight />}
+          onClick={() => onNavigate({ mode: 'datePicker', returnMode: 'main' })}
+        />
+        <Item
+          icon={<PlusIcon />}
+          label="Add Task"
+          trailing={<ChevRight />}
+          onClick={() => onNavigate({ mode: 'templates', returnMode: 'main' })}
+        />
+      </>
+    );
+  } else if (qt.mode === 'bulk') {
+    body = (
+      <>
+        <Header><CheckIcon size={10} /> Quick Task — {selectedCount} selected</Header>
+        <Item
+          icon={<CheckIcon />}
+          label="Complete All"
+          accent="var(--gb-success-fg)"
+          onClick={() => onAction('bulk-complete')}
+        />
+        <Item
+          icon={<CalIcon />}
+          label={`Push Out ${pushDays} day${pushDays === 1 ? '' : 's'}`}
+          accent="var(--gb-info-fg)"
+          onClick={() => onAction('bulk-push', { days: pushDays })}
+        />
+        <Item
+          icon={<CalIcon />}
+          label="Set Date"
+          accent="var(--gb-info-fg)"
+          trailing={<ChevRight />}
+          onClick={() => onNavigate({ mode: 'datePicker', returnMode: 'bulk' })}
+        />
+        <Item
+          icon={<PlusIcon />}
+          label="Add Task to All"
+          trailing={<ChevRight />}
+          onClick={() => onNavigate({ mode: 'templates', returnMode: 'bulk' })}
+        />
+      </>
+    );
+  } else if (qt.mode === 'datePicker') {
+    const setDateAction = qt.returnMode === 'bulk' ? 'bulk-set-date' : 'set-date';
+    body = (
+      <>
+        <Back onClick={() => onNavigate({ mode: qt.returnMode || 'main' })} />
+        <Header>Set due date</Header>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '6px 8px',
+        }}>
+          <input
+            ref={dateRef}
+            type="date"
+            value={dateVal}
+            onChange={(e) => setDateVal(e.target.value)}
+            style={{
+              flex: 1, height: 28,
+              padding: '0 7px',
+              borderRadius: 'var(--gb-r-sm)',
+              border: '1px solid var(--gb-border-default)',
+              background: 'var(--gb-surface-2)',
+              color: 'var(--gb-text-primary)',
+              fontSize: 11.5, fontFamily: 'inherit',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const api = dateInputToApi(dateVal);
+              if (!api) return;
+              onAction(setDateAction, { taskId: qt.taskId, date: api });
+            }}
+            style={{
+              height: 28, padding: '0 10px',
+              borderRadius: 'var(--gb-r-sm)',
+              background: 'var(--gb-brand)',
+              border: '1px solid var(--gb-brand-border)',
+              color: 'var(--gb-brand-text)',
+              fontSize: 11.5, fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}
+          >Set</button>
+        </div>
+      </>
+    );
+  } else if (qt.mode === 'templates') {
+    const tplAction = qt.returnMode === 'bulk' ? 'bulk-create-task' : 'create-task';
+    body = (
+      <>
+        <Back onClick={() => onNavigate({ mode: qt.returnMode || 'main' })} />
+        <Header>Pick a task template</Header>
+        <div style={{
+          maxHeight: 220, overflowY: 'auto',
+          scrollbarWidth: 'thin',
+        }}>
+          {taskTpls.length ? (
+            taskTpls.map((tpl) => (
+              <Item
+                key={tpl.id}
+                label={tpl.name || tpl.subject || 'Untitled'}
+                onClick={() => onAction(tplAction, { taskId: qt.taskId, template: tpl })}
+              />
+            ))
+          ) : (
+            <div style={{
+              padding: 12, textAlign: 'center',
+              fontSize: 11.5, color: 'var(--gb-text-muted)',
+            }}>
+              No task templates found.<br />
+              Add some in the Notes editor.
+            </div>
+          )}
+        </div>
+      </>
+    );
+  }
+
+  return createPortal(
+    <AnimatePresence>
+      <motion.div
+        ref={ref}
+        key="qt-menu"
+        initial={{ opacity: 0, y: placeAbove ? 4 : -4, scale: 0.97 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.97 }}
+        transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
+        style={{
+          position: 'fixed',
+          top, left,
+          width: MENU_W,
+          zIndex: 999999,
+          background: 'var(--gb-surface-elevated)',
+          border: '1px solid var(--gb-border-default)',
+          borderRadius: 'var(--gb-r-md)',
+          boxShadow: 'var(--gb-shadow-popover)',
+          padding: 4,
+          fontFamily: 'var(--gb-font-sans)',
+        }}
+      >
+        {body}
+      </motion.div>
+    </AnimatePresence>,
+    document.body
+  );
+}
