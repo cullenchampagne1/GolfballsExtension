@@ -192,20 +192,20 @@ function seedCallLogTemplates() {
     },
   ];
 
-  // Merge strategy: preserve any non-call_log templates the user
-  // has (notes / tasks they care about), but ALWAYS refresh the
-  // call_log set so changes to the playground seed take effect on
-  // the next open. Reps don't edit call_log templates from the
-  // playground — they edit them in the Notes editor — so blowing
-  // away the playground's call_log samples is safe.
+  // Merge strategy: ONLY seed when there are zero call_log templates
+  // already. The Notes editor is where reps actually configure their
+  // real templates — we must never overwrite those. The playground
+  // samples are a first-run fallback so a fresh install can demo the
+  // modal, not a "refresh on every open" reset.
   //
-  // Returns a Promise that resolves when the seed is durable so the
-  // caller can mount the modal AFTER the templates are readable.
+  // Returns a Promise that resolves once durable so the caller can
+  // mount the modal AFTER any seed write is committed.
   return new Promise((resolve) => {
     const apply = (existing) => {
       const arr = Array.isArray(existing) ? existing : [];
-      const preserved = arr.filter((t) => t?.subType !== 'call_log');
-      const next = [...preserved, ...samples];
+      const hasCallLog = arr.some((t) => t?.subType === 'call_log');
+      if (hasCallLog) { resolve(); return; }
+      const next = [...arr, ...samples];
       if (hasChromeStorage) {
         chrome.storage.local.set({ [NOTE_TEMPLATES_KEY]: next }, () => resolve());
       } else {
@@ -298,11 +298,15 @@ function seedQuickTaskTemplates() {
     },
   ];
 
+  // Only seed when there are zero task templates already — same
+  // first-run-only fallback policy as the call_log seed. The Notes
+  // editor owns the rep's real task templates; we never overwrite.
   return new Promise((resolve) => {
     const apply = (existing) => {
       const arr = Array.isArray(existing) ? existing : [];
-      const preserved = arr.filter((t) => t?.subType !== 'task');
-      const next = [...preserved, ...samples];
+      const hasTask = arr.some((t) => t?.subType === 'task');
+      if (hasTask) { resolve(); return; }
+      const next = [...arr, ...samples];
       if (hasChromeStorage) {
         chrome.storage.local.set({ [NOTE_TEMPLATES_KEY]: next }, () => resolve());
       } else {
