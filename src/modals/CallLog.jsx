@@ -284,6 +284,7 @@ export function CallLog({
                   options={CALL_CATEGORY_OPTIONS}
                   placeholder="Select category…"
                   onChange={(v) => setCategory(parseInt(v, 10) || 0)}
+                  style={{ width: '100%' }}
                 />
               </Field>
             </div>

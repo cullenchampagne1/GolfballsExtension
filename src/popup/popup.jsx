@@ -1148,7 +1148,13 @@ function WatchAddModal({ pageInfo, tab, onClose, onAdded }) {
           </Field>
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
             <Btn size="sm" onClick={onClose}>Cancel</Btn>
-            <Btn full size="sm" variant="primary" icon={<Icon size={12} />} onClick={submit}>
+            <Btn
+              size="sm"
+              variant="primary"
+              icon={<Icon size={12} />}
+              onClick={submit}
+              style={{ flex: 1, minWidth: 0 }}
+            >
               Add to Watch List
             </Btn>
           </div>

@@ -317,11 +317,13 @@ window.__gbCallLogPanelLoaded = true;
           await submitCallLog(tpl, contactId, phone, employeeId);
           statusIcon.innerHTML = `<svg style="color:#38b000; width:14px; height:14px;" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
           
+          // No page reload here — the rep gets the success notification
+          // from showGbNotification and a fresh CRM table refreshes lazily.
+          // Reloading would interrupt the toast and yank focus.
           setTimeout(() => {
             statusIcon.innerHTML = originalStatusContent;
             btn.disabled = false;
             delete btn.dataset.busy;
-            if (typeof window.SaveLeadNote === 'function') window.location.reload(); 
           }, 2000);
         } catch(err) {
           console.error('[GB Quick Log Failure]', err);
