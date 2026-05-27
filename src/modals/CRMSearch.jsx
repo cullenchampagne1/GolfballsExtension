@@ -601,28 +601,24 @@ export function CRMSearch({ onClosed, bindClose }) {
     if (v === '' && mode === 'server') setMode('indexed');
   };
   /* Keyboard nav inside the search input:
-     - Tab from the input moves the highlight into the result list
-       (and visually deactivates the search bar — see the input style
-       below). Subsequent Tabs walk further down.
-     - Shift+Tab walks back up; when already on the top row it
-       returns focus to the search bar (activeIdx = -1) rather than
-       wrapping to the bottom — matches the user's "I'm at the top
-       of the list" mental model.
-     - Enter on a highlighted row opens that contact in a new tab;
-       otherwise it falls back to the existing "run search" behaviour. */
+     - Tab from the input blurs the input AND moves the highlight to
+       the first row. Blurring is intentional so the action shelf's
+       number-key shortcuts (1-9) can fire — they check
+       isTypingTarget and bail when an <input> is focused, which was
+       eating "1" / "2" / etc as typed text. After the blur a
+       document-level listener (installed by an effect below while
+       activeIdx >= 0) takes over Tab / Shift+Tab / Enter / Esc for
+       row navigation, leaving number keys for the shelf.
+     - Enter on the search input runs the search as before.
+     - Esc still clears the highlight from the input. */
   const onSearchKeyDown = (e) => {
     const rows = displayedRows;
     if (e.key === 'Tab') {
-      if (rows.length === 0) return;
+      if (rows.length === 0) return; // no rows → let default Tab take focus elsewhere
+      if (e.shiftKey) return;        // no row to step back to from -1, let default behave
       e.preventDefault();
-      setActiveIdx((i) => {
-        if (e.shiftKey) {
-          // From top (or none) -> deactivate row nav, back to search.
-          if (i <= 0) return -1;
-          return i - 1;
-        }
-        return i < 0 ? 0 : (i + 1) % rows.length;
-      });
+      try { searchInputRef.current?.blur(); } catch {}
+      setActiveIdx(0);
       return;
     }
     if (e.key === 'Enter') {
@@ -643,6 +639,53 @@ export function CRMSearch({ onClosed, bindClose }) {
       setActiveIdx(-1);
     }
   };
+
+  /* Document-level row-nav listener — active only while a row is
+     highlighted (activeIdx >= 0). The search input is BLURRED at
+     that point so the in-input onKeyDown can't drive nav anymore;
+     this listener picks up Tab / Shift+Tab / Enter / Esc directly
+     off the document. Number keys (1-9) are deliberately NOT
+     handled here so they pass through to the action shelf's
+     number-key shortcuts. */
+  useEffect(() => {
+    if (activeIdx < 0) return undefined;
+    const onDocKey = (e) => {
+      const rows = displayedRows;
+      if (rows.length === 0) return;
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          if (activeIdx <= 0) {
+            // Bottom of list-nav: hand focus back to the search bar.
+            setActiveIdx(-1);
+            try { searchInputRef.current?.focus({ preventScroll: true }); } catch {}
+          } else {
+            setActiveIdx((i) => i - 1);
+          }
+        } else {
+          setActiveIdx((i) => (i + 1) % rows.length);
+        }
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const row = rows[activeIdx];
+        const url = row ? contactUrl(row.id) : '';
+        if (url) {
+          try { window.open(url, '_blank', 'noopener,noreferrer'); }
+          catch { window.location.href = url; }
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setActiveIdx(-1);
+        try { searchInputRef.current?.focus({ preventScroll: true }); } catch {}
+      }
+    };
+    document.addEventListener('keydown', onDocKey, true);
+    return () => document.removeEventListener('keydown', onDocKey, true);
+  }, [activeIdx, displayedRows]);
 
   /* ── Modal-aware actions wiring ──────────────────────────────
      1. Push CRMSearch onto the action registry's modal stack on
