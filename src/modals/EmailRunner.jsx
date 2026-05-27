@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { Btn, Dropdown, Field, RangeSlider, Tag, I, Spinner } from '../ui/index.js';
+import { Btn, Dropdown, Field, IconBtn, RangeSlider, I, Spinner } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 
 /* ───────────────────────────────────────────────────────────────
@@ -36,6 +36,36 @@ const PANEL_W = 340;
 const PANEL_H = 480;
 const fmtSeconds = (n) => `${n}s`;
 
+/* Promise wrapper around chrome.runtime.sendMessage so the orchestrator
+   reads top-to-bottom. Resolves null on lastError instead of throwing
+   so the loop can decide what to do per-step. */
+const sendBg = (msg) => new Promise((resolve) => {
+  try {
+    chrome.runtime.sendMessage(msg, (response) => {
+      if (chrome.runtime.lastError) resolve(null);
+      else resolve(response);
+    });
+  } catch { resolve(null); }
+});
+
+/* Same {{var}} substitution the popup uses for single-contact sends.
+   Unknown tokens pass through in their original {{form}} so the rep
+   at least sees a placeholder is missing rather than getting silent
+   blanks in their outbound email. */
+const renderStr = (str, vars) => {
+  if (!str) return '';
+  return String(str).replace(/\{\{(\w+)\}\}/g, (_, k) => vars?.[k] ?? `{{${k}}}`);
+};
+
+/* The vanilla sendViaPA handler appends emailSignature for the popup's
+   single-contact path; the orchestrator hits paAutomate directly so we
+   match the same behaviour ourselves. */
+const readSignature = () => new Promise((resolve) => {
+  try {
+    chrome.storage.local.get('emailSignature', (out) => resolve(out?.emailSignature || ''));
+  } catch { resolve(''); }
+});
+
 const DragHandleDots = () => (
   <svg width="9" height="13" viewBox="0 0 9 13" fill="currentColor" aria-hidden>
     <circle cx="2" cy="2"  r="1" />
@@ -47,16 +77,30 @@ const DragHandleDots = () => (
   </svg>
 );
 
-export function EmailRunner({ open, contacts, onClose, anchorHostId }) {
+export function EmailRunner({
+  open, contacts, onClose, anchorHostId,
+  // Row-level loading-state hooks. CRMSearch / TaskList wire these to
+  // render per-row spinners + sent/fail badges, mirroring the Quick
+  // Actions UX. EmailRunner's own UI shows ONLY the aggregate progress
+  // (counts + bar) — per-row detail belongs on the list.
+  onRowStart,
+  onRowDone,
+  onResetRowStates,
+}) {
   const toast = useToast();
   const [templates, setTemplates] = useState([]);
   const [selectedId, setSelectedId] = useState('');
   const [selectedVariationId, setSelectedVariationId] = useState(null);
   const [delay, setDelay] = useState([15, 45]); // seconds
   const [status, setStatus] = useState('idle');  // 'idle' | 'running' | 'done'
-  const [progress, setProgress] = useState({ current: 0, total: 0, name: '' });
-  const [results, setResults] = useState([]);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [counts, setCounts] = useState({ sent: 0, failed: 0 });
   const [paUrl, setPaUrl] = useState('');
+  /* Run-cancellation token. Each onRun increments it; the loop checks
+     it between iterations so closing the panel mid-send (or starting
+     a fresh run) stops the orchestrator cleanly without leaving stale
+     row spinners behind. */
+  const runTokenRef = useRef(0);
 
   /* Position state. Initial coords anchor the panel to the right of
      the parent modal — same vertical alignment, 16px gap horizontally.
@@ -150,23 +194,13 @@ export function EmailRunner({ open, contacts, onClose, anchorHostId }) {
     } catch {}
   }, [open]);
 
-  /* Per-run id so an older blast's lingering progress events can't
-     leak into a newer run's UI. */
-  const [runId, setRunId] = useState(null);
+  /* Cancel in-flight run when the panel closes — bumps the token so
+     the orchestrator's between-iteration guard short-circuits. */
   useEffect(() => {
-    if (!open) return;
-    const listener = (msg) => {
-      if (!msg || msg.runId !== runId) return;
-      if (msg.action === 'emailBlastProgress') {
-        setProgress({ current: msg.current, total: msg.total, name: msg.name });
-        setResults((r) => [...r, msg.result]);
-      } else if (msg.action === 'emailBlastDone') {
-        setStatus('done');
-      }
-    };
-    chrome.runtime.onMessage.addListener(listener);
-    return () => chrome.runtime.onMessage.removeListener(listener);
-  }, [open, runId]);
+    if (!open) {
+      runTokenRef.current += 1;
+    }
+  }, [open]);
 
   /* Dropdown option shape — ported from popup.jsx. Templates with
      variations expose an inline-expanding parent + sub-options:
@@ -215,64 +249,120 @@ export function EmailRunner({ open, contacts, onClose, anchorHostId }) {
 
   const canRun = !!selectedTpl && contacts.length > 0 && status !== 'running';
 
-  const onRun = () => {
+  const onRun = async () => {
     if (!canRun) return;
     if (!paUrl) {
       toast?.error?.('Power Automate URL not set in Settings — enable PA to send.');
       return;
     }
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    setRunId(id);
-    setResults([]);
-    setProgress({ current: 0, total: contacts.length, name: '' });
+    /* Reset row UI on the parent list, bump the run token (older
+       in-flight loops will see the mismatch and bail before their
+       next iteration), and kick off a fresh local orchestrator. */
+    onResetRowStates?.();
+    runTokenRef.current += 1;
+    const token = runTokenRef.current;
+    setCounts({ sent: 0, failed: 0 });
+    setProgress({ current: 0, total: contacts.length });
     setStatus('running');
 
-    /* If the user pinned a specific variation, fold its subject/body
-       INTO the template payload and clear variations — the
-       orchestrator's random-pick path then has nothing to pick from
-       and falls back to the parent fields (now the pinned ones).
-       If they picked just the parent, pass all variations through
-       and let the orchestrator random-pick per contact. */
-    let payloadTpl;
-    if (selectedVariationId) {
-      const v = (selectedTpl.variations || []).find((x) => x.id === selectedVariationId);
-      payloadTpl = {
-        id:        selectedTpl.id,
-        subject:   v?.subject || selectedTpl.subject || '',
-        body:      v?.body    || selectedTpl.body    || '',
-        vars:      selectedTpl.vars    || {},
-        toField:   selectedTpl.toField || { type: 'auto' },
-        replyMode: selectedTpl.replyMode || 'standalone',
-        variations: [],
-      };
-    } else {
-      payloadTpl = {
-        id:        selectedTpl.id,
-        subject:   selectedTpl.subject || '',
-        body:      selectedTpl.body    || '',
-        vars:      selectedTpl.vars    || {},
-        toField:   selectedTpl.toField || { type: 'auto' },
-        replyMode: selectedTpl.replyMode || 'standalone',
-        variations: Array.isArray(selectedTpl.variations) ? selectedTpl.variations : [],
-      };
+    const variations = Array.isArray(selectedTpl.variations) ? selectedTpl.variations : [];
+    /* Pinned variation? Use its subject/body for everyone. Otherwise
+       we pick one at random per contact below. */
+    const pinnedV = selectedVariationId
+      ? variations.find((v) => v.id === selectedVariationId)
+      : null;
+    const tplVars    = selectedTpl.vars    || {};
+    const tplToField = selectedTpl.toField || { type: 'auto' };
+    const replyMode  = selectedTpl.replyMode || 'standalone';
+
+    /* Per-contact pipeline. All network I/O routes through background
+       messages (fetchRaw to grab HTML without opening a tab,
+       resolveVarsForHtml to drive resolveAllVarsAsync against the
+       parsed document, paAutomate for the actual send). The CRM list
+       row drives loading state via onRowStart / onRowDone — same UX
+       as Quick Actions. */
+    const lo = Math.max(0, Number(delay[0]) || 0);
+    const hi = Math.max(lo, Number(delay[1]) || lo);
+
+    for (let i = 0; i < contacts.length; i++) {
+      if (runTokenRef.current !== token) return; // cancelled
+      const c = contacts[i];
+      setProgress({ current: i + 1, total: contacts.length });
+      onRowStart?.(c.contactId);
+
+      let outcome = { status: 'error', error: 'unknown' };
+      try {
+        // Pick subject/body for this contact.
+        const v = pinnedV || (variations.length ? variations[Math.floor(Math.random() * variations.length)] : null);
+        const rawSubject = v?.subject || selectedTpl.subject || '';
+        const rawBody    = v?.body    || selectedTpl.body    || '';
+
+        // 1. Fetch the contact page HTML through the background proxy.
+        const fetched = await sendBg({ action: 'fetchRaw', url: c.contactUrl });
+        if (!fetched?.ok || typeof fetched.text !== 'string') {
+          throw new Error(fetched?.error || 'Fetch failed');
+        }
+
+        // 2. Resolve template vars against the fetched HTML (no tab).
+        const resolved = await sendBg({
+          action:  'resolveVarsForHtml',
+          html:    fetched.text,
+          vars:    tplVars,
+          toField: tplToField,
+        });
+        const resolvedVars = resolved?.resolved || {};
+        const toEmail      = resolved?.toEmail  || '';
+        if (!toEmail) {
+          outcome = { status: 'error', error: 'No recipient email' };
+        } else {
+          // 3. Render template strings.
+          const subject  = renderStr(rawSubject, resolvedVars);
+          // Signature is appended by the existing paAutomate path in
+          // vanilla/main.js's sendViaPA handler — we go direct to
+          // paAutomate here, so append it ourselves to match.
+          const signature = await readSignature();
+          const htmlBody  = renderStr(rawBody, resolvedVars)
+                          + (signature ? '<br><div>' + signature + '</div>' : '');
+
+          // 4. Send via Power Automate.
+          const send = await sendBg({
+            action: 'paAutomate',
+            paUrl,
+            payload: {
+              emails: [{ to: toEmail, subject, htmlBody, replyMode }],
+            },
+          });
+          if (send?.ok) {
+            outcome = { status: 'sent', email: toEmail };
+          } else {
+            outcome = { status: 'error', error: send?.error || 'PA send failed', email: toEmail };
+          }
+        }
+      } catch (e) {
+        outcome = { status: 'error', error: e?.message || 'failed' };
+      }
+
+      if (runTokenRef.current !== token) return; // cancelled mid-iteration
+      onRowDone?.(c.contactId, outcome);
+      setCounts((cur) => (
+        outcome.status === 'sent'
+          ? { ...cur, sent: cur.sent + 1 }
+          : { ...cur, failed: cur.failed + 1 }
+      ));
+
+      // 5. Random delay between sends — skip after the last one.
+      if (i < contacts.length - 1) {
+        const ms = (lo + Math.random() * (hi - lo)) * 1000;
+        const wait = await new Promise((res) => setTimeout(() => res(true), ms));
+        if (runTokenRef.current !== token) return;
+      }
     }
 
-    chrome.runtime.sendMessage({
-      action: 'runEmailBlast',
-      runId: id,
-      contacts: contacts.map((c) => ({
-        url:  c.contactUrl,
-        name: c.contactName || c.name || '',
-        id:   c.contactId   || '',
-      })),
-      template: payloadTpl,
-      delayMin: delay[0],
-      delayMax: delay[1],
-    });
+    setStatus('done');
   };
 
-  const sentCount   = results.filter((r) => r.status === 'sent').length;
-  const failedCount = results.filter((r) => r.status === 'error').length;
+  const sentCount   = counts.sent;
+  const failedCount = counts.failed;
   const variationCount = selectedTpl?.variations?.length || 0;
 
   return createPortal(
@@ -335,22 +425,21 @@ export function EmailRunner({ open, contacts, onClose, anchorHostId }) {
                 {contacts.length} contact{contacts.length === 1 ? '' : 's'} queued
               </div>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              onPointerDown={(e) => e.stopPropagation()}
-              disabled={status === 'running'}
-              aria-label="Close"
-              style={{
-                width: 22, height: 22, borderRadius: 'var(--gb-r-sm)',
-                background: 'transparent',
-                border: '1px solid var(--gb-border-subtle)',
-                color: 'var(--gb-text-muted)',
-                cursor: status === 'running' ? 'not-allowed' : 'pointer',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                opacity: status === 'running' ? 0.5 : 1,
-              }}
-            >×</button>
+            {/* Use the design-system IconBtn for the close — the
+                inline button rendered an unstyled "×" glyph that sat
+                slightly off-centre because of the character's own
+                vertical metrics. IconBtn uses the I.close SVG which
+                lands true-centred at every size. */}
+            <span onPointerDown={(e) => e.stopPropagation()}>
+              <IconBtn
+                size="xs"
+                variant="ghost"
+                icon={<I.close />}
+                onClick={onClose}
+                disabled={status === 'running'}
+                aria-label="Close"
+              />
+            </span>
           </div>
 
           {/* Body */}
@@ -392,6 +481,11 @@ export function EmailRunner({ open, contacts, onClose, anchorHostId }) {
               />
             </Field>
 
+            {/* Aggregate progress only — per-row status (spinner /
+                sent / fail) is rendered on the parent list via the
+                onRowStart / onRowDone callbacks, matching the Quick
+                Actions UX. Listing each contact in the panel itself
+                would get unwieldy fast on a 100-row blast. */}
             {status !== 'idle' && (
               <div style={{
                 display: 'flex', flexDirection: 'column', gap: 8,
@@ -408,11 +502,6 @@ export function EmailRunner({ open, contacts, onClose, anchorHostId }) {
                       : `Done — ${sentCount} sent${failedCount ? `, ${failedCount} failed` : ''}`}
                   </div>
                 </div>
-                {status === 'running' && progress.name && (
-                  <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {progress.name}
-                  </div>
-                )}
                 <div style={{
                   height: 4, borderRadius: 999,
                   background: 'var(--gb-surface-2)', overflow: 'hidden',
@@ -425,23 +514,6 @@ export function EmailRunner({ open, contacts, onClose, anchorHostId }) {
                     style={{ height: '100%', background: 'var(--gb-brand-fg)' }}
                   />
                 </div>
-                {results.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 110, overflow: 'auto' }}>
-                    {results.slice(-4).map((r, i) => (
-                      <div key={i} style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        fontSize: 10.5, color: 'var(--gb-text-secondary)',
-                      }}>
-                        <Tag size="xs" tone={r.status === 'sent' ? 'brand' : 'error'}>
-                          {r.status === 'sent' ? 'sent' : 'fail'}
-                        </Tag>
-                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {r.name || r.email || '(unknown)'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
           </div>
