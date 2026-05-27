@@ -613,13 +613,16 @@ function PlaygroundSurface() {
         anchoring (CSS quirk: fixed elements anchor to their nearest
         transformed ancestor, not the viewport). Modals INSIDE this
         wrapper inherit the scale, which is the whole point. */}
-    <div style={{
-      transform: `scale(${PLAYGROUND_SCALE})`,
-      transformOrigin: 'top left',
-      width:  `${inv * 100}%`,
-      height: `${inv * 100}%`,
-      position: 'relative',
-    }}>
+    <div
+      data-gb-scale="playground"
+      style={{
+        transform: `scale(${PLAYGROUND_SCALE})`,
+        transformOrigin: 'top left',
+        width:  `${inv * 100}%`,
+        height: `${inv * 100}%`,
+        position: 'relative',
+      }}
+    >
       {/* Center hint — empty-state cue when no modal is up. */}
       {!mounted && (
         <div style={{
@@ -935,7 +938,10 @@ purgePlaygroundTemplateSeeds();
 
 function mount() {
   const host = document.getElementById('playground-root');
-  if (host) host.setAttribute('data-gb-scale', 'playground');
+  // Don't put data-gb-scale on #playground-root — that would also
+  // scale the gridBackground div. The scaled wrapper INSIDE
+  // PlaygroundSurface gets the attribute instead so only the demo
+  // modals + center hint pick up the user's Playground slider.
   if (!host) return;
   createRoot(host).render(<PlaygroundApp />);
 }

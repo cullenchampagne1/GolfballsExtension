@@ -715,15 +715,23 @@ export function SettingsPanel() {
         </div>
       </section>
 
-      {/* Power Automate — flow URL the per-email "Direct Send" toggle
-          uses. The legacy global `replyWithTemplateEnabled` toggle was
-          phased out in favor of a per-email setting; the URL itself
-          still belongs in global settings since it's a shared secret. */}
+      {/* Experimental — Power Automate flow URL. The legacy global
+          "Reply with Template" toggle was phased out in favor of a
+          per-template setting; the URL itself is still a shared secret
+          so it lives here. The ExpandableFeature's "on" state proxies
+          off whether a URL is saved — toggling off clears it. */}
       <section>
-        <SectionLabel>Power Automate</SectionLabel>
-        <Card>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
-            <Field label="Flow URL">
+        <SectionLabel>Experimental</SectionLabel>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <ExpandableFeature
+            on={!!flags.powerAutomateUrl}
+            onChange={(next) => { if (!next) setFlagValue('powerAutomateUrl', ''); }}
+            icon={<I.send />}
+            tone="warning"
+            name="Direct Send via Power Automate"
+            desc="When a flow URL is set, templates that opt-in send directly through Power Automate instead of opening Outlook."
+          >
+            <Field label="Flow URL" required>
               <Input
                 value={flags.powerAutomateUrl || ''}
                 onChange={(v) => setFlagValue('powerAutomateUrl', v)}
@@ -732,15 +740,19 @@ export function SettingsPanel() {
                 leading={<I.bolt />}
               />
             </Field>
-            <Callout tone="info" title="Set up in Power Automate">
-              <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
-                <li>Create <b style={{ color: 'var(--gb-text-secondary)' }}>New flow</b> → <b style={{ color: 'var(--gb-text-secondary)' }}>When an HTTP request is received</b></li>
-                <li>Add a <b style={{ color: 'var(--gb-text-secondary)' }}>Send an email (V2)</b> action</li>
-                <li>Save and paste the generated URL above</li>
-              </ol>
-            </Callout>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Btn variant="tinted" status="brand" size="sm" icon={<I.bolt />} onClick={testConnection}>
+
+            <div style={{ marginTop: 12 }}>
+              <Callout tone="warning" title="Set up in Power Automate">
+                <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
+                  <li>Create <b style={{ color: 'var(--gb-text-secondary)' }}>New flow</b> → <b style={{ color: 'var(--gb-text-secondary)' }}>When an HTTP request is received</b></li>
+                  <li>Add a <b style={{ color: 'var(--gb-text-secondary)' }}>Send an email (V2)</b> action</li>
+                  <li>Save and paste the generated URL above</li>
+                </ol>
+              </Callout>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+              <Btn variant="tinted" status="warning" size="sm" icon={<I.bolt />} onClick={testConnection}>
                 Test connection
               </Btn>
               <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -748,8 +760,8 @@ export function SettingsPanel() {
                 {paStatus === 'ok' ? 'URL valid — saved automatically' : paStatus === 'fail' ? 'Paste the full URL from Power Automate' : 'Not tested'}
               </span>
             </div>
-          </div>
-        </Card>
+          </ExpandableFeature>
+        </div>
       </section>
 
       {/* Custom Pages — pick which internal site pages the extension

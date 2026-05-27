@@ -198,6 +198,7 @@ export function FloatingPanel({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
             onClick={!draggable && visible ? requestClose : undefined}
+            data-gb-scale="modals"
             style={{
               position: 'fixed', inset: 0, zIndex: 999990,
               // Draggable mode = click-through so the page stays usable.
@@ -236,7 +237,10 @@ export function FloatingPanel({
                  modal's own mount/unmount animation (scale+fade) wraps
                  INSIDE Throwable so the panel pops into existence at
                  its current physics-driven position without arguing with
-                 the outer translate. */
+                 the outer translate. data-gb-scale="modals" so the
+                 Modals UI-scale slider in Settings reaches it whether
+                 the modal opened via mountFloating or direct React
+                 render (e.g. the playground). */
               <Throwable
                 dragHandle={dragHandleRef}
                 friction={phys.friction}
@@ -244,6 +248,7 @@ export function FloatingPanel({
                 maxSpeed={phys.maxSpeed}
                 throwScale={phys.throwScale}
                 style={{ zIndex: 999999, pointerEvents: 'auto' }}
+                data-gb-scale="modals"
               >
                 <ModalCard cssWidth={cssWidth} cssMaxHeight={cssMaxHeight} cssHeight={cssHeight}>{children}</ModalCard>
               </Throwable>
@@ -252,6 +257,7 @@ export function FloatingPanel({
                  wrapper so the backdrop catches outside-clicks; the
                  card itself re-enables them. */
               <div
+                data-gb-scale="modals"
                 style={{
                   position: 'fixed', inset: 0, zIndex: 999999,
                   pointerEvents: 'none',
