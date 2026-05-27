@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import { useDevSettings } from '../lib/devSettings.js';
+import { dropConditional } from '../lib/variableResolution.js';
 import {
   Btn, Dropdown, Dot, Tag, KeyVal, SectionLabel, Field, Textarea,
   Spinner, I, T, inputBaseStyle, ToastHost,
@@ -57,33 +58,6 @@ const sendMessage = (tabId, msg) =>
 /* ============================================================
    TEMPLATE RENDERING HELPERS — preserved 1:1 from popup.js
 ============================================================ */
-
-// Drop sentences containing unresolved variables that opted in to
-// smart.conditional, so empty placeholders don't leak into the output.
-// Mirrors `dropConditional` in content/variable-resolution.js — duplicated
-// because popup runs in a separate context.
-function dropConditional(text, defs, resolved) {
-  if (!text || !defs) return text || '';
-  let out = String(text);
-  for (const [name, def] of Object.entries(defs)) {
-    const smart = def && def.smart;
-    if (!smart || !smart.conditional) continue;
-    const val = resolved ? resolved[name] : '';
-    if (val != null && String(val).length > 0) continue;
-    const placeholder = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const scope = smart.conditionalScope || 'sentence';
-    let rx;
-    if (scope === 'paragraph') {
-      rx = new RegExp(`[^\\n]*\\{\\{\\s*${placeholder}\\s*\\}\\}[^\\n]*(\\n\\n|\\n?$)`, 'g');
-    } else if (scope === 'line') {
-      rx = new RegExp(`[^\\n]*\\{\\{\\s*${placeholder}\\s*\\}\\}[^\\n]*\\n?`, 'g');
-    } else {
-      rx = new RegExp(`[^.!?\\n]*\\{\\{\\s*${placeholder}\\s*\\}\\}[^.!?\\n]*[.!?]?\\s*`, 'g');
-    }
-    out = out.replace(rx, '');
-  }
-  return out;
-}
 
 function renderStr(str, vars, defs) {
   const text = defs ? dropConditional(str, defs, vars) : (str || '');
