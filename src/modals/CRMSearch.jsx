@@ -224,6 +224,17 @@ export function CRMSearch({ onClosed, bindClose }) {
   const runSearch = useCallback(async (q, qb = qbFilter, typeF = typeFilter) => {
     const gen = ++searchGenRef.current;
     const term = q.trim();
+    /* Persist "last query" right when the user kicks off a real search.
+       Either a term OR a QB filter counts — the unmount-time backup
+       below covers form state the user typed but never ran. We don't
+       wait for the result so a slow Solr call can't lose the save. */
+    if (term || qb) {
+      try {
+        chrome.storage.local.set({
+          gbCrmLastQuery: { query: q || '', typeFilter: typeF, qbFilter: qb || null, ts: Date.now() },
+        });
+      } catch {}
+    }
     setStatus('loading');
     try {
       let docs;
@@ -590,8 +601,13 @@ export function CRMSearch({ onClosed, bindClose }) {
     if (v === '' && mode === 'server') setMode('indexed');
   };
   /* Keyboard nav inside the search input:
-     - Tab / Shift+Tab cycles a highlight through the visible rows
-       (we preventDefault so focus stays in the input).
+     - Tab from the input moves the highlight into the result list
+       (and visually deactivates the search bar — see the input style
+       below). Subsequent Tabs walk further down.
+     - Shift+Tab walks back up; when already on the top row it
+       returns focus to the search bar (activeIdx = -1) rather than
+       wrapping to the bottom — matches the user's "I'm at the top
+       of the list" mental model.
      - Enter on a highlighted row opens that contact in a new tab;
        otherwise it falls back to the existing "run search" behaviour. */
   const onSearchKeyDown = (e) => {
@@ -600,7 +616,11 @@ export function CRMSearch({ onClosed, bindClose }) {
       if (rows.length === 0) return;
       e.preventDefault();
       setActiveIdx((i) => {
-        if (e.shiftKey) return i <= 0 ? rows.length - 1 : i - 1;
+        if (e.shiftKey) {
+          // From top (or none) -> deactivate row nav, back to search.
+          if (i <= 0) return -1;
+          return i - 1;
+        }
         return i < 0 ? 0 : (i + 1) % rows.length;
       });
       return;
@@ -722,7 +742,17 @@ export function CRMSearch({ onClosed, bindClose }) {
           onKeyDown={onSearchKeyDown}
           placeholder={mode === 'indexed' ? 'Filter indexed contacts — Enter to search server' : 'Search by name, email, account, or phone…'}
           leading={<I.search size={12} />}
-          style={{ flex: 1 }}
+          /* Visually deactivate while a row is keyboard-focused so it
+             reads as "focus moved into the list" — even though the
+             native input is still focused under the hood (keeps the
+             onKeyDown handler live without a document-level listener). */
+          style={{
+            flex: 1,
+            ...(activeIdx >= 0 ? {
+              borderColor: 'var(--gb-border-default)',
+              boxShadow: 'none',
+            } : null),
+          }}
         />
         <Dropdown
           value={typeFilter}
