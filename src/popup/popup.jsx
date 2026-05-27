@@ -592,11 +592,6 @@ function MainView({
   ignoreCharge, ignoreOrderEdit, ignoreWatch, ignoreProof, ignorePageContext,
   onOpenWatchAdd, onOpenProof,
 }) {
-  // Two-step variation picker — when non-null the Dropdown shows the
-  // variation list for this parent instead of the top-level template
-  // list, with a Back row that returns to the top level without
-  // dismissing the menu.
-  const [viewParentId, setViewParentId] = useState(null);
   // ── derived button states ──
   // hasRecipient = real recipient resolved by content scripts. Required for
   // mailto/reply-file modes (the email needs a To address baked in) but not
@@ -657,66 +652,40 @@ function MainView({
   // (muted text on the menu background) so it informs without competing with
   // the label or the accent.
   const dropdownOptions = useMemo(() => {
-    // Sub-view: show the variation list for the parent the user drilled
-    // into, prepended with a Back row. keepOpen on Back makes Dropdown
-    // not close the menu when clicked — we just swap the option list.
-    if (viewParentId) {
-      const parent = templates.find((t) => t.id === viewParentId);
-      if (!parent) return [];
-      const variations = parent.variations || [];
-      return [
-        { id: '__back__', label: `← ${parent.name || 'Templates'}`, keepOpen: true, accent: 'brand' },
-        ...variations.map((v) => ({
-          id: `${parent.id}::${v.id}`,
-          label: v.label || 'Variation',
-        })),
-      ];
-    }
     const matchedSet = new Set(matchedIds);
     const matched = templates.filter((t) => matchedSet.has(t.id));
     const rest    = templates.filter((t) => !matchedSet.has(t.id));
     const showGroups = matched.length > 0 && rest.length > 0;
     return [...matched, ...rest].map((t) => {
-      const varN = (t.variations || []).length;
+      const variations = t.variations || [];
       const isMatchedRow = matchedSet.has(t.id);
-      // Templates with variations get a clickable chevron in the trailing
-      // slot — clicking it enters the variation sub-view; clicking the
-      // row's main label still picks the parent's own subject/body.
-      // stopPropagation on the chevron keeps the parent's onClick from
-      // firing when the chevron is the click target.
-      const trailing = varN > 0 ? (
-        <button
-          type="button"
-          aria-label={`See ${varN} variation${varN === 1 ? '' : 's'}`}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setViewParentId(t.id); }}
-          style={{
-            background: 'transparent', border: 'none', padding: '2px 4px',
-            display: 'inline-flex', alignItems: 'center', gap: 3,
-            cursor: 'pointer', color: 'var(--gb-text-muted)',
-            fontSize: 10, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
-            borderRadius: 'var(--gb-r-xs)',
-          }}
-        >
-          {varN}× <I.chevr size={9} style={{ transform: 'rotate(-90deg)' }} />
-        </button>
-      ) : null;
+      // Templates with variations get inline sub-options — the parent
+      // row becomes an expand toggle (the Dropdown's Row component
+      // animates the slide-down) and the sub-options include "original"
+      // (= picks parent's own subject/body) plus each variation. Picking
+      // any sub fires the dropdown's onChange with that sub's id and
+      // closes the menu, matching how a regular template would behave.
+      const subOptions = variations.length > 0 ? [
+        { id: t.id, label: `${t.name || 'Untitled'} (original)` },
+        ...variations.map((v) => ({
+          id: `${t.id}::${v.id}`,
+          label: v.label || 'Variation',
+        })),
+      ] : undefined;
       return {
         id: t.id,
         label: t.name || 'Untitled',
         group: showGroups ? (isMatchedRow ? 'Matched' : 'All templates') : undefined,
         accent: isMatchedRow ? 'brand' : undefined,
-        trailing,
+        subOptions,
       };
     });
-  }, [templates, matchedIds, viewParentId]);
+  }, [templates, matchedIds]);
 
-  /* Dropdown trigger label — shows the variation suffix when one is
-     selected so the user can see what they picked at a glance. The
-     composite value passed to Dropdown.value lets the trigger lookup
-     fall through to displayLabel when no matching option exists in
-     the current view (e.g. the variation was picked, but the dropdown
-     is now back on the top-level list which doesn't contain that id). */
+  /* The Dropdown value uses a composite id when a variation is selected
+     so the active highlight + check mark land on the variation row.
+     displayLabel shows "{template} · {variation}" in the trigger so the
+     user can see the active selection without expanding the menu. */
   const dropdownValue = selectedVariationId
     ? `${selectedId}::${selectedVariationId}`
     : selectedId;
@@ -728,17 +697,14 @@ function MainView({
   })();
 
   const onDropdownChange = (id) => {
-    if (id === '__back__') { setViewParentId(null); return; }
-    if (id.includes('::')) {
+    if (typeof id === 'string' && id.includes('::')) {
       const [parentId, variationId] = id.split('::');
       onSelect(parentId);
       onSelectVariation(variationId);
-      setViewParentId(null);
       return;
     }
     onSelect(id);
     onSelectVariation(null);
-    setViewParentId(null);
   };
 
   const isMatched = matchedIds.includes(selectedId);
@@ -900,7 +866,7 @@ function MainView({
                   value={dropdownValue}
                   displayLabel={dropdownDisplayLabel}
                   options={dropdownOptions}
-                  searchable={templates.length > 6 && !viewParentId}
+                  searchable={templates.length > 6}
                   leading={<Dot tone={isMatched ? 'brand' : 'muted'} size={7} glow={isMatched} />}
                   onChange={onDropdownChange}
                   /* Hard-clamp the menu height so it always fits inside

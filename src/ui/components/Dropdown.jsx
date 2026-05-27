@@ -99,12 +99,46 @@ export function Dropdown({
 
   useEffect(() => { ensureScrollbarStyle(); }, []);
 
-  const selected = options.find((o) => o.id === value);
+  /* Expanded-parent state for options with sub-options (inline variations
+     picker). Resets to empty when the menu closes so re-opening always
+     shows the collapsed tree. */
+  const [expandedIds, setExpandedIds] = useState(() => new Set());
+  useEffect(() => { if (!open) setExpandedIds(new Set()); }, [open]);
+
+  /* Resolve the selected option — check sub-options too so a sub-id
+     selection still lights up the right row. Used for the trailing
+     check mark + active highlight. */
+  const findOption = (opts, id) => {
+    for (const o of opts) {
+      if (o.id === id) return o;
+      if (Array.isArray(o.subOptions)) {
+        const sub = o.subOptions.find((s) => s.id === id);
+        if (sub) return sub;
+      }
+    }
+    return null;
+  };
+  const selected = findOption(options, value);
 
   const filtered = useMemo(() => {
     if (!searchable || !search) return options;
     const q = search.toLowerCase();
-    return options.filter((o) => o.label.toLowerCase().includes(q));
+    const out = [];
+    for (const o of options) {
+      const parentHit = o.label.toLowerCase().includes(q);
+      const subs = (o.subOptions || []).filter((s) => s.label.toLowerCase().includes(q));
+      if (parentHit) {
+        // Parent matched — include with all its sub-options (if any) so
+        // the user can see the whole set.
+        out.push(o);
+      } else if (subs.length) {
+        // Only some subs matched — render the parent with just the
+        // matches so context is preserved. _forceExpanded surfaces
+        // them without requiring the user to click the chevron.
+        out.push({ ...o, subOptions: subs, _forceExpanded: true });
+      }
+    }
+    return out;
   }, [options, search, searchable]);
 
   const groups = useMemo(() => {
@@ -125,6 +159,15 @@ export function Dropdown({
     if (o.keepOpen) return;
     setOpen(false);
     setSearch('');
+  };
+
+  /* Toggle whether a parent option is expanded. No-op for leaf options. */
+  const toggleExpand = (id) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   };
 
   return (
@@ -207,55 +250,17 @@ export function Dropdown({
                       textTransform: 'uppercase', letterSpacing: 0.8, color: 'var(--gb-text-muted)',
                     }}>{group}</div>
                   )}
-                  {opts.map((o) => {
-                    const active = o.id === value;
-                    // Accent colours mirror the status tokens so an `info`
-                    // accent reads info-blue, etc. The accent bar is an
-                    // absolutely-positioned child rather than a borderLeft —
-                    // a borderLeft inherits the row's border-radius and gets
-                    // rounded at the corners, which looks like a fat
-                    // tear-drop instead of a clean indicator bar.
-                    const accentColor = o.accent
-                      ? `var(--gb-${o.accent === 'brand' ? 'brand-label' : `${o.accent}-fg`})`
-                      : null;
-                    return (
-                      <motion.div
-                        key={o.id}
-                        onClick={() => pick(o)}
-                        whileHover={o.disabled ? undefined : { backgroundColor: 'var(--gb-fill-soft)' }}
-                        style={{
-                          position: 'relative',
-                          padding: o.accent ? '6px 8px 6px 12px' : '6px 8px',
-                          borderRadius: 'var(--gb-r-sm)',
-                          fontSize: 12, fontFamily: 'var(--gb-font-sans)',
-                          display: 'flex', alignItems: 'center', gap: 8,
-                          cursor: o.disabled ? 'not-allowed' : 'pointer',
-                          opacity: o.disabled ? 0.4 : 1,
-                          color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
-                          fontWeight: active ? 600 : 500,
-                          background: active ? 'var(--gb-brand-tint-soft)' : 'transparent',
-                        }}
-                      >
-                        {o.accent && (
-                          <span style={{
-                            position: 'absolute',
-                            top: 4, bottom: 4, left: 4,
-                            width: 2,
-                            background: accentColor,
-                            borderRadius: 1,
-                            pointerEvents: 'none',
-                          }} />
-                        )}
-                        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {o.label}
-                        </span>
-                        {o.trailing && (
-                          <span style={{ display: 'flex', flexShrink: 0 }}>{o.trailing}</span>
-                        )}
-                        {active && <I.check size={12} />}
-                      </motion.div>
-                    );
-                  })}
+                  {opts.map((o) => (
+                    <Row
+                      key={o.id}
+                      o={o}
+                      value={value}
+                      depth={0}
+                      expandedIds={expandedIds}
+                      onToggleExpand={toggleExpand}
+                      onPick={pick}
+                    />
+                  ))}
                 </div>
               ))}
             </div>
@@ -264,5 +269,124 @@ export function Dropdown({
       </AnimatePresence>,
       document.body)}
     </div>
+  );
+}
+
+/* ── Row ─────────────────────────────────────────────────────
+   One dropdown option. Renders the parent row + (if it has
+   subOptions) an AnimatePresence container for the children
+   that slides them in/out below. Indented children call back
+   into the same component recursively, but in practice we only
+   ever have one level (templates → variations).
+
+   Click behavior:
+     • Parent with subOptions → toggles expansion, doesn't pick.
+     • Leaf row (or parent without subs) → pick + close menu.
+
+   `_forceExpanded` (set by the search filter) overrides the
+   user's collapse state so a matching sub-option is always
+   visible during search without needing the user to expand
+   each parent manually. */
+function Row({ o, value, depth, expandedIds, onToggleExpand, onPick }) {
+  const active = o.id === value;
+  const hasSubs = Array.isArray(o.subOptions) && o.subOptions.length > 0;
+  const expanded = hasSubs && (o._forceExpanded || expandedIds.has(o.id));
+  // Sub-option active even when collapsed — surface that the
+  // parent has a "stale" pick inside so the user can see at a glance.
+  const subActive = hasSubs && (o.subOptions || []).some((s) => s.id === value);
+  const isActive = active || (subActive && !expanded);
+  const accentColor = o.accent
+    ? `var(--gb-${o.accent === 'brand' ? 'brand-label' : `${o.accent}-fg`})`
+    : null;
+
+  const handleClick = () => {
+    if (o.disabled) return;
+    if (hasSubs) { onToggleExpand(o.id); return; }
+    onPick(o);
+  };
+
+  return (
+    <>
+      <motion.div
+        layout="position"
+        onClick={handleClick}
+        whileHover={o.disabled ? undefined : { backgroundColor: 'var(--gb-fill-soft)' }}
+        style={{
+          position: 'relative',
+          padding: '6px 8px',
+          paddingLeft: (o.accent ? 12 : 8) + depth * 14,
+          borderRadius: 'var(--gb-r-sm)',
+          fontSize: 12, fontFamily: 'var(--gb-font-sans)',
+          display: 'flex', alignItems: 'center', gap: 8,
+          cursor: o.disabled ? 'not-allowed' : 'pointer',
+          opacity: o.disabled ? 0.4 : 1,
+          color: isActive ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+          fontWeight: isActive ? 600 : 500,
+          background: isActive ? 'var(--gb-brand-tint-soft)' : 'transparent',
+        }}
+      >
+        {o.accent && (
+          <span style={{
+            position: 'absolute',
+            top: 4, bottom: 4, left: 4,
+            width: 2,
+            background: accentColor,
+            borderRadius: 1,
+            pointerEvents: 'none',
+          }} />
+        )}
+        {depth > 0 && (
+          /* Subtle dot indicator on indented children — gives the
+             tree a visual rhythm without needing borders. */
+          <span style={{
+            width: 4, height: 4, borderRadius: '50%',
+            background: 'var(--gb-text-tertiary)',
+            flexShrink: 0,
+          }} />
+        )}
+        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {o.label}
+        </span>
+        {o.trailing && (
+          <span style={{ display: 'flex', flexShrink: 0 }}>{o.trailing}</span>
+        )}
+        {hasSubs && (
+          /* Right-pointing chevron that rotates 90° on expand. */
+          <motion.span
+            animate={{ rotate: expanded ? 90 : 0 }}
+            transition={T.fast}
+            style={{ display: 'flex', color: 'var(--gb-text-muted)', flexShrink: 0 }}
+          >
+            <I.chevr size={10} />
+          </motion.span>
+        )}
+        {active && <I.check size={12} />}
+      </motion.div>
+      <AnimatePresence initial={false}>
+        {hasSubs && expanded && (
+          <motion.div
+            key="sub"
+            layout
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+            style={{ overflow: 'hidden' }}
+          >
+            {o.subOptions.map((sub) => (
+              <Row
+                key={sub.id}
+                o={sub}
+                value={value}
+                depth={depth + 1}
+                expandedIds={expandedIds}
+                onToggleExpand={onToggleExpand}
+                onPick={onPick}
+              />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
