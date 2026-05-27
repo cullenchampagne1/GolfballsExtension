@@ -766,15 +766,15 @@ function MainView({
     // 'standalone' → fresh email (file or PA)
     const replyMode = tpl.replyMode || 'standalone';
     const isReply = replyMode === 'reply';
-    const paReady = !!(flags.replyWithTemplateEnabled && flags.powerAutomateUrl);
+    // PA-ready when the user has a flow URL saved. The legacy global
+// "Reply with Template" toggle was phased out in favor of per-template
+// control (tpl.replyMode + future per-template flags).
+const paReady = !!flags.powerAutomateUrl;
 
-    let mode = 'mailto';
-    if (paReady && isReply)  mode = 'pa-reply';
-    else if (paReady)        mode = 'pa-send';
-    else if (isReply)        mode = 'reply-file';
-
-    if (mode === 'pa-send' || mode === 'pa-reply') {
-      // Fire-and-close — PA is async, flow handles delivery.
+    // When PA is configured we send through it; otherwise fall back to
+    // a mailto window. The legacy file-based reply path is removed —
+    // replyMode now just becomes a hint on the PA payload.
+    if (paReady) {
       sendMessage(tab.id, {
         action: 'sendViaPA',
         replyMode: tpl.replyMode || replyMode,
@@ -784,16 +784,6 @@ function MainView({
         paUrl: flags.powerAutomateUrl,
       });
       window.close();
-    } else if (mode === 'reply-file') {
-      const resp = await sendMessage(tab.id, {
-        action: 'replyWithTemplate',
-        templateHtml: rawBody,
-        templateSubject: subject,
-        contactEmail: resolvedTo,
-      });
-      if (resp?.fallbackToMailto) {
-        try { chrome.tabs.create({ url: buildMailto(resolvedTo, subject, plainBody), active: false }); } catch {}
-      }
     } else {
       try { chrome.tabs.create({ url: buildMailto(resolvedTo, subject, plainBody), active: false }); } catch {}
     }
@@ -818,7 +808,7 @@ function MainView({
     if (!tpl) return null;
     const replyMode = tpl?.replyMode || 'standalone';
     const isReply = replyMode === 'reply';
-    const paReady = !!(flags.replyWithTemplateEnabled && flags.powerAutomateUrl);
+    const paReady = !!flags.powerAutomateUrl;
     if (paReady && isReply)  return { icon: <I.send />,  label: 'Reply' };
     if (paReady)             return { icon: <I.send />,  label: 'Send' };
     if (isReply)             return { icon: <Ic.reply />, label: 'Reply in Outlook' };

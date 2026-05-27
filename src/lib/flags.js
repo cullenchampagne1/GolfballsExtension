@@ -23,9 +23,7 @@ export const FEATURE_DEFAULTS = {
   crmSearchEnabled:         true,
   phoneFinderEnabled:       true,
   emailTemplatesEnabled:    true,
-  replyWithTemplateEnabled: false,
   powerAutomateUrl:         '',
-  developerMode:            false,
 };
 
 /** Default keyboard shortcuts. */
@@ -145,13 +143,6 @@ export const FEATURE_FLAGS = [
     desc: 'Adds a subtle glow effect to orders based on their Signifyd score status.',
     icon: 'alert',
   },
-  {
-    key: 'developerMode',
-    name: 'Developer Mode',
-    desc: 'Enables in-page testing shortcuts on order tabs. Press UP arrow to fire all notification levels.',
-    icon: 'cog',
-    dev: true,
-  },
 ];
 
 /** Read saved flags merged over the defaults. Migrates legacy key names. */
@@ -160,13 +151,17 @@ export function loadFlags() {
     try {
       chrome.storage.local.get('featureFlags', (d) => {
         const saved = d.featureFlags || {};
-        // Migrate legacy keys written by older builds
-        if (saved.directSendEnabled !== undefined && saved.replyWithTemplateEnabled === undefined) {
-          saved.replyWithTemplateEnabled = saved.directSendEnabled;
-        }
+        // Migrate the legacy directSendUrl key written by older builds.
+        // replyWithTemplate/directSendEnabled were phased out in favor
+        // of a per-email setting and intentionally are not migrated.
         if (saved.directSendUrl && !saved.powerAutomateUrl) {
           saved.powerAutomateUrl = saved.directSendUrl;
         }
+        // Strip phased-out keys so they don't bloat storage with stale
+        // values that no code consults.
+        delete saved.replyWithTemplateEnabled;
+        delete saved.directSendEnabled;
+        delete saved.developerMode;
         resolve({ ...FEATURE_DEFAULTS, ...saved });
       });
     } catch {

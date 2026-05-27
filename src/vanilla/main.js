@@ -57,11 +57,6 @@ window.__gbContentReady = true;
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
-    if (msg.action === 'getEmployeeId') {
-      sendResponse({ employeeId: window.__gbEmployeeId || null });
-      return true;
-    }
-
     if (msg.action === 'enterPickMode') {
       enterPickMode();
       return true;
@@ -147,18 +142,8 @@ window.__gbContentReady = true;
       return true;
     }
 
-    if (msg.action === 'showMarginCalcModal') {
-      if (typeof window.__gbShowMarginCalcModal === 'function') window.__gbShowMarginCalcModal();
-      return true;
-    }
-
     if (msg.action === 'showCrmSearchModal') {
       if (typeof window.__gbShowCrmSearchModal === 'function') window.__gbShowCrmSearchModal();
-      return true;
-    }
-
-    if (msg.action === 'showCrmCreateContactModal') {
-      if (typeof window.__gbShowCrmCreateContactModal === 'function') window.__gbShowCrmCreateContactModal();
       return true;
     }
 
@@ -208,26 +193,6 @@ window.__gbContentReady = true;
       return true;
     }
 
-    if (msg.action === 'replyWithTemplate') {
-      if (typeof window.__gbExecuteReplyWithTemplate !== 'function') {
-        sendResponse({ fallbackToMailto: true });
-        return true;
-      }
-      const firstRow = document.querySelector('tr[data-gbep="1"]');
-      const link     = firstRow?.querySelector('a[href*="Page=268"][href*="MessageID="]');
-      const href     = link?.href || '';
-      const idM      = href.match(/MessageID=([^&]+)/i);
-      const guidM    = href.match(/MessageGUID=([^&]+)/i);
-      window.__gbExecuteReplyWithTemplate(
-        idM?.[1]  || '',
-        guidM?.[1] || '',
-        msg.templateHtml,
-        msg.contactEmail,
-        msg.templateSubject || ''
-      ).then(result => sendResponse(result || {})).catch(() => sendResponse({ fallbackToMailto: true }));
-      return true;
-    }
-
     if (msg.action === 'executePresetTask') {
       chrome.storage.local.get('noteTemplates', async ({ noteTemplates }) => {
         const taskTpl = (noteTemplates || []).find(t => t.id === msg.taskId);
@@ -258,22 +223,6 @@ window.__gbContentReady = true;
       return true;
     }
 
-    if (msg.action === 'showSubmitProofModal') {
-      if (typeof __gbBuildProofModal === 'function') {
-        __gbBuildProofModal({
-          logoUrl:        '',
-          orderId:        msg.orderId        || '',
-          customerId:     msg.customerId     || '',
-          salesRep:       msg.salesRep       || '',
-          itemUrl:        null,
-          liveReps:       msg.liveReps       || [],
-          liveArtists:    msg.liveArtists    || [],
-          existingProofs: msg.existingProofs || [],
-        });
-      }
-      return true;
-    }
-
     if (msg.action === 'showImagePreview') {
       if (typeof window.__gbOpenImagePreview === 'function') {
         window.__gbOpenImagePreview({
@@ -284,63 +233,6 @@ window.__gbContentReady = true;
       return true;
     }
 
-    if (msg.action === 'devFireNotification') {
-      const { type = 'info', msg: message = 'Test notification', dur = 4000 } = msg;
-      const handle = showGbNotification(message, type, dur);
-      if (type === 'loading' && handle) {
-        let pct = 0;
-        const tick = setInterval(() => {
-          pct += 10;
-          handle.setProgress(pct);
-          if (pct >= 100) {
-            clearInterval(tick);
-            handle.update('Loading complete — all good', 'success');
-            handle.dismiss(2000);
-          }
-        }, 350);
-      }
-      return true;
-    }
-
-    if (msg.action === 'devFireModal') {
-      if (msg.modal === 'calendar') {
-        openFullScreenCalendar({
-          orderID: 'TEST-1234', calendarUrl: null,
-          defaultApproval: null, defaultCommitment: null, _devMode: true
-        });
-      }
-      if (msg.modal === 'image-viewer') {
-        if (typeof __gbDevOpenImageModal === 'function') __gbDevOpenImageModal();
-      }
-      if (msg.modal === 'proof-modal') {
-        if (typeof window.__gbDevOpenProofModal === 'function') window.__gbDevOpenProofModal();
-      }
-      if (msg.modal === 'email-preview') {
-        if (typeof window.__gbOpenEmailPreview === 'function') {
-          window.__gbOpenEmailPreview({
-            messageId:       'DEV-MSG-001',
-            messageGuid:     'dev-guid-0000',
-            _devMode:        true,
-            _devIsCasePage:  !!msg.isCasePage,
-            meta: {
-              from:    'orders@golfballs.com',
-              to:      'customer@example.com',
-              subject: '[DEV] Test Order Confirmation — #TEST-1234',
-              date:    new Date().toLocaleString(),
-            },
-          });
-        }
-      }
-      if (msg.modal === 'text-preview') { // <-- ADDED THIS FOR DEV TESTING
-        if (typeof window.__gbOpenTextPreview === 'function') {
-            window.__gbOpenTextPreview('DEV-CHAT-001', false, {
-                subject: '[DEV] Test Chat Transcript',
-                date: new Date().toLocaleString()
-            });
-        }
-      }
-      return true;
-    }
   });
 
 // ── Initial scans + DOM mutation observer ───────────────────────────────────
@@ -350,7 +242,7 @@ window.__gbContentReady = true;
 
   // Load feature flags then conditionally add the copy button and email preview
   chrome.storage.local.get('featureFlags', (data) => {
-    window.__gbFeatureFlags = { copyIdsEnabled: true, emailPreviewEnabled: true, imagePreviewEnabled: true, developerMode: false, calendarEnabled: true, watchListEnabled: true, autoPushEnabled: true, signifydGlowEnabled: true, ...(data.featureFlags || {}) };
+    window.__gbFeatureFlags = { copyIdsEnabled: true, emailPreviewEnabled: true, imagePreviewEnabled: true, calendarEnabled: true, watchListEnabled: true, autoPushEnabled: true, signifydGlowEnabled: true, ...(data.featureFlags || {}) };
     if (window.__gbFeatureFlags.copyIdsEnabled)      __gbAddCopyIdsButton();
     if (window.__gbFeatureFlags.emailPreviewEnabled) {
         if (window.__gbEmailPreviewScan) __gbEmailPreviewScan();

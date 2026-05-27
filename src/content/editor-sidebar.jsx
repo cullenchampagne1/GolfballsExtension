@@ -827,7 +827,6 @@ function mount() {
   host.__gbSidebarMounted = true;
   ensureTheme();
   createRoot(host).render(<TemplateSidebar />);
-  window.__gbReactSidebar = true;
 }
 
 if (document.readyState === 'loading') {

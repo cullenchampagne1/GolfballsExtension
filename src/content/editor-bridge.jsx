@@ -350,7 +350,6 @@ window.openSettings     = openSettings;
 window.closeSettings    = closeSettings;
 window.openCaseTplEditor = openCaseTplEditor;
 
-window.__gbSaveTemplate = applyTemplatePatch;
 window.__gbSaveNote     = applyNotePatch;
 window.__gbResolveVars  = resolveVarsLive;
 window.__gbCurrentTemplate = () => templates.find((t) => t.id === currentId) || null;
