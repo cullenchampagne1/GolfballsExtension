@@ -517,7 +517,12 @@ export function ActionsShelf({
         position: 'fixed',
         bottom: bottomOffset,
         right: variant === 'tab' ? 0 : rightOffset,
-        zIndex: 9000,
+        // Shelf must sit ABOVE FloatingPanel modal backdrops (999990) and
+        // the modal cards themselves (999999) so per-modal quick actions
+        // (Complete / Push / etc.) stay accessible while a modal is open.
+        // Still BELOW ToastHost (2147483600) so a toast can layer over
+        // the shelf if both fire at once.
+        zIndex: 2147483500,
         fontFamily: 'var(--gb-font-sans)',
       }}
     >
