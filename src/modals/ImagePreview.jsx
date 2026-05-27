@@ -160,6 +160,11 @@ export function ImagePreview({
   const [eyedropping, setEyedropping] = useState(false);
   const [pendingPick, setPendingPick] = useState(null);
   const [editedDataUrl, setEditedDataUrl] = useState(null);
+  // Filename to use for Download / snapshotName when the displayed image
+  // is an in-memory replacement (dropped file or pasted dataUrl). Null
+  // when we're still on the original `url` prop — the stem is derived
+  // from the URL in that case.
+  const [replacedName, setReplacedName] = useState(null);
   const [colorSwaps, setColorSwaps] = useState([]);
   // Live preview of the pending swap — replaces displayUrl while the
   // popover is open so the user can dial in tolerance / color visually
@@ -331,6 +336,9 @@ export function ImagePreview({
     const reader = new FileReader();
     reader.onload = () => {
       replaceImage(String(reader.result));
+      // Track the dropped filename so subsequent Download / mockup
+      // snapshots are saved under the new name, not the original URL's.
+      setReplacedName(file.name);
       toast?.success?.(`Replaced with ${file.name}`);
     };
     reader.onerror = () => toast?.error?.('Could not read dropped file');
@@ -348,6 +356,7 @@ export function ImagePreview({
     setOriginalDecalDataUrl(null);
     setView('2d');
     setEditedDataUrl(null);
+    setReplacedName(null);
     setColorSwaps([]);
     setEyedropping(false);
     setPendingPick(null);
@@ -729,6 +738,14 @@ export function ImagePreview({
   }
 
   const onCopy = async () => {
+    // Once the image has been REPLACED (drop, paste of a different file)
+    // there's no longer a public URL that reflects what's on screen —
+    // copying effectiveUrl would silently put the original URL on the
+    // clipboard. Surface a clear toast instead so the user knows why.
+    if (replacedName && !pastedUrl) {
+      toast?.info?.('Local image — no public URL to copy', { duration: 2400 });
+      return;
+    }
     try {
       await navigator.clipboard.writeText(effectiveUrl);
       setCopied(true);
@@ -748,8 +765,12 @@ export function ImagePreview({
   const onDownload = () => {
     const a = document.createElement('a');
     a.href = displayUrl;
-    // If we're shipping the edited dataURL, give it a descriptive name.
-    if (editedDataUrl) {
+    // Filename priority: dropped-file basename > original URL stem
+    // (with `-edited` suffix when we're shipping the edited bytes) >
+    // timestamped fallback.
+    if (replacedName) {
+      a.download = replacedName;
+    } else if (editedDataUrl) {
       const stem = (() => {
         try {
           const last = effectiveUrl.split('/').pop() || '';
@@ -794,11 +815,14 @@ export function ImagePreview({
      - Copy   → blob → clipboard.write([{ 'image/png': blob }])
      - Download → anchor click with download attribute */
   const snapshotName = () => {
-    // Best-effort filename: <stem>-3d.png from the source URL, or
-    // a timestamped fallback for blob/data sources.
+    // Best-effort filename. Priority: dropped-file basename (so users
+    // who replaced the image see it reflected) > source URL stem >
+    // timestamped fallback for blob/data sources with no useful name.
     const stem = (() => {
       try {
-        const last = effectiveUrl.split('/').pop() || '';
+        const source = replacedName || effectiveUrl;
+        if (!source) return '';
+        const last = source.split('/').pop() || '';
         const base = last.split('?')[0].split('#')[0];
         const dot = base.lastIndexOf('.');
         return dot > 0 ? base.slice(0, dot) : base;
