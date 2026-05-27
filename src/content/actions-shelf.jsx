@@ -5,6 +5,7 @@ import { ToastHost } from '../ui/components/ToastHost.jsx';
 import { ActionsShelf } from '../ui/components/ActionsShelf.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { I } from '../ui/index.js';
+import { loadDevSettings, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    actions-shelf.jsx — the persistent smart-actions shelf overlay.
@@ -382,23 +383,85 @@ if (!window.__gbActionsShelfLoaded) {
     _syncTimer = setTimeout(syncContext, 30);
   };
 
-  /* Always-available actions — registered once at init, never
-     unregistered. Surface on every page so the rep can reach the
-     image-preview drop zone (paste a URL, drag an image, or punch
-     through to Submit Proof) from anywhere they're working. */
-  actionRegistry.register({
-    id: 'gb-open-image-viewer',
-    label: 'Open Image Viewer',
-    icon: <I.eye size={13} />,
-    hint: 'Drag, paste, or extract — then Submit Proof',
-    handler: () => {
-      if (typeof window.__gbOpenImagePreview === 'function') {
-        window.__gbOpenImagePreview();   // no url → drop-zone state
-      } else {
-        window.__gbToast?.error?.('Image viewer not loaded on this page', { duration: 2400 });
-      }
+  /* Always-available actions — surface on every page so the rep
+     can reach these modals from anywhere they're working. Each one
+     is gated on a dev setting (default ON) so the shelf can be
+     trimmed without recompiling. We hold the unsub fn from
+     actionRegistry.register and re-run applyAlwaysActions whenever
+     devSettings changes in chrome.storage. */
+  const ALWAYS_ACTIONS = [
+    {
+      key: 'actionsShelf.showImageViewer',
+      def: {
+        id: 'gb-open-image-viewer',
+        label: 'Open Image Viewer',
+        icon: <I.eye size={13} />,
+        hint: 'Drag, paste, or extract — then Submit Proof',
+        handler: () => {
+          if (typeof window.__gbOpenImagePreview === 'function') {
+            window.__gbOpenImagePreview();   // no url → drop-zone state
+          } else {
+            window.__gbToast?.error?.('Image viewer not loaded on this page', { duration: 2400 });
+          }
+        },
+      },
     },
-  });
+    {
+      key: 'actionsShelf.showOpenContacts',
+      def: {
+        id: 'gb-open-contacts',
+        label: 'Open Contacts',
+        icon: <I.search size={13} />,
+        hint: 'CRM Search — name, email, account, phone',
+        handler: () => {
+          if (typeof window.__gbShowCrmSearchModal === 'function') {
+            window.__gbShowCrmSearchModal();
+          } else {
+            window.__gbToast?.error?.('CRM Search not loaded on this page', { duration: 2400 });
+          }
+        },
+      },
+    },
+    {
+      key: 'actionsShelf.showOpenTasks',
+      def: {
+        id: 'gb-open-tasks',
+        label: 'Open Tasks',
+        icon: <I.check size={13} />,
+        hint: 'My Tasks — review, complete, follow up',
+        handler: () => {
+          if (typeof window.__gbShowTaskListModal === 'function') {
+            window.__gbShowTaskListModal();
+          } else {
+            window.__gbToast?.error?.('Task list not loaded on this page', { duration: 2400 });
+          }
+        },
+      },
+    },
+  ];
+  const _alwaysUnsubs = new Map(); // key → unsub fn
+  function applyAlwaysActions(devSettings) {
+    for (const entry of ALWAYS_ACTIONS) {
+      // `true` is the default; only an explicit `false` hides the action.
+      const enabled = devSettings?.[entry.key] !== false;
+      const existing = _alwaysUnsubs.get(entry.key);
+      if (enabled && !existing) {
+        _alwaysUnsubs.set(entry.key, actionRegistry.register(entry.def));
+      } else if (!enabled && existing) {
+        existing();
+        _alwaysUnsubs.delete(entry.key);
+      }
+    }
+  }
+  // Initial registration — read settings asynchronously, then react
+  // to any in-session changes via storage.onChanged.
+  loadDevSettings().then(applyAlwaysActions);
+  if (chrome?.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local' || !changes[DEV_STORAGE_KEY]) return;
+      applyAlwaysActions(changes[DEV_STORAGE_KEY].newValue || {});
+    });
+  }
 
   syncContext();
   window.addEventListener('popstate', queueSync);

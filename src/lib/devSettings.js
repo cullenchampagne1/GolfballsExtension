@@ -262,6 +262,32 @@ export const DEV_SETTINGS = [
     type:    'bool',
     default: false,
   },
+
+  /* ── Actions-shelf always-available action toggles ────────────
+     Hide individual always-on actions from the quick-actions shelf
+     without recompiling. Useful when a rep wants a leaner shelf or
+     hasn't wired the destination modal up yet. All default ON. */
+  {
+    key:     'actionsShelf.showImageViewer',
+    label:   'Actions shelf: show Open Image Viewer',
+    desc:    'Surface the Open Image Viewer entry in the always-available section of the quick-actions shelf.',
+    type:    'bool',
+    default: true,
+  },
+  {
+    key:     'actionsShelf.showOpenContacts',
+    label:   'Actions shelf: show Open Contacts',
+    desc:    'Surface the Open Contacts (CRM Search) entry in the always-available section of the quick-actions shelf.',
+    type:    'bool',
+    default: true,
+  },
+  {
+    key:     'actionsShelf.showOpenTasks',
+    label:   'Actions shelf: show Open Tasks',
+    desc:    'Surface the Open Tasks (My Tasks) entry in the always-available section of the quick-actions shelf.',
+    type:    'bool',
+    default: true,
+  },
 ];
 
 export const STORAGE_KEY = 'devSettings';
