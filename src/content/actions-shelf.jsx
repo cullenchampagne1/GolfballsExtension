@@ -349,6 +349,24 @@ if (!window.__gbActionsShelfLoaded) {
     _syncTimer = setTimeout(syncContext, 30);
   };
 
+  /* Always-available actions — registered once at init, never
+     unregistered. Surface on every page so the rep can reach the
+     image-preview drop zone (paste a URL, drag an image, or punch
+     through to Submit Proof) from anywhere they're working. */
+  actionRegistry.register({
+    id: 'gb-open-image-viewer',
+    label: 'Open Image Viewer',
+    icon: <I.eye size={13} />,
+    hint: 'Drag, paste, or extract — then Submit Proof',
+    handler: () => {
+      if (typeof window.__gbOpenImagePreview === 'function') {
+        window.__gbOpenImagePreview();   // no url → drop-zone state
+      } else {
+        window.__gbToast?.error?.('Image viewer not loaded on this page', { duration: 2400 });
+      }
+    },
+  });
+
   syncContext();
   window.addEventListener('popstate', queueSync);
 
