@@ -106,6 +106,7 @@ export function CRMSearch({ onClosed, bindClose }) {
   // selection — the manager reads it and drives execution + UI from
   // there. Storage of the campaign list lives in the manager, not here.
   const [lastIdx, setLastIdx] = useState(null);   // shift-click anchor
+  const [activeIdx, setActiveIdx] = useState(-1); // keyboard-focused row; -1 = none
   const [sortKey, setSortKey] = useState('lastOrderDate_dt');
   const [sortDir, setSortDir] = useState('desc');
 
@@ -351,6 +352,13 @@ export function CRMSearch({ onClosed, bindClose }) {
     ? (indexLoaded ? 'ready' : 'loading')
     : status;
 
+  /* Keep activeIdx in range. When new results arrive, drop the
+     keyboard-highlight rather than carrying a stale index that points
+     past the end (or into a different row than the user expected). */
+  useEffect(() => {
+    setActiveIdx((i) => (i >= displayedRows.length ? -1 : i));
+  }, [displayedRows.length]);
+
   /* User-facing actions over the indexed store. */
   const [indexingAll, setIndexingAll] = useState(false);
   const onIndexThese = useCallback(async () => {
@@ -548,7 +556,42 @@ export function CRMSearch({ onClosed, bindClose }) {
      memory in case they re-search the same term. */
   const onQueryChange = (v) => {
     setQuery(v);
+    setActiveIdx(-1);
     if (v === '' && mode === 'server') setMode('indexed');
+  };
+  /* Keyboard nav inside the search input:
+     - Tab / Shift+Tab cycles a highlight through the visible rows
+       (we preventDefault so focus stays in the input).
+     - Enter on a highlighted row opens that contact in a new tab;
+       otherwise it falls back to the existing "run search" behaviour. */
+  const onSearchKeyDown = (e) => {
+    const rows = displayedRows;
+    if (e.key === 'Tab') {
+      if (rows.length === 0) return;
+      e.preventDefault();
+      setActiveIdx((i) => {
+        if (e.shiftKey) return i <= 0 ? rows.length - 1 : i - 1;
+        return i < 0 ? 0 : (i + 1) % rows.length;
+      });
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (activeIdx >= 0 && rows[activeIdx]) {
+        const url = contactUrl(rows[activeIdx].id);
+        if (url) {
+          try { window.open(url, '_blank', 'noopener,noreferrer'); }
+          catch { window.location.href = url; }
+          return;
+        }
+      }
+      submitSearch();
+      return;
+    }
+    if (e.key === 'Escape' && activeIdx >= 0) {
+      e.preventDefault();
+      setActiveIdx(-1);
+    }
   };
 
   return (
@@ -584,7 +627,7 @@ export function CRMSearch({ onClosed, bindClose }) {
           nativeRef={searchInputRef}
           value={query}
           onChange={onQueryChange}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSearch(); } }}
+          onKeyDown={onSearchKeyDown}
           placeholder={mode === 'indexed' ? 'Filter indexed contacts — Enter to search server' : 'Search by name, email, account, or phone…'}
           leading={<I.search size={12} />}
           style={{ flex: 1 }}
@@ -816,6 +859,7 @@ export function CRMSearch({ onClosed, bindClose }) {
           query={query}
           total={mode === 'indexed' ? indexed.length : total}
           selected={selected}
+          activeIdx={activeIdx}
           allChecked={allVisibleSelected}
           onToggle={toggleSel}
           onToggleAll={toggleAll}
@@ -857,7 +901,7 @@ export function CRMSearch({ onClosed, bindClose }) {
    keep these in lock-step. */
 const COLS = '30px 1.3fr 1.1fr 80px 1.9fr 70px 0.9fr 0.9fr 110px';
 
-function ResultsTable({ rows, status, query, total, selected, allChecked, onToggle, onToggleAll, sortKey, sortDir, onSort, mode, onDeleteIndexed, onSubmitServer, loadingMore }) {
+function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, allChecked, onToggle, onToggleAll, sortKey, sortDir, onSort, mode, onDeleteIndexed, onSubmitServer, loadingMore }) {
   const Header = ({ label, k }) => (
     <SortHeader label={label} sortKey={k} activeKey={sortKey} dir={sortDir} onSort={onSort} />
   );
@@ -912,6 +956,7 @@ function ResultsTable({ rows, status, query, total, selected, allChecked, onTogg
           key={r.id}
           row={r}
           isSelected={selected.has(r.id)}
+          isActive={idx === activeIdx}
           onToggle={(e) => onToggle(r.id, idx, e?.shiftKey)}
           onDelete={mode === 'indexed' ? () => onDeleteIndexed?.(r.id) : null}
         />
@@ -934,8 +979,17 @@ function ResultsTable({ rows, status, query, total, selected, allChecked, onTogg
   );
 }
 
-function ResultRow({ row, isSelected, onToggle, onDelete }) {
+function ResultRow({ row, isSelected, isActive, onToggle, onDelete }) {
   const [hover, setHover] = useState(false);
+  const rowRef = useRef(null);
+  /* When the keyboard moves the highlight to this row, scroll it
+     into view if it isn't already. block:'nearest' keeps the page
+     stable when the row is already on-screen. */
+  useEffect(() => {
+    if (isActive && rowRef.current) {
+      try { rowRef.current.scrollIntoView({ block: 'nearest' }); } catch {}
+    }
+  }, [isActive]);
   const isContact = (row.recordType_s || '').toLowerCase() === 'contact';
   const name  = row.contactName_t || row.accountName_t || '—';
   const acct  = (isContact ? row.accountName_t : '—');
@@ -948,18 +1002,29 @@ function ResultRow({ row, isSelected, onToggle, onDelete }) {
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
     fontVariantNumeric: 'tabular-nums',
   };
+  /* Background priority:
+     - keyboard-active beats checkbox-selected (stronger tint),
+     - selected uses the soft tint as before,
+     - otherwise transparent.
+     The 2px inset boxShadow draws an inner ring on the active row
+     without changing layout (outline would overlap the row below). */
+  const rowBg = isActive
+    ? 'var(--gb-brand-tint-medium)'
+    : isSelected ? 'var(--gb-brand-tint-soft)' : 'transparent';
   return (
     <div
+      ref={rowRef}
       style={{
         position: 'relative',
         display: 'grid', gridTemplateColumns: COLS,
         padding: '10px 14px', gap: 12,
         alignItems: 'center',
-        background: isSelected ? 'var(--gb-brand-tint-soft)' : 'transparent',
+        background: rowBg,
         borderBottom: '1px solid var(--gb-border-subtle)',
+        boxShadow: isActive ? 'inset 0 0 0 2px var(--gb-brand-fg)' : 'none',
         fontSize: 12,
         cursor: 'pointer',
-        transition: 'background-color .15s',
+        transition: 'background-color .15s, box-shadow .15s',
       }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
