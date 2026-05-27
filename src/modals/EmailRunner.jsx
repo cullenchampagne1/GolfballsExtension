@@ -1,75 +1,135 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { Btn, Dropdown, Field, RangeSlider, Tag, I, Spinner } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 
 /* ───────────────────────────────────────────────────────────────
-   EmailRunner — side panel that drives a bulk email send.
+   EmailRunner — draggable bottom-anchored panel that drives a bulk
+   email send.
 
-   Mounts as a sibling of the parent modal (CRMSearch / TaskList)
-   and floats fixed to the right side of the viewport with some
-   air between it and the parent panel. Owns:
+   UX
+   --
+   The panel slides up from the bottom of the viewport (initial
+   position is centred horizontally, hugging the bottom edge with
+   24px of breathing room). A drag handle (six dots) on the header
+   lets the user reposition it anywhere on screen — same pattern as
+   the Color Swap popover in ImagePreview.
 
-     - Template picker (filters to email/account templates)
-     - Min/Max delay range slider
-     - Run button + per-contact progress + final results
+   Template picker
+   ---------------
+   Ports the popup.jsx dropdown shape: each template with variations
+   renders an inline-expanding parent row whose sub-options are
+   "(original) + every variation". Selecting:
+     - just the parent template  → random variation per contact
+     - a specific variation row  → that variation pinned for ALL contacts
+   Composite ids (`${tplId}::${varId}`) drive the selection so the
+   dropdown's active highlight + check mark land on the chosen row.
 
    Orchestration runs in background.js: we send the list of
    { url, name, id } contacts plus the chosen template and delay
-   bounds. The bg script opens each contact in an inactive tab,
-   sends resolveVars to that tab's content script, renders the
-   template, fires the email through Power Automate, closes the
-   tab, sleeps for a random delay between [min, max], and repeats.
-   Progress events come back to whichever tab opened the runner
-   via chrome.runtime.onMessage so we can light up the UI.
-
-   This is the MVP entry point for a broader campaign engine — it
-   intentionally omits scheduling, retries, A/B branching, etc.
+   bounds. Progress events come back via chrome.runtime.onMessage
+   filtered by a per-run runId so a stray older run can't bleed in.
 ─────────────────────────────────────────────────────────────── */
 
-/* Random variation pick: even-weighted draw from tpl.variations.
-   Returns null when there are none, so callers fall back to the
-   template's own subject/body. */
-const pickVariation = (tpl) => {
-  const list = Array.isArray(tpl?.variations) ? tpl.variations : [];
-  if (list.length === 0) return null;
-  return list[Math.floor(Math.random() * list.length)];
-};
-
+const PANEL_W = 340;
+const PANEL_H = 480;
 const fmtSeconds = (n) => `${n}s`;
+
+const DragHandleDots = () => (
+  <svg width="9" height="13" viewBox="0 0 9 13" fill="currentColor" aria-hidden>
+    <circle cx="2" cy="2"  r="1" />
+    <circle cx="7" cy="2"  r="1" />
+    <circle cx="2" cy="6.5" r="1" />
+    <circle cx="7" cy="6.5" r="1" />
+    <circle cx="2" cy="11" r="1" />
+    <circle cx="7" cy="11" r="1" />
+  </svg>
+);
 
 export function EmailRunner({ open, contacts, onClose }) {
   const toast = useToast();
   const [templates, setTemplates] = useState([]);
   const [selectedId, setSelectedId] = useState('');
+  const [selectedVariationId, setSelectedVariationId] = useState(null);
   const [delay, setDelay] = useState([15, 45]); // seconds
   const [status, setStatus] = useState('idle');  // 'idle' | 'running' | 'done'
   const [progress, setProgress] = useState({ current: 0, total: 0, name: '' });
   const [results, setResults] = useState([]);
   const [paUrl, setPaUrl] = useState('');
 
-  /* Pull templates once on mount. Only email-ish templates make
-     sense here — we're going to render them against a contact /
-     account page, so order-only templates would always fail to
-     resolve. Empty `type` strings are treated as email-eligible
-     because the legacy data didn't always set a type. */
+  /* Position state. Initial coords place the panel near the bottom-
+     centre of the viewport with a 24px gap from the bottom edge so
+     it reads as "popping up from the bottom". The user can drag it
+     anywhere by grabbing the header handle. Re-pinned to the bottom
+     each time the panel opens (after `open` flips true) — keeps
+     the entrance feeling consistent even if a previous session
+     left it elsewhere. */
+  const [pos, setPos] = useState(() => ({
+    left: Math.max(0, (window.innerWidth - PANEL_W) / 2),
+    top:  Math.max(0, window.innerHeight - PANEL_H - 24),
+  }));
+  useEffect(() => {
+    if (!open) return;
+    setPos({
+      left: Math.max(0, (window.innerWidth - PANEL_W) / 2),
+      top:  Math.max(0, window.innerHeight - PANEL_H - 24),
+    });
+  }, [open]);
+
+  /* Pointer-drag the panel from the header grip. Tracks the global
+     pointer until release so the cursor can leave the panel without
+     dropping the drag. Clamps to the visible viewport so the user
+     can't lose the panel off-screen. */
+  const dragRef = useRef(null);
+  const onDragStart = (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const start = { px: e.clientX, py: e.clientY, left: pos.left, top: pos.top };
+    dragRef.current = start;
+    const onMove = (ev) => {
+      const dx = ev.clientX - start.px;
+      const dy = ev.clientY - start.py;
+      const maxLeft = Math.max(0, window.innerWidth  - PANEL_W);
+      const maxTop  = Math.max(0, window.innerHeight - PANEL_H);
+      setPos({
+        left: Math.max(0, Math.min(maxLeft, start.left + dx)),
+        top:  Math.max(0, Math.min(maxTop,  start.top  + dy)),
+      });
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
+
+  /* Load templates + PA URL on open. Filter matches the popup's
+     visibleTemplates: drop disabled + case templates, keep email /
+     account / untyped (which still resolve against a contact page
+     in the background orchestrator). */
   useEffect(() => {
     if (!open) return;
     try {
       chrome.storage.local.get(['templates', 'featureFlags'], (out) => {
         const all = Array.isArray(out?.templates) ? out.templates : [];
-        const eligible = all.filter((t) => !t.type || t.type === 'email' || t.type === 'account');
+        const eligible = all.filter((t) =>
+          t.enabled !== false
+          && t.type !== 'case'
+          && (!t.type || t.type === 'email' || t.type === 'account'));
         setTemplates(eligible);
         setPaUrl(out?.featureFlags?.powerAutomateUrl || '');
       });
     } catch {}
   }, [open]);
 
-  /* Live progress / completion events from background.js. The
-     orchestrator broadcasts to all tabs because it doesn't know
-     which one initiated; we filter by a runId we generate per
-     Run click so a stray older run can't bleed in. */
+  /* Per-run id so an older blast's lingering progress events can't
+     leak into a newer run's UI. */
   const [runId, setRunId] = useState(null);
   useEffect(() => {
     if (!open) return;
@@ -86,25 +146,51 @@ export function EmailRunner({ open, contacts, onClose }) {
     return () => chrome.runtime.onMessage.removeListener(listener);
   }, [open, runId]);
 
-  /* Dropdown options. Templates with variations expose a top-level
-     option plus nested sub-options (label per variation), so the
-     user can see what's in the pool before they Run — handy when
-     they don't want to spray an off-brand variant. */
+  /* Dropdown option shape — ported from popup.jsx. Templates with
+     variations expose an inline-expanding parent + sub-options:
+     "(original)" picks the parent, each variation row pins that
+     specific variant for the whole run. */
   const dropdownOptions = useMemo(() => templates.map((t) => {
     const variations = Array.isArray(t.variations) ? t.variations : [];
+    const subOptions = variations.length > 0 ? [
+      { id: t.id, label: `${t.name || 'Untitled'} (original — random per contact)` },
+      ...variations.map((v) => ({
+        id: `${t.id}::${v.id}`,
+        label: v.label || 'Variation',
+      })),
+    ] : undefined;
     return {
       id: t.id,
-      label: t.name || t.label || '(untitled)',
+      label: t.name || 'Untitled',
       sub: variations.length ? `${variations.length} variation${variations.length === 1 ? '' : 's'}` : null,
-      subOptions: variations.length ? variations.map((v) => ({
-        id: `${t.id}::${v.id}`,
-        label: v.label || v.name || '(variant)',
-        keepOpen: true,
-      })) : null,
+      subOptions,
     };
   }), [templates]);
 
+  /* Composite id when a variation is pinned so the dropdown's active
+     row lands on the chosen sub-option. */
+  const dropdownValue = selectedVariationId
+    ? `${selectedId}::${selectedVariationId}`
+    : selectedId;
   const selectedTpl = templates.find((t) => t.id === selectedId);
+  const dropdownDisplayLabel = (() => {
+    if (!selectedTpl) return '';
+    if (!selectedVariationId) return selectedTpl.name || 'Untitled';
+    const v = (selectedTpl.variations || []).find((x) => x.id === selectedVariationId);
+    return `${selectedTpl.name || 'Untitled'} · ${v?.label || 'Variation'}`;
+  })();
+
+  const onDropdownChange = (id) => {
+    if (typeof id === 'string' && id.includes('::')) {
+      const [parentId, variationId] = id.split('::');
+      setSelectedId(parentId);
+      setSelectedVariationId(variationId);
+      return;
+    }
+    setSelectedId(String(id || ''));
+    setSelectedVariationId(null);
+  };
+
   const canRun = !!selectedTpl && contacts.length > 0 && status !== 'running';
 
   const onRun = () => {
@@ -119,6 +205,36 @@ export function EmailRunner({ open, contacts, onClose }) {
     setProgress({ current: 0, total: contacts.length, name: '' });
     setStatus('running');
 
+    /* If the user pinned a specific variation, fold its subject/body
+       INTO the template payload and clear variations — the
+       orchestrator's random-pick path then has nothing to pick from
+       and falls back to the parent fields (now the pinned ones).
+       If they picked just the parent, pass all variations through
+       and let the orchestrator random-pick per contact. */
+    let payloadTpl;
+    if (selectedVariationId) {
+      const v = (selectedTpl.variations || []).find((x) => x.id === selectedVariationId);
+      payloadTpl = {
+        id:        selectedTpl.id,
+        subject:   v?.subject || selectedTpl.subject || '',
+        body:      v?.body    || selectedTpl.body    || '',
+        vars:      selectedTpl.vars    || {},
+        toField:   selectedTpl.toField || { type: 'auto' },
+        replyMode: selectedTpl.replyMode || 'standalone',
+        variations: [],
+      };
+    } else {
+      payloadTpl = {
+        id:        selectedTpl.id,
+        subject:   selectedTpl.subject || '',
+        body:      selectedTpl.body    || '',
+        vars:      selectedTpl.vars    || {},
+        toField:   selectedTpl.toField || { type: 'auto' },
+        replyMode: selectedTpl.replyMode || 'standalone',
+        variations: Array.isArray(selectedTpl.variations) ? selectedTpl.variations : [],
+      };
+    }
+
     chrome.runtime.sendMessage({
       action: 'runEmailBlast',
       runId: id,
@@ -127,15 +243,7 @@ export function EmailRunner({ open, contacts, onClose }) {
         name: c.contactName || c.name || '',
         id:   c.contactId   || '',
       })),
-      template: {
-        id:        selectedTpl.id,
-        subject:   selectedTpl.subject || '',
-        body:      selectedTpl.body    || '',
-        vars:      selectedTpl.vars    || {},
-        toField:   selectedTpl.toField || { type: 'auto' },
-        replyMode: selectedTpl.replyMode || 'standalone',
-        variations: Array.isArray(selectedTpl.variations) ? selectedTpl.variations : [],
-      },
+      template: payloadTpl,
       delayMin: delay[0],
       delayMax: delay[1],
     });
@@ -143,6 +251,7 @@ export function EmailRunner({ open, contacts, onClose }) {
 
   const sentCount   = results.filter((r) => r.status === 'sent').length;
   const failedCount = results.filter((r) => r.status === 'error').length;
+  const variationCount = selectedTpl?.variations?.length || 0;
 
   return createPortal(
     <AnimatePresence>
@@ -151,37 +260,47 @@ export function EmailRunner({ open, contacts, onClose }) {
           key="email-runner"
           className="gb-email-runner"
           data-gb-scale="modals"
-          initial={{ x: 60, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: 60, opacity: 0, transition: { duration: 0.15 } }}
+          initial={{ y: 30, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 30, opacity: 0, transition: { duration: 0.15 } }}
           transition={{ type: 'spring', stiffness: 260, damping: 28 }}
           style={{
             position: 'fixed',
-            top: '50%',
-            right: 24,
-            transform: 'translateY(-50%)',
-            width: 340,
-            maxHeight: '80vh',
+            left: pos.left, top: pos.top,
+            width: PANEL_W,
+            maxHeight: PANEL_H,
             background: 'var(--gb-surface-modal)',
             border: '1px solid var(--gb-border-default)',
             borderRadius: 'var(--gb-r-md)',
-            boxShadow: 'var(--gb-shadow-popover)',
-            zIndex: 999998,
+            // Keep above the parent modal's FloatingPanel (z 999999)
+            // so the runner floats freely on top.
+            zIndex: 2147483400,
+            boxShadow: '0 12px 32px -8px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.06) inset',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
             fontFamily: 'var(--gb-font-sans)',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
           }}
         >
-          {/* Header */}
-          <div style={{
-            padding: '12px 14px',
-            borderBottom: '1px solid var(--gb-border-subtle)',
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: 'var(--gb-surface-1)',
-            flexShrink: 0,
-          }}>
-            <I.mail size={14} />
+          {/* Header doubles as drag handle — grab the dots to drag. */}
+          <div
+            onPointerDown={onDragStart}
+            style={{
+              padding: '10px 14px',
+              borderBottom: '1px solid var(--gb-border-subtle)',
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: 'var(--gb-surface-1)',
+              cursor: dragRef.current ? 'grabbing' : 'grab',
+              touchAction: 'none',
+              flexShrink: 0,
+            }}
+          >
+            <span style={{ color: 'var(--gb-text-muted)', display: 'flex' }}>
+              <DragHandleDots />
+            </span>
+            <I.mail size={13} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>
                 Email selected
@@ -193,6 +312,7 @@ export function EmailRunner({ open, contacts, onClose }) {
             <button
               type="button"
               onClick={onClose}
+              onPointerDown={(e) => e.stopPropagation()}
               disabled={status === 'running'}
               aria-label="Close"
               style={{
@@ -212,21 +332,26 @@ export function EmailRunner({ open, contacts, onClose }) {
             padding: '14px',
             display: 'flex', flexDirection: 'column', gap: 14,
             overflow: 'auto', flex: 1, minHeight: 0,
+            userSelect: 'auto',
+            WebkitUserSelect: 'auto',
           }}>
-            <Field label="Template" hint={templates.length ? null : 'No email templates saved yet'}>
+            <Field
+              label="Template"
+              hint={templates.length
+                ? (variationCount > 0 && !selectedVariationId
+                  ? `Random pick across ${variationCount} variation${variationCount === 1 ? '' : 's'} per contact`
+                  : null)
+                : 'No email templates saved yet'}
+            >
               <Dropdown
-                value={selectedId}
-                onChange={(v) => setSelectedId(String(v || '').split('::')[0])}
+                value={dropdownValue}
+                displayLabel={dropdownDisplayLabel}
+                onChange={onDropdownChange}
                 options={dropdownOptions}
                 placeholder={templates.length ? 'Pick a template' : 'No templates'}
                 searchable
                 disabled={status === 'running'}
               />
-              {selectedTpl?.variations?.length > 0 && (
-                <div style={{ marginTop: 6, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
-                  Random pick across {selectedTpl.variations.length} variation{selectedTpl.variations.length === 1 ? '' : 's'} per contact.
-                </div>
-              )}
             </Field>
 
             <Field label="Delay between sends" hint={`${fmtSeconds(delay[0])}–${fmtSeconds(delay[1])} (random per contact)`}>
@@ -241,7 +366,6 @@ export function EmailRunner({ open, contacts, onClose }) {
               />
             </Field>
 
-            {/* Progress strip */}
             {status !== 'idle' && (
               <div style={{
                 display: 'flex', flexDirection: 'column', gap: 8,
@@ -263,7 +387,6 @@ export function EmailRunner({ open, contacts, onClose }) {
                     {progress.name}
                   </div>
                 )}
-                {/* Bar */}
                 <div style={{
                   height: 4, borderRadius: 999,
                   background: 'var(--gb-surface-2)', overflow: 'hidden',
@@ -276,7 +399,6 @@ export function EmailRunner({ open, contacts, onClose }) {
                     style={{ height: '100%', background: 'var(--gb-brand-fg)' }}
                   />
                 </div>
-                {/* Compact result tail — last 4 outcomes */}
                 {results.length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 110, overflow: 'auto' }}>
                     {results.slice(-4).map((r, i) => (
