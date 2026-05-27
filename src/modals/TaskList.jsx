@@ -478,29 +478,16 @@ export function TaskList({ onClosed, bindClose }) {
   }, [selected, patchTaskLocal, toast]);
 
   const onRunCampaign = () => {
-    // Campaign engine isn't ported yet; surface a labeled TODO toast.
-    // The dropdown + Editor button are still functional shell pieces.
-    toast?.info?.('Campaign engine — coming later', { duration: 2400, placement: 'top-center' });
+    // Hand off to the Campaign Manager submodal which owns the picker,
+    // engine, and CRM-UI control. Until that lands, surface a TODO toast.
+    if (typeof window.__gbShowCampaignEditor === 'function') {
+      window.__gbShowCampaignEditor();
+    } else {
+      toast?.info?.('Campaign manager — coming later', { duration: 2400, placement: 'top-center' });
+    }
   };
 
-  /* Campaign UI shell — list from chrome.storage.local.campaigns. The
-     engine that runs them is intentionally deferred; selecting / running
-     surfaces a labeled TODO so the rep knows it's not silently broken. */
-  const [campaigns, setCampaigns] = useState([]);
-  const [campaignId, setCampaignId] = useState('');
   const [lastIdx, setLastIdx] = useState(null);
-  useEffect(() => {
-    try {
-      chrome.storage.local.get('campaigns', (d) => setCampaigns(d?.campaigns || []));
-      const onChanged = (changes, area) => {
-        if (area === 'local' && changes.campaigns) {
-          setCampaigns(changes.campaigns.newValue || []);
-        }
-      };
-      chrome.storage.onChanged.addListener(onChanged);
-      return () => chrome.storage.onChanged.removeListener(onChanged);
-    } catch { /* not in extension context */ }
-  }, []);
 
   // ── Subtitle ─────────────────────────────────────────────────
   const subtitle = useMock
@@ -591,32 +578,9 @@ export function TaskList({ onClosed, bindClose }) {
                 {' '}of {visibleTasks.length} task{visibleTasks.length === 1 ? '' : 's'}
               </div>
               <div style={{ flex: 1 }} />
-              {/* Campaign dropdown loads campaigns from storage. Engine
-                  is deferred — selecting + Run surface labeled TODO toasts. */}
-              <Dropdown
-                size="sm"
-                value={campaignId}
-                onChange={setCampaignId}
-                placeholder={campaigns.length ? 'Pick a campaign' : '— no campaigns yet —'}
-                options={[
-                  { id: '', label: '— pick a campaign —' },
-                  ...campaigns.map((c) => ({ id: c.id, label: c.name || 'Untitled' })),
-                ]}
-                style={{ width: 220 }}
-              />
-              <IconBtn
-                size="sm"
-                variant="ghost"
-                icon={<I.plus size={11} />}
-                tooltip="Create or edit campaigns"
-                onClick={() => {
-                  if (typeof window.__gbShowCampaignEditor === 'function') {
-                    window.__gbShowCampaignEditor();
-                  } else {
-                    toast?.info?.('Campaign editor — coming later', { duration: 2400, placement: 'top-center' });
-                  }
-                }}
-              />
+              {/* Run Campaign opens the Campaign Manager submodal which
+                  owns the picker, engine, and CRM-UI control. TaskList
+                  just hands off the current task selection. */}
               <Btn
                 size="sm"
                 variant="tinted"
