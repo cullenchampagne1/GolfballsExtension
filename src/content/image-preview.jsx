@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { mountFloating } from '../lib/mountFloating.js';
 import { ensureTheme } from '../lib/theme.js';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
@@ -38,27 +38,55 @@ if (!window.__gbImagePreviewLoaded) {
 
   const HOST_ID = '__gb-imp';
 
+  /* Stateful wrapper around <ImagePreview>. Owns the hide-pattern:
+     when the user clicks Submit Proof we fade the preview out (via
+     FloatingPanel's `visible` prop) while SubmitProof mounts on top.
+     When SubmitProof closes we either restore the preview (cancelled)
+     or close it alongside (submitted at least one proof). The
+     coordination flag rides on opts.onClosed(wasSubmitted) which the
+     submit-proof.jsx wrapper sets. */
+  function ImagePreviewHost({ opts, mountOnClosed, mountBindClose }) {
+    const [hidden, setHidden] = useState(false);
+
+    const handleLaunchProof = (image) => {
+      if (typeof window.__gbOpenSubmitProof !== 'function') return;
+      setHidden(true);
+      window.__gbOpenSubmitProof({
+        image,
+        orderId: opts.orderId,
+        customerId: opts.customerId,
+        onClosed: (wasSubmitted) => {
+          if (wasSubmitted) {
+            // ImagePreview is already at opacity 0; unmount cleanly.
+            mountOnClosed();
+          } else {
+            // User backed out without submitting — bring us back.
+            setHidden(false);
+          }
+        },
+      });
+    };
+
+    return (
+      <ImagePreview
+        url={opts.url || ''}
+        dataUrl={opts.dataUrl || ''}
+        itemLink={opts.itemLink || null}
+        visible={!hidden}
+        onClosed={mountOnClosed}
+        bindClose={mountBindClose}
+        onLaunchSubmitProof={handleLaunchProof}
+      />
+    );
+  }
+
   window.__gbOpenImagePreview = function (opts = {}) {
     mountFloating(HOST_ID, ({ onClosed, bindClose }) => (
       <ToastHost installGlobal={false}>
-        <ImagePreview
-          url={opts.url || ''}
-          dataUrl={opts.dataUrl || ''}
-          itemLink={opts.itemLink || null}
-          onClosed={onClosed}
-          bindClose={bindClose}
-          onLaunchSubmitProof={(image) => {
-            // Pass through to the submit-proof opener — that script
-            // owns its own mount and toast host so the two modals
-            // can run independently (proof can outlive preview).
-            if (typeof window.__gbOpenSubmitProof === 'function') {
-              window.__gbOpenSubmitProof({
-                image,
-                orderId: opts.orderId,
-                customerId: opts.customerId,
-              });
-            }
-          }}
+        <ImagePreviewHost
+          opts={opts}
+          mountOnClosed={onClosed}
+          mountBindClose={bindClose}
         />
       </ToastHost>
     ));

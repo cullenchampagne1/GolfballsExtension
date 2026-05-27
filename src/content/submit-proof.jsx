@@ -33,13 +33,22 @@ if (!window.__gbSubmitProofLoaded) {
   const HOST_ID = '__gb-spm';
 
   window.__gbOpenSubmitProof = function (opts = {}) {
-    mountFloating(HOST_ID, ({ onClosed, bindClose }) => (
+    // Tracks whether the proof form ever reached the "results" stage
+    // (i.e. produced at least one successful proof link). The caller's
+    // onClosed receives this flag so the ImagePreview wrapper can
+    // distinguish a cancel ("restore me") from a finish ("close us both").
+    let submittedFlag = false;
+    mountFloating(HOST_ID, ({ onClosed: mountOnClosed, bindClose }) => (
       <ToastHost installGlobal={false}>
         <SubmitProof
           image={opts.image || null}
           orderId={opts.orderId || null}
           customerId={opts.customerId || null}
-          onClosed={onClosed}
+          onSubmitted={() => { submittedFlag = true; }}
+          onClosed={() => {
+            try { opts.onClosed?.(submittedFlag); } catch {}
+            mountOnClosed();
+          }}
           bindClose={bindClose}
         />
       </ToastHost>
