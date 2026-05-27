@@ -38,4 +38,36 @@ if (!window.__gbCrmSearchModalLoaded) {
       </ToastHost>
     ));
   };
+
+  /* Configurable Ctrl+<key> (or Cmd+<key>) toggle. Same pattern as
+     margin-calc.jsx and task-list.jsx — cached config + capture-phase
+     keydown so we beat any page-script handler that might swallow the
+     chord. The legacy content/crm-search-modal.js registered this; the
+     React port lost it when the vanilla file was deleted. */
+  const state = { key: 'k', enabled: true };
+  function applyConfig({ keyboardShortcuts, featureFlags }) {
+    const raw = keyboardShortcuts?.crmSearch;
+    state.key = (raw === undefined ? 'k' : raw).toLowerCase();
+    state.enabled = featureFlags?.crmSearchEnabled !== false;
+  }
+  try {
+    chrome.storage.local.get(['keyboardShortcuts', 'featureFlags'], applyConfig);
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local') return;
+      if (changes.keyboardShortcuts || changes.featureFlags) {
+        chrome.storage.local.get(['keyboardShortcuts', 'featureFlags'], applyConfig);
+      }
+    });
+  } catch { /* not in extension context */ }
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    if (e.shiftKey || e.altKey) return;
+    if (!state.enabled || !state.key) return;
+    if (e.key.toLowerCase() !== state.key) return;
+    const tag = document.activeElement?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+    e.preventDefault();
+    e.stopPropagation();
+    window.__gbShowCrmSearchModal();
+  }, { capture: true });
 }
