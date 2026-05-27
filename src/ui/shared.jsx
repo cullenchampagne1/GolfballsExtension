@@ -180,10 +180,10 @@ export function ensureMarchingAntsStyle() {
        dashes literally march around the perimeter without browser-
        level animation hooks.
 
-       inset:0 keeps the overlay INSIDE the host so it can't be
-       clipped by a scrolling grid parent (CallLog's 168px wrap, the
-       QuickTaskMenu's 220px templates list, etc.). The host's solid
-       border is suppressed via `border-color: transparent !important`
+       inset:0 keeps the overlay INSIDE the host so it cannot be
+       clipped by a scrolling grid parent (CallLog 168px wrap, the
+       QuickTaskMenu 220px templates list, etc.). The host solid
+       border is suppressed via border-color transparent !important
        below so the dashes are the visible perimeter, not a double
        border. */
     .gb-kbd-active {
