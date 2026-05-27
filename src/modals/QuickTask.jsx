@@ -117,6 +117,21 @@ export function QuickTask({
         return;
       }
       if (e.key !== 'Tab') return;
+      /* Shift+Tab from the first focusable in the Custom task form
+         returns to the last quick-task row — same symmetry as
+         CallLog so the marching-ants visual stays consistent both
+         directions. */
+      if (e.shiftKey && customFormRef.current?.contains(e.target)) {
+        const focusables = customFormRef.current.querySelectorAll(
+          'input, textarea, select, button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusables[0] === e.target && templates.length > 0) {
+          e.preventDefault();
+          try { e.target.blur?.(); } catch {}
+          setActiveQuickIdx(templates.length - 1);
+          return;
+        }
+      }
       if (isTypingTarget(e.target)) return;
       if (templates.length === 0) return;
       if (e.shiftKey) {
