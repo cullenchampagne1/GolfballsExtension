@@ -493,6 +493,12 @@ export function CRMSearch({ onClosed, bindClose }) {
                   }
                 }}
               >Run campaign</Btn>
+              <Btn
+                size="sm"
+                variant="ghost"
+                icon={<I.mail size={11} />}
+                onClick={() => toast?.info?.('Email blast — coming later', { duration: 2400, placement: 'top-center' })}
+              >Email selected</Btn>
               <Btn size="sm" variant="ghost" icon={<I.copy size={11} />} onClick={exportSelectedCSV}>Export CSV</Btn>
             </div>
           </motion.div>
