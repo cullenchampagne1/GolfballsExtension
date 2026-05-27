@@ -178,13 +178,44 @@ async function updateTaskWith(task, overrides) {
   await fetch(`${CRM_BASE}/golfballs/crm/Admin/Task/Update.ajax?${encodeURIComponent(JSON.stringify(params))}`, { credentials: 'include' });
 }
 
+/* Complete / Reopen use the legacy tlCompleteTask / tlReopenTask payload
+   shape verbatim — `TaskId: Number(...)` (camelCase d, numeric), only the
+   subset of fields the original modal sent, and `taskStatusID` as a
+   number. The newer updateTaskWith() shape (with `TaskID`/`leadID`/
+   `caseID`) round-trips fine for push/set-date but the CRM's
+   Update.ajax silently ignored complete/reopen submits when we sent
+   `TaskID` (capital) — task changed nothing server-side. */
 async function apiCompleteTask(id) {
   const t = await fetchTaskRaw(id);
-  await updateTaskWith(t, { taskStatusID: '3' });
+  const params = {
+    TaskId:         Number(t.TaskId),
+    Subject:        t.Subject,
+    Description:    t.Description,
+    LiveDate:       t.LiveDate,
+    DueDate:        t.DueDate,
+    taskCategoryID: t.taskCategoryID,
+    taskStatusID:   3,
+    contactID:      t.contactID,
+    employeeID:     t.employeeID,
+    Priority:       t.Priority,
+  };
+  await fetch(`${CRM_BASE}/golfballs/crm/Admin/Task/Update.ajax?${encodeURIComponent(JSON.stringify(params))}`, { credentials: 'include' });
 }
 async function apiReopenTask(id) {
   const t = await fetchTaskRaw(id);
-  await updateTaskWith(t, { taskStatusID: '1' });
+  const params = {
+    TaskId:         Number(t.TaskId),
+    Subject:        t.Subject,
+    Description:    t.Description,
+    LiveDate:       t.LiveDate,
+    DueDate:        t.DueDate,
+    taskCategoryID: t.taskCategoryID,
+    taskStatusID:   1,
+    contactID:      t.contactID,
+    employeeID:     t.employeeID,
+    Priority:       t.Priority,
+  };
+  await fetch(`${CRM_BASE}/golfballs/crm/Admin/Task/Update.ajax?${encodeURIComponent(JSON.stringify(params))}`, { credentials: 'include' });
 }
 async function apiPushTaskDate(id, daysOut) {
   const t = await fetchTaskRaw(id);
@@ -1126,10 +1157,33 @@ function dateInputToApi(val) {
   return `${m}/${d}/${y}`;
 }
 
+/* Hide the native number-input spinner buttons. Injected once at first
+   QuickTaskMenu mount — the rules use ::-webkit-… and -moz-appearance so
+   both engines drop the arrows. Applied via the gb-no-spin class on the
+   PushRow input so we don't leak this into any other number field. */
+const GB_NO_SPIN_STYLE_ID = '__gb-no-spin-style';
+function ensureNoSpinStyle() {
+  if (typeof document === 'undefined' || document.getElementById(GB_NO_SPIN_STYLE_ID)) return;
+  const el = document.createElement('style');
+  el.id = GB_NO_SPIN_STYLE_ID;
+  el.textContent = `
+    .gb-no-spin::-webkit-outer-spin-button,
+    .gb-no-spin::-webkit-inner-spin-button {
+      -webkit-appearance: none !important;
+      margin: 0 !important;
+      display: none !important;
+    }
+    .gb-no-spin { -moz-appearance: textfield !important; appearance: textfield !important; }
+  `;
+  document.head.appendChild(el);
+}
+
 function QuickTaskMenu({ qt, pushDays, setPushDays, taskTpls, selectedCount, getTask, onClose, onNavigate, onAction }) {
   const ref = useRef(null);
   const dateRef = useRef(null);
   const [dateVal, setDateVal] = useState(todayInput);
+
+  useEffect(() => { ensureNoSpinStyle(); }, []);
 
   /* Click-outside dismiss. Captures on capture phase so a click on the
      same trigger that opened us doesn't immediately reopen + close in
@@ -1264,6 +1318,11 @@ function QuickTaskMenu({ qt, pushDays, setPushDays, taskTpls, selectedCount, get
         onKeyDown={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
         onFocus={(e) => e.target.select()}
+        // gb-no-spin hides the native up/down spinner buttons (the global
+        // CSS rule is injected once below in QuickTaskMenu's effect). The
+        // arrows otherwise sit on the right edge of the input and push
+        // the digits off-centre, which the user flagged as looking ugly.
+        className="gb-no-spin"
         style={{
           width: 38, height: 22, padding: '0 4px',
           background: 'var(--gb-surface-2)',
