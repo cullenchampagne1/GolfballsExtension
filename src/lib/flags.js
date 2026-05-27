@@ -23,6 +23,7 @@ export const FEATURE_DEFAULTS = {
   crmSearchEnabled:         true,
   phoneFinderEnabled:       true,
   emailTemplatesEnabled:    true,
+  powerAutomateEnabled:     false,
   powerAutomateUrl:         '',
 };
 

@@ -601,12 +601,31 @@ function PlaygroundSurface() {
   return (
     <div style={{
       width: '100%', height: '100vh',
-      ...gridBackground,
       position: 'relative',
       overflow: 'hidden',
       fontFamily: 'var(--gb-font-sans)',
       color: 'var(--gb-text-secondary)',
     }}>
+    {/* Background — sits behind everything and stays at 100% regardless
+        of the Playground slider. Pulled out of the parent's style so
+        zooming the content wrapper above doesn't compound the grid. */}
+    <div
+      aria-hidden
+      style={{
+        position: 'absolute', inset: 0,
+        pointerEvents: 'none',
+        ...gridBackground,
+      }}
+    />
+    {/* Content wrapper — everything the Playground slider scales: the
+        modal-scaling wrapper, the toolbar/DraggablePanel, sidebars,
+        action buttons, and the ActionsShelf live inside. The grid
+        background above is intentionally OUTSIDE this so zooming
+        doesn't tile-shift the graph paper. */}
+    <div
+      data-gb-scale="playground"
+      style={{ position: 'absolute', inset: 0 }}
+    >
     {/* Scaled wrapper holds the modal mount + center hint. The toolbar
         lives OUTSIDE so it stays at native chrome size — a transformed
         ancestor would scale the toolbar AND break its position:fixed
@@ -614,7 +633,6 @@ function PlaygroundSurface() {
         transformed ancestor, not the viewport). Modals INSIDE this
         wrapper inherit the scale, which is the whole point. */}
     <div
-      data-gb-scale="playground"
       style={{
         transform: `scale(${PLAYGROUND_SCALE})`,
         transformOrigin: 'top left',
@@ -916,7 +934,8 @@ function PlaygroundSurface() {
         position:fixed anchors to the viewport at native scale —
         anything inside the wrapper would be 0.74× of its style. */}
     <ActionsShelf />
-    </div>
+    </div>{/* end data-gb-scale="playground" content wrapper */}
+    </div>{/* end PlaygroundSurface root */}
   );
 }
 
