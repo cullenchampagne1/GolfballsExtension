@@ -103,10 +103,12 @@ export function Segmented({ value, onChange, options = [], size = 'md', full, st
       )}
       {options.map((o, i) => {
         const active = o.id === value;
-        /* Roving-tabindex pattern (same as a native radio group): the
-           currently-selected option is the only Tab stop in the
-           segmented; Arrow keys move within. That way Tab moves IN
-           once and OUT once instead of stopping on every option. */
+        /* Tab walks through every option; the user's keyboard
+           movement does NOT change the selection. Enter / Space
+           commits the focused option. Matches the "highlight first,
+           confirm on Enter" idiom the rep is asking for — different
+           from a pure radio-group pattern, but reads cleaner when
+           Tab is the main navigation key for the form. */
         return (
           <button
             key={o.id}
@@ -114,32 +116,12 @@ export function Segmented({ value, onChange, options = [], size = 'md', full, st
             type="button"
             role="radio"
             aria-checked={active}
-            tabIndex={active ? 0 : -1}
+            tabIndex={0}
             onClick={() => { if (!active) onChange?.(o.id); }}
             onKeyDown={(e) => {
-              if (options.length < 2) return;
-              if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+              if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
-                const next = options[(i + 1) % options.length];
-                onChange?.(next.id);
-                // Focus the newly-active button on the next paint so
-                // Tab from here continues to whatever comes after the
-                // group.
-                requestAnimationFrame(() => btnRefs.current[(i + 1) % options.length]?.focus?.());
-              } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-                e.preventDefault();
-                const prevIdx = (i - 1 + options.length) % options.length;
-                onChange?.(options[prevIdx].id);
-                requestAnimationFrame(() => btnRefs.current[prevIdx]?.focus?.());
-              } else if (e.key === 'Home') {
-                e.preventDefault();
-                onChange?.(options[0].id);
-                requestAnimationFrame(() => btnRefs.current[0]?.focus?.());
-              } else if (e.key === 'End') {
-                e.preventDefault();
-                const lastIdx = options.length - 1;
-                onChange?.(options[lastIdx].id);
-                requestAnimationFrame(() => btnRefs.current[lastIdx]?.focus?.());
+                if (!active) onChange?.(o.id);
               }
             }}
             style={{
