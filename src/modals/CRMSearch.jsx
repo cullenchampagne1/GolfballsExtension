@@ -77,7 +77,7 @@ const fmtDate = (iso) => {
 };
 const contactUrl = (id) => {
   const [type, num] = String(id || '').split('_');
-  if (type === 'contact') return `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=240&ContactID=${num}`;
+  if (type === 'contact') return `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=240&customerID=${num}`;
   if (type === 'account') return `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=267&AccountID=${num}`;
   return '';
 };
