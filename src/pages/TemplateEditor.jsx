@@ -233,6 +233,7 @@ export function TemplateEditor({ tpl, onDelete }) {
     setVariations((vs) => vs.map((v) => (v.id === id ? { ...v, ...patch } : v)));
   }
 
+
   // Load task templates (account "Auto-Create Task on Send" picker).
   useEffect(() => {
     chrome.storage.local.get('noteTemplates', ({ noteTemplates }) => {
