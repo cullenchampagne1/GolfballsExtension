@@ -288,16 +288,17 @@ export function RichTextEditor({
     if (singleLine && e.key === 'Enter') e.preventDefault();
   }
 
-  // Clicking a {{variable}} chip (name or bolt) opens its smart-options popover.
-  // We pass the chip element as the anchor so the popover can position
-  // itself against it via getBoundingClientRect.
+  // Clicking a {{variable}} chip (name or bolt) opens its smart-options
+  // popover. We pass the chip element AND the cursor position (clientX,
+  // clientY) so the caller can spawn the popover either anchored to the
+  // chip or — preferred — cursor-anchored via DraggablePopup.
   function onClickContent(e) {
     if (!onChipClick) return;
     const chip = e.target?.closest?.('.gb-rte-chip');
     if (!chip) return;
     const nameEl = chip.querySelector('.gb-rte-chip-name');
     const name   = ((nameEl || chip).textContent || '').replace(/[{}]/g, '').trim();
-    if (name) onChipClick(name, chip);
+    if (name) onChipClick(name, chip, { x: e.clientX, y: e.clientY });
   }
 
   function onInput() {

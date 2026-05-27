@@ -2096,12 +2096,22 @@ function SwapPopover({ pick, wrapRef, swapCount, onPreview, onCancel, onApply })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newColor, tolerance]);
 
+  /* Cursor anchor: pick.x/pick.y are wrap-relative coords from the
+     image click. Convert to viewport coords so DraggablePopup can
+     spawn the popup right where the user clicked the color. */
+  const wrapRect = wrapRef?.current?.getBoundingClientRect();
+  const cursor = wrapRect ? {
+    x: wrapRect.left + (pick?.x ?? 0),
+    y: wrapRect.top  + (pick?.y ?? 0),
+  } : null;
+
   /* DraggablePopup handles the chrome (drag, header icon + title +
      close X, scale-aware clamp, portal). We just supply the body. */
   return (
     <DraggablePopup
       open={true}
       onClose={onCancel}
+      cursorAnchor={cursor}
       width={226}
       maxHeight={170}
       icon={<I.eye size={12} />}

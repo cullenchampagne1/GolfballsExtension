@@ -62,7 +62,13 @@ export function BodyVar({ v, onOpenSmart, size = 'md' }) {
           the state's fg color (works with var(--...) refs, unlike `#fg+22`
           which produced invalid CSS in the original). */}
       <span
-        onClick={(e) => { e.stopPropagation(); onOpenSmart?.(v, e.currentTarget); }}
+        /* Pass clientX/Y too so the SmartPopover can spawn cursor-
+           anchored. Older callers reading the second arg still get
+           the bolt element; the third arg is the cursor pos. */
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpenSmart?.(v, e.currentTarget, { x: e.clientX, y: e.clientY });
+        }}
         style={{
           padding: s.boltPad,
           borderLeft: `1px solid ${p.bd}`,
