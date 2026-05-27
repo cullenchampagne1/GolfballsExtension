@@ -98,6 +98,27 @@ export function CRMSearch({ onClosed, bindClose }) {
   // display + pass to Solr's fq= param. Until that lands, this stays
   // null and the bar is hidden.
   const [qbFilter, setQbFilter] = useState(null);
+  // Campaign UI shell — list loaded from chrome.storage.local.campaigns.
+  // The engine (per-row execution, conditions, branch groups, etc.) is
+  // intentionally deferred; the dropdown + Run/Email buttons surface a
+  // labeled TODO toast so the rep knows it's not silently broken.
+  const [campaigns, setCampaigns] = useState([]);
+  const [campaignId, setCampaignId] = useState('');
+  const [lastIdx, setLastIdx] = useState(null);   // shift-click anchor
+  const [sortKey, setSortKey] = useState('lastOrderDate_dt');
+  const [sortDir, setSortDir] = useState('desc');
+  useEffect(() => {
+    try {
+      chrome.storage.local.get('campaigns', (d) => setCampaigns(d?.campaigns || []));
+      const onChanged = (changes, area) => {
+        if (area === 'local' && changes.campaigns) {
+          setCampaigns(changes.campaigns.newValue || []);
+        }
+      };
+      chrome.storage.onChanged.addListener(onChanged);
+      return () => chrome.storage.onChanged.removeListener(onChanged);
+    } catch { /* not in extension context */ }
+  }, []);
 
   const bindCloseRef = useRef(null);
   const handleBindClose = useCallback((fn) => {
@@ -143,7 +164,7 @@ export function CRMSearch({ onClosed, bindClose }) {
         const qStr = term
           ? (term.includes(' ') ? `"${term}"` : term)
           : '*:*';
-        let body = `${qStr}&sort=lastOrderDate_dt desc&rows=${ROWS}&qf=${encodeURIComponent(QF)}&q.op=AND&sow=false&defType=edismax`;
+        let body = `${qStr}&sort=${sortKey} ${sortDir}&rows=${ROWS}&qf=${encodeURIComponent(QF)}&q.op=AND&sow=false&defType=edismax`;
         if (qb?.solrFq) body += `&fq=${encodeURIComponent(qb.solrFq)}`;
         const res = await fetch(ENDPOINT, {
           method: 'POST',
@@ -155,7 +176,18 @@ export function CRMSearch({ onClosed, bindClose }) {
         const raw = await res.json();
         const data = JSON.parse(raw.d);
         docs = data.response?.docs || [];
+        const numFound = data.response?.numFound ?? docs.length;
         if (typeF !== 'all') docs = docs.filter((r) => (r.recordType_s || '').toLowerCase() === typeF);
+        if (gen !== searchGenRef.current) return;
+        setResults(docs);
+        setTotal(numFound);
+        setStatus('ready');
+        setSelected((sel) => {
+          const next = new Set();
+          for (const r of docs) if (sel.has(r.id)) next.add(r.id);
+          return next;
+        });
+        return;
       }
       if (gen !== searchGenRef.current) return;     // stale — newer search in flight
       setResults(docs);
@@ -205,14 +237,31 @@ export function CRMSearch({ onClosed, bindClose }) {
     }
     runSearch(query, qbFilter, typeFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [typeFilter, qbFilter]);
+  }, [typeFilter, qbFilter, sortKey, sortDir]);
 
   // ── Selection ────────────────────────────────────────────────
-  const toggleSel = (id) => setSelected((s) => {
-    const next = new Set(s);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
+  const toggleSel = (id, idx, shiftKey) => {
+    if (shiftKey && lastIdx != null && idx != null) {
+      // Shift-click range select between the previous anchor and the
+      // current row. Adds all rows in the range to the selection.
+      const [a, b] = idx < lastIdx ? [idx, lastIdx] : [lastIdx, idx];
+      setSelected((s) => {
+        const next = new Set(s);
+        for (let i = a; i <= b; i++) {
+          const r = results[i];
+          if (r) next.add(r.id);
+        }
+        return next;
+      });
+    } else {
+      setSelected((s) => {
+        const next = new Set(s);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+      });
+    }
+    if (idx != null) setLastIdx(idx);
+  };
   const allVisibleSelected = results.length > 0 && results.every((r) => selected.has(r.id));
   const toggleAll = () => setSelected((s) => {
     if (allVisibleSelected) {
@@ -314,7 +363,13 @@ export function CRMSearch({ onClosed, bindClose }) {
   const selCount = selected.size;
   const subtitle = useMock
     ? <span>Search contacts &amp; accounts · <span style={{ fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-warning-fg)', fontWeight: 700, fontSize: 10 }}>OFFLINE / MOCK</span></span>
-    : 'Search contacts & accounts · select · run campaigns';
+    : status === 'loading'
+      ? 'Searching…'
+      : status === 'ready' && results.length
+        ? (total > results.length
+            ? `${results.length} of ${total.toLocaleString()} matches — refine your query`
+            : `${results.length} result${results.length === 1 ? '' : 's'}`)
+        : 'Search contacts & accounts · select · run campaigns';
 
   return (
     <>
@@ -437,8 +492,44 @@ export function CRMSearch({ onClosed, bindClose }) {
                 {' '}of {results.length} result{results.length === 1 ? '' : 's'}
               </div>
               <div style={{ flex: 1 }} />
-              <Btn size="sm" variant="ghost" icon={<MegaphoneIcon />}>Run campaign</Btn>
-              <Btn size="sm" variant="ghost" icon={<I.mail size={11} />}>Email selected</Btn>
+              {/* Campaign dropdown + editor button. Engine logic isn't
+                  ported yet — selecting + Run surface labeled TODO toasts. */}
+              <Dropdown
+                size="sm"
+                value={campaignId}
+                onChange={setCampaignId}
+                placeholder={campaigns.length ? 'Pick a campaign' : '— no campaigns yet —'}
+                options={[
+                  { id: '', label: '— pick a campaign —' },
+                  ...campaigns.map((c) => ({ id: c.id, label: c.name || 'Untitled' })),
+                ]}
+                style={{ width: 200 }}
+              />
+              <IconBtn
+                size="sm"
+                variant="ghost"
+                icon={<I.plus size={11} />}
+                tooltip="Create or edit campaigns"
+                onClick={() => {
+                  if (typeof window.__gbShowCampaignEditor === 'function') {
+                    window.__gbShowCampaignEditor();
+                  } else {
+                    toast?.info?.('Campaign editor — coming later', { duration: 2400, placement: 'top-center' });
+                  }
+                }}
+              />
+              <Btn
+                size="sm"
+                variant="ghost"
+                icon={<MegaphoneIcon />}
+                onClick={() => toast?.info?.('Campaign engine — coming later', { duration: 2400, placement: 'top-center' })}
+              >Run campaign</Btn>
+              <Btn
+                size="sm"
+                variant="ghost"
+                icon={<I.mail size={11} />}
+                onClick={() => toast?.info?.('Email blast — coming later', { duration: 2400, placement: 'top-center' })}
+              >Email selected</Btn>
               <Btn size="sm" variant="ghost" icon={<I.copy size={11} />} onClick={exportSelectedCSV}>Export CSV</Btn>
             </div>
           </motion.div>
@@ -456,6 +547,12 @@ export function CRMSearch({ onClosed, bindClose }) {
           allChecked={allVisibleSelected}
           onToggle={toggleSel}
           onToggleAll={toggleAll}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onSort={(k) => {
+            if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+            else { setSortKey(k); setSortDir('asc'); }
+          }}
         />
       </div>
 
@@ -485,10 +582,15 @@ export function CRMSearch({ onClosed, bindClose }) {
    keep these in lock-step. */
 const COLS = '30px 1.3fr 1.1fr 80px 1.9fr 70px 0.9fr 0.9fr 110px';
 
-function ResultsTable({ rows, status, query, total, selected, allChecked, onToggle, onToggleAll }) {
+function ResultsTable({ rows, status, query, total, selected, allChecked, onToggle, onToggleAll, sortKey, sortDir, onSort }) {
+  const Header = ({ label, k }) => (
+    <SortHeader label={label} sortKey={k} activeKey={sortKey} dir={sortDir} onSort={onSort} />
+  );
   return (
     <div>
-      {/* Sticky header */}
+      {/* Sticky header — click a sortable column to sort. Sorts are
+          server-driven (Solr) so they re-run a search; debounce isn't
+          needed because the user clicks once. */}
       <div style={{
         display: 'grid', gridTemplateColumns: COLS,
         padding: '8px 14px', gap: 12,
@@ -502,14 +604,14 @@ function ResultsTable({ rows, status, query, total, selected, allChecked, onTogg
         <div>
           <Checkbox checked={allChecked} onChange={onToggleAll} />
         </div>
-        <div>Name</div>
-        <div>Account</div>
-        <div>Type</div>
+        <Header label="Name"       k="contactName_t" />
+        <Header label="Account"    k="accountName_t" />
+        <Header label="Type"       k="recordType_s" />
         <div>Email</div>
-        <div>Orders</div>
-        <div>YTD Rev</div>
-        <div>PY Rev</div>
-        <div>Last Order</div>
+        <Header label="Orders"     k="orderCount_i" />
+        <Header label="YTD Rev"    k="yearToDateRevenue_f" />
+        <Header label="PY Rev"     k="priorYearRevenue_f" />
+        <Header label="Last Order" k="lastOrderDate_dt" />
       </div>
 
       {status === 'loading' && (
@@ -520,17 +622,17 @@ function ResultsTable({ rows, status, query, total, selected, allChecked, onTogg
       )}
       {status === 'ready' && rows.length === 0 && (
         <EmptyRow>
-          {query ? <>No results for <strong style={{ color: 'var(--gb-text-secondary)' }}>“{query}”</strong>.</>
-                 : <>Enter a search term and press Enter.</>}
+          {query ? <>No results for <strong style={{ color: 'var(--gb-text-secondary)' }}>“{query}”</strong>. Try a different query or open the Query Builder.</>
+                 : <>Enter a search term and press Enter, or use Query Builder.</>}
         </EmptyRow>
       )}
 
-      {status === 'ready' && rows.map((r) => (
+      {status === 'ready' && rows.map((r, idx) => (
         <ResultRow
           key={r.id}
           row={r}
           isSelected={selected.has(r.id)}
-          onToggle={() => onToggle(r.id)}
+          onToggle={(e) => onToggle(r.id, idx, e?.shiftKey)}
         />
       ))}
     </div>
@@ -565,11 +667,11 @@ function ResultRow({ row, isSelected, onToggle }) {
       onClick={(e) => {
         // Don't toggle if the user clicked the link or checkbox itself.
         if (e.target.closest('a, button, [data-checkbox]')) return;
-        onToggle();
+        onToggle(e);
       }}
     >
       <div>
-        <Checkbox checked={isSelected} onChange={onToggle} />
+        <Checkbox checked={isSelected} onChange={(e) => onToggle(e)} />
       </div>
       {url ? (
         <a
@@ -608,13 +710,39 @@ function ResultRow({ row, isSelected, onToggle }) {
   );
 }
 
+/* Sortable column header. Click to set sort key + asc; click again to
+   flip direction. Arrow chevron indicates active state. */
+function SortHeader({ label, sortKey, activeKey, dir, onSort }) {
+  const active = activeKey === sortKey;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      style={{
+        background: 'transparent', border: 'none', padding: 0,
+        cursor: 'pointer',
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        fontSize: 'inherit', fontWeight: 'inherit', letterSpacing: 'inherit',
+        textTransform: 'inherit',
+        color: active ? 'var(--gb-text-secondary)' : 'inherit',
+        fontFamily: 'inherit',
+      }}
+    >
+      {label}
+      {active && (
+        <span style={{ fontSize: 8, lineHeight: 1 }}>{dir === 'asc' ? '▲' : '▼'}</span>
+      )}
+    </button>
+  );
+}
+
 /* Small checkbox styled to match the design's brand-tint version. */
 function Checkbox({ checked, onChange }) {
   return (
     <button
       type="button"
       data-checkbox
-      onClick={(e) => { e.stopPropagation(); onChange?.(); }}
+      onClick={(e) => { e.stopPropagation(); onChange?.(e); }}
       style={{
         width: 16, height: 16, padding: 0,
         background: checked ? 'var(--gb-brand-tint-medium)' : 'transparent',

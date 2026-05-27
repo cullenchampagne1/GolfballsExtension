@@ -329,6 +329,13 @@ export function TaskList({ onClosed, bindClose }) {
     });
     const dir = sortDir === 'asc' ? 1 : -1;
     rows = rows.slice().sort((a, b) => {
+      // Completed tasks always sink to the bottom, regardless of which
+      // column the user is sorting by — matches the legacy modal's
+      // tlGetVisible behavior. A done task buried mid-list is rarely
+      // what the rep wants to see.
+      const aDone = a.status === 'Complete';
+      const bDone = b.status === 'Complete';
+      if (aDone !== bDone) return aDone ? 1 : -1;
       if (sortBy === 'dueDate')  return dir * (a.dueDate - b.dueDate);
       if (sortBy === 'priority') return dir * (a.priority - b.priority);
       const av = (a[sortBy] || '').toLowerCase();
@@ -339,11 +346,26 @@ export function TaskList({ onClosed, bindClose }) {
   }, [tasks, query, statusFilter, priorityFilter, sortBy, sortDir]);
 
   // ── Selection ────────────────────────────────────────────────
-  const toggleSel = (id) => setSelected((s) => {
-    const next = new Set(s);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
+  const toggleSel = (id, idx, shiftKey) => {
+    if (shiftKey && lastIdx != null && idx != null) {
+      const [a, b] = idx < lastIdx ? [idx, lastIdx] : [lastIdx, idx];
+      setSelected((s) => {
+        const next = new Set(s);
+        for (let i = a; i <= b; i++) {
+          const r = visibleTasks[i];
+          if (r) next.add(r.id);
+        }
+        return next;
+      });
+    } else {
+      setSelected((s) => {
+        const next = new Set(s);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+      });
+    }
+    if (idx != null) setLastIdx(idx);
+  };
   const allVisibleSelected = visibleTasks.length > 0 && visibleTasks.every((t) => selected.has(t.id));
   const toggleAll = () => setSelected((s) => {
     if (allVisibleSelected) {
@@ -456,10 +478,29 @@ export function TaskList({ onClosed, bindClose }) {
   }, [selected, patchTaskLocal, toast]);
 
   const onRunCampaign = () => {
-    // Campaign run is similarly gated on the full campaign logic port.
-    // The toast keeps the action discoverable without lying about state.
-    toast?.info?.('Campaign logic — coming soon', { duration: 2800, placement: 'top-center' });
+    // Campaign engine isn't ported yet; surface a labeled TODO toast.
+    // The dropdown + Editor button are still functional shell pieces.
+    toast?.info?.('Campaign engine — coming later', { duration: 2400, placement: 'top-center' });
   };
+
+  /* Campaign UI shell — list from chrome.storage.local.campaigns. The
+     engine that runs them is intentionally deferred; selecting / running
+     surfaces a labeled TODO so the rep knows it's not silently broken. */
+  const [campaigns, setCampaigns] = useState([]);
+  const [campaignId, setCampaignId] = useState('');
+  const [lastIdx, setLastIdx] = useState(null);
+  useEffect(() => {
+    try {
+      chrome.storage.local.get('campaigns', (d) => setCampaigns(d?.campaigns || []));
+      const onChanged = (changes, area) => {
+        if (area === 'local' && changes.campaigns) {
+          setCampaigns(changes.campaigns.newValue || []);
+        }
+      };
+      chrome.storage.onChanged.addListener(onChanged);
+      return () => chrome.storage.onChanged.removeListener(onChanged);
+    } catch { /* not in extension context */ }
+  }, []);
 
   // ── Subtitle ─────────────────────────────────────────────────
   const subtitle = useMock
@@ -550,22 +591,31 @@ export function TaskList({ onClosed, bindClose }) {
                 {' '}of {visibleTasks.length} task{visibleTasks.length === 1 ? '' : 's'}
               </div>
               <div style={{ flex: 1 }} />
-              {/* Campaign dropdown — empty until campaign logic lands.
-                  Disabled state communicates "wired but no data yet"
-                  rather than hiding the affordance. */}
+              {/* Campaign dropdown loads campaigns from storage. Engine
+                  is deferred — selecting + Run surface labeled TODO toasts. */}
               <Dropdown
-                value=""
-                onChange={() => {}}
-                options={[{ id: '', label: '— select campaign —' }]}
-                disabled
+                size="sm"
+                value={campaignId}
+                onChange={setCampaignId}
+                placeholder={campaigns.length ? 'Pick a campaign' : '— no campaigns yet —'}
+                options={[
+                  { id: '', label: '— pick a campaign —' },
+                  ...campaigns.map((c) => ({ id: c.id, label: c.name || 'Untitled' })),
+                ]}
                 style={{ width: 220 }}
               />
               <IconBtn
                 size="sm"
                 variant="ghost"
                 icon={<I.plus size={11} />}
-                tooltip="Create or edit campaigns (coming soon)"
-                onClick={() => toast?.info?.('Campaign editor — coming soon', { duration: 2200, placement: 'top-center' })}
+                tooltip="Create or edit campaigns"
+                onClick={() => {
+                  if (typeof window.__gbShowCampaignEditor === 'function') {
+                    window.__gbShowCampaignEditor();
+                  } else {
+                    toast?.info?.('Campaign editor — coming later', { duration: 2400, placement: 'top-center' });
+                  }
+                }}
               />
               <Btn
                 size="sm"
@@ -700,13 +750,13 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
         </EmptyRow>
       )}
 
-      {status === 'ready' && rows.map((t) => (
+      {status === 'ready' && rows.map((t, idx) => (
         <TaskRow
           key={t.id}
           task={t}
           isSelected={selected.has(t.id)}
           isBusy={busyRows?.has(t.id) || false}
-          onToggle={() => onToggle(t.id)}
+          onToggle={(e) => onToggle(t.id, idx, e?.shiftKey)}
           onQuickMenu={onQuickMenu}
         />
       ))}
@@ -759,11 +809,36 @@ function TaskRow({ task, isSelected, isBusy, onToggle, onQuickMenu }) {
       }}
       onClick={(e) => {
         if (e.target.closest('a, button, [data-checkbox]')) return;
-        onToggle();
+        onToggle(e);
       }}
     >
-      <div>
-        <Checkbox checked={isSelected} onChange={onToggle} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Checkbox checked={isSelected} onChange={(e) => onToggle(e)} />
+        {/* Tiny status dot — red for overdue, amber for due today.
+            Only shown on incomplete tasks; the row's date column is
+            also color-coded but the dot is a faster visual scan. */}
+        {overdue && (
+          <span
+            title="Overdue"
+            style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: 'var(--gb-error)',
+              boxShadow: '0 0 4px color-mix(in srgb, var(--gb-error) 60%, transparent)',
+              flexShrink: 0,
+            }}
+          />
+        )}
+        {!overdue && dueToday && (
+          <span
+            title="Due today"
+            style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: 'var(--gb-warning)',
+              boxShadow: '0 0 4px color-mix(in srgb, var(--gb-warning) 60%, transparent)',
+              flexShrink: 0,
+            }}
+          />
+        )}
       </div>
       {task.accountUrl ? (
         <a
@@ -876,7 +951,7 @@ function Checkbox({ checked, onChange }) {
     <button
       type="button"
       data-checkbox
-      onClick={(e) => { e.stopPropagation(); onChange?.(); }}
+      onClick={(e) => { e.stopPropagation(); onChange?.(e); }}
       style={{
         width: 16, height: 16, padding: 0,
         background: checked ? 'var(--gb-brand-tint-medium)' : 'transparent',
