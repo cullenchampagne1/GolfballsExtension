@@ -48,6 +48,7 @@ export { Callout } from './components/Callout.jsx';
 export { ModalShell } from './components/ModalShell.jsx';
 export { CompactModal } from './components/CompactModal.jsx';
 export { FloatingPanel } from './components/FloatingPanel.jsx';
+export { DraggablePopup } from './components/DraggablePopup.jsx';
 export { Throwable } from './components/Throwable.jsx';
 export { ModalHeader } from './components/ModalHeader.jsx';
 export { ModalFooter } from './components/ModalFooter.jsx';

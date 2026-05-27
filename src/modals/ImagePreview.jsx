@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   FloatingPanel, ModalHeader, IconBtn, Btn, Callout, Spinner,
-  I, T, Slider, Input,
+  I, T, Slider, Input, DraggablePopup,
 } from '../ui/index.js';
 import { ColorPickerPopover as DSColorPickerPopover } from '../ui/components/ColorPicker.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
@@ -2082,51 +2082,6 @@ function SwapPopover({ pick, wrapRef, swapCount, onPreview, onCancel, onApply })
   const newSwatchRef = useRef(null);
   React.useEffect(() => { setNewColor(rgbToHex(pick.color)); }, [pick.color]);
 
-  // Popover position is FIXED viewport coords and rendered via a
-  // portal to document.body, so it can be dragged anywhere on screen
-  // — outside the image preview, outside the modal, anywhere.
-  // Initial anchor is the click point converted to viewport coords.
-  const POPOVER_W = 226;
-  const POPOVER_H = 140;
-  const [pos, setPos] = React.useState(() => {
-    const wrap = wrapRef.current;
-    const r = wrap?.getBoundingClientRect();
-    const cx = (r?.left ?? 0) + pick.x + 12;
-    const cy = (r?.top  ?? 0) + pick.y + 12;
-    return { left: cx, top: cy };
-  });
-  const dragRef = useRef(null);
-  const onDragStart = (e) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const start = {
-      px: e.clientX, py: e.clientY,
-      left: pos.left, top: pos.top,
-    };
-    dragRef.current = start;
-    const onMove = (ev) => {
-      const dx = ev.clientX - start.px;
-      const dy = ev.clientY - start.py;
-      // Clamp to viewport only — popover can leave the modal/preview.
-      const maxLeft = Math.max(0, window.innerWidth  - POPOVER_W);
-      const maxTop  = Math.max(0, window.innerHeight - POPOVER_H);
-      setPos({
-        left: Math.max(0, Math.min(maxLeft, start.left + dx)),
-        top:  Math.max(0, Math.min(maxTop,  start.top  + dy)),
-      });
-    };
-    const onUp = () => {
-      dragRef.current = null;
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
-  };
-
   const pickedHex = rgbToHex(pick.color);
   const toRgb = hexToRgb(newColor);
 
@@ -2141,132 +2096,90 @@ function SwapPopover({ pick, wrapRef, swapCount, onPreview, onCancel, onApply })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newColor, tolerance]);
 
-  return createPortal(
-    <motion.div
-      className="gb-imp-portal"
-      data-gb-scale="popovers"
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.14, ease: [0.4, 0, 0.2, 1] }}
-      style={{
-        position: 'fixed',
-        left: pos.left, top: pos.top,
-        width: POPOVER_W,
-        // Stay BELOW the DS ColorPickerPopover (z 2147483500) so when
-        // the user opens it from our "new color" swatch, it floats on
-        // top of us instead of behind.
-        zIndex: 2147483400,
-        padding: 10,
-        background: 'var(--gb-surface-modal)',
-        border: '1px solid var(--gb-border-default)',
-        borderRadius: 'var(--gb-r-md)',
-        boxShadow: '0 8px 24px -8px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.06) inset',
-        display: 'flex', flexDirection: 'column', gap: 9,
-        fontFamily: 'var(--gb-font-sans)',
-        // Portaled into body, so the modal's userSelect:none doesn't
-        // reach us — apply our own. Drag-to-reposition would otherwise
-        // paint text-selection ranges across the popover labels.
-        userSelect: 'none',
-        WebkitUserSelect: 'none',
-      }}
+  /* DraggablePopup handles the chrome (drag, header icon + title +
+     close X, scale-aware clamp, portal). We just supply the body. */
+  return (
+    <DraggablePopup
+      open={true}
+      onClose={onCancel}
+      width={226}
+      maxHeight={170}
+      icon={<I.eye size={12} />}
+      title={swapCount > 0 ? `Swap color · #${swapCount + 1}` : 'Swap color'}
+      enterFrom="bottom"
+      /* Style override gives the body a compact 10px padding the
+         caller-friendly default doesn't supply. */
+      style={{}}
     >
-      {/* Drag handle — header row doubles as the grip. cursor:move
-          on the row, but the buttons inside (color swatch button)
-          override to pointer so they remain clickable. */}
-      <div
-        data-viewer-ui="true"
-        onPointerDown={onDragStart}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          fontSize: 9.5, fontWeight: 700, letterSpacing: 0.5,
-          textTransform: 'uppercase', color: 'var(--gb-text-muted)',
-          cursor: 'grab',
-          userSelect: 'none',
-          touchAction: 'none',
-          marginBottom: -2,
-        }}
-      >
-        <DragHandleDots />
-        <span>Swap color {swapCount > 0 ? `· #${swapCount + 1}` : ''}</span>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div title="Picked color" style={{
-          width: 26, height: 26, borderRadius: 'var(--gb-r-sm)', background: pickedHex,
-          border: '1px solid var(--gb-border-default)',
-        }} />
-        <I.chevr size={11} style={{ color: 'var(--gb-text-tertiary)' }} />
-        <button
-          ref={newSwatchRef}
-          type="button"
-          onClick={() => setPickerOpen((v) => !v)}
-          style={{
-            width: 26, height: 26, padding: 0, cursor: 'pointer',
-            background: newColor,
+      <div style={{
+        padding: 10,
+        display: 'flex', flexDirection: 'column', gap: 9,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div title="Picked color" style={{
+            width: 26, height: 26, borderRadius: 'var(--gb-r-sm)', background: pickedHex,
             border: '1px solid var(--gb-border-default)',
-            borderRadius: 'var(--gb-r-sm)',
-          }}
-        />
-        <span style={{
-          flex: 1, textAlign: 'right',
-          fontFamily: 'var(--gb-font-mono)', fontSize: 10.5,
-          color: 'var(--gb-text-secondary)',
-          letterSpacing: 0.4,
-        }}>{newColor.toUpperCase()}</span>
-      </div>
-      <AnimatePresence>
-        {pickerOpen && (
-          <DSColorPickerPopover
-            value={newColor}
-            onChange={(hex) => setNewColor(hex)}
-            anchorRef={newSwatchRef}
-            onClose={() => setPickerOpen(false)}
-            align="left"
+          }} />
+          <I.chevr size={11} style={{ color: 'var(--gb-text-tertiary)' }} />
+          <button
+            ref={newSwatchRef}
+            type="button"
+            onClick={() => setPickerOpen((v) => !v)}
+            style={{
+              width: 26, height: 26, padding: 0, cursor: 'pointer',
+              background: newColor,
+              border: '1px solid var(--gb-border-default)',
+              borderRadius: 'var(--gb-r-sm)',
+            }}
           />
-        )}
-      </AnimatePresence>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          fontSize: 10, fontWeight: 600, color: 'var(--gb-text-muted)',
-          letterSpacing: 0.3,
-        }}>
-          <span>Tolerance</span>
+          <span style={{
+            flex: 1, textAlign: 'right',
+            fontFamily: 'var(--gb-font-mono)', fontSize: 10.5,
+            color: 'var(--gb-text-secondary)',
+            letterSpacing: 0.4,
+          }}>{newColor.toUpperCase()}</span>
         </div>
-        <Slider
-          value={tolerance}
-          min={0}
-          max={120}
-          step={1}
-          onChange={setTolerance}
-        />
+        <AnimatePresence>
+          {pickerOpen && (
+            <DSColorPickerPopover
+              value={newColor}
+              onChange={(hex) => setNewColor(hex)}
+              anchorRef={newSwatchRef}
+              onClose={() => setPickerOpen(false)}
+              align="left"
+            />
+          )}
+        </AnimatePresence>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            fontSize: 10, fontWeight: 600, color: 'var(--gb-text-muted)',
+            letterSpacing: 0.3,
+          }}>
+            <span>Tolerance</span>
+          </div>
+          <Slider
+            value={tolerance}
+            min={0}
+            max={120}
+            step={1}
+            onChange={setTolerance}
+          />
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <Btn size="sm" variant="secondary" onClick={onCancel} style={{ flex: 1 }}>Cancel</Btn>
+          <Btn
+            size="sm"
+            variant="tinted"
+            status="brand"
+            onClick={() => onApply(toRgb, tolerance)}
+            style={{ flex: 1 }}
+          >Apply</Btn>
+        </div>
       </div>
-      <div style={{ display: 'flex', gap: 6 }}>
-        <Btn size="sm" variant="secondary" onClick={onCancel} style={{ flex: 1 }}>Cancel</Btn>
-        <Btn
-          size="sm"
-          variant="tinted"
-          status="brand"
-          onClick={() => onApply(toRgb, tolerance)}
-          style={{ flex: 1 }}
-        >Apply</Btn>
-      </div>
-    </motion.div>,
-    document.body,
+    </DraggablePopup>
   );
 }
-
-/* Six-dot drag handle, standard "grip" affordance. */
-const DragHandleDots = () => (
-  <svg width="9" height="13" viewBox="0 0 9 13" fill="currentColor" aria-hidden>
-    <circle cx="2" cy="2"  r="1" />
-    <circle cx="7" cy="2"  r="1" />
-    <circle cx="2" cy="6.5" r="1" />
-    <circle cx="7" cy="6.5" r="1" />
-    <circle cx="2" cy="11" r="1" />
-    <circle cx="7" cy="11" r="1" />
-  </svg>
-);
 
 function rgbToHex({ r, g, b }) {
   const h = (v) => v.toString(16).padStart(2, '0');
