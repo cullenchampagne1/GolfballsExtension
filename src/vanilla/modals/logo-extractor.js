@@ -687,25 +687,33 @@ if (window.__gbLoaded_logoExtractor) {} else { window.__gbLoaded_logoExtractor =
     // Every fetch routes through the background service worker — content-
     // script <img> tags get blocked as mixed content on https pages when
     // the asset is http://s.customizationapps.com/..., and the CRM order
-    // pages are https-only. The bg-fetch path is also what the legacy
-    // modal used (verified against content/logo-extractor.js). The
-    // dataUrl coming back is same-origin so the modal's canvas-based
-    // eyedropper / color-swap also work CORS-clean. We pass the public
-    // `url` alongside so Copy URL / Download hand back a real link, not
-    // the base64 data URL.
+    // pages are https-only. The dataUrl coming back is same-origin so
+    // the modal's canvas-based eyedropper / color-swap work CORS-clean.
+    //
+    // Each fetch carries a 3-second cap so an unreachable CDN
+    // (ERR_CONNECTION_TIMED_OUT, mixed-content block, slow proxy) can't
+    // freeze the modal waiting for the browser's ~90s default timeout.
+    // On cap we fall through to opening the modal on just the URL — the
+    // modal's <img> can still try to display it (or surface an error).
     //
     // MIME gate: if the CDN responds with application/octet-stream or an
     // HTML error page we don't want to render those bytes as if they
-    // were an image — fall through to opening the modal on the public
-    // URL itself and let it surface a load error if needed.
+    // were an image — fall through to URL-only and let the modal
+    // surface a load error.
+    const FETCH_CAP_MS = 3000;
     const isImageDataUrl = (du) => /^data:image\//i.test(du || '');
     const openWithBgFetch = (url) => {
+      let settled = false;
+      const settle = (dataUrl) => {
+        if (settled) return;
+        settled = true;
+        const safe = isImageDataUrl(dataUrl) ? dataUrl : '';
+        window.__gbOpenImagePreview({ url, dataUrl: safe, itemLink });
+      };
+      const timer = setTimeout(() => settle(null), FETCH_CAP_MS);
       __gbLoadImageViaBackground(url,
-        (dataUrl) => {
-          const safe = isImageDataUrl(dataUrl) ? dataUrl : '';
-          window.__gbOpenImagePreview({ url, dataUrl: safe, itemLink });
-        },
-        () => window.__gbOpenImagePreview({ url, itemLink })
+        (dataUrl) => { clearTimeout(timer); settle(dataUrl); },
+        () => { clearTimeout(timer); settle(null); }
       );
     };
 
@@ -722,7 +730,7 @@ if (window.__gbLoaded_logoExtractor) {} else { window.__gbLoaded_logoExtractor =
 
     // Render.aspx case — multiple candidate hosts/casings. Probe each
     // via the background script (CORS / mixed-content immune) until
-    // one returns image bytes.
+    // one returns image bytes, with the same per-candidate cap.
     const candidates = __gbBuildAbsoluteCandidates(tokenOrPath);
     let idx = 0;
     const tryNext = () => {
@@ -731,12 +739,26 @@ if (window.__gbLoaded_logoExtractor) {} else { window.__gbLoaded_logoExtractor =
         return;
       }
       const url = candidates[idx++];
+      let resolved = false;
+      const timer = setTimeout(() => {
+        if (resolved) return;
+        resolved = true;
+        tryNext();
+      }, FETCH_CAP_MS);
       __gbLoadImageViaBackground(url,
         (dataUrl) => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(timer);
           const safe = isImageDataUrl(dataUrl) ? dataUrl : '';
           window.__gbOpenImagePreview({ url, dataUrl: safe, itemLink });
         },
-        () => tryNext()
+        () => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(timer);
+          tryNext();
+        }
       );
     };
     tryNext();
