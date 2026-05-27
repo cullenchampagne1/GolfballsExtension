@@ -734,6 +734,7 @@ export function TaskList({ onClosed, bindClose }) {
         no hide pattern (both modals stay visible at the same time). */}
     <EmailRunner
       open={emailRunnerOpen}
+      anchorHostId="__gb-tl"
       contacts={selectedContacts}
       onClose={() => setEmailRunnerOpen(false)}
     />
