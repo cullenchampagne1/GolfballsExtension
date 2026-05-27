@@ -253,8 +253,13 @@ export function TaskList({ onClosed, bindClose }) {
      wired below; TaskRow reads from the map to replace the Quick Task
      button cell with the live send state. */
   const [emailStatusByRow, setEmailStatusByRow] = useState({});
-  const [sortBy, setSortBy]       = useState('dueDate');
-  const [sortDir, setSortDir]     = useState('asc');
+  /* Multi-column sort chain. Primary entry = main sort; subsequent
+     entries are tiebreakers in order. Plain header-click replaces the
+     chain with a single entry; Shift+click appends (or toggles dir
+     if the column is already in the chain). Default: due-date ascending
+     so the soonest task floats to the top.
+     Shape: Array<{ key: string, dir: 'asc' | 'desc' }> */
+  const [sortChain, setSortChain] = useState([{ key: 'dueDate', dir: 'asc' }]);
 
   /* Quick Task menu state. `qt` is null when closed; otherwise:
      { mode: 'main'|'bulk'|'datePicker'|'templates', taskId, anchor, returnMode? }
@@ -352,36 +357,75 @@ export function TaskList({ onClosed, bindClose }) {
   // set), so we don't have the CRMSearch StrictMode double-fire risk.
   useEffect(() => { loadTasks(); }, [loadTasks]);
 
-  /* Filter + sort, memoized on the inputs the user actually changes. */
+  /* Compare a single column on two rows. dueDate uses numeric Date
+     subtraction; priority is already numeric; everything else is a
+     case-insensitive localeCompare. Pulled out so the multi-sort
+     loop reads top-to-bottom. */
+  const compareOne = (a, b, key) => {
+    if (key === 'dueDate')  return a.dueDate - b.dueDate;
+    if (key === 'priority') return a.priority - b.priority;
+    const av = (a[key] || '').toString().toLowerCase();
+    const bv = (b[key] || '').toString().toLowerCase();
+    return av.localeCompare(bv);
+  };
+
+  /* Filter + sort. Search ranking tiers float the strongest matches
+     to the top before the user's sort chain kicks in:
+       100: subject starts with the query (the "type 'ty' to see TY-
+            subject tasks first" case the user flagged)
+        60: subject contains the query
+        30: contact starts with the query
+        15: account starts with the query
+         5: any of {account, contact, subject, category} contains the
+            query (kept so weak matches still surface — they're just
+            below all the strong ones)
+     Within the same tier the multi-column sortChain orders rows; the
+     chain is also the primary sort when the query is empty. */
   const visibleTasks = useMemo(() => {
     const q = query.trim().toLowerCase();
+
+    const scoreRow = (t) => {
+      if (!q) return 0;
+      const subj = (t.subject || '').toLowerCase();
+      if (subj.startsWith(q)) return 100;
+      if (subj.includes(q))   return 60;
+      const contact = (t.contact || '').toLowerCase();
+      if (contact.startsWith(q)) return 30;
+      const account = (t.account || '').toLowerCase();
+      if (account.startsWith(q)) return 15;
+      const cat = (t.category || '').toLowerCase();
+      if (contact.includes(q) || account.includes(q) || cat.includes(q)) return 5;
+      return 0;
+    };
+
     let rows = tasks.filter((t) => {
       if (statusFilter === '1' && t.status !== 'New')      return false;
       if (statusFilter === '3' && t.status !== 'Complete') return false;
       if (priorityFilter && String(t.priority) !== priorityFilter) return false;
-      if (q) {
-        const hay = `${t.account} ${t.contact} ${t.subject} ${t.category}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
+      if (q && scoreRow(t) === 0) return false;
       return true;
     });
-    const dir = sortDir === 'asc' ? 1 : -1;
+
     rows = rows.slice().sort((a, b) => {
-      // Completed tasks always sink to the bottom, regardless of which
-      // column the user is sorting by — matches the legacy modal's
-      // tlGetVisible behavior. A done task buried mid-list is rarely
-      // what the rep wants to see.
+      // Completed tasks always sink to the bottom — matches legacy.
       const aDone = a.status === 'Complete';
       const bDone = b.status === 'Complete';
       if (aDone !== bDone) return aDone ? 1 : -1;
-      if (sortBy === 'dueDate')  return dir * (a.dueDate - b.dueDate);
-      if (sortBy === 'priority') return dir * (a.priority - b.priority);
-      const av = (a[sortBy] || '').toLowerCase();
-      const bv = (b[sortBy] || '').toLowerCase();
-      return dir * av.localeCompare(bv);
+      // Relevance score drives the primary sort whenever the user has
+      // typed something. Highest score floats up.
+      if (q) {
+        const diff = scoreRow(b) - scoreRow(a);
+        if (diff !== 0) return diff;
+      }
+      // User's sort chain (or default dueDate asc) breaks ties.
+      for (const { key, dir } of sortChain) {
+        const cmp = compareOne(a, b, key);
+        if (cmp !== 0) return dir === 'asc' ? cmp : -cmp;
+      }
+      return 0;
     });
     return rows;
-  }, [tasks, query, statusFilter, priorityFilter, sortBy, sortDir]);
+  }, [tasks, query, statusFilter, priorityFilter, sortChain]);
 
   // ── Selection ────────────────────────────────────────────────
   const toggleSel = (id, idx, shiftKey) => {
@@ -415,9 +459,28 @@ export function TaskList({ onClosed, bindClose }) {
     for (const t of visibleTasks) next.add(t.id);
     return next;
   });
-  const onSortClick = (key) => {
-    if (sortBy === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-    else { setSortBy(key); setSortDir('asc'); }
+  /* Header click handler.
+       - Plain click: collapse the chain to just this column. If it's
+         already the only entry, toggle its direction (asc ↔ desc).
+       - Shift+click: extend the chain. Toggle if the column is in it
+         already; otherwise append `asc`. Lets the user combine sorts
+         like "due soonest, then subject alphabetised". */
+  const onSortClick = (key, e) => {
+    const shift = e?.shiftKey;
+    setSortChain((cur) => {
+      if (shift) {
+        const idx = cur.findIndex((c) => c.key === key);
+        if (idx === -1) return [...cur, { key, dir: 'asc' }];
+        const next = cur.slice();
+        next[idx] = { key, dir: next[idx].dir === 'asc' ? 'desc' : 'asc' };
+        return next;
+      }
+      // Plain click: single-column sort.
+      if (cur.length === 1 && cur[0].key === key) {
+        return [{ key, dir: cur[0].dir === 'asc' ? 'desc' : 'asc' }];
+      }
+      return [{ key, dir: 'asc' }];
+    });
   };
 
   // ── Bulk actions ─────────────────────────────────────────────
@@ -708,8 +771,7 @@ export function TaskList({ onClosed, bindClose }) {
           selected={selected}
           onToggle={toggleSel}
           onToggleAll={toggleAll}
-          sortBy={sortBy}
-          sortDir={sortDir}
+          sortChain={sortChain}
           onSort={onSortClick}
           onQuickMenu={(id, anchor) => setQt({ mode: 'main', taskId: id, anchor })}
           busyRows={busyRowsRef.current}
@@ -790,7 +852,7 @@ export function TaskList({ onClosed, bindClose }) {
    Contact, Due Date, Category, Priority, Subject, Status, Action. */
 const COLS = '30px 1.3fr 1.1fr 100px 1.0fr 70px 1.5fr 90px 110px';
 
-function TasksTable({ rows, status, query, allChecked, selected, onToggle, onToggleAll, sortBy, sortDir, onSort, onQuickMenu, busyRows, emailStatusByRow = {} }) {
+function TasksTable({ rows, status, query, allChecked, selected, onToggle, onToggleAll, sortChain = [], onSort, onQuickMenu, busyRows, emailStatusByRow = {} }) {
   return (
     <div>
       {/* Sticky header — sortable. Click a label to set sort; click
@@ -809,12 +871,12 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
         <div>
           <Checkbox checked={allChecked} onChange={onToggleAll} />
         </div>
-        <SortHeader col={SORT_COLS.account}  sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
-        <SortHeader col={SORT_COLS.contact}  sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
-        <SortHeader col={SORT_COLS.dueDate}  sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
-        <SortHeader col={SORT_COLS.category} sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
-        <SortHeader col={SORT_COLS.priority} sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
-        <SortHeader col={SORT_COLS.subject}  sortBy={sortBy} sortDir={sortDir} onSort={onSort} />
+        <SortHeader col={SORT_COLS.account}  sortChain={sortChain} onSort={onSort} />
+        <SortHeader col={SORT_COLS.contact}  sortChain={sortChain} onSort={onSort} />
+        <SortHeader col={SORT_COLS.dueDate}  sortChain={sortChain} onSort={onSort} />
+        <SortHeader col={SORT_COLS.category} sortChain={sortChain} onSort={onSort} />
+        <SortHeader col={SORT_COLS.priority} sortChain={sortChain} onSort={onSort} />
+        <SortHeader col={SORT_COLS.subject}  sortChain={sortChain} onSort={onSort} />
         <div>Status</div>
         <div style={{ textAlign: 'right' }}>Action</div>
       </div>
@@ -848,25 +910,45 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
   );
 }
 
-function SortHeader({ col, sortBy, sortDir, onSort }) {
-  const active = sortBy === col.key;
+function SortHeader({ col, sortChain = [], onSort }) {
+  /* Where does this column sit in the active sort chain? -1 = not in
+     the chain. When chain length is 1 we only show the direction
+     arrow; with 2+ entries we also show a small "1"/"2"/"3" rank
+     badge so the user can see the priority order they built. */
+  const idx = sortChain.findIndex((c) => c.key === col.key);
+  const active = idx !== -1;
+  const dir = active ? sortChain[idx].dir : null;
+  const showRank = sortChain.length > 1 && active;
   return (
     <button
       type="button"
-      onClick={() => onSort(col.key)}
+      onClick={(e) => onSort(col.key, e)}
+      title={`Click to sort by ${col.label}. Shift-click to add as a secondary sort.`}
       style={{
         background: 'transparent', border: 'none', padding: 0,
         cursor: 'pointer',
         display: 'inline-flex', alignItems: 'center', gap: 4,
         fontSize: 'inherit', fontWeight: 'inherit', letterSpacing: 'inherit',
         textTransform: 'inherit',
-        color: active ? 'var(--gb-text-secondary)' : 'inherit',
+        color: active ? 'var(--gb-brand-label)' : 'inherit',
         fontFamily: 'inherit',
       }}
     >
       {col.label}
       {active && (
-        <span style={{ fontSize: 8, lineHeight: 1 }}>{sortDir === 'asc' ? '▲' : '▼'}</span>
+        <span style={{ fontSize: 8, lineHeight: 1 }}>{dir === 'asc' ? '▲' : '▼'}</span>
+      )}
+      {showRank && (
+        <span style={{
+          fontSize: 8.5, fontWeight: 800, lineHeight: 1,
+          fontFamily: 'var(--gb-font-mono)',
+          minWidth: 12, height: 12, padding: '0 3px',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          background: 'var(--gb-brand-tint-medium)',
+          color: 'var(--gb-brand-label)',
+          border: '1px solid var(--gb-brand-tint-border)',
+          borderRadius: 999,
+        }}>{idx + 1}</span>
       )}
     </button>
   );
