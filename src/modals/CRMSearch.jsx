@@ -6,6 +6,9 @@ import {
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { QueryBuilder, describeCondition, compileToSolr, compileToLabel } from './QueryBuilder.jsx';
+import {
+  indexRecords, getAllIndexed, deleteIndexed, clearIndex, searchIndexed,
+} from '../lib/crmIndex.js';
 
 /* ───────────────────────────────────────────────────────────────
    CRMSearch — React port of content/crm-search-modal.js.
@@ -105,6 +108,26 @@ export function CRMSearch({ onClosed, bindClose }) {
   const [lastIdx, setLastIdx] = useState(null);   // shift-click anchor
   const [sortKey, setSortKey] = useState('lastOrderDate_dt');
   const [sortDir, setSortDir] = useState('desc');
+
+  /* Local index of CRM rows the rep cares about. Loaded from
+     IndexedDB on mount; refreshed whenever indexRecords / delete-/
+     clearIndex mutates the store. The modal opens in "indexed" mode
+     by default — the user gets an instant typeahead over their
+     indexed clients without hitting the server, and only falls back
+     to Solr when they explicitly press Enter / Search. */
+  const [indexed, setIndexed] = useState([]);
+  const [indexLoaded, setIndexLoaded] = useState(false);
+  const [mode, setMode] = useState('indexed');   // 'indexed' | 'server'
+  useEffect(() => {
+    let alive = true;
+    getAllIndexed()
+      .then((rows) => { if (alive) { setIndexed(rows); setIndexLoaded(true); } })
+      .catch(() => { if (alive) { setIndexed([]); setIndexLoaded(true); } });
+    return () => { alive = false; };
+  }, []);
+  const refreshIndex = useCallback(async () => {
+    try { setIndexed(await getAllIndexed()); } catch { /* ignore */ }
+  }, []);
 
   const bindCloseRef = useRef(null);
   const handleBindClose = useCallback((fn) => {
@@ -216,14 +239,68 @@ export function CRMSearch({ onClosed, bindClose }) {
   // toasts on the empty CRM endpoint.
   const ranInitial = useRef(false);
   useEffect(() => {
+    // Initial mount: don't auto-fire a server search. The modal opens
+    // in `indexed` mode — the user's locally indexed contacts are shown
+    // instantly. They press Enter / Search to escalate to Solr.
     if (!ranInitial.current) {
       ranInitial.current = true;
-      runSearch('', null, 'all');
       return;
     }
+    if (mode !== 'server') return;     // typing in indexed mode shouldn't refetch
     runSearch(query, qbFilter, typeFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [typeFilter, qbFilter, sortKey, sortDir]);
+
+  /* Local typeahead over indexed records. Updates on every keystroke
+     without hitting the network — anything below a few thousand rows
+     ranks in <10ms. Empty query returns the full set sorted by most-
+     recently-indexed. */
+  const indexedResults = useMemo(() => {
+    if (mode !== 'indexed') return [];
+    return searchIndexed(indexed, query, { limit: 200 });
+  }, [indexed, query, mode]);
+
+  /* What the results table renders. In 'indexed' mode we feed the
+     indexed list through the same ResultsTable so styling matches.
+     The mode flag drives the "X indexed" vs "X results" subtitle too. */
+  const displayedRows = mode === 'indexed' ? indexedResults : results;
+  const displayedStatus = mode === 'indexed'
+    ? (indexLoaded ? 'ready' : 'loading')
+    : status;
+
+  /* User-facing actions over the indexed store. */
+  const onIndexThese = useCallback(async () => {
+    if (!results.length) {
+      toast?.warning?.('Nothing to index — run a search first', { duration: 2400 });
+      return;
+    }
+    try {
+      const { added } = await indexRecords(results);
+      await refreshIndex();
+      toast?.success?.(`Indexed ${added} row${added === 1 ? '' : 's'}`, { duration: 2400 });
+    } catch (err) {
+      toast?.error?.(`Index failed: ${err?.message || err}`);
+    }
+  }, [results, refreshIndex, toast]);
+
+  const onDeleteIndexed = useCallback(async (id) => {
+    try {
+      await deleteIndexed(id);
+      await refreshIndex();
+    } catch (err) {
+      toast?.error?.(`Couldn't remove: ${err?.message || err}`);
+    }
+  }, [refreshIndex, toast]);
+
+  const onClearIndex = useCallback(async () => {
+    try {
+      await clearIndex();
+      await refreshIndex();
+      toast?.success?.('Cleared local index', { duration: 2200 });
+    } catch (err) {
+      toast?.error?.(`Couldn't clear: ${err?.message || err}`);
+    }
+  }, [refreshIndex, toast]);
 
   // ── Selection ────────────────────────────────────────────────
   const toggleSel = (id, idx, shiftKey) => {
@@ -347,15 +424,39 @@ export function CRMSearch({ onClosed, bindClose }) {
 
   // ── Render ───────────────────────────────────────────────────
   const selCount = selected.size;
+  // Subtitle is mode-aware: in indexed mode it shows the local count
+  // ("12 indexed · type to filter") so the rep knows what they're
+  // looking at; in server mode it reverts to the Solr count.
   const subtitle = useMock
     ? <span>Search contacts &amp; accounts · <span style={{ fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-warning-fg)', fontWeight: 700, fontSize: 10 }}>OFFLINE / MOCK</span></span>
-    : status === 'loading'
-      ? 'Searching…'
-      : status === 'ready' && results.length
-        ? (total > results.length
-            ? `${results.length} of ${total.toLocaleString()} matches — refine your query`
-            : `${results.length} result${results.length === 1 ? '' : 's'}`)
-        : 'Search contacts & accounts · select · run campaigns';
+    : mode === 'indexed'
+      ? (indexed.length === 0
+          ? 'No locally-indexed contacts yet — run a search and click Index'
+          : query
+            ? `${indexedResults.length} indexed match${indexedResults.length === 1 ? '' : 'es'} for “${query}” · press Enter to search server`
+            : `${indexed.length} indexed contact${indexed.length === 1 ? '' : 's'} · type to filter or press Enter to search server`)
+      : status === 'loading'
+        ? 'Searching…'
+        : status === 'ready' && results.length
+          ? (total > results.length
+              ? `${results.length} of ${total.toLocaleString()} matches — refine your query`
+              : `${results.length} result${results.length === 1 ? '' : 's'}`)
+          : 'Search contacts & accounts · select · run campaigns';
+
+  /* Submit the current query to Solr. Used by Enter on the Input,
+     the explicit Search button, and the "Search server instead"
+     fallback shown in the indexed-list empty state. */
+  const submitSearch = () => {
+    setMode('server');
+    runSearch(query);
+  };
+  /* Clearing the query field flips back to the indexed view so the
+     user doesn't lose their typeahead list. Keeps server results in
+     memory in case they re-search the same term. */
+  const onQueryChange = (v) => {
+    setQuery(v);
+    if (v === '' && mode === 'server') setMode('indexed');
+  };
 
   return (
     <>
@@ -388,9 +489,9 @@ export function CRMSearch({ onClosed, bindClose }) {
       }}>
         <Input
           value={query}
-          onChange={setQuery}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); runSearch(query); } }}
-          placeholder="Search by name, email, account, or phone…"
+          onChange={onQueryChange}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSearch(); } }}
+          placeholder={mode === 'indexed' ? 'Filter indexed contacts — Enter to search server' : 'Search by name, email, account, or phone…'}
           leading={<I.search size={12} />}
           style={{ flex: 1 }}
         />
@@ -411,7 +512,7 @@ export function CRMSearch({ onClosed, bindClose }) {
           variant="tinted"
           status="brand"
           icon={<I.bolt size={11} />}
-          onClick={() => runSearch(query)}
+          onClick={submitSearch}
         >Search</Btn>
       </div>
 
@@ -451,6 +552,88 @@ export function CRMSearch({ onClosed, bindClose }) {
                   />
                 );
               })}
+              <div style={{ flex: 1 }} />
+              {/* Index-this-query — only meaningful in server mode with
+                  results visible. The locally-stored index gives the rep
+                  instant typeahead next time the modal opens. */}
+              {mode === 'server' && status === 'ready' && results.length > 0 && (
+                <Btn
+                  size="xs"
+                  variant="ghost"
+                  status="brand"
+                  icon={<I.bolt size={10} />}
+                  onClick={onIndexThese}
+                >Index these {results.length}</Btn>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Standalone "Index these N results" bar — shown when there's a
+          server result set without a QB filter (the in-filter button is
+          inside the filter chip bar above). Same affordance, just
+          surfaces no matter how the search was triggered. */}
+      <AnimatePresence initial={false}>
+        {mode === 'server' && status === 'ready' && results.length > 0 && !(qbFilter && qbFilter.conditions?.length > 0) && (
+          <motion.div
+            key="index-bar"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.16 }}
+            style={{ overflow: 'hidden', flexShrink: 0 }}
+          >
+            <div style={{
+              padding: '6px 14px',
+              borderBottom: '1px solid var(--gb-border-subtle)',
+              background: 'var(--gb-surface-1)',
+              display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 11,
+              color: 'var(--gb-text-muted)',
+            }}>
+              <span>Speed up future lookups for these contacts:</span>
+              <div style={{ flex: 1 }} />
+              <Btn
+                size="xs"
+                variant="ghost"
+                status="brand"
+                icon={<I.bolt size={10} />}
+                onClick={onIndexThese}
+              >Index these {results.length}</Btn>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Indexed-mode footer — clear-all utility. Hidden in server mode
+          + when the index is empty. */}
+      <AnimatePresence initial={false}>
+        {mode === 'indexed' && indexed.length > 0 && (
+          <motion.div
+            key="index-footer"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.16 }}
+            style={{ overflow: 'hidden', flexShrink: 0 }}
+          >
+            <div style={{
+              padding: '6px 14px',
+              borderBottom: '1px solid var(--gb-border-subtle)',
+              background: 'var(--gb-surface-1)',
+              display: 'flex', alignItems: 'center', gap: 8,
+              fontSize: 11,
+              color: 'var(--gb-text-muted)',
+            }}>
+              <span>Locally indexed — instant typeahead. Falls through to server on Enter.</span>
+              <div style={{ flex: 1 }} />
+              <Btn
+                size="xs"
+                variant="ghost"
+                icon={<I.trash size={10} />}
+                onClick={onClearIndex}
+              >Clear index</Btn>
             </div>
           </motion.div>
         )}
@@ -508,10 +691,10 @@ export function CRMSearch({ onClosed, bindClose }) {
       {/* Table */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
         <ResultsTable
-          rows={results}
-          status={status}
+          rows={displayedRows}
+          status={displayedStatus}
           query={query}
-          total={total}
+          total={mode === 'indexed' ? indexed.length : total}
           selected={selected}
           allChecked={allVisibleSelected}
           onToggle={toggleSel}
@@ -522,6 +705,9 @@ export function CRMSearch({ onClosed, bindClose }) {
             if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
             else { setSortKey(k); setSortDir('asc'); }
           }}
+          mode={mode}
+          onDeleteIndexed={onDeleteIndexed}
+          onSubmitServer={submitSearch}
         />
       </div>
 
@@ -551,7 +737,7 @@ export function CRMSearch({ onClosed, bindClose }) {
    keep these in lock-step. */
 const COLS = '30px 1.3fr 1.1fr 80px 1.9fr 70px 0.9fr 0.9fr 110px';
 
-function ResultsTable({ rows, status, query, total, selected, allChecked, onToggle, onToggleAll, sortKey, sortDir, onSort }) {
+function ResultsTable({ rows, status, query, total, selected, allChecked, onToggle, onToggleAll, sortKey, sortDir, onSort, mode, onDeleteIndexed, onSubmitServer }) {
   const Header = ({ label, k }) => (
     <SortHeader label={label} sortKey={k} activeKey={sortKey} dir={sortDir} onSort={onSort} />
   );
@@ -591,8 +777,13 @@ function ResultsTable({ rows, status, query, total, selected, allChecked, onTogg
       )}
       {status === 'ready' && rows.length === 0 && (
         <EmptyRow>
-          {query ? <>No results for <strong style={{ color: 'var(--gb-text-secondary)' }}>“{query}”</strong>. Try a different query or open the Query Builder.</>
-                 : <>Enter a search term and press Enter, or use Query Builder.</>}
+          {mode === 'indexed' && query
+            ? <>No indexed contacts match <strong style={{ color: 'var(--gb-text-secondary)' }}>“{query}”</strong>. <span style={{ cursor: 'pointer', color: 'var(--gb-brand-label)', textDecoration: 'underline' }} onClick={onSubmitServer}>Search server instead</span>.</>
+            : mode === 'indexed'
+              ? <>No locally-indexed contacts yet. Run a search and click <strong style={{ color: 'var(--gb-text-secondary)' }}>Index these N</strong> to add some.</>
+              : query
+                ? <>No results for <strong style={{ color: 'var(--gb-text-secondary)' }}>“{query}”</strong>. Try a different query or open the Query Builder.</>
+                : <>Enter a search term and press Enter, or use Query Builder.</>}
         </EmptyRow>
       )}
 
@@ -602,13 +793,15 @@ function ResultsTable({ rows, status, query, total, selected, allChecked, onTogg
           row={r}
           isSelected={selected.has(r.id)}
           onToggle={(e) => onToggle(r.id, idx, e?.shiftKey)}
+          onDelete={mode === 'indexed' ? () => onDeleteIndexed?.(r.id) : null}
         />
       ))}
     </div>
   );
 }
 
-function ResultRow({ row, isSelected, onToggle }) {
+function ResultRow({ row, isSelected, onToggle, onDelete }) {
+  const [hover, setHover] = useState(false);
   const isContact = (row.recordType_s || '').toLowerCase() === 'contact';
   const name  = row.contactName_t || row.accountName_t || '—';
   const acct  = (isContact ? row.accountName_t : '—');
@@ -624,6 +817,7 @@ function ResultRow({ row, isSelected, onToggle }) {
   return (
     <div
       style={{
+        position: 'relative',
         display: 'grid', gridTemplateColumns: COLS,
         padding: '10px 14px', gap: 12,
         alignItems: 'center',
@@ -633,6 +827,8 @@ function ResultRow({ row, isSelected, onToggle }) {
         cursor: 'pointer',
         transition: 'background-color .15s',
       }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       onClick={(e) => {
         // Don't toggle if the user clicked the link or checkbox itself.
         if (e.target.closest('a, button, [data-checkbox]')) return;
@@ -675,6 +871,37 @@ function ResultRow({ row, isSelected, onToggle }) {
       <div style={{ ...mono, color: 'var(--gb-text-secondary)' }}>{fmtMoney(row.yearToDateRevenue_f)}</div>
       <div style={mono}>{fmtMoney(row.priorYearRevenue_f)}</div>
       <div style={{ ...mono, color: 'var(--gb-text-muted)' }}>{fmtDate(row.lastOrderDate_dt)}</div>
+      {/* Hover-revealed delete button for indexed rows. Sits over the
+          last column so it doesn't shift layout — the column under it
+          is the Last Order date which the user still sees up to the
+          point of hovering. */}
+      {onDelete && hover && (
+        <button
+          type="button"
+          aria-label="Remove from index"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onDelete();
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          style={{
+            position: 'absolute',
+            top: '50%', right: 10,
+            transform: 'translateY(-50%)',
+            width: 22, height: 22,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            background: 'var(--gb-surface-2)',
+            border: '1px solid var(--gb-border-default)',
+            borderRadius: 'var(--gb-r-sm)',
+            color: 'var(--gb-error-fg)',
+            cursor: 'pointer',
+            opacity: 0.85,
+          }}
+        >
+          <I.trash size={11} />
+        </button>
+      )}
     </div>
   );
 }
