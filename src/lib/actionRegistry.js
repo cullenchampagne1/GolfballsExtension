@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 
 /* ───────────────────────────────────────────────────────────────
    actionRegistry — singleton store for the bottom-right Actions
@@ -122,7 +122,7 @@ export const actionRegistry = {
    An action that's smart for the current context is REMOVED from
    the page-actions list to avoid showing it twice. Danger actions
    are always under danger regardless of context. */
-export function getContextualActions() {
+function getContextualActions() {
   const all = actionRegistry.getActions();
   const page = actionRegistry.getPage();
   const topModal = actionRegistry.getTopModal();
@@ -183,17 +183,3 @@ export function useActionRegistry() {
   };
 }
 
-/* ── React helper: track a modal's open/close lifetime ───────────
-   Components can call useActionModalContext('crmSearch') inside
-   their render and the registry's modal stack auto-tracks them.
-   No coupling to FloatingPanel — modal can use this however it
-   wires its visibility.
-─────────────────────────────────────────────────────────────── */
-export function useActionModalContext(modalId, options = {}) {
-  const active = options.active !== false;   // default: track from mount
-  useEffect(() => {
-    if (!active) return;
-    actionRegistry.pushModal(modalId);
-    return () => actionRegistry.popModal(modalId);
-  }, [modalId, active]);
-}

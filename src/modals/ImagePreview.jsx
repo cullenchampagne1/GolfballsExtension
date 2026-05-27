@@ -40,8 +40,9 @@ import { LiquidDrawer } from '../ui/components/LiquidDrawer.jsx';
      • Wheel zoom + drag pan  — pointer events on the preview wrapper
      • Copy URL               — clipboard write of the URL (or fallback)
      • Download               — anchor click of the URL
-     • Submit Proof           — stub toast (will hand off to the real
-                                Submit Proof modal once that lands)
+     • Submit Proof           — hands off via onLaunchSubmitProof to
+                                the SubmitProof modal (content-script
+                                wrappers + the playground wire this).
 ─────────────────────────────────────────────────────────────── */
 
 /* Frosted-glass tokens — match the LiquidDrawer capsule aesthetic.
@@ -774,7 +775,10 @@ export function ImagePreview({
       onLaunchSubmitProof(payload);
       return;
     }
-    toast?.info?.('Submit Proof — coming soon', { tone: 'info' });
+    // Defensive: every production call site passes onLaunchSubmitProof
+    // (playground, content-script wrappers). If a future caller forgets,
+    // surface a console warning instead of a misleading "coming soon".
+    console.warn('[gb] ImagePreview: Submit Proof clicked without onLaunchSubmitProof prop');
   };
 
 
@@ -1078,9 +1082,9 @@ export function ImagePreview({
               actually viewable. Use the design-system IconBtn so the
               styling matches the rest of the modal chrome.
 
-              Top-right slot holds a 3D-view trigger that's wired up
-              later (placeholder toast for now). Bottom-left is the
-              zoom-level chip; bottom-right is the −/1:1/+ control
+              Top-right slot holds the 3D-view + mockup triggers
+              (wired to on3DToggle / onMockupToggle). Bottom-left is
+              the zoom-level chip; bottom-right is the −/1:1/+ control
               cluster. */}
           {status === 'ready' && (
             <>
@@ -1420,8 +1424,8 @@ export function ImagePreview({
             strip. Lives above the primary action row whenever the user
             is in 3D mode. Hosts a non-intrusive "back to image" exit
             (so the user doesn't have to find the small cube IconBtn
-            inside the 3D canvas) plus copy + download stubs for the
-            future 3D-screenshot feature. */}
+            inside the 3D canvas) plus Copy + Download for the active
+            viewer's snapshot (wired to onCopy3D / onDownload3D). */}
         <AnimatePresence initial={false}>
           {inViewerMode && (
             <motion.div
