@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  FloatingPanel, ModalHeader, ModalFooter, Btn, Input, Dropdown, IconBtn, I,
+  FloatingPanel, ModalHeader, ModalFooter, Btn, Input, Dropdown, DatePicker, IconBtn, I,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
@@ -833,13 +833,12 @@ function ValueEditor({ field, condition, onChange }) {
       }
       if (condition.op === 'before' || condition.op === 'after') {
         return (
-          <Input
-            size="sm" mono
+          <DatePicker
             value={condition.val}
             onChange={(v) => onChange({ val: v })}
-            placeholder="YYYY-MM-DD"
-            type="date"
-            style={{ flex: 1, minWidth: 150, maxWidth: 180 }}
+            includeTime={false}
+            placeholder="Pick a date"
+            style={{ flex: 1, minWidth: 150, maxWidth: 200 }}
           />
         );
       }
