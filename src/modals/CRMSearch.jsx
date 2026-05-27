@@ -1135,8 +1135,30 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
      smoothly; an inner motion span fades the header label in. */
   const anyEmailing = Object.keys(emailStatusByRow).length > 0;
   const gridCols = anyEmailing ? COLS_WITH_STATUS : COLS_BASE;
+
+  /* Scan beam — find the currently-sending row id and measure its
+     offsetTop / offsetHeight against the rows container so the beam
+     can position itself over it. Updates each render so the beam
+     follows the active row through the list. */
+  const containerRef = useRef(null);
+  const activeRowId = useMemo(() => {
+    for (const [id, st] of Object.entries(emailStatusByRow)) {
+      if (st === 'sending') return id;
+    }
+    return null;
+  }, [emailStatusByRow]);
+  const [scanRect, setScanRect] = useState(null);
+  useEffect(() => {
+    if (!activeRowId) { setScanRect(null); return; }
+    const root = containerRef.current;
+    if (!root) return;
+    const safeId = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(activeRowId) : String(activeRowId).replace(/"/g, '\\"');
+    const el = root.querySelector(`[data-row-id="${safeId}"]`);
+    if (el) setScanRect({ top: el.offsetTop, height: el.offsetHeight });
+  }, [activeRowId, rows]);
+
   return (
-    <div>
+    <div ref={containerRef} style={{ position: 'relative' }}>
       {/* Sticky header — click a sortable column to sort. Sorts are
           server-driven (Solr) so they re-run a search; debounce isn't
           needed because the user clicks once. */}
@@ -1202,6 +1224,10 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
           onDelete={mode === 'indexed' ? () => onDeleteIndexed?.(r.id) : null}
         />
       ))}
+      {/* Scan beam — sweeps over the currently-sending row. translateY
+          transition gives the "moving light bar" follow-the-active-row
+          effect. Only rendered while a row is actively sending. */}
+      {scanRect && <ScanBeam top={scanRect.top} height={scanRect.height} />}
       {/* Next-page spinner shown while infinite-scroll is fetching. The
           scroll handler upstairs fires loadMoreResults; this just gives
           the user visual feedback that something's happening. */}
@@ -1217,6 +1243,121 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
         </div>
       )}
     </div>
+  );
+}
+
+/* Status badges (mono, uppercase, dot/spinner/check leading) ported
+   from the Email Send Animation design — uniform shape across the
+   four states so the column reads as one strip. */
+function StatusBadge({ kind }) {
+  if (kind === 'queued') {
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '2px 7px', borderRadius: 4,
+        background: 'var(--gb-fill-subtle)',
+        border: '1px solid var(--gb-border-default)',
+        fontSize: 10, fontWeight: 600, letterSpacing: 0.3,
+        color: 'var(--gb-text-muted)',
+        fontFamily: 'var(--gb-font-mono)',
+      }}>
+        <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--gb-text-muted)' }} />
+        QUEUED
+      </span>
+    );
+  }
+  if (kind === 'sending') {
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        padding: '2px 7px', borderRadius: 4,
+        background: 'var(--gb-warning-tint-medium)',
+        border: '1px solid var(--gb-warning-tint-border)',
+        fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+        color: 'var(--gb-warning-fg)',
+        fontFamily: 'var(--gb-font-mono)',
+      }}>
+        <span style={{
+          width: 9, height: 9, borderRadius: '50%',
+          border: '1.5px solid currentColor', borderTopColor: 'transparent',
+          animation: 'gb-spin .8s linear infinite',
+        }} />
+        SENDING
+      </span>
+    );
+  }
+  if (kind === 'sent') {
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '2px 7px', borderRadius: 4,
+        background: 'var(--gb-brand-tint-medium)',
+        border: '1px solid var(--gb-brand-tint-border)',
+        fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+        color: 'var(--gb-brand-label)',
+        fontFamily: 'var(--gb-font-mono)',
+      }}>
+        <I.check size={9} strokeWidth={3.5} />
+        SENT
+      </span>
+    );
+  }
+  if (kind === 'error') {
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '2px 7px', borderRadius: 4,
+        background: 'var(--gb-error-tint-soft, var(--gb-surface-2))',
+        border: '1px solid var(--gb-error-tint-border, var(--gb-border-default))',
+        fontSize: 10, fontWeight: 700, letterSpacing: 0.3,
+        color: 'var(--gb-error-fg)',
+        fontFamily: 'var(--gb-font-mono)',
+      }}>
+        FAILED
+      </span>
+    );
+  }
+  return null;
+}
+
+/* Scan beam — soft horizontal gradient body bracketed by two glowing
+   hairlines. Slides between rows via translateY transitions when the
+   active sending id changes. Three layers absolutely positioned over
+   the rows container; pointer-events:none so it doesn't block clicks. */
+function ScanBeam({ top, height }) {
+  const transition = 'transform .35s cubic-bezier(.3,.7,.2,1)';
+  return (
+    <>
+      <div aria-hidden style={{
+        position: 'absolute', left: 0, right: 0, top: 0,
+        transform: `translateY(${top}px)`,
+        height,
+        background: 'linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--gb-brand-label) 16%, transparent) 35%, color-mix(in srgb, var(--gb-brand-label) 28%, transparent) 50%, color-mix(in srgb, var(--gb-brand-label) 16%, transparent) 65%, transparent 100%)',
+        transition,
+        pointerEvents: 'none',
+        zIndex: 3,
+      }} />
+      <div aria-hidden style={{
+        position: 'absolute', left: 0, right: 0, top: 0,
+        transform: `translateY(${top}px)`,
+        height: 1,
+        background: 'var(--gb-brand-label)',
+        boxShadow: '0 0 14px 1px var(--gb-brand-label)',
+        transition,
+        pointerEvents: 'none',
+        zIndex: 4,
+      }} />
+      <div aria-hidden style={{
+        position: 'absolute', left: 0, right: 0, top: 0,
+        transform: `translateY(${top + height}px)`,
+        height: 1,
+        background: 'var(--gb-brand-label)',
+        boxShadow: '0 0 14px 1px var(--gb-brand-label)',
+        transition,
+        pointerEvents: 'none',
+        zIndex: 4,
+      }} />
+    </>
   );
 }
 
@@ -1255,6 +1396,7 @@ function ResultRow({ row, isSelected, isActive, emailStatus, showStatusCol, onTo
   return (
     <div
       ref={rowRef}
+      data-row-id={row.id}
       style={{
         position: 'relative',
         zIndex: isActive ? 1 : 0,
@@ -1319,40 +1461,36 @@ function ResultRow({ row, isSelected, isActive, emailStatus, showStatusCol, onTo
       <div style={mono}>{fmtMoney(row.priorYearRevenue_f)}</div>
       <div style={{ ...mono, color: 'var(--gb-text-muted)' }}>{fmtDate(row.lastOrderDate_dt)}</div>
       {/* Status column — only rendered while a blast is active. The
-          grid template animates its width in via CSS transition; the
-          inner motion span fades the badge so the slide reads as a
-          single coordinated reveal. */}
-      {showStatusCol && (
-        <motion.div
-          key={emailStatus || 'idle'}
-          initial={{ opacity: 0, x: 8 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-          style={{ overflow: 'hidden', display: 'flex', alignItems: 'center' }}
-        >
-          {emailStatus === 'sending' ? (
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              fontSize: 10.5, fontWeight: 700,
-              color: 'var(--gb-text-tertiary)',
-              textTransform: 'uppercase', letterSpacing: 0.5,
-            }}>
-              <Spinner size={11} /> Sending
-            </span>
-          ) : emailStatus === 'sent' ? (
-            <Tag tone="brand" size="xs">Sent</Tag>
-          ) : emailStatus === 'error' ? (
-            <Tag tone="error" size="xs">Failed</Tag>
-          ) : (
-            // Reserved space — keeps the column expanded so other rows
-            // in the same blast don't shift around while this one is
-            // still waiting its turn.
-            <span style={{
-              fontSize: 10, color: 'var(--gb-text-muted)', opacity: 0.5,
-            }}>—</span>
-          )}
-        </motion.div>
-      )}
+          grid-template-columns transition slides the column in; the
+          inner motion span fades the badge. The cell picks one of
+          four states: queued (selected rows that haven't started),
+          sending (warning tint + spinning ring), sent (brand check),
+          error (failed). Cross-fades between them on transition. */}
+      {showStatusCol && (() => {
+        const kind = emailStatus === 'sending' ? 'sending'
+          : emailStatus === 'sent'  ? 'sent'
+          : emailStatus === 'error' ? 'error'
+          : isSelected              ? 'queued'
+          : null;
+        return (
+          <div style={{ overflow: 'hidden', display: 'flex', alignItems: 'center' }}>
+            <AnimatePresence mode="wait" initial={false}>
+              {kind && (
+                <motion.span
+                  key={kind}
+                  initial={{ opacity: 0, x: 8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -6 }}
+                  transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+                  style={{ display: 'inline-flex' }}
+                >
+                  <StatusBadge kind={kind} />
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </div>
+        );
+      })()}
       {/* Hover-revealed delete button for indexed rows. Sits over the
           last column so it doesn't shift layout — the column under it
           is the Last Order date which the user still sees up to the
