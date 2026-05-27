@@ -404,7 +404,13 @@ export function ImagePreview({
      dataURL with all matching pixels recolored. Pixels within
      `tolerance` RGB distance of `from` get replaced with `to`.
      Preserves alpha so transparent regions stay transparent. */
-  function applyColorSwap(fromRgb, toRgb, tolerance, sourceUrl = (editedDataUrl || effectiveUrl)) {
+  // Source priority mirrors `displayUrl` — prefer any in-memory bytes
+  // (committed edits, then the background-fetched dataUrl) before
+  // falling back to the public URL. Without dataUrl in the chain, a
+  // CDN that's unreachable from the page context (mixed-content blocked,
+  // ERR_CONNECTION_TIMED_OUT, etc.) makes color swaps fail even though
+  // the modal can display the image fine from the bg-fetched bytes.
+  function applyColorSwap(fromRgb, toRgb, tolerance, sourceUrl = (editedDataUrl || dataUrl || effectiveUrl)) {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
