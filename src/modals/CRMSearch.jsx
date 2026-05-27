@@ -36,7 +36,15 @@ import { actionRegistry } from '../lib/actionRegistry.js';
 ─────────────────────────────────────────────────────────────── */
 
 const ENDPOINT = 'https://api.golfballs.com/Golfballs/WebServices/Private/SolrIndexCrm.asmx/Query';
-const QF = 'id^50 accountID_s^50 contactName_t^50 accountName_t^50 email_tp^20 emails_tps^20 phones_ss^20';
+// Per-field boosts (qf). Names are weighted heavily so a token that
+// matches a contact / account name dominates a token that happens to
+// appear inside an email or a phone string. IDs stay near the top in
+// case the user types an exact record key.
+const QF = 'id^100 accountID_s^100 contactName_t^120 accountName_t^120 email_tp^25 emails_tps^25 phones_ss^25';
+// Phrase fields (pf): edismax adds a boost when ALL query tokens
+// appear as a phrase. Bumps "Cullen Champagne" above someone called
+// "Champagne Cullen-Brown" who only matches the tokens separately.
+const PF = 'contactName_t^400 accountName_t^400 email_tp^60';
 const ROWS = 100;
 
 const TYPE_OPTS = [
@@ -173,11 +181,30 @@ export function CRMSearch({ onClosed, bindClose }) {
      duplicating the body construction. */
   const fetchSolrPage = useCallback(async (q, qb, typeF, start) => {
     const term = (q || '').trim();
-    const qStr = term
-      ? (term.includes(' ') ? `"${term}"` : term)
-      : '*:*';
+    /* Build the q string:
+       - Empty term → match-all so the sort + filters drive results.
+       - Otherwise, tokenise + append `~1` to each token of length ≥ 4
+         to allow one-character edits (typo tolerance). Exact matches
+         still rank higher than fuzzy because Solr's fuzzy score factor
+         decays with edit distance, and the pf= phrase boost (below)
+         further pushes exact phrases to the top.
+       - Short tokens (< 4 chars) keep their literal form to avoid the
+         combinatorial explosion of 1-edit matches on tiny inputs. */
+    const qStr = (() => {
+      if (!term) return '*:*';
+      const tokens = term.split(/\s+/).filter(Boolean);
+      if (!tokens.length) return '*:*';
+      return tokens.map((t) => (t.length >= 4 ? `${t}~1` : t)).join(' ');
+    })();
+    /* Sort: when a search term is present, the user wants relevance
+       first — score desc — with their column choice as a tiebreaker.
+       Without a term, fall back to the chosen sort directly so the
+       baseline listing (most-recent orders) still works. */
+    const effectiveSort = term
+      ? `score desc, ${sortKey} ${sortDir}`
+      : `${sortKey} ${sortDir}`;
     const startPart = start > 0 ? `&start=${start}` : '';
-    let body = `${qStr}${startPart}&sort=${sortKey} ${sortDir}&rows=${ROWS}&qf=${encodeURIComponent(QF)}&q.op=AND&sow=false&defType=edismax`;
+    let body = `${qStr}${startPart}&sort=${encodeURIComponent(effectiveSort)}&rows=${ROWS}&qf=${encodeURIComponent(QF)}&pf=${encodeURIComponent(PF)}&q.op=AND&sow=false&defType=edismax`;
     if (qb?.solrFq) body += `&fq=${encodeURIComponent(qb.solrFq)}`;
     const res = await fetch(ENDPOINT, {
       method: 'POST',
