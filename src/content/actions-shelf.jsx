@@ -53,6 +53,10 @@ if (!window.__gbActionsShelfLoaded) {
     if (document.getElementById('tbContactId')) return 'contact';
     if (/[?&]accountID=\d+/i.test(url)) return 'account';
     if (/[?&]customerID=\d+/i.test(url)) return 'contact';
+    // Orders index — Folder=Orders WITHOUT a ViewOrder page param. The
+    // ViewOrder check above already returns 'order' for the detail page,
+    // so by the time we get here we know it's the listing.
+    if (/[?&]Folder=Orders\b/i.test(url)) return 'order-index';
     return 'other';
   }
 
@@ -94,6 +98,7 @@ if (!window.__gbActionsShelfLoaded) {
      scoped var so the next syncContext can swap it. */
   let _callActionUnsub = null;
   let _taskActionUnsub = null;
+  let _copyIdsActionUnsub = null;
 
   function registerCallAction(pageType, displayName) {
     if (_callActionUnsub) { _callActionUnsub(); _callActionUnsub = null; }
@@ -132,6 +137,74 @@ if (!window.__gbActionsShelfLoaded) {
         if (typeof window.__gbShowCallLogModal === 'function') {
           await window.__gbShowCallLogModal({ phone: livePhone });
         }
+      },
+    });
+  }
+
+  /* Order-list index page — surface a "Copy order IDs" action that
+     scrapes every order id (col 2 of `table.table-advance tbody tr`)
+     into the clipboard. Replaces the legacy page-injected button that
+     used to live in the Order List portlet title bar. Gated on the
+     copyIdsEnabled feature flag so users can hide it. */
+  function readOrderRows() {
+    const rows = document.querySelectorAll('table.table-advance tbody tr');
+    const ids = [];
+    let html = '';
+    let plain = '';
+    rows.forEach((row) => {
+      const link = row.querySelector('td:nth-child(2) a');
+      if (!link) return;
+      const id = (link.textContent || '').trim();
+      const href = link.href || '';
+      if (!id) return;
+      ids.push(id);
+      // <div> wrapping forces real new lines when pasted into Outlook /
+      // Teams; \r\n in the plain-text fallback covers Windows clients.
+      html  += `<div><a href="${href}">${id}</a> - </div>`;
+      plain += `${id} - \r\n`;
+    });
+    return { ids, html, plain };
+  }
+
+  function registerCopyOrdersAction(pageType) {
+    if (_copyIdsActionUnsub) { _copyIdsActionUnsub(); _copyIdsActionUnsub = null; }
+    if (pageType !== 'order-index') return;
+    const flags = window.__gbFeatureFlags || {};
+    if (flags.copyIdsEnabled === false) return;
+    // Initial count — gives the action a more useful hint right out of
+    // the gate. Click-time re-scans pick up newly-loaded rows.
+    const initial = readOrderRows();
+    _copyIdsActionUnsub = actionRegistry.register({
+      id: 'gb-copy-order-ids',
+      label: 'Copy order IDs',
+      icon: <I.copy size={13} />,
+      hint: initial.ids.length
+        ? `${initial.ids.length} order${initial.ids.length === 1 ? '' : 's'} on this page`
+        : 'No orders detected — scroll to load the table first',
+      smartFor: ['order-index'],
+      handler: async () => {
+        const { ids, html, plain } = readOrderRows();
+        if (!ids.length) {
+          window.__gbToast?.warning?.('No order rows found on this page', { duration: 2500 });
+          return;
+        }
+        try {
+          const item = new ClipboardItem({
+            'text/html':  new Blob([html],  { type: 'text/html' }),
+            'text/plain': new Blob([plain], { type: 'text/plain' }),
+          });
+          await navigator.clipboard.write([item]);
+        } catch {
+          // Older browsers / restrictive contexts: fall back to plain text.
+          const ta = document.createElement('textarea');
+          ta.value = plain;
+          ta.style.cssText = 'position:fixed;opacity:0;';
+          document.body.appendChild(ta);
+          ta.select();
+          try { document.execCommand('copy'); } catch { /* swallow */ }
+          ta.remove();
+        }
+        window.__gbToast?.success?.(`Copied ${ids.length} order id${ids.length === 1 ? '' : 's'}`, { duration: 2400 });
       },
     });
   }
@@ -180,10 +253,15 @@ if (!window.__gbActionsShelfLoaded) {
       const id = readOrderId();
       label = id ? `Order #${id}` : 'Order';
       subLabel = 'Order';
+    } else if (type === 'order-index') {
+      key = 'order-index';
+      label = 'Orders';
+      subLabel = 'Order list';
     }
     actionRegistry.setPage(key, label, subLabel);
     registerCallAction(type, label);
     registerTaskAction(type, label);
+    registerCopyOrdersAction(type);
   }
 
   /* ── Mount the shelf overlay ────────────────────────────────
