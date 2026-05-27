@@ -487,6 +487,50 @@ export function TaskList({ onClosed, bindClose }) {
     }
   };
 
+  /* Export selected tasks to CSV. Mirrors the CRMSearch exporter —
+     same RFC 4180 escaping, UTF-8 BOM for Excel, same blob+anchor
+     download pattern. Columns reflect the row data shape (account,
+     contact, due date, category, priority, subject, status). */
+  const exportSelectedCSV = useCallback(() => {
+    const rows = visibleTasks.filter((t) => selected.has(t.id));
+    if (!rows.length) {
+      toast?.warning?.('No tasks selected', { duration: 2500 });
+      return;
+    }
+    const columns = [
+      { key: 'id',            label: 'Task ID' },
+      { key: 'account',       label: 'Account' },
+      { key: 'accountUrl',    label: 'Account URL' },
+      { key: 'contact',       label: 'Contact' },
+      { key: 'contactUrl',    label: 'Contact URL' },
+      { key: 'due',           label: 'Due Date' },
+      { key: 'category',      label: 'Category' },
+      { key: 'priorityLabel', label: 'Priority' },
+      { key: 'subject',       label: 'Subject' },
+      { key: 'status',        label: 'Status' },
+    ];
+    const esc = (v) => {
+      if (v == null) return '';
+      const raw = Array.isArray(v) ? v.join('; ') : String(v);
+      return /[",\n\r]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw;
+    };
+    const lines = [
+      columns.map((c) => esc(c.label)).join(','),
+      ...rows.map((t) => columns.map((c) => esc(t[c.key])).join(',')),
+    ];
+    const csv = '﻿' + lines.join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tasks-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+    toast?.success?.(`Exported ${rows.length} task${rows.length === 1 ? '' : 's'} to CSV`);
+  }, [visibleTasks, selected, toast]);
+
   const [lastIdx, setLastIdx] = useState(null);
 
   // ── Subtitle ─────────────────────────────────────────────────
@@ -578,16 +622,24 @@ export function TaskList({ onClosed, bindClose }) {
                 {' '}of {visibleTasks.length} task{visibleTasks.length === 1 ? '' : 's'}
               </div>
               <div style={{ flex: 1 }} />
-              {/* Run Campaign opens the Campaign Manager submodal which
-                  owns the picker, engine, and CRM-UI control. TaskList
-                  just hands off the current task selection. */}
+              {/* Same trio as CRMSearch: Run Campaign hands off to the
+                  Campaign Manager submodal, Email selected to the same
+                  manager when wired, Export CSV serializes the visible
+                  selection. Styling intentionally mirrors CRMSearch so
+                  both selection bars feel like the same control. */}
               <Btn
                 size="sm"
-                variant="tinted"
-                status="brand"
+                variant="ghost"
                 icon={<MegaphoneIcon />}
                 onClick={onRunCampaign}
-              >Run Campaign</Btn>
+              >Run campaign</Btn>
+              <Btn
+                size="sm"
+                variant="ghost"
+                icon={<I.mail size={11} />}
+                onClick={() => toast?.info?.('Email blast — coming later', { duration: 2400, placement: 'top-center' })}
+              >Email selected</Btn>
+              <Btn size="sm" variant="ghost" icon={<I.copy size={11} />} onClick={exportSelectedCSV}>Export CSV</Btn>
             </div>
           </motion.div>
         )}
