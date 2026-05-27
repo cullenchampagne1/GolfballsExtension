@@ -100,15 +100,6 @@ window.__gbContentReady = true;
 
     if (msg.action === 'GB_FEATURE_FLAGS') {
       window.__gbFeatureFlags = { ...(window.__gbFeatureFlags || {}), ...msg.flags };
-      // Show or hide the copy button immediately without a reload
-      if ('copyIdsEnabled' in msg.flags) {
-        const btn = document.getElementById('__gb-copy-ids-btn');
-        if (msg.flags.copyIdsEnabled) {
-          if (!btn) __gbAddCopyIdsButton();
-        } else {
-          btn?.remove();
-        }
-      }
       // Enable/disable email/text preview
       if ('emailPreviewEnabled' in msg.flags) {
         if (msg.flags.emailPreviewEnabled) {
@@ -252,7 +243,9 @@ window.__gbContentReady = true;
   // Load feature flags then conditionally add the copy button and email preview
   chrome.storage.local.get('featureFlags', (data) => {
     window.__gbFeatureFlags = { copyIdsEnabled: true, emailPreviewEnabled: true, imagePreviewEnabled: true, calendarEnabled: true, watchListEnabled: true, autoPushEnabled: true, signifydGlowEnabled: true, ...(data.featureFlags || {}) };
-    if (window.__gbFeatureFlags.copyIdsEnabled)      __gbAddCopyIdsButton();
+    // copyIdsEnabled now powers the actions-shelf "Copy order IDs"
+    // action on the Orders index page — the legacy page-injected
+    // button (__gbAddCopyIdsButton) was removed in favor of that path.
     if (window.__gbFeatureFlags.emailPreviewEnabled) {
         if (window.__gbEmailPreviewScan) __gbEmailPreviewScan();
         if (window.__gbTextPreviewScan) __gbTextPreviewScan(); // <-- ADDED THIS
@@ -281,7 +274,6 @@ window.__gbContentReady = true;
 
   const __gbObserver = new MutationObserver(() => {
     __gbApplySignifydGlow();
-    if (window.__gbFeatureFlags?.copyIdsEnabled      !== false) __gbAddCopyIdsButton();
     if (window.__gbFeatureFlags?.emailPreviewEnabled !== false) {
         if (window.__gbEmailPreviewScan) __gbEmailPreviewScan();
         if (window.__gbTextPreviewScan) __gbTextPreviewScan(); // <-- ADDED THIS
