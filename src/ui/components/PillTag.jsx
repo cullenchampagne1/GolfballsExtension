@@ -11,7 +11,16 @@ import { T, sizeIcon } from '../shared.jsx';
 export function PillTag({ on, icon, children, onClick, style }) {
   return (
     <motion.span
+      role="button"
+      tabIndex={0}
+      aria-pressed={!!on}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick?.(e);
+        }
+      }}
       animate={{
         backgroundColor: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)',
         color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
@@ -25,6 +34,7 @@ export function PillTag({ on, icon, children, onClick, style }) {
         fontSize: 11, fontWeight: 600, border: '1px solid',
         cursor: 'pointer', whiteSpace: 'nowrap', userSelect: 'none',
         fontFamily: 'var(--gb-font-sans)', boxSizing: 'border-box',
+        outline: 'none',
         ...style,
       }}
     >
