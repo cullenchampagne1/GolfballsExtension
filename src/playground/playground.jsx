@@ -727,6 +727,13 @@ function PlaygroundSurface() {
         {mounted === 'crmSearch' && (
           <CRMSearch
             key="crmSearch"
+            /* Playground always uses mock data + the mock send loop so
+               reps can drive the entire email-runner animation end-to-
+               end without needing real Solr / Power Automate behind it.
+               Mock templates ship from EmailRunner so the template
+               dropdown isn't empty even if chrome.storage has nothing
+               seeded. */
+            useMock
             onClosed={() => setMounted(null)}
           />
         )}
