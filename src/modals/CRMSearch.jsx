@@ -1003,25 +1003,29 @@ function ResultRow({ row, isSelected, isActive, onToggle, onDelete }) {
     fontVariantNumeric: 'tabular-nums',
   };
   /* Background priority:
-     - keyboard-active beats checkbox-selected (stronger tint),
-     - selected uses the soft tint as before,
+     - keyboard-active uses the same soft tint as a checkbox-selected
+       row; the brand ring + outer halo are what distinguish it,
      - otherwise transparent.
-     The 2px inset boxShadow draws an inner ring on the active row
-     without changing layout (outline would overlap the row below). */
-  const rowBg = isActive
-    ? 'var(--gb-brand-tint-medium)'
-    : isSelected ? 'var(--gb-brand-tint-soft)' : 'transparent';
+     A 1px inset ring + 3px outer halo gives the row a clear focus
+     treatment without changing layout. We also drop the row-separator
+     borderBottom and lift z-index so neighbouring lines don't slice
+     through the rounded corners. */
+  const rowBg = (isActive || isSelected) ? 'var(--gb-brand-tint-soft)' : 'transparent';
   return (
     <div
       ref={rowRef}
       style={{
         position: 'relative',
+        zIndex: isActive ? 1 : 0,
         display: 'grid', gridTemplateColumns: COLS,
         padding: '10px 14px', gap: 12,
         alignItems: 'center',
         background: rowBg,
-        borderBottom: '1px solid var(--gb-border-subtle)',
-        boxShadow: isActive ? 'inset 0 0 0 2px var(--gb-brand-fg)' : 'none',
+        borderBottom: isActive ? '1px solid transparent' : '1px solid var(--gb-border-subtle)',
+        borderRadius: isActive ? 'var(--gb-r-md)' : 0,
+        boxShadow: isActive
+          ? 'inset 0 0 0 1px var(--gb-brand-fg), 0 0 0 3px var(--gb-brand-tint-medium)'
+          : 'none',
         fontSize: 12,
         cursor: 'pointer',
         transition: 'background-color .15s, box-shadow .15s',
