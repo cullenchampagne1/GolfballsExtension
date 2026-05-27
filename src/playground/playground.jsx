@@ -934,8 +934,8 @@ function PlaygroundSurface() {
         position:fixed anchors to the viewport at native scale —
         anything inside the wrapper would be 0.74× of its style. */}
     <ActionsShelf />
-    </div>{/* end data-gb-scale="playground" content wrapper */}
-    </div>{/* end PlaygroundSurface root */}
+    </div>
+    </div>
   );
 }
 
