@@ -35,7 +35,7 @@ import {
 
 const ENDPOINT = 'https://api.golfballs.com/Golfballs/WebServices/Private/SolrIndexCrm.asmx/Query';
 const QF = 'id^50 accountID_s^50 contactName_t^50 accountName_t^50 email_tp^20 emails_tps^20 phones_ss^20';
-const ROWS = 200;
+const ROWS = 100;
 
 const TYPE_OPTS = [
   { id: 'all',     label: 'All types' },
@@ -143,6 +143,41 @@ export function CRMSearch({ onClosed, bindClose }) {
   const searchGenRef = useRef(0);
 
   // ── Search ────────────────────────────────────────────────────
+  /* Loading-more guard so an in-flight next-page fetch can't double-fire
+     from a fast scroll. Kept as a ref so we can read/write synchronously
+     inside the scroll handler without a re-render race. */
+  const loadingMoreRef = useRef(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  /* Issue ONE Solr page. `start` is the row offset (0 for the first
+     page); page size is constant ROWS. The function returns
+     `{ docs, numFound }` so the caller can decide whether to append or
+     replace, whether to bump `start`, etc. Pulled out of runSearch so
+     loadMoreResults + indexAllMatches can hit the same backend without
+     duplicating the body construction. */
+  const fetchSolrPage = useCallback(async (q, qb, typeF, start) => {
+    const term = (q || '').trim();
+    const qStr = term
+      ? (term.includes(' ') ? `"${term}"` : term)
+      : '*:*';
+    const startPart = start > 0 ? `&start=${start}` : '';
+    let body = `${qStr}${startPart}&sort=${sortKey} ${sortDir}&rows=${ROWS}&qf=${encodeURIComponent(QF)}&q.op=AND&sow=false&defType=edismax`;
+    if (qb?.solrFq) body += `&fq=${encodeURIComponent(qb.solrFq)}`;
+    const res = await fetch(ENDPOINT, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ str: body }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const raw = await res.json();
+    const data = JSON.parse(raw.d);
+    let docs = data.response?.docs || [];
+    const numFound = data.response?.numFound ?? docs.length;
+    if (typeF !== 'all') docs = docs.filter((r) => (r.recordType_s || '').toLowerCase() === typeF);
+    return { docs, numFound };
+  }, [sortKey, sortDir]);
+
   const runSearch = useCallback(async (q, qb = qbFilter, typeF = typeFilter) => {
     const gen = ++searchGenRef.current;
     const term = q.trim();
@@ -166,34 +201,14 @@ export function CRMSearch({ onClosed, bindClose }) {
         });
         if (qb) docs = docs.slice(0, 3);
       } else {
-        // Server prepends `q=` to the `str` field itself, so we send the
-        // bare term/query expression here. Passing `q=jordan` would make
-        // the server see `q=q=jordan` and edismax matches nothing. Multi-
-        // word terms get phrase-quoted to match the legacy behavior.
-        const qStr = term
-          ? (term.includes(' ') ? `"${term}"` : term)
-          : '*:*';
-        let body = `${qStr}&sort=${sortKey} ${sortDir}&rows=${ROWS}&qf=${encodeURIComponent(QF)}&q.op=AND&sow=false&defType=edismax`;
-        if (qb?.solrFq) body += `&fq=${encodeURIComponent(qb.solrFq)}`;
-        const res = await fetch(ENDPOINT, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ str: body }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const raw = await res.json();
-        const data = JSON.parse(raw.d);
-        docs = data.response?.docs || [];
-        const numFound = data.response?.numFound ?? docs.length;
-        if (typeF !== 'all') docs = docs.filter((r) => (r.recordType_s || '').toLowerCase() === typeF);
+        const { docs: pageDocs, numFound } = await fetchSolrPage(q, qb, typeF, 0);
         if (gen !== searchGenRef.current) return;
-        setResults(docs);
+        setResults(pageDocs);
         setTotal(numFound);
         setStatus('ready');
         setSelected((sel) => {
           const next = new Set();
-          for (const r of docs) if (sel.has(r.id)) next.add(r.id);
+          for (const r of pageDocs) if (sel.has(r.id)) next.add(r.id);
           return next;
         });
         return;
@@ -230,7 +245,62 @@ export function CRMSearch({ onClosed, bindClose }) {
         },
       });
     }
-  }, [useMock, qbFilter, typeFilter, toast]);
+  }, [useMock, qbFilter, typeFilter, toast, fetchSolrPage]);
+
+  /* Append the next page when the user scrolls near the bottom of the
+     results table. Skips when there's nothing more to load, when we're
+     already mid-load, or when we're not in server mode. */
+  const loadMoreResults = useCallback(async () => {
+    if (useMock) return;
+    if (loadingMoreRef.current) return;
+    if (mode !== 'server') return;
+    if (status !== 'ready') return;
+    if (results.length >= total) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    try {
+      const { docs } = await fetchSolrPage(query, qbFilter, typeFilter, results.length);
+      // Dedupe defensively — Solr can return the same row across pages
+      // if a row's sort field changes between requests (e.g. lastOrderDate
+      // updated mid-paging). Drop duplicates against the existing set.
+      setResults((prev) => {
+        const known = new Set(prev.map((r) => r.id));
+        const next = [...prev];
+        for (const d of docs) if (!known.has(d.id)) next.push(d);
+        return next;
+      });
+    } catch (err) {
+      toast?.warning?.(`Couldn't load more: ${err?.message || err}`, { duration: 3000 });
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [useMock, mode, status, results.length, total, query, qbFilter, typeFilter, fetchSolrPage, toast]);
+
+  /* Fetch every remaining page sequentially and feed them all into the
+     local index. Used by the Index button when total > results.length —
+     the visible page would only index 100 rows otherwise. Bails on the
+     first request error and indexes whatever we already have. Sequential
+     (not parallel) keeps the CRM server happy at Solr-side concurrency
+     limits and produces a predictable progress trail in the network tab. */
+  const indexAllMatches = useCallback(async () => {
+    if (useMock) return results;
+    let acc = results.slice();
+    let cursor = acc.length;
+    while (cursor < total) {
+      try {
+        const { docs } = await fetchSolrPage(query, qbFilter, typeFilter, cursor);
+        if (docs.length === 0) break;        // server returned nothing; stop
+        const known = new Set(acc.map((r) => r.id));
+        for (const d of docs) if (!known.has(d.id)) acc.push(d);
+        cursor = acc.length;
+      } catch (err) {
+        toast?.warning?.(`Stopped at ${acc.length}/${total}: ${err?.message || err}`, { duration: 3500 });
+        break;
+      }
+    }
+    return acc;
+  }, [useMock, results, total, query, qbFilter, typeFilter, fetchSolrPage, toast]);
 
   // Single effect drives all auto-searches. On first invocation it runs
   // an empty search (initial load); on subsequent invocations it re-runs
@@ -269,19 +339,29 @@ export function CRMSearch({ onClosed, bindClose }) {
     : status;
 
   /* User-facing actions over the indexed store. */
+  const [indexingAll, setIndexingAll] = useState(false);
   const onIndexThese = useCallback(async () => {
     if (!results.length) {
       toast?.warning?.('Nothing to index — run a search first', { duration: 2400 });
       return;
     }
+    setIndexingAll(true);
     try {
-      const { added } = await indexRecords(results);
+      // When there are more matches behind the paginated tail, drain
+      // them sequentially first so "Index these N" actually indexes
+      // every match — not just the first 100 rows that fit on screen.
+      const rowsToIndex = total > results.length
+        ? await indexAllMatches()
+        : results;
+      const { added } = await indexRecords(rowsToIndex);
       await refreshIndex();
       toast?.success?.(`Indexed ${added} row${added === 1 ? '' : 's'}`, { duration: 2400 });
     } catch (err) {
       toast?.error?.(`Index failed: ${err?.message || err}`);
+    } finally {
+      setIndexingAll(false);
     }
-  }, [results, refreshIndex, toast]);
+  }, [results, total, indexAllMatches, refreshIndex, toast]);
 
   const onDeleteIndexed = useCallback(async (id) => {
     try {
@@ -439,8 +519,8 @@ export function CRMSearch({ onClosed, bindClose }) {
         ? 'Searching…'
         : status === 'ready' && results.length
           ? (total > results.length
-              ? `${results.length} of ${total.toLocaleString()} matches — refine your query`
-              : `${results.length} result${results.length === 1 ? '' : 's'}`)
+              ? `${results.length.toLocaleString()} of ${total.toLocaleString()} loaded — scroll for more`
+              : `${results.length.toLocaleString()} result${results.length === 1 ? '' : 's'}`)
           : 'Search contacts & accounts · select · run campaigns';
 
   /* Submit the current query to Solr. Used by Enter on the Input,
@@ -561,9 +641,14 @@ export function CRMSearch({ onClosed, bindClose }) {
                   size="xs"
                   variant="ghost"
                   status="brand"
-                  icon={<I.bolt size={10} />}
+                  icon={indexingAll ? <Spinner /> : <I.bolt size={10} />}
+                  disabled={indexingAll}
                   onClick={onIndexThese}
-                >Index these {results.length}</Btn>
+                >{indexingAll
+                  ? 'Indexing…'
+                  : total > results.length
+                    ? `Index all ${total.toLocaleString()}`
+                    : `Index these ${results.length}`}</Btn>
               )}
             </div>
           </motion.div>
@@ -592,15 +677,24 @@ export function CRMSearch({ onClosed, bindClose }) {
               fontSize: 11,
               color: 'var(--gb-text-muted)',
             }}>
-              <span>Speed up future lookups for these contacts:</span>
+              <span>
+                {total > results.length
+                  ? `Speed up future lookups — index all ${total.toLocaleString()} matches:`
+                  : 'Speed up future lookups for these contacts:'}
+              </span>
               <div style={{ flex: 1 }} />
               <Btn
                 size="xs"
                 variant="ghost"
                 status="brand"
-                icon={<I.bolt size={10} />}
+                icon={indexingAll ? <Spinner /> : <I.bolt size={10} />}
+                disabled={indexingAll}
                 onClick={onIndexThese}
-              >Index these {results.length}</Btn>
+              >{indexingAll
+                ? 'Indexing…'
+                : total > results.length
+                  ? `Index all ${total.toLocaleString()}`
+                  : `Index these ${results.length}`}</Btn>
             </div>
           </motion.div>
         )}
@@ -689,9 +783,21 @@ export function CRMSearch({ onClosed, bindClose }) {
       </AnimatePresence>
 
       {/* Table */}
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+      <div
+        style={{ flex: 1, minHeight: 0, overflow: 'auto' }}
+        onScroll={(e) => {
+          // Infinite scroll: fire the next page when the user is within
+          // ~200px of the bottom. loadMoreResults is a no-op when there
+          // are no more matches or a load is already in flight.
+          const el = e.currentTarget;
+          if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
+            loadMoreResults();
+          }
+        }}
+      >
         <ResultsTable
           rows={displayedRows}
+          loadingMore={loadingMore}
           status={displayedStatus}
           query={query}
           total={mode === 'indexed' ? indexed.length : total}
@@ -737,7 +843,7 @@ export function CRMSearch({ onClosed, bindClose }) {
    keep these in lock-step. */
 const COLS = '30px 1.3fr 1.1fr 80px 1.9fr 70px 0.9fr 0.9fr 110px';
 
-function ResultsTable({ rows, status, query, total, selected, allChecked, onToggle, onToggleAll, sortKey, sortDir, onSort, mode, onDeleteIndexed, onSubmitServer }) {
+function ResultsTable({ rows, status, query, total, selected, allChecked, onToggle, onToggleAll, sortKey, sortDir, onSort, mode, onDeleteIndexed, onSubmitServer, loadingMore }) {
   const Header = ({ label, k }) => (
     <SortHeader label={label} sortKey={k} activeKey={sortKey} dir={sortDir} onSort={onSort} />
   );
@@ -796,6 +902,20 @@ function ResultsTable({ rows, status, query, total, selected, allChecked, onTogg
           onDelete={mode === 'indexed' ? () => onDeleteIndexed?.(r.id) : null}
         />
       ))}
+      {/* Next-page spinner shown while infinite-scroll is fetching. The
+          scroll handler upstairs fires loadMoreResults; this just gives
+          the user visual feedback that something's happening. */}
+      {loadingMore && (
+        <div style={{
+          padding: '14px',
+          textAlign: 'center',
+          fontSize: 11,
+          color: 'var(--gb-text-muted)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        }}>
+          <Spinner /> Loading more…
+        </div>
+      )}
     </div>
   );
 }
