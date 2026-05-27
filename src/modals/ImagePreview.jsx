@@ -112,6 +112,10 @@ export function ImagePreview({
   // callback instead of firing the stub toast — lets a content-script
   // wrapper mount the real SubmitProof modal with the current image.
   onLaunchSubmitProof,
+  // Submodal hide-pattern: parent wrapper flips this to false while the
+  // SubmitProof modal is up, so the preview fades out and stops eating
+  // pointer events. FloatingPanel handles the actual opacity/animation.
+  visible = true,
 }) {
   // Resolve which image to render. A `url` prop wins. When no url is
   // provided, the user can paste one into the URL input that appears
@@ -872,6 +876,7 @@ export function ImagePreview({
       width={500}
       backdrop
       draggable={draggable}
+      visible={visible}
       onClose={onClosed}
       bindClose={bindClose}
     >

@@ -170,7 +170,7 @@ function statusTone(status) { return STATUS_TONE[status] || 'neutral'; }
 /* ───────────────────────────────────────────────────────────────
    Public component
 ─────────────────────────────────────────────────────────────── */
-export function SubmitProof({ image, orderId: orderIdProp, customerId: customerIdProp, onClosed, bindClose }) {
+export function SubmitProof({ image, orderId: orderIdProp, customerId: customerIdProp, onClosed, bindClose, onSubmitted }) {
   const toast = useToast();
   const draggable = useDevSetting('submitProof.draggable') ?? true;
   const forceMock = useDevSetting('submitProof.useMock') ?? false;
@@ -507,6 +507,10 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
       toast?.error?.(`Submission failed (${failed.length}/${out.length})`, { duration: 5000 });
     } else {
       setStage('results');
+      // Notify parent: at least one proof generated. The wrapper uses
+      // this to decide whether to close ImagePreview alongside us when
+      // the user finally dismisses the modal.
+      try { onSubmitted?.(); } catch {}
       if (failed.length > 0) {
         toast?.warning?.(`${failed.length} of ${out.length} requests failed`);
       } else {
