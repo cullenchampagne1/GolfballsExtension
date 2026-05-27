@@ -142,6 +142,14 @@ if (!window.__gbActionsShelfLoaded) {
   function registerCallAction(pageType, displayName) {
     if (_callActionUnsub) { _callActionUnsub(); _callActionUnsub = null; }
     if (pageType !== 'contact' && pageType !== 'account') return;
+    /* Gate on a real phone existing on the page. When the contact has
+       no phone, Call would dial nothing — surface Find phone instead
+       (registered separately). Postbacks that rebuild the phone label
+       trigger a syncContext re-run, so the action flips back into the
+       registry as soon as a number lands. */
+    const phone = readContactPhoneRaw();
+    const phoneDigits = phone.replace(/\D/g, '');
+    if (phoneDigits.length < 7) return;
 
     // Title keeps the contact / account name so the action reads strongly
     // ("Call Marcus Chen"). The hint underneath surfaces the actual phone
@@ -149,8 +157,7 @@ if (!window.__gbActionsShelfLoaded) {
     // — much more useful than the old static "Dial via tel: + log the
     // outcome" description.
     const labelName = displayName || (pageType === 'account' ? 'account' : 'contact');
-    const phone = readContactPhoneRaw();
-    const hint = phone ? `Dials ${phone}` : 'No phone on this page';
+    const hint = `Dials ${phone}`;
     _callActionUnsub = actionRegistry.register({
       id: 'gb-call-contact',
       label: `Call ${labelName}`,
@@ -271,21 +278,12 @@ if (!window.__gbActionsShelfLoaded) {
         { credentials: 'include' },
       ).then((r) => r.json());
       if (result?.phoneNumber) {
-        // Inline patch the contact-phone label so the page reflects
-        // the new number without a full reload — find-phone's whole
-        // point is "I want to call this person NOW", so we'd rather
-        // hand off straight to the Call Log than throw the rep back
-        // through a page reload + click cycle. The legacy code
-        // reloaded; the React port doesn't need to because every
-        // other place the phone shows reads off the same label.
-        const lbl = document.getElementById('lblContactPhoneNumber');
-        if (lbl) lbl.textContent = result.phoneNumber;
-        // Open the Call Log modal with the freshly-found number so
-        // the rep can immediately log + dial. Pops the same modal
-        // the Call action uses — same UX as the "Call ${name}" path.
-        if (typeof window.__gbShowCallLogModal === 'function') {
-          try { window.__gbShowCallLogModal({ phone: result.phoneNumber }); } catch {}
-        }
+        // Match legacy: reload so every place the phone shows on the
+        // page (header label, sidebar, the action shelf's own re-sync)
+        // picks up the new number. After reload the shelf's
+        // syncContext re-runs and Find phone unregisters (phone now
+        // exists) while Call registers (phone now present).
+        setTimeout(() => { try { window.location.reload(); } catch {} }, 1100);
         return { ok: true, contact: result };
       }
       return { ok: false, error: 'Save returned no phone' };
