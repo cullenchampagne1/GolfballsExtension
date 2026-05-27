@@ -10,6 +10,7 @@ import { EmailRunner } from './EmailRunner.jsx';
 import {
   indexRecords, getAllIndexed, deleteIndexed, clearIndex, searchIndexed,
 } from '../lib/crmIndex.js';
+import { actionRegistry } from '../lib/actionRegistry.js';
 
 /* ───────────────────────────────────────────────────────────────
    CRMSearch — React port of content/crm-search-modal.js.
@@ -595,6 +596,68 @@ export function CRMSearch({ onClosed, bindClose }) {
       setActiveIdx(-1);
     }
   };
+
+  /* ── Modal-aware actions wiring ──────────────────────────────
+     1. Push CRMSearch onto the action registry's modal stack on
+        mount so the shelf can surface modal-specific actions in a
+        dedicated section. Pop on unmount.
+     2. Mirror the latest input + filter state into a ref so the
+        unmount-time persist + action handler always read the
+        up-to-date values without re-running the effect on every
+        keystroke (storage write on each tick would be wasteful).
+     3. On unmount, persist { query, typeFilter, qbFilter } under
+        gbCrmLastQuery so the next session's "Run last query"
+        action can replay it. */
+  const lastStateRef = useRef({ query, typeFilter, qbFilter });
+  useEffect(() => {
+    lastStateRef.current = { query, typeFilter, qbFilter };
+  }, [query, typeFilter, qbFilter]);
+
+  useEffect(() => {
+    actionRegistry.pushModal('crm-search', 'CRM Search');
+    return () => {
+      actionRegistry.popModal('crm-search');
+      try {
+        chrome.storage.local.set({
+          gbCrmLastQuery: { ...lastStateRef.current, ts: Date.now() },
+        });
+      } catch {}
+    };
+  }, []);
+
+  /* Register the "Run last query" action while CRMSearch is open.
+     Re-registering when runSearch identity changes keeps the
+     handler's closure fresh against the latest state setters. */
+  useEffect(() => {
+    const unsub = actionRegistry.register({
+      id: 'gb-crm-run-last-query',
+      label: 'Run last query',
+      icon: <I.refresh size={13} />,
+      hint: 'Replay your previous search',
+      whenModalOpen: ['crm-search'],
+      handler: async () => {
+        let saved = null;
+        try {
+          const out = await new Promise((r) => chrome.storage.local.get('gbCrmLastQuery', r));
+          saved = out?.gbCrmLastQuery || null;
+        } catch {}
+        if (!saved || (!saved.query && !saved.qbFilter)) {
+          toast?.warning?.('No previous search to re-run', { duration: 2200 });
+          return;
+        }
+        // Apply the saved state, flip into server mode (the source
+        // of recorded searches), then fire runSearch directly with
+        // the saved filters — the setQuery/setQbFilter updates are
+        // async so passing them inline guarantees the right inputs.
+        setQuery(saved.query || '');
+        setType(saved.typeFilter || 'all');
+        setQbFilter(saved.qbFilter || null);
+        setMode('server');
+        runSearch(saved.query || '', saved.qbFilter || null, saved.typeFilter || 'all');
+      },
+    });
+    return unsub;
+  }, [runSearch, toast]);
 
   return (
     <>

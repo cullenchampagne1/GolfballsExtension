@@ -48,7 +48,6 @@
         "src/vanilla/modals/crm-query-builder.js",
         "src/vanilla/modals/campaign-editor.js",
         "react-dist/content/task-list.js",
-        "src/vanilla/phone-finder.js",
         "react-dist/content/call-log.js",
         "react-dist/content/quick-task.js",
         "react-dist/content/margin-calc.js",

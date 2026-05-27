@@ -6,6 +6,7 @@ import { ActionsShelf } from '../ui/components/ActionsShelf.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { I } from '../ui/index.js';
 import { loadDevSettings, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
+import { findPhone } from '../lib/findPhone.js';
 
 /* ───────────────────────────────────────────────────────────────
    actions-shelf.jsx — the persistent smart-actions shelf overlay.
@@ -136,6 +137,7 @@ if (!window.__gbActionsShelfLoaded) {
   let _logCallActionUnsub = null;
   let _taskActionUnsub = null;
   let _copyIdsActionUnsub = null;
+  let _findPhoneActionUnsub = null;
 
   function registerCallAction(pageType, displayName) {
     if (_callActionUnsub) { _callActionUnsub(); _callActionUnsub = null; }
@@ -205,6 +207,111 @@ if (!window.__gbActionsShelfLoaded) {
         if (typeof window.__gbShowCallLogModal === 'function') {
           await window.__gbShowCallLogModal({ phone: livePhone });
         }
+      },
+    });
+  }
+
+  /* Find-phone: only show on contact pages where the phone field is
+     missing / too short to be a real number AND the contact has at
+     least one order to scan. Drives src/lib/findPhone.js with real
+     DOM scraping + bg-script proxy fetch + Contact/Update.ajax save.
+     Replaces the legacy inline "Find phone" pill button that used to
+     inject next to #lblContactPhoneNumber via the deleted
+     src/vanilla/phone-finder.js. */
+  function _readContactName() {
+    const first = document.getElementById('lblContactFirstName')?.textContent?.trim() || '';
+    const last  = document.getElementById('lblContactLastName')?.textContent?.trim()  || '';
+    return [first, last].filter(Boolean).join(' ') || 'this contact';
+  }
+  function _readContactPhoneDigits() {
+    return (document.getElementById('lblContactPhoneNumber')?.textContent || '').replace(/\D/g, '');
+  }
+  function _readOrderLinks() {
+    return [...document.querySelectorAll('table.dtORD tbody tr')]
+      .map((tr) => tr.querySelector('td a')).filter(Boolean)
+      .map((a) => a.href)
+      .filter((h) => h.includes('ViewOrder') || h.includes('folder=Orders'));
+  }
+  function _fetchOrderPage(url) {
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ action: 'fetchRaw', url }, (resp) => {
+          if (chrome.runtime.lastError || !resp?.ok) resolve({ html: '', url });
+          else resolve({ html: resp.text, url });
+        });
+      } catch { resolve({ html: '', url }); }
+    });
+  }
+  async function _saveContactPhone(phone) {
+    const contactIdEl = document.getElementById('tbContactId') || document.getElementById('tbContactID');
+    const contactId = contactIdEl?.value?.trim();
+    if (!contactId) return { ok: false, error: 'No contact ID on this page' };
+    const BASE = 'https://api.golfballs.com';
+    try {
+      // Update.ajax wants the full contact payload — fetch the current one
+      // first, then mutate phone, then POST it back. Mirrors what the
+      // legacy injector did so server-side validation rules stay the same.
+      const contact = await fetch(`${BASE}/golfballs/crm/Admin/Contact/Get.ajax?${contactId}`, { credentials: 'include' }).then((r) => r.json());
+      const payload = {
+        customerId:  String(contact.customerId),
+        firstName:   contact.firstName   || '',
+        middleInit:  contact.middleInit  || '',
+        lastName:    contact.lastName    || '',
+        companyName: contact.companyName || '',
+        jobTitle:    contact.jobTitle    || '',
+        email:       contact.email       || '',
+        phoneNumber: phone,
+        zipCode:     contact.zipCode     || '',
+        UserType:    String(contact.userType ?? 0),
+        userCountry: contact.userCountry || null,
+        CustomData:  contact.CustomData  || '{}',
+      };
+      const result = await fetch(
+        `${BASE}/golfballs/crm/Admin/Contact/Update.ajax?${encodeURIComponent(JSON.stringify(payload))}`,
+        { credentials: 'include' },
+      ).then((r) => r.json());
+      if (result?.phoneNumber) {
+        // Match legacy: reload so the page picks up the new phone in
+        // every place it's surfaced (header label, sidebar, etc.).
+        setTimeout(() => { try { window.location.reload(); } catch {} }, 1100);
+        return { ok: true, contact: result };
+      }
+      return { ok: false, error: 'Save returned no phone' };
+    } catch (e) {
+      return { ok: false, error: e?.message || 'save failed' };
+    }
+  }
+
+  function registerFindPhoneAction(pageType) {
+    if (_findPhoneActionUnsub) { _findPhoneActionUnsub(); _findPhoneActionUnsub = null; }
+    if (pageType !== 'contact') return;
+    const flags = window.__gbFeatureFlags || {};
+    if (flags.phoneFinderEnabled === false) return;
+    // Already has a usable phone → nothing to do.
+    if (_readContactPhoneDigits().length >= 7) return;
+    const orderCount = document.querySelectorAll('table.dtORD tbody tr').length;
+    if (orderCount === 0) return;
+
+    _findPhoneActionUnsub = actionRegistry.register({
+      id: 'gb-find-phone',
+      label: 'Find phone',
+      icon: <I.search size={13} />,
+      hint: `Scan ${orderCount} order${orderCount === 1 ? '' : 's'} for a number`,
+      smartFor: ['contact'],
+      handler: async () => {
+        const toast = window.__gbToast;
+        if (!toast) {
+          console.warn('[gb] FindPhone: no toast surface installed yet');
+          return;
+        }
+        const links = _readOrderLinks();
+        await findPhone({
+          contactName:     _readContactName(),
+          fetchOrderLinks: async () => links,
+          fetchOrderPage:  _fetchOrderPage,
+          saveContact:     _saveContactPhone,
+          toast,
+        });
       },
     });
   }
@@ -339,6 +446,7 @@ if (!window.__gbActionsShelfLoaded) {
     registerLogCallAction(type, label);
     registerTaskAction(type, label);
     registerCopyOrdersAction(type);
+    registerFindPhoneAction(type);
   }
 
   /* ── Mount the shelf overlay ────────────────────────────────

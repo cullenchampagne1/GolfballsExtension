@@ -36,7 +36,7 @@ const _actions = new Map();   // id → action
 let _page = null;             // current page key (e.g. 'contact', 'account')
 let _pageLabel = '';          // human-readable for the shelf header
 let _pageSubLabel = '';
-let _modalStack = [];         // top of stack = most recent modal
+let _modalStack = [];         // top of stack = most recent modal { id, label }
 const _subscribers = new Set();
 
 function notify() {
@@ -80,25 +80,45 @@ export const actionRegistry = {
   /* ── Modal stack ─────────────────────────────────────────── */
   // Modals push themselves on mount, pop on close. Top of stack
   // is the "active" modal — shelf reads it to surface modal-aware
-  // smart actions. Stack allows nested modals (e.g. CRMSearch →
-  // QueryBuilder) to both count as "open" but the topmost is the
-  // primary context.
-  pushModal(modalId) {
+  // smart actions in a dedicated section. Stack allows nested modals
+  // (e.g. CRMSearch → QueryBuilder) to both count as "open" but the
+  // topmost is the primary context.
+  //
+  // Each entry is { id, label }. `label` is the human-readable name
+  // the shelf renders as a section header ("In CRM Search"); if a
+  // caller pushes a raw id string we keep the legacy contract and
+  // store it without a label.
+  pushModal(modalId, label) {
     if (!modalId) return;
-    _modalStack.push(modalId);
+    const entry = (typeof modalId === 'object')
+      ? { id: modalId.id, label: modalId.label || '' }
+      : { id: modalId, label: label || '' };
+    if (!entry.id) return;
+    _modalStack.push(entry);
     notify();
   },
   popModal(modalId) {
     // Remove the LAST occurrence so out-of-order closes (rare) still
     // do the right thing. If id is omitted, pops the top.
     if (!modalId) { _modalStack.pop(); notify(); return; }
-    const i = _modalStack.lastIndexOf(modalId);
-    if (i < 0) return;
-    _modalStack.splice(i, 1);
-    notify();
+    const id = (typeof modalId === 'object') ? modalId.id : modalId;
+    for (let i = _modalStack.length - 1; i >= 0; i--) {
+      if (_modalStack[i].id === id) {
+        _modalStack.splice(i, 1);
+        notify();
+        return;
+      }
+    }
   },
   getModalStack() { return _modalStack.slice(); },
-  getTopModal() { return _modalStack[_modalStack.length - 1] || null; },
+  getTopModal() {
+    const top = _modalStack[_modalStack.length - 1];
+    return top ? top.id : null;
+  },
+  getTopModalLabel() {
+    const top = _modalStack[_modalStack.length - 1];
+    return top ? (top.label || '') : '';
+  },
 
   /* ── Read ────────────────────────────────────────────────── */
   getActions() { return Array.from(_actions.values()); },
@@ -127,24 +147,30 @@ function getContextualActions() {
   const page = actionRegistry.getPage();
   const topModal = actionRegistry.getTopModal();
 
-  const smart = [];
-  const pageActions = [];
-  const danger = [];
+  const modalSmart = [];   // matches the current top modal — dedicated section
+  const pageSmart  = [];   // matches the current page — "Smart for this page"
+  const pageActions = [];  // everything else
+  const danger     = [];
 
   for (const a of all) {
     if (a.category === 'danger' || a.tone === 'danger') {
       danger.push(a);
       continue;
     }
-    const isSmart = (a.smartFor && a.smartFor.includes(page))
-                 || (a.whenModalOpen && a.whenModalOpen.includes(topModal));
-    if (isSmart) {
-      smart.push(a);
-    } else {
-      pageActions.push(a);
-    }
+    const matchesModal = a.whenModalOpen && topModal && a.whenModalOpen.includes(topModal);
+    const matchesPage  = a.smartFor && a.smartFor.includes(page);
+    // Modal match wins over page match so the action sits in the
+    // modal section rather than getting double-listed. An action with
+    // neither match falls through to page-actions.
+    if (matchesModal)      modalSmart.push(a);
+    else if (matchesPage)  pageSmart.push(a);
+    else                   pageActions.push(a);
   }
-  return { smart, page: pageActions, danger };
+  // Keep `smart` around for any consumer that hasn't migrated yet —
+  // it's the union of modal + page in the original order. New code
+  // should read modalSmart / pageSmart directly.
+  const smart = [...modalSmart, ...pageSmart];
+  return { modalSmart, pageSmart, smart, page: pageActions, danger };
 }
 
 /* ── React hook ─────────────────────────────────────────────────
@@ -180,6 +206,7 @@ export function useActionRegistry() {
     pageSubLabel: actionRegistry.getPageSubLabel(),
     modalStack: actionRegistry.getModalStack(),
     topModal: actionRegistry.getTopModal(),
+    topModalLabel: actionRegistry.getTopModalLabel(),
   };
 }
 

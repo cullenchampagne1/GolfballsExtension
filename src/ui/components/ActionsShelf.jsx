@@ -400,8 +400,11 @@ export function ActionsShelf({
   const ref = useRef(null);
   useDismissShelf(ref, () => setOpen(false), open);
 
-  const { actions, pageLabel, pageSubLabel } = useActionRegistry();
-  const smartCount = actions.smart.length;
+  const { actions, pageLabel, pageSubLabel, topModalLabel } = useActionRegistry();
+  // Modal-smart and page-smart now live in separate sections; keep
+  // a single "smart" count for the trigger badge so the user still
+  // sees one number summarising everything contextual.
+  const smartCount = (actions.modalSmart?.length || 0) + (actions.pageSmart?.length || 0);
 
   // Default header copy when nothing is set so the shelf reads
   // sensibly even on a totally-fresh page that hasn't called
@@ -410,12 +413,24 @@ export function ActionsShelf({
   const headerSubLabel = pageSubLabel || 'No specific page detected';
 
   // Build a flat row plan so animations get a global index
-  // (smart staggers continue smoothly into page actions).
+  // (modal → page-smart → page → danger, stagger flows through all
+  // sections). The modal section is hidden entirely when there are
+  // no actions for the current top modal.
   const rows = [];
   let idx = 0;
-  if (smartCount > 0) {
-    rows.push({ kind: 'header-smart', key: 'h-s', count: smartCount });
-    actions.smart.forEach((a) => rows.push({ kind: 'row', smart: true, action: a, key: 'sm-' + a.id, index: idx++ }));
+  const modalSmart = actions.modalSmart || [];
+  const pageSmart  = actions.pageSmart  || actions.smart || [];
+  if (modalSmart.length > 0) {
+    rows.push({
+      kind: 'header',
+      key: 'h-m',
+      label: topModalLabel ? `In ${topModalLabel}` : 'Modal actions',
+    });
+    modalSmart.forEach((a) => rows.push({ kind: 'row', smart: true, action: a, key: 'md-' + a.id, index: idx++ }));
+  }
+  if (pageSmart.length > 0) {
+    rows.push({ kind: 'header-smart', key: 'h-s', count: pageSmart.length });
+    pageSmart.forEach((a) => rows.push({ kind: 'row', smart: true, action: a, key: 'sm-' + a.id, index: idx++ }));
   }
   if (actions.page.length > 0) {
     rows.push({ kind: 'header', key: 'h-p', label: 'Page actions' });
