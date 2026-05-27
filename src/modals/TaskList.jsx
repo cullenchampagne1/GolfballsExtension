@@ -9,6 +9,7 @@ import { useDevSetting } from '../lib/devSettings.js';
 import { loadTaskTemplates } from '../lib/quickTask.js';
 import { submitQuickTask } from '../lib/submitQuickTask.js';
 import { EmailRunner } from './EmailRunner.jsx';
+import { actionRegistry } from '../lib/actionRegistry.js';
 
 /* ───────────────────────────────────────────────────────────────
    TaskList — React port of content/task-list-modal.js.
@@ -253,6 +254,12 @@ export function TaskList({ onClosed, bindClose }) {
      wired below; TaskRow reads from the map to replace the Quick Task
      button cell with the live send state. */
   const [emailStatusByRow, setEmailStatusByRow] = useState({});
+  /* "Urgent only" filter — set to 'urgent' by the modal-aware
+     action in the action shelf to narrow the visible list to
+     overdue + due-today tasks. Cleared via the filter chip in the
+     header. */
+  const [dueFilter, setDueFilter] = useState('all'); // 'all' | 'urgent'
+
   /* Multi-column sort chain. Primary entry = main sort; subsequent
      entries are tiebreakers in order. Plain header-click replaces the
      chain with a single entry; Shift+click appends (or toggles dir
@@ -357,6 +364,31 @@ export function TaskList({ onClosed, bindClose }) {
   // set), so we don't have the CRMSearch StrictMode double-fire risk.
   useEffect(() => { loadTasks(); }, [loadTasks]);
 
+  /* Modal-stack registration + modal-specific shelf action. Mirrors
+     CRMSearch's pattern: push on mount so the shelf shows "In My
+     Tasks" with relevant actions; register an "Only urgent" action
+     that flips dueFilter to 'urgent' so the rep can narrow the list
+     to what they need to act on RIGHT NOW from a keyboard shortcut. */
+  useEffect(() => {
+    actionRegistry.pushModal('task-list', 'My Tasks');
+    return () => actionRegistry.popModal('task-list');
+  }, []);
+  useEffect(() => {
+    const unsub = actionRegistry.register({
+      id: 'gb-task-only-urgent',
+      label: dueFilter === 'urgent' ? 'Show all tasks' : 'Only overdue + due today',
+      icon: <I.bolt size={13} />,
+      hint: dueFilter === 'urgent'
+        ? 'Restore the full task list'
+        : 'Narrow to tasks that need action right now',
+      whenModalOpen: ['task-list'],
+      handler: () => {
+        setDueFilter((d) => (d === 'urgent' ? 'all' : 'urgent'));
+      },
+    });
+    return unsub;
+  }, [dueFilter]);
+
   /* Compare a single column on two rows. dueDate uses numeric Date
      subtraction; priority is already numeric; everything else is a
      case-insensitive localeCompare. Pulled out so the multi-sort
@@ -398,10 +430,25 @@ export function TaskList({ onClosed, bindClose }) {
       return 0;
     };
 
+    /* Urgent filter: keep only overdue + due-today + still-open
+       tasks. Completed tasks are never urgent — they'd just clutter
+       the narrow view that the user opened to see what they need
+       to act on RIGHT NOW. */
+    const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+    const todayStr = today0.toDateString();
+    const isUrgent = (t) => {
+      if (t.status === 'Complete') return false;
+      if (!t.dueDate) return false;
+      if (t.dueDate < today0) return true;
+      if (t.dueDate.toDateString() === todayStr) return true;
+      return false;
+    };
+
     let rows = tasks.filter((t) => {
       if (statusFilter === '1' && t.status !== 'New')      return false;
       if (statusFilter === '3' && t.status !== 'Complete') return false;
       if (priorityFilter && String(t.priority) !== priorityFilter) return false;
+      if (dueFilter === 'urgent' && !isUrgent(t)) return false;
       if (q && scoreRow(t) === 0) return false;
       return true;
     });
@@ -425,7 +472,7 @@ export function TaskList({ onClosed, bindClose }) {
       return 0;
     });
     return rows;
-  }, [tasks, query, statusFilter, priorityFilter, sortChain]);
+  }, [tasks, query, statusFilter, priorityFilter, dueFilter, sortChain]);
 
   // ── Selection ────────────────────────────────────────────────
   const toggleSel = (id, idx, shiftKey) => {
@@ -711,6 +758,47 @@ export function TaskList({ onClosed, bindClose }) {
           disabled={status === 'loading'}
         >Refresh</Btn>
       </div>
+
+      {/* "Urgent only" filter chip — visible whenever dueFilter is on.
+          Set by the modal-aware action shelf entry ("Only overdue +
+          due today"); clears via the × on the chip. Mirrors the QB
+          filter bar in CRMSearch so the active narrowing is always
+          surfaced inline rather than buried in a sub-menu. */}
+      <AnimatePresence initial={false}>
+        {dueFilter === 'urgent' && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 18px',
+              background: 'var(--gb-brand-tint-soft)',
+              borderBottom: '1px solid var(--gb-brand-tint-border)',
+              fontSize: 11, fontWeight: 600,
+              color: 'var(--gb-brand-label)',
+              flexShrink: 0,
+            }}
+          >
+            <I.bolt size={11} />
+            <span>Showing overdue + due today only</span>
+            <span style={{ flex: 1 }} />
+            <button
+              type="button"
+              onClick={() => setDueFilter('all')}
+              style={{
+                background: 'transparent', border: 'none', padding: 0,
+                fontSize: 11, fontWeight: 600,
+                color: 'var(--gb-brand-label)',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                textUnderlineOffset: 2,
+              }}
+            >Clear</button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Selection summary — slides in at the TOP when rows are checked.
           Matches CRMSearch's pattern. Hosts the campaign workflow so the
