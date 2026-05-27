@@ -64,10 +64,24 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
     setHoverText('');
   }, [typeId]);
 
-  // DOM picker — same plumbing as AddVariableModal: storage.onChanged
-  // carries the pick result + a live hover text from the host page.
+  // DOM picker — same plumbing as AddVariableModal: an initial .get
+  // catches any pickResult that landed before we subscribed,
+  // chrome.storage.onChanged carries subsequent writes + the live
+  // hover text from the host page.
   useEffect(() => {
     if (!picking) { setHoverText(''); return undefined; }
+    let mounted = true;
+    chrome.storage.local.get(['pickResult', 'pickHover'], (data) => {
+      if (!mounted) return;
+      const seeded = data?.pickResult;
+      if (seeded && seeded.fieldId === 'pick_inlinevar') {
+        setConfig(seeded.selector || '');
+        setPicking(false);
+        setHoverText('');
+        return;
+      }
+      if (data?.pickHover?.text) setHoverText(data.pickHover.text);
+    });
     function onChanged(changes) {
       if (changes.pickResult) {
         const result = changes.pickResult.newValue;
@@ -82,7 +96,7 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
       }
     }
     chrome.storage.onChanged.addListener(onChanged);
-    return () => chrome.storage.onChanged.removeListener(onChanged);
+    return () => { mounted = false; chrome.storage.onChanged.removeListener(onChanged); };
   }, [picking]);
 
   function startPick() {
@@ -100,6 +114,15 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
   // the user wants to narrow the match to a subtree of the page.
   useEffect(() => {
     if (!pickingScope) return undefined;
+    let mounted = true;
+    chrome.storage.local.get(['pickResult'], (data) => {
+      if (!mounted) return;
+      const seeded = data?.pickResult;
+      if (seeded && seeded.fieldId === 'pick_inlinevar_scope') {
+        setRegexScope(seeded.selector || '');
+        setPickingScope(false);
+      }
+    });
     function onChanged(changes) {
       if (!changes.pickResult) return;
       const result = changes.pickResult.newValue;
@@ -109,7 +132,7 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
       }
     }
     chrome.storage.onChanged.addListener(onChanged);
-    return () => chrome.storage.onChanged.removeListener(onChanged);
+    return () => { mounted = false; chrome.storage.onChanged.removeListener(onChanged); };
   }, [pickingScope]);
 
   const startPickScope = () => {

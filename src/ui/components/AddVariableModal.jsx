@@ -119,9 +119,24 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
     setHoverText('');
   }, [typeId]);
 
-  // Listen for pick result + real-time hover text while pick mode is active
+  // Listen for pick result + real-time hover text while pick mode is active.
+  // The initial .get catches any pickResult that landed BEFORE we
+  // subscribed — `onChanged` only fires on subsequent writes, so without
+  // the seed lookup a fast click-and-confirm could be missed.
   useEffect(() => {
     if (!picking) { setHoverText(''); return; }
+    let mounted = true;
+    chrome.storage.local.get(['pickResult', 'pickHover'], (data) => {
+      if (!mounted) return;
+      const seeded = data?.pickResult;
+      if (seeded && seeded.fieldId === 'pick_addvar') {
+        setConfig(seeded.selector || '');
+        setPicking(false);
+        setHoverText('');
+        return;
+      }
+      if (data?.pickHover?.text) setHoverText(data.pickHover.text);
+    });
     function onChanged(changes) {
       if (changes.pickResult) {
         const result = changes.pickResult.newValue;
@@ -136,7 +151,7 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
       }
     }
     chrome.storage.onChanged.addListener(onChanged);
-    return () => chrome.storage.onChanged.removeListener(onChanged);
+    return () => { mounted = false; chrome.storage.onChanged.removeListener(onChanged); };
   }, [picking]);
 
   function startPick() {
