@@ -202,6 +202,9 @@
    *
    * Call BEFORE running the template through `.replace(/\{\{...\}\}/g, ...)`.
    */
+  // NOTE: canonical implementation lives at src/lib/variableResolution.js.
+  // Vanilla content scripts can't ESM-import, so we keep a parallel copy
+  // here. Keep both in sync.
   function dropConditional(template, vars, resolved) {
     if (!template || !vars) return template || '';
     let out = String(template);

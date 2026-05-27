@@ -5,7 +5,12 @@ if (!window.__gbCallLogPanelLoaded) {
 window.__gbCallLogPanelLoaded = true;
 
 (function initCallLogPanel() {
-  if (!/[?&]Page=240\b/i.test(window.location.href)) return;
+  // NOTE: this file renders the INLINE Quick Log portlet on Page=240.
+// The submitCallLog implementation here mirrors src/lib/submitCallLog.js
+// (which serves the React CallLog modal). Both must stay in sync — the
+// lib version is the canonical reference. The portlet stays vanilla
+// because it injects into the legacy portlet container, not a React tree.
+if (!/[?&]Page=240\b/i.test(window.location.href)) return;
 
   const BASE = 'https://api.golfballs.com';
 

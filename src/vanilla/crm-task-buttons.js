@@ -2,6 +2,12 @@
 // Injects styled one-click task creation buttons above the Open Tasks DataTable,
 // collapsing the bulky DataTable controls to make room.
 // Runs on Page=240 (Contact Details) and Page=271 (Account Details).
+//
+// NOTE: ctbCreateNewTask + readTaskContext mirror src/lib/submitQuickTask.js
+// (the lib's source-of-truth for the React QuickTask modal). Keep both in
+// sync. ctbCompleteTask ("complete the latest open task in one click") has
+// no React equivalent — if surfaced in the React actions-shelf it should go
+// next to "Quick task for X" rather than being re-implemented elsewhere.
 
 if (!window.__gbCrmTaskButtonsLoaded) {
 window.__gbCrmTaskButtonsLoaded = true;
