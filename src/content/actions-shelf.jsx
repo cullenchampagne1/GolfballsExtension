@@ -85,6 +85,41 @@ if (!window.__gbActionsShelfLoaded) {
     return m ? m[1] : '';
   }
 
+  /* Read the labels of every checked status filter on the Orders Index
+     page. Markup is
+       <div class="checker"><span><input id="statusN" type="checkbox"></span></div>
+       {label text}<span class="badge">N</span><br>
+     so we walk the sibling chain after each checked .checker until we
+     hit a <br> (end of row), gathering text nodes and skipping the
+     count badge. Empty result = no filters selected. */
+  function readOrderFilters() {
+    const inputs = document.querySelectorAll('input[type="checkbox"][id^="status"]:checked');
+    const labels = [];
+    inputs.forEach((input) => {
+      const checker = input.closest('.checker');
+      if (!checker) return;
+      let node = checker.nextSibling;
+      let text = '';
+      while (node) {
+        if (node.nodeType === 3) {                          // text
+          text += node.textContent;
+        } else if (node.nodeType === 1) {
+          if (node.tagName === 'BR') break;
+          if (node.tagName === 'DIV') break;                // next .checker row
+          if (node.classList?.contains('badge')) {           // count chip — skip
+            node = node.nextSibling; continue;
+          }
+          // Inline element (span, etc.) — include its text.
+          text += node.textContent || '';
+        }
+        node = node.nextSibling;
+      }
+      const label = text.replace(/\s+/g, ' ').trim();
+      if (label) labels.push(label);
+    });
+    return labels;
+  }
+
   /* ── Context-bound action registration ──────────────────────
      "Call ${name}" + "Quick task for ${name}" both embed the
      contact's name in the label so the button text reads strongly
@@ -255,8 +290,16 @@ if (!window.__gbActionsShelfLoaded) {
       subLabel = 'Order';
     } else if (type === 'order-index') {
       key = 'order-index';
-      label = 'Orders';
-      subLabel = 'Order list';
+      label = 'Orders Index';
+      // Subtitle reflects the rep's filter selection on the page so they
+      // see at a glance which slice they're working with. Multiple
+      // filters join with " · " — the shelf header already applies
+      // overflow:hidden + textOverflow:ellipsis so a long list truncates
+      // with … instead of wrapping into a second line.
+      const filters = readOrderFilters();
+      subLabel = filters.length
+        ? `Filtered: ${filters.join(' · ')}`
+        : 'No filter selected';
     }
     actionRegistry.setPage(key, label, subLabel);
     registerCallAction(type, label);
@@ -337,4 +380,14 @@ if (!window.__gbActionsShelfLoaded) {
     }
   });
   mo.observe(document.body, { childList: true, subtree: true });
+
+  /* Live-update the Orders-Index subtitle whenever the rep toggles a
+     status filter. Capture-phase change listener on document catches
+     every status checkbox without needing to know which page is up. */
+  document.addEventListener('change', (e) => {
+    const el = e.target;
+    if (el?.tagName === 'INPUT' && el.type === 'checkbox' && typeof el.id === 'string' && el.id.startsWith('status')) {
+      queueSync();
+    }
+  }, { capture: true });
 }
