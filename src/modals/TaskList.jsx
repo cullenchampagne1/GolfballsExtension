@@ -1416,6 +1416,78 @@ function QuickTaskMenu({ qt, pushDays, setPushDays, taskTpls, selectedCount, get
 
   useEffect(() => { ensureNoSpinStyle(); }, []);
 
+  /* Keyboard nav for the menu's actionable rows. Same pattern as
+     CallLog's Quick log: -1 = idle (menu just opened), first Tab
+     highlights the top row, subsequent Tabs walk forward, Shift+Tab
+     walks back. Enter fires the active row's onClick. The visible
+     row components register their onActivate into rowsRef during
+     render so the registry stays in source / DOM order. */
+  const [activeRowIdx, setActiveRowIdx] = useState(-1);
+  const rowsRef = useRef([]);
+  rowsRef.current = []; // reset at the start of every render — items push back below
+  // Reset highlight on mode change so a fresh pane starts idle.
+  useEffect(() => { setActiveRowIdx(-1); }, [qt?.mode]);
+
+  /* Scroll the active row into view inside the menu container —
+     mainly for the templates pane which scrolls when there are
+     more than ~6 templates. We find the row via data-qt-row so we
+     don't need a per-row ref (which would force every Item rerun
+     to keep the same identity, and the inline definitions don't). */
+  useEffect(() => {
+    if (activeRowIdx < 0) return;
+    const root = ref.current;
+    if (!root) return;
+    const el = root.querySelector(`[data-qt-row="${activeRowIdx}"]`);
+    if (el) {
+      try { el.scrollIntoView({ block: 'nearest' }); } catch {}
+    }
+  }, [activeRowIdx]);
+  useEffect(() => {
+    if (!qt) return undefined;
+    const isTypingTarget = (el) => {
+      if (!el) return false;
+      const tag = el.tagName && el.tagName.toLowerCase();
+      return tag === 'input' || tag === 'textarea' || el.isContentEditable;
+    };
+    const onKey = (e) => {
+      // Esc handled by the existing outside-click close (mousedown
+      // only) — we add explicit support here so the keyboard nav
+      // user can dismiss without reaching for the mouse.
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key === 'Enter' && activeRowIdx >= 0) {
+        const onActivate = rowsRef.current[activeRowIdx];
+        if (typeof onActivate === 'function') {
+          e.preventDefault();
+          onActivate();
+        }
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      // Typing into the date input / number input shouldn't be
+      // hijacked — let those fields handle Tab normally so the user
+      // can move out of them.
+      if (isTypingTarget(e.target)) return;
+      const total = rowsRef.current.length;
+      if (total === 0) return;
+      e.preventDefault();
+      try { document.activeElement?.blur?.(); } catch {}
+      setActiveRowIdx((i) => {
+        if (e.shiftKey) {
+          if (i <= 0) return total - 1;
+          return i - 1;
+        }
+        if (i < 0) return 0;
+        return (i + 1) % total;
+      });
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [qt, activeRowIdx, onClose]);
+
   /* Click-outside dismiss. Captures on capture phase so a click on the
      same trigger that opened us doesn't immediately reopen + close in
      the same gesture (the trigger calls setQt → we'd close, then the
@@ -1473,22 +1545,44 @@ function QuickTaskMenu({ qt, pushDays, setPushDays, taskTpls, selectedCount, get
     fontFamily: 'inherit',
     textAlign: 'left',
   };
-  const Item = ({ icon, label, accent, onClick, trailing }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        ...itemStyle,
-        color: accent || itemStyle.color,
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--gb-fill-hover)'; e.currentTarget.style.color = accent ? accent : 'var(--gb-text-primary)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = accent || 'var(--gb-text-secondary)'; }}
-    >
-      {icon}
-      <span style={{ flex: 1 }}>{label}</span>
-      {trailing}
-    </button>
-  );
+  /* Item registers itself into rowsRef during render so the menu's
+     keyboard nav can find it by index. data-qt-row carries the same
+     index in the DOM so the parent-side scroll effect (below) can
+     find the active row's <button> without needing per-item refs
+     — important because Item is redefined every render, so a hook
+     inside it would re-fire continuously. */
+  const Item = ({ icon, label, accent, onClick, trailing }) => {
+    const idx = rowsRef.current.length;
+    rowsRef.current.push(onClick);
+    const isActive = idx === activeRowIdx;
+    return (
+      <button
+        type="button"
+        data-qt-row={idx}
+        onClick={onClick}
+        style={{
+          ...itemStyle,
+          color: isActive ? (accent || 'var(--gb-text-primary)') : (accent || itemStyle.color),
+          background: isActive ? 'var(--gb-fill-hover)' : 'transparent',
+          boxShadow: isActive ? 'inset 0 0 0 2px var(--gb-brand-fg)' : 'none',
+        }}
+        onMouseEnter={(e) => {
+          if (isActive) return;
+          e.currentTarget.style.background = 'var(--gb-fill-hover)';
+          e.currentTarget.style.color = accent ? accent : 'var(--gb-text-primary)';
+        }}
+        onMouseLeave={(e) => {
+          if (isActive) return;
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = accent || 'var(--gb-text-secondary)';
+        }}
+      >
+        {icon}
+        <span style={{ flex: 1 }}>{label}</span>
+        {trailing}
+      </button>
+    );
+  };
 
   const Header = ({ children }) => (
     <div style={{
@@ -1502,41 +1596,64 @@ function QuickTaskMenu({ qt, pushDays, setPushDays, taskTpls, selectedCount, get
     }}>{children}</div>
   );
 
-  const Back = ({ onClick }) => (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        ...itemStyle,
-        color: 'var(--gb-text-muted)',
-        fontWeight: 600,
-        fontSize: 11.5,
-        borderBottom: '1px solid var(--gb-border-subtle)',
-        marginBottom: 3,
-        borderRadius: 0,
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--gb-fill-hover)'; e.currentTarget.style.color = 'var(--gb-text-primary)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--gb-text-muted)'; }}
-    >
-      <ChevLeft />
-      Back
-    </button>
-  );
+  const Back = ({ onClick }) => {
+    const idx = rowsRef.current.length;
+    rowsRef.current.push(onClick);
+    const isActive = idx === activeRowIdx;
+    return (
+      <button
+        type="button"
+        data-qt-row={idx}
+        onClick={onClick}
+        style={{
+          ...itemStyle,
+          color: 'var(--gb-text-muted)',
+          fontWeight: 600,
+          fontSize: 11.5,
+          borderBottom: '1px solid var(--gb-border-subtle)',
+          marginBottom: 3,
+          borderRadius: 0,
+          background: isActive ? 'var(--gb-fill-hover)' : 'transparent',
+          boxShadow: isActive ? 'inset 0 0 0 2px var(--gb-brand-fg)' : 'none',
+        }}
+        onMouseEnter={(e) => {
+          if (isActive) return;
+          e.currentTarget.style.background = 'var(--gb-fill-hover)';
+          e.currentTarget.style.color = 'var(--gb-text-primary)';
+        }}
+        onMouseLeave={(e) => {
+          if (isActive) return;
+          e.currentTarget.style.background = 'transparent';
+          e.currentTarget.style.color = 'var(--gb-text-muted)';
+        }}
+      >
+        <ChevLeft />
+        Back
+      </button>
+    );
+  };
 
   /* Push-Out row with an inline day-count input. The whole row is a
      click target that fires the push action with the current days
      value; the input gets pointer + key events isolated so typing in
      it doesn't trigger the action or the menu's outside-click close. */
-  const PushRow = ({ pushDays, setPushDays, onClick }) => (
+  const PushRow = ({ pushDays, setPushDays, onClick }) => {
+    const idx = rowsRef.current.length;
+    rowsRef.current.push(onClick);
+    const isActive = idx === activeRowIdx;
+    return (
     <div
       onClick={onClick}
+      data-qt-row={idx}
       style={{
         ...itemStyle,
         color: 'var(--gb-info-fg)',
         cursor: 'pointer',
+        background: isActive ? 'var(--gb-fill-hover)' : 'transparent',
+        boxShadow: isActive ? 'inset 0 0 0 2px var(--gb-brand-fg)' : 'none',
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--gb-fill-hover)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+      onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--gb-fill-hover)'; }}
+      onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
     >
       <CalIcon />
       <span>Push Out</span>
@@ -1570,7 +1687,8 @@ function QuickTaskMenu({ qt, pushDays, setPushDays, taskTpls, selectedCount, get
         {pushDays === 1 ? 'day' : 'days'}
       </span>
     </div>
-  );
+    );
+  };
 
   let body = null;
   if (qt.mode === 'main' && task) {

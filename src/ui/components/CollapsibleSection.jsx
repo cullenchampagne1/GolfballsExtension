@@ -41,9 +41,26 @@ function ensureNobarStyle() {
  *                 scrollbar is more distracting than helpful.
  *   children      Body.
  */
-export function CollapsibleSection({ icon, title, subtitle, action, defaultOpen = false, maxHeight, hideScrollbar, children }) {
+export function CollapsibleSection({
+  icon, title, subtitle, action,
+  defaultOpen = false,
+  /* Optional controlled props. If `open` is passed, the section is
+     fully controlled by the parent and the internal `setOpen` is
+     bypassed — the parent decides when to toggle via `onOpenChange`.
+     If `open` is omitted, the component falls back to the existing
+     uncontrolled behaviour (`defaultOpen` seeds the internal state). */
+  open: controlledOpen,
+  onOpenChange,
+  maxHeight, hideScrollbar, children,
+}) {
   useEffect(() => { if (hideScrollbar) ensureNobarStyle(); }, [hideScrollbar]);
-  const [open, setOpen] = useState(defaultOpen);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : uncontrolledOpen;
+  const toggle = () => {
+    if (isControlled) onOpenChange?.(!open);
+    else setUncontrolledOpen((v) => !v);
+  };
   return (
     <div style={{
       border: '1px solid var(--gb-border-default)',
@@ -52,7 +69,7 @@ export function CollapsibleSection({ icon, title, subtitle, action, defaultOpen 
       overflow: 'hidden',
     }}>
       <div
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
         style={{
           padding: '8px 10px',
           display: 'flex', alignItems: 'center', gap: 9,

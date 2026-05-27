@@ -90,6 +90,21 @@ export function CallLog({
   const [voicemail, setVoicemail] = useState(false);
   const [savingCustom, setSavingCustom] = useState(false);
 
+  /* Keyboard nav over the Quick log grid.
+       - Tab from idle (-1) → highlight the first quick action.
+       - Tab walks forward; Shift+Tab walks back.
+       - Enter fires handlePresetClick on the highlighted row.
+       - Tab past the last row opens Custom log + focuses its first
+         field so the user's next Tab keystroke flows naturally
+         through the form. Shift+Tab from row 0 releases the
+         highlight back to idle.
+     The active row gets an inset brand ring (PresetGridButton reads
+     isKbdActive). We blur whatever was focused at the start of a
+     Tab session so the browser's own Tab routing doesn't fight us. */
+  const [activeQuickIdx, setActiveQuickIdx] = useState(-1);
+  const [customOpen, setCustomOpen] = useState(false);
+  const customFormRef = useRef(null);
+
   const bindCloseRef = useRef(null);
   const handleBindClose = (fn) => {
     bindCloseRef.current = fn;
@@ -107,6 +122,92 @@ export function CallLog({
     const unsub = subscribeToCallTemplates((next) => { if (alive) setTemplates(next); });
     return () => { alive = false; unsub(); };
   }, []);
+
+  /* Keep activeQuickIdx in bounds when the template list changes. */
+  useEffect(() => {
+    setActiveQuickIdx((i) => (i >= templates.length ? -1 : i));
+  }, [templates.length]);
+
+  /* Document-level Tab/Shift+Tab/Enter handler. Only intercepts when
+     the user isn't typing into an input/textarea/contenteditable —
+     once focus is inside the Custom log form, native Tab takes over
+     and walks the fields. */
+  useEffect(() => {
+    const isTypingTarget = (el) => {
+      if (!el) return false;
+      const tag = el.tagName && el.tagName.toLowerCase();
+      return tag === 'input' || tag === 'textarea' || el.isContentEditable;
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape' && activeQuickIdx >= 0) {
+        e.preventDefault();
+        setActiveQuickIdx(-1);
+        return;
+      }
+      if (e.key === 'Enter' && activeQuickIdx >= 0) {
+        const tpl = templates[activeQuickIdx];
+        if (tpl) {
+          e.preventDefault();
+          handlePresetClick(tpl);
+        }
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      // Let typing targets handle Tab themselves (browser-default
+      // focus rotation through the Custom form's fields).
+      if (isTypingTarget(e.target)) return;
+      if (templates.length === 0) return;
+
+      if (e.shiftKey) {
+        if (activeQuickIdx <= 0) {
+          // From the first row (or idle) → release the highlight and
+          // fall through to default Tab so the user can leave the
+          // modal naturally.
+          setActiveQuickIdx(-1);
+          return;
+        }
+        e.preventDefault();
+        setActiveQuickIdx((i) => i - 1);
+        return;
+      }
+
+      // Tab forward.
+      if (activeQuickIdx === -1) {
+        e.preventDefault();
+        // Take focus off whatever button currently holds it so the
+        // visual highlight is the only thing telling the user where
+        // they are.
+        try { document.activeElement?.blur?.(); } catch {}
+        setActiveQuickIdx(0);
+        return;
+      }
+      if (activeQuickIdx < templates.length - 1) {
+        e.preventDefault();
+        setActiveQuickIdx((i) => i + 1);
+        return;
+      }
+      // Past the last quick action: open the Custom log section,
+      // release the highlight, and focus the first focusable in
+      // the form so the user's next Tab walks normally.
+      e.preventDefault();
+      setActiveQuickIdx(-1);
+      setCustomOpen(true);
+      // Wait a tick for the collapsible to render its body before
+      // querying it for a focusable. requestAnimationFrame after a
+      // microtask lines up nicely with motion's mount.
+      Promise.resolve().then(() => requestAnimationFrame(() => {
+        const root = customFormRef.current;
+        if (!root) return;
+        const focusable = root.querySelector(
+          'input, textarea, select, button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        try { focusable?.focus({ preventScroll: false }); } catch {}
+      }));
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeQuickIdx, templates]);
 
   /* Preset click: submit immediately. Same toast on success/failure
      as the custom path so the rep gets uniform feedback. */
@@ -226,12 +327,13 @@ export function CallLog({
                 gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
                 gap: 5,
               }}>
-                {templates.map((tpl) => (
+                {templates.map((tpl, idx) => (
                   <PresetGridButton
                     key={tpl.id}
                     tpl={tpl}
                     busy={busyId === tpl.id}
                     disabled={anyBusy && busyId !== tpl.id}
+                    isKbdActive={idx === activeQuickIdx}
                     onPick={() => handlePresetClick(tpl)}
                   />
                 ))}
@@ -251,9 +353,13 @@ export function CallLog({
           icon={<I.edit />}
           title="Custom log"
           subtitle="No preset fits? Build a one-off entry."
-          defaultOpen={false}
+          open={customOpen}
+          onOpenChange={setCustomOpen}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
+          <div
+            ref={customFormRef}
+            style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}
+          >
             {/* Direction + Category share a row to save vertical
                 space. Heights are forced to 28px so the bottoms
                 align — Segmented size="sm" defaults to ~20px tall
@@ -387,15 +493,26 @@ function EmptyHint({ children }) {
    in-page quick-log buttons: icon + truncated name + tiny IN/OUT
    meta on the right. Busy state shows a spinner where the IN/OUT
    tag was so the cell width stays stable mid-submit. */
-function PresetGridButton({ tpl, busy, disabled, onPick }) {
+function PresetGridButton({ tpl, busy, disabled, isKbdActive, onPick }) {
   const [hover, setHover] = useState(false);
+  const ref = useRef(null);
   const dirLabel = tpl.callDirection === 1 ? 'IN' : 'OUT';
   const catLabel = getCategoryLabel(tpl.callCategory);
   const Glyph = tpl.callVoicemail ? Voicemail : I.phone;
   const inactive = disabled || busy;
 
+  /* Scroll-into-view when the keyboard nav highlights this row, so
+     the active cell stays visible inside the scrolling 168px wrapper
+     even on rep accounts with 20+ templates. */
+  useEffect(() => {
+    if (isKbdActive && ref.current) {
+      try { ref.current.scrollIntoView({ block: 'nearest' }); } catch {}
+    }
+  }, [isKbdActive]);
+
   return (
     <button
+      ref={ref}
       type="button"
       disabled={inactive}
       onClick={onPick}
@@ -412,7 +529,15 @@ function PresetGridButton({ tpl, busy, disabled, onPick }) {
         gap: 6,
         height: 30,
         padding: '0 8px',
-        background: hover && !inactive ? 'var(--gb-brand-tint-medium)' : 'var(--gb-brand-tint-soft)',
+        /* Keyboard-active wins over hover. Stronger tint + 2px inset
+           brand ring gives a clear "this is where the highlight is"
+           cue without breaking the row's grid (a ring stays inside
+           the existing borderRadius). */
+        background: isKbdActive
+          ? 'var(--gb-brand-tint-strong, var(--gb-brand-tint-medium))'
+          : hover && !inactive
+            ? 'var(--gb-brand-tint-medium)'
+            : 'var(--gb-brand-tint-soft)',
         border: '1px solid var(--gb-brand-tint-border)',
         color: 'var(--gb-brand-label)',
         borderRadius: 'var(--gb-r-sm)',
@@ -420,7 +545,11 @@ function PresetGridButton({ tpl, busy, disabled, onPick }) {
         opacity: disabled ? 0.5 : 1,
         textAlign: 'left',
         fontFamily: 'var(--gb-font-sans)',
-        boxShadow: hover && !inactive ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
+        boxShadow: isKbdActive
+          ? 'inset 0 0 0 2px var(--gb-brand-fg)'
+          : hover && !inactive
+            ? '0 2px 6px rgba(0,0,0,0.06)'
+            : 'none',
         transition: 'all var(--gb-anim-fast)',
         minWidth: 0,
       }}
