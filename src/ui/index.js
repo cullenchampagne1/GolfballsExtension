@@ -9,7 +9,7 @@
 ─────────────────────────────────────────────────────────────── */
 
 export { Icon, I } from './icons.jsx';
-export { T, TINT, SHAKE, SHAKE_T, Spinner, sizeIcon, useAsyncState, inputBaseStyle } from './shared.jsx';
+export { T, TINT, SHAKE, SHAKE_T, Spinner, sizeIcon, useAsyncState, inputBaseStyle, ensureMarchingAntsStyle } from './shared.jsx';
 
 export { Btn } from './components/Btn.jsx';
 export { IconBtn } from './components/IconBtn.jsx';

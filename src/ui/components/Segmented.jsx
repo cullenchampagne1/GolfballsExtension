@@ -71,6 +71,7 @@ export function Segmented({ value, onChange, options = [], size = 'md', full, st
   return (
     <div
       ref={containerRef}
+      role="radiogroup"
       style={{
         display: full ? 'flex' : 'inline-flex',
         padding: s.pad, gap: s.gap,
@@ -102,12 +103,45 @@ export function Segmented({ value, onChange, options = [], size = 'md', full, st
       )}
       {options.map((o, i) => {
         const active = o.id === value;
+        /* Roving-tabindex pattern (same as a native radio group): the
+           currently-selected option is the only Tab stop in the
+           segmented; Arrow keys move within. That way Tab moves IN
+           once and OUT once instead of stopping on every option. */
         return (
           <button
             key={o.id}
             ref={(el) => { btnRefs.current[i] = el; }}
             type="button"
+            role="radio"
+            aria-checked={active}
+            tabIndex={active ? 0 : -1}
             onClick={() => { if (!active) onChange?.(o.id); }}
+            onKeyDown={(e) => {
+              if (options.length < 2) return;
+              if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                const next = options[(i + 1) % options.length];
+                onChange?.(next.id);
+                // Focus the newly-active button on the next paint so
+                // Tab from here continues to whatever comes after the
+                // group.
+                requestAnimationFrame(() => btnRefs.current[(i + 1) % options.length]?.focus?.());
+              } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                const prevIdx = (i - 1 + options.length) % options.length;
+                onChange?.(options[prevIdx].id);
+                requestAnimationFrame(() => btnRefs.current[prevIdx]?.focus?.());
+              } else if (e.key === 'Home') {
+                e.preventDefault();
+                onChange?.(options[0].id);
+                requestAnimationFrame(() => btnRefs.current[0]?.focus?.());
+              } else if (e.key === 'End') {
+                e.preventDefault();
+                const lastIdx = options.length - 1;
+                onChange?.(options[lastIdx].id);
+                requestAnimationFrame(() => btnRefs.current[lastIdx]?.focus?.());
+              }
+            }}
             style={{
               position: 'relative', zIndex: 1,
               flex: full ? 1 : '0 0 auto',
@@ -119,6 +153,7 @@ export function Segmented({ value, onChange, options = [], size = 'md', full, st
               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
               gap: 5, whiteSpace: 'nowrap',
               transition: 'color .14s',
+              outline: 'none',
             }}
           >
             {o.icon && React.cloneElement(o.icon, { size: s.icon })}

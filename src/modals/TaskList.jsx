@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { createPortal } from 'react-dom';
 import {
   FloatingPanel, ModalHeader, Btn, Input, Dropdown, Tag, IconBtn, I,
+  ensureMarchingAntsStyle,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
@@ -1414,7 +1415,7 @@ function QuickTaskMenu({ qt, pushDays, setPushDays, taskTpls, selectedCount, get
   const dateRef = useRef(null);
   const [dateVal, setDateVal] = useState(todayInput);
 
-  useEffect(() => { ensureNoSpinStyle(); }, []);
+  useEffect(() => { ensureNoSpinStyle(); ensureMarchingAntsStyle(); }, []);
 
   /* Keyboard nav for the menu's actionable rows. Same pattern as
      CallLog's Quick log: -1 = idle (menu just opened), first Tab
@@ -1559,12 +1560,12 @@ function QuickTaskMenu({ qt, pushDays, setPushDays, taskTpls, selectedCount, get
       <button
         type="button"
         data-qt-row={idx}
+        className={isActive ? 'gb-kbd-active' : undefined}
         onClick={onClick}
         style={{
           ...itemStyle,
-          color: isActive ? (accent || 'var(--gb-text-primary)') : (accent || itemStyle.color),
-          background: isActive ? 'var(--gb-fill-hover)' : 'transparent',
-          boxShadow: isActive ? 'inset 0 0 0 2px var(--gb-brand-fg)' : 'none',
+          color: accent || itemStyle.color,
+          background: 'transparent',
         }}
         onMouseEnter={(e) => {
           if (isActive) return;
@@ -1604,6 +1605,7 @@ function QuickTaskMenu({ qt, pushDays, setPushDays, taskTpls, selectedCount, get
       <button
         type="button"
         data-qt-row={idx}
+        className={isActive ? 'gb-kbd-active' : undefined}
         onClick={onClick}
         style={{
           ...itemStyle,
@@ -1613,8 +1615,7 @@ function QuickTaskMenu({ qt, pushDays, setPushDays, taskTpls, selectedCount, get
           borderBottom: '1px solid var(--gb-border-subtle)',
           marginBottom: 3,
           borderRadius: 0,
-          background: isActive ? 'var(--gb-fill-hover)' : 'transparent',
-          boxShadow: isActive ? 'inset 0 0 0 2px var(--gb-brand-fg)' : 'none',
+          background: 'transparent',
         }}
         onMouseEnter={(e) => {
           if (isActive) return;
@@ -1645,12 +1646,12 @@ function QuickTaskMenu({ qt, pushDays, setPushDays, taskTpls, selectedCount, get
     <div
       onClick={onClick}
       data-qt-row={idx}
+      className={isActive ? 'gb-kbd-active' : undefined}
       style={{
         ...itemStyle,
         color: 'var(--gb-info-fg)',
         cursor: 'pointer',
-        background: isActive ? 'var(--gb-fill-hover)' : 'transparent',
-        boxShadow: isActive ? 'inset 0 0 0 2px var(--gb-brand-fg)' : 'none',
+        background: 'transparent',
       }}
       onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--gb-fill-hover)'; }}
       onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}

@@ -4,6 +4,7 @@ import {
   Btn, Dropdown, Input, Textarea, Segmented, Field, SectionLabel,
   PillTag, CollapsibleSection,
   I, Icon, useToast,
+  ensureMarchingAntsStyle,
 } from '../ui/index.js';
 import {
   CALL_CATEGORY_OPTIONS,
@@ -111,6 +112,8 @@ export function CallLog({
     if (bindClose) bindClose(fn);
   };
   const animatedClose = () => bindCloseRef.current?.();
+
+  useEffect(() => { ensureMarchingAntsStyle(); }, []);
 
   useEffect(() => {
     let alive = true;
@@ -522,6 +525,11 @@ function PresetGridButton({ tpl, busy, disabled, isKbdActive, onPick }) {
          hints on hover even though the cell itself is too narrow
          to render them inline. */
       title={[tpl.name, catLabel && `Category: ${catLabel}`, tpl.callVoicemail && 'Voicemail'].filter(Boolean).join('\n')}
+      /* gb-kbd-active layers the marching-ants animation onto the
+         border. The dashed outline "spins" around the perimeter
+         while the inner tint stays calm — it's a motion cue, not a
+         visual punch. */
+      className={isKbdActive ? 'gb-kbd-active' : undefined}
       style={{
         display: 'grid',
         gridTemplateColumns: '14px 1fr auto',
@@ -529,15 +537,9 @@ function PresetGridButton({ tpl, busy, disabled, isKbdActive, onPick }) {
         gap: 6,
         height: 30,
         padding: '0 8px',
-        /* Keyboard-active wins over hover. Stronger tint + 2px inset
-           brand ring gives a clear "this is where the highlight is"
-           cue without breaking the row's grid (a ring stays inside
-           the existing borderRadius). */
-        background: isKbdActive
-          ? 'var(--gb-brand-tint-strong, var(--gb-brand-tint-medium))'
-          : hover && !inactive
-            ? 'var(--gb-brand-tint-medium)'
-            : 'var(--gb-brand-tint-soft)',
+        background: hover && !inactive
+          ? 'var(--gb-brand-tint-medium)'
+          : 'var(--gb-brand-tint-soft)',
         border: '1px solid var(--gb-brand-tint-border)',
         color: 'var(--gb-brand-label)',
         borderRadius: 'var(--gb-r-sm)',
@@ -545,11 +547,7 @@ function PresetGridButton({ tpl, busy, disabled, isKbdActive, onPick }) {
         opacity: disabled ? 0.5 : 1,
         textAlign: 'left',
         fontFamily: 'var(--gb-font-sans)',
-        boxShadow: isKbdActive
-          ? 'inset 0 0 0 2px var(--gb-brand-fg)'
-          : hover && !inactive
-            ? '0 2px 6px rgba(0,0,0,0.06)'
-            : 'none',
+        boxShadow: hover && !inactive ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
         transition: 'all var(--gb-anim-fast)',
         minWidth: 0,
       }}

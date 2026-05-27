@@ -170,14 +170,78 @@ export function Dropdown({
     });
   };
 
+  /* Keyboard-active option index used to highlight a row in the open
+     popover and pick it on Enter. -1 = no row active (mouse-driven).
+     Arrow Up/Down move through the flat list of pickable options. */
+  const [activeIdx, setActiveIdx] = useState(-1);
+  useEffect(() => { if (!open) setActiveIdx(-1); }, [open]);
+  /* Flat list of pickable items in the same order they render in the
+     popover — used for ArrowUp/Down navigation. Mirrors the rendering
+     logic (group + parent/sub expansion). */
+  const pickableList = useMemo(() => {
+    const out = [];
+    for (const [, opts] of groups) {
+      for (const o of opts) {
+        out.push(o);
+        const subsExpanded = o._forceExpanded || expandedIds.has(o.id);
+        if (subsExpanded && Array.isArray(o.subOptions)) {
+          for (const s of o.subOptions) out.push(s);
+        }
+      }
+    }
+    return out;
+  }, [groups, expandedIds]);
+
+  /* Trigger keydown — implements the standard combobox/listbox pattern
+     so the Dropdown works as a single Tab stop with full keyboard nav. */
+  const onTriggerKeyDown = (e) => {
+    if (disabled) return;
+    if (!open) {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setOpen(true);
+        setActiveIdx(0);
+      }
+      return;
+    }
+    // Open state.
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setOpen(false);
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIdx((i) => (pickableList.length === 0 ? -1 : (i + 1) % pickableList.length));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIdx((i) => (pickableList.length === 0 ? -1 : (i <= 0 ? pickableList.length - 1 : i - 1)));
+      return;
+    }
+    if (e.key === 'Enter' || e.key === ' ') {
+      if (activeIdx >= 0 && activeIdx < pickableList.length) {
+        e.preventDefault();
+        pick(pickableList[activeIdx]);
+      }
+    }
+  };
+
   return (
     <div ref={rootRef} style={{ position: 'relative', ...style }}>
       <div
+        role="combobox"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        tabIndex={disabled ? -1 : 0}
         onClick={() => !disabled && setOpen((v) => !v)}
+        onKeyDown={onTriggerKeyDown}
         style={{
           ...inputBaseStyle({ focused: open, error, size }),
           cursor: disabled ? 'not-allowed' : 'pointer',
           opacity: disabled ? 0.5 : 1, userSelect: 'none',
+          outline: 'none',
         }}
       >
         {leading && <span style={{ display: 'flex', flexShrink: 0, color: 'var(--gb-text-muted)' }}>{leading}</span>}
@@ -227,6 +291,7 @@ export function Dropdown({
                   autoFocus
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={onTriggerKeyDown}
                   placeholder="Search…"
                   style={{
                     width: '100%', boxSizing: 'border-box', height: 26,
@@ -261,6 +326,7 @@ export function Dropdown({
                       expandedIds={expandedIds}
                       onToggleExpand={toggleExpand}
                       onPick={pick}
+                      kbdActiveId={pickableList[activeIdx]?.id}
                     />
                   ))}
                 </div>
@@ -289,7 +355,7 @@ export function Dropdown({
    user's collapse state so a matching sub-option is always
    visible during search without needing the user to expand
    each parent manually. */
-function Row({ o, value, depth, expandedIds, onToggleExpand, onPick }) {
+function Row({ o, value, depth, expandedIds, onToggleExpand, onPick, kbdActiveId }) {
   const active = o.id === value;
   const hasSubs = Array.isArray(o.subOptions) && o.subOptions.length > 0;
   const expanded = hasSubs && (o._forceExpanded || expandedIds.has(o.id));
@@ -297,6 +363,10 @@ function Row({ o, value, depth, expandedIds, onToggleExpand, onPick }) {
   // parent has a "stale" pick inside so the user can see at a glance.
   const subActive = hasSubs && (o.subOptions || []).some((s) => s.id === value);
   const isActive = active || (subActive && !expanded);
+  /* Keyboard-highlighted row (ArrowUp/Down inside the open menu).
+     Distinct from the selected-value highlight so the user can SEE
+     where their next Enter will land before committing the pick. */
+  const isKbdHighlighted = kbdActiveId === o.id;
   const accentColor = o.accent
     ? `var(--gb-${o.accent === 'brand' ? 'brand-label' : `${o.accent}-fg`})`
     : null;
@@ -324,7 +394,10 @@ function Row({ o, value, depth, expandedIds, onToggleExpand, onPick }) {
           opacity: o.disabled ? 0.4 : 1,
           color: isActive ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
           fontWeight: isActive ? 600 : 500,
-          background: isActive ? 'var(--gb-brand-tint-soft)' : 'transparent',
+          background: isKbdHighlighted
+            ? 'var(--gb-brand-tint-medium)'
+            : isActive ? 'var(--gb-brand-tint-soft)' : 'transparent',
+          boxShadow: isKbdHighlighted ? 'inset 0 0 0 1px var(--gb-brand-fg)' : 'none',
         }}
       >
         {o.accent && (
@@ -384,6 +457,7 @@ function Row({ o, value, depth, expandedIds, onToggleExpand, onPick }) {
                 expandedIds={expandedIds}
                 onToggleExpand={onToggleExpand}
                 onPick={onPick}
+                kbdActiveId={kbdActiveId}
               />
             ))}
           </motion.div>

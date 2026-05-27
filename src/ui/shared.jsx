@@ -127,3 +127,47 @@ export function inputBaseStyle({ focused, error, size = 'md' }) {
     boxSizing: 'border-box',
   };
 }
+
+/* ───────────────────────────────────────────────────────────────
+   Marching-ants keyboard-active border.
+
+   Active row indicator for the modal Tab-nav pattern (CallLog quick
+   log, QuickTask menu, etc.). Four linear-gradient backgrounds on
+   each edge, animated by shifting background-position — produces a
+   classic dashed perimeter that walks ("marches") around the
+   element. Lighter visual cue than a static ring + carries motion
+   so it's immediately readable as "this is what you're aiming at".
+
+   `--gb-march-color` defaults to the brand foreground; consumers can
+   override on the element to retint. `--gb-march-dur` (0.7s default)
+   controls how fast the ants march.
+─────────────────────────────────────────────────────────────── */
+const MARCHING_ANTS_STYLE_ID = '__gb-marching-ants';
+export function ensureMarchingAntsStyle() {
+  if (typeof document === 'undefined' || document.getElementById(MARCHING_ANTS_STYLE_ID)) return;
+  const el = document.createElement('style');
+  el.id = MARCHING_ANTS_STYLE_ID;
+  el.textContent = `
+    @keyframes gb-march {
+      to {
+        background-position:
+          16px 0,    -16px 100%,
+          0 -16px,   100% 16px;
+      }
+    }
+    .gb-kbd-active {
+      --gb-march-color: var(--gb-brand-fg);
+      --gb-march-dur: 0.7s;
+      background-image:
+        linear-gradient(90deg, var(--gb-march-color) 50%, transparent 50%),
+        linear-gradient(90deg, var(--gb-march-color) 50%, transparent 50%),
+        linear-gradient(0deg,  var(--gb-march-color) 50%, transparent 50%),
+        linear-gradient(0deg,  var(--gb-march-color) 50%, transparent 50%);
+      background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+      background-size: 16px 2px, 16px 2px, 2px 16px, 2px 16px;
+      background-position: 0 0, 0 100%, 0 0, 100% 0;
+      animation: gb-march var(--gb-march-dur) linear infinite;
+    }
+  `;
+  document.head.appendChild(el);
+}
