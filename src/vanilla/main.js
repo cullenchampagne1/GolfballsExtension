@@ -181,11 +181,21 @@ window.__gbContentReady = true;
           }],
         };
         chrome.runtime.sendMessage({ action: 'paAutomate', paUrl: msg.paUrl, payload }, (result) => {
+          // Use the React toast surface (window.__gbToast, installed by
+          // any ToastHost that's mounted) when available — falls back to
+          // the legacy vanilla notification only if no React host has
+          // installed the global yet. The design-system toasts respect
+          // the user's UI Scale settings + carry the rounded chrome.
+          const toast = (typeof window !== 'undefined' && window.__gbToast) ? window.__gbToast : null;
           if (result?.results?.[0]?.status === 'sent') {
-            showGbNotification(`Email sent to ${msg.contactEmail}`, 'success', 4000);
+            const msgText = `Email sent to ${msg.contactEmail}`;
+            if (toast?.success) toast.success(msgText, { duration: 4000 });
+            else showGbNotification(msgText, 'success', 4000);
           } else {
             const err = result?.results?.[0]?.error || result?.error || 'Unknown error';
-            showGbNotification(`Email failed: ${err}`, 'error', 6000);
+            const msgText = `Email failed: ${err}`;
+            if (toast?.error) toast.error(msgText, { duration: 6000 });
+            else showGbNotification(msgText, 'error', 6000);
           }
         });
       });
