@@ -57,12 +57,27 @@ const DragHandleDots = () => (
   </svg>
 );
 
-function readPopoverScale() {
+/* Resolve the popovers scale at drag/position time. Prefers reading
+   the COMPUTED `scale` property off the popup element (the source of
+   truth for what the browser actually rendered with) — that's robust
+   to the CSS-var-on-:root not being set yet at mount, to stylesheet
+   load order races, and to any future renaming of the var. Falls
+   back to reading --gb-scale-popovers off documentElement if the
+   element ref isn't available. */
+function readPopoverScale(el) {
+  try {
+    if (el) {
+      const v = getComputedStyle(el).scale;
+      const n = parseFloat(String(v || '1'));
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  } catch {}
   try {
     const v = getComputedStyle(document.documentElement).getPropertyValue('--gb-scale-popovers');
-    const n = parseFloat(v);
+    const n = parseFloat(String(v || '').trim());
     return Number.isFinite(n) && n > 0 ? n : 1;
-  } catch { return 1; }
+  } catch { /* fallthrough */ }
+  return 1;
 }
 
 export function DraggablePopup({
@@ -97,21 +112,39 @@ export function DraggablePopup({
   const W = width;
   const H = maxHeight;
 
+  const rootRef = useRef(null);
+
   const computeInitialPos = () => {
+    const scale = readPopoverScale(rootRef.current);
+    const Wv = W * scale;        // rendered width in viewport px
+    const Hv = H * scale;        // rendered height in viewport px
     let rect = null;
     if (anchorHostId) {
       const host = document.getElementById(anchorHostId);
       rect = host?.querySelector('.gb-modal-card')?.getBoundingClientRect() || null;
     }
-    if (!rect) {
-      const cx = window.innerWidth / 2;
-      rect = { right: cx + 500, top: Math.max(40, (window.innerHeight - H) / 2) };
+    let left;
+    let top;
+    if (rect) {
+      // First try: anchor to the parent modal's right edge with a 16px
+      // gap. When the viewport is too narrow to fit the popup beside
+      // the parent (e.g. a 1000px modal at 1280px viewport), overlay
+      // the right portion of the parent itself rather than getting
+      // mashed against the viewport's right edge. Keeps "this popup
+      // belongs to that modal" visually obvious.
+      left = rect.right + 16;
+      if (left + Wv > window.innerWidth - 8) {
+        left = Math.max(8, rect.right - Wv - 16);
+      }
+      top = rect.top;
+    } else {
+      // No parent → centre.
+      left = Math.max(8, (window.innerWidth  - Wv) / 2);
+      top  = Math.max(40, (window.innerHeight - Hv) / 2);
     }
-    const scale = readPopoverScale();
-    let left = rect.right + 16;
-    let top = rect.top;
-    const maxLeft = Math.max(0, window.innerWidth - W * scale - 8);
-    const maxTop  = Math.max(0, window.innerHeight - 80);
+    // Final viewport clamp using rendered (scaled) dimensions.
+    const maxLeft = Math.max(0, window.innerWidth  - Wv - 8);
+    const maxTop  = Math.max(0, window.innerHeight - Math.min(Hv, 80));
     if (left > maxLeft) left = maxLeft;
     if (top < 8) top = 8;
     if (top > maxTop) top = maxTop;
@@ -140,9 +173,15 @@ export function DraggablePopup({
     const onMove = (ev) => {
       const dx = ev.clientX - start.px;
       const dy = ev.clientY - start.py;
-      const scale = readPopoverScale();
-      const maxLeft = Math.max(0, window.innerWidth  - W * scale);
-      const maxTop  = Math.max(0, window.innerHeight - H * scale);
+      const scale = readPopoverScale(rootRef.current);
+      /* Use the popup's ACTUAL rendered height when possible — the
+         element's offsetHeight gives the real content height (which
+         caps at maxHeight), so the clamp respects content collapses
+         and growth, not just the maxHeight constant. */
+      const realW = (rootRef.current?.offsetWidth  || W) * scale;
+      const realH = (rootRef.current?.offsetHeight || H) * scale;
+      const maxLeft = Math.max(0, window.innerWidth  - realW);
+      const maxTop  = Math.max(0, window.innerHeight - realH);
       setPos({
         left: Math.max(0, Math.min(maxLeft, start.left + dx)),
         top:  Math.max(0, Math.min(maxTop,  start.top  + dy)),
@@ -159,7 +198,6 @@ export function DraggablePopup({
     window.addEventListener('pointercancel', onUp);
   };
 
-  const rootRef = useRef(null);
   useEffect(() => {
     if (!open || !closeOnOutside) return undefined;
     const onDown = (e) => {
