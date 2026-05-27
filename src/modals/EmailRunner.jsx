@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { Btn, Dropdown, Field, IconBtn, RangeSlider, Tag, I, Spinner } from '../ui/index.js';
+import { Btn, DraggablePopup, Dropdown, Field, RangeSlider, Tag, I, Spinner } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 
 /* ───────────────────────────────────────────────────────────────
@@ -77,17 +76,6 @@ const readSignature = () => new Promise((resolve) => {
   } catch { resolve(''); }
 });
 
-const DragHandleDots = () => (
-  <svg width="9" height="13" viewBox="0 0 9 13" fill="currentColor" aria-hidden>
-    <circle cx="2" cy="2"  r="1" />
-    <circle cx="7" cy="2"  r="1" />
-    <circle cx="2" cy="6.5" r="1" />
-    <circle cx="7" cy="6.5" r="1" />
-    <circle cx="2" cy="11" r="1" />
-    <circle cx="7" cy="11" r="1" />
-  </svg>
-);
-
 export function EmailRunner({
   open, contacts, onClose, anchorHostId,
   // Row-level loading-state hooks. CRMSearch / TaskList wire these to
@@ -116,79 +104,6 @@ export function EmailRunner({
      a fresh run) stops the orchestrator cleanly without leaving stale
      row spinners behind. */
   const runTokenRef = useRef(0);
-
-  /* Position state. Initial coords anchor the panel to the right of
-     the parent modal — same vertical alignment, 16px gap horizontally.
-     The user can drag it anywhere by grabbing the header handle.
-     Re-pinned each time `open` flips true so a previous session's
-     drag doesn't carry over. Falls back to a sensible right-of-
-     viewport-centre default when the parent host isn't found. */
-  const computeAnchoredPos = () => {
-    let rect = null;
-    if (anchorHostId) {
-      const host = document.getElementById(anchorHostId);
-      // .gb-modal-card is the visible card inside FloatingPanel; the
-      // outer host div spans the viewport so we need the card's rect.
-      rect = host?.querySelector('.gb-modal-card')?.getBoundingClientRect() || null;
-    }
-    if (!rect) {
-      // Fallback: place right of the viewport centre minus half a
-      // typical 1000px modal width, with the same 16px gap.
-      const cx = window.innerWidth / 2;
-      rect = { right: cx + 500, top: Math.max(40, (window.innerHeight - PANEL_H) / 2) };
-    }
-    let left = rect.right + 16;
-    let top  = rect.top;
-    // Clamp so the panel stays visible even when the parent modal sits
-    // close to the right viewport edge.
-    const maxLeft = Math.max(0, window.innerWidth - PANEL_W - 8);
-    const maxTop  = Math.max(0, window.innerHeight - 80);
-    if (left > maxLeft) left = maxLeft;
-    if (top < 8) top = 8;
-    if (top > maxTop) top = maxTop;
-    return { left: Math.max(8, left), top };
-  };
-  const [pos, setPos] = useState(computeAnchoredPos);
-  useEffect(() => {
-    if (!open) return;
-    setPos(computeAnchoredPos());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  /* Pointer-drag the panel from the header grip. Tracks the global
-     pointer until release so the cursor can leave the panel without
-     dropping the drag. Clamps to the visible viewport so the user
-     can't lose the panel off-screen. */
-  const dragRef = useRef(null);
-  const onDragStart = (e) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    // No stopPropagation: any Dropdown that's open right now listens
-    // on document mousedown and will close itself when the event
-    // bubbles, which is what we want — the popover anchors to its
-    // trigger and doesn't reposition as the panel moves.
-    const start = { px: e.clientX, py: e.clientY, left: pos.left, top: pos.top };
-    dragRef.current = start;
-    const onMove = (ev) => {
-      const dx = ev.clientX - start.px;
-      const dy = ev.clientY - start.py;
-      const maxLeft = Math.max(0, window.innerWidth  - PANEL_W);
-      const maxTop  = Math.max(0, window.innerHeight - PANEL_H);
-      setPos({
-        left: Math.max(0, Math.min(maxLeft, start.left + dx)),
-        top:  Math.max(0, Math.min(maxTop,  start.top  + dy)),
-      });
-    };
-    const onUp = () => {
-      dragRef.current = null;
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      window.removeEventListener('pointercancel', onUp);
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-    window.addEventListener('pointercancel', onUp);
-  };
 
   /* Load templates + PA URL on open. Filter matches the popup's
      visibleTemplates: drop disabled + case templates, keep email /
@@ -389,84 +304,20 @@ export function EmailRunner({
   const failedCount = counts.failed;
   const variationCount = selectedTpl?.variations?.length || 0;
 
-  return createPortal(
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          key="email-runner"
-          className="gb-email-runner"
-          /* popovers scale category uses CSS `scale` (not `zoom`) so
-             getBoundingClientRect + pointer-event clientX/Y stay in
-             the same coord system. Using "modals" zoomed the panel
-             AND shifted JS coords, which made drag deltas overshoot. */
-          data-gb-scale="popovers"
-          initial={{ x: 20, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          exit={{ x: 20, opacity: 0, transition: { duration: 0.15 } }}
-          transition={{ type: 'spring', stiffness: 260, damping: 28 }}
-          style={{
-            position: 'fixed',
-            left: pos.left, top: pos.top,
-            width: PANEL_W,
-            maxHeight: PANEL_H,
-            background: 'var(--gb-surface-modal)',
-            border: '1px solid var(--gb-border-default)',
-            borderRadius: 'var(--gb-r-md)',
-            // Keep above the parent modal's FloatingPanel (z 999999)
-            // so the runner floats freely on top.
-            zIndex: 2147483400,
-            boxShadow: '0 12px 32px -8px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.06) inset',
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            fontFamily: 'var(--gb-font-sans)',
-            userSelect: 'none',
-            WebkitUserSelect: 'none',
-          }}
-        >
-          {/* Header doubles as drag handle — grab the dots to drag. */}
-          <div
-            onPointerDown={onDragStart}
-            style={{
-              padding: '10px 14px',
-              borderBottom: '1px solid var(--gb-border-subtle)',
-              display: 'flex', alignItems: 'center', gap: 8,
-              background: 'var(--gb-surface-1)',
-              cursor: dragRef.current ? 'grabbing' : 'grab',
-              touchAction: 'none',
-              flexShrink: 0,
-            }}
-          >
-            <span style={{ color: 'var(--gb-text-muted)', display: 'flex' }}>
-              <DragHandleDots />
-            </span>
-            <I.mail size={13} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>
-                Email selected
-              </div>
-              <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)' }}>
-                {contacts.length} contact{contacts.length === 1 ? '' : 's'} queued
-              </div>
-            </div>
-            {/* Use the design-system IconBtn for the close — the
-                inline button rendered an unstyled "×" glyph that sat
-                slightly off-centre because of the character's own
-                vertical metrics. IconBtn uses the I.close SVG which
-                lands true-centred at every size. */}
-            <span onPointerDown={(e) => e.stopPropagation()}>
-              <IconBtn
-                size="xs"
-                variant="ghost"
-                icon={<I.close />}
-                onClick={onClose}
-                disabled={status === 'running'}
-                aria-label="Close"
-              />
-            </span>
-          </div>
-
-          {/* Body */}
+  return (
+    <DraggablePopup
+      open={open}
+      onClose={onClose}
+      anchorHostId={anchorHostId}
+      width={PANEL_W}
+      maxHeight={PANEL_H}
+      icon={<I.mail size={13} />}
+      title="Email selected"
+      subtitle={`${contacts.length} contact${contacts.length === 1 ? '' : 's'} queued`}
+      closeDisabled={status === 'running'}
+      enterFrom="right"
+    >
+      {/* Body */}
           <div
             className="gb-email-runner-body"
             style={{
@@ -608,9 +459,6 @@ export function EmailRunner({
                   : `Run · ${contacts.length}`}
             </Btn>
           </div>
-        </motion.div>
-      )}
-    </AnimatePresence>,
-    document.body
+    </DraggablePopup>
   );
 }
