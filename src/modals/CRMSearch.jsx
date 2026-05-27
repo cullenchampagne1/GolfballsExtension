@@ -98,27 +98,13 @@ export function CRMSearch({ onClosed, bindClose }) {
   // display + pass to Solr's fq= param. Until that lands, this stays
   // null and the bar is hidden.
   const [qbFilter, setQbFilter] = useState(null);
-  // Campaign UI shell — list loaded from chrome.storage.local.campaigns.
-  // The engine (per-row execution, conditions, branch groups, etc.) is
-  // intentionally deferred; the dropdown + Run/Email buttons surface a
-  // labeled TODO toast so the rep knows it's not silently broken.
-  const [campaigns, setCampaigns] = useState([]);
-  const [campaignId, setCampaignId] = useState('');
+  // Run Campaign opens the Campaign Manager submodal which owns the
+  // picker + engine. CRMSearch's job here is just to hand off the
+  // selection — the manager reads it and drives execution + UI from
+  // there. Storage of the campaign list lives in the manager, not here.
   const [lastIdx, setLastIdx] = useState(null);   // shift-click anchor
   const [sortKey, setSortKey] = useState('lastOrderDate_dt');
   const [sortDir, setSortDir] = useState('desc');
-  useEffect(() => {
-    try {
-      chrome.storage.local.get('campaigns', (d) => setCampaigns(d?.campaigns || []));
-      const onChanged = (changes, area) => {
-        if (area === 'local' && changes.campaigns) {
-          setCampaigns(changes.campaigns.newValue || []);
-        }
-      };
-      chrome.storage.onChanged.addListener(onChanged);
-      return () => chrome.storage.onChanged.removeListener(onChanged);
-    } catch { /* not in extension context */ }
-  }, []);
 
   const bindCloseRef = useRef(null);
   const handleBindClose = useCallback((fn) => {
@@ -492,44 +478,21 @@ export function CRMSearch({ onClosed, bindClose }) {
                 {' '}of {results.length} result{results.length === 1 ? '' : 's'}
               </div>
               <div style={{ flex: 1 }} />
-              {/* Campaign dropdown + editor button. Engine logic isn't
-                  ported yet — selecting + Run surface labeled TODO toasts. */}
-              <Dropdown
-                size="sm"
-                value={campaignId}
-                onChange={setCampaignId}
-                placeholder={campaigns.length ? 'Pick a campaign' : '— no campaigns yet —'}
-                options={[
-                  { id: '', label: '— pick a campaign —' },
-                  ...campaigns.map((c) => ({ id: c.id, label: c.name || 'Untitled' })),
-                ]}
-                style={{ width: 200 }}
-              />
-              <IconBtn
-                size="sm"
-                variant="ghost"
-                icon={<I.plus size={11} />}
-                tooltip="Create or edit campaigns"
-                onClick={() => {
-                  if (typeof window.__gbShowCampaignEditor === 'function') {
-                    window.__gbShowCampaignEditor();
-                  } else {
-                    toast?.info?.('Campaign editor — coming later', { duration: 2400, placement: 'top-center' });
-                  }
-                }}
-              />
+              {/* Run Campaign opens the Campaign Manager submodal. The
+                  manager owns the picker, engine, and CRM-UI control —
+                  CRMSearch just hands off the current selection. */}
               <Btn
                 size="sm"
                 variant="ghost"
                 icon={<MegaphoneIcon />}
-                onClick={() => toast?.info?.('Campaign engine — coming later', { duration: 2400, placement: 'top-center' })}
+                onClick={() => {
+                  if (typeof window.__gbShowCampaignEditor === 'function') {
+                    window.__gbShowCampaignEditor();
+                  } else {
+                    toast?.info?.('Campaign manager — coming later', { duration: 2400, placement: 'top-center' });
+                  }
+                }}
               >Run campaign</Btn>
-              <Btn
-                size="sm"
-                variant="ghost"
-                icon={<I.mail size={11} />}
-                onClick={() => toast?.info?.('Email blast — coming later', { duration: 2400, placement: 'top-center' })}
-              >Email selected</Btn>
               <Btn size="sm" variant="ghost" icon={<I.copy size={11} />} onClick={exportSelectedCSV}>Export CSV</Btn>
             </div>
           </motion.div>
