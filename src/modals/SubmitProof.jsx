@@ -567,6 +567,108 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
   const artistOptions = (artists || []).map((a) => ({ id: a.val, label: a.txt }));
   const hasGallery = Array.isArray(gallery) && gallery.length > 0;
 
+  /* Build the proof-results email (subject + plain-text body + all
+     links concatenated). Matches the formatting the legacy
+     logo-extractor used so the art team's downstream parsing of
+     incoming proof-request emails keeps working. */
+  const buildProofEmail = (rows) => {
+    const multi = rows.length > 1;
+    const LINE = '='.repeat(50);
+    const subline = '-'.repeat(50);
+    const lbl = (k, v) => v ? `${(k + ':').padEnd(16)} ${v}` : null;
+
+    const repLabel    = (reps || []).find((r) => r.val === salesRepId)?.txt || salesRepId || '';
+    const artistLabel = (artists || []).find((a) => a.val === artistId)?.txt || artistId || '';
+
+    const flagsStr = [
+      flags.rush     ? 'RUSH'         : null,
+      flags.canada   ? 'Canada Drop'  : null,
+      flags.dropship ? 'Drop Ship TS' : null,
+    ].filter(Boolean).join(' | ') || 'None';
+
+    const sourceImage = imageData?.url || ''; // raw dataUrls don't survive mailto; only true URLs included
+
+    const header = [
+      LINE,
+      `PROOF REQUEST  –  Order #${orderId.trim() || 'N/A'}`,
+      LINE,
+      lbl('Customer',  customerId.trim()),
+      lbl('Sales Rep', repLabel),
+      lbl('Artist',    artistLabel),
+      lbl('Type',      orderType),
+      lbl('Value',     orderValue),
+      lbl('Source Image', sourceImage),
+      flagsStr !== 'None' ? lbl('Flags', flagsStr) : null,
+    ].filter(Boolean).join('\n');
+
+    const proofBlocks = rows.map((r, i) => {
+      const dyn = r.dynFields || {};
+      const num = multi ? `PROOF ${i + 1} OF ${rows.length}` : 'PROOF DETAILS';
+      const lines = [
+        subline,
+        num,
+        subline,
+        lbl('Proof Name',   r.proofName),
+        lbl('Item',         r.item),
+        lbl('Logo Type',    r.logoType),
+        lbl('Ball Color',   dyn.color && r.item === 'Ball' ? dyn.color : null),
+        lbl('Imprint',      dyn.imprint),
+        lbl('Dozens',       dyn.dozens),
+        lbl('Print Method', dyn.printMethod),
+        lbl('Decorator',    dyn.decorator),
+        lbl('Dec. Method',  dyn.method),
+        lbl('Item Color',   dyn.color && r.item !== 'Ball' ? dyn.color : null),
+        lbl('Placement',    dyn.placement),
+        lbl('Tee Size',     dyn.size),
+        lbl('Item Name',    dyn.name),
+        '',
+        lbl('Proof Link',   r.proofLink || '(generation failed)'),
+        '',
+        lbl('Item Link',    itemLink.trim() || null),
+        lbl('Reference',    refLink.trim()  || null),
+        lbl('Instructions', notes.trim()    || null),
+      ].filter(Boolean).join('\n');
+      return lines;
+    }).join('\n\n');
+
+    const body = [header, '', proofBlocks].join('\n');
+
+    const isRush  = flags.rush ? 'Rush '  : '';
+    const isMulti = multi      ? 'Multi ' : '';
+    const cleanValue = (orderValue || '').replace('$', '');
+    const subject = `${isRush}${isMulti}${orderType} ${cleanValue} - ${rows.map((r) => r.proofName).join(', ')} - ${orderId.trim() || 'N/A'}`.trim();
+
+    const allLinks = rows.filter((r) => r.proofLink).map((r) => r.proofLink).join('\n');
+
+    return { subject, body, allLinks };
+  };
+
+  /* Hand off to the user's default mail client (Outlook on the rep
+     workstations) with subject + body pre-filled. mailto: is the
+     least-magic path that works everywhere; Outlook on Windows hooks
+     it natively. Hard-coded recipient matches the legacy flow. */
+  const openInOutlook = () => {
+    if (!results.length) return;
+    const { subject, body } = buildProofEmail(results);
+    const mailto = `mailto:gbcproofrequest@golfballs.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    try { window.open(mailto, '_blank', 'noopener,noreferrer'); }
+    catch { window.location.href = mailto; }
+  };
+
+  const copyAllLinks = async () => {
+    if (!results.length) return;
+    const { allLinks } = buildProofEmail(results);
+    if (!allLinks) { toast?.warning?.('No links to copy'); return; }
+    try {
+      await navigator.clipboard.writeText(allLinks);
+      toast?.success?.('Links copied');
+    } catch {
+      toast?.error?.("Couldn't copy links");
+    }
+  };
+
+  const hasAnyLink = results.some((r) => r.proofLink);
+
   return (
     <FloatingPanel
       width={hasGallery ? 1000 : 720}
@@ -1031,7 +1133,31 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           <Btn size="sm" variant="secondary" onClick={() => bindCloseRef.current?.()} disabled={submitting}>
             {stage === 'results' ? 'Close' : 'Cancel'}
           </Btn>
-          {stage !== 'results' && (
+          {stage === 'results' ? (
+            <>
+              {hasAnyLink && (
+                <Btn
+                  size="sm"
+                  variant="ghost"
+                  icon={<I.copy size={11} />}
+                  onClick={copyAllLinks}
+                >
+                  Copy all links
+                </Btn>
+              )}
+              {hasAnyLink && (
+                <Btn
+                  size="sm"
+                  variant="tinted"
+                  status="brand"
+                  icon={<I.mail size={11} />}
+                  onClick={openInOutlook}
+                >
+                  Open in Outlook
+                </Btn>
+              )}
+            </>
+          ) : (
             <Btn
               size="sm"
               variant="tinted"
