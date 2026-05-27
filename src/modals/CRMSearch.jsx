@@ -486,6 +486,11 @@ export function CRMSearch({ onClosed, bindClose }) {
   // the conditions (and re-opening the QB pre-populates them).
   const [qbOpen, setQbOpen] = useState(false);
   const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
+  /* Per-row send status, keyed by the SAME id we extract for the
+     EmailRunner contacts list (the numeric portion of `r.id`). Values:
+       'sending' | 'sent' | 'error'
+     Cleared on every fresh blast via onResetRowStates. */
+  const [emailStatusByRow, setEmailStatusByRow] = useState({});
   const openQueryBuilder = () => setQbOpen(true);
   const applyQbFilter = (filter) => {
     setQbFilter(filter);   // triggers the auto re-run effect
@@ -1033,6 +1038,7 @@ export function CRMSearch({ onClosed, bindClose }) {
           selected={selected}
           activeIdx={activeIdx}
           allChecked={allVisibleSelected}
+          emailStatusByRow={emailStatusByRow}
           onToggle={toggleSel}
           onToggleAll={toggleAll}
           sortKey={sortKey}
@@ -1071,12 +1077,18 @@ export function CRMSearch({ onClosed, bindClose }) {
       contacts={displayedRows
         .filter((r) => selected.has(r.id))
         .map((r) => ({
-          contactId:   String(r.id || '').split('_')[1] || String(r.id || ''),
+          /* contactId here is the full Solr id (e.g. 'contact_12345')
+             — we use it as the key in emailStatusByRow so the row
+             render can look itself up directly without splitting. */
+          contactId:   r.id,
           contactName: r.contactName_t || r.accountName_t || '',
           contactUrl:  contactUrl(r.id),
         }))
         .filter((c) => c.contactUrl)}
       onClose={() => setEmailRunnerOpen(false)}
+      onResetRowStates={() => setEmailStatusByRow({})}
+      onRowStart={(id) => setEmailStatusByRow((m) => ({ ...m, [id]: 'sending' }))}
+      onRowDone={(id, outcome) => setEmailStatusByRow((m) => ({ ...m, [id]: outcome.status }))}
     />
     </>
   );
@@ -1090,7 +1102,7 @@ export function CRMSearch({ onClosed, bindClose }) {
    keep these in lock-step. */
 const COLS = '30px 1.3fr 1.1fr 80px 1.9fr 70px 0.9fr 0.9fr 110px';
 
-function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, allChecked, onToggle, onToggleAll, sortKey, sortDir, onSort, mode, onDeleteIndexed, onSubmitServer, loadingMore }) {
+function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, allChecked, emailStatusByRow = {}, onToggle, onToggleAll, sortKey, sortDir, onSort, mode, onDeleteIndexed, onSubmitServer, loadingMore }) {
   const Header = ({ label, k }) => (
     <SortHeader label={label} sortKey={k} activeKey={sortKey} dir={sortDir} onSort={onSort} />
   );
@@ -1146,6 +1158,7 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
           row={r}
           isSelected={selected.has(r.id)}
           isActive={idx === activeIdx}
+          emailStatus={emailStatusByRow[r.id]}
           onToggle={(e) => onToggle(r.id, idx, e?.shiftKey)}
           onDelete={mode === 'indexed' ? () => onDeleteIndexed?.(r.id) : null}
         />
@@ -1168,7 +1181,7 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
   );
 }
 
-function ResultRow({ row, isSelected, isActive, onToggle, onDelete }) {
+function ResultRow({ row, isSelected, isActive, emailStatus, onToggle, onDelete }) {
   const [hover, setHover] = useState(false);
   const rowRef = useRef(null);
   /* When the keyboard moves the highlight to this row, scroll it
@@ -1254,9 +1267,24 @@ function ResultRow({ row, isSelected, isActive, onToggle, onDelete }) {
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{acct}</div>
       <div>
-        <Tag tone={isContact ? 'info' : 'brand'} size="xs">
-          {isContact ? 'Contact' : 'Account'}
-        </Tag>
+        {emailStatus === 'sending' ? (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            fontSize: 10, fontWeight: 700,
+            color: 'var(--gb-text-tertiary)',
+            textTransform: 'uppercase', letterSpacing: 0.5,
+          }}>
+            <Spinner size={10} /> Sending
+          </span>
+        ) : emailStatus === 'sent' ? (
+          <Tag tone="brand" size="xs">Sent</Tag>
+        ) : emailStatus === 'error' ? (
+          <Tag tone="error" size="xs">Failed</Tag>
+        ) : (
+          <Tag tone={isContact ? 'info' : 'brand'} size="xs">
+            {isContact ? 'Contact' : 'Account'}
+          </Tag>
+        )}
       </div>
       <div style={mono}>{email}</div>
       <div style={mono}>{row.orderCount_i ?? '—'}</div>

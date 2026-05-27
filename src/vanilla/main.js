@@ -70,6 +70,23 @@ window.__gbContentReady = true;
       return true;
     }
 
+    /* Resolve variables against a fetched HTML string instead of the
+       live page. Used by the EmailRunner's bulk-send loop so we can
+       drive per-contact var resolution from a background fetchRaw
+       without opening tabs. resolveAllVarsAsync already accepts a
+       Document — we just parse + hand it through. */
+    if (msg.action === 'resolveVarsForHtml') {
+      try {
+        const doc = new DOMParser().parseFromString(msg.html || '', 'text/html');
+        resolveAllVarsAsync(msg.vars, msg.toField, doc)
+          .then(result => sendResponse(result))
+          .catch((err) => sendResponse({ resolved: {}, toEmail: '', error: err?.message || 'resolve failed' }));
+      } catch (e) {
+        sendResponse({ resolved: {}, toEmail: '', error: e?.message || 'parse failed' });
+      }
+      return true;
+    }
+
     if (msg.action === 'getPageInfo') {
       const pageType  = smartPageType();
       const contactId = smartContactId();
