@@ -1100,19 +1100,30 @@ export function CRMSearch({ onClosed, bindClose }) {
    would let users filter on something they can't see — and the
    reverse confuses people about what filters are available — so
    keep these in lock-step. */
-const COLS = '30px 1.3fr 1.1fr 80px 1.9fr 70px 0.9fr 0.9fr 110px';
+const COLS_BASE        = '30px 1.3fr 1.1fr 80px 1.9fr 70px 0.9fr 0.9fr 110px';
+/* Adds a 10th column reserved for the email-send status. Modern
+   browsers transition grid-template-columns smoothly, so swapping
+   the two strings via state animates the column sliding in/out
+   (with a CSS transition declared on the parent grid container). */
+const COLS_WITH_STATUS = `${COLS_BASE} 96px`;
 
 function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, allChecked, emailStatusByRow = {}, onToggle, onToggleAll, sortKey, sortDir, onSort, mode, onDeleteIndexed, onSubmitServer, loadingMore }) {
   const Header = ({ label, k }) => (
     <SortHeader label={label} sortKey={k} activeKey={sortKey} dir={sortDir} onSort={onSort} />
   );
+  /* Are any rows currently mid-blast or already settled? When true we
+     slide in a 10th column ("Status") that shows per-row send state.
+     CSS transition on grid-template-columns lets the column expand
+     smoothly; an inner motion span fades the header label in. */
+  const anyEmailing = Object.keys(emailStatusByRow).length > 0;
+  const gridCols = anyEmailing ? COLS_WITH_STATUS : COLS_BASE;
   return (
     <div>
       {/* Sticky header — click a sortable column to sort. Sorts are
           server-driven (Solr) so they re-run a search; debounce isn't
           needed because the user clicks once. */}
       <div style={{
-        display: 'grid', gridTemplateColumns: COLS,
+        display: 'grid', gridTemplateColumns: gridCols,
         padding: '8px 14px', gap: 12,
         background: 'var(--gb-surface-1)',
         borderBottom: '1px solid var(--gb-border-subtle)',
@@ -1120,6 +1131,7 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
         textTransform: 'uppercase',
         color: 'var(--gb-text-muted)',
         position: 'sticky', top: 0, zIndex: 1,
+        transition: 'grid-template-columns .35s cubic-bezier(0.4, 0, 0.2, 1)',
       }}>
         <div>
           <Checkbox checked={allChecked} onChange={onToggleAll} />
@@ -1132,6 +1144,14 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
         <Header label="YTD Rev"    k="yearToDateRevenue_f" />
         <Header label="PY Rev"     k="priorYearRevenue_f" />
         <Header label="Last Order" k="lastOrderDate_dt" />
+        {anyEmailing && (
+          <motion.div
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+            style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}
+          >Status</motion.div>
+        )}
       </div>
 
       {status === 'loading' && (
@@ -1159,6 +1179,7 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
           isSelected={selected.has(r.id)}
           isActive={idx === activeIdx}
           emailStatus={emailStatusByRow[r.id]}
+          showStatusCol={anyEmailing}
           onToggle={(e) => onToggle(r.id, idx, e?.shiftKey)}
           onDelete={mode === 'indexed' ? () => onDeleteIndexed?.(r.id) : null}
         />
@@ -1181,7 +1202,7 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
   );
 }
 
-function ResultRow({ row, isSelected, isActive, emailStatus, onToggle, onDelete }) {
+function ResultRow({ row, isSelected, isActive, emailStatus, showStatusCol, onToggle, onDelete }) {
   const [hover, setHover] = useState(false);
   const rowRef = useRef(null);
   /* When the keyboard moves the highlight to this row, scroll it
@@ -1219,7 +1240,7 @@ function ResultRow({ row, isSelected, isActive, emailStatus, onToggle, onDelete 
       style={{
         position: 'relative',
         zIndex: isActive ? 1 : 0,
-        display: 'grid', gridTemplateColumns: COLS,
+        display: 'grid', gridTemplateColumns: showStatusCol ? COLS_WITH_STATUS : COLS_BASE,
         padding: '10px 14px', gap: 12,
         alignItems: 'center',
         background: rowBg,
@@ -1230,7 +1251,10 @@ function ResultRow({ row, isSelected, isActive, emailStatus, onToggle, onDelete 
           : 'none',
         fontSize: 12,
         cursor: 'pointer',
-        transition: 'background-color .15s, box-shadow .15s',
+        // grid-template-columns transitions smoothly in modern Chrome
+        // — the new status column slides open as it grows. Falls back
+        // to an instant snap on browsers without support.
+        transition: 'background-color .15s, box-shadow .15s, grid-template-columns .35s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -1267,30 +1291,50 @@ function ResultRow({ row, isSelected, isActive, emailStatus, onToggle, onDelete 
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{acct}</div>
       <div>
-        {emailStatus === 'sending' ? (
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            fontSize: 10, fontWeight: 700,
-            color: 'var(--gb-text-tertiary)',
-            textTransform: 'uppercase', letterSpacing: 0.5,
-          }}>
-            <Spinner size={10} /> Sending
-          </span>
-        ) : emailStatus === 'sent' ? (
-          <Tag tone="brand" size="xs">Sent</Tag>
-        ) : emailStatus === 'error' ? (
-          <Tag tone="error" size="xs">Failed</Tag>
-        ) : (
-          <Tag tone={isContact ? 'info' : 'brand'} size="xs">
-            {isContact ? 'Contact' : 'Account'}
-          </Tag>
-        )}
+        <Tag tone={isContact ? 'info' : 'brand'} size="xs">
+          {isContact ? 'Contact' : 'Account'}
+        </Tag>
       </div>
       <div style={mono}>{email}</div>
       <div style={mono}>{row.orderCount_i ?? '—'}</div>
       <div style={{ ...mono, color: 'var(--gb-text-secondary)' }}>{fmtMoney(row.yearToDateRevenue_f)}</div>
       <div style={mono}>{fmtMoney(row.priorYearRevenue_f)}</div>
       <div style={{ ...mono, color: 'var(--gb-text-muted)' }}>{fmtDate(row.lastOrderDate_dt)}</div>
+      {/* Status column — only rendered while a blast is active. The
+          grid template animates its width in via CSS transition; the
+          inner motion span fades the badge so the slide reads as a
+          single coordinated reveal. */}
+      {showStatusCol && (
+        <motion.div
+          key={emailStatus || 'idle'}
+          initial={{ opacity: 0, x: 8 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+          style={{ overflow: 'hidden', display: 'flex', alignItems: 'center' }}
+        >
+          {emailStatus === 'sending' ? (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              fontSize: 10.5, fontWeight: 700,
+              color: 'var(--gb-text-tertiary)',
+              textTransform: 'uppercase', letterSpacing: 0.5,
+            }}>
+              <Spinner size={11} /> Sending
+            </span>
+          ) : emailStatus === 'sent' ? (
+            <Tag tone="brand" size="xs">Sent</Tag>
+          ) : emailStatus === 'error' ? (
+            <Tag tone="error" size="xs">Failed</Tag>
+          ) : (
+            // Reserved space — keeps the column expanded so other rows
+            // in the same blast don't shift around while this one is
+            // still waiting its turn.
+            <span style={{
+              fontSize: 10, color: 'var(--gb-text-muted)', opacity: 0.5,
+            }}>—</span>
+          )}
+        </motion.div>
+      )}
       {/* Hover-revealed delete button for indexed rows. Sits over the
           last column so it doesn't shift layout — the column under it
           is the Last Order date which the user still sees up to the

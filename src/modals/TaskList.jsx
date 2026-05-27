@@ -248,6 +248,11 @@ export function TaskList({ onClosed, bindClose }) {
   const [priorityFilter, setPriorityFilter] = useState('');
   const [selected, setSelected]   = useState(() => new Set());
   const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
+  /* Per-row email-send status keyed by task.id. EmailRunner pumps
+     this via the onRowStart / onRowDone / onResetRowStates callbacks
+     wired below; TaskRow reads from the map to replace the Quick Task
+     button cell with the live send state. */
+  const [emailStatusByRow, setEmailStatusByRow] = useState({});
   const [sortBy, setSortBy]       = useState('dueDate');
   const [sortDir, setSortDir]     = useState('asc');
 
@@ -580,11 +585,14 @@ export function TaskList({ onClosed, bindClose }) {
 
   /* Selected-task → contact tuples for the Email Runner side panel.
      Tasks already carry a built contactUrl (Page=240&customerID=...);
-     drop rows missing one so we don't queue a no-op send. */
+     drop rows missing one so we don't queue a no-op send.
+     `contactId` here is the task row id (not the underlying contact's
+     customerId) — that's the key TaskRow uses to look itself up in
+     emailStatusByRow when the EmailRunner pumps a row-level update. */
   const selectedContacts = useMemo(() => visibleTasks
     .filter((t) => selected.has(t.id) && t.contactUrl)
     .map((t) => ({
-      contactId:   String(t.contactID || ''),
+      contactId:   t.id,
       contactName: t.contact || '',
       contactUrl:  t.contactUrl,
     })), [visibleTasks, selected]);
@@ -705,6 +713,7 @@ export function TaskList({ onClosed, bindClose }) {
           onSort={onSortClick}
           onQuickMenu={(id, anchor) => setQt({ mode: 'main', taskId: id, anchor })}
           busyRows={busyRowsRef.current}
+          emailStatusByRow={emailStatusByRow}
         />
         {/* re-render hook — busyVersion changes force the table to repick
             up busyRowsRef without doing structural state churn */}
@@ -768,6 +777,9 @@ export function TaskList({ onClosed, bindClose }) {
       anchorHostId="__gb-tl"
       contacts={selectedContacts}
       onClose={() => setEmailRunnerOpen(false)}
+      onResetRowStates={() => setEmailStatusByRow({})}
+      onRowStart={(id) => setEmailStatusByRow((m) => ({ ...m, [id]: 'sending' }))}
+      onRowDone={(id, outcome) => setEmailStatusByRow((m) => ({ ...m, [id]: outcome.status }))}
     />
     </>
   );
@@ -778,7 +790,7 @@ export function TaskList({ onClosed, bindClose }) {
    Contact, Due Date, Category, Priority, Subject, Status, Action. */
 const COLS = '30px 1.3fr 1.1fr 100px 1.0fr 70px 1.5fr 90px 110px';
 
-function TasksTable({ rows, status, query, allChecked, selected, onToggle, onToggleAll, sortBy, sortDir, onSort, onQuickMenu, busyRows }) {
+function TasksTable({ rows, status, query, allChecked, selected, onToggle, onToggleAll, sortBy, sortDir, onSort, onQuickMenu, busyRows, emailStatusByRow = {} }) {
   return (
     <div>
       {/* Sticky header — sortable. Click a label to set sort; click
@@ -827,6 +839,7 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
           task={t}
           isSelected={selected.has(t.id)}
           isBusy={busyRows?.has(t.id) || false}
+          emailStatus={emailStatusByRow[t.id]}
           onToggle={(e) => onToggle(t.id, idx, e?.shiftKey)}
           onQuickMenu={onQuickMenu}
         />
@@ -859,7 +872,7 @@ function SortHeader({ col, sortBy, sortDir, onSort }) {
   );
 }
 
-function TaskRow({ task, isSelected, isBusy, onToggle, onQuickMenu }) {
+function TaskRow({ task, isSelected, isBusy, emailStatus, onToggle, onQuickMenu }) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const overdue  = task.dueDate < today && task.status !== 'Complete';
   const dueToday = task.dueDate.toDateString() === today.toDateString();
@@ -974,15 +987,61 @@ function TaskRow({ task, isSelected, isBusy, onToggle, onQuickMenu }) {
         </Tag>
       </div>
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <button
-          type="button"
-          data-checkbox /* reuses TaskRow's "don't toggle on click" sentinel */
-          onClick={(e) => {
-            e.stopPropagation();
-            const rect = e.currentTarget.getBoundingClientRect();
-            onQuickMenu?.(task.id, rect);
-          }}
-          disabled={isBusy}
+        {/* Quick Task button swaps to the live email-send status while
+            a blast is touching this row. Same cell, no layout shift —
+            matches the Quick Actions row-spinner pattern. AnimatePresence
+            cross-fades the content so the swap reads as one motion. */}
+        <AnimatePresence mode="wait" initial={false}>
+          {emailStatus ? (
+            <motion.div
+              key={`email-${emailStatus}`}
+              initial={{ opacity: 0, x: 6 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -6 }}
+              transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+              style={{
+                height: 26, padding: '0 10px',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                background: emailStatus === 'error'
+                  ? 'var(--gb-error-tint-soft, var(--gb-surface-2))'
+                  : emailStatus === 'sent'
+                    ? 'var(--gb-brand-tint-soft)'
+                    : 'var(--gb-surface-2)',
+                border: '1px solid ' + (
+                  emailStatus === 'error' ? 'var(--gb-error-tint-border, var(--gb-border-default))'
+                  : emailStatus === 'sent' ? 'var(--gb-brand-tint-border)'
+                  : 'var(--gb-border-default)'
+                ),
+                borderRadius: 'var(--gb-r-sm)',
+                color: emailStatus === 'error'
+                  ? 'var(--gb-error-fg)'
+                  : emailStatus === 'sent'
+                    ? 'var(--gb-brand-label)'
+                    : 'var(--gb-text-tertiary)',
+                fontSize: 10.5, fontWeight: 700,
+                letterSpacing: 0.5, textTransform: 'uppercase',
+                userSelect: 'none',
+              }}
+            >
+              {emailStatus === 'sending' && <><Spinner size={11} /> Sending</>}
+              {emailStatus === 'sent'    && <><CheckIcon size={11} /> Sent</>}
+              {emailStatus === 'error'   && <>Failed</>}
+            </motion.div>
+          ) : (
+            <motion.button
+              key="qt-btn"
+              type="button"
+              data-checkbox /* reuses TaskRow's "don't toggle on click" sentinel */
+              initial={{ opacity: 0, x: -6 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 6 }}
+              transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+              onClick={(e) => {
+                e.stopPropagation();
+                const rect = e.currentTarget.getBoundingClientRect();
+                onQuickMenu?.(task.id, rect);
+              }}
+              disabled={isBusy}
           style={{
             height: 26, padding: '0 8px',
             display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -1008,7 +1067,9 @@ function TaskRow({ task, isSelected, isBusy, onToggle, onQuickMenu }) {
               </svg>
             </>
           )}
-        </button>
+            </motion.button>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
