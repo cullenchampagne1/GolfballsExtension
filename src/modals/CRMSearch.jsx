@@ -135,6 +135,19 @@ export function CRMSearch({ onClosed, bindClose }) {
     bindClose?.(fn);
   }, [bindClose]);
 
+  /* Autofocus the search box when the modal mounts so the rep can
+     start typing immediately. requestAnimationFrame defers the focus
+     by one frame so it lands AFTER FloatingPanel's mount transition,
+     otherwise the entrance animation can steal focus mid-transform. */
+  const searchInputRef = useRef(null);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      try { searchInputRef.current?.focus({ preventScroll: true }); }
+      catch { searchInputRef.current?.focus?.(); }
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   // Generation token — every runSearch bumps it. When a request comes
   // back we compare the gen it was issued at against the current value
   // and bail if they differ. Kills the "no data" toast firing twice on
@@ -568,6 +581,7 @@ export function CRMSearch({ onClosed, bindClose }) {
         flexShrink: 0,
       }}>
         <Input
+          nativeRef={searchInputRef}
           value={query}
           onChange={onQueryChange}
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submitSearch(); } }}
