@@ -126,15 +126,18 @@ export function DraggablePopup({
     let left;
     let top;
     if (rect) {
-      // First try: anchor to the parent modal's right edge with a 16px
-      // gap. When the viewport is too narrow to fit the popup beside
-      // the parent (e.g. a 1000px modal at 1280px viewport), overlay
-      // the right portion of the parent itself rather than getting
-      // mashed against the viewport's right edge. Keeps "this popup
-      // belongs to that modal" visually obvious.
-      left = rect.right + 16;
-      if (left + Wv > window.innerWidth - 8) {
-        left = Math.max(8, rect.right - Wv - 16);
+      /* First choice: anchor 16px outside the parent modal's right
+         edge — fits on wide viewports.
+         Fallback (narrow viewport): right-align the popup with the
+         parent's right edge so the popup overlays the parent's
+         right portion BUT the right edges line up. Reads as "popup
+         attached to the parent's right side" instead of the previous
+         "shifted way to the left of the parent's right edge". */
+      const rightOf = rect.right + 16;
+      if (rightOf + Wv > window.innerWidth - 8) {
+        left = rect.right - Wv;
+      } else {
+        left = rightOf;
       }
       top = rect.top;
     } else {
