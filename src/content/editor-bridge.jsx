@@ -283,6 +283,11 @@ async function gbMigrateVariations({ dryRun = false } = {}) {
     byBase.get(base).push({ tpl: t, n });
   }
   let migrated = 0;
+  /* Accumulate removals across ALL groups before filtering once at the
+     end. The previous code reassigned `templates = all.filter(…)` per
+     iteration, which silently wiped out earlier groups' deletions —
+     only the last group's siblings actually got removed. */
+  const removeIds = new Set();
   for (const [base, group] of byBase.entries()) {
     if (group.length < 2) continue;
     const parent = all.find((t) => t.name === base);
@@ -294,18 +299,16 @@ async function gbMigrateVariations({ dryRun = false } = {}) {
     }));
     parent.variations = [...(parent.variations || []), ...variations];
     migrated += variations.length;
-    if (!dryRun) {
-      const removeIds = new Set(group.map((g) => g.tpl.id));
-      templates = all.filter((t) => !removeIds.has(t.id));
-    }
+    for (const g of group) removeIds.add(g.tpl.id);
   }
   if (!dryRun && migrated > 0) {
+    templates = all.filter((t) => !removeIds.has(t.id));
     await saveTemplates();
-    console.log('[gbMigrateVariations] migrated', migrated, 'siblings into parents');
+    console.log('[gbMigrateVariations] migrated', migrated, 'siblings into parents (', removeIds.size, 'standalone templates removed)');
   } else {
     console.log('[gbMigrateVariations]', dryRun ? 'dry-run:' : 'no-op:', 'would migrate', migrated, 'siblings');
   }
-  return { migrated };
+  return { migrated, removed: removeIds.size };
 }
 
 /**
