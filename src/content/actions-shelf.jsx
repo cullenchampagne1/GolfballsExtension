@@ -271,9 +271,21 @@ if (!window.__gbActionsShelfLoaded) {
         { credentials: 'include' },
       ).then((r) => r.json());
       if (result?.phoneNumber) {
-        // Match legacy: reload so the page picks up the new phone in
-        // every place it's surfaced (header label, sidebar, etc.).
-        setTimeout(() => { try { window.location.reload(); } catch {} }, 1100);
+        // Inline patch the contact-phone label so the page reflects
+        // the new number without a full reload — find-phone's whole
+        // point is "I want to call this person NOW", so we'd rather
+        // hand off straight to the Call Log than throw the rep back
+        // through a page reload + click cycle. The legacy code
+        // reloaded; the React port doesn't need to because every
+        // other place the phone shows reads off the same label.
+        const lbl = document.getElementById('lblContactPhoneNumber');
+        if (lbl) lbl.textContent = result.phoneNumber;
+        // Open the Call Log modal with the freshly-found number so
+        // the rep can immediately log + dial. Pops the same modal
+        // the Call action uses — same UX as the "Call ${name}" path.
+        if (typeof window.__gbShowCallLogModal === 'function') {
+          try { window.__gbShowCallLogModal({ phone: result.phoneNumber }); } catch {}
+        }
         return { ok: true, contact: result };
       }
       return { ok: false, error: 'Save returned no phone' };
@@ -299,18 +311,18 @@ if (!window.__gbActionsShelfLoaded) {
       hint: `Scan ${orderCount} order${orderCount === 1 ? '' : 's'} for a number`,
       smartFor: ['contact'],
       handler: async () => {
-        const toast = window.__gbToast;
-        if (!toast) {
-          console.warn('[gb] FindPhone: no toast surface installed yet');
-          return;
-        }
+        // The shelf's ToastHost is mounted with installGlobal=true,
+        // so window.__gbToast is set as soon as the shelf renders.
+        // findPhone itself handles the (now-rare) case where it's
+        // still undefined — just bails with a console.warn — so we
+        // don't pre-gate the call here.
         const links = _readOrderLinks();
         await findPhone({
           contactName:     _readContactName(),
           fetchOrderLinks: async () => links,
           fetchOrderPage:  _fetchOrderPage,
           saveContact:     _saveContactPhone,
-          toast,
+          toast:           window.__gbToast,
         });
       },
     });
@@ -454,10 +466,15 @@ if (!window.__gbActionsShelfLoaded) {
      it down on URL change — the registry updates underneath and
      the shelf re-renders via useSyncExternalStore.
 
-     ToastHost is mounted with installGlobal:false so it doesn't
-     fight with any other ToastHost a modal might mount; the
-     shelf's own action handlers don't fire toasts directly
-     (they delegate to the called modal / handler). */
+     ToastHost mounts with installGlobal=true so the shelf's host
+     IS the page-wide window.__gbToast — it's the only ToastHost
+     that's reliably mounted on every page (loads at content_script
+     time, persists for the tab's lifetime). Other modals mount
+     later and the global install is a "first wins" race, so the
+     shelf gets the slot. That gives find-phone (and any other
+     non-modal handler that needs a toast surface) a stable
+     globally-available API instead of bailing when no modal
+     happens to be open. */
   const HOST_ID = '__gb-actions-shelf';
   if (!document.getElementById(HOST_ID)) {
     const host = document.createElement('div');
@@ -465,7 +482,7 @@ if (!window.__gbActionsShelfLoaded) {
     host.setAttribute('data-gb-scale', 'shelf');
     document.body.appendChild(host);
     createRoot(host).render(
-      <ToastHost installGlobal={false}>
+      <ToastHost installGlobal={true}>
         <ActionsShelf />
       </ToastHost>,
     );
