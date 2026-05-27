@@ -100,18 +100,27 @@ export function OrderRules({ initial, onChange }) {
   const [pickingId, setPickingId] = useState(null);
   useEffect(() => {
     if (!pickingId) return undefined;
+    let mounted = true;
+    const apply = (result) => {
+      if (!result || !result.fieldId) return false;
+      const m = result.fieldId.match(/^pick_orderrule:(\d+)$/);
+      if (!m) return false;
+      edit(Number(m[1]), { left: result.selector || '' });
+      setPickingId(null);
+      return true;
+    };
+    // Seed from any pickResult that landed before subscription —
+    // onChanged only fires on subsequent writes.
+    chrome.storage.local.get(['pickResult'], (data) => {
+      if (!mounted) return;
+      apply(data?.pickResult);
+    });
     function onChanged(changes) {
       if (!changes.pickResult) return;
-      const result = changes.pickResult.newValue;
-      if (!result || !result.fieldId) return;
-      const m = result.fieldId.match(/^pick_orderrule:(\d+)$/);
-      if (!m) return;
-      const id = Number(m[1]);
-      edit(id, { left: result.selector || '' });
-      setPickingId(null);
+      apply(changes.pickResult.newValue);
     }
     chrome.storage.onChanged.addListener(onChanged);
-    return () => chrome.storage.onChanged.removeListener(onChanged);
+    return () => { mounted = false; chrome.storage.onChanged.removeListener(onChanged); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickingId, rules]);
 

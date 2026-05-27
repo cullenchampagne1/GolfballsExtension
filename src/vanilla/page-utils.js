@@ -49,39 +49,109 @@ let pickActive = false;
     if (document.getElementById('__gb-style')) return;
     const s = document.createElement('style');
     s.id = '__gb-style';
+    /* Floating pill banner that matches the design system's modal /
+       popover surfaces. Sits 16px below the top of the viewport with
+       margin on each side, rounded corners, frosted glass, and the
+       brand-tinted border the rest of the UI uses. data-gb-scale is
+       set on the host element (injectBanner) so the UI-scale slider
+       picks it up. */
     s.textContent = `
       .__gb-hover { outline: 2px solid var(--gb-brand) !important; outline-offset: 2px !important;
-        cursor: crosshair !important; background-color: rgba(var(--gb-brand-rgb),0.1) !important; }
-      #__gb-banner { position:fixed!important; top:0!important; left:0!important; right:0!important;
-        z-index:2147483647!important; background:var(--gb-brand)!important; color:var(--gb-text-primary)!important;
-        padding:10px 16px!important; font:600 13px/1.5 -apple-system,sans-serif!important;
-        display:flex!important; align-items:center!important; justify-content:center!important;
-        gap:14px!important; box-shadow:0 2px 12px rgba(0,0,0,.4)!important; }
-      #__gb-banner kbd { background:rgba(255,255,255,.2)!important; padding:1px 6px!important;
-        border-radius:4px !important; }
-      #__gb-cancel-btn { background:rgba(255,255,255,.2)!important; color:var(--gb-text-primary)!important;
-        border:1px solid rgba(255,255,255,.4)!important; padding:3px 12px!important;
-        border-radius:5px !important; cursor:pointer!important; font:inherit!important; font-size:12px!important; }
-      #__gb-tip { position:fixed!important; z-index:2147483646!important;
-        background:var(--gb-tooltip-bg)!important; color:var(--gb-text-tertiary)!important;
-        font:11px/1.5 monospace!important; padding:5px 9px!important; border-radius:5px !important;
-        pointer-events:none!important; max-width:340px!important; word-break:break-all!important;
-        border:1px solid var(--gb-border-standard)!important; display:none!important; }
+        cursor: crosshair !important; background-color: color-mix(in srgb, var(--gb-brand) 10%, transparent) !important; }
+      #__gb-banner {
+        position: fixed !important;
+        top: 16px !important; left: 50% !important;
+        transform: translateX(-50%) !important;
+        z-index: 2147483647 !important;
+        max-width: min(560px, calc(100vw - 32px)) !important;
+        padding: 10px 14px !important;
+        background: color-mix(in srgb, var(--gb-surface-modal) 92%, transparent) !important;
+        color: var(--gb-text-primary) !important;
+        border: 1px solid var(--gb-border-default) !important;
+        border-radius: var(--gb-r-lg) !important;
+        backdrop-filter: blur(14px) saturate(160%) !important;
+        -webkit-backdrop-filter: blur(14px) saturate(160%) !important;
+        box-shadow: var(--gb-shadow-popover) !important;
+        font: 500 12.5px/1.4 var(--gb-font-sans, -apple-system, sans-serif) !important;
+        display: flex !important; align-items: center !important; gap: 10px !important;
+        animation: __gbPickBannerIn .18s cubic-bezier(.4,0,.2,1) !important;
+      }
+      @keyframes __gbPickBannerIn {
+        from { opacity: 0; transform: translate(-50%, -8px); }
+        to   { opacity: 1; transform: translate(-50%,  0); }
+      }
+      #__gb-banner .__gb-pick-icon {
+        width: 22px !important; height: 22px !important;
+        display: inline-flex !important; align-items: center !important; justify-content: center !important;
+        background: var(--gb-brand-tint-medium) !important;
+        border: 1px solid var(--gb-brand-tint-border) !important;
+        border-radius: var(--gb-r-sm) !important;
+        color: var(--gb-brand-label) !important;
+        flex-shrink: 0 !important;
+      }
+      #__gb-banner .__gb-pick-text { flex: 1 !important; min-width: 0 !important; }
+      #__gb-banner kbd {
+        background: var(--gb-surface-2) !important;
+        border: 1px solid var(--gb-border-default) !important;
+        color: var(--gb-text-secondary) !important;
+        padding: 1px 6px !important;
+        border-radius: var(--gb-r-xs) !important;
+        font-family: var(--gb-font-mono, ui-monospace, monospace) !important;
+        font-size: 10.5px !important;
+      }
+      #__gb-cancel-btn {
+        background: var(--gb-surface-2) !important;
+        color: var(--gb-text-secondary) !important;
+        border: 1px solid var(--gb-border-default) !important;
+        padding: 4px 10px !important;
+        border-radius: var(--gb-r-sm) !important;
+        cursor: pointer !important;
+        font: 600 11.5px/1 var(--gb-font-sans, inherit) !important;
+        transition: background .12s, color .12s, border-color .12s !important;
+        flex-shrink: 0 !important;
+      }
+      #__gb-cancel-btn:hover {
+        background: var(--gb-fill-hover) !important;
+        color: var(--gb-text-primary) !important;
+        border-color: var(--gb-border-strong) !important;
+      }
+      #__gb-tip { position: fixed !important; z-index: 2147483646 !important;
+        background: var(--gb-surface-modal) !important; color: var(--gb-text-secondary) !important;
+        font: 11px/1.5 var(--gb-font-mono, ui-monospace, monospace) !important;
+        padding: 6px 9px !important;
+        border-radius: var(--gb-r-sm) !important;
+        border: 1px solid var(--gb-border-default) !important;
+        box-shadow: var(--gb-shadow-popover) !important;
+        pointer-events: none !important;
+        max-width: 340px !important; word-break: break-all !important;
+        display: none !important;
+      }
     `;
     document.head.appendChild(s);
   }
 
   /**
-   * Creates and prepends the "Click any element" instruction banner and a
-   * floating tooltip element to the document body. Idempotent.
-   */
+   * Creates and prepends the floating "Click any element" pill banner
+   * and a tooltip element to the document body. Banner is themed and
+   * opted-in to the popovers UI-scale slider via data-gb-scale. */
   function injectBanner() {
     if (document.getElementById('__gb-banner')) return;
     const b = document.createElement('div');
     b.id = '__gb-banner';
-    b.innerHTML = `<span>🎯 Click any element to capture its value &nbsp;·&nbsp; <kbd>Esc</kbd> to cancel</span>
-      <button id="__gb-cancel-btn">✕ Cancel</button>`;
-    document.body.prepend(b);
+    b.className = 'gb-pick-banner';
+    b.setAttribute('data-gb-scale', 'popovers');
+    b.innerHTML = `
+      <span class="__gb-pick-icon" aria-hidden="true">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 1v3M12 20v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M1 12h3M20 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
+        </svg>
+      </span>
+      <span class="__gb-pick-text">Click any element to capture its value &nbsp;·&nbsp; <kbd>Esc</kbd> to cancel</span>
+      <button id="__gb-cancel-btn" type="button">Cancel</button>
+    `;
+    document.body.appendChild(b);
     document.getElementById('__gb-cancel-btn').addEventListener('click', () => exitPickMode(true));
 
     const tip = document.createElement('div');
