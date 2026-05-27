@@ -136,11 +136,20 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
   const [mode, setMode] = useState('indexed');   // 'indexed' | 'server'
   useEffect(() => {
     let alive = true;
+    /* In useMock mode (playground), pre-seed the indexed list with
+       the same MOCK_RESULTS the server-mode mock returns so the
+       modal opens with rows already visible — no Search button click
+       required to populate something the rep can select + email. */
+    if (useMock) {
+      setIndexed(MOCK_RESULTS);
+      setIndexLoaded(true);
+      return () => { alive = false; };
+    }
     getAllIndexed()
       .then((rows) => { if (alive) { setIndexed(rows); setIndexLoaded(true); } })
       .catch(() => { if (alive) { setIndexed([]); setIndexLoaded(true); } });
     return () => { alive = false; };
-  }, []);
+  }, [useMock]);
   const refreshIndex = useCallback(async () => {
     try { setIndexed(await getAllIndexed()); } catch { /* ignore */ }
   }, []);
