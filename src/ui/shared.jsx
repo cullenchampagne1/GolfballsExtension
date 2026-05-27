@@ -147,6 +147,23 @@ export function ensureMarchingAntsStyle() {
   if (typeof document === 'undefined' || document.getElementById(MARCHING_ANTS_STYLE_ID)) return;
   const el = document.createElement('style');
   el.id = MARCHING_ANTS_STYLE_ID;
+  /* TWO distinct kbd-focus visuals so reps can tell at a glance
+     whether they're aimed at a one-shot action vs an editable field:
+
+     1) `.gb-kbd-active` — a marching-ants dashed outline drawn via a
+        ::after pseudo-element absolutely-positioned just outside the
+        host. The pseudo-element approach means inline styles on the
+        host (e.g. PresetGridButton's brand-tint background) can't
+        clobber the ants. Used on the Quick log + Quick task rows
+        when the virtual-focus index (activeQuickIdx / activeRowIdx)
+        lands on them. Press Enter to "fire" the row.
+
+     2) `[data-gb-kbd-scope] :focus-visible` — for any real-focused
+        element inside a modal scoped with data-gb-kbd-scope: a
+        solid brand-fg border + soft brand-tint focus ring. Reads
+        as "this is selected, Enter to edit / commit". Distinct from
+        the ants so the user immediately knows the difference between
+        a one-shot row vs a form field. */
   el.textContent = `
     @keyframes gb-march {
       to {
@@ -155,18 +172,43 @@ export function ensureMarchingAntsStyle() {
           0 -16px,   100% 16px;
       }
     }
+    /* Quick-action row: marching dashed outline via ::after so it
+       doesn't fight inline backgrounds on the host element. */
     .gb-kbd-active {
-      --gb-march-color: var(--gb-brand-fg);
-      --gb-march-dur: 0.7s;
+      position: relative;
+    }
+    .gb-kbd-active::after {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      pointer-events: none;
+      border-radius: inherit;
       background-image:
-        linear-gradient(90deg, var(--gb-march-color) 50%, transparent 50%),
-        linear-gradient(90deg, var(--gb-march-color) 50%, transparent 50%),
-        linear-gradient(0deg,  var(--gb-march-color) 50%, transparent 50%),
-        linear-gradient(0deg,  var(--gb-march-color) 50%, transparent 50%);
+        linear-gradient(90deg, var(--gb-brand-fg) 50%, transparent 50%),
+        linear-gradient(90deg, var(--gb-brand-fg) 50%, transparent 50%),
+        linear-gradient(0deg,  var(--gb-brand-fg) 50%, transparent 50%),
+        linear-gradient(0deg,  var(--gb-brand-fg) 50%, transparent 50%);
       background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
       background-size: 16px 2px, 16px 2px, 2px 16px, 2px 16px;
       background-position: 0 0, 0 100%, 0 0, 100% 0;
-      animation: gb-march var(--gb-march-dur) linear infinite;
+      animation: gb-march 0.7s linear infinite;
+    }
+
+    /* Form-field focus: solid brand outline + soft focus ring. The
+       !important flags override inline styles on Input/Dropdown/etc
+       that set their own border-color and box-shadow. */
+    [data-gb-kbd-scope] :focus-visible {
+      outline: none !important;
+      border-color: var(--gb-brand-fg) !important;
+      box-shadow: 0 0 0 3px var(--gb-brand-tint-medium), inset 0 0 0 1px var(--gb-brand-fg) !important;
+    }
+    /* Inputs/textareas don't have a separate border to recolor —
+       the entire visible border IS the box-shadow, so the inset ring
+       above does the work. The selector below is just a safety net
+       that turns off any lingering browser outline on text fields. */
+    [data-gb-kbd-scope] input:focus-visible,
+    [data-gb-kbd-scope] textarea:focus-visible {
+      outline: none !important;
     }
   `;
   document.head.appendChild(el);

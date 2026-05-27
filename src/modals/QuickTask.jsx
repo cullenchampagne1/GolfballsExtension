@@ -6,6 +6,7 @@ import {
   DatePicker, parseDateValue,
   I, useToast,
 } from '../ui/index.js';
+import { useModalTopState } from '../lib/actionRegistry.js';
 import {
   PRIORITY_OPTIONS,
   DEFAULT_PRIORITY,
@@ -153,12 +154,15 @@ export function QuickTask({
   };
 
   const anyBusy = !!busyId || savingCustom;
+  /* Single-visible-modal coordination — see useModalTopState. */
+  const modalVisible = useModalTopState('quick-task', 'Quick Task');
 
   return (
     <FloatingPanel
       width={480}
       backdrop
       draggable
+      visible={modalVisible}
       onClose={onClosed}
       bindClose={handleBindClose}
     >
