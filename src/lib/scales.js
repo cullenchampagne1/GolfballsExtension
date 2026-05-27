@@ -90,7 +90,20 @@ export function applyScales(scales) {
   for (const c of SCALE_CATEGORIES) lines.push(`  --gb-scale-${c.id}: ${sane[c.id]};`);
   lines.push('}');
   for (const c of SCALE_CATEGORIES) {
-    lines.push(`[data-gb-scale="${c.id}"] { zoom: var(--gb-scale-${c.id}, 1) !important; }`);
+    // Popovers are positioned by JS off `getBoundingClientRect` of an
+    // anchor element — `zoom` shifts how those coordinates are
+    // interpreted (`top: 200` in a zoom:1.25 ancestor lands at 250
+    // viewport pixels), so the popover drifts off-anchor. `transform:
+    // scale()` is visual-only and doesn't affect layout coords, so the
+    // popover stays glued to its trigger and just grows from the top-
+    // left. Every other category (modals, toasts, shelf, full-page
+    // surfaces) uses zoom because they don't have anchor-relative JS
+    // positioning to worry about.
+    if (c.id === 'popovers') {
+      lines.push(`[data-gb-scale="${c.id}"] { transform: scale(var(--gb-scale-${c.id}, 1)) !important; transform-origin: top left !important; }`);
+    } else {
+      lines.push(`[data-gb-scale="${c.id}"] { zoom: var(--gb-scale-${c.id}, 1) !important; }`);
+    }
   }
   const css = lines.join('\n');
 
