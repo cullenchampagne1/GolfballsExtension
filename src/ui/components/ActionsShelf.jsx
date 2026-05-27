@@ -438,19 +438,23 @@ export function ActionsShelf({
   actionRows.slice(0, 9).forEach((r, i) => shortcutFor.set(r.key, String(i + 1)));
 
   /* Keyboard control:
-       • Tap Alt / Option alone → toggle the shelf open
+       • Double-tap Shift (within 500ms, no other key between) → toggle shelf
        • While the shelf is open, 1-9 → fire that action
 
-     The "Alt tapped alone" pattern is keydown-Alt followed by
-     keyup-Alt with NO other key in between. Without that gate, a
-     normal Alt+letter combo (Alt+Tab, Alt+F, etc.) would also
-     trigger the toggle on keyup, which would be infuriating.
+     Why Shift double-tap instead of the old Alt/Option-alone tap:
+     Chrome on Windows/Linux intercepts Alt to focus the menu bar, so
+     the keyup never reached us cleanly; on macOS Option types special
+     characters into focused inputs. Shift has no equivalent browser
+     hijack — both keydowns + keyups reach the page, the modifier
+     itself is harmless in inputs, and the double-tap idiom is
+     familiar (Telegram, Discord, IntelliJ).
 
-     We bail when typing in an input so number keys still type
-     into search boxes / textareas. */
+     The "no other key between" gate kills false positives from
+     Shift+letter capitalisation: the letter's keydown sets a flag
+     that blocks the next Shift from counting as a double-tap. */
   useEffect(() => {
-    let altDownAt = 0;
-    let altCombined = false;
+    let lastShiftDownAt = 0;
+    let otherKeyBetween = false;
     const TAP_WINDOW_MS = 500;
 
     const isTypingTarget = (el) => {
@@ -460,16 +464,25 @@ export function ActionsShelf({
     };
 
     const onKeyDown = (e) => {
-      // Track Alt-down before any input-target check so input
-      // focus doesn't block the Alt-tap toggle (Option in an
-      // input still summons the shelf).
-      if (e.key === 'Alt') {
-        if (!altDownAt) { altDownAt = Date.now(); altCombined = false; }
+      // Detect the double-tap on the second Shift keydown. e.repeat
+      // skips auto-repeat from a held Shift (it would otherwise fire
+      // hundreds of "second taps").
+      if (e.key === 'Shift' && !e.repeat) {
+        const now = Date.now();
+        if (lastShiftDownAt && !otherKeyBetween && (now - lastShiftDownAt) < TAP_WINDOW_MS) {
+          setOpen((v) => !v);
+          lastShiftDownAt = 0;
+          otherKeyBetween = false;
+          return;
+        }
+        lastShiftDownAt = now;
+        otherKeyBetween = false;
         return;
       }
-      // If anything else fires while Alt is held, it's NOT a
-      // lone tap — cancel the toggle intent.
-      if (altDownAt) altCombined = true;
+      // Any non-Shift key breaks the double-tap sequence so
+      // Shift+letter capitalisation doesn't accidentally fire on the
+      // next plain Shift tap.
+      if (e.key !== 'Shift') otherKeyBetween = true;
 
       // Number keys 1-9 trigger only while the shelf is open and
       // ONLY when no modifier is held (so Alt+1 / Ctrl+1 / Cmd+1
@@ -488,17 +501,18 @@ export function ActionsShelf({
       }
     };
 
+    /* Unused for the toggle, but retained for the number-key escape
+       hatches we used to wire here. Kept as a stub so the listener
+       cleanup is symmetric — easier to extend later. */
     const onKeyUp = (e) => {
-      if (e.key !== 'Alt') return;
-      const wasTap = altDownAt && !altCombined && (Date.now() - altDownAt) < TAP_WINDOW_MS;
-      altDownAt = 0;
+      if (e.key !== 'ShiftPlaceholder') return;
       altCombined = false;
-      if (wasTap) setOpen((v) => !v);
     };
 
-    // Window blur (Cmd-Tab to another app while Alt was held) →
-    // wipe the half-state so the next Alt press starts clean.
-    const onBlur = () => { altDownAt = 0; altCombined = false; };
+    // Window blur — wipe the double-tap state so the next Shift starts
+    // a fresh sequence (e.g. Cmd-Tab away mid-tap shouldn't pre-arm
+    // the next tap when the user comes back).
+    const onBlur = () => { lastShiftDownAt = 0; otherKeyBetween = false; };
 
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
