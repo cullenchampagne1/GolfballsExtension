@@ -4,9 +4,13 @@ import { motion } from 'motion/react';
 /* Density presets. Defaults match the spec's SidePicker
    (design_handoff_components/reference/system-page.jsx:533) — 10.5px text,
    3×9 inner padding, 2 outer padding, brand-tint active. */
+/* innerRadius bumped on sm/md so the focus-visible ring (box-shadow
+   follows the host's border-radius) reads as clearly rounded
+   instead of the previous ~3px corners that just looked square at
+   a glance. lg stays — already pronounced enough. */
 const SIZES = {
-  sm: { pad: 2, btnPad: '2px 7px',  font: 10,   gap: 1, radius: 'var(--gb-r-sm)', innerRadius: 3, icon: 10 },
-  md: { pad: 2, btnPad: '3px 9px',  font: 10.5, gap: 1, radius: 'var(--gb-r-sm)', innerRadius: 4, icon: 11 },
+  sm: { pad: 2, btnPad: '2px 7px',  font: 10,   gap: 1, radius: 'var(--gb-r-sm)', innerRadius: 5, icon: 10 },
+  md: { pad: 2, btnPad: '3px 9px',  font: 10.5, gap: 1, radius: 'var(--gb-r-sm)', innerRadius: 6, icon: 11 },
   lg: { pad: 3, btnPad: '4px 11px', font: 11,   gap: 1, radius: 'var(--gb-r-md)', innerRadius: 5, icon: 12 },
 };
 
@@ -78,6 +82,13 @@ export function Segmented({ value, onChange, options = [], size = 'md', full, st
         borderRadius: s.radius,
         background: 'var(--gb-fill-subtle)',
         border: '1px solid var(--gb-border-subtle)',
+        /* border-box so any inline `height` from a caller is the
+           OUTER dimension (matches inputBaseStyle, which is the
+           sibling element a Segmented usually sits beside). Without
+           this an inline height was inner-only — padding + border
+           added on top so Segmented rendered ~6px taller than a
+           Dropdown of the same nominal size. */
+        boxSizing: 'border-box',
         position: 'relative',
         ...style,
       }}

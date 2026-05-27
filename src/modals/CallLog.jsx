@@ -392,18 +392,18 @@ export function CallLog({
             ref={customFormRef}
             style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}
           >
-            {/* Direction + Category share a row to save vertical
-                space. Heights are forced to 28px so the bottoms
-                align — Segmented size="sm" defaults to ~20px tall
-                while Dropdown size="sm" is 28px (inputBaseStyle's
-                heights map), so we explicitly stretch Segmented to
-                match. alignItems:end on the grid handles the
-                Field-label height variance (if one label wraps,
-                the controls still bottom-align). */}
+            {/* Direction + Category share a row. Both use size="md"
+                (32px) so the visual heights match — sm + an inline
+                28px on Segmented + a 28px Dropdown looked uneven
+                because Segmented's container is content-box (its
+                "height" was inner-only, plus 4px padding + 2px
+                border = ~34px outer), while inputBaseStyle on the
+                Dropdown is border-box. md on both = uniform 32px
+                outer for both. */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'end' }}>
               <Field label="Direction">
                 <Segmented
-                  size="sm"
+                  size="md"
                   value={String(direction)}
                   onChange={(v) => setDirection(parseInt(v, 10) | 0)}
                   options={CALL_DIRECTION_OPTIONS.map((o) => ({
@@ -411,12 +411,11 @@ export function CallLog({
                     icon: o.id === '1' ? <Inbound /> : <Outbound />,
                   }))}
                   full
-                  style={{ height: 28 }}
                 />
               </Field>
               <Field label="Category" required>
                 <Dropdown
-                  size="sm"
+                  size="md"
                   searchable
                   value={String(category)}
                   options={CALL_CATEGORY_OPTIONS}
