@@ -202,17 +202,22 @@ export function ensureMarchingAntsStyle() {
     }
 
     /* Form-field focus: solid brand outline + soft focus ring. The
-       !important flags override inline styles on Input/Dropdown/etc
-       that set their own border-color and box-shadow. */
-    [data-gb-kbd-scope] :focus-visible {
+       !important flags override inline styles on Dropdown / PillTag /
+       Segmented buttons that set their own borders.
+
+       Native <input> and <textarea> live INSIDE a wrapper component
+       (Input.jsx / Textarea.jsx) that already paints a brand border
+       + focus ring via inputBaseStyle when focused — applying the
+       same treatment to the inner native field too produced a
+       double-border effect (one around the wrapper, one around the
+       text node). The :not() selectors exclude them so only the
+       wrapper's focus visual shows. We still neutralise the
+       browser's default outline on the native fields below. */
+    [data-gb-kbd-scope] *:focus-visible:not(input):not(textarea) {
       outline: none !important;
       border-color: var(--gb-brand-fg) !important;
       box-shadow: 0 0 0 3px var(--gb-brand-tint-medium), inset 0 0 0 1px var(--gb-brand-fg) !important;
     }
-    /* Inputs/textareas don't have a separate border to recolor —
-       the entire visible border IS the box-shadow, so the inset ring
-       above does the work. The selector below is just a safety net
-       that turns off any lingering browser outline on text fields. */
     [data-gb-kbd-scope] input:focus-visible,
     [data-gb-kbd-scope] textarea:focus-visible {
       outline: none !important;
