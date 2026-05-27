@@ -293,12 +293,21 @@ async function gbMigrateVariations({ dryRun = false } = {}) {
     const parent = all.find((t) => t.name === base);
     if (!parent) continue;
     group.sort((a, b) => a.n - b.n);
-    const variations = group.map((g) => ({
-      id: g.tpl.id, label: `Variation ${g.n}`,
-      subject: g.tpl.subject || '', body: g.tpl.body || '',
-    }));
+    // Dedupe by id against any variations already on the parent. Lets
+    // the migration be re-run safely to clean up leftover standalones
+    // from earlier buggy runs without doubling entries on the parent.
+    const existingIds = new Set((parent.variations || []).map((v) => v.id));
+    const variations = group
+      .filter((g) => !existingIds.has(g.tpl.id))
+      .map((g) => ({
+        id: g.tpl.id, label: `Variation ${g.n}`,
+        subject: g.tpl.subject || '', body: g.tpl.body || '',
+      }));
     parent.variations = [...(parent.variations || []), ...variations];
     migrated += variations.length;
+    // Every group sibling — even ones already in parent.variations —
+    // belongs in the removal set so the standalone templates from the
+    // first-run leftover state get pruned now.
     for (const g of group) removeIds.add(g.tpl.id);
   }
   if (!dryRun && migrated > 0) {
