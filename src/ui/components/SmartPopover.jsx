@@ -1,19 +1,21 @@
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { I, Icon } from '../icons.jsx';
 import { Btn } from './Btn.jsx';
 import { Field } from './Field.jsx';
 import { Input } from './Input.jsx';
 import { Dropdown } from './Dropdown.jsx';
 import { Switch } from './Switch.jsx';
+import { DraggablePopup } from './DraggablePopup.jsx';
 
-/* Compact, anchor-positioned replacement for SmartModal. Lives inside
-   a tooltip-sized popover (340px) instead of a 560px modal. Same five
-   smart options (fallback / extract / transform / conditional / format)
-   but laid out as an icon tab strip + inline body, so even on a small
-   monitor it doesn't take over the screen. Portals to <body> so it
-   escapes ancestor stacking contexts and overflow clips. */
+/* SmartPopover — cursor-anchored editor for a variable's smart options.
+   The same five tabs (fallback / extract / transform / conditional /
+   format) the legacy SmartModal carried, but laid out as an icon strip
+   inside a DraggablePopup so the visual chrome (drag grip, icon, title,
+   close X) matches every other secondary popup in the system. The
+   spawn point follows the user's cursor instead of an anchor element —
+   click a variable bolt anywhere and the popup pops up right where the
+   user's eyes already are, no anchor wiring required. */
 
 const POPOVER_W = 340;
 
@@ -63,22 +65,20 @@ function isOptionSet(smart, id) {
 }
 
 /**
- * SmartPopover — anchor-positioned compact editor for a variable's
- * smart options. Replaces SmartModal for the in-table + body chip flows.
+ * SmartPopover — cursor-anchored compact editor for a variable's
+ * smart options. Replaces the older anchor-element flavour with a
+ * cursor-pixel anchor so callers just hand over the click event.
  *
  * Props:
  *   variable   The variable object {name, smart, resolved, ...}
- *   anchor     A DOM element to position against (the clicked bolt span)
+ *   cursor     { x, y } viewport coords (from event.clientX/clientY).
+ *              Pass null to fall back to viewport-centre placement.
  *   onSave     (smart) => void
  *   onClose    () => void
  */
-export function SmartPopover({ variable, anchor, onSave, onClose }) {
-  const popoverRef = useRef(null);
-  const [tab, setTab]   = useState('fallback');
+export function SmartPopover({ variable, cursor, onSave, onClose }) {
+  const [tab, setTab] = useState('fallback');
   const [smart, setSmart] = useState(variable?.smart || {});
-  // Per-instance id keeps multiple SmartPopovers from colliding on
-  // the shared layoutId for the active-tab indicator.
-  const groupId = useId();
 
   // Reset when the variable changes (user clicked a different chip while
   // the previous popover was still open).
@@ -89,55 +89,6 @@ export function SmartPopover({ variable, anchor, onSave, onClose }) {
     }
   }, [variable?.name]);
 
-  // Position from the anchor's bounding rect. Update on resize; close on
-  // outside scroll (so it doesn't float when the table scrolls).
-  const [pos, setPos] = useState(null);
-  useEffect(() => {
-    if (!anchor) return undefined;
-    function update() {
-      const r = anchor.getBoundingClientRect();
-      // Default: drop down + align left with anchor. Flip to left-of-anchor
-      // if it would clip the right edge of the viewport.
-      let left = r.left;
-      const right = left + POPOVER_W;
-      if (right > window.innerWidth - 8) left = window.innerWidth - POPOVER_W - 8;
-      if (left < 8) left = 8;
-      // Try below first; flip above if it would clip the bottom.
-      let top = r.bottom + 6;
-      // We don't know height until the popover renders. Use a conservative
-      // estimate (320) for the initial flip decision.
-      if (top + 320 > window.innerHeight - 8) top = Math.max(8, r.top - 320 - 6);
-      setPos({ top, left });
-    }
-    update();
-    const onScroll = (e) => {
-      if (popoverRef.current?.contains(e.target)) return;
-      onClose?.();
-    };
-    window.addEventListener('resize', update);
-    window.addEventListener('scroll', onScroll, true);
-    return () => {
-      window.removeEventListener('resize', update);
-      window.removeEventListener('scroll', onScroll, true);
-    };
-  }, [anchor, onClose]);
-
-  // Outside click + Esc close.
-  useEffect(() => {
-    const onDown = (e) => {
-      if (popoverRef.current?.contains(e.target)) return;
-      if (anchor && anchor.contains(e.target)) return;
-      onClose?.();
-    };
-    const onKey = (e) => { if (e.key === 'Escape') onClose?.(); };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [anchor, onClose]);
-
   const upd = (patch) => setSmart((s) => ({ ...s, ...patch }));
 
   const activeCount = useMemo(
@@ -145,65 +96,27 @@ export function SmartPopover({ variable, anchor, onSave, onClose }) {
     [smart],
   );
 
-  if (!variable || !pos) return null;
+  if (!variable) return null;
 
-  return createPortal(
-    <motion.div
-      ref={popoverRef}
-      className="gb-popover"
-      data-gb-scale="popovers"
-      initial={{ opacity: 0, y: -4, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0,  scale: 1 }}
-      exit={{    opacity: 0, y: -4, scale: 0.97 }}
-      transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
-      style={{
-        position: 'fixed',
-        top: pos.top, left: pos.left,
-        width: POPOVER_W,
-        zIndex: 2147483500,
-        background: 'var(--gb-surface-modal)',
-        border: '1px solid var(--gb-border-default)',
-        borderRadius: 'var(--gb-r-md)',
-        boxShadow: 'var(--gb-shadow-popover)',
-        fontFamily: 'var(--gb-font-sans)',
-        display: 'flex', flexDirection: 'column',
-        overflow: 'hidden',
-      }}
-    >
-      {/* Header — tight pill with var name + close */}
-      <div style={{
-        padding: '8px 10px',
-        background: 'var(--gb-warning-tint-soft)',
-        borderBottom: '1px solid var(--gb-border-subtle)',
-        display: 'flex', alignItems: 'center', gap: 7,
-      }}>
-        <I.bolt size={11} style={{ color: 'var(--gb-warning-fg)', flexShrink: 0 }} />
-        <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--gb-text-secondary)', letterSpacing: 0.3 }}>
-          Smart options
-        </span>
+  return (
+    <DraggablePopup
+      open={!!variable}
+      onClose={onClose}
+      cursorAnchor={cursor}
+      width={POPOVER_W}
+      maxHeight={420}
+      icon={<I.bolt size={12} />}
+      title="Smart options"
+      subtitle={(
         <code style={{
-          fontFamily: 'var(--gb-font-mono)', fontSize: 10, fontWeight: 600,
-          color: 'var(--gb-warning-fg)', background: 'transparent',
-          padding: '0 4px',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          minWidth: 0, flex: 1,
-        }}>
-          {`{{${variable.name}}}`}
-        </code>
-        <button
-          type="button"
-          onClick={onClose}
-          style={{
-            background: 'transparent', border: 'none', cursor: 'pointer',
-            color: 'var(--gb-text-muted)', padding: 2, display: 'flex',
-            borderRadius: 'var(--gb-r-sm)',
-          }}
-        >
-          <I.close size={11} />
-        </button>
-      </div>
-
-      {/* Icon tab strip — 5 columns equal width, with dot indicator */}
+          fontFamily: 'var(--gb-font-mono)', fontSize: 10.5, fontWeight: 600,
+          color: 'var(--gb-warning-fg)',
+        }}>{`{{${variable.name}}}`}</code>
+      )}
+      closeOnOutside
+      enterFrom="bottom"
+    >
+      {/* Icon tab strip — 5 columns equal width, with sliding underline. */}
       <div style={{
         display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)',
         background: 'var(--gb-surface-canvas)',
@@ -225,19 +138,14 @@ export function SmartPopover({ variable, anchor, onSave, onClose }) {
                 display: 'flex', flexDirection: 'column',
                 alignItems: 'center', justifyContent: 'center', gap: 2,
                 color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
-                // Underline is the sliding indicator (motion below). Reserve
-                // the 2px so the row height doesn't jump when the tab
-                // changes — the actual stroke is the layoutId pill.
                 borderBottom: '2px solid transparent',
                 transition: 'color 140ms ease, background 140ms ease',
                 fontFamily: 'inherit',
               }}
             >
-              {/* Sliding active underline — springs between tabs via shared
-                  layoutId, the same pattern Segmented uses. */}
               {active && (
                 <motion.span
-                  layoutId={`smartpop-tab-${groupId}`}
+                  layoutId="gb-smart-tab"
                   transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.85 }}
                   style={{
                     position: 'absolute',
@@ -254,7 +162,6 @@ export function SmartPopover({ variable, anchor, onSave, onClose }) {
               }}>
                 {label}
               </span>
-              {/* Active-config dot */}
               {set && (
                 <span style={{
                   position: 'absolute', top: 5, right: 8,
@@ -272,7 +179,7 @@ export function SmartPopover({ variable, anchor, onSave, onClose }) {
       <div style={{
         padding: 11, maxHeight: 280, overflow: 'auto',
         display: 'flex', flexDirection: 'column', gap: 10,
-        fontSize: 11,
+        fontSize: 11, flex: 1,
       }}>
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
@@ -422,6 +329,7 @@ export function SmartPopover({ variable, anchor, onSave, onClose }) {
         background: 'var(--gb-surface-canvas)',
         borderTop: '1px solid var(--gb-border-subtle)',
         display: 'flex', alignItems: 'center', gap: 6,
+        flexShrink: 0,
       }}>
         <div style={{ flex: 1, fontSize: 10, color: 'var(--gb-text-muted)' }}>
           {activeCount} option{activeCount !== 1 ? 's' : ''} active
@@ -431,7 +339,6 @@ export function SmartPopover({ variable, anchor, onSave, onClose }) {
           Save
         </Btn>
       </div>
-    </motion.div>,
-    document.body,
+    </DraggablePopup>
   );
 }

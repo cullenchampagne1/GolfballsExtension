@@ -88,6 +88,13 @@ export function DraggablePopup({
      with a 16px gap. Falls back to a viewport-centre + half-modal-
      width estimate. */
   anchorHostId,
+  /* Optional: { x, y } viewport coordinates (typically from a click
+     event's clientX / clientY). When set, the popup spawns slightly
+     below and to the right of the cursor — no anchor element
+     management required. Wins over anchorHostId when both are set:
+     a cursor anchor is always a more deliberate "open right here"
+     intent than a parent-modal fallback. */
+  cursorAnchor,
   /* CSS width of the unscaled box. The popup's rendered size in
      viewport pixels is width × scale and the clamp accounts for it. */
   width = 340,
@@ -118,32 +125,42 @@ export function DraggablePopup({
     const scale = readPopoverScale(rootRef.current);
     const Wv = W * scale;        // rendered width in viewport px
     const Hv = H * scale;        // rendered height in viewport px
-    let rect = null;
-    if (anchorHostId) {
-      const host = document.getElementById(anchorHostId);
-      rect = host?.querySelector('.gb-modal-card')?.getBoundingClientRect() || null;
-    }
     let left;
     let top;
-    if (rect) {
-      /* First choice: anchor 16px outside the parent modal's right
-         edge — fits on wide viewports.
-         Fallback (narrow viewport): right-align the popup with the
-         parent's right edge so the popup overlays the parent's
-         right portion BUT the right edges line up. Reads as "popup
-         attached to the parent's right side" instead of the previous
-         "shifted way to the left of the parent's right edge". */
-      const rightOf = rect.right + 16;
-      if (rightOf + Wv > window.innerWidth - 8) {
-        left = rect.right - Wv;
-      } else {
-        left = rightOf;
-      }
-      top = rect.top;
+    if (cursorAnchor && typeof cursorAnchor.x === 'number' && typeof cursorAnchor.y === 'number') {
+      /* Cursor-anchored spawn — sits 12px to the right and 8px below
+         the click point. Lets callers (BodyVar bolt, RichTextEditor
+         chip, etc.) pop a popup right where the user is looking
+         without managing an anchor element. The viewport clamp below
+         pulls it back in-bounds when the click was near an edge. */
+      left = cursorAnchor.x + 12;
+      top  = cursorAnchor.y + 8;
     } else {
-      // No parent → centre.
-      left = Math.max(8, (window.innerWidth  - Wv) / 2);
-      top  = Math.max(40, (window.innerHeight - Hv) / 2);
+      let rect = null;
+      if (anchorHostId) {
+        const host = document.getElementById(anchorHostId);
+        rect = host?.querySelector('.gb-modal-card')?.getBoundingClientRect() || null;
+      }
+      if (rect) {
+        /* First choice: anchor 16px outside the parent modal's right
+           edge — fits on wide viewports.
+           Fallback (narrow viewport): right-align the popup with the
+           parent's right edge so the popup overlays the parent's
+           right portion BUT the right edges line up. Reads as "popup
+           attached to the parent's right side" instead of the previous
+           "shifted way to the left of the parent's right edge". */
+        const rightOf = rect.right + 16;
+        if (rightOf + Wv > window.innerWidth - 8) {
+          left = rect.right - Wv;
+        } else {
+          left = rightOf;
+        }
+        top = rect.top;
+      } else {
+        // No anchor at all → centre.
+        left = Math.max(8, (window.innerWidth  - Wv) / 2);
+        top  = Math.max(40, (window.innerHeight - Hv) / 2);
+      }
     }
     // Final viewport clamp using rendered (scaled) dimensions.
     const maxLeft = Math.max(0, window.innerWidth  - Wv - 8);
