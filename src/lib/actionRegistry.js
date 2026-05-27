@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
 /* ───────────────────────────────────────────────────────────────
    actionRegistry — singleton store for the bottom-right Actions
@@ -226,4 +226,37 @@ export function useActionRegistry() {
     topModal: actionRegistry.getTopModal(),
     topModalLabel: actionRegistry.getTopModalLabel(),
   };
+}
+
+/* ── Single-visible-modal coordination ──────────────────────────
+   Modals call useModalTopState on mount with their id + display
+   label. The hook pushes them onto the shared modal stack, listens
+   for stack changes, and returns `true` only while THIS modal is
+   the topmost — i.e. the only one that should be visible. Every
+   modal in the codebase routes its FloatingPanel `visible` prop
+   through this hook, so opening a new modal automatically hides
+   whoever was on top, and closing the new one restores them.
+
+   Pattern at the call site:
+
+       const visible = useModalTopState('quick-task', 'Quick Task');
+       return <FloatingPanel visible={visible}>...</FloatingPanel>;
+
+   The state is preserved while hidden (FloatingPanel just fades
+   out + pointer-events:none) so the user comes back to whatever
+   they'd typed / selected. */
+export function useModalTopState(id, label) {
+  const [isTop, setIsTop] = useState(true);
+  useEffect(() => {
+    if (!id) return undefined;
+    actionRegistry.pushModal(id, label);
+    const compute = () => setIsTop(actionRegistry.getTopModal() === id);
+    compute();
+    const unsub = actionRegistry.subscribe(compute);
+    return () => {
+      unsub();
+      actionRegistry.popModal(id);
+    };
+  }, [id, label]);
+  return isTop;
 }

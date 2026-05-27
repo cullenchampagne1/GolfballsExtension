@@ -77,6 +77,7 @@ function ModalCard({ cssWidth, cssMaxHeight, cssHeight, children }) {
     <motion.div
       className="gb-modal-card"
       data-gb-scale="modals"
+      data-gb-kbd-scope=""
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95, transition: T.base }}

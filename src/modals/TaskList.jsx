@@ -1847,6 +1847,7 @@ function QuickTaskMenu({ qt, pushDays, setPushDays, taskTpls, selectedCount, get
         key="qt-menu"
         className="gb-qtm"
         data-gb-scale="popovers"
+        data-gb-kbd-scope=""
         initial={{ opacity: 0, y: placeAbove ? 4 : -4, scale: 0.97 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, scale: 0.97 }}

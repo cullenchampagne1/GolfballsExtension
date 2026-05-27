@@ -14,6 +14,7 @@ import {
   getCategoryLabel,
   buildCustomTemplate,
 } from '../lib/callLog.js';
+import { useModalTopState } from '../lib/actionRegistry.js';
 
 /* ───────────────────────────────────────────────────────────────
    CallLog — quick-action modal for logging an outbound (or
@@ -114,6 +115,9 @@ export function CallLog({
   const animatedClose = () => bindCloseRef.current?.();
 
   useEffect(() => { ensureMarchingAntsStyle(); }, []);
+
+  /* Single-visible-modal coordination — see useModalTopState. */
+  const modalVisible = useModalTopState('call-log', 'Call Log');
 
   useEffect(() => {
     let alive = true;
@@ -283,6 +287,7 @@ export function CallLog({
       width={480}
       backdrop
       draggable
+      visible={modalVisible}
       onClose={onClosed}
       bindClose={handleBindClose}
     >
