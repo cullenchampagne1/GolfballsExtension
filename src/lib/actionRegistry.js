@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from 'react';
 
 /* ───────────────────────────────────────────────────────────────
    actionRegistry — singleton store for the bottom-right Actions
@@ -7,13 +7,23 @@ import { useState, useSyncExternalStore } from 'react';
    can do. The shelf renders them grouped + filtered against the
    current context (page type + open-modal stack).
 
+   Cross-bundle sharing
+   --------------------
+   Each content_script entry in manifest.json is its own JavaScript
+   bundle, so importing this module from (say) crm-search.js and
+   actions-shelf.js would normally produce two independent copies —
+   pushModal in one bundle wouldn't reach subscribers in the other.
+
+   To fix that we build the registry once and stash it on window as
+   `__gbActionRegistry`. Every subsequent bundle that imports this
+   module reuses the existing instance. Result: register / pushModal
+   from any content script lands in the same _state and notifies
+   every React tree that subscribed via useActionRegistry().
+
    The shelf decides what's "smart" by matching each action's
    `smartFor` page list and `whenModalOpen` modal list against the
-   current context. Smart actions float to the top.
-
-   No React imports here — pure JS so it can be called from
-   content-script entries, background-script handlers, anywhere.
-   Subscribers (React hooks below) re-render on any change.
+   current context. Modal matches go in a dedicated section; page
+   matches go under "Smart for this page".
 ─────────────────────────────────────────────────────────────── */
 
 /* Action shape:
@@ -32,124 +42,148 @@ import { useState, useSyncExternalStore } from 'react';
    }
 */
 
-const _actions = new Map();   // id → action
-let _page = null;             // current page key (e.g. 'contact', 'account')
-let _pageLabel = '';          // human-readable for the shelf header
-let _pageSubLabel = '';
-let _modalStack = [];         // top of stack = most recent modal { id, label }
-const _subscribers = new Set();
+function _build() {
+  // All mutable state lives in this single object so the registry's
+  // methods (which close over it) and the React hook (which reads
+  // via accessors) see the same data — even when imported from a
+  // different content-script bundle that re-reads the same window
+  // singleton.
+  const state = {
+    actions: new Map(),    // id → action
+    page: null,            // current page key (e.g. 'contact')
+    pageLabel: '',         // human-readable for the shelf header
+    pageSubLabel: '',
+    modalStack: [],        // top = most recent { id, label }
+    subscribers: new Set(),
+    version: 0,            // bumped on every change for useSyncExternalStore
+  };
 
-function notify() {
-  for (const fn of _subscribers) fn();
+  function notify() {
+    state.version += 1;
+    for (const fn of state.subscribers) fn();
+  }
+
+  const r = {
+    /* Exposed so the React hook can use it as getSnapshot. Stable
+       primitive (number) so React's identity check passes when
+       nothing has actually changed. */
+    _state: state,
+
+    /* ── Action registration ──────────────────────────────────── */
+    register(action) {
+      if (!action || !action.id) throw new Error('actionRegistry.register: action.id required');
+      state.actions.set(action.id, action);
+      notify();
+      // Return an unregister fn so callers don't have to remember the id.
+      return () => r.unregister(action.id);
+    },
+    unregister(id) {
+      if (state.actions.delete(id)) notify();
+    },
+    clear() {
+      if (state.actions.size === 0) return;
+      state.actions.clear();
+      notify();
+    },
+
+    /* ── Page context ────────────────────────────────────────── */
+    setPage(page, label = '', subLabel = '') {
+      if (state.page === page && state.pageLabel === label && state.pageSubLabel === subLabel) return;
+      state.page = page;
+      state.pageLabel = label;
+      state.pageSubLabel = subLabel;
+      notify();
+    },
+    getPage() { return state.page; },
+    getPageLabel() { return state.pageLabel; },
+    getPageSubLabel() { return state.pageSubLabel; },
+
+    /* ── Modal stack ─────────────────────────────────────────── */
+    // Modals push themselves on mount, pop on close. Top of stack
+    // is the "active" modal — shelf reads it to surface modal-aware
+    // smart actions in a dedicated section. Stack allows nested
+    // modals (e.g. CRMSearch → QueryBuilder) to both count as
+    // "open" but the topmost is the primary context.
+    //
+    // Each entry is { id, label }. The id-only legacy contract
+    // still works (label defaults to '').
+    pushModal(modalId, label) {
+      if (!modalId) return;
+      const entry = (typeof modalId === 'object')
+        ? { id: modalId.id, label: modalId.label || '' }
+        : { id: modalId, label: label || '' };
+      if (!entry.id) return;
+      state.modalStack.push(entry);
+      notify();
+    },
+    popModal(modalId) {
+      if (!modalId) { state.modalStack.pop(); notify(); return; }
+      const id = (typeof modalId === 'object') ? modalId.id : modalId;
+      for (let i = state.modalStack.length - 1; i >= 0; i--) {
+        if (state.modalStack[i].id === id) {
+          state.modalStack.splice(i, 1);
+          notify();
+          return;
+        }
+      }
+    },
+    getModalStack() { return state.modalStack.slice(); },
+    getTopModal() {
+      const top = state.modalStack[state.modalStack.length - 1];
+      return top ? top.id : null;
+    },
+    getTopModalLabel() {
+      const top = state.modalStack[state.modalStack.length - 1];
+      return top ? (top.label || '') : '';
+    },
+
+    /* ── Read ────────────────────────────────────────────────── */
+    getActions() { return Array.from(state.actions.values()); },
+
+    /* ── Subscribe ───────────────────────────────────────────── */
+    subscribe(fn) {
+      state.subscribers.add(fn);
+      return () => state.subscribers.delete(fn);
+    },
+  };
+
+  return r;
 }
 
-export const actionRegistry = {
-  /* ── Action registration ──────────────────────────────────── */
-  register(action) {
-    if (!action || !action.id) throw new Error('actionRegistry.register: action.id required');
-    _actions.set(action.id, action);
-    notify();
-    // Return an unregister function so callers can clean up on
-    // teardown without remembering the id.
-    return () => actionRegistry.unregister(action.id);
-  },
-  unregister(id) {
-    if (_actions.delete(id)) notify();
-  },
-  clear() {
-    if (_actions.size === 0) return;
-    _actions.clear();
-    notify();
-  },
+/* Pick the shared singleton if one already exists on window; otherwise
+   build + install our own. Doing this at module load means the FIRST
+   content-script bundle to import this file wins, and every subsequent
+   import (in any other bundle in the same window) reuses it. */
+function _resolveShared() {
+  if (typeof window === 'undefined') return _build();
+  if (!window.__gbActionRegistry) {
+    window.__gbActionRegistry = _build();
+  }
+  return window.__gbActionRegistry;
+}
 
-  /* ── Page context ────────────────────────────────────────── */
-  // Features set the page context when smart-detection identifies it.
-  // page is a stable string key ('contact', 'account', 'order', etc.).
-  // label/subLabel are display strings for the shelf header.
-  setPage(page, label = '', subLabel = '') {
-    if (_page === page && _pageLabel === label && _pageSubLabel === subLabel) return;
-    _page = page;
-    _pageLabel = label;
-    _pageSubLabel = subLabel;
-    notify();
-  },
-  getPage() { return _page; },
-  getPageLabel() { return _pageLabel; },
-  getPageSubLabel() { return _pageSubLabel; },
-
-  /* ── Modal stack ─────────────────────────────────────────── */
-  // Modals push themselves on mount, pop on close. Top of stack
-  // is the "active" modal — shelf reads it to surface modal-aware
-  // smart actions in a dedicated section. Stack allows nested modals
-  // (e.g. CRMSearch → QueryBuilder) to both count as "open" but the
-  // topmost is the primary context.
-  //
-  // Each entry is { id, label }. `label` is the human-readable name
-  // the shelf renders as a section header ("In CRM Search"); if a
-  // caller pushes a raw id string we keep the legacy contract and
-  // store it without a label.
-  pushModal(modalId, label) {
-    if (!modalId) return;
-    const entry = (typeof modalId === 'object')
-      ? { id: modalId.id, label: modalId.label || '' }
-      : { id: modalId, label: label || '' };
-    if (!entry.id) return;
-    _modalStack.push(entry);
-    notify();
-  },
-  popModal(modalId) {
-    // Remove the LAST occurrence so out-of-order closes (rare) still
-    // do the right thing. If id is omitted, pops the top.
-    if (!modalId) { _modalStack.pop(); notify(); return; }
-    const id = (typeof modalId === 'object') ? modalId.id : modalId;
-    for (let i = _modalStack.length - 1; i >= 0; i--) {
-      if (_modalStack[i].id === id) {
-        _modalStack.splice(i, 1);
-        notify();
-        return;
-      }
-    }
-  },
-  getModalStack() { return _modalStack.slice(); },
-  getTopModal() {
-    const top = _modalStack[_modalStack.length - 1];
-    return top ? top.id : null;
-  },
-  getTopModalLabel() {
-    const top = _modalStack[_modalStack.length - 1];
-    return top ? (top.label || '') : '';
-  },
-
-  /* ── Read ────────────────────────────────────────────────── */
-  getActions() { return Array.from(_actions.values()); },
-
-  /* ── Subscribe ───────────────────────────────────────────── */
-  subscribe(fn) {
-    _subscribers.add(fn);
-    return () => _subscribers.delete(fn);
-  },
-};
+export const actionRegistry = _resolveShared();
 
 /* Group + filter the registry by current context. The shelf renders
-   what this returns. Smart actions float; page actions catch the
-   rest; danger actions get a divider above them in the UI.
+   what this returns.
 
-   Smart matching:
-     - page in action.smartFor → smart
-     - topModal in action.whenModalOpen → smart
-   An action can be smart for multiple reasons; counted once.
+   - Modal-smart: action.whenModalOpen includes the current top modal.
+     These go in their own section (header derived from the modal's
+     label) so the user immediately sees the modal-specific options.
+   - Page-smart:  action.smartFor includes the current page. Under
+     the existing "Smart for this page" header.
+   - Everything else: "Page actions" (default category) or "Danger".
 
-   An action that's smart for the current context is REMOVED from
-   the page-actions list to avoid showing it twice. Danger actions
-   are always under danger regardless of context. */
+   Modal match wins over page match so an action eligible for both
+   doesn't double-list. */
 function getContextualActions() {
   const all = actionRegistry.getActions();
   const page = actionRegistry.getPage();
   const topModal = actionRegistry.getTopModal();
 
-  const modalSmart = [];   // matches the current top modal — dedicated section
-  const pageSmart  = [];   // matches the current page — "Smart for this page"
-  const pageActions = [];  // everything else
+  const modalSmart = [];
+  const pageSmart  = [];
+  const pageActions = [];
   const danger     = [];
 
   for (const a of all) {
@@ -159,45 +193,29 @@ function getContextualActions() {
     }
     const matchesModal = a.whenModalOpen && topModal && a.whenModalOpen.includes(topModal);
     const matchesPage  = a.smartFor && a.smartFor.includes(page);
-    // Modal match wins over page match so the action sits in the
-    // modal section rather than getting double-listed. An action with
-    // neither match falls through to page-actions.
     if (matchesModal)      modalSmart.push(a);
     else if (matchesPage)  pageSmart.push(a);
     else                   pageActions.push(a);
   }
-  // Keep `smart` around for any consumer that hasn't migrated yet —
-  // it's the union of modal + page in the original order. New code
-  // should read modalSmart / pageSmart directly.
+  // Legacy `smart` field = union, for any consumer not yet migrated.
   const smart = [...modalSmart, ...pageSmart];
   return { modalSmart, pageSmart, smart, page: pageActions, danger };
 }
 
 /* ── React hook ─────────────────────────────────────────────────
    useSyncExternalStore is the React-blessed way to subscribe to a
-   non-React store — runs the snapshot, re-renders on subscribe-
-   notify. The snapshot returns the contextual breakdown directly,
-   so components just read what they need.
-
-   Caveat: getContextualActions() returns a new object every call.
-   To make this hook stable across renders WITHOUT object identity
-   churn, the snapshot itself returns the registry's "version" and
-   we re-derive in the component. Simpler: just track a counter
-   and let the consumer call getContextualActions() once per render.
+   non-React store. We hand it a stable subscribe fn and a getSnapshot
+   that returns a primitive (the version counter) — React re-renders
+   the calling component whenever notify() bumps the counter.
 ─────────────────────────────────────────────────────────────── */
-let _version = 0;
-actionRegistry.subscribe(() => { _version += 1; });
-
 function subscribe(cb) {
   return actionRegistry.subscribe(cb);
 }
 function getSnapshot() {
-  return _version;
+  return actionRegistry._state.version;
 }
 
 export function useActionRegistry() {
-  // Bump on every change. Consumer calls getContextualActions()
-  // and reads page/modal state from the registry directly.
   useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   return {
     actions: getContextualActions(),
@@ -209,4 +227,3 @@ export function useActionRegistry() {
     topModalLabel: actionRegistry.getTopModalLabel(),
   };
 }
-
