@@ -31,7 +31,18 @@
    how it will run on golfballs.com.
 ─────────────────────────────────────────────────────────────── */
 
-const PHONE_RE = /(?:\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4})/g;
+/* Strict phone-shaped run.
+   - (?<!\d) / (?!\d) — must not be embedded inside a longer digit run.
+     Kept the old loose pattern from matching `820701-5119` inside
+     `Order #2820701-5119355`, which surfaced as a bogus (820) 701-5119
+     candidate.
+   - The second separator `[\s.\-]` is REQUIRED (not optional). Real
+     phones in this CRM are always formatted like 610-374-8344 or
+     (610) 374-8344, never as 6103748344, so requiring the dash/space
+     between the last two groups is safe and tightens the pattern
+     further against incidental digit runs. The first separator
+     stays optional so "(610) 374-8344" still parses. */
+const PHONE_RE = /(?<!\d)(?:\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]\d{4})(?!\d)/g;
 
 /* Normalize a phone string to the (xxx) xxx-xxxx format the CRM stores.
    Strips formatting, drops a leading country-code '1' if present. */
@@ -54,37 +65,49 @@ export function extractPhonesFromOrderHtml(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const customerInfo = doc.getElementById('customerInfo');
   const candidates = [];
+  const seen = new Set();
+  const pushIfNew = (phone, name) => {
+    const norm = normalizePhone(phone);
+    if (!norm) return;
+    if (norm.replace(/\D/g, '').length < 10) return;
+    if (seen.has(norm)) return;
+    seen.add(norm);
+    candidates.push({ phone: norm, name: (name || '').replace(/\s+/g, ' ').trim() });
+  };
+
   if (customerInfo) {
-    // The CRM's customerInfo block typically holds:
-    //   <tr><td>Name</td> <td class="darkText">Recipient Name</td></tr>
-    //   <tr><td>Phone</td><td class="darkText">(415) 555-0142</td></tr>
-    // We scan ALL darkText cells, pair phones with the nearest name
-    // cell on the same row's predecessor row when possible.
-    const rows = Array.from(customerInfo.querySelectorAll('tr'));
-    let lastName = '';
-    for (const row of rows) {
-      const labelCell = row.querySelector('td:first-child');
-      const valueCell = row.querySelector('td.darkText, td:nth-child(2)');
-      const label = (labelCell?.textContent || '').trim().toLowerCase();
-      const value = (valueCell?.textContent || '').trim();
-      if (!value) continue;
-      if (label.includes('name')   || label.includes('ship to')) lastName = value;
-      if (label.includes('phone')  || label.includes('contact')) {
-        for (const match of value.matchAll(PHONE_RE)) {
-          candidates.push({ phone: normalizePhone(match[0]), name: lastName });
+    /* The CRM's #customerInfo isn't a single label/value table —
+       it's a wrapper around 2-3 nested <table>s (billing, payment,
+       shipping). Each nested table holds:
+         <tr><td class="darkText"><b>Name</b></td></tr>
+         <tr><td class="darkText">street</td></tr>
+         <tr><td class="darkText">city, ST zip</td></tr>
+         <tr><td class="darkText">phone</td></tr>
+       So we extract per-block: the FIRST <b> in the block is the
+       name, and any cell whose text matches the strict PHONE_RE is
+       a phone candidate paired with that name. Tables without a
+       phone (the payment block) just contribute nothing. */
+    for (const tbl of customerInfo.querySelectorAll('table')) {
+      const nameEl = tbl.querySelector('b');
+      const name = (nameEl?.textContent || '').trim();
+      for (const cell of tbl.querySelectorAll('td')) {
+        const text = (cell.textContent || '').trim();
+        if (!text) continue;
+        for (const match of text.matchAll(PHONE_RE)) {
+          pushIfNew(match[0], name);
         }
       }
     }
   }
-  // Catch-all: any phone-formatted strings anywhere in body that the
-  // structured pass missed. These get attached as anonymous candidates.
-  const body = doc.body?.textContent || '';
-  const seen = new Set(candidates.map((c) => c.phone));
-  for (const match of body.matchAll(PHONE_RE)) {
-    const phone = normalizePhone(match[0]);
-    if (!seen.has(phone)) {
-      candidates.push({ phone, name: '' });
-      seen.add(phone);
+
+  /* Catch-all over the body text — with the lookaround-anchored
+     regex it's much less likely to pick up order-id substrings as
+     phones, so we keep it as a backstop for orders that store the
+     phone outside #customerInfo. No name attached. */
+  if (doc.body) {
+    const bodyText = doc.body.textContent || '';
+    for (const match of bodyText.matchAll(PHONE_RE)) {
+      pushIfNew(match[0], '');
     }
   }
   return candidates;
