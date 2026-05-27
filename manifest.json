@@ -29,12 +29,6 @@
   "content_scripts": [
     {
       "matches": ["*://*.golfballs.com/*"],
-      "js": ["src/vanilla/call-log-early.js"],
-      "run_at": "document_start",
-      "all_frames": false
-    },
-    {
-      "matches": ["*://*.golfballs.com/*"],
       "js": [
         "theme.js",
         "libs/flatpickr.js",
@@ -52,11 +46,9 @@
         "src/vanilla/modals/text-preview.js",
         "react-dist/content/watch-list.js",
         "src/vanilla/modals/crm-query-builder.js",
-        "src/vanilla/crm-task-buttons.js",
         "src/vanilla/modals/campaign-editor.js",
         "react-dist/content/task-list.js",
         "src/vanilla/phone-finder.js",
-        "src/vanilla/call-log-panel.js",
         "react-dist/content/call-log.js",
         "react-dist/content/quick-task.js",
         "react-dist/content/margin-calc.js",
