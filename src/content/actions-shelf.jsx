@@ -95,23 +95,29 @@ if (!window.__gbActionsShelfLoaded) {
   let _callActionUnsub = null;
   let _taskActionUnsub = null;
 
-  function registerCallAction(pageType, displayName) {
+  function registerCallAction(pageType) {
     if (_callActionUnsub) { _callActionUnsub(); _callActionUnsub = null; }
     if (pageType !== 'contact' && pageType !== 'account') return;
 
-    const labelName = displayName || (pageType === 'account' ? 'account' : 'contact');
+    // Label embeds the phone number that would actually be dialed so the
+    // rep can verify before clicking — "Dial via (555) 123-4567" reads
+    // unambiguously vs the old "Call contact" which never told you which
+    // number you were about to call. Empty phone falls back to a generic
+    // label so the action still appears (the click handler re-reads the
+    // phone at dial-time anyway).
+    const phone = readContactPhoneRaw();
+    const label = phone ? `Dial via ${phone}` : 'Dial contact';
     _callActionUnsub = actionRegistry.register({
       id: 'gb-call-contact',
-      label: `Call ${labelName}`,
+      label,
       icon: <I.phone size={13} />,
       hint: 'Dial via tel: + log the outcome',
       smartFor: ['contact', 'account'],
       handler: async () => {
-        // Re-read the phone at click-time so a stale registration
-        // (page rebuilt the phone label after we registered) still
-        // dials whatever's on screen NOW.
-        const phone = readContactPhoneRaw();
-        const digits = phone.replace(/\D/g, '');
+        // Re-read at click-time so a postback that rebuilt the phone
+        // label after we registered still dials whatever's on screen NOW.
+        const livePhone = readContactPhoneRaw();
+        const digits = livePhone.replace(/\D/g, '');
         if (digits) {
           // _blank target hands the dial to whichever app owns
           // the tel: protocol (3CX desktop, 3CX PWA, or FaceTime)
@@ -124,7 +130,7 @@ if (!window.__gbActionsShelfLoaded) {
         // formatted-string override so the subtitle reflects what
         // we just dialed.
         if (typeof window.__gbShowCallLogModal === 'function') {
-          await window.__gbShowCallLogModal({ phone });
+          await window.__gbShowCallLogModal({ phone: livePhone });
         }
       },
     });
@@ -176,7 +182,7 @@ if (!window.__gbActionsShelfLoaded) {
       subLabel = 'Order';
     }
     actionRegistry.setPage(key, label, subLabel);
-    registerCallAction(type, label);
+    registerCallAction(type);
     registerTaskAction(type, label);
   }
 
@@ -238,12 +244,13 @@ if (!window.__gbActionsShelfLoaded) {
         if (n.nodeType !== 1) continue;
         if (n.id === 'tbContactId' || n.id === 'lblContactFirstName' ||
             n.id === 'lblContactLastName' || n.id === 'lblContactCompanyName' ||
+            n.id === 'lblContactPhoneNumber' ||
             n.id === 'Name' || n.id === 'lblAccountName') {
           queueSync();
           return;
         }
         if (n.querySelector && n.querySelector(
-          '#tbContactId, #lblContactFirstName, #lblContactLastName, #lblContactCompanyName, #Name, #lblAccountName'
+          '#tbContactId, #lblContactFirstName, #lblContactLastName, #lblContactCompanyName, #lblContactPhoneNumber, #Name, #lblAccountName'
         )) {
           queueSync();
           return;

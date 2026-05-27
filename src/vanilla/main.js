@@ -194,31 +194,30 @@ window.__gbContentReady = true;
     }
 
     if (msg.action === 'executePresetTask') {
+      // Inline Task/Create.ajax — same payload shape as lib/submitQuickTask.js
+      // (used by the React QuickTask modal). Kept inline here because main.js
+      // is a vanilla content script and can't ESM-import the lib. The legacy
+      // crm-task-buttons.js used to host this with a "complete + create"
+      // variant; that page-injected button was removed when we deleted the
+      // file, so the message handler is the only remaining entry point.
       chrome.storage.local.get('noteTemplates', async ({ noteTemplates }) => {
         const taskTpl = (noteTemplates || []).find(t => t.id === msg.taskId);
         if (!taskTpl) return;
-
-        if (typeof window.ctbHandleTaskClick === 'function') {
-          // crm-task-buttons.js is loaded — use the shared logic
-          window.ctbHandleTaskClick(taskTpl, msg.contactId, msg.employeeId).catch(() => {});
-        } else {
-          // Fallback: inline the create-only path (no open task to complete on non-contact pages)
-          const base = 'https://api.golfballs.com';
-          const go   = url => fetch(base + url, { credentials: 'include' }).then(r => r.json()).catch(() => null);
-          const today = new Date();
-          const fmt = d => `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
-          const due = taskTpl.daysOut != null
-            ? (() => { const d = new Date(); d.setDate(d.getDate() + taskTpl.daysOut); return fmt(d); })()
-            : fmt(today);
-          await go(`/golfballs/crm/Admin/Task/Create.ajax?${JSON.stringify({
-            TaskID: '', Subject: taskTpl.subject || taskTpl.name,
-            Description: taskTpl.body || '', LiveDate: fmt(today), DueDate: due,
-            taskCategoryID: String(taskTpl.categoryId || '0'), taskStatusID: '1',
-            Priority: String(taskTpl.priority || '1'),
-            contactID: String(msg.contactId || '0'), leadID: '0',
-            employeeID: String(msg.employeeId || '0'), caseID: 0,
-          })}`);
-        }
+        const base = 'https://api.golfballs.com';
+        const go = (url) => fetch(base + url, { credentials: 'include' }).then(r => r.json()).catch(() => null);
+        const today = new Date();
+        const fmt = d => `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
+        const due = taskTpl.daysOut != null
+          ? (() => { const d = new Date(); d.setDate(d.getDate() + taskTpl.daysOut); return fmt(d); })()
+          : fmt(today);
+        await go(`/golfballs/crm/Admin/Task/Create.ajax?${JSON.stringify({
+          TaskID: '', Subject: taskTpl.subject || taskTpl.name,
+          Description: taskTpl.body || '', LiveDate: fmt(today), DueDate: due,
+          taskCategoryID: String(taskTpl.categoryId || '0'), taskStatusID: '1',
+          Priority: String(taskTpl.priority || '1'),
+          contactID: String(msg.contactId || '0'), leadID: '0',
+          employeeID: String(msg.employeeId || '0'), caseID: 0,
+        })}`);
       });
       return true;
     }
