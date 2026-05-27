@@ -47,7 +47,7 @@ const DragHandleDots = () => (
   </svg>
 );
 
-export function EmailRunner({ open, contacts, onClose }) {
+export function EmailRunner({ open, contacts, onClose, anchorHostId }) {
   const toast = useToast();
   const [templates, setTemplates] = useState([]);
   const [selectedId, setSelectedId] = useState('');
@@ -58,23 +58,42 @@ export function EmailRunner({ open, contacts, onClose }) {
   const [results, setResults] = useState([]);
   const [paUrl, setPaUrl] = useState('');
 
-  /* Position state. Initial coords place the panel near the bottom-
-     centre of the viewport with a 24px gap from the bottom edge so
-     it reads as "popping up from the bottom". The user can drag it
-     anywhere by grabbing the header handle. Re-pinned to the bottom
-     each time the panel opens (after `open` flips true) — keeps
-     the entrance feeling consistent even if a previous session
-     left it elsewhere. */
-  const [pos, setPos] = useState(() => ({
-    left: Math.max(0, (window.innerWidth - PANEL_W) / 2),
-    top:  Math.max(0, window.innerHeight - PANEL_H - 24),
-  }));
+  /* Position state. Initial coords anchor the panel to the right of
+     the parent modal — same vertical alignment, 16px gap horizontally.
+     The user can drag it anywhere by grabbing the header handle.
+     Re-pinned each time `open` flips true so a previous session's
+     drag doesn't carry over. Falls back to a sensible right-of-
+     viewport-centre default when the parent host isn't found. */
+  const computeAnchoredPos = () => {
+    let rect = null;
+    if (anchorHostId) {
+      const host = document.getElementById(anchorHostId);
+      // .gb-modal-card is the visible card inside FloatingPanel; the
+      // outer host div spans the viewport so we need the card's rect.
+      rect = host?.querySelector('.gb-modal-card')?.getBoundingClientRect() || null;
+    }
+    if (!rect) {
+      // Fallback: place right of the viewport centre minus half a
+      // typical 1000px modal width, with the same 16px gap.
+      const cx = window.innerWidth / 2;
+      rect = { right: cx + 500, top: Math.max(40, (window.innerHeight - PANEL_H) / 2) };
+    }
+    let left = rect.right + 16;
+    let top  = rect.top;
+    // Clamp so the panel stays visible even when the parent modal sits
+    // close to the right viewport edge.
+    const maxLeft = Math.max(0, window.innerWidth - PANEL_W - 8);
+    const maxTop  = Math.max(0, window.innerHeight - 80);
+    if (left > maxLeft) left = maxLeft;
+    if (top < 8) top = 8;
+    if (top > maxTop) top = maxTop;
+    return { left: Math.max(8, left), top };
+  };
+  const [pos, setPos] = useState(computeAnchoredPos);
   useEffect(() => {
     if (!open) return;
-    setPos({
-      left: Math.max(0, (window.innerWidth - PANEL_W) / 2),
-      top:  Math.max(0, window.innerHeight - PANEL_H - 24),
-    });
+    setPos(computeAnchoredPos());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   /* Pointer-drag the panel from the header grip. Tracks the global
@@ -85,7 +104,10 @@ export function EmailRunner({ open, contacts, onClose }) {
   const onDragStart = (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
-    e.stopPropagation();
+    // No stopPropagation: any Dropdown that's open right now listens
+    // on document mousedown and will close itself when the event
+    // bubbles, which is what we want — the popover anchors to its
+    // trigger and doesn't reposition as the panel moves.
     const start = { px: e.clientX, py: e.clientY, left: pos.left, top: pos.top };
     dragRef.current = start;
     const onMove = (ev) => {
@@ -259,10 +281,14 @@ export function EmailRunner({ open, contacts, onClose }) {
         <motion.div
           key="email-runner"
           className="gb-email-runner"
-          data-gb-scale="modals"
-          initial={{ y: 30, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 30, opacity: 0, transition: { duration: 0.15 } }}
+          /* popovers scale category uses CSS `scale` (not `zoom`) so
+             getBoundingClientRect + pointer-event clientX/Y stay in
+             the same coord system. Using "modals" zoomed the panel
+             AND shifted JS coords, which made drag deltas overshoot. */
+          data-gb-scale="popovers"
+          initial={{ x: 20, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          exit={{ x: 20, opacity: 0, transition: { duration: 0.15 } }}
           transition={{ type: 'spring', stiffness: 260, damping: 28 }}
           style={{
             position: 'fixed',
@@ -358,7 +384,7 @@ export function EmailRunner({ open, contacts, onClose }) {
               <RangeSlider
                 values={delay}
                 min={5}
-                max={300}
+                max={80}
                 step={5}
                 unit="s"
                 onChange={(next) => setDelay(next)}

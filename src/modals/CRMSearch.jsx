@@ -1060,6 +1060,7 @@ export function CRMSearch({ onClosed, bindClose }) {
         replacement. Visible alongside the parent (no hide pattern). */}
     <EmailRunner
       open={emailRunnerOpen}
+      anchorHostId="__gb-csm"
       contacts={displayedRows
         .filter((r) => selected.has(r.id))
         .map((r) => ({
