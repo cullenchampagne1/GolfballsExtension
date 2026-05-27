@@ -172,26 +172,33 @@ export function ensureMarchingAntsStyle() {
           0 -16px,   100% 16px;
       }
     }
-    /* Quick-action row: marching dashed outline via ::after so it
-       doesn't fight inline backgrounds on the host element. */
+    /* Quick-action row: an inline SVG rect-with-dashed-stroke, drawn
+       to fill the host via background-image so we don't have to mount
+       per-row React markup. SVG strokes follow the path's rounded
+       corners cleanly (CSS linear-gradient edges can't), and
+       stroke-dashoffset animates inside the SVG via SMIL so the
+       dashes literally march around the perimeter without browser-
+       level animation hooks.
+
+       inset:0 keeps the overlay INSIDE the host so it can't be
+       clipped by a scrolling grid parent (CallLog's 168px wrap, the
+       QuickTaskMenu's 220px templates list, etc.). The host's solid
+       border is suppressed via `border-color: transparent !important`
+       below so the dashes are the visible perimeter, not a double
+       border. */
     .gb-kbd-active {
       position: relative;
+      border-color: transparent !important;
     }
     .gb-kbd-active::after {
       content: '';
       position: absolute;
-      inset: -3px;
+      inset: 0;
       pointer-events: none;
       border-radius: inherit;
-      background-image:
-        linear-gradient(90deg, var(--gb-brand-fg) 50%, transparent 50%),
-        linear-gradient(90deg, var(--gb-brand-fg) 50%, transparent 50%),
-        linear-gradient(0deg,  var(--gb-brand-fg) 50%, transparent 50%),
-        linear-gradient(0deg,  var(--gb-brand-fg) 50%, transparent 50%);
-      background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
-      background-size: 16px 2px, 16px 2px, 2px 16px, 2px 16px;
-      background-position: 0 0, 0 100%, 0 0, 100% 0;
-      animation: gb-march 0.7s linear infinite;
+      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30' preserveAspectRatio='none'><rect x='1' y='1' width='98' height='28' rx='4' ry='4' fill='none' stroke='%237db82a' stroke-width='2' stroke-dasharray='5 3'><animate attributeName='stroke-dashoffset' from='0' to='-16' dur='0.6s' repeatCount='indefinite'/></rect></svg>");
+      background-size: 100% 100%;
+      background-repeat: no-repeat;
     }
 
     /* Form-field focus: solid brand outline + soft focus ring. The

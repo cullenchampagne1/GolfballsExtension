@@ -7,6 +7,7 @@ import {
   I, useToast,
 } from '../ui/index.js';
 import { useModalTopState } from '../lib/actionRegistry.js';
+import { ensureMarchingAntsStyle } from '../ui/index.js';
 import {
   PRIORITY_OPTIONS,
   DEFAULT_PRIORITY,
@@ -66,12 +67,92 @@ export function QuickTask({
   const [categoryId, setCategoryId] = useState('0');  // mono number string
   const [savingCustom, setSavingCustom] = useState(false);
 
+  /* Keyboard nav over the Quick task grid — same mechanic as CallLog
+     so reps get a consistent shortcut across both modals. activeQuickIdx
+     drives the virtual-focus row indicator; Tab past the last quick
+     row opens the Custom collapsible and focuses its first form field
+     so subsequent Tabs walk Priority → Due → Subject → Description →
+     Category → Save through normal browser focus. */
+  const [activeQuickIdx, setActiveQuickIdx] = useState(-1);
+  const [customOpen, setCustomOpen] = useState(false);
+  const customFormRef = useRef(null);
+
   const bindCloseRef = useRef(null);
   const handleBindClose = (fn) => {
     bindCloseRef.current = fn;
     if (bindClose) bindClose(fn);
   };
   const animatedClose = () => bindCloseRef.current?.();
+
+  useEffect(() => { ensureMarchingAntsStyle(); }, []);
+
+  /* Keep activeQuickIdx in bounds when templates change. */
+  useEffect(() => {
+    setActiveQuickIdx((i) => (i >= templates.length ? -1 : i));
+  }, [templates.length]);
+
+  /* Document keydown for Tab / Shift+Tab / Enter / Esc — see CallLog
+     for the rationale. Focus inside customFormRef bypasses so native
+     Tab walks the form fields. */
+  useEffect(() => {
+    const isTypingTarget = (el) => {
+      if (!el) return false;
+      const tag = el.tagName && el.tagName.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || el.isContentEditable) return true;
+      if (customFormRef.current?.contains(el)) return true;
+      return false;
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape' && activeQuickIdx >= 0) {
+        e.preventDefault();
+        setActiveQuickIdx(-1);
+        return;
+      }
+      if (e.key === 'Enter' && activeQuickIdx >= 0) {
+        const tpl = templates[activeQuickIdx];
+        if (tpl) {
+          e.preventDefault();
+          handlePresetClick(tpl);
+        }
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      if (isTypingTarget(e.target)) return;
+      if (templates.length === 0) return;
+      if (e.shiftKey) {
+        if (activeQuickIdx <= 0) { setActiveQuickIdx(-1); return; }
+        e.preventDefault();
+        setActiveQuickIdx((i) => i - 1);
+        return;
+      }
+      if (activeQuickIdx === -1) {
+        e.preventDefault();
+        try { document.activeElement?.blur?.(); } catch {}
+        setActiveQuickIdx(0);
+        return;
+      }
+      if (activeQuickIdx < templates.length - 1) {
+        e.preventDefault();
+        setActiveQuickIdx((i) => i + 1);
+        return;
+      }
+      // Past the last quick row → open Custom + focus first focusable.
+      e.preventDefault();
+      setActiveQuickIdx(-1);
+      setCustomOpen(true);
+      Promise.resolve().then(() => requestAnimationFrame(() => {
+        const root = customFormRef.current;
+        if (!root) return;
+        const focusable = root.querySelector(
+          'input, textarea, select, button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        try { focusable?.focus({ preventScroll: false }); } catch {}
+      }));
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeQuickIdx, templates]);
 
   useEffect(() => {
     let alive = true;
@@ -198,12 +279,13 @@ export function QuickTask({
                 gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
                 gap: 5,
               }}>
-                {templates.map((tpl) => (
+                {templates.map((tpl, idx) => (
                   <PresetGridButton
                     key={tpl.id}
                     tpl={tpl}
                     busy={busyId === tpl.id}
                     disabled={anyBusy && busyId !== tpl.id}
+                    isKbdActive={idx === activeQuickIdx}
                     onPick={() => handlePresetClick(tpl)}
                   />
                 ))}
@@ -217,9 +299,10 @@ export function QuickTask({
           icon={<I.edit />}
           title="Custom task"
           subtitle="No preset fits? Build a one-off."
-          defaultOpen={false}
+          open={customOpen}
+          onOpenChange={setCustomOpen}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
+          <div ref={customFormRef} style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
             {/* Priority + Due date share a row. DatePicker defaults
                 to 30px tall + content-box sizing — without
                 box-sizing override, height:28 plus the 1+1 border
@@ -330,19 +413,28 @@ function EmptyHint({ children }) {
      • priority dot + "in Nd" right (replaces IN/OUT)
    Busy state swaps the right side for a spinner so the cell
    width stays stable mid-submit. */
-function PresetGridButton({ tpl, busy, disabled, onPick }) {
+function PresetGridButton({ tpl, busy, disabled, isKbdActive, onPick }) {
   const [hover, setHover] = useState(false);
+  const ref = useRef(null);
   const prio = getPriority(tpl.priority);
   const due = getDueLabel(tpl.daysOut);
   const inactive = disabled || busy;
 
+  useEffect(() => {
+    if (isKbdActive && ref.current) {
+      try { ref.current.scrollIntoView({ block: 'nearest' }); } catch {}
+    }
+  }, [isKbdActive]);
+
   return (
     <button
+      ref={ref}
       type="button"
       disabled={inactive}
       onClick={onPick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      className={isKbdActive ? 'gb-kbd-active' : undefined}
       title={[
         tpl.name,
         tpl.subject && tpl.subject !== tpl.name ? `Subject: ${tpl.subject}` : '',
