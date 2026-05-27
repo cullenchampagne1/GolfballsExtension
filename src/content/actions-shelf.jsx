@@ -95,23 +95,23 @@ if (!window.__gbActionsShelfLoaded) {
   let _callActionUnsub = null;
   let _taskActionUnsub = null;
 
-  function registerCallAction(pageType) {
+  function registerCallAction(pageType, displayName) {
     if (_callActionUnsub) { _callActionUnsub(); _callActionUnsub = null; }
     if (pageType !== 'contact' && pageType !== 'account') return;
 
-    // Label embeds the phone number that would actually be dialed so the
-    // rep can verify before clicking — "Dial via (555) 123-4567" reads
-    // unambiguously vs the old "Call contact" which never told you which
-    // number you were about to call. Empty phone falls back to a generic
-    // label so the action still appears (the click handler re-reads the
-    // phone at dial-time anyway).
+    // Title keeps the contact / account name so the action reads strongly
+    // ("Call Marcus Chen"). The hint underneath surfaces the actual phone
+    // number that would be dialed so the rep can verify before clicking
+    // — much more useful than the old static "Dial via tel: + log the
+    // outcome" description.
+    const labelName = displayName || (pageType === 'account' ? 'account' : 'contact');
     const phone = readContactPhoneRaw();
-    const label = phone ? `Dial via ${phone}` : 'Dial contact';
+    const hint = phone ? `Dials ${phone}` : 'No phone on this page';
     _callActionUnsub = actionRegistry.register({
       id: 'gb-call-contact',
-      label,
+      label: `Call ${labelName}`,
       icon: <I.phone size={13} />,
-      hint: 'Dial via tel: + log the outcome',
+      hint,
       smartFor: ['contact', 'account'],
       handler: async () => {
         // Re-read at click-time so a postback that rebuilt the phone
@@ -182,7 +182,7 @@ if (!window.__gbActionsShelfLoaded) {
       subLabel = 'Order';
     }
     actionRegistry.setPage(key, label, subLabel);
-    registerCallAction(type);
+    registerCallAction(type, label);
     registerTaskAction(type, label);
   }
 
