@@ -8,6 +8,7 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { loadTaskTemplates } from '../lib/quickTask.js';
 import { submitQuickTask } from '../lib/submitQuickTask.js';
+import { EmailRunner } from './EmailRunner.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    TaskList — React port of content/task-list-modal.js.
@@ -215,6 +216,7 @@ export function TaskList({ onClosed, bindClose }) {
   const [statusFilter, setStatusFilter] = useState('1');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [selected, setSelected]   = useState(() => new Set());
+  const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
   const [sortBy, setSortBy]       = useState('dueDate');
   const [sortDir, setSortDir]     = useState('asc');
 
@@ -545,7 +547,19 @@ export function TaskList({ onClosed, bindClose }) {
   const selCount = selected.size;
   const hasSelection = selCount > 0;
 
+  /* Selected-task → contact tuples for the Email Runner side panel.
+     Tasks already carry a built contactUrl (Page=240&customerID=...);
+     drop rows missing one so we don't queue a no-op send. */
+  const selectedContacts = useMemo(() => visibleTasks
+    .filter((t) => selected.has(t.id) && t.contactUrl)
+    .map((t) => ({
+      contactId:   String(t.contactID || ''),
+      contactName: t.contact || '',
+      contactUrl:  t.contactUrl,
+    })), [visibleTasks, selected]);
+
   return (
+    <>
     <FloatingPanel
       width={1000}
       height={640}
@@ -637,7 +651,7 @@ export function TaskList({ onClosed, bindClose }) {
                 size="sm"
                 variant="ghost"
                 icon={<I.mail size={11} />}
-                onClick={() => toast?.info?.('Email blast — coming later', { duration: 2400, placement: 'top-center' })}
+                onClick={() => setEmailRunnerOpen(true)}
               >Email selected</Btn>
               <Btn size="sm" variant="ghost" icon={<I.copy size={11} />} onClick={exportSelectedCSV}>Export CSV</Btn>
             </div>
@@ -715,6 +729,15 @@ export function TaskList({ onClosed, bindClose }) {
         onAction={runQuickAction}
       />
     </FloatingPanel>
+
+    {/* Email Runner side panel — sits to the right with air between,
+        no hide pattern (both modals stay visible at the same time). */}
+    <EmailRunner
+      open={emailRunnerOpen}
+      contacts={selectedContacts}
+      onClose={() => setEmailRunnerOpen(false)}
+    />
+    </>
   );
 }
 

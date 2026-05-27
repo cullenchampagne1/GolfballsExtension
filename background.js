@@ -615,6 +615,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
 
+  /* ── Email blast orchestrator ────────────────────────────────────
+     Pre-flight for the campaign engine. Iterates a list of contacts,
+     opens each in an inactive tab, asks the content script to resolve
+     template variables against that DOM, then fires the email through
+     Power Automate (re-using the paAutomate path's CID image
+     extraction). Random delay between [delayMin, delayMax] seconds
+     between sends, random variation pick per-contact when the
+     template has them. Progress + final results stream back to the
+     opener tab via chrome.runtime.sendMessage. */
+  if (msg.action === 'runEmailBlast') {
+    const { runId, contacts, template, delayMin = 15, delayMax = 45 } = msg;
+    if (!Array.isArray(contacts) || !contacts.length || !template) {
+      sendResponse({ ok: false, error: 'No contacts or template' });
+      return false;
+    }
+    runEmailBlast(runId, contacts, template, delayMin, delayMax)
+      .catch((e) => console.warn('[GB blast] orchestrator crashed:', e?.message));
+    sendResponse({ ok: true });
+    return true;
+  }
+
   if (msg.action === 'downloadEml') {
     chrome.downloads.download({
       url:      msg.dataUrl,
@@ -987,6 +1008,219 @@ async function extractEmailImages(html) {
     .forEach((orig) => { out = out.split(orig).join(replace[orig]); });
   result.html = out;
   return result;
+}
+
+
+// ── Email blast helpers ─────────────────────────────────────────────────────
+//
+// MVP for the campaign engine. Keep this self-contained inside the background
+// script so we don't have to ESM-import from the React layer — the goal is a
+// dumb sequential pipeline (open tab → resolve → send → close → wait) we can
+// iterate on without unblocking the UI.
+
+const gbSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* Replace {{var}} tokens with values from `vars`. Unknown tokens pass through
+   in their original form so the recipient at least sees that a variable was
+   meant to be there — better than silently dropping. Mirrors the popup's
+   renderStr (without dropConditional). */
+function gbRenderStr(str, vars) {
+  if (!str) return '';
+  return String(str).replace(/\{\{(\w+)\}\}/g, (_, k) => vars?.[k] ?? `{{${k}}}`);
+}
+
+/* Wait for a freshly-opened tab to finish loading. Resolves on the next
+   onUpdated event with status === 'complete', or after `timeoutMs` so a hung
+   page can't strand the orchestrator. */
+function gbWaitTabComplete(tabId, timeoutMs = 30000) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      try { chrome.tabs.onUpdated.removeListener(listener); } catch {}
+      resolve(ok);
+    };
+    const listener = (id, info) => {
+      if (id !== tabId) return;
+      if (info.status === 'complete') finish(true);
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+    // Check current state in case the page was already done by the time we
+    // hooked the listener (rare but cheap to check).
+    chrome.tabs.get(tabId, (t) => {
+      if (chrome.runtime.lastError) return finish(false);
+      if (t?.status === 'complete') finish(true);
+    });
+    setTimeout(() => finish(false), timeoutMs);
+  });
+}
+
+/* Send a message to a content script and wait for its reply with a hard
+   timeout so a tab whose content script never loaded can't hang the run. */
+function gbAskTab(tabId, payload, timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (val) => { if (!done) { done = true; resolve(val); } };
+    try {
+      chrome.tabs.sendMessage(tabId, payload, (response) => {
+        if (chrome.runtime.lastError) finish(null);
+        else finish(response || null);
+      });
+    } catch { finish(null); }
+    setTimeout(() => finish(null), timeoutMs);
+  });
+}
+
+/* Get the saved Power Automate URL + email signature in one shot so each
+   contact iteration doesn't pay the storage roundtrip. */
+function gbReadEmailConfig() {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get(['featureFlags', 'emailSignature'], (out) => {
+        resolve({
+          paUrl: out?.featureFlags?.powerAutomateUrl || '',
+          signature: out?.emailSignature || '',
+        });
+      });
+    } catch { resolve({ paUrl: '', signature: '' }); }
+  });
+}
+
+/* POST one rendered email to Power Automate. CID image extraction matches
+   what paAutomate does for the popup path so inline images render in Outlook
+   instead of getting stripped. */
+async function gbSendOnePA(paUrl, email) {
+  const ext = await extractEmailImages(email.htmlBody || '');
+  email.htmlBody = ext.html;
+  if (ext.attachments.length) {
+    email.attachments = [...(email.attachments || []), ...ext.attachments];
+  }
+  const r = await fetch(paUrl, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ emails: [email] }),
+  });
+  if (!r.ok) {
+    return { ok: false, error: `HTTP ${r.status}` };
+  }
+  try {
+    const text = await r.text();
+    const data = JSON.parse(text);
+    if (typeof data.ok === 'boolean') return { ok: data.ok, error: data.error };
+  } catch { /* PA direct-trigger returns 202 with no body */ }
+  return { ok: true };
+}
+
+/* Broadcast progress to every tab — cheap, and avoids us having to track
+   which tab opened the runner. The runner UI filters by runId so older runs
+   don't bleed into a newer one. */
+function gbBroadcastBlast(msg) {
+  try {
+    chrome.tabs.query({}, (tabs) => {
+      for (const t of tabs || []) {
+        try { chrome.tabs.sendMessage(t.id, msg); } catch {}
+      }
+    });
+  } catch {}
+}
+
+/* The orchestrator itself. Sequential by design — runs in parallel would
+   risk burning through reps' background-tab capacity and the goal here is
+   the human-cadence drip the user described. */
+async function runEmailBlast(runId, contacts, template, delayMin, delayMax) {
+  const { paUrl, signature } = await gbReadEmailConfig();
+  if (!paUrl) {
+    gbBroadcastBlast({ runId, action: 'emailBlastProgress', current: 0, total: contacts.length, name: '', result: { name: '', status: 'error', error: 'No Power Automate URL configured' } });
+    gbBroadcastBlast({ runId, action: 'emailBlastDone' });
+    return;
+  }
+
+  const variations = Array.isArray(template.variations) ? template.variations : [];
+
+  for (let i = 0; i < contacts.length; i++) {
+    const c = contacts[i];
+    let result = { name: c.name, status: 'error', error: 'unknown' };
+    let tabId  = null;
+
+    try {
+      // Per-contact random variation pick. Falls back to the template's own
+      // subject/body when the template has no variations.
+      const v = variations.length ? variations[Math.floor(Math.random() * variations.length)] : null;
+      const rawSubject = v?.subject || template.subject || '';
+      const rawBody    = v?.body    || template.body    || '';
+
+      // 1. Open the contact page in an inactive tab.
+      const tab = await new Promise((resolve, reject) => {
+        chrome.tabs.create({ url: c.url, active: false }, (t) => {
+          if (chrome.runtime.lastError || !t) reject(new Error(chrome.runtime.lastError?.message || 'tab create failed'));
+          else resolve(t);
+        });
+      });
+      tabId = tab.id;
+
+      // 2. Wait for the page to finish loading.
+      const ok = await gbWaitTabComplete(tabId);
+      if (!ok) throw new Error('Tab load timed out');
+      // Give the content script a beat to settle (it injects at document_idle).
+      await gbSleep(700);
+
+      // 3. Resolve template vars against this tab's DOM.
+      const resolved = await gbAskTab(tabId, {
+        action:  'resolveVars',
+        vars:    template.vars    || {},
+        toField: template.toField || { type: 'auto' },
+      });
+      const resolvedVars = resolved?.resolved || {};
+      const toEmail = resolved?.toEmail || '';
+
+      if (!toEmail) {
+        result = { name: c.name, status: 'error', error: 'No recipient email' };
+      } else {
+        // 4. Render subject + body.
+        const subject  = gbRenderStr(rawSubject, resolvedVars);
+        const htmlBody = gbRenderStr(rawBody,    resolvedVars)
+                       + (signature ? '<br><div>' + signature + '</div>' : '');
+
+        // 5. Send via Power Automate.
+        const send = await gbSendOnePA(paUrl, {
+          to:        toEmail,
+          subject,
+          htmlBody,
+          replyMode: template.replyMode || 'standalone',
+        });
+        if (send.ok) result = { name: c.name, status: 'sent', email: toEmail };
+        else         result = { name: c.name, status: 'error', error: send.error || 'PA send failed', email: toEmail };
+      }
+    } catch (e) {
+      result = { name: c.name, status: 'error', error: e?.message || 'failed' };
+    } finally {
+      // 6. Close the background tab no matter what happened.
+      if (tabId != null) {
+        try { chrome.tabs.remove(tabId); } catch {}
+      }
+    }
+
+    // 7. Broadcast progress.
+    gbBroadcastBlast({
+      runId,
+      action: 'emailBlastProgress',
+      current: i + 1,
+      total: contacts.length,
+      name: c.name,
+      result,
+    });
+
+    // 8. Random delay between sends (skip after the last one).
+    if (i < contacts.length - 1) {
+      const lo = Math.max(0, Number(delayMin) || 0);
+      const hi = Math.max(lo, Number(delayMax) || lo);
+      const ms = (lo + Math.random() * (hi - lo)) * 1000;
+      await gbSleep(ms);
+    }
+  }
+
+  gbBroadcastBlast({ runId, action: 'emailBlastDone' });
 }
 
 
