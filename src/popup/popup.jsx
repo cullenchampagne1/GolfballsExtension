@@ -633,8 +633,11 @@ function MainView({
   const orderEditDisabled = ignoreOrderEdit ? false : orderEditDisabledReal;
   const watchAddDisabled  = ignoreWatch     ? false : watchAddDisabledReal;
 
-  const watchCount = watchList.length;
-  const watchHasCrit = watchList.some((i) => (Date.now() - i.addedAt) >= 6 * 3600000);
+  /* Active items only — completed entries shouldn't pad the pill
+     badge or trip the "critical" highlight. The WatchList modal
+     stores `done: true` on completed rows. */
+  const watchCount = watchList.filter((i) => !i.done).length;
+  const watchHasCrit = watchList.some((i) => !i.done && (Date.now() - i.addedAt) >= 6 * 3600000);
 
   const proofDisabledReal = !(knownType && (pageInfo.contactId || pageInfo.accountId || pageInfo.orderNo));
   const proofDisabled = ignoreProof ? false : proofDisabledReal;

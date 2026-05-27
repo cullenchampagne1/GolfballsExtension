@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { Btn, Dropdown, Field, IconBtn, RangeSlider, I, Spinner } from '../ui/index.js';
+import { Btn, Dropdown, Field, IconBtn, RangeSlider, Tag, I, Spinner } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 
 /* ───────────────────────────────────────────────────────────────
@@ -34,6 +34,17 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 
 const PANEL_W = 340;
 const PANEL_H = 480;
+
+/* Hide the inner body scrollbar in WebKit too — scrollbar-width:none
+   handles Firefox. Injected once at first EmailRunner mount. */
+const SCROLLBAR_STYLE_ID = '__gb-email-runner-noscroll';
+function ensureNoScrollStyle() {
+  if (typeof document === 'undefined' || document.getElementById(SCROLLBAR_STYLE_ID)) return;
+  const el = document.createElement('style');
+  el.id = SCROLLBAR_STYLE_ID;
+  el.textContent = '.gb-email-runner-body::-webkit-scrollbar{width:0;height:0;display:none}';
+  document.head.appendChild(el);
+}
 const fmtSeconds = (n) => `${n}s`;
 
 /* Promise wrapper around chrome.runtime.sendMessage so the orchestrator
@@ -95,6 +106,10 @@ export function EmailRunner({
   const [status, setStatus] = useState('idle');  // 'idle' | 'running' | 'done'
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [counts, setCounts] = useState({ sent: 0, failed: 0 });
+  /* Per-row tail shown inside the panel — last 4 names with status
+     badges. Kept short on purpose; the full per-row truth lives on
+     the parent list (CRMSearch / TaskList) via the row callbacks. */
+  const [trail, setTrail] = useState([]); // [{ name, status, email? }]
   const [paUrl, setPaUrl] = useState('');
   /* Run-cancellation token. Each onRun increments it; the loop checks
      it between iterations so closing the panel mid-send (or starting
@@ -202,6 +217,8 @@ export function EmailRunner({
     }
   }, [open]);
 
+  useEffect(() => { ensureNoScrollStyle(); }, []);
+
   /* Dropdown option shape — ported from popup.jsx. Templates with
      variations expose an inline-expanding parent + sub-options:
      "(original)" picks the parent, each variation row pins that
@@ -263,6 +280,7 @@ export function EmailRunner({
     const token = runTokenRef.current;
     setCounts({ sent: 0, failed: 0 });
     setProgress({ current: 0, total: contacts.length });
+    setTrail([]);
     setStatus('running');
 
     const variations = Array.isArray(selectedTpl.variations) ? selectedTpl.variations : [];
@@ -349,6 +367,12 @@ export function EmailRunner({
           ? { ...cur, sent: cur.sent + 1 }
           : { ...cur, failed: cur.failed + 1 }
       ));
+      setTrail((cur) => {
+        const next = [...cur, { name: c.name || '(unknown)', status: outcome.status, email: outcome.email }];
+        // Cap to last 4 so the list never grows past the rendered slot
+        // height — also kills the panel scrollbar.
+        return next.length > 4 ? next.slice(next.length - 4) : next;
+      });
 
       // 5. Random delay between sends — skip after the last one.
       if (i < contacts.length - 1) {
@@ -443,13 +467,22 @@ export function EmailRunner({
           </div>
 
           {/* Body */}
-          <div style={{
-            padding: '14px',
-            display: 'flex', flexDirection: 'column', gap: 14,
-            overflow: 'auto', flex: 1, minHeight: 0,
-            userSelect: 'auto',
-            WebkitUserSelect: 'auto',
-          }}>
+          <div
+            className="gb-email-runner-body"
+            style={{
+              padding: '14px',
+              display: 'flex', flexDirection: 'column', gap: 14,
+              overflow: 'auto', flex: 1, minHeight: 0,
+              userSelect: 'auto',
+              WebkitUserSelect: 'auto',
+              // Hide the scrollbar visually — the body needs to scroll
+              // when progress + trail expand beyond the panel cap, but
+              // a visible bar inside this small panel reads as
+              // clutter. ::-webkit-scrollbar rule is injected on mount
+              // below.
+              scrollbarWidth: 'none',
+            }}
+          >
             <Field
               label="Template"
               hint={templates.length
@@ -514,6 +547,36 @@ export function EmailRunner({
                     style={{ height: '100%', background: 'var(--gb-brand-fg)' }}
                   />
                 </div>
+                {/* Last-4 trail. Capped so the panel doesn't need to
+                    scroll. AnimatePresence + layout makes new entries
+                    slide in and old ones slide off the top smoothly. */}
+                {trail.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <AnimatePresence initial={false}>
+                      {trail.map((r, i) => (
+                        <motion.div
+                          key={`${r.name}-${i}-${r.email || ''}`}
+                          layout
+                          initial={{ opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -10, height: 0 }}
+                          transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            fontSize: 10.5, color: 'var(--gb-text-secondary)',
+                          }}
+                        >
+                          <Tag size="xs" tone={r.status === 'sent' ? 'brand' : 'error'}>
+                            {r.status === 'sent' ? 'sent' : 'fail'}
+                          </Tag>
+                          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {r.name}
+                          </span>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                )}
               </div>
             )}
           </div>
