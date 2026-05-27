@@ -744,6 +744,13 @@ export function CRMSearch({ onClosed, bindClose }) {
         setQbFilter(saved.qbFilter || null);
         setMode('server');
         runSearch(saved.query || '', saved.qbFilter || null, saved.typeFilter || 'all');
+        /* Hand control back to the search bar. The user reached this
+           action via Tab → shelf-number, which leaves activeIdx at 0
+           and the input blurred; without the reset they'd still see
+           the deactivated state + first row highlighted, requiring
+           a mouse click to pick a different row. */
+        setActiveIdx(-1);
+        try { searchInputRef.current?.focus({ preventScroll: true }); } catch {}
       },
     });
     return unsub;
