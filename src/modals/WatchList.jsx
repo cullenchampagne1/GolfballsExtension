@@ -156,7 +156,23 @@ export function WatchList({ onClosed, bindClose }) {
   const [editingId, setEditingId] = useState(null); // task id currently in edit mode (or '__new')
   const [draft, setDraft] = useState(null);         // { title, due, priority, context }
   const [resolvingIds, setResolvingIds] = useState(() => new Set());
-  const now = Date.now(); // used for done-today calc; static per render is fine
+  // Tick every 30s so urgency labels + the header critical-state badge
+  // recompute as items age. 30s is the smallest sane interval — the
+  // urgency thresholds are hour-grained so finer ticks waste CPU.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  const now = nowMs; // alias: existing "static per render" references stay valid
+  // Two-tap "Clear all" confirmation — first click arms, second clears.
+  // Auto-disarms after 4s so a stray click doesn't sit in armed state.
+  const [clearArmed, setClearArmed] = useState(false);
+  useEffect(() => {
+    if (!clearArmed) return undefined;
+    const id = setTimeout(() => setClearArmed(false), 4000);
+    return () => clearTimeout(id);
+  }, [clearArmed]);
 
   // Auto-delete completed items after N days (0 = keep forever).
   const autoDeleteDays = Number(useDevSetting('watchList.autoDeleteCompletedDays') ?? 5);
@@ -293,9 +309,29 @@ export function WatchList({ onClosed, bindClose }) {
     { key: 'done',   label: 'Completed',     n: counts.done   },
   ];
 
+  // Urgency derives from how long an active task has been on the watch
+  // list — same buckets as the legacy modal. Items 6+h old are critical;
+  // the header recolors when ANY active item hits that threshold so the
+  // rep can see at a glance the list needs attention.
+  const criticalCount = useMemo(
+    () => tasks.filter((t) => !t.done && (nowMs - (t.createdAt || nowMs)) >= 6 * 3600 * 1000).length,
+    [tasks, nowMs],
+  );
   const subtitle = tasks.length === 0
     ? 'Nothing yet — add something to watch'
-    : `${counts.active} active${completedToday > 0 ? ` · ${completedToday} completed today` : ''}`;
+    : (
+      <span>
+        <span style={{ color: criticalCount ? 'var(--gb-error-fg)' : undefined, fontWeight: criticalCount ? 700 : undefined }}>
+          {counts.active} active
+        </span>
+        {criticalCount > 0 && (
+          <span style={{ color: 'var(--gb-error-fg)' }}>
+            {' · '}{criticalCount} critical
+          </span>
+        )}
+        {completedToday > 0 && ` · ${completedToday} completed today`}
+      </span>
+    );
 
   return (
     <FloatingPanel
@@ -408,6 +444,7 @@ export function WatchList({ onClosed, bindClose }) {
                   key={task.id}
                   task={task}
                   index={i}
+                  nowMs={nowMs}
                   isResolving={resolvingIds.has(task.id)}
                   onToggle={() => toggleDone(task.id)}
                   onEdit={() => startEdit(task)}
@@ -419,9 +456,61 @@ export function WatchList({ onClosed, bindClose }) {
         </motion.ul>
       </div>
 
+      {/* Footer — Clear All (two-tap confirm). Only shown when there
+          are items to clear so it stays out of the way on empty lists. */}
+      {tasks.length > 0 && (
+        <div style={{
+          padding: '8px 14px',
+          borderTop: '1px solid var(--gb-border-subtle)',
+          background: 'var(--gb-surface-1)',
+          flexShrink: 0,
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <div style={{ flex: 1, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
+            {clearArmed
+              ? <span style={{ color: 'var(--gb-error-fg)', fontWeight: 600 }}>Click again to remove all {tasks.length} items</span>
+              : `${tasks.length} item${tasks.length === 1 ? '' : 's'} on watch list`}
+          </div>
+          <Btn
+            size="sm"
+            variant="ghost"
+            status={clearArmed ? 'error' : undefined}
+            icon={<I.trash size={11} />}
+            onClick={() => {
+              if (!clearArmed) { setClearArmed(true); return; }
+              persist([]);
+              setClearArmed(false);
+              toast?.success?.('Watch list cleared', { duration: 2000 });
+            }}
+          >
+            {clearArmed ? 'Confirm clear' : 'Clear all'}
+          </Btn>
+        </div>
+      )}
+
     </FloatingPanel>
   );
 }
+
+/* ── urgency helpers ─────────────────────────────────────────
+   Bucket an active watch-list item by how long it's been sitting:
+   normal (<1h), moderate (1–4h), high (4–6h), critical (6+h). Done
+   items return 'done' so the row can render a calmer neutral. */
+export function urgencyLevel(task, nowMs = Date.now()) {
+  if (task?.done) return 'done';
+  const age = nowMs - (task?.createdAt || nowMs);
+  if (age >= 6 * 3600 * 1000) return 'critical';
+  if (age >= 4 * 3600 * 1000) return 'high';
+  if (age >= 1 * 3600 * 1000) return 'moderate';
+  return 'normal';
+}
+export const URGENCY_TINT = {
+  normal:   'var(--gb-text-tertiary)',
+  moderate: 'var(--gb-info-fg)',
+  high:     'var(--gb-warning-fg)',
+  critical: 'var(--gb-error-fg)',
+  done:     'var(--gb-text-muted)',
+};
 
 /* ── FilterLabel — label + count badge composed for Segmented.
    Segmented accepts ReactNode labels and recolors them via its
@@ -438,9 +527,11 @@ function FilterLabel({ text, count, active }) {
 }
 
 /* ── TaskRow ─────────────────────────────────────────────────── */
-function TaskRow({ task, index, isResolving, onToggle, onEdit, onDelete }) {
+function TaskRow({ task, index, isResolving, onToggle, onEdit, onDelete, nowMs }) {
   const link = contextUrl(task.context);
   const dueColor = dueLabelColor(task);
+  const urgency = urgencyLevel(task, nowMs);
+  const urgentColor = URGENCY_TINT[urgency];
 
   return (
     <motion.li
@@ -458,13 +549,30 @@ function TaskRow({ task, index, isResolving, onToggle, onEdit, onDelete }) {
       style={{ overflow: 'hidden', listStyle: 'none' }}
     >
       <div style={{
+        position: 'relative',
         display: 'flex', alignItems: 'flex-start', gap: 11,
         padding: '11px 12px',
         background: 'var(--gb-surface-1)',
-        border: '1px solid var(--gb-border-default)',
+        border: '1px solid ' + (urgency === 'critical' ? 'var(--gb-error)' : 'var(--gb-border-default)'),
         borderRadius: 'var(--gb-r-md)',
         transition: 'border-color .2s, background-color .2s',
+        boxShadow: urgency === 'critical'
+          ? '0 0 0 1px color-mix(in srgb, var(--gb-error) 35%, transparent)'
+          : 'none',
       }}>
+        {/* Urgency stripe — 3px tall colored bar on the left edge,
+            keyed to how long the item has been sitting unresolved.
+            Critical items also recolor the row border above. */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute', top: 6, bottom: 6, left: -1, width: 3,
+            background: urgentColor,
+            borderRadius: 2,
+            opacity: urgency === 'normal' || urgency === 'done' ? 0 : 1,
+            transition: 'opacity .2s, background-color .2s',
+          }}
+        />
         {/* 18×18 checkbox */}
         <TaskCheckbox done={task.done} onToggle={onToggle} />
 
