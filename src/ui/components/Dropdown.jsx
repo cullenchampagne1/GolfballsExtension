@@ -205,6 +205,8 @@ export function Dropdown({
         {open && pos && (
           <motion.div
             ref={popoverRef}
+            className="gb-dd-popover"
+            data-gb-scale="popovers"
             initial={{ opacity: 0, y: -4, scaleY: 0.95 }}
             animate={{ opacity: 1, y: 0, scaleY: 1 }}
             exit={{ opacity: 0, y: -4, scaleY: 0.95, transition: T.base }}
