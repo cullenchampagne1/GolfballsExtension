@@ -724,12 +724,12 @@ export function SettingsPanel() {
         <SectionLabel>Experimental</SectionLabel>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <ExpandableFeature
-            on={!!flags.powerAutomateUrl}
-            onChange={(next) => { if (!next) setFlagValue('powerAutomateUrl', ''); }}
+            on={!!flags.powerAutomateEnabled}
+            onChange={(next) => setFlagValue('powerAutomateEnabled', next)}
             icon={<I.send />}
             tone="warning"
             name="Direct Send via Power Automate"
-            desc="When a flow URL is set, templates that opt-in send directly through Power Automate instead of opening Outlook."
+            desc="When enabled and a flow URL is set, templates that opt in send directly through Power Automate instead of opening Outlook."
           >
             <Field label="Flow URL" required>
               <Input

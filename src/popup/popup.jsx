@@ -740,10 +740,12 @@ function MainView({
     // 'standalone' → fresh email (file or PA)
     const replyMode = tpl.replyMode || 'standalone';
     const isReply = replyMode === 'reply';
-    // PA-ready when the user has a flow URL saved. The legacy global
-// "Reply with Template" toggle was phased out in favor of per-template
-// control (tpl.replyMode + future per-template flags).
-const paReady = !!flags.powerAutomateUrl;
+    // PA-ready when the user has BOTH toggled the feature on in Settings
+    // (powerAutomateEnabled) AND saved a flow URL. The legacy global
+    // "Reply with Template" toggle was renamed but the gating shape is
+    // the same — per-template settings (tpl.replyMode + future flags)
+    // refine which templates actually use the path.
+    const paReady = !!(flags.powerAutomateEnabled && flags.powerAutomateUrl);
 
     // When PA is configured we send through it; otherwise fall back to
     // a mailto window. The legacy file-based reply path is removed —
