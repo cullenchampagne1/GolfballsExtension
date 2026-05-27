@@ -169,6 +169,21 @@ export function CallLog({
         return;
       }
       if (e.key !== 'Tab') return;
+      /* Shift+Tab from the FIRST focusable in the Custom log form
+         should hop back to the last quick-log row instead of bouncing
+         out of the modal. Same marching-ants visual either direction
+         so Tab and Shift+Tab feel symmetric. */
+      if (e.shiftKey && customFormRef.current?.contains(e.target)) {
+        const focusables = customFormRef.current.querySelectorAll(
+          'input, textarea, select, button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusables[0] === e.target && templates.length > 0) {
+          e.preventDefault();
+          try { e.target.blur?.(); } catch {}
+          setActiveQuickIdx(templates.length - 1);
+          return;
+        }
+      }
       // Let typing targets handle Tab themselves (browser-default
       // focus rotation through the Custom form's fields).
       if (isTypingTarget(e.target)) return;
