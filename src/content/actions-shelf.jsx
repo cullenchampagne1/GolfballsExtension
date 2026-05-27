@@ -132,6 +132,7 @@ if (!window.__gbActionsShelfLoaded) {
      Each context-bound action keeps its own unsub fn in a module-
      scoped var so the next syncContext can swap it. */
   let _callActionUnsub = null;
+  let _logCallActionUnsub = null;
   let _taskActionUnsub = null;
   let _copyIdsActionUnsub = null;
 
@@ -169,6 +170,37 @@ if (!window.__gbActionsShelfLoaded) {
         // DOM via readCallContext(); we just pass `phone` as a
         // formatted-string override so the subtitle reflects what
         // we just dialed.
+        if (typeof window.__gbShowCallLogModal === 'function') {
+          await window.__gbShowCallLogModal({ phone: livePhone });
+        }
+      },
+    });
+  }
+
+  /* Sibling of the Call action: opens the call-log modal WITHOUT
+     firing the tel: link. For inbound calls the rep answered on
+     their phone — they just need the log dialog. Same gating
+     (contact / account pages) and same fresh phone lookup so the
+     subtitle reflects whatever's currently on screen. */
+  function registerLogCallAction(pageType, displayName) {
+    if (_logCallActionUnsub) { _logCallActionUnsub(); _logCallActionUnsub = null; }
+    if (pageType !== 'contact' && pageType !== 'account') return;
+
+    const labelName = displayName || (pageType === 'account' ? 'account' : 'contact');
+    const phone = readContactPhoneRaw();
+    const hint = phone
+      ? `Open log for ${phone} (no dial)`
+      : 'Open the call log without dialing';
+    _logCallActionUnsub = actionRegistry.register({
+      id: 'gb-log-incoming-call',
+      label: `Log incoming call`,
+      // edit/pencil icon reads as "write a note" — visually distinct
+      // from the regular Call action's phone icon.
+      icon: <I.edit size={13} />,
+      hint,
+      smartFor: ['contact', 'account'],
+      handler: async () => {
+        const livePhone = readContactPhoneRaw();
         if (typeof window.__gbShowCallLogModal === 'function') {
           await window.__gbShowCallLogModal({ phone: livePhone });
         }
@@ -303,6 +335,7 @@ if (!window.__gbActionsShelfLoaded) {
     }
     actionRegistry.setPage(key, label, subLabel);
     registerCallAction(type, label);
+    registerLogCallAction(type, label);
     registerTaskAction(type, label);
     registerCopyOrdersAction(type);
   }
