@@ -76,6 +76,80 @@ const readSignature = () => new Promise((resolve) => {
   } catch { resolve(''); }
 });
 
+/* Hard-coded templates used when the modal is in mock mode (playground
+   demo, CRMSearch's useMock branch). Three flavours so the variations
+   dropdown has something interesting to render and the per-contact
+   random-variation pick is visibly different across the run. */
+const MOCK_TEMPLATES = [
+  {
+    id: 'mock-followup',
+    name: 'Follow-up nudge',
+    type: 'email',
+    enabled: true,
+    subject: 'Quick follow-up — {{contactFirstName}}',
+    body: '<p>Hi {{contactFirstName}},</p><p>Just checking in on the order from last month — anything else you need from us?</p>',
+    toField: { type: 'auto' },
+    vars: {
+      contactFirstName: { type: 'builtin', builtin: 'firstName', smart: { fallback: 'there' } },
+    },
+    variations: [],
+  },
+  {
+    id: 'mock-quote',
+    name: 'Updated quote',
+    type: 'email',
+    enabled: true,
+    subject: 'Updated quote ready · {{accountName}}',
+    body: '<p>Hey {{contactFirstName}},</p><p>We pulled together a fresh quote based on last week\'s call. Let me know if anything looks off.</p>',
+    toField: { type: 'auto' },
+    vars: {
+      contactFirstName: { type: 'builtin', builtin: 'firstName', smart: { fallback: 'there' } },
+      accountName: { type: 'builtin', builtin: 'accountName', smart: { fallback: 'your team' } },
+    },
+    variations: [
+      { id: 'short', label: 'Short version', body: '<p>Hi {{contactFirstName}}, fresh quote is in. Let me know if it works.</p>' },
+      { id: 'long',  label: 'Long version',  body: '<p>Hi {{contactFirstName}}, attached is the updated quote with the volume break we discussed. Happy to walk through it whenever.</p>' },
+    ],
+  },
+  {
+    id: 'mock-checkin',
+    name: 'Annual check-in',
+    type: 'email',
+    enabled: true,
+    subject: 'Quick check-in',
+    body: '<p>Hi {{contactFirstName}},</p><p>Been a minute since we last talked — wanted to see how things are going on your end.</p>',
+    toField: { type: 'auto' },
+    vars: {
+      contactFirstName: { type: 'builtin', builtin: 'firstName', smart: { fallback: 'there' } },
+    },
+    variations: [],
+  },
+];
+
+/* Mock sendBg: fakes the chrome.runtime round-trip with realistic
+   timing so the playground can drive the entire send animation
+   (Sending → Sent / Failed badges, trail of names, progress bar)
+   without an extension context. ~85% success rate so a small share
+   of rows show up as failures and the rep can see how those land. */
+const mockSendBg = (msg) => new Promise((resolve) => {
+  const a = msg?.action;
+  if (a === 'fetchRaw') {
+    setTimeout(() => resolve({ ok: true, text: '<html><body>(mock contact page)</body></html>' }), 380 + Math.random() * 220);
+  } else if (a === 'resolveVarsForHtml') {
+    setTimeout(() => resolve({
+      resolved: { contactFirstName: 'Friend', accountName: 'your team' },
+      toEmail: `mock-${Math.random().toString(36).slice(2, 7)}@example.com`,
+    }), 180 + Math.random() * 140);
+  } else if (a === 'paAutomate') {
+    setTimeout(() => {
+      const ok = Math.random() > 0.15;
+      resolve(ok ? { ok: true } : { ok: false, error: 'Mock 500 (random)' });
+    }, 420 + Math.random() * 320);
+  } else {
+    resolve(null);
+  }
+});
+
 export function EmailRunner({
   open, contacts, onClose, anchorHostId,
   // Row-level loading-state hooks. CRMSearch / TaskList wire these to
@@ -85,6 +159,11 @@ export function EmailRunner({
   onRowStart,
   onRowDone,
   onResetRowStates,
+  /* Mock mode: skip chrome.runtime calls + chrome.storage reads,
+     wire in MOCK_TEMPLATES and a fake sendBg with realistic timings.
+     CRMSearch flips this on when its own useMock dev flag is set so
+     the playground can drive the full send animation end-to-end. */
+  useMock = false,
 }) {
   const toast = useToast();
   const [templates, setTemplates] = useState([]);
@@ -108,9 +187,16 @@ export function EmailRunner({
   /* Load templates + PA URL on open. Filter matches the popup's
      visibleTemplates: drop disabled + case templates, keep email /
      account / untyped (which still resolve against a contact page
-     in the background orchestrator). */
+     in the background orchestrator). Mock mode skips the storage
+     read entirely and uses the canned MOCK_TEMPLATES + a placeholder
+     PA URL so canRun passes through. */
   useEffect(() => {
     if (!open) return;
+    if (useMock) {
+      setTemplates(MOCK_TEMPLATES);
+      setPaUrl('mock://power-automate');
+      return;
+    }
     try {
       chrome.storage.local.get(['templates', 'featureFlags'], (out) => {
         const all = Array.isArray(out?.templates) ? out.templates : [];
@@ -122,7 +208,7 @@ export function EmailRunner({
         setPaUrl(out?.featureFlags?.powerAutomateUrl || '');
       });
     } catch {}
-  }, [open]);
+  }, [open, useMock]);
 
   /* Cancel in-flight run when the panel closes — bumps the token so
      the orchestrator's between-iteration guard short-circuits. */
@@ -198,6 +284,12 @@ export function EmailRunner({
     setTrail([]);
     setStatus('running');
 
+    /* In mock mode the orchestrator runs against in-process timers
+       instead of chrome.runtime — lets the playground exercise the
+       send animation (Sending → Sent / Failed badges, trail, the
+       progress bar) without an extension context. */
+    const dispatchBg = useMock ? mockSendBg : sendBg;
+
     const variations = Array.isArray(selectedTpl.variations) ? selectedTpl.variations : [];
     /* Pinned variation? Use its subject/body for everyone. Otherwise
        we pick one at random per contact below. */
@@ -231,13 +323,13 @@ export function EmailRunner({
         const rawBody    = v?.body    || selectedTpl.body    || '';
 
         // 1. Fetch the contact page HTML through the background proxy.
-        const fetched = await sendBg({ action: 'fetchRaw', url: c.contactUrl });
+        const fetched = await dispatchBg({ action: 'fetchRaw', url: c.contactUrl });
         if (!fetched?.ok || typeof fetched.text !== 'string') {
           throw new Error(fetched?.error || 'Fetch failed');
         }
 
         // 2. Resolve template vars against the fetched HTML (no tab).
-        const resolved = await sendBg({
+        const resolved = await dispatchBg({
           action:  'resolveVarsForHtml',
           html:    fetched.text,
           vars:    tplVars,
@@ -258,7 +350,7 @@ export function EmailRunner({
                           + (signature ? '<br><div>' + signature + '</div>' : '');
 
           // 4. Send via Power Automate.
-          const send = await sendBg({
+          const send = await dispatchBg({
             action: 'paAutomate',
             paUrl,
             payload: {

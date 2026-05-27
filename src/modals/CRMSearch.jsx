@@ -92,11 +92,16 @@ const contactUrl = (id) => {
   return '';
 };
 
-export function CRMSearch({ onClosed, bindClose }) {
+export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
   const toast = useToast();
   const draggable = useDevSetting('crmSearch.draggable') ?? true;
   const forceMock = useDevSetting('crmSearch.useMock') ?? false;
-  const useMock   = forceMock || !hasExtensionContext();
+  /* useMock prop wins when explicitly set — playground passes
+     useMock={true} so the demo loop doesn't need the rep to flip a
+     dev setting first. Falls back to the dev flag, then to a runtime
+     check (no extension context = automatic mock so the modal still
+     works as a standalone preview e.g. on the design playground). */
+  const useMock   = useMockProp ?? (forceMock || !hasExtensionContext());
 
   const [query, setQuery]       = useState('');
   const [typeFilter, setType]   = useState('all');
@@ -1074,6 +1079,7 @@ export function CRMSearch({ onClosed, bindClose }) {
     <EmailRunner
       open={emailRunnerOpen}
       anchorHostId="__gb-csm"
+      useMock={useMock}
       contacts={displayedRows
         .filter((r) => selected.has(r.id))
         .map((r) => ({
@@ -1082,7 +1088,10 @@ export function CRMSearch({ onClosed, bindClose }) {
              render can look itself up directly without splitting. */
           contactId:   r.id,
           contactName: r.contactName_t || r.accountName_t || '',
-          contactUrl:  contactUrl(r.id),
+          /* In mock mode there's no real CRM page to fetch — give the
+             contactUrl a placeholder so the dispatch loop still runs.
+             The mock sendBg returns canned HTML regardless. */
+          contactUrl:  contactUrl(r.id) || (useMock ? `mock://contact/${r.id}` : ''),
         }))
         .filter((c) => c.contactUrl)}
       onClose={() => setEmailRunnerOpen(false)}
