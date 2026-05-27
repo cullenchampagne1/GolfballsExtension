@@ -36,6 +36,9 @@ function ensureScrollbarStyle() {
 export function Dropdown({
   value, placeholder = 'Select…', options = [], size = 'md',
   leading, searchable, disabled, error, onChange, maxHeight, style,
+  // Override what the trigger shows. Useful when `value` is a composite
+  // id whose option isn't in the visible list (e.g. a sub-view's pick).
+  displayLabel,
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -117,6 +120,9 @@ export function Dropdown({
   const pick = (o) => {
     if (o.disabled) return;
     onChange?.(o.id);
+    // `keepOpen` lets the consumer swap the option list in response to
+    // a click (e.g. two-step variation picker) without closing the menu.
+    if (o.keepOpen) return;
     setOpen(false);
     setSearch('');
   };
@@ -134,9 +140,9 @@ export function Dropdown({
         {leading && <span style={{ display: 'flex', flexShrink: 0, color: 'var(--gb-text-muted)' }}>{leading}</span>}
         <span style={{
           flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          color: selected ? 'var(--gb-text-primary)' : 'var(--gb-text-ghost)',
+          color: (displayLabel || selected) ? 'var(--gb-text-primary)' : 'var(--gb-text-ghost)',
         }}>
-          {selected ? selected.label : placeholder}
+          {displayLabel || (selected ? selected.label : placeholder)}
         </span>
         <motion.span
           animate={{ rotate: open ? 180 : 0 }}

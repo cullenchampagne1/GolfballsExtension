@@ -150,6 +150,11 @@ function PopupApp() {
 
   // ── selected template + resolved data ──
   const [selectedId, setSelectedId] = useState(null);
+  // When the selected template has variations and the user explicitly
+  // picked one, this is its id. Null = use the parent template's own
+  // subject/body. Parent / variation pick logic lives in MainView; we
+  // track it up here so onSend can resolve the right content.
+  const [selectedVariationId, setSelectedVariationId] = useState(null);
   const [matchedIds, setMatchedIds] = useState([]);
   const [resolvedVars, setResolvedVars] = useState({});
   const [resolvedTo, setResolvedTo] = useState('');
@@ -283,6 +288,7 @@ function PopupApp() {
     const matched = info.matchedTemplateIds || [];
     const initial = matched.find((id) => visible.some((t) => t.id === id)) || visible[0]?.id || null;
     setSelectedId(initial);
+    setSelectedVariationId(null);
     setStage('main');
   }
 
@@ -381,6 +387,8 @@ function PopupApp() {
           matchedIds={effectiveMatchedIds}
           selectedId={selectedId}
           onSelect={setSelectedId}
+          selectedVariationId={selectedVariationId}
+          onSelectVariation={setSelectedVariationId}
           tpl={tpl}
           resolving={resolving}
           resolvedVars={resolvedVars}
@@ -577,11 +585,18 @@ function EmptyState({ onCreate }) {
 ============================================================ */
 
 function MainView({
-  templates, matchedIds, selectedId, onSelect, tpl,
+  templates, matchedIds, selectedId, onSelect,
+  selectedVariationId, onSelectVariation,
+  tpl,
   resolving, resolvedVars, resolvedTo, pageInfo, flags, watchList, tab,
   ignoreCharge, ignoreOrderEdit, ignoreWatch, ignoreProof, ignorePageContext,
   onOpenWatchAdd, onOpenProof,
 }) {
+  // Two-step variation picker — when non-null the Dropdown shows the
+  // variation list for this parent instead of the top-level template
+  // list, with a Back row that returns to the top level without
+  // dismissing the menu.
+  const [viewParentId, setViewParentId] = useState(null);
   // ── derived button states ──
   // hasRecipient = real recipient resolved by content scripts. Required for
   // mailto/reply-file modes (the email needs a To address baked in) but not
@@ -642,6 +657,21 @@ function MainView({
   // (muted text on the menu background) so it informs without competing with
   // the label or the accent.
   const dropdownOptions = useMemo(() => {
+    // Sub-view: show the variation list for the parent the user drilled
+    // into, prepended with a Back row. keepOpen on Back makes Dropdown
+    // not close the menu when clicked — we just swap the option list.
+    if (viewParentId) {
+      const parent = templates.find((t) => t.id === viewParentId);
+      if (!parent) return [];
+      const variations = parent.variations || [];
+      return [
+        { id: '__back__', label: `← ${parent.name || 'Templates'}`, keepOpen: true, accent: 'brand' },
+        ...variations.map((v) => ({
+          id: `${parent.id}::${v.id}`,
+          label: v.label || 'Variation',
+        })),
+      ];
+    }
     const matchedSet = new Set(matchedIds);
     const matched = templates.filter((t) => matchedSet.has(t.id));
     const rest    = templates.filter((t) => !matchedSet.has(t.id));
@@ -649,20 +679,67 @@ function MainView({
     return [...matched, ...rest].map((t) => {
       const varN = (t.variations || []).length;
       const isMatchedRow = matchedSet.has(t.id);
+      // Templates with variations get a clickable chevron in the trailing
+      // slot — clicking it enters the variation sub-view; clicking the
+      // row's main label still picks the parent's own subject/body.
+      // stopPropagation on the chevron keeps the parent's onClick from
+      // firing when the chevron is the click target.
+      const trailing = varN > 0 ? (
+        <button
+          type="button"
+          aria-label={`See ${varN} variation${varN === 1 ? '' : 's'}`}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setViewParentId(t.id); }}
+          style={{
+            background: 'transparent', border: 'none', padding: '2px 4px',
+            display: 'inline-flex', alignItems: 'center', gap: 3,
+            cursor: 'pointer', color: 'var(--gb-text-muted)',
+            fontSize: 10, fontWeight: 600, fontVariantNumeric: 'tabular-nums',
+            borderRadius: 'var(--gb-r-xs)',
+          }}
+        >
+          {varN}× <I.chevr size={9} style={{ transform: 'rotate(-90deg)' }} />
+        </button>
+      ) : null;
       return {
         id: t.id,
         label: t.name || 'Untitled',
         group: showGroups ? (isMatchedRow ? 'Matched' : 'All templates') : undefined,
         accent: isMatchedRow ? 'brand' : undefined,
-        trailing: varN > 1
-          ? <span style={{
-              fontSize: 9, fontWeight: 600, color: 'var(--gb-text-muted)',
-              fontVariantNumeric: 'tabular-nums', letterSpacing: 0.2,
-            }}>{varN}×</span>
-          : null,
+        trailing,
       };
     });
-  }, [templates, matchedIds]);
+  }, [templates, matchedIds, viewParentId]);
+
+  /* Dropdown trigger label — shows the variation suffix when one is
+     selected so the user can see what they picked at a glance. The
+     composite value passed to Dropdown.value lets the trigger lookup
+     fall through to displayLabel when no matching option exists in
+     the current view (e.g. the variation was picked, but the dropdown
+     is now back on the top-level list which doesn't contain that id). */
+  const dropdownValue = selectedVariationId
+    ? `${selectedId}::${selectedVariationId}`
+    : selectedId;
+  const dropdownDisplayLabel = (() => {
+    if (!tpl) return '';
+    if (!selectedVariationId) return tpl.name || 'Untitled';
+    const v = (tpl.variations || []).find((x) => x.id === selectedVariationId);
+    return `${tpl.name || 'Untitled'} · ${v?.label || 'Variation'}`;
+  })();
+
+  const onDropdownChange = (id) => {
+    if (id === '__back__') { setViewParentId(null); return; }
+    if (id.includes('::')) {
+      const [parentId, variationId] = id.split('::');
+      onSelect(parentId);
+      onSelectVariation(variationId);
+      setViewParentId(null);
+      return;
+    }
+    onSelect(id);
+    onSelectVariation(null);
+    setViewParentId(null);
+  };
 
   const isMatched = matchedIds.includes(selectedId);
 
@@ -731,8 +808,15 @@ function MainView({
 
   const onSend = async () => {
     if (!tpl || !canSend || !tab) return;
-    const subject  = renderStr(tpl.subject, resolvedVars, tpl.vars);
-    const rawBody  = renderStr(tpl.body, resolvedVars, tpl.vars);
+    // Per-template variations override the parent's subject/body when
+    // the user explicitly picked one. Parent stays usable on its own —
+    // selecting a parent without a variation falls back to its own
+    // content. The variation list lives on tpl.variations: [{id, label,
+    // subject?, body?}] — fields are optional so a partial variation
+    // inherits whichever field it omits from the parent.
+    const variation = (tpl.variations || []).find((v) => v.id === selectedVariationId);
+    const subject  = renderStr(variation?.subject || tpl.subject, resolvedVars, tpl.vars);
+    const rawBody  = renderStr(variation?.body    || tpl.body,    resolvedVars, tpl.vars);
     const plainBody = toPlainText(rawBody);
 
     // tpl.replyMode drives behavior for ALL template types:
@@ -813,11 +897,12 @@ function MainView({
               {hasTemplates ? (
                 <Dropdown
                   size="sm"
-                  value={selectedId}
+                  value={dropdownValue}
+                  displayLabel={dropdownDisplayLabel}
                   options={dropdownOptions}
-                  searchable={templates.length > 6}
+                  searchable={templates.length > 6 && !viewParentId}
                   leading={<Dot tone={isMatched ? 'brand' : 'muted'} size={7} glow={isMatched} />}
-                  onChange={onSelect}
+                  onChange={onDropdownChange}
                   /* Hard-clamp the menu height so it always fits inside
                      the popup with visible bottom padding. We don't
                      rely on the Dropdown's auto-clamp here because
