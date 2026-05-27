@@ -6,6 +6,7 @@ import {
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { QueryBuilder, describeCondition, compileToSolr, compileToLabel } from './QueryBuilder.jsx';
+import { EmailRunner } from './EmailRunner.jsx';
 import {
   indexRecords, getAllIndexed, deleteIndexed, clearIndex, searchIndexed,
 } from '../lib/crmIndex.js';
@@ -445,6 +446,7 @@ export function CRMSearch({ onClosed, bindClose }) {
   // qbFilter so the QB filter bar renders + the next search reuses
   // the conditions (and re-opening the QB pre-populates them).
   const [qbOpen, setQbOpen] = useState(false);
+  const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
   const openQueryBuilder = () => setQbOpen(true);
   const applyQbFilter = (filter) => {
     setQbFilter(filter);   // triggers the auto re-run effect
@@ -831,7 +833,7 @@ export function CRMSearch({ onClosed, bindClose }) {
                 size="sm"
                 variant="ghost"
                 icon={<I.mail size={11} />}
-                onClick={() => toast?.info?.('Email blast — coming later', { duration: 2400, placement: 'top-center' })}
+                onClick={() => setEmailRunnerOpen(true)}
               >Email selected</Btn>
               <Btn size="sm" variant="ghost" icon={<I.copy size={11} />} onClick={exportSelectedCSV}>Export CSV</Btn>
             </div>
@@ -889,6 +891,22 @@ export function CRMSearch({ onClosed, bindClose }) {
         onApply={applyQbFilter}
       />
     )}
+
+    {/* Email Runner side panel — sits to the right of CRMSearch with
+        air between, so it reads as a child workspace rather than a
+        replacement. Visible alongside the parent (no hide pattern). */}
+    <EmailRunner
+      open={emailRunnerOpen}
+      contacts={displayedRows
+        .filter((r) => selected.has(r.id))
+        .map((r) => ({
+          contactId:   String(r.id || '').split('_')[1] || String(r.id || ''),
+          contactName: r.contactName_t || r.accountName_t || '',
+          contactUrl:  contactUrl(r.id),
+        }))
+        .filter((c) => c.contactUrl)}
+      onClose={() => setEmailRunnerOpen(false)}
+    />
     </>
   );
 }
