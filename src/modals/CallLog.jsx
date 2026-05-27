@@ -143,7 +143,16 @@ export function CallLog({
     const isTypingTarget = (el) => {
       if (!el) return false;
       const tag = el.tagName && el.tagName.toLowerCase();
-      return tag === 'input' || tag === 'textarea' || el.isContentEditable;
+      if (tag === 'input' || tag === 'textarea' || el.isContentEditable) return true;
+      /* Crucial: once focus is anywhere inside the Custom log form
+         (Segmented Outbound/Inbound, Dropdown trigger, PillTag, Save
+         button, etc.) the handler must bow out so the BROWSER walks
+         the form's natural tab order. Without this the Tab keystroke
+         was re-firing our "from idle, highlight first quick row"
+         branch and the user got bounced back to the top of the
+         quick log. */
+      if (customFormRef.current?.contains(el)) return true;
+      return false;
     };
     const onKey = (e) => {
       if (e.key === 'Escape' && activeQuickIdx >= 0) {
