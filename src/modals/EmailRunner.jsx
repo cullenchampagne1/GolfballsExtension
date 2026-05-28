@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Btn, DraggablePopup, Dot, Field, RangeSlider, Tag, I, Spinner } from '../ui/index.js';
+import { Btn, DraggablePopup, Dot, Field, RangeSlider, Tag, TemplatePicker, I, Spinner } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { pickFromAddress } from '../lib/sender.js';
 import { useDevSetting } from '../lib/devSettings.js';
@@ -284,14 +284,32 @@ export function EmailRunner({
   const ORIGINAL_PIN = '__original';
 
   const selectedTpl = templates.find((t) => t.id === selectedId);
-  /* True whenever a template with variations is selected — the
-     bulk loop picks one per contact using `variationWeights`.
-     selectedVariationId stays null in the InlinePicker design;
-     pinning a single variation is now done by setting that row's
-     weight to 100% in the panel below. */
+  /* True whenever the parent template (no specific variation pinned)
+     is the active selection and the template carries variations.
+     The orchestrator's per-row pick rolls weighted across the pool
+     in that case; otherwise it uses the pinned variation. */
   const isRandomMode = !!selectedTpl
     && Array.isArray(selectedTpl.variations) && selectedTpl.variations.length > 0
     && !selectedVariationId;
+
+  /* Composite value the shared TemplatePicker reads/writes.
+       `tplId`           → parent picked (Random mode)
+       `tplId::varId`    → variation pinned (pinned mode)
+     Empty string when nothing is selected so the picker shows its
+     placeholder row. */
+  const dropdownValue = selectedVariationId
+    ? `${selectedId}::${selectedVariationId}`
+    : (selectedId || '');
+  const onTemplatePickerChange = (composite) => {
+    if (typeof composite === 'string' && composite.includes('::')) {
+      const [parentId, variationId] = composite.split('::');
+      setSelectedId(parentId);
+      setSelectedVariationId(variationId);
+      return;
+    }
+    setSelectedId(String(composite || ''));
+    setSelectedVariationId(null);
+  };
 
   /* The weightable pool used by the Random-mode picker AND the
      sliders UI. The bare template is exposed as "Variation 1"
@@ -604,21 +622,18 @@ export function EmailRunner({
                 return `Each contact gets a weighted random pick (1 of ${variationCount + 1} variations)`;
               })()}
             >
-              {/* Inline picker — the same card surface morphs into a
-                  list of templates when the rep taps SWAP. Replaces
-                  the legacy flying Dropdown so the open list stays
-                  inside the popup boundary (no portal, no clipping). */}
-              <InlinePicker
-                value={selectedId}
-                onChange={(id) => {
-                  setSelectedId(String(id || ''));
-                  setSelectedVariationId(null);
-                }}
-                options={templates.map((t) => ({
-                  id: t.id,
-                  label: t.name || 'Untitled',
-                  sub: variationSub(t),
-                }))}
+              {/* TemplatePicker (shared with popup.jsx). mode='random'
+                  flags the parent click as "weighted random across the
+                  pool" so the right-edge state badge shows a shuffle
+                  glyph when variations exist. Picking a sub-row pins
+                  that variation (`${tplId}::${varId}`) and the
+                  orchestrator's pinnedV branch short-circuits the
+                  weighted pick. */}
+              <TemplatePicker
+                mode="random"
+                templates={templates}
+                value={dropdownValue}
+                onChange={onTemplatePickerChange}
                 placeholder={templates.length ? 'Pick a template' : 'No templates'}
                 disabled={status === 'running'}
               />
@@ -1028,191 +1043,6 @@ function CountChip({ tone, value, label }) {
   );
 }
 
-/* ────────────────────────────────────────────────────────────
-   InlinePicker — replaces the legacy Dropdown for the template
-   slot. The trigger is a card (dot + label + sub + SWAP chip)
-   that, when activated, drops its option list INSIDE the same
-   card boundary — no portal, no clipping, no menu chrome that
-   doesn't match the popup.
-
-   Active option is denoted by the brand-tint background + check
-   glyph. Each option animates in with a tiny stagger so the list
-   reads as alive on first open. Picking flushes via onChange and
-   collapses the list. SWAP / CANCEL chip stays put so the rep
-   has a clear way out of the picker mid-deliberation.
-─────────────────────────────────────────────────────────────── */
-function InlinePicker({ value, onChange, options, placeholder, disabled }) {
-  const [open, setOpen] = useState(false);
-  useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
-  const selected = options.find((o) => o.id === value) || null;
-  return (
-    <div style={{
-      background: 'var(--gb-surface-2)',
-      border: `1px solid ${open ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'}`,
-      borderRadius: 'var(--gb-r-md)',
-      overflow: 'hidden',
-      transition: 'border-color .2s, box-shadow .2s',
-      boxShadow: open ? '0 0 0 3px var(--gb-brand-tint-medium)' : 'none',
-      opacity: disabled ? 0.55 : 1,
-    }}>
-      <button
-        type="button"
-        onClick={() => !disabled && setOpen((o) => !o)}
-        disabled={disabled}
-        style={{
-          width: '100%', background: 'transparent', border: 'none',
-          padding: '9px 10px',
-          display: 'flex', alignItems: 'center', gap: 8,
-          cursor: disabled ? 'not-allowed' : 'pointer',
-          textAlign: 'left',
-          fontFamily: 'inherit',
-        }}
-      >
-        <Dot tone={selected ? 'brand' : 'muted'} size={7} glow={!!selected} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontSize: 12, fontWeight: 600,
-            color: selected ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {selected ? selected.label : (placeholder || 'Pick an option')}
-          </div>
-          {selected?.sub && (
-            <div style={{
-              fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 1,
-              fontFamily: 'var(--gb-font-mono)',
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>{selected.sub}</div>
-          )}
-        </div>
-        {/* SWAP / CANCEL chip — replaces the chevron so the surface
-            reads as "this slot can change" instead of "this is a
-            dropdown." Brand-tints when open so the rep has a clear
-            exit affordance. */}
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 4,
-          padding: '3px 6px',
-          background: open ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)',
-          color: open ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
-          borderRadius: 4,
-          fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
-          textTransform: 'uppercase',
-          transition: 'background .2s, color .2s',
-        }}>
-          <SwapIcon size={9} />
-          <span>{open ? 'cancel' : 'swap'}</span>
-        </div>
-      </button>
-      {/* Inline expanding list — height + opacity tween. AnimatePresence
-          isn't needed because the list is always-mounted and we just
-          collapse it via max-height (same pattern as the variation
-          weights panel above). */}
-      <ExpandList open={open}>
-        <div style={{
-          borderTop: '1px dashed var(--gb-border-default)',
-          padding: 6,
-          display: 'flex', flexDirection: 'column', gap: 3,
-          maxHeight: 200, overflowY: 'auto',
-        }}>
-          {options.length === 0 ? (
-            <div style={{
-              padding: '8px 10px',
-              fontSize: 11, fontStyle: 'italic',
-              color: 'var(--gb-text-muted)',
-              textAlign: 'center',
-            }}>{placeholder || 'No options'}</div>
-          ) : options.map((opt, idx) => {
-            const active = opt.id === value;
-            return (
-              <motion.button
-                key={opt.id}
-                type="button"
-                onClick={() => { onChange(opt.id); setOpen(false); }}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.04, duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-                style={{
-                  padding: '7px 8px',
-                  background: active ? 'var(--gb-brand-tint-soft)' : 'transparent',
-                  border: 'none',
-                  borderRadius: 'var(--gb-r-sm)',
-                  cursor: 'pointer', textAlign: 'left',
-                  display: 'grid', gridTemplateColumns: '10px 1fr auto',
-                  gap: 8, alignItems: 'center',
-                  color: 'inherit', fontFamily: 'inherit',
-                }}
-              >
-                <Dot tone={active ? 'brand' : 'muted'} size={6} glow={active} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{
-                    fontSize: 11.5, fontWeight: 600,
-                    color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>{opt.label}</div>
-                  {opt.sub && (
-                    <div style={{
-                      fontSize: 9.5, color: 'var(--gb-text-muted)',
-                      fontFamily: 'var(--gb-font-mono)',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>{opt.sub}</div>
-                  )}
-                </div>
-                {active && <I.check size={11} style={{ color: 'var(--gb-brand-label)' }} />}
-              </motion.button>
-            );
-          })}
-        </div>
-      </ExpandList>
-    </div>
-  );
-}
-
-/* Max-height + opacity reveal — small wrapper used by InlinePicker
-   so we don't have to thread ResizeObservers through the picker
-   itself. Mirrors the QuickTaskPopover's ExpandWhen but local so
-   EmailRunner stays self-contained. */
-function ExpandList({ open, children }) {
-  const ref = useRef(null);
-  const [h, setH] = useState(0);
-  useEffect(() => {
-    if (!ref.current) return;
-    const measure = () => setH(ref.current.scrollHeight);
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(ref.current);
-    return () => ro.disconnect();
-  }, [open]);
-  return (
-    <div style={{
-      maxHeight: open ? h : 0,
-      opacity: open ? 1 : 0,
-      overflow: 'hidden',
-      transition: 'max-height .3s cubic-bezier(.4,0,.2,1), opacity .25s',
-    }}>
-      <div ref={ref}>{children}</div>
-    </div>
-  );
-}
-
-function SwapIcon({ size = 9 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M7 10l-3 3 3 3M4 13h16M17 4l3 3-3 3M20 7H4" />
-    </svg>
-  );
-}
-
-/* Render-friendly sub line for the template card. Templates with no
-   variations advertise that explicitly so the rep doesn't waste a
-   second hunting for the weights panel; templates with variations
-   show their count so the picker telegraphs "this is a pool, not a
-   single shot." */
-function variationSub(tpl) {
-  const variations = Array.isArray(tpl.variations) ? tpl.variations : [];
-  if (variations.length === 0) return 'no variations · email';
-  return `${variations.length + 1} variations · email`;
-}
 
 /* Status icon for a single trail row: filled success disc with a
    check for sent, error disc with X for fail. Mirrors the design's

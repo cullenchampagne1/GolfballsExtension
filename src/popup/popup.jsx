@@ -6,7 +6,7 @@ import { ensureTheme } from '../lib/theme.js';
 import { useDevSettings } from '../lib/devSettings.js';
 import { dropConditional, renderTemplate } from '../lib/variableResolution.js';
 import {
-  Btn, Dropdown, Dot, Tag, KeyVal, SectionLabel, Field, Textarea,
+  Btn, Dropdown, TemplatePicker, Dot, Tag, KeyVal, SectionLabel, Field, Textarea,
   Spinner, I, T, inputBaseStyle, ToastHost,
 } from '../ui';
 
@@ -645,64 +645,14 @@ function MainView({
   const proofDisabledReal = !(knownType && (pageInfo.contactId || pageInfo.accountId || pageInfo.orderNo));
   const proofDisabled = ignoreProof ? false : proofDisabledReal;
 
-  // ── template dropdown options ──
-  // Matched templates pin to the top with a brand left-accent bar AND a
-  // small group header ("Matched" / "All templates") — the accent gives an
-  // at-a-glance "this matched the page rules" cue, and the group header
-  // makes the matched/unmatched split unmissable when both kinds are present.
-  //
-  // We only emit group labels when both buckets are non-empty; if every
-  // template matched (or none did), the headers would just be noise.
-  //
-  // Templates with 2+ variations get a quiet count chip in the trailing slot
-  // (muted text on the menu background) so it informs without competing with
-  // the label or the accent.
-  const dropdownOptions = useMemo(() => {
-    const matchedSet = new Set(matchedIds);
-    const matched = templates.filter((t) => matchedSet.has(t.id));
-    const rest    = templates.filter((t) => !matchedSet.has(t.id));
-    const showGroups = matched.length > 0 && rest.length > 0;
-    return [...matched, ...rest].map((t) => {
-      const variations = t.variations || [];
-      const isMatchedRow = matchedSet.has(t.id);
-      // Templates with variations get inline sub-options — the parent
-      // row becomes an expand toggle (the Dropdown's Row component
-      // animates the slide-down) and the sub-options include "original"
-      // (= picks parent's own subject/body) plus each variation. Picking
-      // any sub fires the dropdown's onChange with that sub's id and
-      // closes the menu, matching how a regular template would behave.
-      const subOptions = variations.length > 0 ? [
-        { id: t.id, label: `${t.name || 'Untitled'} (original)` },
-        ...variations.map((v) => ({
-          id: `${t.id}::${v.id}`,
-          label: v.label || 'Variation',
-        })),
-      ] : undefined;
-      return {
-        id: t.id,
-        label: t.name || 'Untitled',
-        group: showGroups ? (isMatchedRow ? 'Matched' : 'All templates') : undefined,
-        accent: isMatchedRow ? 'brand' : undefined,
-        subOptions,
-      };
-    });
-  }, [templates, matchedIds]);
-
-  /* The Dropdown value uses a composite id when a variation is selected
-     so the active highlight + check mark land on the variation row.
-     displayLabel shows "{template} · {variation}" in the trigger so the
-     user can see the active selection without expanding the menu. */
+  /* Composite value the shared TemplatePicker reads/writes — same
+     shape the legacy Dropdown used so the onChange `::` split is
+     unchanged. Empty string when nothing's picked so the picker
+     shows its placeholder row. */
   const dropdownValue = selectedVariationId
     ? `${selectedId}::${selectedVariationId}`
-    : selectedId;
-  const dropdownDisplayLabel = (() => {
-    if (!tpl) return '';
-    if (!selectedVariationId) return tpl.name || 'Untitled';
-    const v = (tpl.variations || []).find((x) => x.id === selectedVariationId);
-    return `${tpl.name || 'Untitled'} · ${v?.label || 'Variation'}`;
-  })();
-
-  const onDropdownChange = (id) => {
+    : (selectedId || '');
+  const onTemplatePickerChange = (id) => {
     if (typeof id === 'string' && id.includes('::')) {
       const [parentId, variationId] = id.split('::');
       onSelect(parentId);
@@ -712,27 +662,6 @@ function MainView({
     onSelect(id);
     onSelectVariation(null);
   };
-
-  const isMatched = matchedIds.includes(selectedId);
-
-  // ── dynamic dropdown maxHeight ──
-  // The popup auto-resizes to its content with a 340px floor. The button
-  // stack fits "for free" up to ~3 rows within that floor; each row beyond
-  // that grows the popup taller, so the dropdown menu should grow by the
-  // same amount or it'll look artificially cramped against a tall popup.
-  //
-  // Row height: 28px button + 6px stack gap = 34px. Watch pair = 1 row.
-  // Floor at 160 (one usable page of options) at the floor popup height;
-  // ceiling at 280 so an everything-on popup doesn't grow an absurd menu.
-  const visibleButtonRows =
-    (flags.chargeEnabled    ? 1 : 0) +
-    (flags.orderEditEnabled ? 1 : 0) +
-    (flags.watchListEnabled ? 1 : 0) +
-    (flags.taskListEnabled  ? 1 : 0) +
-    (flags.crmSearchEnabled ? 1 : 0) +
-    (flags.submitProofEnabled ? 1 : 0);
-  const rowsAboveFloor = Math.max(0, visibleButtonRows - 3);
-  const dropdownMaxHeight = Math.min(280, 160 + rowsAboveFloor * 34);
 
   // ── action handlers ──
   const onCharge = async () => {
@@ -889,22 +818,20 @@ function MainView({
             <Reveal key="template-block" gap={0}>
               <SectionLabel divider={false} style={{ marginBottom: 2 }}>Template</SectionLabel>
               {hasTemplates ? (
-                <Dropdown
-                  size="sm"
+                /* Shared TemplatePicker (mode='single' — popup is a
+                   single-send, no random across recipients). Matched
+                   templates are grouped under a "Matched on this
+                   page" header with brand-glow dots; everything else
+                   sits under "All templates". The picker opens
+                   inline inside the popup body, so Chrome's popup
+                   auto-resize no longer races a flying menu. */
+                <TemplatePicker
+                  mode="single"
+                  templates={templates}
+                  matchedIds={matchedIds}
                   value={dropdownValue}
-                  displayLabel={dropdownDisplayLabel}
-                  options={dropdownOptions}
-                  searchable={templates.length > 6}
-                  leading={<Dot tone={isMatched ? 'brand' : 'muted'} size={7} glow={isMatched} />}
-                  onChange={onDropdownChange}
-                  /* Hard-clamp the menu height so it always fits inside
-                     the popup with visible bottom padding. We don't
-                     rely on the Dropdown's auto-clamp here because
-                     Chrome's popup auto-resize can fire after the menu
-                     opens, leaving the menu sized against a stale
-                     viewport. Scales with visible button rows so the
-                     menu grows as the popup grows. */
-                  maxHeight={dropdownMaxHeight}
+                  onChange={onTemplatePickerChange}
+                  placeholder="Pick a template"
                 />
               ) : (
                 <div style={{
