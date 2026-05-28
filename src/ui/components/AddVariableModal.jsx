@@ -10,6 +10,27 @@ import { KindPickerGrid } from './KindPickerGrid.jsx';
 import { CompactModal } from './CompactModal.jsx';
 import { ModalHeader } from './ModalHeader.jsx';
 import { ModalFooter } from './ModalFooter.jsx';
+import { contactSchema } from '../../lib/page-schemas/contact.js';
+import { listPaths } from '../../lib/page-engine/index.js';
+
+/* Pre-compute the unified schema's leaf paths once — used by the
+   Schema-kind Dropdown so the rep picks `contact.firstName` etc.
+   instead of typing it. Filtered to leaves; the schema's nested
+   objects (`contact`, `account`, `stats`) and array containers
+   surface in the path strings already. Labels follow the schema's
+   field labels so the picker reads like a sentence. */
+const SCHEMA_OPTIONS = (() => {
+  try {
+    const list = listPaths(contactSchema, /* sample data */ {});
+    return list
+      .filter((n) => n.type !== 'object' && n.type !== 'array')
+      .map((n) => ({
+        id:    n.path,
+        label: n.label || n.path,
+        group: n.path.split('.')[0],
+      }));
+  } catch { return []; }
+})();
 
 /* ── Kind icons (BoltIcon comes from I.bolt) ───────────────────── */
 const PickerIcon  = (p) => <Icon {...p}><path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/></Icon>;
@@ -23,11 +44,18 @@ const VariableIcon= (p) => <Icon {...p}><path d="M5 4 a14 14 0 000 16M19 4a14 14
 export const SOURCE_KINDS = {
   order:   ['builtin', 'dom', 'literal'],
   case:    ['builtin', 'regex', 'literal'],
-  account: ['builtin', 'dom', 'literal'],
+  /* Schema first for account templates — the engine-driven picker
+     is the recommended path now that the unified CRM schema
+     covers every legacy built-in (and adds the multi-row
+     `contacts[]` / account-only fields). Built-in stays in the
+     list for backward compat (existing templates keep working)
+     but the modal flags it as deprecated. */
+  account: ['schema', 'builtin', 'dom', 'literal'],
 };
 
 const KIND_OPTIONS = {
   builtin: { icon: <I.bolt />,  label: 'Built-in', desc: 'Pre-defined from the page context' },
+  schema:  { icon: <I.search />,  label: 'Schema',   desc: 'Pull from the page-engine field tree' },
   dom:     { icon: <I.search />,  label: 'DOM',      desc: 'CSS selector — or pick from page' },
   regex:   { icon: <RegexIcon />, label: 'Regex',    desc: 'Capture group from an email field' },
   literal: { icon: <I.edit />,    label: 'Literal',  desc: 'Fixed string' },
@@ -189,6 +217,7 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
   const previewResolved = (
     kind === 'literal' ? (config || '— empty —')
     : kind === 'builtin' ? (config ? '(live value)' : '— select a path —')
+    : kind === 'schema'  ? (config ? '(engine value)' : '— pick a field —')
     : kind === 'dom'     ? (liveResolved || (config ? '(querying…)' : '— enter a selector —'))
     : kind === 'regex'   ? (config ? '(first capture group)' : '— enter a regex —')
     : '—'
@@ -232,8 +261,34 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
           </div>
 
           {/* Kind-specific config */}
+          {kind === 'schema' && (
+            <Field
+              label="Schema path"
+              hint="Resolved via the page-engine field tree (works on contact + account pages)"
+            >
+              <Dropdown
+                value={config}
+                placeholder="Pick a field…"
+                leading={<I.search />}
+                searchable
+                options={SCHEMA_OPTIONS}
+                onChange={setConfig}
+                maxHeight={320}
+              />
+            </Field>
+          )}
           {kind === 'builtin' && (
-            <Field label="Built-in path" hint="Pre-defined value resolved from the page context">
+            <Field
+              label="Built-in path"
+              /* The built-in kind predates the page-engine schema.
+                 Existing templates still resolve via the legacy
+                 `smartPageVariables` path; new account variables
+                 should use Schema instead so the unified
+                 contact/account extractor covers them. */
+              hint={typeId === 'account'
+                ? 'Deprecated — use Schema for new variables. Existing templates keep resolving via the legacy path.'
+                : 'Pre-defined value resolved from the page context'}
+            >
               <Dropdown
                 value={config}
                 placeholder="Select a field…"

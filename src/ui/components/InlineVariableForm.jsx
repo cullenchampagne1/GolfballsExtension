@@ -8,6 +8,19 @@ import { Dropdown } from './Dropdown.jsx';
 import { Dot } from './Dot.jsx';
 import { Segmented } from './Segmented.jsx';
 import { SOURCE_KINDS, BUILTIN_PATHS, REGEX_FIELDS } from './AddVariableModal.jsx';
+import { contactSchema } from '../../lib/page-schemas/contact.js';
+import { listPaths } from '../../lib/page-engine/index.js';
+
+/* Schema-kind path options — same source as AddVariableModal's
+   SCHEMA_OPTIONS, recomputed here to avoid a circular-import (the
+   modal already imports from this file via the table). */
+const SCHEMA_OPTIONS = (() => {
+  try {
+    return listPaths(contactSchema, {})
+      .filter((n) => n.type !== 'object' && n.type !== 'array')
+      .map((n) => ({ id: n.path, label: n.label || n.path, group: n.path.split('.')[0] }));
+  } catch { return []; }
+})();
 
 /* ────────────────────────────────────────────────────────────────
    InlineVariableForm — compact, in-table replacement for
@@ -31,12 +44,14 @@ const VariableIcon = (p) => <Icon {...p}><path d="M5 4 a14 14 0 000 16M19 4a14 1
 
 const KIND_LABELS = {
   builtin: 'Built-in',
+  schema:  'Schema',
   dom:     'DOM',
   literal: 'Literal',
   regex:   'Regex',
 };
 const KIND_ICONS = {
   builtin: <I.bolt />,
+  schema:  <I.search />,
   dom:     <I.search />,
   literal: <I.edit />,
   regex:   <RegexIcon />,
@@ -167,6 +182,7 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
   const previewResolved =
     kind === 'literal' ? (config || '— empty —')
     : kind === 'builtin' ? (config ? '(live value)' : '— select a path —')
+    : kind === 'schema'  ? (config ? '(engine value)' : '— pick a field —')
     : kind === 'dom'     ? (liveResolved || (config ? '(querying…)' : '— enter a selector —'))
     : kind === 'regex'   ? (config ? '(first capture group)' : '— enter a regex —')
     : '—';
@@ -270,8 +286,30 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
             transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
             style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
           >
+            {kind === 'schema' && (
+              <Field
+                label="Schema path"
+                hint="Resolves via the unified contact + account page-engine schema"
+              >
+                <Dropdown
+                  size="sm"
+                  value={config}
+                  placeholder="Pick a field…"
+                  leading={<I.search />}
+                  searchable
+                  options={SCHEMA_OPTIONS}
+                  onChange={setConfig}
+                  maxHeight={280}
+                />
+              </Field>
+            )}
             {kind === 'builtin' && (
-              <Field label="Built-in path" hint="Pre-defined value from the page context">
+              <Field
+                label="Built-in path"
+                hint={typeId === 'account'
+                  ? 'Deprecated — use Schema. Kept so existing templates keep resolving.'
+                  : 'Pre-defined value from the page context'}
+              >
                 <Dropdown
                   size="sm"
                   value={config}

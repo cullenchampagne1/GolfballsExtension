@@ -56,15 +56,17 @@
           return m[g] !== undefined ? m[g] : (m[0] || '');
         }
 
-        /* New: schema-driven path lookup. Defs look like
-              { type: 'path', path: 'contact.firstName' }
-           The engine (loaded as window.__gbPageEngine before this
-           script in the manifest) detects the page's schema, runs
-           extraction once (memoized per doc), and walks the path
-           against the JSON. Returns '' when no schema matched
-           the doc OR the path doesn't resolve — same failure shape
-           as the legacy kinds so smart-options fallback still
-           applies cleanly. */
+        /* Schema-driven path lookup. Defs look like
+              { type: 'schema', path: 'contact.firstName' }   (user-facing)
+              { type: 'path',   path: 'contact.firstName' }   (legacy alias)
+           Both resolve through window.__gbPageEngine which detects
+           the page's schema (contact / account variant of the
+           unified CRM schema), runs extraction once (memoized per
+           doc), and walks the path against the JSON. Returns ''
+           when no schema matched the doc OR the path doesn't
+           resolve — same failure shape as the legacy kinds so
+           smart-options fallback still applies cleanly. */
+        case 'schema':
         case 'path': {
           if (!def.path) return '';
           const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;

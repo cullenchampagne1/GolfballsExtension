@@ -114,6 +114,49 @@ function ensureStyle() {
       opacity: 1;
       background: color-mix(in srgb, var(--gb-brand-label) 13%, transparent);
     }
+    /* OR-block chip — a pipe-separated placeholder renders as two
+       named halves sharing one pill, divided by a slanted seam.
+       Two-shade tint signals the priority-pick semantic: the first
+       half is the preferred value, the second is the fallback. */
+    .gb-rte-chip-or {
+      display: inline-flex; align-items: stretch; vertical-align: baseline;
+      margin: 0 1px; border-radius: var(--gb-r-sm) !important; overflow: hidden;
+      border: 1px solid var(--gb-brand-tint-border);
+      line-height: 1.4;
+      user-select: all;
+    }
+    .gb-rte-chip-or-half {
+      padding: 0 6px;
+      font-family: var(--gb-font-mono);
+      font-size: inherit; font-weight: 600;
+      color: var(--gb-brand-label);
+      cursor: default;
+      position: relative;
+    }
+    .gb-rte-chip-or-half.first {
+      background: var(--gb-brand-tint-soft);
+      padding-right: 9px;
+      clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+    }
+    .gb-rte-chip-or-half.second {
+      background: color-mix(in srgb, var(--gb-brand-label) 18%, transparent);
+      padding-left: 9px;
+      margin-left: -6px;
+      clip-path: polygon(6px 0, 100% 0, 100% 100%, 0 100%);
+    }
+    .gb-rte-chip-or .gb-rte-chip-bolt {
+      padding: 0 4px;
+      border-left: 1px solid var(--gb-brand-tint-border);
+      color: var(--gb-brand-label);
+      display: inline-flex; align-items: center;
+      cursor: pointer;
+      opacity: 0.55;
+      transition: opacity .12s, background .12s;
+    }
+    .gb-rte-chip-or:hover .gb-rte-chip-bolt {
+      opacity: 1;
+      background: color-mix(in srgb, var(--gb-brand-label) 13%, transparent);
+    }
     .gb-rte-ph {
       position: absolute; pointer-events: none;
       color: var(--gb-text-ghost);
@@ -123,10 +166,38 @@ function ensureStyle() {
 
 /* ── {{var}} ↔ chip conversion ──────────────────────────────────
    Each chip is a two-part pill: the name and a clickable lightning
-   "smart options" button, divider between — mirrors BodyVar. */
+   "smart options" button, divider between — mirrors BodyVar.
+   `{{a|b}}` (OR-block) renders as a two-tone split pill — first
+   variant in the lighter half, fallback in the darker half,
+   separated by a slanted seam. The visual surfaces the
+   "priority-then-fallback" semantic without needing a tooltip. */
 const CHIP_BOLT =
   '<span class="gb-rte-chip-bolt"><svg viewBox="0 0 24 24" width="9" height="9" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>';
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => (
+    c === '&' ? '&amp;' :
+    c === '<' ? '&lt;' :
+    c === '>' ? '&gt;' :
+    c === '"' ? '&quot;' : '&#39;'
+  ));
+}
 function chipHTML(name) {
+  /* Pipe → OR-block. We split on the FIRST pipe only — extra pipes
+     in a 3+ candidate block flatten into the second half's label
+     so the chip stays visually two-toned (the runtime renderer
+     still respects all candidates in order; the chip is a
+     simplified visual). */
+  if (name.includes('|')) {
+    const idx = name.indexOf('|');
+    const first  = name.slice(0, idx).trim();
+    const second = name.slice(idx + 1).trim();
+    return `<span class="gb-rte-chip gb-rte-chip-or" contenteditable="false">`
+      + `<span class="gb-rte-chip-or-half first">${escapeHtml(first)}</span>`
+      + `<span class="gb-rte-chip-or-half second">${escapeHtml(second)}</span>`
+      + `<span class="gb-rte-chip-name" style="display:none">{{${escapeHtml(name)}}}</span>`
+      + CHIP_BOLT
+      + `</span>`;
+  }
   return `<span class="gb-rte-chip" contenteditable="false"><span class="gb-rte-chip-name">{{${name}}}</span>${CHIP_BOLT}</span>`;
 }
 function highlightVars(html) {
