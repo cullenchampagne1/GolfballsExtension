@@ -23,7 +23,7 @@
           if (def.builtin === 'order_number') return typeof smartOrderNumber === 'function' ? smartOrderNumber(doc) : '';
           if (def.builtin === 'payment_link') return typeof smartPaymentLink === 'function' ? smartPaymentLink(doc) : '';
           if (def.builtin === 'oos_item')     return typeof getOOSItemNames === 'function' ? getOOSItemNames(doc) : '';
-          
+
           // Checks for Account built-ins (firstName, salesRep, etc.)
           if (typeof smartPageVariables === 'function') {
             const pageVars = smartPageVariables(doc);
@@ -56,6 +56,48 @@
           return m[g] !== undefined ? m[g] : (m[0] || '');
         }
 
+        /* New: schema-driven path lookup. Defs look like
+              { type: 'path', path: 'contact.firstName' }
+           The engine (loaded as window.__gbPageEngine before this
+           script in the manifest) detects the page's schema, runs
+           extraction once (memoized per doc), and walks the path
+           against the JSON. Returns '' when no schema matched
+           the doc OR the path doesn't resolve — same failure shape
+           as the legacy kinds so smart-options fallback still
+           applies cleanly. */
+        case 'path': {
+          if (!def.path) return '';
+          const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
+          if (!engine) return '';
+          const raw = engine.resolvePath(doc, def.path, '');
+          /* Path resolver returns the raw typed value (number / date
+             / bool); coerce to string for downstream template
+             substitution. Code vars that want typed access call the
+             engine directly. */
+          return engine.toDisplayString(raw);
+        }
+
+        /* New: sandboxed code variable. Defs look like
+              { type: 'code', body: 'return ctx.contact.firstName.toUpperCase();' }
+           We use the synchronous variant — bodies typically just
+           walk ctx and format. resolveAllVarsAsync handles the
+           async variant when the body needs it (signaled by `async`
+           on the def). */
+        case 'code': {
+          if (!def.body) return '';
+          const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
+          if (!engine) return '';
+          try {
+            const raw = engine.evaluateCodeSync(doc, def.body);
+            return engine.toDisplayString(raw);
+          } catch (e) {
+            /* Surface the compile/runtime error inside the rendered
+               value so the rep notices and fixes the template,
+               rather than silently emitting an empty string. */
+            return `<code-var error: ${e.message}>`;
+          }
+        }
+
         default: return '';
       }
     } catch { return ''; }
@@ -77,6 +119,21 @@
       if (def.type === 'builtin' && def.builtin === 'recommended_replacement') {
         try { raw = await getRecommendedReplacement(doc); }
         catch { raw = ''; }
+      } else if (def.type === 'code' && def.async) {
+        /* Async code variables get the timeout-guarded runtime so a
+           runaway promise can't hang the whole resolution loop. The
+           sync variant in resolveVar is enough for the common case
+           (pure expressions over ctx). */
+        const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
+        if (!engine) { raw = ''; }
+        else {
+          try {
+            const value = await engine.evaluateCode(doc, def.body || '');
+            raw = engine.toDisplayString(value);
+          } catch (e) {
+            raw = `<code-var error: ${e.message}>`;
+          }
+        }
       } else {
         raw = resolveVar(name, def, doc);
       }

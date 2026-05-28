@@ -35,6 +35,7 @@
         "src/vanilla/notifications.js",
         "src/vanilla/calendar.js",
         "src/vanilla/smart-detection.js",
+        "react-dist/vanilla/page-engine.js",
         "src/vanilla/variable-resolution.js",
         "src/vanilla/modals/logo-extractor.js",
         "react-dist/content/image-preview.js",
