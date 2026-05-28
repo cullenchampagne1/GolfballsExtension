@@ -182,18 +182,29 @@ window.__gbContentReady = true;
         if (emailSignature) {
           body += '<br><div>' + emailSignature + '</div>';
         }
-        /* TEMP: `from` is omitted so PA's send action falls back to the
-           connection mailbox identity. Specifying `from` triggers a
-           Send-As permission check in Microsoft Graph, and the M365
-           mailbox driving this flow only has Send-As granted for
-           golfballs.com — prioritylogo.com sends create the draft but
-           fail to send. Restore the SENDER_DOMAINS block and put `from`
-           back in the payload once Send-As is granted for
-           cullen@prioritylogo.com in M365. devSettings read kept above
-           in case other code paths in this handler need it. */
-        void devSettings;
+        /* Sender mapping — inlined because this file is a vanilla
+           content script (no ESM imports). Keep in sync with
+           src/lib/sender.js when adding accounts. Only the DOMAIN
+           lives here; the local part comes from the rep's
+           devSetting ('email.localPart', defaults to 'cullen'), so
+           the rendered From: is e.g. cullen@golfballs.com. */
+        const SENDER_DOMAINS = {
+          golfballs:   'golfballs.com',
+          loyaltylogo: 'loyaltylogo.com',
+        };
+        const SENDER_IDS = Object.keys(SENDER_DOMAINS);
+        const rawLocal = (devSettings && devSettings['email.localPart']) || 'cullen';
+        const localPart = String(rawLocal).trim() || 'cullen';
+        const domainFor = (id) => SENDER_DOMAINS[id] || SENDER_DOMAINS[SENDER_IDS[0]];
+        const fromAddr = (() => {
+          const id = msg.senderRandomize
+            ? SENDER_IDS[Math.floor(Math.random() * SENDER_IDS.length)]
+            : (msg.senderAccount || SENDER_IDS[0]);
+          return `${localPart}@${domainFor(id)}`;
+        })();
         const payload = {
           emails: [{
+            from:      fromAddr,
             to:        msg.contactEmail,
             subject:   msg.templateSubject,
             htmlBody:  body,
@@ -211,7 +222,7 @@ window.__gbContentReady = true;
           if (result?.results?.[0]?.status === 'sent') {
             toast?.success?.(`Email sent to ${msg.contactEmail}`, { duration: 4000 });
           } else {
-            const err = result?.results?.[0]?.error || result?.error || 'Unknown error';
+            const err = result?.results?.[0]?.error || result?.error || 'PA FAILED';
             toast?.error?.(`Email failed: ${err}`, { duration: 6000 });
           }
         });

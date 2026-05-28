@@ -8,7 +8,7 @@
 
    Two-piece address
    ──────────────────
-   The DOMAIN (`golfballs.com` / `prioritylogo.com`) is per-template
+   The DOMAIN (`golfballs.com` / `loyaltylogo.com`) is per-template
    — picked in the editor's Segmented sender pills.
 
    The LOCAL PART (`cullen` / `marcus` / …) is per-REP. Different
@@ -43,7 +43,7 @@ export const DEFAULT_LOCAL_PART = 'cullen';
  *  right-hand side of the resulting From: address. */
 export const SENDER_ACCOUNTS = [
   { id: 'golfballs',    label: 'golfballs.com',    domain: 'golfballs.com' },
-  { id: 'prioritylogo', label: 'prioritylogo.com', domain: 'prioritylogo.com' },
+  { id: 'loyaltylogo',  label: 'loyaltylogo.com',  domain: 'loyaltylogo.com'  },
 ];
 
 /** Slug → domain lookup. Pre-built so the per-row pick is O(1). */
