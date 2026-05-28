@@ -1140,25 +1140,47 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
   const Header = ({ label, k }) => (
     <SortHeader label={label} sortKey={k} activeKey={sortKey} dir={sortDir} onSort={onSort} />
   );
-  /* Are any rows currently mid-blast or already settled? When true we
-     slide in a 10th column ("Status") that shows per-row send state.
-     CSS transition on grid-template-columns lets the column expand
-     smoothly; an inner motion span fades the header label in. */
-  const anyEmailing = Object.keys(emailStatusByRow).length > 0;
-  const gridCols = anyEmailing ? COLS_WITH_STATUS : COLS_BASE;
+  /* Three derived states drive the column-slide + beam-fade
+     animations:
+
+       hasEntries   any row has a status in the map (any phase)
+       allSettled   every entry is 'sent' or 'failed' — the blast is
+                    complete, no more rows will send
+       showStatusCol whether to render the 10th "Status" column
+                    Logic: slide IN as soon as we have entries; slide
+                    OUT after a grace period once the blast settles so
+                    the user has time to read the final badges before
+                    the column slides away. */
+  const hasEntries = Object.keys(emailStatusByRow).length > 0;
+  const allSettled = hasEntries && Object.values(emailStatusByRow).every(
+    (st) => st === 'sent' || st === 'failed',
+  );
+  const [showStatusCol, setShowStatusCol] = useState(false);
+  useEffect(() => {
+    if (!hasEntries) { setShowStatusCol(false); return; }
+    if (!allSettled) { setShowStatusCol(true); return; }
+    /* Blast just finished — keep the column for a beat so the badges
+       are readable, then slide it out. Cleared on dependency change
+       (e.g. a new blast starts before the timer fires). */
+    const t = setTimeout(() => setShowStatusCol(false), 1800);
+    return () => clearTimeout(t);
+  }, [hasEntries, allSettled]);
+  const gridCols = showStatusCol ? COLS_WITH_STATUS : COLS_BASE;
 
   /* Scan beam — beam follows whichever row is currently sending,
-     AND keeps showing on that row through the delay between sends
-     until the NEXT row starts. activeRowId only updates when a new
-     row enters 'sending' (so a 'sent' transition doesn't blank
-     it). Reset to null when the blast itself ends — detected by
-     emailStatusByRow becoming empty. */
+     AND keeps showing on that row through the inter-send delay. When
+     the WHOLE blast finishes (allSettled), the beam fades out after
+     a short delay so the final badge is visible for a moment before
+     the light fades. AnimatePresence below handles the opacity exit. */
   const containerRef = useRef(null);
   const [activeRowId, setActiveRowId] = useState(null);
   useEffect(() => {
-    if (Object.keys(emailStatusByRow).length === 0) {
-      setActiveRowId(null);
-      return;
+    if (!hasEntries) { setActiveRowId(null); return; }
+    if (allSettled) {
+      /* Short delay before clearing so the beam doesn't pop off
+         simultaneously with the SENT badge appearing. */
+      const t = setTimeout(() => setActiveRowId(null), 500);
+      return () => clearTimeout(t);
     }
     for (const [id, st] of Object.entries(emailStatusByRow)) {
       if (st === 'sending') {
@@ -1166,9 +1188,9 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
         return;
       }
     }
-    // No row currently sending — keep activeRowId on the last one
-    // so the scan beam dwells through the inter-send delay.
-  }, [emailStatusByRow]);
+    // Mid-blast, no row sending right this instant — keep the beam
+    // dwelling on the last one (inter-send delay).
+  }, [emailStatusByRow, hasEntries, allSettled]);
   const [scanRect, setScanRect] = useState(null);
   useEffect(() => {
     if (!activeRowId) { setScanRect(null); return; }
@@ -1206,14 +1228,18 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
         <Header label="YTD Rev"    k="yearToDateRevenue_f" />
         <Header label="PY Rev"     k="priorYearRevenue_f" />
         <Header label="Last Order" k="lastOrderDate_dt" />
-        {anyEmailing && (
-          <motion.div
-            initial={{ opacity: 0, x: 12 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-            style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}
-          >Status</motion.div>
-        )}
+        <AnimatePresence>
+          {showStatusCol && (
+            <motion.div
+              key="status-header"
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 12, transition: { duration: 0.2 } }}
+              transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+              style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}
+            >Status</motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {status === 'loading' && (
@@ -1241,15 +1267,20 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
           isSelected={selected.has(r.id)}
           isActive={idx === activeIdx}
           emailStatus={emailStatusByRow[r.id]}
-          showStatusCol={anyEmailing}
+          showStatusCol={showStatusCol}
           onToggle={(e) => onToggle(r.id, idx, e?.shiftKey)}
           onDelete={mode === 'indexed' ? () => onDeleteIndexed?.(r.id) : null}
         />
       ))}
       {/* Scan beam — sweeps over the currently-sending row. translateY
           transition gives the "moving light bar" follow-the-active-row
-          effect. Only rendered while a row is actively sending. */}
-      {scanRect && <ScanBeam top={scanRect.top} height={scanRect.height} />}
+          effect. AnimatePresence handles the fade-out when the blast
+          settles (allSettled clears activeRowId → scanRect → exit). */}
+      <AnimatePresence>
+        {scanRect && (
+          <ScanBeam key="scan" top={scanRect.top} height={scanRect.height} />
+        )}
+      </AnimatePresence>
       {/* Next-page spinner shown while infinite-scroll is fetching. The
           scroll handler upstairs fires loadMoreResults; this just gives
           the user visual feedback that something's happening. */}
@@ -1348,38 +1379,45 @@ function StatusBadge({ kind }) {
    the rows container; pointer-events:none so it doesn't block clicks. */
 function ScanBeam({ top, height }) {
   const transition = 'transform .35s cubic-bezier(.3,.7,.2,1)';
+  /* Wrap the three layers in a motion.div so AnimatePresence in the
+     parent can fade the beam out smoothly when the blast settles —
+     opacity exit fades the gradient + both hairlines together. */
   return (
-    <>
-      <div aria-hidden style={{
+    <motion.div
+      aria-hidden
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+      style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+    >
+      <div style={{
         position: 'absolute', left: 0, right: 0, top: 0,
         transform: `translateY(${top}px)`,
         height,
         background: 'linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--gb-brand-label) 16%, transparent) 35%, color-mix(in srgb, var(--gb-brand-label) 28%, transparent) 50%, color-mix(in srgb, var(--gb-brand-label) 16%, transparent) 65%, transparent 100%)',
         transition,
-        pointerEvents: 'none',
         zIndex: 3,
       }} />
-      <div aria-hidden style={{
+      <div style={{
         position: 'absolute', left: 0, right: 0, top: 0,
         transform: `translateY(${top}px)`,
         height: 1,
         background: 'var(--gb-brand-label)',
         boxShadow: '0 0 14px 1px var(--gb-brand-label)',
         transition,
-        pointerEvents: 'none',
         zIndex: 4,
       }} />
-      <div aria-hidden style={{
+      <div style={{
         position: 'absolute', left: 0, right: 0, top: 0,
         transform: `translateY(${top + height}px)`,
         height: 1,
         background: 'var(--gb-brand-label)',
         boxShadow: '0 0 14px 1px var(--gb-brand-label)',
         transition,
-        pointerEvents: 'none',
         zIndex: 4,
       }} />
-    </>
+    </motion.div>
   );
 }
 
