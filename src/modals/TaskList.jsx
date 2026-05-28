@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { createPortal } from 'react-dom';
 import {
   FloatingPanel, ModalHeader, Btn, Input, Dropdown, Tag, IconBtn, I,
   ensureMarchingAntsStyle,
@@ -10,6 +9,7 @@ import { useDevSetting } from '../lib/devSettings.js';
 import { loadTaskTemplates } from '../lib/quickTask.js';
 import { submitQuickTask } from '../lib/submitQuickTask.js';
 import { EmailRunner } from './EmailRunner.jsx';
+import { QuickTaskPopover } from './QuickTaskPopover.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 
 /* ───────────────────────────────────────────────────────────────
@@ -553,10 +553,12 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
     toast?.success?.(`Opened ${tasksToOpen.length} contact${tasksToOpen.length === 1 ? '' : 's'}`, { duration: 2200 });
   };
   const onQuickTask = (e) => {
-    // Bulk Quick Task — opens the floating menu rooted on the footer
-    // button. The menu handler dispatches the action across every
-    // selected row.
-    const anchor = e?.currentTarget?.getBoundingClientRect?.() || null;
+    /* Bulk Quick Task — opens the moveable popover anchored at the
+       trigger button's top-right corner. DraggablePopup spawns 12px
+       to the right + 8px below the anchor, so {x,y} lands the popup
+       just past the button without overlapping it. */
+    const rect = e?.currentTarget?.getBoundingClientRect?.();
+    const anchor = rect ? { x: rect.right, y: rect.top } : null;
     setQt({ mode: 'bulk', taskId: 'bulk', anchor });
   };
 
@@ -919,12 +921,13 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
         >Quick Task</Btn>
       </div>
 
-      {/* Quick-Task floating menu — portal'd so it can escape any
-          overflow clipping on the modal body. Anchored to whichever
-          trigger button opened it via `qt.anchor`. The pushDays
-          number lives INSIDE the menu now (inline number input on
-          the Push Out row) so the footer stays uncluttered. */}
-      <QuickTaskMenu
+      {/* Quick Task — moveable popover (replaces the legacy portal
+          menu). DraggablePopup chrome makes the title bar a drag
+          handle; the popover owns its own pane navigation between
+          main / date / templates and surfaces the push presets as
+          chips with an inline stepper for the custom day count. */}
+      <QuickTaskPopover
+        open={!!qt}
         qt={qt}
         pushDays={pushDays}
         setPushDays={setPushDays}
@@ -932,7 +935,6 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
         selectedCount={selCount}
         getTask={(id) => tasks.find((t) => t.id === id)}
         onClose={() => setQt(null)}
-        onNavigate={(next) => setQt((cur) => cur ? { ...cur, ...next } : null)}
         onAction={runQuickAction}
       />
     </FloatingPanel>
@@ -1322,7 +1324,10 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, onToggle, onQuickMenu 
               onClick={(e) => {
                 e.stopPropagation();
                 const rect = e.currentTarget.getBoundingClientRect();
-                onQuickMenu?.(task.id, rect);
+                /* Anchor as {x,y} for DraggablePopup's cursorAnchor.
+                   Using the button's top-right corner makes the
+                   popover spawn just past the trigger row. */
+                onQuickMenu?.(task.id, { x: rect.right, y: rect.top });
               }}
               disabled={isBusy}
           style={{
@@ -1451,535 +1456,3 @@ const MegaphoneIcon = ({ size = 11 }) => (
   </svg>
 );
 
-/* ── QuickTaskMenu ───────────────────────────────────────────
-   Floating menu used by both the per-row Quick Task button and
-   the bulk Quick Task button in the footer. Portal'd to body so
-   it can escape the modal's overflow:hidden clipping. */
-const CalIcon = ({ size = 13 }) => (
-  <svg width={size} height={size} fill="none" stroke="currentColor"
-    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-    <rect x="3" y="4" width="18" height="18" rx="2" />
-    <line x1="16" y1="2" x2="16" y2="6" />
-    <line x1="8" y1="2" x2="8" y2="6" />
-    <line x1="3" y1="10" x2="21" y2="10" />
-  </svg>
-);
-const CheckIcon = ({ size = 13 }) => (
-  <svg width={size} height={size} fill="none" stroke="currentColor"
-    strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-    <polyline points="20 6 9 17 4 12" />
-  </svg>
-);
-const PlusIcon = ({ size = 13 }) => (
-  <svg width={size} height={size} fill="none" stroke="currentColor"
-    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="8" x2="12" y2="16" />
-    <line x1="8" y1="12" x2="16" y2="12" />
-  </svg>
-);
-const ChevRight = ({ size = 11 }) => (
-  <svg width={size} height={size} fill="none" stroke="currentColor"
-    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-    <polyline points="9 18 15 12 9 6" />
-  </svg>
-);
-const ChevLeft = ({ size = 11 }) => (
-  <svg width={size} height={size} fill="none" stroke="currentColor"
-    strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
-    <polyline points="15 18 9 12 15 6" />
-  </svg>
-);
-
-function todayInput() {
-  const d = new Date();
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-}
-function dateInputToApi(val) {
-  if (!val) return null;
-  const [y, m, d] = val.split('-');
-  return `${m}/${d}/${y}`;
-}
-
-/* Hide the native number-input spinner buttons. Injected once at first
-   QuickTaskMenu mount — the rules use ::-webkit-… and -moz-appearance so
-   both engines drop the arrows. Applied via the gb-no-spin class on the
-   PushRow input so we don't leak this into any other number field. */
-const GB_NO_SPIN_STYLE_ID = '__gb-no-spin-style';
-function ensureNoSpinStyle() {
-  if (typeof document === 'undefined' || document.getElementById(GB_NO_SPIN_STYLE_ID)) return;
-  const el = document.createElement('style');
-  el.id = GB_NO_SPIN_STYLE_ID;
-  el.textContent = `
-    .gb-no-spin::-webkit-outer-spin-button,
-    .gb-no-spin::-webkit-inner-spin-button {
-      -webkit-appearance: none !important;
-      margin: 0 !important;
-      display: none !important;
-    }
-    .gb-no-spin { -moz-appearance: textfield !important; appearance: textfield !important; }
-  `;
-  document.head.appendChild(el);
-}
-
-function QuickTaskMenu({ qt, pushDays, setPushDays, taskTpls, selectedCount, getTask, onClose, onNavigate, onAction }) {
-  const ref = useRef(null);
-  const dateRef = useRef(null);
-  const [dateVal, setDateVal] = useState(todayInput);
-
-  useEffect(() => { ensureNoSpinStyle(); ensureMarchingAntsStyle(); }, []);
-
-  /* Keyboard nav for the menu's actionable rows. Same pattern as
-     CallLog's Quick log: -1 = idle (menu just opened), first Tab
-     highlights the top row, subsequent Tabs walk forward, Shift+Tab
-     walks back. Enter fires the active row's onClick. The visible
-     row components register their onActivate into rowsRef during
-     render so the registry stays in source / DOM order. */
-  const [activeRowIdx, setActiveRowIdx] = useState(-1);
-  const rowsRef = useRef([]);
-  rowsRef.current = []; // reset at the start of every render — items push back below
-  // Reset highlight on mode change so a fresh pane starts idle.
-  useEffect(() => { setActiveRowIdx(-1); }, [qt?.mode]);
-
-  /* Scroll the active row into view inside the menu container —
-     mainly for the templates pane which scrolls when there are
-     more than ~6 templates. We find the row via data-qt-row so we
-     don't need a per-row ref (which would force every Item rerun
-     to keep the same identity, and the inline definitions don't). */
-  useEffect(() => {
-    if (activeRowIdx < 0) return;
-    const root = ref.current;
-    if (!root) return;
-    const el = root.querySelector(`[data-qt-row="${activeRowIdx}"]`);
-    if (el) {
-      try { el.scrollIntoView({ block: 'nearest' }); } catch {}
-    }
-  }, [activeRowIdx]);
-  useEffect(() => {
-    if (!qt) return undefined;
-    const isTypingTarget = (el) => {
-      if (!el) return false;
-      const tag = el.tagName && el.tagName.toLowerCase();
-      return tag === 'input' || tag === 'textarea' || el.isContentEditable;
-    };
-    const onKey = (e) => {
-      // Esc handled by the existing outside-click close (mousedown
-      // only) — we add explicit support here so the keyboard nav
-      // user can dismiss without reaching for the mouse.
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-        return;
-      }
-      if (e.key === 'Enter' && activeRowIdx >= 0) {
-        const onActivate = rowsRef.current[activeRowIdx];
-        if (typeof onActivate === 'function') {
-          e.preventDefault();
-          onActivate();
-        }
-        return;
-      }
-      if (e.key !== 'Tab') return;
-      // Typing into the date input / number input shouldn't be
-      // hijacked — let those fields handle Tab normally so the user
-      // can move out of them.
-      if (isTypingTarget(e.target)) return;
-      const total = rowsRef.current.length;
-      if (total === 0) return;
-      e.preventDefault();
-      try { document.activeElement?.blur?.(); } catch {}
-      setActiveRowIdx((i) => {
-        if (e.shiftKey) {
-          if (i <= 0) return total - 1;
-          return i - 1;
-        }
-        if (i < 0) return 0;
-        return (i + 1) % total;
-      });
-    };
-    document.addEventListener('keydown', onKey, true);
-    return () => document.removeEventListener('keydown', onKey, true);
-  }, [qt, activeRowIdx, onClose]);
-
-  /* Click-outside dismiss. Captures on capture phase so a click on the
-     same trigger that opened us doesn't immediately reopen + close in
-     the same gesture (the trigger calls setQt → we'd close, then the
-     trigger's own onClick fires and reopens — unless we ignore clicks
-     that originate inside .qt-trigger / data-qt-trigger). */
-  useEffect(() => {
-    if (!qt) return;
-    const onDown = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) onClose();
-    };
-    // Use a microtask so the same click that opened the menu doesn't immediately close it
-    const id = setTimeout(() => document.addEventListener('mousedown', onDown), 0);
-    return () => { clearTimeout(id); document.removeEventListener('mousedown', onDown); };
-  }, [qt, onClose]);
-
-  // Reset the date input each time we enter the datePicker pane.
-  useEffect(() => {
-    if (qt?.mode === 'datePicker') {
-      setDateVal(todayInput());
-      setTimeout(() => dateRef.current?.focus(), 30);
-    }
-  }, [qt?.mode]);
-
-  if (!qt || !qt.anchor) return null;
-
-  // Position: below the anchor by default. Flip above if the menu
-  // would clip the viewport.
-  const MENU_W = 190;
-  const MENU_H_EST = qt.mode === 'templates' ? 260 : 200;
-  const anchor = qt.anchor;
-  const spaceBelow = window.innerHeight - anchor.bottom;
-  const placeAbove = spaceBelow < MENU_H_EST + 12;
-  const top = placeAbove ? Math.max(8, anchor.top - MENU_H_EST - 6) : anchor.bottom + 6;
-  const left = Math.min(
-    Math.max(8, anchor.right - MENU_W),
-    window.innerWidth - MENU_W - 8
-  );
-
-  const task = qt.taskId && qt.taskId !== 'bulk' ? getTask(qt.taskId) : null;
-  const isComplete = task?.status === 'Complete';
-  const isBulk = qt.taskId === 'bulk';
-
-  const itemStyle = {
-    padding: '8px 10px',
-    fontSize: 12, fontWeight: 500,
-    color: 'var(--gb-text-secondary)',
-    cursor: 'pointer',
-    borderRadius: 'var(--gb-r-sm)',
-    display: 'flex', alignItems: 'center', gap: 8,
-    transition: 'background-color .1s, color .1s',
-    whiteSpace: 'nowrap',
-    background: 'transparent',
-    border: 'none',
-    width: '100%',
-    fontFamily: 'inherit',
-    textAlign: 'left',
-  };
-  /* Item registers itself into rowsRef during render so the menu's
-     keyboard nav can find it by index. data-qt-row carries the same
-     index in the DOM so the parent-side scroll effect (below) can
-     find the active row's <button> without needing per-item refs
-     — important because Item is redefined every render, so a hook
-     inside it would re-fire continuously. */
-  const Item = ({ icon, label, accent, onClick, trailing }) => {
-    const idx = rowsRef.current.length;
-    rowsRef.current.push(onClick);
-    const isActive = idx === activeRowIdx;
-    return (
-      <button
-        type="button"
-        data-qt-row={idx}
-        className={isActive ? 'gb-kbd-active' : undefined}
-        onClick={onClick}
-        style={{
-          ...itemStyle,
-          color: accent || itemStyle.color,
-          background: 'transparent',
-        }}
-        onMouseEnter={(e) => {
-          if (isActive) return;
-          e.currentTarget.style.background = 'var(--gb-fill-hover)';
-          e.currentTarget.style.color = accent ? accent : 'var(--gb-text-primary)';
-        }}
-        onMouseLeave={(e) => {
-          if (isActive) return;
-          e.currentTarget.style.background = 'transparent';
-          e.currentTarget.style.color = accent || 'var(--gb-text-secondary)';
-        }}
-      >
-        {icon}
-        <span style={{ flex: 1 }}>{label}</span>
-        {trailing}
-      </button>
-    );
-  };
-
-  const Header = ({ children }) => (
-    <div style={{
-      padding: '6px 10px 5px',
-      fontSize: 9.5, fontWeight: 700,
-      textTransform: 'uppercase', letterSpacing: 0.6,
-      color: 'var(--gb-text-muted)',
-      display: 'flex', alignItems: 'center', gap: 6,
-      borderBottom: '1px solid var(--gb-border-subtle)',
-      marginBottom: 3,
-    }}>{children}</div>
-  );
-
-  const Back = ({ onClick }) => {
-    const idx = rowsRef.current.length;
-    rowsRef.current.push(onClick);
-    const isActive = idx === activeRowIdx;
-    return (
-      <button
-        type="button"
-        data-qt-row={idx}
-        className={isActive ? 'gb-kbd-active' : undefined}
-        onClick={onClick}
-        style={{
-          ...itemStyle,
-          color: 'var(--gb-text-muted)',
-          fontWeight: 600,
-          fontSize: 11.5,
-          borderBottom: '1px solid var(--gb-border-subtle)',
-          marginBottom: 3,
-          borderRadius: 0,
-          background: 'transparent',
-        }}
-        onMouseEnter={(e) => {
-          if (isActive) return;
-          e.currentTarget.style.background = 'var(--gb-fill-hover)';
-          e.currentTarget.style.color = 'var(--gb-text-primary)';
-        }}
-        onMouseLeave={(e) => {
-          if (isActive) return;
-          e.currentTarget.style.background = 'transparent';
-          e.currentTarget.style.color = 'var(--gb-text-muted)';
-        }}
-      >
-        <ChevLeft />
-        Back
-      </button>
-    );
-  };
-
-  /* Push-Out row with an inline day-count input. The whole row is a
-     click target that fires the push action with the current days
-     value; the input gets pointer + key events isolated so typing in
-     it doesn't trigger the action or the menu's outside-click close. */
-  const PushRow = ({ pushDays, setPushDays, onClick }) => {
-    const idx = rowsRef.current.length;
-    rowsRef.current.push(onClick);
-    const isActive = idx === activeRowIdx;
-    return (
-    <div
-      onClick={onClick}
-      data-qt-row={idx}
-      className={isActive ? 'gb-kbd-active' : undefined}
-      style={{
-        ...itemStyle,
-        color: 'var(--gb-info-fg)',
-        cursor: 'pointer',
-        background: 'transparent',
-      }}
-      onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.background = 'var(--gb-fill-hover)'; }}
-      onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-    >
-      <CalIcon />
-      <span>Push Out</span>
-      <input
-        type="number"
-        min="1"
-        value={pushDays}
-        onChange={(e) => setPushDays(Math.max(1, parseInt(e.target.value, 10) || 1))}
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-        onMouseDown={(e) => e.stopPropagation()}
-        onFocus={(e) => e.target.select()}
-        // gb-no-spin hides the native up/down spinner buttons (the global
-        // CSS rule is injected once below in QuickTaskMenu's effect). The
-        // arrows otherwise sit on the right edge of the input and push
-        // the digits off-centre, which the user flagged as looking ugly.
-        className="gb-no-spin"
-        style={{
-          width: 38, height: 22, padding: '0 4px',
-          background: 'var(--gb-surface-2)',
-          border: '1px solid var(--gb-border-default)',
-          borderRadius: 'var(--gb-r-sm)',
-          color: 'var(--gb-text-primary)',
-          fontSize: 11, fontWeight: 700, fontFamily: 'var(--gb-font-mono)',
-          outline: 'none',
-          textAlign: 'center',
-          MozAppearance: 'textfield',
-        }}
-      />
-      <span style={{ flex: 1, fontSize: 12, color: 'var(--gb-info-fg)' }}>
-        {pushDays === 1 ? 'day' : 'days'}
-      </span>
-    </div>
-    );
-  };
-
-  let body = null;
-  if (qt.mode === 'main' && task) {
-    body = (
-      <>
-        <Header><CheckIcon size={10} /> Quick Task</Header>
-        {isComplete ? (
-          <Item
-            icon={<svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.49"/></svg>}
-            label="Reopen"
-            onClick={() => onAction('reopen', { taskId: task.id })}
-          />
-        ) : (
-          <Item
-            icon={<CheckIcon />}
-            label="Complete"
-            accent="var(--gb-success-fg)"
-            onClick={() => onAction('complete', { taskId: task.id })}
-          />
-        )}
-        <PushRow
-          pushDays={pushDays}
-          setPushDays={setPushDays}
-          onClick={() => onAction('push', { taskId: task.id, days: pushDays })}
-        />
-        <Item
-          icon={<CalIcon />}
-          label="Set Date"
-          accent="var(--gb-info-fg)"
-          trailing={<ChevRight />}
-          onClick={() => onNavigate({ mode: 'datePicker', returnMode: 'main' })}
-        />
-        <Item
-          icon={<PlusIcon />}
-          label="Add Task"
-          trailing={<ChevRight />}
-          onClick={() => onNavigate({ mode: 'templates', returnMode: 'main' })}
-        />
-      </>
-    );
-  } else if (qt.mode === 'bulk') {
-    body = (
-      <>
-        <Header><CheckIcon size={10} /> Quick Task — {selectedCount} selected</Header>
-        <Item
-          icon={<CheckIcon />}
-          label="Complete All"
-          accent="var(--gb-success-fg)"
-          onClick={() => onAction('bulk-complete')}
-        />
-        <PushRow
-          pushDays={pushDays}
-          setPushDays={setPushDays}
-          onClick={() => onAction('bulk-push', { days: pushDays })}
-        />
-        <Item
-          icon={<CalIcon />}
-          label="Set Date"
-          accent="var(--gb-info-fg)"
-          trailing={<ChevRight />}
-          onClick={() => onNavigate({ mode: 'datePicker', returnMode: 'bulk' })}
-        />
-        <Item
-          icon={<PlusIcon />}
-          label="Add Task to All"
-          trailing={<ChevRight />}
-          onClick={() => onNavigate({ mode: 'templates', returnMode: 'bulk' })}
-        />
-      </>
-    );
-  } else if (qt.mode === 'datePicker') {
-    const setDateAction = qt.returnMode === 'bulk' ? 'bulk-set-date' : 'set-date';
-    body = (
-      <>
-        <Back onClick={() => onNavigate({ mode: qt.returnMode || 'main' })} />
-        <Header>Set due date</Header>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '6px 8px',
-        }}>
-          <input
-            ref={dateRef}
-            type="date"
-            value={dateVal}
-            onChange={(e) => setDateVal(e.target.value)}
-            style={{
-              flex: 1, height: 28,
-              padding: '0 7px',
-              borderRadius: 'var(--gb-r-sm)',
-              border: '1px solid var(--gb-border-default)',
-              background: 'var(--gb-surface-2)',
-              color: 'var(--gb-text-primary)',
-              fontSize: 11.5, fontFamily: 'inherit',
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
-          />
-          <button
-            type="button"
-            onClick={() => {
-              const api = dateInputToApi(dateVal);
-              if (!api) return;
-              onAction(setDateAction, { taskId: qt.taskId, date: api });
-            }}
-            style={{
-              height: 28, padding: '0 10px',
-              borderRadius: 'var(--gb-r-sm)',
-              background: 'var(--gb-brand)',
-              border: '1px solid var(--gb-brand-border)',
-              color: 'var(--gb-brand-text)',
-              fontSize: 11.5, fontWeight: 600,
-              cursor: 'pointer',
-              fontFamily: 'inherit',
-            }}
-          >Set</button>
-        </div>
-      </>
-    );
-  } else if (qt.mode === 'templates') {
-    const tplAction = qt.returnMode === 'bulk' ? 'bulk-create-task' : 'create-task';
-    body = (
-      <>
-        <Back onClick={() => onNavigate({ mode: qt.returnMode || 'main' })} />
-        <Header>Pick a task template</Header>
-        <div style={{
-          maxHeight: 220, overflowY: 'auto',
-          scrollbarWidth: 'thin',
-        }}>
-          {taskTpls.length ? (
-            taskTpls.map((tpl) => (
-              <Item
-                key={tpl.id}
-                label={tpl.name || tpl.subject || 'Untitled'}
-                onClick={() => onAction(tplAction, { taskId: qt.taskId, template: tpl })}
-              />
-            ))
-          ) : (
-            <div style={{
-              padding: 12, textAlign: 'center',
-              fontSize: 11.5, color: 'var(--gb-text-muted)',
-            }}>
-              No task templates found.<br />
-              Add some in the Notes editor.
-            </div>
-          )}
-        </div>
-      </>
-    );
-  }
-
-  return createPortal(
-    <AnimatePresence>
-      <motion.div
-        ref={ref}
-        key="qt-menu"
-        className="gb-qtm"
-        data-gb-scale="popovers"
-        data-gb-kbd-scope=""
-        initial={{ opacity: 0, y: placeAbove ? 4 : -4, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.97 }}
-        transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
-        style={{
-          position: 'fixed',
-          top, left,
-          width: MENU_W,
-          zIndex: 999999,
-          background: 'var(--gb-surface-elevated)',
-          border: '1px solid var(--gb-border-default)',
-          borderRadius: 'var(--gb-r-md)',
-          boxShadow: 'var(--gb-shadow-popover)',
-          padding: 4,
-          fontFamily: 'var(--gb-font-sans)',
-        }}
-      >
-        {body}
-      </motion.div>
-    </AnimatePresence>,
-    document.body
-  );
-}

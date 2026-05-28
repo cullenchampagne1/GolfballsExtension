@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Btn, DraggablePopup, Dot, Dropdown, Field, RangeSlider, Tag, I, Spinner } from '../ui/index.js';
+import { Btn, DraggablePopup, Dot, Field, RangeSlider, Tag, I, Spinner } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { pickFromAddress } from '../lib/sender.js';
 import { useDevSetting } from '../lib/devSettings.js';
@@ -48,7 +48,17 @@ function ensureNoScrollStyle() {
   if (typeof document === 'undefined' || document.getElementById(SCROLLBAR_STYLE_ID)) return;
   const el = document.createElement('style');
   el.id = SCROLLBAR_STYLE_ID;
-  el.textContent = '.gb-email-runner-body::-webkit-scrollbar{width:0;height:0;display:none}';
+  el.textContent = `
+    .gb-email-runner-body::-webkit-scrollbar { width: 0; height: 0; display: none; }
+    /* Sweeping scan light on the run-status card while a blast is
+       in flight. The animation is global because a CSS animation
+       can't be expressed inline via Motion without a child component
+       eating every frame. */
+    @keyframes gb-er-scan {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+  `;
   document.head.appendChild(el);
 }
 const fmtSeconds = (n) => `${n}s`;
@@ -273,70 +283,15 @@ export function EmailRunner({
      means "random across variations per contact." */
   const ORIGINAL_PIN = '__original';
 
-  /* Dropdown option shape — templates with variations render as a
-     `pickableParent` row whose chevron exposes the per-variation
-     overrides. Three modes per template:
-
-       Random (default)   id = t.id (no ::)         selectedVariationId = null
-                          → bulk loop picks per contact using the
-                            variationWeights sliders (Original
-                            included in the pool as "Variation 1")
-       Variation 1        id = t.id::__original     selectedVariationId = '__original'
-                          → bare template, no variation, sent to all
-       Variation N        id = t.id::<v.id>         selectedVariationId = '<v.id>'
-                          → that specific variation pinned for all
-
-     The Original is exposed as "Variation 1" so the saved
-     variations enumerate from 2 onward — matches the rep's mental
-     model that the parent template is just the first variant. */
-  const dropdownOptions = useMemo(() => templates.map((t) => {
-    const variations = Array.isArray(t.variations) ? t.variations : [];
-    const subOptions = variations.length > 0 ? [
-      { id: `${t.id}::${ORIGINAL_PIN}`, label: 'Variation 1' },
-      ...variations.map((v, i) => ({
-        id: `${t.id}::${v.id}`,
-        label: v.label || `Variation ${i + 2}`,
-      })),
-    ] : undefined;
-    return {
-      id: t.id,
-      label: t.name || 'Untitled',
-      sub: variations.length ? `${variations.length + 1} variations` : null,
-      subOptions,
-      /* Row-click picks (= Random mode); chevron expands the list
-         of specific picks. No standalone "Random" entry in the
-         submenu — the parent IS the random pick. */
-      pickableParent: variations.length > 0,
-    };
-  }), [templates]);
-
-  /* Composite id when a variation is pinned so the dropdown's active
-     row lands on the chosen sub-option. */
-  const dropdownValue = selectedVariationId
-    ? `${selectedId}::${selectedVariationId}`
-    : selectedId;
   const selectedTpl = templates.find((t) => t.id === selectedId);
-  /* True when the selected template has variations AND no specific
-     one is pinned — the bulk loop will randomly pick a variation
-     per contact using `variationWeights` below. Drives both the
-     dropdown label suffix and the sliders section's visibility. */
+  /* True whenever a template with variations is selected — the
+     bulk loop picks one per contact using `variationWeights`.
+     selectedVariationId stays null in the InlinePicker design;
+     pinning a single variation is now done by setting that row's
+     weight to 100% in the panel below. */
   const isRandomMode = !!selectedTpl
     && Array.isArray(selectedTpl.variations) && selectedTpl.variations.length > 0
     && !selectedVariationId;
-  const dropdownDisplayLabel = (() => {
-    if (!selectedTpl) return '';
-    const baseName = selectedTpl.name || 'Untitled';
-    if (selectedVariationId === ORIGINAL_PIN) return `${baseName} · Variation 1`;
-    if (selectedVariationId) {
-      const vIdx = (selectedTpl.variations || []).findIndex((x) => x.id === selectedVariationId);
-      const v = vIdx >= 0 ? selectedTpl.variations[vIdx] : null;
-      return `${baseName} · ${v?.label || `Variation ${vIdx + 2}`}`;
-    }
-    /* No pin — picker defaulted to Random; bare template name
-       reads as the random pick (no suffix needed since the parent
-       row IS the random mode now). */
-    return baseName;
-  })();
 
   /* The weightable pool used by the Random-mode picker AND the
      sliders UI. The bare template is exposed as "Variation 1"
@@ -398,17 +353,6 @@ export function EmailRunner({
       }
       return next;
     });
-  };
-
-  const onDropdownChange = (id) => {
-    if (typeof id === 'string' && id.includes('::')) {
-      const [parentId, variationId] = id.split('::');
-      setSelectedId(parentId);
-      setSelectedVariationId(variationId);
-      return;
-    }
-    setSelectedId(String(id || ''));
-    setSelectedVariationId(null);
   };
 
   const canRun = !!selectedTpl && contacts.length > 0 && status !== 'running';
@@ -654,32 +598,29 @@ export function EmailRunner({
               hint={(() => {
                 if (!templates.length) return 'No email templates saved yet';
                 if (variationCount === 0) return null;
-                if (selectedVariationId) {
-                  /* User pinned a specific variation via the chevron
-                     menu — every contact gets that one. */
-                  return 'Only this variation will send to every contact';
-                }
-                /* Parent template selected = Random mode. Tweak the
-                   weights below, or open the chevron to pin one. */
+                /* Variation pinning moved to the weights panel below
+                   (set a variation to 100% to lock it). The hint here
+                   nudges that there's a meaningful pool to balance. */
                 return `Each contact gets a weighted random pick (1 of ${variationCount + 1} variations)`;
               })()}
             >
-              {/* Match the popup.js template picker exactly: size sm
-                  (28px row), brand-glow dot for leading indicator,
-                  searchable only when the list is meaningfully long,
-                  and the 280px ceiling for the open menu so it
-                  doesn't dominate a small panel. */}
-              <Dropdown
-                size="sm"
-                value={dropdownValue}
-                displayLabel={dropdownDisplayLabel}
-                onChange={onDropdownChange}
-                options={dropdownOptions}
+              {/* Inline picker — the same card surface morphs into a
+                  list of templates when the rep taps SWAP. Replaces
+                  the legacy flying Dropdown so the open list stays
+                  inside the popup boundary (no portal, no clipping). */}
+              <InlinePicker
+                value={selectedId}
+                onChange={(id) => {
+                  setSelectedId(String(id || ''));
+                  setSelectedVariationId(null);
+                }}
+                options={templates.map((t) => ({
+                  id: t.id,
+                  label: t.name || 'Untitled',
+                  sub: variationSub(t),
+                }))}
                 placeholder={templates.length ? 'Pick a template' : 'No templates'}
-                searchable={templates.length > 6}
-                leading={<Dot tone={selectedTpl ? 'brand' : 'muted'} size={7} glow={!!selectedTpl} />}
                 disabled={status === 'running'}
-                maxHeight={280}
               />
             </Field>
 
@@ -703,12 +644,35 @@ export function EmailRunner({
                     hint="Sliders always sum to 100% — each contact gets a roll weighted by these."
                   >
                     <div style={{
-                      display: 'flex', flexDirection: 'column', gap: 8,
-                      padding: 10,
+                      display: 'flex', flexDirection: 'column', gap: 10,
+                      padding: 12,
                       background: 'var(--gb-surface-1)',
                       border: '1px solid var(--gb-border-subtle)',
-                      borderRadius: 'var(--gb-r-sm)',
+                      borderRadius: 'var(--gb-r-md)',
                     }}>
+                      {/* Stacked proportion bar — the visual fold-up of
+                          every slider. Tints step down per item so the
+                          eye can read which slot owns which segment.
+                          Widths tween on weight change so the bar
+                          breathes with the user's edits. */}
+                      <div style={{
+                        display: 'flex',
+                        height: 10, borderRadius: 999, overflow: 'hidden',
+                        border: '1px solid var(--gb-border-subtle)',
+                      }}>
+                        {weightableItems.map((it, idx) => (
+                          <motion.div
+                            key={it.id}
+                            animate={{ flex: variationWeights[it.id] || 0.0001 }}
+                            transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+                            style={{
+                              background: weightStripeColor(idx),
+                              minWidth: 0,
+                            }}
+                            title={`${it.label}: ${Math.round(variationWeights[it.id] || 0)}%`}
+                          />
+                        ))}
+                      </div>
                       {weightableItems.map((it, idx) => (
                         <motion.div
                           key={it.id}
@@ -717,6 +681,7 @@ export function EmailRunner({
                           transition={{ delay: idx * 0.05, duration: 0.2 }}
                         >
                           <VariationWeightRow
+                            colorIndex={idx}
                             label={it.label}
                             value={variationWeights[it.id] || 0}
                             onChange={(val) => onWeightChange(it.id, val)}
@@ -742,70 +707,19 @@ export function EmailRunner({
               />
             </Field>
 
-            {/* Aggregate progress only — per-row status (spinner /
-                sent / fail) is rendered on the parent list via the
-                onRowStart / onRowDone callbacks, matching the Quick
-                Actions UX. Listing each contact in the panel itself
-                would get unwieldy fast on a 100-row blast. */}
+            {/* Run progress card. While running, the rep sees a radial
+                progress, the current recipient, a sweeping scan light,
+                and live count chips. The trail collapses to status-
+                tagged rows. When the run finishes, the card swaps to a
+                "Done" state with the final counts. */}
             {status !== 'idle' && (
-              <div style={{
-                display: 'flex', flexDirection: 'column', gap: 8,
-                padding: 12,
-                background: 'var(--gb-surface-1)',
-                border: '1px solid var(--gb-border-subtle)',
-                borderRadius: 'var(--gb-r-sm)',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {status === 'running' ? <Spinner size={12} /> : <I.check size={12} />}
-                  <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)' }}>
-                    {status === 'running'
-                      ? `Sending ${progress.current} of ${progress.total}…`
-                      : `Done — ${sentCount} sent${failedCount ? `, ${failedCount} failed` : ''}`}
-                  </div>
-                </div>
-                <div style={{
-                  height: 4, borderRadius: 999,
-                  background: 'var(--gb-surface-2)', overflow: 'hidden',
-                }}>
-                  <motion.div
-                    animate={{ width: progress.total
-                      ? `${Math.min(100, (progress.current / progress.total) * 100)}%`
-                      : '0%' }}
-                    transition={{ duration: 0.3 }}
-                    style={{ height: '100%', background: 'var(--gb-brand-fg)' }}
-                  />
-                </div>
-                {/* Last-4 trail. Capped so the panel doesn't need to
-                    scroll. AnimatePresence + layout makes new entries
-                    slide in and old ones slide off the top smoothly. */}
-                {trail.length > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <AnimatePresence initial={false}>
-                      {trail.map((r, i) => (
-                        <motion.div
-                          key={`${r.name}-${i}-${r.email || ''}`}
-                          layout
-                          initial={{ opacity: 0, x: 10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: -10, height: 0 }}
-                          transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 8,
-                            fontSize: 10.5, color: 'var(--gb-text-secondary)',
-                          }}
-                        >
-                          <Tag size="xs" tone={r.status === 'sent' ? 'brand' : 'error'}>
-                            {r.status === 'sent' ? 'sent' : 'fail'}
-                          </Tag>
-                          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {r.name}
-                          </span>
-                        </motion.div>
-                      ))}
-                    </AnimatePresence>
-                  </div>
-                )}
-              </div>
+              <RunStatusCard
+                status={status}
+                progress={progress}
+                sentCount={sentCount}
+                failedCount={failedCount}
+                trail={trail}
+              />
             )}
           </div>
 
@@ -846,15 +760,22 @@ export function EmailRunner({
    brand without a custom thumb implementation — the rounded
    numeric on the right is what the rep watches when balancing
    the split. */
-function VariationWeightRow({ label, value, onChange, disabled }) {
+function VariationWeightRow({ colorIndex = 0, label, value, onChange, disabled }) {
   const rounded = Math.round(value);
   return (
     <div style={{
       display: 'grid',
-      gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.4fr) 36px',
+      gridTemplateColumns: '10px minmax(0, 1fr) minmax(0, 1.4fr) 36px',
       gap: 10,
       alignItems: 'center',
     }}>
+      {/* Color swatch — matches the corresponding segment in the
+          stacked proportion bar above so the rep can map the slider
+          back to the bar without reading the label. */}
+      <div style={{
+        width: 8, height: 8, borderRadius: 2,
+        background: weightStripeColor(colorIndex),
+      }} />
       <div style={{
         fontSize: 11,
         color: 'var(--gb-text-secondary)',
@@ -883,5 +804,444 @@ function VariationWeightRow({ label, value, onChange, disabled }) {
         textAlign: 'right',
       }}>{rounded}%</div>
     </div>
+  );
+}
+
+/* Map a per-row index to a tint of the brand color. First row gets
+   the full brand label color; subsequent rows step down by ~40% per
+   index so a 4-variation pool still reads as distinct stripes. */
+function weightStripeColor(idx) {
+  const pcts = [100, 60, 30, 18, 12, 8];
+  const pct = pcts[idx] ?? Math.max(6, 100 - idx * 18);
+  return pct === 100
+    ? 'var(--gb-brand-label)'
+    : `color-mix(in srgb, var(--gb-brand-label) ${pct}%, transparent)`;
+}
+
+/* ────────────────────────────────────────────────────────────
+   RunStatusCard — running / done state UI
+
+   While `status === 'running'`:
+     • Radial progress (stroke-dashoffset tween) — central glance
+     • "Now sending" — name + email of the most recent trail entry
+     • Count chips: sent · queued · fail
+     • Sweeping scan-light overlay so the card reads as alive
+     • Trail list — each row a status-tagged entry (sent / fail)
+
+   When `status === 'done'`:
+     • Radial fills to 100% in success tone
+     • Header switches to "Done — N sent" so the card stays useful
+       through the post-send glance before the rep closes the panel
+─────────────────────────────────────────────────────────────── */
+function RunStatusCard({ status, progress, sentCount, failedCount, trail }) {
+  const total = progress.total || 0;
+  const settled = sentCount + failedCount;
+  const pct = total > 0 ? Math.min(1, settled / total) : (status === 'done' ? 1 : 0);
+  const queued = Math.max(0, total - settled);
+  const isRunning = status === 'running';
+  const current = trail[trail.length - 1] || null;
+
+  return (
+    <div style={{
+      position: 'relative', overflow: 'hidden',
+      padding: 14, borderRadius: 'var(--gb-r-md)',
+      background: 'linear-gradient(180deg, var(--gb-surface-1) 0%, var(--gb-surface-modal, var(--gb-surface-2)) 100%)',
+      border: '1px solid ' + (isRunning ? 'var(--gb-brand-tint-border)' : 'var(--gb-success-tint-border)'),
+      display: 'flex', flexDirection: 'column', gap: 12,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative', zIndex: 1 }}>
+        <RadialProgress pct={pct} tone={isRunning ? 'brand' : 'success'} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontSize: 9.5, fontWeight: 700, letterSpacing: 0.8,
+            textTransform: 'uppercase',
+            color: isRunning ? 'var(--gb-brand-label)' : 'var(--gb-success-fg)',
+          }}>{isRunning ? 'Now sending' : `Done · ${sentCount} sent`}</div>
+          {isRunning && current ? (
+            <motion.div
+              key={current.name + (current.email || '')}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+            >
+              <div style={{
+                fontSize: 13, fontWeight: 700,
+                color: 'var(--gb-text-primary)',
+                marginTop: 3,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>{current.name || '(resolving…)'}</div>
+              {current.email && (
+                <div style={{
+                  fontSize: 10.5, color: 'var(--gb-text-muted)',
+                  fontFamily: 'var(--gb-font-mono)',
+                  marginTop: 1,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>{current.email}</div>
+              )}
+            </motion.div>
+          ) : !isRunning ? (
+            <div style={{
+              fontSize: 11.5, color: 'var(--gb-text-tertiary)', marginTop: 3,
+            }}>
+              {failedCount > 0
+                ? `${sentCount} sent · ${failedCount} failed`
+                : `${sentCount} of ${total} delivered`}
+            </div>
+          ) : (
+            <div style={{
+              fontSize: 11.5, color: 'var(--gb-text-tertiary)', marginTop: 3,
+              fontStyle: 'italic',
+            }}>preparing first contact…</div>
+          )}
+          <div style={{ display: 'flex', gap: 5, marginTop: 7 }}>
+            <CountChip tone="success" value={sentCount} label="sent" />
+            <CountChip tone="neutral" value={queued} label="queued" />
+            {failedCount > 0 && (
+              <CountChip tone="error" value={failedCount} label="fail" />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Sweeping scan light — only while running. Pure decorative;
+          pointer-events disabled so it never eats a click. */}
+      {isRunning && (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute', inset: 0,
+            background: 'linear-gradient(90deg, transparent 0%, var(--gb-brand-tint-soft) 50%, transparent 100%)',
+            mixBlendMode: 'plus-lighter',
+            pointerEvents: 'none',
+            animation: 'gb-er-scan 2.4s linear infinite',
+          }}
+        />
+      )}
+
+      {/* Trail — last few rows with sent / fail tags. AnimatePresence
+          slides new rows in from the right and old rows out the
+          left. Kept short so the card doesn't blow up the panel. */}
+      {trail.length > 0 && (
+        <div style={{
+          display: 'flex', flexDirection: 'column',
+          background: 'var(--gb-surface-2)',
+          border: '1px solid var(--gb-border-subtle)',
+          borderRadius: 'var(--gb-r-sm)',
+          overflow: 'hidden',
+          position: 'relative', zIndex: 1,
+        }}>
+          <AnimatePresence initial={false}>
+            {trail.map((r, i) => (
+              <motion.div
+                key={`${r.name}-${r.email || ''}-${i}`}
+                layout
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10, height: 0 }}
+                transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                style={{
+                  display: 'grid', gridTemplateColumns: '18px minmax(0,1fr) auto',
+                  gap: 8, alignItems: 'center',
+                  padding: '7px 9px',
+                  borderBottom: i < trail.length - 1 ? '1px solid var(--gb-border-subtle)' : 'none',
+                }}
+              >
+                <TrailIcon status={r.status} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{
+                    fontSize: 11, fontWeight: 600,
+                    color: 'var(--gb-text-primary)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{r.name || '(unknown)'}</div>
+                  {r.email && (
+                    <div style={{
+                      fontSize: 9.5, color: 'var(--gb-text-muted)',
+                      fontFamily: 'var(--gb-font-mono)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>{r.email}</div>
+                  )}
+                </div>
+                <Tag size="xs" tone={r.status === 'sent' ? 'success' : 'error'} mono>
+                  {r.status === 'sent' ? 'sent' : 'fail'}
+                </Tag>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* SVG radial progress with stroke-dashoffset tween. Centered % readout.
+   Tone switches the stroke + glow color so done states feel resolved. */
+function RadialProgress({ pct, tone = 'brand' }) {
+  const r = 22;
+  const circ = 2 * Math.PI * r;
+  const offset = circ * (1 - pct);
+  const stroke = tone === 'success' ? 'var(--gb-success-fg)' : 'var(--gb-brand-label)';
+  return (
+    <div style={{ position: 'relative', width: 56, height: 56, flexShrink: 0 }}>
+      <svg width={56} height={56} viewBox="0 0 56 56" style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={28} cy={28} r={r} fill="none"
+          stroke="var(--gb-surface-2)" strokeWidth={4} />
+        <motion.circle
+          cx={28} cy={28} r={r} fill="none"
+          stroke={stroke}
+          strokeWidth={4}
+          strokeLinecap="round"
+          strokeDasharray={circ}
+          initial={false}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
+        />
+      </svg>
+      <div style={{
+        position: 'absolute', inset: 0, display: 'flex',
+        alignItems: 'center', justifyContent: 'center',
+        fontSize: 12, fontWeight: 800,
+        fontFamily: 'var(--gb-font-mono)',
+        color: 'var(--gb-text-primary)',
+      }}>{Math.round(pct * 100)}%</div>
+    </div>
+  );
+}
+
+function CountChip({ tone, value, label }) {
+  const tones = {
+    success: { bg: 'var(--gb-success-tint-medium)', fg: 'var(--gb-success-fg)' },
+    neutral: { bg: 'var(--gb-fill-subtle)',         fg: 'var(--gb-text-tertiary)' },
+    error:   { bg: 'var(--gb-error-tint-medium)',   fg: 'var(--gb-error-fg)' },
+  }[tone] || { bg: 'var(--gb-fill-subtle)', fg: 'var(--gb-text-tertiary)' };
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '1px 6px', borderRadius: 4,
+      background: tones.bg, color: tones.fg,
+      fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
+      textTransform: 'uppercase',
+      fontFamily: 'var(--gb-font-mono)',
+    }}>
+      <span style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</span>
+      {label}
+    </span>
+  );
+}
+
+/* ────────────────────────────────────────────────────────────
+   InlinePicker — replaces the legacy Dropdown for the template
+   slot. The trigger is a card (dot + label + sub + SWAP chip)
+   that, when activated, drops its option list INSIDE the same
+   card boundary — no portal, no clipping, no menu chrome that
+   doesn't match the popup.
+
+   Active option is denoted by the brand-tint background + check
+   glyph. Each option animates in with a tiny stagger so the list
+   reads as alive on first open. Picking flushes via onChange and
+   collapses the list. SWAP / CANCEL chip stays put so the rep
+   has a clear way out of the picker mid-deliberation.
+─────────────────────────────────────────────────────────────── */
+function InlinePicker({ value, onChange, options, placeholder, disabled }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
+  const selected = options.find((o) => o.id === value) || null;
+  return (
+    <div style={{
+      background: 'var(--gb-surface-2)',
+      border: `1px solid ${open ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'}`,
+      borderRadius: 'var(--gb-r-md)',
+      overflow: 'hidden',
+      transition: 'border-color .2s, box-shadow .2s',
+      boxShadow: open ? '0 0 0 3px var(--gb-brand-tint-medium)' : 'none',
+      opacity: disabled ? 0.55 : 1,
+    }}>
+      <button
+        type="button"
+        onClick={() => !disabled && setOpen((o) => !o)}
+        disabled={disabled}
+        style={{
+          width: '100%', background: 'transparent', border: 'none',
+          padding: '9px 10px',
+          display: 'flex', alignItems: 'center', gap: 8,
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          textAlign: 'left',
+          fontFamily: 'inherit',
+        }}
+      >
+        <Dot tone={selected ? 'brand' : 'muted'} size={7} glow={!!selected} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontSize: 12, fontWeight: 600,
+            color: selected ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {selected ? selected.label : (placeholder || 'Pick an option')}
+          </div>
+          {selected?.sub && (
+            <div style={{
+              fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 1,
+              fontFamily: 'var(--gb-font-mono)',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>{selected.sub}</div>
+          )}
+        </div>
+        {/* SWAP / CANCEL chip — replaces the chevron so the surface
+            reads as "this slot can change" instead of "this is a
+            dropdown." Brand-tints when open so the rep has a clear
+            exit affordance. */}
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          padding: '3px 6px',
+          background: open ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)',
+          color: open ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
+          borderRadius: 4,
+          fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
+          textTransform: 'uppercase',
+          transition: 'background .2s, color .2s',
+        }}>
+          <SwapIcon size={9} />
+          <span>{open ? 'cancel' : 'swap'}</span>
+        </div>
+      </button>
+      {/* Inline expanding list — height + opacity tween. AnimatePresence
+          isn't needed because the list is always-mounted and we just
+          collapse it via max-height (same pattern as the variation
+          weights panel above). */}
+      <ExpandList open={open}>
+        <div style={{
+          borderTop: '1px dashed var(--gb-border-default)',
+          padding: 6,
+          display: 'flex', flexDirection: 'column', gap: 3,
+          maxHeight: 200, overflowY: 'auto',
+        }}>
+          {options.length === 0 ? (
+            <div style={{
+              padding: '8px 10px',
+              fontSize: 11, fontStyle: 'italic',
+              color: 'var(--gb-text-muted)',
+              textAlign: 'center',
+            }}>{placeholder || 'No options'}</div>
+          ) : options.map((opt, idx) => {
+            const active = opt.id === value;
+            return (
+              <motion.button
+                key={opt.id}
+                type="button"
+                onClick={() => { onChange(opt.id); setOpen(false); }}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: idx * 0.04, duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                style={{
+                  padding: '7px 8px',
+                  background: active ? 'var(--gb-brand-tint-soft)' : 'transparent',
+                  border: 'none',
+                  borderRadius: 'var(--gb-r-sm)',
+                  cursor: 'pointer', textAlign: 'left',
+                  display: 'grid', gridTemplateColumns: '10px 1fr auto',
+                  gap: 8, alignItems: 'center',
+                  color: 'inherit', fontFamily: 'inherit',
+                }}
+              >
+                <Dot tone={active ? 'brand' : 'muted'} size={6} glow={active} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{
+                    fontSize: 11.5, fontWeight: 600,
+                    color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{opt.label}</div>
+                  {opt.sub && (
+                    <div style={{
+                      fontSize: 9.5, color: 'var(--gb-text-muted)',
+                      fontFamily: 'var(--gb-font-mono)',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>{opt.sub}</div>
+                  )}
+                </div>
+                {active && <I.check size={11} style={{ color: 'var(--gb-brand-label)' }} />}
+              </motion.button>
+            );
+          })}
+        </div>
+      </ExpandList>
+    </div>
+  );
+}
+
+/* Max-height + opacity reveal — small wrapper used by InlinePicker
+   so we don't have to thread ResizeObservers through the picker
+   itself. Mirrors the QuickTaskPopover's ExpandWhen but local so
+   EmailRunner stays self-contained. */
+function ExpandList({ open, children }) {
+  const ref = useRef(null);
+  const [h, setH] = useState(0);
+  useEffect(() => {
+    if (!ref.current) return;
+    const measure = () => setH(ref.current.scrollHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(ref.current);
+    return () => ro.disconnect();
+  }, [open]);
+  return (
+    <div style={{
+      maxHeight: open ? h : 0,
+      opacity: open ? 1 : 0,
+      overflow: 'hidden',
+      transition: 'max-height .3s cubic-bezier(.4,0,.2,1), opacity .25s',
+    }}>
+      <div ref={ref}>{children}</div>
+    </div>
+  );
+}
+
+function SwapIcon({ size = 9 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 10l-3 3 3 3M4 13h16M17 4l3 3-3 3M20 7H4" />
+    </svg>
+  );
+}
+
+/* Render-friendly sub line for the template card. Templates with no
+   variations advertise that explicitly so the rep doesn't waste a
+   second hunting for the weights panel; templates with variations
+   show their count so the picker telegraphs "this is a pool, not a
+   single shot." */
+function variationSub(tpl) {
+  const variations = Array.isArray(tpl.variations) ? tpl.variations : [];
+  if (variations.length === 0) return 'no variations · email';
+  return `${variations.length + 1} variations · email`;
+}
+
+/* Status icon for a single trail row: filled success disc with a
+   check for sent, error disc with X for fail. Mirrors the design's
+   gb-bounce-in entrance. */
+function TrailIcon({ status }) {
+  const isSent = status === 'sent';
+  return (
+    <motion.div
+      initial={{ scale: 0.6, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ duration: 0.35, ease: [0.34, 1.3, 0.64, 1] }}
+      style={{
+        width: 16, height: 16, borderRadius: '50%',
+        background: isSent ? 'var(--gb-success-tint-medium)' : 'var(--gb-error-tint-medium)',
+        color: isSent ? 'var(--gb-success-fg)' : 'var(--gb-error-fg)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+    >
+      {isSent ? (
+        <svg width={9} height={9} viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      ) : (
+        <svg width={9} height={9} viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 6L6 18M6 6l12 12" />
+        </svg>
+      )}
+    </motion.div>
   );
 }
