@@ -260,13 +260,19 @@ export function TemplateEditor({ tpl, onDelete }) {
   const [paReady, setPaReady] = useState(false);
   useEffect(() => {
     chrome.storage.local.get('featureFlags', ({ featureFlags }) => {
-      setPaEnabled(!!(featureFlags && featureFlags.powerAutomateEnabled));
+      const on = featureFlags && featureFlags.powerAutomateEnabled === true;
+      // eslint-disable-next-line no-console
+      console.log('[gb] TemplateEditor init featureFlags:', featureFlags, '→ paEnabled:', on);
+      setPaEnabled(!!on);
       setPaReady(true);
     });
     function onChanged(changes) {
       if (!changes.featureFlags) return;
       const v = changes.featureFlags.newValue;
-      setPaEnabled(!!(v && v.powerAutomateEnabled));
+      const on = v && v.powerAutomateEnabled === true;
+      // eslint-disable-next-line no-console
+      console.log('[gb] TemplateEditor storage change → paEnabled:', on);
+      setPaEnabled(!!on);
     }
     chrome.storage.onChanged.addListener(onChanged);
     return () => chrome.storage.onChanged.removeListener(onChanged);

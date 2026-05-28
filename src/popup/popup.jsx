@@ -794,11 +794,14 @@ function MainView({
     const replyMode = tpl.replyMode || 'standalone';
     const isReply = replyMode === 'reply';
     // PA-ready when the user has BOTH toggled the feature on in Settings
-    // (powerAutomateEnabled) AND saved a flow URL. The legacy global
-    // "Reply with Template" toggle was renamed but the gating shape is
-    // the same — per-template settings (tpl.replyMode + future flags)
-    // refine which templates actually use the path.
-    const paReady = !!(flags.powerAutomateEnabled && flags.powerAutomateUrl);
+    // (powerAutomateEnabled) AND saved a flow URL. Mirrors the
+    // sendMode label predicate above EXACTLY so the button label and
+    // the actual send behavior never disagree — explicit Boolean +
+    // string-trim checks defend against non-canonical legacy values
+    // that earlier flag migrations may have left in storage.
+    const paOn   = flags.powerAutomateEnabled === true;
+    const paUrl  = typeof flags.powerAutomateUrl === 'string' && flags.powerAutomateUrl.trim().length > 0;
+    const paReady = paOn && paUrl;
 
     // When PA is configured we send through it; otherwise fall back to
     // a mailto window. The legacy file-based reply path is removed —
@@ -840,8 +843,29 @@ function MainView({
     /* paReady MUST match the predicate the actual send path uses
        (onSend line ~801 — both the toggle AND the URL). Otherwise
        the button advertises "Send" while clicking it falls through
-       to the mailto path, which surprises the user. */
-    const paReady = !!(flags.powerAutomateEnabled && flags.powerAutomateUrl);
+       to the mailto path, which surprises the user.
+
+       Coerce both reads through Boolean explicitly — older storage
+       writes could land non-canonical values (e.g. the legacy
+       directSend migration wrote `1` instead of `true`), and JS's
+       `&&` returns the FIRST falsy or LAST truthy value, so even
+       though `!!('1')` is true we want to be explicit so the
+       predicate reads identically here and in onSend regardless
+       of where the value came from. */
+    const paOn  = flags.powerAutomateEnabled === true;
+    const paUrl = typeof flags.powerAutomateUrl === 'string' && flags.powerAutomateUrl.trim().length > 0;
+    const paReady = paOn && paUrl;
+    /* Eyes-on diagnostic so we can see WHY the button picked its
+       label when storage and visible label disagree. Printed once
+       per render — harmless in production. Remove when stable. */
+    if (typeof console !== 'undefined') {
+      // eslint-disable-next-line no-console
+      console.log('[gb] sendMode:', {
+        paOn, paUrl, paReady, replyMode,
+        rawEnabled: flags.powerAutomateEnabled,
+        rawUrlPresent: !!flags.powerAutomateUrl,
+      });
+    }
     if (paReady && isReply)  return { icon: <I.send />,  label: 'Reply' };
     if (paReady)             return { icon: <I.send />,  label: 'Send' };
     if (isReply)             return { icon: <Ic.reply />, label: 'Reply in Outlook' };
