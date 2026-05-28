@@ -83,4 +83,5 @@ export { SignatureModal } from './components/SignatureModal.jsx';
 export { OrderRules } from './components/template-rules/OrderRules.jsx';
 export { CaseRules } from './components/template-rules/CaseRules.jsx';
 export { AccountRules } from './components/template-rules/AccountRules.jsx';
+export { AccountConditions } from './components/template-rules/AccountConditions.jsx';
 export { CaseTagsEditor } from './components/template-rules/CaseTagsEditor.jsx';
