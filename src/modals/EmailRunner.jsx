@@ -169,6 +169,13 @@ export function EmailRunner({
   onRowStart,
   onRowDone,
   onResetRowStates,
+  /* Fires `true` when the orchestrator starts a run, `false` when it
+     finishes (cleanly OR via cancel). TaskList uses this so its scan
+     beam dwells on the just-sent row through the inter-send delay
+     instead of fading out the moment that row's status flips to
+     'sent' — `allSettled` over the so-far-known rows would otherwise
+     trigger the auto-clear between every send. */
+  onRunStateChange,
   /* Mock mode: skip chrome.runtime calls + chrome.storage reads,
      wire in MOCK_TEMPLATES and a fake sendBg with realistic timings.
      CRMSearch flips this on when its own useMock dev flag is set so
@@ -225,12 +232,15 @@ export function EmailRunner({
   }, [open, useMock]);
 
   /* Cancel in-flight run when the panel closes — bumps the token so
-     the orchestrator's between-iteration guard short-circuits. */
+     the orchestrator's between-iteration guard short-circuits, and
+     drops the running-state signal so the parent list's scan beam
+     fades out instead of staying stuck on the last sending row. */
   useEffect(() => {
     if (!open) {
       runTokenRef.current += 1;
+      onRunStateChange?.(false);
     }
-  }, [open]);
+  }, [open, onRunStateChange]);
 
   useEffect(() => { ensureNoScrollStyle(); }, []);
 
@@ -313,6 +323,7 @@ export function EmailRunner({
     setProgress({ current: 0, total: contacts.length });
     setTrail([]);
     setStatus('running');
+    onRunStateChange?.(true);
 
     /* In mock mode the orchestrator runs against in-process timers
        instead of chrome.runtime — lets the playground exercise the
@@ -479,6 +490,7 @@ export function EmailRunner({
     }
 
     setStatus('done');
+    onRunStateChange?.(false);
   };
 
   const sentCount   = counts.sent;
