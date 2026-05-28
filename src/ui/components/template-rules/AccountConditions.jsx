@@ -478,7 +478,14 @@ function RuleRow({ row, onPatch, onRemove }) {
           alignItems: 'center',
         }}
       >
-        <div style={{ position: 'relative', minWidth: 0 }}>
+        {/* width: '100%' so the button fills the grid column instead
+            of sizing to its text content. Without this the column
+            collapses to fit short paths ("orders") and stretches for
+            long ones ("contact.account.creditApproved"), making the
+            whole row's layout shift every time the user picks a new
+            path. The text inside the button truncates with a right
+            fade — see PathButton. */}
+        <div style={{ position: 'relative', width: '100%', minWidth: 0 }}>
           <PathButton
             path={displayPath}
             type={type}
@@ -700,8 +707,20 @@ function IndexInput({ value, onChange }) {
 
 /* ── PathButton ─────────────────────────────────────────────────
    The custom dropdown trigger the user specifically liked from
-   the design. Mono path text + type dot + rotating caret. */
+   the design. Mono path text + type dot + rotating caret.
+
+   width: '100%' so the button fills its grid cell — without that,
+   the button sizes to its text and the column collapses for short
+   paths, blowing the layout's consistency. The text span uses a
+   right-side mask-image fade INSTEAD OF text-overflow: ellipsis
+   so a too-long path softens off into the row's background rather
+   than ending with a `…` glyph. The chevron stays sharp on the
+   right because it's a separate sibling outside the masked span. */
 function PathButton({ path, type, open, onClick }) {
+  /* Mask fades the last 18px of the text into transparent. Falls
+     back to a plain right-side cut on browsers without
+     mask-image, which is fine — we ship Chrome only anyway. */
+  const fadeMask = 'linear-gradient(to right, black calc(100% - 18px), transparent 100%)';
   return (
     <button
       type="button"
@@ -710,8 +729,9 @@ function PathButton({ path, type, open, onClick }) {
         display: 'inline-flex',
         alignItems: 'center',
         gap: 6,
-        flex: 1,
+        width: '100%',
         minWidth: 0,
+        boxSizing: 'border-box',
         height: 28,
         padding: '0 8px',
         background: open ? 'var(--gb-brand-tint-medium)' : 'var(--gb-surface-2)',
@@ -732,7 +752,12 @@ function PathButton({ path, type, open, onClick }) {
         flexShrink: 0,
       }} />
       <span style={{
-        flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        flex: 1,
+        minWidth: 0,
+        overflow: 'hidden',
+        whiteSpace: 'nowrap',
+        WebkitMaskImage: fadeMask,
+        maskImage: fadeMask,
       }}>{path || '— pick a field —'}</span>
       <motion.span
         animate={{ rotate: open ? 180 : 0 }}
@@ -742,6 +767,7 @@ function PathButton({ path, type, open, onClick }) {
           color: open ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
           fontFamily: 'var(--gb-font-mono)',
           display: 'inline-flex',
+          flexShrink: 0,
         }}
       >
         ▾
