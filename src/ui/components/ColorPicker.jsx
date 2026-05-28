@@ -88,20 +88,24 @@ export function ColorPickerPopover({
   // a generous max so the flip decision below has something to compare
   // against viewport space. ~210 covers SV square + hue + hex row;
   // +30 per swatch row (≤10 per row).
-  /* Read the body's CSS `zoom` so we can compensate when the popover
-     is portaled into a parent that's zoomed (e.g. the editor page
-     uses [data-gb-scale="editor"] which translates to body { zoom }).
-     getBoundingClientRect returns post-zoom viewport pixels, but
-     position:fixed left/top on a body-child are interpreted in the
-     body's PRE-zoom coord system — so a literal r.left would render
-     at r.left * zoom visually, dragging the popover off the anchor.
-     Dividing the desired viewport coord by body zoom puts the
-     popover back where it visually should be. */
-  function readBodyZoom() {
-    try {
-      const v = parseFloat(getComputedStyle(document.body).zoom);
-      return Number.isFinite(v) && v > 0 ? v : 1;
-    } catch { return 1; }
+  /* Compensate for ancestor CSS zoom — see DraggablePopup's
+     readZoomChain for the rationale. Walks body up to documentElement,
+     multiplying every non-1 zoom. Lets the popover land at the
+     anchor even when the page (e.g. the editor / settings) has
+     body { zoom }. */
+  function readZoomChain() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return 1;
+    let z = 1;
+    let el = document.body;
+    while (el && el !== document.documentElement.parentNode) {
+      try {
+        const raw = getComputedStyle(el).zoom;
+        const n = parseFloat(raw);
+        if (Number.isFinite(n) && n > 0) z *= n;
+      } catch {}
+      el = el.parentElement;
+    }
+    return z || 1;
   }
   const [pos, setPos] = useState(null);
   useEffect(() => {
@@ -110,14 +114,11 @@ export function ColorPickerPopover({
       if (!el) return;
       const r = el.getBoundingClientRect();
       const estH = 210 + (swatches?.length ? 30 : 0);
-      // Flip above the anchor when there isn't room below. Keeps the
-      // popover fully on-screen for triggers near the bottom edge
-      // (the GolfballViewer light chip lives at canvas bottom-left).
       const roomBelow = window.innerHeight - r.bottom - offset;
       const flipUp = roomBelow < estH && r.top > estH + offset;
       const desiredTop  = flipUp ? r.top - offset - estH : r.bottom + offset;
       const desiredLeft = align === 'right' ? r.right - POPOVER_W : r.left;
-      const z = readBodyZoom();
+      const z = readZoomChain();
       setPos({ top: desiredTop / z, left: desiredLeft / z });
     }
     update();

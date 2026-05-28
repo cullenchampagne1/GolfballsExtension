@@ -57,6 +57,30 @@ export function Dropdown({
   // Critical in the toolbar popup where the viewport is only ~340px tall —
   // without this clamp the menu spills past the popup's bottom edge and
   // gets clipped by Chrome.
+  /* Walk the zoom chain so we can compensate when the dropdown's
+     parent (typically body) has CSS zoom — getBoundingClientRect
+     returns post-zoom viewport coords, but the popover is portaled
+     to body and its position/width are interpreted in PRE-zoom
+     CSS pixels. Divide both the position and width by the cumulative
+     zoom so the popover lands directly under the trigger AND its
+     menu rendered width matches the trigger's rendered width
+     (previously the menu came out ~zoom-factor narrower than the
+     trigger, e.g. a 90%-zoom page → menu ~10% narrower → it looked
+     like the dropdown had a small popover next to the input). */
+  function readZoomChain() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return 1;
+    let z = 1;
+    let el = document.body;
+    while (el && el !== document.documentElement.parentNode) {
+      try {
+        const raw = getComputedStyle(el).zoom;
+        const n = parseFloat(raw);
+        if (Number.isFinite(n) && n > 0) z *= n;
+      } catch {}
+      el = el.parentElement;
+    }
+    return z || 1;
+  }
   const [pos, setPos] = useState(null);
   useEffect(() => {
     if (!open) { setPos(null); return undefined; }
@@ -64,14 +88,17 @@ export function Dropdown({
       const el = rootRef.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      const top = r.bottom + 4;
+      const z = readZoomChain();
+      const top = (r.bottom + 4) / z;
+      const left = r.left / z;
+      const width = r.width / z;
       // documentElement.clientHeight tracks the actual rendered viewport,
       // including dynamic Chrome popup auto-resizing — window.innerHeight
       // can lag a frame during the resize.
       const viewportH = document.documentElement.clientHeight || window.innerHeight;
       const ceiling = typeof maxHeight === 'number' ? maxHeight : 240;
-      const maxListHeight = Math.max(80, Math.min(ceiling, viewportH - top - 8));
-      setPos({ top, left: r.left, width: r.width, maxListHeight });
+      const maxListHeight = Math.max(80, Math.min(ceiling, viewportH / z - top - 8));
+      setPos({ top, left, width, maxListHeight });
     }
     update();
     const onScroll = (e) => {

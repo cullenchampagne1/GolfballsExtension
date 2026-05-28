@@ -57,17 +57,32 @@ const DragHandleDots = () => (
   </svg>
 );
 
-/* The popover portals to document.body. If body itself has CSS
-   zoom (the editor page uses [data-gb-scale="editor"] which
-   translates to body { zoom }), every left/top we set on the
-   popover gets multiplied by that zoom before it's painted. Read
-   the body zoom so we can divide our positions by it and the
-   popover lands at the visual coords we actually intended. */
-function readBodyZoom() {
-  try {
-    const v = parseFloat(getComputedStyle(document.body).zoom);
-    return Number.isFinite(v) && v > 0 ? v : 1;
-  } catch { return 1; }
+/* Resolve the CSS `zoom` chain UP from the popup's mount parent —
+   we need it because the popover portals to document.body, and if
+   body (or any ancestor) has a zoom != 1 the browser multiplies
+   every left/top we set by that zoom before painting. We want the
+   popup to land at the same VISUAL viewport pixel we computed in
+   the cursor / anchor math, so dividing the CSS coord by the cumulative
+   zoom before assigning it produces the right rendered position.
+
+   Walks document.body up to documentElement, multiplying every
+   non-1 zoom along the way. Settings + template editor live under
+   <body data-gb-scale="editor"> which compiles to body { zoom: N },
+   so that's the typical 2-level walk: body × html (html is always 1).
+   The check is cheap and the chain is short. */
+function readZoomChain() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return 1;
+  let z = 1;
+  let el = document.body;
+  while (el && el !== document.documentElement.parentNode) {
+    try {
+      const raw = getComputedStyle(el).zoom;
+      const n = parseFloat(raw);
+      if (Number.isFinite(n) && n > 0) z *= n;
+    } catch {}
+    el = el.parentElement;
+  }
+  return z || 1;
 }
 
 /* Resolve the popovers scale at drag/position time. Prefers reading
@@ -181,9 +196,11 @@ export function DraggablePopup({
     if (left > maxLeft) left = maxLeft;
     if (top < 8) top = 8;
     if (top > maxTop) top = maxTop;
-    /* Compensate for body zoom — see readBodyZoom comment. */
-    const bz = readBodyZoom();
-    return { left: Math.max(8, left) / bz, top: top / bz };
+    /* Compensate for ancestor CSS zoom (editor scale, etc.) so a
+       coord we computed in true viewport pixels lands at that
+       viewport pixel after the browser multiplies by zoom. */
+    const z = readZoomChain();
+    return { left: Math.max(8, left) / z, top: top / z };
   };
 
   const [pos, setPos] = useState(computeInitialPos);
@@ -209,21 +226,24 @@ export function DraggablePopup({
       const dx = ev.clientX - start.px;
       const dy = ev.clientY - start.py;
       const scale = readPopoverScale(rootRef.current);
-      const bz = readBodyZoom();
+      const z = readZoomChain();
       /* Use the popup's ACTUAL rendered height when possible — the
          element's offsetHeight gives the real content height (which
          caps at maxHeight), so the clamp respects content collapses
-         and growth, not just the maxHeight constant. */
-      const realW = (rootRef.current?.offsetWidth  || W) * scale * bz;
-      const realH = (rootRef.current?.offsetHeight || H) * scale * bz;
+         and growth. The clamp is against viewport pixels so multiply
+         the popup's CSS box by the ancestor zoom chain to compare
+         against window.innerWidth/innerHeight which are in viewport
+         pixels. */
+      const realW = (rootRef.current?.offsetWidth  || W) * scale * z;
+      const realH = (rootRef.current?.offsetHeight || H) * scale * z;
       const maxLeft = Math.max(0, window.innerWidth  - realW);
       const maxTop  = Math.max(0, window.innerHeight - realH);
-      /* Mouse delta is in viewport pixels; CSS pixels on the popup are
-         in body-zoom pre-zoom space. Divide the delta by body zoom
-         so the popup tracks the cursor 1:1 visually. */
+      /* Mouse delta is in viewport pixels; the popup's CSS left/top
+         live in zoom-pre-multiplied space, so divide the delta by the
+         ancestor zoom so the popup follows the cursor 1:1 visually. */
       setPos({
-        left: Math.max(0, Math.min(maxLeft, start.left + dx / bz)),
-        top:  Math.max(0, Math.min(maxTop,  start.top  + dy / bz)),
+        left: Math.max(0, Math.min(maxLeft / z, start.left + dx / z)),
+        top:  Math.max(0, Math.min(maxTop  / z, start.top  + dy / z)),
       });
     };
     const onUp = () => {

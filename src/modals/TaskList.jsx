@@ -953,9 +953,75 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
    Contact, Due Date, Category, Priority, Subject, Status, Action. */
 const COLS = '30px 1.3fr 1.1fr 100px 1.0fr 70px 1.5fr 90px 110px';
 
-function TasksTable({ rows, status, query, allChecked, selected, onToggle, onToggleAll, sortChain = [], onSort, onQuickMenu, busyRows, emailStatusByRow = {} }) {
+/* Scan beam — same three-layer overlay CRMSearch uses (gradient body
+   + two glowing hairlines) absolutely positioned over the active
+   sending row. translateY transition slides between rows when the
+   orchestrator advances. */
+function ScanBeam({ top, height }) {
+  const transition = 'transform .35s cubic-bezier(.3,.7,.2,1)';
   return (
-    <div>
+    <>
+      <div aria-hidden style={{
+        position: 'absolute', left: 0, right: 0, top: 0,
+        transform: `translateY(${top}px)`,
+        height,
+        background: 'linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--gb-brand-label) 16%, transparent) 35%, color-mix(in srgb, var(--gb-brand-label) 28%, transparent) 50%, color-mix(in srgb, var(--gb-brand-label) 16%, transparent) 65%, transparent 100%)',
+        transition,
+        pointerEvents: 'none',
+        zIndex: 3,
+      }} />
+      <div aria-hidden style={{
+        position: 'absolute', left: 0, right: 0, top: 0,
+        transform: `translateY(${top}px)`,
+        height: 1,
+        background: 'var(--gb-brand-label)',
+        boxShadow: '0 0 14px 1px var(--gb-brand-label)',
+        transition, pointerEvents: 'none', zIndex: 4,
+      }} />
+      <div aria-hidden style={{
+        position: 'absolute', left: 0, right: 0, top: 0,
+        transform: `translateY(${top + height}px)`,
+        height: 1,
+        background: 'var(--gb-brand-label)',
+        boxShadow: '0 0 14px 1px var(--gb-brand-label)',
+        transition, pointerEvents: 'none', zIndex: 4,
+      }} />
+    </>
+  );
+}
+
+function TasksTable({ rows, status, query, allChecked, selected, onToggle, onToggleAll, sortChain = [], onSort, onQuickMenu, busyRows, emailStatusByRow = {} }) {
+  /* Beam dwells on the last 'sending' row through the inter-send
+     delay so the visual stays tied to the orchestrator's cursor.
+     Mirrors CRMSearch's behaviour exactly. */
+  const containerRef = useRef(null);
+  const [activeRowId, setActiveRowId] = useState(null);
+  useEffect(() => {
+    if (Object.keys(emailStatusByRow).length === 0) {
+      setActiveRowId(null);
+      return;
+    }
+    for (const [id, st] of Object.entries(emailStatusByRow)) {
+      if (st === 'sending') {
+        setActiveRowId(id);
+        return;
+      }
+    }
+    // No row currently sending — keep activeRowId on the last one
+    // so the beam dwells through the inter-send delay.
+  }, [emailStatusByRow]);
+  const [scanRect, setScanRect] = useState(null);
+  useEffect(() => {
+    if (!activeRowId) { setScanRect(null); return; }
+    const root = containerRef.current;
+    if (!root) return;
+    const safeId = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(activeRowId) : String(activeRowId).replace(/"/g, '\\"');
+    const el = root.querySelector(`[data-row-id="${safeId}"]`);
+    if (el) setScanRect({ top: el.offsetTop, height: el.offsetHeight });
+  }, [activeRowId, rows]);
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }}>
       {/* Sticky header — sortable. Click a label to set sort; click
           again to toggle direction. The arrow next to the label
           indicates the active column. */}
@@ -1007,6 +1073,10 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
           onQuickMenu={onQuickMenu}
         />
       ))}
+      {/* Same moving light bar CRMSearch has — sweeps over the
+          currently-sending row and stays on it through the delay
+          to the next send. */}
+      {scanRect && <ScanBeam top={scanRect.top} height={scanRect.height} />}
     </div>
   );
 }
@@ -1063,6 +1133,7 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, onToggle, onQuickMenu 
 
   return (
     <div
+      data-row-id={task.id}
       style={{
         display: 'grid', gridTemplateColumns: COLS,
         padding: '10px 14px', gap: 12,
