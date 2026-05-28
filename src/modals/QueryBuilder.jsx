@@ -1,17 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  FloatingPanel, ModalHeader, ModalFooter, Btn, Input, Dropdown, DatePicker, IconBtn, I,
+  FloatingPanel, ModalHeader, Btn, Input, IconBtn, Tag, I,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 
 /* ── Saved-queries storage ───────────────────────────────────────
    Mirrors the legacy content/crm-query-builder.js storage at
-   `chrome.storage.local.crmSavedQueries` so any queries the user
-   already saved against the old vanilla-JS modal continue to load
-   here. Outside an extension context (playground, dev), we transparently
-   fall back to localStorage under the same key. */
+   `chrome.storage.local.crmSavedQueries`. Outside an extension
+   context (playground, dev) we transparently fall back to
+   localStorage under the same key. */
 const QB_STORAGE_KEY = 'crmSavedQueries';
 const hasChromeStorage = () => {
   try { return typeof chrome !== 'undefined' && !!chrome.storage?.local; } catch { return false; }
@@ -41,53 +40,69 @@ async function persistSavedQueries(list) {
 }
 
 /* ───────────────────────────────────────────────────────────────
-   QueryBuilder — React port of content/crm-query-builder.js.
+   QueryBuilder — group-based redesign.
 
-   A modal that lets users compose a Solr `fq` filter as a list of
-   field/op/value conditions joined by AND. On Apply, it returns:
+   Surface:
+     • per-condition NOT toggle
+     • per-condition duplicate + reorder
+     • condition groups joined by AND or OR INSIDE the group
+     • outer joiner (AND or OR) BETWEEN groups
+     • quick presets sidebar (4 pre-baked starting points)
+     • saved queries sidebar (round-trips through crmSavedQueries)
+     • live preview row with human label, compiled fq, copy buttons,
+       and a brand pulse on every edit
+
+   State shape kept on the panel:
      {
-       label:   human-readable summary, e.g. "Sales Rep is Jamie · Orders > 5"
-       solrFq:  the compiled fq= clause, e.g. "salesRep_s:Jamie AND orderCount_i:{5 TO *}"
-       conditions: the editable state, for re-opening
+       outerJoiner: 'AND' | 'OR',
+       groups: [
+         {
+           id, joiner: 'AND' | 'OR',
+           conditions: [
+             { id, fieldKey, op, val, val2, num, unit, not },
+             ...
+           ],
+         },
+         ...
+       ],
      }
 
-   Two surface areas are kept in lock-step with the source:
-     • QB_FIELDS  — list of queryable Solr fields; mirrors CRMSearch's
-                    table columns so users can only filter on what
-                    they can see.
-     • compileToSolr — must produce the same fq syntax the legacy
-                    crm-query-builder.js emitted, so the existing
-                    server-side Solr index keeps working without a
-                    parallel parser. Verbatim port of qbConditionToSolr.
+   Back-compat — CRMSearch's filter bar still consumes the flat
+   exports `compileToSolr` / `compileToLabel` / `describeCondition`
+   over a flat conditions list. On Apply, we ship the rich `state`
+   AND a flattened `conditions` array. Re-opening with the flat
+   array (no state) collapses to a single AND-joined group; the
+   rich state survives a round trip when callers pass it back via
+   `initialState`.
 
-   Value-editor variants by (field.type, op):
-     text                          → single Input
-     enum                          → Dropdown of field.options
-     int/float (single op)         → number Input
-     int/float (between)           → number Input + 'to' + number Input
-     date (rel_past, rel_future)   → number Input + unit Dropdown + suffix
-     date (before, after)          → date Input
-     exists, not_exists,
-     after_today, before_today     → no value editor
-─────────────────────────────────────────────────────────────── */
+   QB_FIELDS is the locked column list — same set CRMSearch's table
+   exposes. Each field carries a `category` for the picker grouping
+   and the in-row category chip. ─────────────────────────────────── */
 
 export const QB_FIELDS = [
-  { key: 'recordType_s',        label: 'Record Type',        type: 'enum',  options: ['Contact', 'Account'] },
-  { key: 'salesRep_s',          label: 'Sales Rep',          type: 'text' },
-  { key: 'podID_i',             label: 'Pod ID',             type: 'int'  },
-  { key: 'role_s',              label: 'Role',               type: 'enum',  options: ['BDR', 'AE', 'CSM', 'SE', 'Manager'] },
-  { key: 'contactName_t',       label: 'Contact Name',       type: 'text' },
-  { key: 'accountName_t',       label: 'Account Name',       type: 'text' },
-  { key: 'accountID_s',         label: 'Account ID',         type: 'text' },
-  { key: 'emails_tps',          label: 'Email',              type: 'text' },
-  { key: 'phones_ss',           label: 'Phone',              type: 'text' },
-  { key: 'orderCount_i',        label: 'Order Count',        type: 'int'  },
-  { key: 'lastOrderDate_dt',    label: 'Last Order Date',    type: 'date' },
-  { key: 'nextTaskDate_dt',     label: 'Next Task Date',     type: 'date' },
-  { key: 'priorYearRevenue_f',  label: 'Prior Year Revenue', type: 'float'},
-  { key: 'yearToDateRevenue_f', label: 'YTD Revenue',        type: 'float'},
-  { key: 'salesRepID_s',        label: 'Sales Rep ID',       type: 'text' },
+  { key: 'recordType_s',        label: 'Record Type',        type: 'enum',  category: 'Identity', options: ['Contact', 'Account'] },
+  { key: 'salesRep_s',          label: 'Sales Rep',          type: 'text',  category: 'Identity' },
+  { key: 'salesRepID_s',        label: 'Sales Rep ID',       type: 'text',  category: 'Identity' },
+  { key: 'role_s',              label: 'Role',               type: 'enum',  category: 'Identity', options: ['BDR', 'AE', 'CSM', 'SE', 'Manager'] },
+  { key: 'podID_i',             label: 'Pod ID',             type: 'int',   category: 'Identity' },
+  { key: 'contactName_t',       label: 'Contact Name',       type: 'text',  category: 'Identity' },
+  { key: 'accountName_t',       label: 'Account Name',       type: 'text',  category: 'Identity' },
+  { key: 'accountID_s',         label: 'Account ID',         type: 'text',  category: 'Identity' },
+  { key: 'emails_tps',          label: 'Email',              type: 'text',  category: 'Contact'  },
+  { key: 'phones_ss',           label: 'Phone',              type: 'text',  category: 'Contact'  },
+  { key: 'orderCount_i',        label: 'Order Count',        type: 'int',   category: 'Activity' },
+  { key: 'lastOrderDate_dt',    label: 'Last Order Date',    type: 'date',  category: 'Activity' },
+  { key: 'nextTaskDate_dt',     label: 'Next Task Date',     type: 'date',  category: 'Activity' },
+  { key: 'priorYearRevenue_f',  label: 'Prior Year Revenue', type: 'float', category: 'Revenue'  },
+  { key: 'yearToDateRevenue_f', label: 'YTD Revenue',        type: 'float', category: 'Revenue'  },
 ];
+
+const CATEGORY_TONE = {
+  Identity: 'neutral',
+  Contact:  'brand',
+  Activity: 'warning',
+  Revenue:  'success',
+};
 
 export const QB_OPS = {
   text:  [
@@ -135,20 +150,28 @@ export const QB_OPS = {
 };
 
 const QB_UNITS      = ['days', 'weeks', 'months', 'years'];
-const QB_UNIT_OPTS  = QB_UNITS.map((u) => ({ id: u, label: u }));
 const QB_UNIT_SOLR  = { days: 'DAY', weeks: 'WEEK', months: 'MONTH', years: 'YEAR' };
+const VALUELESS     = new Set(['exists', 'not_exists', 'after_today', 'before_today']);
 
-// Ops that don't take a value editor (the predicate is the whole condition).
-const VALUELESS = new Set(['exists', 'not_exists', 'after_today', 'before_today']);
-
+/* Client-local id counter so every row carries a stable React key
+   even when the user duplicates / reorders frequently. */
 let _nextId = 1;
+const uid = () => ++_nextId;
+
 const newCondition = () => {
   const field = QB_FIELDS[0];
-  const defaultVal = field.type === 'enum' ? (field.options[0] ?? '') : '';
-  return { id: ++_nextId, fieldKey: field.key, op: 'is', val: defaultVal, val2: '', unit: 'years', num: '1' };
+  return {
+    id: uid(),
+    fieldKey: field.key,
+    op: 'is',
+    val: field.type === 'enum' ? (field.options[0] ?? '') : '',
+    val2: '', num: '1', unit: 'years', not: false,
+  };
 };
+const newGroup = () => ({ id: uid(), joiner: 'AND', conditions: [newCondition()] });
 
-/* ── Solr compilation — verbatim from qbConditionToSolr ────────── */
+/* ── Solr compilation — verbatim semantics from the legacy
+   crm-query-builder.js + new `not` wrapper. */
 function qbQuote(v) { return v.includes(' ') ? `"${v}"` : v; }
 
 function conditionToSolr(field, c) {
@@ -157,77 +180,84 @@ function conditionToSolr(field, c) {
   const v2 = (c.val2 || '').trim();
   const n = c.num || '1';
   const u = QB_UNIT_SOLR[c.unit] || 'YEAR';
+  let out = null;
   switch (c.op) {
-    case 'is':           return v  ? `${k}:${qbQuote(v)}`         : null;
-    case 'contains':     return v  ? `${k}:*${v}*`                : null;
-    case 'starts':       return v  ? `${k}:${v}*`                 : null;
-    case 'is_not':       return v  ? `-${k}:${qbQuote(v)}`        : null;
-    case 'exists':       return `${k}:[* TO *]`;
-    case 'not_exists':   return `-${k}:[* TO *]`;
-    case 'eq':           return v  ? `${k}:${v}`                  : null;
-    case 'ne':           return v  ? `-${k}:${v}`                 : null;
-    case 'gt':           return v  ? `${k}:{${v} TO *}`           : null;
-    case 'gte':          return v  ? `${k}:[${v} TO *]`           : null;
-    case 'lt':           return v  ? `${k}:{* TO ${v}}`           : null;
-    case 'lte':          return v  ? `${k}:[* TO ${v}]`           : null;
-    case 'between':      return (v && v2) ? `${k}:[${v} TO ${v2}]` : null;
-    case 'rel_past':     return `${k}:[* TO NOW-${n}${u}]`;
-    case 'rel_future':   return `${k}:[NOW TO NOW%2B${n}${u}]`;
-    case 'after_today':  return `${k}:[NOW TO *]`;
-    case 'before_today': return `${k}:[* TO NOW]`;
-    case 'before':       return v  ? `${k}:[* TO ${v}T00:00:00Z]` : null;
-    case 'after':        return v  ? `${k}:[${v}T00:00:00Z TO *]` : null;
-    default:             return null;
+    case 'is':           out = v ? `${k}:${qbQuote(v)}` : null; break;
+    case 'contains':     out = v ? `${k}:*${v}*` : null; break;
+    case 'starts':       out = v ? `${k}:${v}*` : null; break;
+    case 'is_not':       out = v ? `-${k}:${qbQuote(v)}` : null; break;
+    case 'exists':       out = `${k}:[* TO *]`; break;
+    case 'not_exists':   out = `-${k}:[* TO *]`; break;
+    case 'eq':           out = v ? `${k}:${v}` : null; break;
+    case 'ne':           out = v ? `-${k}:${v}` : null; break;
+    case 'gt':           out = v ? `${k}:{${v} TO *}` : null; break;
+    case 'gte':          out = v ? `${k}:[${v} TO *]` : null; break;
+    case 'lt':           out = v ? `${k}:{* TO ${v}}` : null; break;
+    case 'lte':          out = v ? `${k}:[* TO ${v}]` : null; break;
+    case 'between':      out = (v && v2) ? `${k}:[${v} TO ${v2}]` : null; break;
+    case 'rel_past':     out = `${k}:[* TO NOW-${n}${u}]`; break;
+    case 'rel_future':   out = `${k}:[NOW TO NOW%2B${n}${u}]`; break;
+    case 'after_today':  out = `${k}:[NOW TO *]`; break;
+    case 'before_today': out = `${k}:[* TO NOW]`; break;
+    case 'before':       out = v ? `${k}:[* TO ${v}T00:00:00Z]` : null; break;
+    case 'after':        out = v ? `${k}:[${v}T00:00:00Z TO *]` : null; break;
+    default:             out = null;
   }
+  if (!out) return null;
+  /* NOT wraps the whole condition. For ops that already emit a
+     leading `-` (is_not / ne / not_exists) the toggle becomes a
+     double-negative, which we collapse rather than emitting
+     `-(-foo)` and forcing Solr to parse it back out. */
+  if (c.not) {
+    if (out.startsWith('-')) return out.slice(1);
+    return `-(${out})`;
+  }
+  return out;
 }
 
-export function compileToSolr(conditions) {
-  return conditions.map((c) => {
-    const field = QB_FIELDS.find((f) => f.key === c.fieldKey);
-    return field ? conditionToSolr(field, c) : null;
-  }).filter(Boolean).join(' AND ');
-}
-
-/* ── Human-readable label for the QB filter bar in CRMSearch ──── */
 function conditionToLabel(field, c) {
   const fl = field.label;
   const v = (c.val || '').trim();
   const v2 = (c.val2 || '').trim();
   const n = c.num || '1';
   const u = c.unit || 'years';
+  let label = null;
   switch (c.op) {
-    case 'is':            return v  ? `${fl} is ${v}` : null;
-    case 'contains':      return v  ? `${fl} contains "${v}"` : null;
-    case 'starts':        return v  ? `${fl} starts with "${v}"` : null;
-    case 'is_not':        return v  ? `${fl} is not ${v}` : null;
-    case 'exists':        return `${fl} is set`;
-    case 'not_exists':    return `${fl} is not set`;
-    case 'eq':            return v  ? `${fl} = ${v}`  : null;
-    case 'ne':            return v  ? `${fl} ≠ ${v}`  : null;
-    case 'gt':            return v  ? `${fl} > ${v}`  : null;
-    case 'gte':           return v  ? `${fl} ≥ ${v}`  : null;
-    case 'lt':            return v  ? `${fl} < ${v}`  : null;
-    case 'lte':           return v  ? `${fl} ≤ ${v}`  : null;
-    case 'between':       return (v && v2) ? `${fl} between ${v} and ${v2}` : null;
-    case 'rel_past':      return `${fl} more than ${n} ${u} ago`;
-    case 'rel_future':    return `${fl} within next ${n} ${u}`;
-    case 'after_today':   return `${fl} after today`;
-    case 'before_today':  return `${fl} before today`;
-    case 'before':        return v  ? `${fl} before ${v}` : null;
-    case 'after':         return v  ? `${fl} after ${v}`  : null;
-    default:              return null;
+    case 'is':            label = v ? `${fl} is ${v}` : null; break;
+    case 'contains':      label = v ? `${fl} contains "${v}"` : null; break;
+    case 'starts':        label = v ? `${fl} starts with "${v}"` : null; break;
+    case 'is_not':        label = v ? `${fl} is not ${v}` : null; break;
+    case 'exists':        label = `${fl} is set`; break;
+    case 'not_exists':    label = `${fl} is not set`; break;
+    case 'eq':            label = v ? `${fl} = ${v}`  : null; break;
+    case 'ne':            label = v ? `${fl} ≠ ${v}`  : null; break;
+    case 'gt':            label = v ? `${fl} > ${v}`  : null; break;
+    case 'gte':           label = v ? `${fl} ≥ ${v}`  : null; break;
+    case 'lt':            label = v ? `${fl} < ${v}`  : null; break;
+    case 'lte':           label = v ? `${fl} ≤ ${v}`  : null; break;
+    case 'between':       label = (v && v2) ? `${fl} between ${v} and ${v2}` : null; break;
+    case 'rel_past':      label = `${fl} more than ${n} ${u} ago`; break;
+    case 'rel_future':    label = `${fl} within next ${n} ${u}`; break;
+    case 'after_today':   label = `${fl} after today`; break;
+    case 'before_today':  label = `${fl} before today`; break;
+    case 'before':        label = v ? `${fl} before ${v}` : null; break;
+    case 'after':         label = v ? `${fl} after ${v}`  : null; break;
+    default:              label = null;
   }
+  if (label && c.not) return `NOT (${label})`;
+  return label;
 }
 
-/* Single-condition label — same logic as compileToLabel but for one
-   condition at a time. Exported so CRMSearch can render each active
-   filter as its own removable tag instead of one bulk label. */
-export function describeCondition(c) {
-  const field = QB_FIELDS.find((f) => f.key === c.fieldKey);
-  if (!field) return null;
-  return conditionToLabel(field, c);
+/* ── Flat-conditions back-compat exports — CRMSearch's filter bar
+   keeps using these to render per-tag removal. They still treat
+   the input as an AND-joined list, which is what the legacy modal
+   produced. */
+export function compileToSolr(conditions) {
+  return conditions.map((c) => {
+    const field = QB_FIELDS.find((f) => f.key === c.fieldKey);
+    return field ? conditionToSolr(field, c) : null;
+  }).filter(Boolean).join(' AND ');
 }
-
 export function compileToLabel(conditions) {
   const parts = conditions.map((c) => {
     const field = QB_FIELDS.find((f) => f.key === c.fieldKey);
@@ -235,27 +265,174 @@ export function compileToLabel(conditions) {
   }).filter(Boolean);
   return parts.join(' · ');
 }
+export function describeCondition(c) {
+  const field = QB_FIELDS.find((f) => f.key === c.fieldKey);
+  if (!field) return null;
+  return conditionToLabel(field, c);
+}
+
+/* ── Group-aware compilers used inside the modal. */
+function compileGroup(group) {
+  const parts = group.conditions.map((c) => {
+    const f = QB_FIELDS.find((ff) => ff.key === c.fieldKey);
+    return f ? conditionToSolr(f, c) : null;
+  }).filter(Boolean);
+  if (parts.length === 0) return null;
+  if (parts.length === 1) return parts[0];
+  return `(${parts.join(` ${group.joiner} `)})`;
+}
+function compileGroupsToSolr(groups, outerJoiner) {
+  const parts = groups.map(compileGroup).filter(Boolean);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0];
+  return parts.join(` ${outerJoiner} `);
+}
+function compileGroupLabel(group) {
+  const parts = group.conditions.map((c) => {
+    const f = QB_FIELDS.find((ff) => ff.key === c.fieldKey);
+    return f ? conditionToLabel(f, c) : null;
+  }).filter(Boolean);
+  if (parts.length === 0) return null;
+  if (parts.length === 1) return parts[0];
+  return `(${parts.join(` ${group.joiner} `)})`;
+}
+function compileGroupsToLabel(groups, outerJoiner) {
+  const parts = groups.map(compileGroupLabel).filter(Boolean);
+  if (parts.length === 0) return '';
+  return parts.join(` ${outerJoiner} `);
+}
+
+/* ── Quick presets — pre-baked starting points the rep can load
+   with one click. Each builder returns a fresh state shape. */
+const QUICK_PRESETS = [
+  {
+    id: 'vip',
+    name: 'VIP accounts',
+    desc: 'High-revenue, frequent reorderers',
+    build: () => ({
+      outerJoiner: 'AND',
+      groups: [{
+        id: uid(), joiner: 'AND',
+        conditions: [
+          { ...newCondition(), fieldKey: 'orderCount_i',        op: 'gte', val: '12' },
+          { ...newCondition(), fieldKey: 'yearToDateRevenue_f', op: 'gte', val: '10000' },
+        ],
+      }],
+    }),
+  },
+  {
+    id: 'stale',
+    name: 'Stale leads',
+    desc: 'No order in 90 days, no task pending',
+    build: () => ({
+      outerJoiner: 'AND',
+      groups: [{
+        id: uid(), joiner: 'AND',
+        conditions: [
+          { ...newCondition(), fieldKey: 'lastOrderDate_dt', op: 'rel_past', num: '90', unit: 'days' },
+          { ...newCondition(), fieldKey: 'nextTaskDate_dt',  op: 'not_exists' },
+        ],
+      }],
+    }),
+  },
+  {
+    id: 'recent',
+    name: 'Recent reorder',
+    desc: 'Last order in the past 30 days',
+    build: () => ({
+      outerJoiner: 'AND',
+      groups: [{
+        id: uid(), joiner: 'AND',
+        conditions: [
+          { ...newCondition(), fieldKey: 'lastOrderDate_dt', op: 'after_today' },
+        ],
+      }],
+    }),
+  },
+  {
+    id: 'tour',
+    name: 'Tournament prospects',
+    desc: 'AEs or BDRs with no recent contact',
+    build: () => ({
+      outerJoiner: 'AND',
+      groups: [
+        {
+          id: uid(), joiner: 'OR',
+          conditions: [
+            { ...newCondition(), fieldKey: 'role_s', op: 'is', val: 'AE' },
+            { ...newCondition(), fieldKey: 'role_s', op: 'is', val: 'BDR' },
+          ],
+        },
+        {
+          id: uid(), joiner: 'AND',
+          conditions: [
+            { ...newCondition(), fieldKey: 'lastOrderDate_dt', op: 'rel_past', num: '60', unit: 'days' },
+          ],
+        },
+      ],
+    }),
+  },
+];
+
+/* Build the panel's initial state from props:
+   - initialState (group shape) takes priority — round-trips a
+     previously-saved rich query.
+   - initialConditions (flat) falls back to a single AND group.
+   - empty starts with one default-field condition. */
+function buildInitial({ initialState, initialConditions }) {
+  if (initialState?.groups?.length) {
+    return {
+      outerJoiner: initialState.outerJoiner || 'AND',
+      groups: initialState.groups.map((g) => ({
+        id: uid(),
+        joiner: g.joiner || 'AND',
+        conditions: (g.conditions || []).map((c) => ({ ...c, id: uid() })),
+      })),
+    };
+  }
+  if (Array.isArray(initialConditions) && initialConditions.length) {
+    return {
+      outerJoiner: 'AND',
+      groups: [{
+        id: uid(), joiner: 'AND',
+        conditions: initialConditions.map((c) => ({ ...c, id: uid() })),
+      }],
+    };
+  }
+  return { outerJoiner: 'AND', groups: [newGroup()] };
+}
+
+/* Flatten a group structure into the legacy single-conditions
+   array CRMSearch's filter bar expects. The flattened list loses
+   group/joiner structure — re-importing it produces a single AND
+   group, which is the correct degradation when a user trims a tag
+   from CRMSearch. */
+function flattenGroups(groups) {
+  const out = [];
+  for (const g of groups) {
+    for (const c of g.conditions) {
+      // Strip the runtime id; CRMSearch keeps its own per-tag key.
+      const { id: _id, ...rest } = c;
+      out.push(rest);
+    }
+  }
+  return out;
+}
 
 /* ── Component ─────────────────────────────────────────────── */
-
-export function QueryBuilder({ onClosed, bindClose, initialConditions = [], onApply }) {
-  // Draggable preference mirrors CRMSearch so users get the same
-  // behavior in both modals from a single setting.
+export function QueryBuilder({ onClosed, bindClose, initialConditions = [], initialState, onApply }) {
   const draggable = useDevSetting('crmSearch.draggable') ?? false;
   const toast = useToast();
 
-  const [conditions, setConditions] = useState(() =>
-    initialConditions.length ? initialConditions.map((c) => ({ ...c, id: ++_nextId })) : [newCondition()]
-  );
-  // Saved-queries panel. List loaded on mount; flipping `savedOpen`
-  // toggles the collapsible body. saveName drives the Save button.
+  const [{ outerJoiner, groups }, setBuilder] = useState(() =>
+    buildInitial({ initialState, initialConditions }));
   const [savedQueries, setSavedQueries] = useState([]);
-  const [savedOpen, setSavedOpen] = useState(false);
   const [saveName, setSaveName] = useState('');
+  /* Pulse counter — re-keys the preview row's fq box so the
+     animation restarts on every edit. Cheap visual cue that the
+     query actually changed. */
+  const [pulseKey, setPulseKey] = useState(0);
 
-  // Load saved queries once on mount so the panel is populated before
-  // the user expands it. Fire-and-forget; if storage fails we just
-  // show "No saved queries yet."
   useEffect(() => {
     let alive = true;
     loadSavedQueries().then((list) => { if (alive) setSavedQueries(list); });
@@ -268,60 +445,128 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], onAp
     bindClose?.(fn);
   }, [bindClose]);
 
-  const solrFq = useMemo(() => compileToSolr(conditions), [conditions]);
-  const label  = useMemo(() => compileToLabel(conditions), [conditions]);
+  const solrFq = useMemo(() => compileGroupsToSolr(groups, outerJoiner), [groups, outerJoiner]);
+  const label  = useMemo(() => compileGroupsToLabel(groups, outerJoiner), [groups, outerJoiner]);
   const canApply = solrFq.length > 0;
+  const conditionCount = groups.reduce((n, g) => n + g.conditions.length, 0);
 
-  const updateCondition = useCallback((id, patch) => {
-    setConditions((arr) => arr.map((c) => (c.id === id ? { ...c, ...patch } : c)));
-  }, []);
-  const removeCondition = useCallback((id) => {
-    setConditions((arr) => arr.length <= 1 ? arr : arr.filter((c) => c.id !== id));
-  }, []);
-  const addCondition = useCallback(() => {
-    setConditions((arr) => [...arr, newCondition()]);
-  }, []);
+  useEffect(() => { setPulseKey((k) => k + 1); }, [solrFq]);
 
+  /* ── Mutators ── */
+  const patchCondition = (gid, cid, patch) => {
+    setBuilder((s) => ({
+      ...s,
+      groups: s.groups.map((g) => g.id !== gid ? g : {
+        ...g,
+        conditions: g.conditions.map((c) => c.id === cid ? { ...c, ...patch } : c),
+      }),
+    }));
+  };
+  const removeCondition = (gid, cid) => {
+    setBuilder((s) => {
+      const next = s.groups.map((g) => g.id !== gid ? g : {
+        ...g,
+        conditions: g.conditions.filter((c) => c.id !== cid),
+      });
+      const filtered = next.filter((g) => g.conditions.length > 0);
+      return { ...s, groups: filtered.length === 0 ? [newGroup()] : filtered };
+    });
+  };
+  const duplicateCondition = (gid, cid) => {
+    setBuilder((s) => ({
+      ...s,
+      groups: s.groups.map((g) => g.id !== gid ? g : {
+        ...g,
+        conditions: g.conditions.flatMap((c) => c.id === cid
+          ? [c, { ...c, id: uid() }]
+          : [c]),
+      }),
+    }));
+  };
+  const moveCondition = (gid, cid, dir) => {
+    setBuilder((s) => ({
+      ...s,
+      groups: s.groups.map((g) => {
+        if (g.id !== gid) return g;
+        const idx = g.conditions.findIndex((c) => c.id === cid);
+        const next = idx + dir;
+        if (idx < 0 || next < 0 || next >= g.conditions.length) return g;
+        const arr = g.conditions.slice();
+        [arr[idx], arr[next]] = [arr[next], arr[idx]];
+        return { ...g, conditions: arr };
+      }),
+    }));
+  };
+  const addCondition = (gid) => {
+    setBuilder((s) => ({
+      ...s,
+      groups: s.groups.map((g) => g.id !== gid ? g : {
+        ...g, conditions: [...g.conditions, newCondition()],
+      }),
+    }));
+  };
+  const setGroupJoiner = (gid, joiner) => {
+    setBuilder((s) => ({
+      ...s,
+      groups: s.groups.map((g) => g.id === gid ? { ...g, joiner } : g),
+    }));
+  };
+  const removeGroup = (gid) => {
+    setBuilder((s) => s.groups.length <= 1
+      ? s
+      : { ...s, groups: s.groups.filter((g) => g.id !== gid) });
+  };
+  const addGroup = () => setBuilder((s) => ({ ...s, groups: [...s.groups, newGroup()] }));
+  const setOuterJoiner = (joiner) => setBuilder((s) => ({ ...s, outerJoiner: joiner }));
+
+  const loadFromState = (st) => {
+    setBuilder({
+      outerJoiner: st.outerJoiner || 'AND',
+      groups: (st.groups || [newGroup()]).map((g) => ({
+        id: uid(),
+        joiner: g.joiner || 'AND',
+        conditions: (g.conditions || []).map((c) => ({ ...c, id: uid() })),
+      })),
+    });
+  };
+  const handleClear = () => setBuilder({ outerJoiner: 'AND', groups: [newGroup()] });
+
+  /* ── Apply / save / load ── */
   const handleApply = () => {
     if (!canApply) return;
+    const flat = flattenGroups(groups);
     const payload = {
       label,
       solrFq,
-      // Strip the auto-incremented client id when handing back — caller
-      // doesn't need it and we'll re-issue on re-open.
-      conditions: conditions.map(({ id: _id, ...rest }) => rest),
+      conditions: flat,
+      /* Rich state for round-tripping; CRMSearch can stash this
+         and pass it back via initialState on the next open. */
+      state: {
+        outerJoiner,
+        groups: groups.map((g) => ({
+          joiner: g.joiner,
+          conditions: g.conditions.map(({ id: _id, ...rest }) => rest),
+        })),
+      },
     };
     if (typeof onApply === 'function') {
       onApply(payload);
     } else {
-      // Standalone mode (e.g. playground): nothing to apply to.
-      // Gracefully fall back to a toast that shows the compiled query
-      // so the user can still see their work.
       toast?.info?.(`Query ready: ${solrFq}`, { duration: 4500, placement: 'top-center' });
     }
     bindCloseRef.current?.();
   };
-  const handleClear = () => setConditions([newCondition()]);
 
-  /* Copy the compiled fq= to the clipboard so users can paste into
-     custom CRM queries or scripts. Defensively falls back to a toast
-     when clipboard API is blocked (e.g., insecure context). */
-  const handleCopy = async () => {
-    if (!canApply) return;
+  const handleCopy = async (text, label) => {
+    if (!text) return;
     try {
-      await navigator.clipboard?.writeText(solrFq);
-      toast?.success?.('Query copied to clipboard', { duration: 2200 });
+      await navigator.clipboard?.writeText(text);
+      toast?.success?.(`${label} copied`, { duration: 1800 });
     } catch (err) {
-      toast?.warning?.(`Couldn't copy: ${err?.message || 'clipboard blocked'}`, { duration: 3500 });
+      toast?.warning?.(`Couldn't copy: ${err?.message || 'clipboard blocked'}`, { duration: 3200 });
     }
   };
 
-  /* Save / load / delete — mirror the legacy QB's behavior so users
-     with existing saved queries see them here. Saving uses the same
-     `crmSavedQueries` storage key + the same entry shape (id, name,
-     query, conditions, savedAt). Re-saving with the same name
-     REPLACES the existing entry (matches the legacy "replace same-name"
-     behavior — prevents drift between near-duplicates). */
   const canSave = !!saveName.trim() && canApply;
   const handleSave = async () => {
     if (!canSave) return;
@@ -330,21 +575,33 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], onAp
       id: Date.now().toString(36),
       name,
       query: solrFq,
-      conditions: conditions.map(({ id: _id, ...rest }) => rest),
+      conditions: flattenGroups(groups),
+      state: {
+        outerJoiner,
+        groups: groups.map((g) => ({
+          joiner: g.joiner,
+          conditions: g.conditions.map(({ id: _id, ...rest }) => rest),
+        })),
+      },
       savedAt: Date.now(),
     };
     const updated = [entry, ...savedQueries.filter((q) => q.name !== name)];
     setSavedQueries(updated);
     await persistSavedQueries(updated);
-    toast?.success?.(`Saved "${name}"`, { duration: 2200 });
+    setSaveName('');
+    toast?.success?.(`Saved "${name}"`, { duration: 1800 });
   };
-  const handleLoad = (q) => {
-    if (!q?.conditions?.length) return;
-    setConditions(q.conditions.map((c) => ({ ...c, id: ++_nextId })));
-    setSaveName(q.name);
-    toast?.info?.(`Loaded "${q.name}"`, { duration: 1800 });
+  const handleLoadSaved = (q) => {
+    if (q?.state?.groups?.length) {
+      loadFromState(q.state);
+    } else if (Array.isArray(q?.conditions) && q.conditions.length) {
+      loadFromState({
+        outerJoiner: 'AND',
+        groups: [{ id: uid(), joiner: 'AND', conditions: q.conditions }],
+      });
+    }
   };
-  const handleDelete = async (id) => {
+  const handleDeleteSaved = async (id) => {
     const updated = savedQueries.filter((q) => q.id !== id);
     setSavedQueries(updated);
     await persistSavedQueries(updated);
@@ -352,8 +609,8 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], onAp
 
   return (
     <FloatingPanel
-      width={820}
-      height={580}
+      width={1080}
+      height={620}
       backdrop
       draggable={draggable}
       onClose={onClosed}
@@ -362,524 +619,758 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], onAp
       <ModalHeader
         icon={<FunnelIcon size={14} />}
         title="Query Builder"
-        subtitle="Build a Solr filter — conditions are joined with AND"
+        subtitle={`Filter CRM contacts and accounts · ${QB_FIELDS.length} queryable fields · Solr fq output`}
+        right={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <CountChip>{conditionCount} CONDITION{conditionCount === 1 ? '' : 'S'}</CountChip>
+            <CountChip>{groups.length} GROUP{groups.length === 1 ? '' : 'S'}</CountChip>
+          </div>
+        }
       />
 
-      {/* Conditions list — scrollable */}
-      <div style={{
-        flex: 1, minHeight: 0,
-        overflow: 'auto',
-        padding: '14px 18px',
-        background: 'var(--gb-surface-canvas)',
-      }}>
-        <AnimatePresence initial={false}>
-          {conditions.map((c, idx) => (
-            <ConditionRow
-              key={c.id}
-              index={idx}
-              condition={c}
-              isLast={idx === conditions.length - 1}
-              canDelete={conditions.length > 1}
-              onChange={(patch) => updateCondition(c.id, patch)}
-              onRemove={() => removeCondition(c.id)}
-            />
-          ))}
-        </AnimatePresence>
-
-        <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-start' }}>
-          <Btn
-            size="sm"
-            variant="ghost"
-            icon={<I.plus size={11} />}
-            onClick={addCondition}
-          >
-            Add condition
-          </Btn>
-        </div>
-      </div>
-
-      {/* Preview — compiled Solr fq, mono font, dim when empty */}
-      <div style={{
-        padding: '10px 18px',
-        borderTop: '1px solid var(--gb-border-subtle)',
-        background: 'var(--gb-surface-1)',
-        flexShrink: 0,
-        display: 'flex', alignItems: 'center', gap: 10,
-      }}>
-        <span style={{
-          fontSize: 9.5, fontWeight: 700, letterSpacing: 0.8,
-          textTransform: 'uppercase',
-          color: 'var(--gb-text-muted)',
-          flexShrink: 0,
-        }}>fq</span>
-        <code style={{
-          flex: 1, minWidth: 0,
-          fontSize: 11,
-          fontFamily: 'var(--gb-font-mono)',
-          color: canApply ? 'var(--gb-text-secondary)' : 'var(--gb-text-muted)',
-          fontStyle: canApply ? 'normal' : 'italic',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }} title={solrFq}>
-          {canApply ? solrFq : '— add a condition above —'}
-        </code>
-        <Btn
-          size="xs" variant="ghost"
-          icon={<I.copy size={10} />}
-          disabled={!canApply}
-          onClick={handleCopy}
-        >Copy</Btn>
-      </div>
-
-      {/* Save bar — name input + Save button. Disabled until the name
-          is non-empty AND the query has at least one valid condition. */}
-      <div style={{
-        padding: '10px 18px',
-        borderTop: '1px solid var(--gb-border-subtle)',
-        background: 'var(--gb-surface-1)',
-        flexShrink: 0,
-        display: 'flex', alignItems: 'center', gap: 8,
-      }}>
-        <Input
-          size="sm"
-          value={saveName}
-          onChange={setSaveName}
-          placeholder="Name this query to save it…"
-          style={{ flex: 1 }}
+      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        <Sidebar
+          presets={QUICK_PRESETS}
+          saved={savedQueries}
+          onLoadPreset={(p) => loadFromState(p.build())}
+          onLoadSaved={handleLoadSaved}
+          onDeleteSaved={handleDeleteSaved}
         />
-        <Btn
-          size="sm" variant="secondary"
-          icon={<SaveIcon size={11} />}
-          disabled={!canSave}
-          onClick={handleSave}
-        >Save</Btn>
-      </div>
 
-      {/* Saved-queries collapsible panel. Clicking the header toggles
-          the list; each row has Load/Delete. Mirrors the legacy QB's
-          saved-queries panel so users with old saved entries see them
-          here. */}
-      <div style={{
-        borderTop: '1px solid var(--gb-border-subtle)',
-        background: 'var(--gb-surface-canvas)',
-        flexShrink: 0,
-      }}>
-        <button
-          type="button"
-          onClick={() => setSavedOpen((o) => !o)}
-          style={{
-            width: '100%',
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '8px 18px',
-            background: 'transparent', border: 'none',
-            color: 'var(--gb-text-secondary)',
-            cursor: 'pointer',
-            fontSize: 11.5, fontWeight: 600,
-            textAlign: 'left',
-          }}
-        >
-          <span style={{
-            fontSize: 9.5, fontWeight: 700, letterSpacing: 0.8,
-            textTransform: 'uppercase',
-            color: 'var(--gb-text-muted)',
-          }}>Saved Queries</span>
-          {savedQueries.length > 0 && (
-            <span style={{
-              fontFamily: 'var(--gb-font-mono)', fontSize: 10,
-              color: 'var(--gb-text-tertiary)',
-            }}>{savedQueries.length}</span>
-          )}
-          <div style={{ flex: 1 }} />
-          <motion.span
-            animate={{ rotate: savedOpen ? 180 : 0 }}
-            transition={{ duration: 0.18 }}
-            style={{ display: 'inline-flex' }}
-          >
-            <ChevronIcon size={10} />
-          </motion.span>
-        </button>
-        <AnimatePresence initial={false}>
-          {savedOpen && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              style={{ overflow: 'hidden' }}
-            >
-              <div style={{
-                maxHeight: 140, overflowY: 'auto',
-                padding: '4px 18px 10px',
-              }}>
-                {savedQueries.length === 0 ? (
-                  <div style={{
-                    padding: '12px 0',
-                    fontSize: 11.5, fontStyle: 'italic',
-                    color: 'var(--gb-text-muted)',
-                    textAlign: 'center',
-                  }}>No saved queries yet.</div>
-                ) : (
-                  savedQueries.map((q) => (
-                    <SavedQueryRow
-                      key={q.id}
-                      query={q}
-                      onLoad={() => handleLoad(q)}
-                      onDelete={() => handleDelete(q.id)}
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          {/* Groups area — scrolls when there are many groups. */}
+          <div style={{
+            flex: 1, minHeight: 0,
+            overflow: 'auto',
+            padding: '16px 18px 12px',
+            background: 'var(--gb-surface-canvas)',
+          }}>
+            <AnimatePresence initial={false}>
+              {groups.map((g, i) => (
+                <motion.div
+                  key={g.id}
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
+                >
+                  <GroupCard
+                    group={g}
+                    index={i}
+                    onPatchCondition={(cid, patch) => patchCondition(g.id, cid, patch)}
+                    onRemoveCondition={(cid) => removeCondition(g.id, cid)}
+                    onDuplicateCondition={(cid) => duplicateCondition(g.id, cid)}
+                    onMoveCondition={(cid, dir) => moveCondition(g.id, cid, dir)}
+                    onAddCondition={() => addCondition(g.id)}
+                    onJoinerChange={(j) => setGroupJoiner(g.id, j)}
+                    canRemove={groups.length > 1}
+                    onRemoveGroup={() => removeGroup(g.id)}
+                  />
+                  {i < groups.length - 1 && (
+                    <JoinerDivider
+                      value={outerJoiner}
+                      onChange={setOuterJoiner}
+                      label="GROUP JOIN"
+                      large
                     />
-                  ))
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+                  )}
+                </motion.div>
+              ))}
+            </AnimatePresence>
+            <div style={{ marginTop: 12, display: 'flex' }}>
+              <Btn size="sm" variant="dashed" icon={<I.plus size={11} />} onClick={addGroup}>
+                Add group
+              </Btn>
+            </div>
+          </div>
 
-      <ModalFooter>
-        {/* Footer hint — clarifies how multiple conditions combine and
-            the negation semantics of "is not set". Mirrors the legacy
-            QB's .__gb-qb-foot-hint row so users coming from the old
-            tool see the same affordance. */}
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          fontSize: 10.5,
-          color: 'var(--gb-text-muted)',
-          flexShrink: 1, minWidth: 0,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>
-          <InfoCircleIcon size={11} />
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            Conditions joined with AND · "is not set" applies negation automatically
-          </span>
+          {/* Preview row — human label + compiled fq + copy buttons.
+              Pulse re-keys on every fq edit so the user gets a visual
+              confirmation their change registered. */}
+          <div style={{
+            padding: '10px 18px',
+            background: 'var(--gb-surface-1)',
+            borderTop: '1px solid var(--gb-border-default)',
+            display: 'flex', flexDirection: 'column', gap: 6,
+            flexShrink: 0,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <PreviewKey>HUMAN</PreviewKey>
+              <span style={{
+                flex: 1, minWidth: 0,
+                fontSize: 12.5, fontWeight: 600,
+                color: canApply ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)',
+                fontStyle: canApply ? 'normal' : 'italic',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }} title={label}>
+                {canApply ? label : '— add a valid condition above —'}
+              </span>
+              <IconBtn
+                size="xs" variant="ghost"
+                icon={<I.copy size={10} />}
+                disabled={!canApply}
+                onClick={() => handleCopy(label, 'Label')}
+                tooltip="Copy label"
+              />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <PreviewKey>FQ</PreviewKey>
+              <motion.code
+                key={pulseKey}
+                initial={{ opacity: 0.6 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.25 }}
+                style={{
+                  flex: 1, minWidth: 0,
+                  fontSize: 11,
+                  fontFamily: 'var(--gb-font-mono)',
+                  color: canApply ? 'var(--gb-text-secondary)' : 'var(--gb-text-muted)',
+                  fontStyle: canApply ? 'normal' : 'italic',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  padding: '2px 8px',
+                  background: 'var(--gb-fill-inverse-medium)',
+                  border: '1px solid var(--gb-border-subtle)',
+                  borderRadius: 4,
+                }}
+                title={solrFq}
+              >
+                {canApply ? solrFq : '—'}
+              </motion.code>
+              <IconBtn
+                size="xs" variant="ghost"
+                icon={<I.copy size={10} />}
+                disabled={!canApply}
+                onClick={() => handleCopy(solrFq, 'fq')}
+                tooltip="Copy fq"
+              />
+            </div>
+          </div>
+
+          {/* Footer row — save name + Reset/Cancel/Apply actions. */}
+          <div style={{
+            padding: '10px 18px',
+            background: 'var(--gb-fill-inverse-strong)',
+            borderTop: '1px solid var(--gb-border-default)',
+            display: 'flex', alignItems: 'center', gap: 8,
+            flexShrink: 0,
+          }}>
+            <Input
+              size="sm"
+              value={saveName}
+              onChange={setSaveName}
+              placeholder="Name this query to save it…"
+              style={{ flex: 1, minWidth: 0, maxWidth: 320 }}
+            />
+            <Btn
+              size="sm" variant="secondary"
+              icon={<SaveIcon size={11} />}
+              disabled={!canSave}
+              onClick={handleSave}
+            >Save</Btn>
+            <div style={{ flex: 1 }} />
+            <Btn size="sm" variant="ghost" onClick={handleClear}>Reset</Btn>
+            <Btn size="sm" variant="ghost" onClick={() => bindCloseRef.current?.()}>Cancel</Btn>
+            <Btn
+              size="sm" variant="tinted" status="brand"
+              icon={<I.check size={11} />}
+              disabled={!canApply}
+              onClick={handleApply}
+            >
+              {onApply ? 'Apply filter' : 'Done'}
+            </Btn>
+          </div>
         </div>
-        <Btn variant="ghost" size="sm" onClick={handleClear}>Reset</Btn>
-        <div style={{ flex: 1 }} />
-        <Btn variant="ghost" size="sm" onClick={() => bindCloseRef.current?.()}>Cancel</Btn>
-        <Btn
-          variant="tinted"
-          status="brand"
-          size="sm"
-          icon={<I.check size={11} />}
-          disabled={!canApply}
-          onClick={handleApply}
-        >
-          {onApply ? 'Apply filter' : 'Done'}
-        </Btn>
-      </ModalFooter>
+      </div>
     </FloatingPanel>
   );
 }
 
-/* ── SavedQueryRow ─────────────────────────────────────────────── */
-function SavedQueryRow({ query, onLoad, onDelete }) {
+/* ════════════════════════════════════════════════════════════
+   Sidebar — quick presets + saved queries
+═══════════════════════════════════════════════════════════ */
+function Sidebar({ presets, saved, onLoadPreset, onLoadSaved, onDeleteSaved }) {
+  return (
+    <aside style={{
+      width: 232, flexShrink: 0,
+      background: 'var(--gb-surface-1)',
+      borderRight: '1px solid var(--gb-border-default)',
+      display: 'flex', flexDirection: 'column',
+      minHeight: 0,
+    }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '14px 12px 16px' }}>
+        <SidebarHeader>Quick presets</SidebarHeader>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {presets.map((p) => (
+            <PresetButton key={p.id} name={p.name} desc={p.desc} onClick={() => onLoadPreset(p)} />
+          ))}
+        </div>
+
+        <SidebarHeader style={{ marginTop: 18 }}>
+          <span>Saved queries</span>
+          {saved.length > 0 && (
+            <span style={{
+              fontFamily: 'var(--gb-font-mono)', fontSize: 10,
+              color: 'var(--gb-text-tertiary)',
+              fontWeight: 600,
+              letterSpacing: 0,
+              textTransform: 'none',
+            }}>{saved.length}</span>
+          )}
+        </SidebarHeader>
+        {saved.length === 0 ? (
+          <div style={{
+            padding: '12px 10px',
+            fontSize: 10.5, color: 'var(--gb-text-muted)',
+            fontStyle: 'italic',
+            border: '1px dashed var(--gb-border-default)',
+            borderRadius: 'var(--gb-r-sm)',
+            textAlign: 'center',
+          }}>No saved queries yet</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {saved.map((q) => (
+              <SavedQueryRow
+                key={q.id}
+                query={q}
+                onLoad={() => onLoadSaved(q)}
+                onDelete={() => onDeleteSaved(q.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </aside>
+  );
+}
+
+function SidebarHeader({ children, style }) {
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 8,
-      padding: '6px 8px',
-      borderRadius: 'var(--gb-r-xs)',
-      transition: 'background-color .15s',
-    }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--gb-surface-1)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+      display: 'flex', alignItems: 'center', gap: 6,
+      marginBottom: 6,
+      fontSize: 9.5, fontWeight: 700, letterSpacing: 1,
+      textTransform: 'uppercase',
+      color: 'var(--gb-text-muted)',
+      ...style,
+    }}>{children}</div>
+  );
+}
+
+function PresetButton({ name, desc, onClick }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', flexDirection: 'column', gap: 2,
+        padding: '8px 10px',
+        background: hover ? 'var(--gb-brand-tint-soft)' : 'var(--gb-surface-2)',
+        border: '1px solid ' + (hover ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-subtle)'),
+        borderRadius: 'var(--gb-r-sm)',
+        color: 'var(--gb-text-secondary)',
+        cursor: 'pointer',
+        textAlign: 'left',
+        fontFamily: 'var(--gb-font-sans)',
+        transition: 'background-color .15s, border-color .15s',
+      }}
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{
-          fontSize: 12, fontWeight: 600,
+      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{name}</span>
+      <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>{desc}</span>
+    </button>
+  );
+}
+
+function SavedQueryRow({ query, onLoad, onDelete }) {
+  return (
+    <div
+      style={{
+        display: 'flex', flexDirection: 'column', gap: 3,
+        padding: '8px 10px',
+        background: 'var(--gb-surface-2)',
+        border: '1px solid var(--gb-border-subtle)',
+        borderRadius: 'var(--gb-r-sm)',
+        cursor: 'pointer',
+      }}
+      onClick={onLoad}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{
+          flex: 1, minWidth: 0,
+          fontSize: 11.5, fontWeight: 700,
           color: 'var(--gb-text-primary)',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>{query.name}</div>
-        <div style={{
-          fontSize: 10, fontFamily: 'var(--gb-font-mono)',
-          color: 'var(--gb-text-muted)',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }} title={query.query}>{query.query}</div>
+        }}>{query.name}</span>
+        <IconBtn
+          size="xs" variant="ghost" danger
+          icon={<I.close size={9} />}
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          tooltip="Delete"
+        />
       </div>
-      <Btn size="xs" variant="ghost" onClick={onLoad}>Load</Btn>
-      <IconBtn size="xs" variant="ghost" danger icon={<I.close size={10} />} onClick={onDelete} tooltip="Delete" />
+      <code style={{
+        fontSize: 9.5,
+        fontFamily: 'var(--gb-font-mono)',
+        color: 'var(--gb-text-muted)',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }} title={query.query}>{query.query}</code>
     </div>
   );
 }
 
-/* Inline chevron icon — used in the saved-queries collapsible header.
-   Stroke matches the design system's other small chev glyphs. */
-function ChevronIcon({ size = 10, style }) {
+/* ════════════════════════════════════════════════════════════
+   GroupCard — one group of conditions joined by AND or OR
+═══════════════════════════════════════════════════════════ */
+function GroupCard({
+  group, index,
+  onPatchCondition, onRemoveCondition, onDuplicateCondition, onMoveCondition,
+  onAddCondition, onJoinerChange,
+  canRemove, onRemoveGroup,
+}) {
   return (
-    <svg
-      width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-      style={style}
-    >
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
+    <div style={{
+      padding: 14,
+      background: 'var(--gb-surface-1)',
+      border: '1px solid var(--gb-border-subtle)',
+      borderRadius: 'var(--gb-r-md)',
+      position: 'relative',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        marginBottom: 10,
+      }}>
+        <span style={{
+          fontSize: 9.5, fontWeight: 700, letterSpacing: 1,
+          textTransform: 'uppercase',
+          color: 'var(--gb-text-muted)',
+        }}>Group {String.fromCharCode(65 + index)}</span>
+        <span style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
+        <span style={{
+          fontSize: 9.5, fontWeight: 700, letterSpacing: .8,
+          textTransform: 'uppercase',
+          color: 'var(--gb-text-muted)',
+        }}>match</span>
+        <JoinerToggle value={group.joiner} onChange={onJoinerChange} />
+        <IconBtn
+          size="xs" variant="ghost" danger
+          icon={<I.trash size={10} />}
+          disabled={!canRemove}
+          onClick={onRemoveGroup}
+          tooltip={canRemove ? 'Remove group' : 'At least one group required'}
+        />
+      </div>
+
+      {group.conditions.map((c, i) => (
+        <React.Fragment key={c.id}>
+          {i > 0 && <JoinerDivider value={group.joiner} small label="" />}
+          <ConditionRow
+            condition={c}
+            onPatch={(patch) => onPatchCondition(c.id, patch)}
+            onRemove={() => onRemoveCondition(c.id)}
+            onDuplicate={() => onDuplicateCondition(c.id)}
+            onMoveUp={i > 0 ? () => onMoveCondition(c.id, -1) : null}
+            onMoveDown={i < group.conditions.length - 1 ? () => onMoveCondition(c.id, 1) : null}
+            canRemove={group.conditions.length > 1}
+          />
+        </React.Fragment>
+      ))}
+
+      <div style={{ marginTop: 8 }}>
+        <Btn size="xs" variant="ghost" icon={<I.plus size={10} />} onClick={onAddCondition}>
+          Add condition
+        </Btn>
+      </div>
+    </div>
   );
 }
 
-/* Inline save / disk icon — used in the Save button. */
-function SaveIcon({ size = 12, style }) {
+/* ════════════════════════════════════════════════════════════
+   JoinerToggle — compact AND/OR segmented control
+═══════════════════════════════════════════════════════════ */
+function JoinerToggle({ value, onChange }) {
   return (
-    <svg
-      width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
-      style={style}
-    >
-      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-      <polyline points="17 21 17 13 7 13 7 21" />
-      <polyline points="7 3 7 8 15 8" />
-    </svg>
+    <div style={{
+      display: 'inline-flex', padding: 2, gap: 2,
+      background: 'var(--gb-surface-2)',
+      border: '1px solid var(--gb-border-default)',
+      borderRadius: 'var(--gb-r-sm)',
+    }}>
+      {['AND', 'OR'].map((j) => {
+        const on = value === j;
+        return (
+          <button
+            key={j}
+            type="button"
+            onClick={() => onChange(j)}
+            style={{
+              padding: '0 8px', height: 20,
+              border: 'none', cursor: 'pointer',
+              background: on ? 'var(--gb-brand-tint-medium)' : 'transparent',
+              color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
+              fontSize: 10, fontWeight: 800, letterSpacing: .5,
+              fontFamily: 'var(--gb-font-mono)',
+              borderRadius: 3,
+            }}
+          >{j}</button>
+        );
+      })}
+    </div>
   );
 }
 
-/* ── ConditionRow ──────────────────────────────────────────── */
-function ConditionRow({ index, condition, isLast, canDelete, onChange, onRemove }) {
+function JoinerDivider({ value, onChange, label, small, large }) {
+  const hr = <span style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      margin: small ? '6px 0' : large ? '14px 0' : '8px 0',
+    }}>
+      {hr}
+      {label && (
+        <span style={{
+          fontSize: 9, fontWeight: 700, letterSpacing: 1,
+          textTransform: 'uppercase',
+          color: 'var(--gb-text-muted)',
+        }}>{label}</span>
+      )}
+      {onChange
+        ? <JoinerToggle value={value} onChange={onChange} />
+        : <span style={{
+            display: 'inline-flex', padding: '2px 8px',
+            background: 'var(--gb-brand-tint-soft)',
+            border: '1px solid var(--gb-brand-tint-border)',
+            borderRadius: 'var(--gb-r-pill)',
+            fontSize: 9.5, fontWeight: 800, letterSpacing: .6,
+            color: 'var(--gb-brand-label)',
+            fontFamily: 'var(--gb-font-mono)',
+          }}>{value}</span>}
+      {hr}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════
+   ConditionRow
+═══════════════════════════════════════════════════════════ */
+function ConditionRow({ condition, onPatch, onRemove, onDuplicate, onMoveUp, onMoveDown, canRemove }) {
   const field = QB_FIELDS.find((f) => f.key === condition.fieldKey) || QB_FIELDS[0];
   const ops = QB_OPS[field.type] || QB_OPS.text;
 
-  // When the field changes, op might be invalid for the new field type
-  // (e.g., text→int means "contains" is gone). Reset op + value if the
-  // current op isn't available under the new field's type.
   const onFieldChange = (newKey) => {
     const newField = QB_FIELDS.find((f) => f.key === newKey) || QB_FIELDS[0];
     const newOps = QB_OPS[newField.type] || QB_OPS.text;
     const opStillValid = newOps.some((o) => o.id === condition.op);
     const patch = { fieldKey: newKey };
     if (!opStillValid) patch.op = newOps[0].id;
-    // For enum fields, seed val with the first option so the Solr query
-    // is non-empty as soon as the user picks the field.
     if (newField.type === 'enum') patch.val = newField.options[0] ?? '';
     else if (field.type === 'enum' && newField.type !== 'enum') patch.val = '';
-    onChange(patch);
+    onPatch(patch);
   };
 
-  const fieldOpts = useMemo(() =>
-    QB_FIELDS.map((f) => ({ id: f.key, label: f.label })),
-  []);
-
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -4 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, height: 0, marginTop: 0, marginBottom: 0 }}
-      transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
-      style={{ marginBottom: isLast ? 0 : 8 }}
-    >
+    <div style={{
+      display: 'flex', alignItems: 'flex-start', gap: 8,
+      padding: 10,
+      background: 'var(--gb-surface-2)',
+      border: '1px solid ' + (condition.not ? 'var(--gb-error-tint-border)' : 'var(--gb-border-subtle)'),
+      borderRadius: 'var(--gb-r-sm)',
+      transition: 'border-color .2s',
+    }}>
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 8,
+        flex: 1, minWidth: 0,
+        display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
       }}>
-        {/* Row-number badge — circular brand-tinted disc, mirrors the
-            legacy QB's .qb-row-num. Gives the rows a clean visual
-            hierarchy and a hover affordance for "this is row N". */}
-        <span style={{
-          width: 22, height: 22, flexShrink: 0,
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          borderRadius: '50%',
-          background: 'var(--gb-brand-tint-soft)',
-          color: 'var(--gb-brand-label)',
-          fontSize: 11, fontWeight: 700,
-          fontFamily: 'var(--gb-font-mono)',
-          fontVariantNumeric: 'tabular-nums',
-        }}>{index + 1}</span>
-
-        <div style={{
-          flex: 1, minWidth: 0,
-          display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
-          padding: '8px 10px',
-          background: 'var(--gb-surface-1)',
-          border: '1px solid var(--gb-border-subtle)',
-          borderRadius: 'var(--gb-r-sm)',
-          transition: 'border-color .18s, background-color .18s',
-        }}>
-          <Dropdown
-            value={condition.fieldKey}
-            options={fieldOpts}
-            onChange={onFieldChange}
-            searchable
-            size="sm"
-            style={{ width: 180 }}
-          />
-          <Dropdown
-            value={condition.op}
-            options={ops}
-            onChange={(op) => onChange({ op })}
-            size="sm"
-            style={{ width: 160 }}
-          />
-          <ValueEditor field={field} condition={condition} onChange={onChange} />
-        </div>
-
-        <IconBtn
-          icon={<I.trash size={12} />}
-          size="sm"
-          variant="ghost"
-          danger
-          disabled={!canDelete}
-          onClick={onRemove}
-          tooltip={canDelete ? 'Remove condition' : 'At least one condition is required'}
-        />
+        <NotPill on={condition.not} onClick={() => onPatch({ not: !condition.not })} />
+        <FieldSelect value={condition.fieldKey} onChange={onFieldChange} />
+        <Tag tone={CATEGORY_TONE[field.category]} size="xs">{field.category}</Tag>
+        <OpSelect value={condition.op} ops={ops} onChange={(op) => onPatch({ op })} />
+        <ValueEditor field={field} condition={condition} onPatch={onPatch} />
       </div>
 
-      {!isLast && (
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          margin: '6px 0 6px 30px',
-        }}>
-          <div style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
-          <span style={{
-            fontSize: 9, fontWeight: 800, letterSpacing: 0.8,
-            color: 'var(--gb-text-muted)',
-            textTransform: 'uppercase',
-          }}>AND</span>
-          <div style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
-        </div>
-      )}
-    </motion.div>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 2,
+        flexShrink: 0,
+      }}>
+        <IconBtn
+          size="xs" variant="ghost"
+          icon={<ChevUpIcon size={11} />}
+          onClick={onMoveUp}
+          disabled={!onMoveUp}
+          tooltip="Move up"
+        />
+        <IconBtn
+          size="xs" variant="ghost"
+          icon={<ChevDownIcon size={11} />}
+          onClick={onMoveDown}
+          disabled={!onMoveDown}
+          tooltip="Move down"
+        />
+        <IconBtn
+          size="xs" variant="ghost"
+          icon={<I.copy size={10} />}
+          onClick={onDuplicate}
+          tooltip="Duplicate"
+        />
+        <IconBtn
+          size="xs" variant="ghost" danger
+          icon={<I.trash size={10} />}
+          disabled={!canRemove}
+          onClick={onRemove}
+          tooltip={canRemove ? 'Remove condition' : 'At least one condition is required'}
+        />
+      </div>
+    </div>
   );
 }
 
-/* ── ValueEditor — variant by (field.type, op) ───────────────── */
-function ValueEditor({ field, condition, onChange }) {
+function NotPill({ on, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={on ? 'Negation on (remove)' : 'Negate this condition'}
+      style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 28, height: 26,
+        borderRadius: 4,
+        background: on ? 'var(--gb-error-tint-medium)' : 'var(--gb-fill-subtle)',
+        border: '1px solid ' + (on ? 'var(--gb-error-tint-border)' : 'var(--gb-border-default)'),
+        color: on ? 'var(--gb-error-fg)' : 'var(--gb-text-muted)',
+        fontSize: 10, fontWeight: 800, letterSpacing: .4,
+        fontFamily: 'var(--gb-font-mono)',
+        cursor: 'pointer',
+        transition: 'background-color .2s, border-color .2s, color .2s',
+        flexShrink: 0,
+      }}
+    >NOT</button>
+  );
+}
+
+/* ── Native selects + inputs — styled to match the design system.
+   We use native <select> for FieldSelect specifically to keep
+   optgroup category grouping, which our custom Dropdown doesn't
+   support. baseControlStyle gives them the inline-styled look that
+   matches our token system. */
+function FieldSelect({ value, onChange }) {
+  const byCategory = useMemo(() => {
+    const m = new Map();
+    for (const f of QB_FIELDS) {
+      if (!m.has(f.category)) m.set(f.category, []);
+      m.get(f.category).push(f);
+    }
+    return [...m.entries()];
+  }, []);
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={baseControlStyle({ width: 180 })}
+    >
+      {byCategory.map(([cat, fields]) => (
+        <optgroup key={cat} label={cat}>
+          {fields.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
+
+function OpSelect({ value, ops, onChange }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={baseControlStyle({ width: 152 })}
+    >
+      {ops.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+    </select>
+  );
+}
+
+function ValueEditor({ field, condition, onPatch }) {
   if (VALUELESS.has(condition.op)) {
-    // Predicate is complete without a value — show a soft hint so users
-    // don't think they're missing an input.
     return (
       <span style={{
         flex: 1, minWidth: 0,
-        fontSize: 11.5, fontStyle: 'italic',
+        fontSize: 11, fontStyle: 'italic',
         color: 'var(--gb-text-muted)',
-        padding: '0 6px',
+        padding: '0 8px',
       }}>no value needed</span>
     );
   }
-
-  switch (field.type) {
-    case 'enum': {
-      const opts = field.options.map((o) => ({ id: o, label: o }));
+  if (field.type === 'enum') {
+    return (
+      <select
+        value={condition.val || field.options[0]}
+        onChange={(e) => onPatch({ val: e.target.value })}
+        style={baseControlStyle({ flex: 1, minWidth: 130 })}
+      >
+        {field.options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+    );
+  }
+  if (field.type === 'text') {
+    return (
+      <input
+        type="text"
+        value={condition.val}
+        onChange={(e) => onPatch({ val: e.target.value })}
+        placeholder="value…"
+        style={baseControlStyle({ flex: 1, minWidth: 140 })}
+      />
+    );
+  }
+  if (field.type === 'int' || field.type === 'float') {
+    if (condition.op === 'between') {
       return (
-        <Dropdown
-          value={condition.val || field.options[0]}
-          options={opts}
-          onChange={(v) => onChange({ val: v })}
-          size="sm"
-          style={{ flex: 1, minWidth: 140 }}
+        <>
+          <input
+            type="number"
+            inputMode={field.type === 'int' ? 'numeric' : 'decimal'}
+            value={condition.val}
+            onChange={(e) => onPatch({ val: e.target.value })}
+            placeholder="min"
+            style={baseControlStyle({ width: 90, mono: true })}
+          />
+          <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>to</span>
+          <input
+            type="number"
+            inputMode={field.type === 'int' ? 'numeric' : 'decimal'}
+            value={condition.val2}
+            onChange={(e) => onPatch({ val2: e.target.value })}
+            placeholder="max"
+            style={baseControlStyle({ width: 90, mono: true })}
+          />
+        </>
+      );
+    }
+    return (
+      <input
+        type="number"
+        inputMode={field.type === 'int' ? 'numeric' : 'decimal'}
+        value={condition.val}
+        onChange={(e) => onPatch({ val: e.target.value })}
+        placeholder="0"
+        style={baseControlStyle({ flex: 1, minWidth: 100, maxWidth: 160, mono: true })}
+      />
+    );
+  }
+  if (field.type === 'date') {
+    if (condition.op === 'rel_past' || condition.op === 'rel_future') {
+      return (
+        <>
+          <input
+            type="number"
+            inputMode="numeric"
+            value={condition.num}
+            onChange={(e) => onPatch({ num: e.target.value })}
+            placeholder="1"
+            style={baseControlStyle({ width: 64, mono: true })}
+          />
+          <select
+            value={condition.unit || 'years'}
+            onChange={(e) => onPatch({ unit: e.target.value })}
+            style={baseControlStyle({ width: 92 })}
+          >
+            {QB_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+          </select>
+          <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
+            {condition.op === 'rel_past' ? 'ago' : 'from now'}
+          </span>
+        </>
+      );
+    }
+    if (condition.op === 'before' || condition.op === 'after') {
+      return (
+        <input
+          type="date"
+          value={condition.val}
+          onChange={(e) => onPatch({ val: e.target.value })}
+          style={baseControlStyle({ flex: 1, minWidth: 150, maxWidth: 200, mono: true })}
         />
       );
     }
-    case 'text':
-      return (
-        <Input
-          size="sm"
-          value={condition.val}
-          onChange={(v) => onChange({ val: v })}
-          placeholder="value…"
-          style={{ flex: 1, minWidth: 140 }}
-        />
-      );
-    case 'int':
-    case 'float':
-      if (condition.op === 'between') {
-        return (
-          <>
-            <Input
-              size="sm" mono
-              value={condition.val}
-              onChange={(v) => onChange({ val: v })}
-              placeholder="min"
-              style={{ width: 90 }}
-              inputMode={field.type === 'int' ? 'numeric' : 'decimal'}
-            />
-            <span style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>to</span>
-            <Input
-              size="sm" mono
-              value={condition.val2}
-              onChange={(v) => onChange({ val2: v })}
-              placeholder="max"
-              style={{ width: 90 }}
-              inputMode={field.type === 'int' ? 'numeric' : 'decimal'}
-            />
-          </>
-        );
-      }
-      return (
-        <Input
-          size="sm" mono
-          value={condition.val}
-          onChange={(v) => onChange({ val: v })}
-          placeholder="0"
-          style={{ flex: 1, minWidth: 110, maxWidth: 160 }}
-          inputMode={field.type === 'int' ? 'numeric' : 'decimal'}
-        />
-      );
-    case 'date':
-      if (condition.op === 'rel_past' || condition.op === 'rel_future') {
-        return (
-          <>
-            <Input
-              size="sm" mono
-              value={condition.num}
-              onChange={(v) => onChange({ num: v })}
-              placeholder="1"
-              style={{ width: 60 }}
-              inputMode="numeric"
-            />
-            <Dropdown
-              value={condition.unit || 'years'}
-              options={QB_UNIT_OPTS}
-              onChange={(v) => onChange({ unit: v })}
-              size="sm"
-              style={{ width: 100 }}
-            />
-            <span style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>
-              {condition.op === 'rel_past' ? 'ago' : 'from now'}
-            </span>
-          </>
-        );
-      }
-      if (condition.op === 'before' || condition.op === 'after') {
-        return (
-          <DatePicker
-            value={condition.val}
-            onChange={(v) => onChange({ val: v })}
-            includeTime={false}
-            placeholder="Pick a date"
-            style={{ flex: 1, minWidth: 150, maxWidth: 200 }}
-          />
-        );
-      }
-      return null;
-    default:
-      return (
-        <Input
-          size="sm"
-          value={condition.val}
-          onChange={(v) => onChange({ val: v })}
-          placeholder="value…"
-          style={{ flex: 1, minWidth: 140 }}
-        />
-      );
+    return null;
   }
+  return null;
 }
 
-/* Inline funnel icon — same shape as the one in CRMSearch's toolbar
-   so users get the visual continuity that "this is the same feature." */
-function InfoCircleIcon({ size = 11, style }) {
+function baseControlStyle({ width, minWidth, maxWidth, flex, mono }) {
+  return {
+    width, minWidth, maxWidth, flex,
+    height: 28,
+    background: 'var(--gb-fill-inverse-medium)',
+    border: '1px solid var(--gb-border-default)',
+    borderRadius: 'var(--gb-r-sm)',
+    padding: '0 8px',
+    fontSize: 11.5,
+    fontFamily: mono ? 'var(--gb-font-mono)' : 'var(--gb-font-sans)',
+    fontWeight: 500,
+    color: 'var(--gb-text-primary)',
+    outline: 'none',
+    boxSizing: 'border-box',
+  };
+}
+
+/* ── Header chrome bits ── */
+function CountChip({ children }) {
   return (
-    <svg
-      width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      style={style}
-    >
-      <circle cx="12" cy="12" r="10" />
-      <line x1="12" y1="8" x2="12" y2="12" />
-      <line x1="12" y1="16" x2="12.01" y2="16" />
-    </svg>
+    <span style={{
+      padding: '1px 7px', borderRadius: 4,
+      background: 'var(--gb-fill-subtle)',
+      border: '1px solid var(--gb-border-default)',
+      fontSize: 10, fontWeight: 700, letterSpacing: .4,
+      color: 'var(--gb-text-muted)',
+      fontFamily: 'var(--gb-font-mono)',
+    }}>{children}</span>
+  );
+}
+function PreviewKey({ children }) {
+  return (
+    <span style={{
+      fontSize: 8.5, fontWeight: 800, letterSpacing: .8,
+      textTransform: 'uppercase',
+      color: 'var(--gb-text-muted)',
+      fontFamily: 'var(--gb-font-mono)',
+      width: 36, flexShrink: 0,
+    }}>{children}</span>
   );
 }
 
+/* ── Inline icons used in the row + header ── */
 function FunnelIcon({ size = 12, style }) {
   return (
-    <svg
-      width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
-      style={style}
-    >
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={style}>
       <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+    </svg>
+  );
+}
+function SaveIcon({ size = 12, style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={style}>
+      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+      <polyline points="17 21 17 13 7 13 7 21" />
+      <polyline points="7 3 7 8 15 8" />
+    </svg>
+  );
+}
+function ChevUpIcon({ size = 11 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="18 15 12 9 6 15" />
+    </svg>
+  );
+}
+function ChevDownIcon({ size = 11 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 9 12 15 18 9" />
     </svg>
   );
 }

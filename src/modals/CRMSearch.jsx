@@ -1091,6 +1091,12 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
         CRMSearch fades back in. */}
     {qbOpen && (
       <QueryBuilder
+        /* Rich state takes priority — round-trips groups + outer
+           joiner + NOT toggles when the user re-opens the QB on
+           an active filter. Falls back to the flat conditions for
+           filters built before the redesign or trimmed in the
+           filter-tag bar (per-tag removal flattens by design). */
+        initialState={qbFilter?.state || null}
         initialConditions={qbFilter?.conditions || []}
         onClosed={() => setQbOpen(false)}
         onApply={applyQbFilter}
