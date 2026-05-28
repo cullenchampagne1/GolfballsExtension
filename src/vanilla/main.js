@@ -87,6 +87,7 @@ window.__gbContentReady = true;
       return true;
     }
 
+
     if (msg.action === 'getPageInfo') {
       const pageType  = smartPageType();
       const contactId = smartContactId();
@@ -270,6 +271,26 @@ window.__gbContentReady = true;
     }
 
   });
+
+  /* Expose the resolver as a window global so React content scripts
+     (notably EmailRunner's bulk-send loop) can call it DIRECTLY
+     instead of going through chrome.runtime.sendMessage. Cross-
+     content-script runtime messaging in MV3 has to round-trip
+     through the background, and the bulk loop firing dozens of
+     these per blast was the fragile path the user reported as
+     "every send fails to evaluate the contact page." Direct call
+     sidesteps the routing entirely. The chrome.runtime listener
+     above stays as the canonical message handler for any caller
+     that prefers messaging (popup, other extensions). */
+  window.__gbResolveVarsForHtml = (html, vars, toField) => {
+    try {
+      const doc = new DOMParser().parseFromString(html || '', 'text/html');
+      return resolveAllVarsAsync(vars, toField, doc)
+        .catch((err) => ({ resolved: {}, toEmail: '', error: err?.message || 'resolve failed' }));
+    } catch (e) {
+      return Promise.resolve({ resolved: {}, toEmail: '', error: e?.message || 'parse failed' });
+    }
+  };
 
 // ── Initial scans + DOM mutation observer ───────────────────────────────────
   // ── Scan on load + watch for dynamic rows ─────────────

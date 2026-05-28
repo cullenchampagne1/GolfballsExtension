@@ -275,7 +275,16 @@ export function DraggablePopup({
       {open && (
         <motion.div
           ref={rootRef}
-          className={className}
+          /* Always carry the `gb-draggable-popup` class so the
+             forceImportantBorderRadius helper (theme.js) recognises
+             this subtree as extension-owned and patches every inline
+             border-radius below to !important. Without that, host
+             pages like golfballs.com flatten our rounded corners
+             via their global `* { border-radius: 0 !important }`
+             resets. The portal targets document.body so there's no
+             extension ancestor to inherit recognition from — the
+             class must live ON the popup itself. */
+          className={['gb-draggable-popup', className].filter(Boolean).join(' ')}
           data-gb-scale="popovers"
           data-gb-kbd-scope=""
           {...animProps}
