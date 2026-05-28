@@ -245,9 +245,13 @@ export function TemplateEditor({ tpl, onDelete }) {
     });
   }, []);
 
-  // Feature flags — only `replyWithTemplateEnabled` (Direct Send via
-  // Power Automate) is consumed here. Live-updated so flipping the
-  // flag in settings immediately gates the sender picker.
+  // Feature flag — `powerAutomateEnabled` (Direct Send via Power
+  // Automate) is the gate consumed here. Live-updated so flipping
+  // the toggle in Settings immediately reveals / hides the sender
+  // picker and reply-mode controls. The flag was previously named
+  // `replyWithTemplateEnabled`; that legacy key got migrated away
+  // in flags.js but this read site was missed at rename time, so
+  // PA-dependent UI never appeared no matter what the user did.
   //
   // `paReady` blocks the initial render until the async storage check
   // resolves — otherwise the editor paints first with paEnabled=false
@@ -258,13 +262,13 @@ export function TemplateEditor({ tpl, onDelete }) {
   const [paReady, setPaReady] = useState(false);
   useEffect(() => {
     chrome.storage.local.get('featureFlags', ({ featureFlags }) => {
-      setPaEnabled(!!(featureFlags && featureFlags.replyWithTemplateEnabled));
+      setPaEnabled(!!(featureFlags && featureFlags.powerAutomateEnabled));
       setPaReady(true);
     });
     function onChanged(changes) {
       if (!changes.featureFlags) return;
       const v = changes.featureFlags.newValue;
-      setPaEnabled(!!(v && v.replyWithTemplateEnabled));
+      setPaEnabled(!!(v && v.powerAutomateEnabled));
     }
     chrome.storage.onChanged.addListener(onChanged);
     return () => chrome.storage.onChanged.removeListener(onChanged);

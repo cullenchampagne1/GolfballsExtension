@@ -837,7 +837,11 @@ function MainView({
     if (!tpl) return null;
     const replyMode = tpl?.replyMode || 'standalone';
     const isReply = replyMode === 'reply';
-    const paReady = !!flags.powerAutomateUrl;
+    /* paReady MUST match the predicate the actual send path uses
+       (onSend line ~801 — both the toggle AND the URL). Otherwise
+       the button advertises "Send" while clicking it falls through
+       to the mailto path, which surprises the user. */
+    const paReady = !!(flags.powerAutomateEnabled && flags.powerAutomateUrl);
     if (paReady && isReply)  return { icon: <I.send />,  label: 'Reply' };
     if (paReady)             return { icon: <I.send />,  label: 'Send' };
     if (isReply)             return { icon: <Ic.reply />, label: 'Reply in Outlook' };
