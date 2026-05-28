@@ -855,17 +855,6 @@ function MainView({
     const paOn  = flags.powerAutomateEnabled === true;
     const paUrl = typeof flags.powerAutomateUrl === 'string' && flags.powerAutomateUrl.trim().length > 0;
     const paReady = paOn && paUrl;
-    /* Eyes-on diagnostic so we can see WHY the button picked its
-       label when storage and visible label disagree. Printed once
-       per render — harmless in production. Remove when stable. */
-    if (typeof console !== 'undefined') {
-      // eslint-disable-next-line no-console
-      console.log('[gb] sendMode:', {
-        paOn, paUrl, paReady, replyMode,
-        rawEnabled: flags.powerAutomateEnabled,
-        rawUrlPresent: !!flags.powerAutomateUrl,
-      });
-    }
     if (paReady && isReply)  return { icon: <I.send />,  label: 'Reply' };
     if (paReady)             return { icon: <I.send />,  label: 'Send' };
     if (isReply)             return { icon: <Ic.reply />, label: 'Reply in Outlook' };

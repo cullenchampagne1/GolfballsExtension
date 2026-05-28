@@ -8,7 +8,7 @@ import {
   I, Icon,
   SmartPopover,
   RichTextEditor,
-  VariableTable, OrderRules, CaseRules, AccountRules, CaseTagsEditor,
+  VariableTable, OrderRules, CaseRules, AccountConditions, CaseTagsEditor,
 } from '../ui/index.js';
 
 /* ─────────────────────────────────────────────────────────────
@@ -260,19 +260,13 @@ export function TemplateEditor({ tpl, onDelete }) {
   const [paReady, setPaReady] = useState(false);
   useEffect(() => {
     chrome.storage.local.get('featureFlags', ({ featureFlags }) => {
-      const on = featureFlags && featureFlags.powerAutomateEnabled === true;
-      // eslint-disable-next-line no-console
-      console.log('[gb] TemplateEditor init featureFlags:', featureFlags, '→ paEnabled:', on);
-      setPaEnabled(!!on);
+      setPaEnabled(featureFlags && featureFlags.powerAutomateEnabled === true);
       setPaReady(true);
     });
     function onChanged(changes) {
       if (!changes.featureFlags) return;
       const v = changes.featureFlags.newValue;
-      const on = v && v.powerAutomateEnabled === true;
-      // eslint-disable-next-line no-console
-      console.log('[gb] TemplateEditor storage change → paEnabled:', on);
-      setPaEnabled(!!on);
+      setPaEnabled(v && v.powerAutomateEnabled === true);
     }
     chrome.storage.onChanged.addListener(onChanged);
     return () => chrome.storage.onChanged.removeListener(onChanged);
@@ -476,7 +470,7 @@ export function TemplateEditor({ tpl, onDelete }) {
     return () => { cancelled = true; };
   }, [varSig]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const RulesComp = typeId === 'order' ? OrderRules : typeId === 'case' ? CaseRules : AccountRules;
+  const RulesComp = typeId === 'order' ? OrderRules : typeId === 'case' ? CaseRules : AccountConditions;
 
   const S = { // compact spacing constants
     mb8:  { marginBottom: 8  },
