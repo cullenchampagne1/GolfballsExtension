@@ -500,6 +500,11 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
   // the conditions (and re-opening the QB pre-populates them).
   const [qbOpen, setQbOpen] = useState(false);
   const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
+  /* Cursor coords captured at the moment the user clicks Email
+     selected. EmailRunner forwards these through DraggablePopup so
+     the panel pops up right where the button is — no parent-rect
+     overlay fallback that read as "far left" on narrow viewports. */
+  const [emailRunnerCursor, setEmailRunnerCursor] = useState(null);
   /* Per-row send status, keyed by the SAME id we extract for the
      EmailRunner contacts list (the numeric portion of `r.id`). Values:
        'sending' | 'sent' | 'error'
@@ -1022,7 +1027,10 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
                 size="sm"
                 variant="ghost"
                 icon={<I.mail size={11} />}
-                onClick={() => setEmailRunnerOpen(true)}
+                onClick={(e) => {
+                  setEmailRunnerCursor({ x: e.clientX, y: e.clientY });
+                  setEmailRunnerOpen(true);
+                }}
               >Email selected</Btn>
               <Btn size="sm" variant="ghost" icon={<I.copy size={11} />} onClick={exportSelectedCSV}>Export CSV</Btn>
             </div>
@@ -1088,6 +1096,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
     <EmailRunner
       open={emailRunnerOpen}
       anchorHostId="__gb-csm"
+      cursor={emailRunnerCursor}
       useMock={useMock}
       contacts={displayedRows
         .filter((r) => selected.has(r.id))
@@ -1118,12 +1127,14 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
    would let users filter on something they can't see — and the
    reverse confuses people about what filters are available — so
    keep these in lock-step. */
-const COLS_BASE        = '30px 1.3fr 1.1fr 80px 1.9fr 70px 0.9fr 0.9fr 110px';
-/* Adds a 10th column reserved for the email-send status. Modern
-   browsers transition grid-template-columns smoothly, so swapping
-   the two strings via state animates the column sliding in/out
-   (with a CSS transition declared on the parent grid container). */
-const COLS_WITH_STATUS = `${COLS_BASE} 96px`;
+/* The status column ALWAYS exists in the grid template so browsers
+   can interpolate its width — adding / removing a track makes
+   transition: grid-template-columns snap the column in instead of
+   sliding it. The "base" version reserves the column at 0px (the
+   cell renders empty / collapsed); the "with status" version expands
+   it to 96px. Same column count both directions, smooth slide. */
+const COLS_BASE        = '30px 1.3fr 1.1fr 80px 1.9fr 70px 0.9fr 0.9fr 110px 0px';
+const COLS_WITH_STATUS = '30px 1.3fr 1.1fr 80px 1.9fr 70px 0.9fr 0.9fr 110px 96px';
 
 function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, allChecked, emailStatusByRow = {}, onToggle, onToggleAll, sortKey, sortDir, onSort, mode, onDeleteIndexed, onSubmitServer, loadingMore }) {
   const Header = ({ label, k }) => (
@@ -1136,16 +1147,27 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
   const anyEmailing = Object.keys(emailStatusByRow).length > 0;
   const gridCols = anyEmailing ? COLS_WITH_STATUS : COLS_BASE;
 
-  /* Scan beam — find the currently-sending row id and measure its
-     offsetTop / offsetHeight against the rows container so the beam
-     can position itself over it. Updates each render so the beam
-     follows the active row through the list. */
+  /* Scan beam — beam follows whichever row is currently sending,
+     AND keeps showing on that row through the delay between sends
+     until the NEXT row starts. activeRowId only updates when a new
+     row enters 'sending' (so a 'sent' transition doesn't blank
+     it). Reset to null when the blast itself ends — detected by
+     emailStatusByRow becoming empty. */
   const containerRef = useRef(null);
-  const activeRowId = useMemo(() => {
-    for (const [id, st] of Object.entries(emailStatusByRow)) {
-      if (st === 'sending') return id;
+  const [activeRowId, setActiveRowId] = useState(null);
+  useEffect(() => {
+    if (Object.keys(emailStatusByRow).length === 0) {
+      setActiveRowId(null);
+      return;
     }
-    return null;
+    for (const [id, st] of Object.entries(emailStatusByRow)) {
+      if (st === 'sending') {
+        setActiveRowId(id);
+        return;
+      }
+    }
+    // No row currently sending — keep activeRowId on the last one
+    // so the scan beam dwells through the inter-send delay.
   }, [emailStatusByRow]);
   const [scanRect, setScanRect] = useState(null);
   useEffect(() => {

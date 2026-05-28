@@ -250,6 +250,7 @@ export function TaskList({ onClosed, bindClose }) {
   const [priorityFilter, setPriorityFilter] = useState('');
   const [selected, setSelected]   = useState(() => new Set());
   const [emailRunnerOpen, setEmailRunnerOpen] = useState(false);
+  const [emailRunnerCursor, setEmailRunnerCursor] = useState(null);
   /* Per-row email-send status keyed by task.id. EmailRunner pumps
      this via the onRowStart / onRowDone / onResetRowStates callbacks
      wired below; TaskRow reads from the map to replace the Quick Task
@@ -842,7 +843,10 @@ export function TaskList({ onClosed, bindClose }) {
                 size="sm"
                 variant="ghost"
                 icon={<I.mail size={11} />}
-                onClick={() => setEmailRunnerOpen(true)}
+                onClick={(e) => {
+                  setEmailRunnerCursor({ x: e.clientX, y: e.clientY });
+                  setEmailRunnerOpen(true);
+                }}
               >Email selected</Btn>
               <Btn size="sm" variant="ghost" icon={<I.copy size={11} />} onClick={exportSelectedCSV}>Export CSV</Btn>
             </div>
@@ -926,6 +930,7 @@ export function TaskList({ onClosed, bindClose }) {
     <EmailRunner
       open={emailRunnerOpen}
       anchorHostId="__gb-tl"
+      cursor={emailRunnerCursor}
       contacts={selectedContacts}
       onClose={() => setEmailRunnerOpen(false)}
       onResetRowStates={() => setEmailStatusByRow({})}
