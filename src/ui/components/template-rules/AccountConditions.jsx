@@ -473,7 +473,16 @@ function RuleRow({ row, onPatch, onRemove }) {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(0, 2fr) 140px minmax(0, 1fr) auto auto',
+          /* Op dropdown trimmed to 100px and the value column promoted
+             from 1fr to 1.4fr (so the path/value split goes from
+             2:1 → ~1.4:1). Net effect: the value input gains the
+             ~40px the op gave up PLUS a bigger share of free space,
+             which is where users were running out of room to type
+             longer comparison literals. Op labels are short enough
+             ("contains", "is set", "≥", etc.) that 100px still fits
+             everything except the date "more than… ago" line — the
+             Dropdown gracefully truncates that one with an ellipsis. */
+          gridTemplateColumns: 'minmax(0, 2fr) 100px minmax(0, 1.4fr) auto auto',
           gap: 8,
           alignItems: 'center',
         }}
