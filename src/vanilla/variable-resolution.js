@@ -137,8 +137,14 @@
       } else {
         raw = resolveVar(name, def, doc);
       }
-      // Apply smart options (fallback → transform → format) so every
-      // downstream renderer gets the final string verbatim.
+      /* Smart options run BEFORE any per-variable validation that
+         consumers downstream might apply. Order is load-bearing:
+         a path field marked `validate.required` would otherwise
+         emit an "empty" warning for a value that smart.fallback
+         is about to fill in, surprising the user. The schema-level
+         validation that runs inside extract.js is informational
+         (warnings carried on the ctx); the AUTHORITATIVE value the
+         renderer sees is the one returned here — post-smart. */
       resolved[name] = applySmart(raw, def);
     }
 
