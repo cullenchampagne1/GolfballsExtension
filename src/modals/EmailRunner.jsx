@@ -234,14 +234,28 @@ export function EmailRunner({
 
   useEffect(() => { ensureNoScrollStyle(); }, []);
 
+  /* Sentinel composite-id suffix that pins the parent template
+     itself (no variation applied) — distinct from "no pin" which
+     means "random across variations per contact." */
+  const ORIGINAL_PIN = '__original';
+
   /* Dropdown option shape — ported from popup.jsx. Templates with
-     variations expose an inline-expanding parent + sub-options:
-     "(original)" picks the parent, each variation row pins that
-     specific variant for the whole run. */
+     variations expose an inline-expanding parent + sub-options.
+     Three modes per template:
+
+       Random per contact   id = t.id (no ::)         selectedVariationId = null
+       Original             id = t.id::__original     selectedVariationId = '__original'
+       Variation X          id = t.id::<v.id>         selectedVariationId = '<v.id>'
+
+     Picking the parent ROW in the open picker expands it (Dropdown
+     component behavior) — it doesn't pick. To send "just the
+     original template, no random pick" the user picks the
+     explicit Original sub-option. */
   const dropdownOptions = useMemo(() => templates.map((t) => {
     const variations = Array.isArray(t.variations) ? t.variations : [];
     const subOptions = variations.length > 0 ? [
-      { id: t.id, label: `${t.name || 'Untitled'} (random per contact)` },
+      { id: t.id, label: 'Random per contact' },
+      { id: `${t.id}::${ORIGINAL_PIN}`, label: 'Original (no variation)' },
       ...variations.map((v) => ({
         id: `${t.id}::${v.id}`,
         label: v.label || 'Variation',
@@ -263,9 +277,11 @@ export function EmailRunner({
   const selectedTpl = templates.find((t) => t.id === selectedId);
   const dropdownDisplayLabel = (() => {
     if (!selectedTpl) return '';
-    if (!selectedVariationId) return selectedTpl.name || 'Untitled';
+    const baseName = selectedTpl.name || 'Untitled';
+    if (!selectedVariationId)            return baseName;
+    if (selectedVariationId === ORIGINAL_PIN) return `${baseName} · Original`;
     const v = (selectedTpl.variations || []).find((x) => x.id === selectedVariationId);
-    return `${selectedTpl.name || 'Untitled'} · ${v?.label || 'Variation'}`;
+    return `${baseName} · ${v?.label || 'Variation'}`;
   })();
 
   const onDropdownChange = (id) => {
@@ -331,8 +347,14 @@ export function EmailRunner({
 
       let outcome = { status: 'error', error: 'unknown' };
       try {
-        // Pick subject/body for this contact.
-        const v = pinnedV || (variations.length ? variations[Math.floor(Math.random() * variations.length)] : null);
+        /* Pick subject/body for this contact.
+             ORIGINAL_PIN  → use parent only, no random pick
+             pinnedV       → use that specific variation
+             null + vars   → random variation per contact
+             null + no vars → parent only */
+        const v = selectedVariationId === ORIGINAL_PIN
+          ? null
+          : pinnedV || (variations.length ? variations[Math.floor(Math.random() * variations.length)] : null);
         const rawSubject = v?.subject || selectedTpl.subject || '';
         const rawBody    = v?.body    || selectedTpl.body    || '';
 
@@ -393,13 +415,24 @@ export function EmailRunner({
              from the rep's devSetting so the rest of the address
              ends up like cullen@golfballs.com. */
           const from = pickFromAddress(selectedTpl, emailLocalPart);
+          const paPayload = {
+            emails: [{ from, to: toEmail, subject, htmlBody, replyMode }],
+          };
+          /* Eyes-on log so the rep can copy the EXACT payload going
+             to PA and compare against the popup's network call.
+             Helps diagnose flow-side rejections like "Failed to
+             send standalone email" — usually a from/to/replyMode
+             mismatch the flow validates against. Remove once the
+             bulk path matches the popup path 1:1. */
+          // eslint-disable-next-line no-console
+          console.log('[gb] EmailRunner → paAutomate payload:', paPayload);
           const send = await dispatchBg({
             action: 'paAutomate',
             paUrl,
-            payload: {
-              emails: [{ from, to: toEmail, subject, htmlBody, replyMode }],
-            },
+            payload: paPayload,
           });
+          // eslint-disable-next-line no-console
+          console.log('[gb] EmailRunner ← paAutomate response:', send);
           if (send?.ok) {
             outcome = { status: 'sent', email: toEmail };
           } else {
