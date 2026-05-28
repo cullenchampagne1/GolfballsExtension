@@ -152,6 +152,10 @@ const mockSendBg = (msg) => new Promise((resolve) => {
 
 export function EmailRunner({
   open, contacts, onClose, anchorHostId,
+  /* Optional cursor { x, y } from the click that opened the
+     panel — when set, DraggablePopup spawns the panel near the
+     cursor instead of relative to the parent modal. */
+  cursor,
   // Row-level loading-state hooks. CRMSearch / TaskList wire these to
   // render per-row spinners + sent/fail badges, mirroring the Quick
   // Actions UX. EmailRunner's own UI shows ONLY the aggregate progress
@@ -401,6 +405,7 @@ export function EmailRunner({
       open={open}
       onClose={onClose}
       anchorHostId={anchorHostId}
+      cursorAnchor={cursor}
       width={PANEL_W}
       maxHeight={PANEL_H}
       icon={<I.mail size={13} />}
@@ -435,6 +440,7 @@ export function EmailRunner({
                 : 'No email templates saved yet'}
             >
               <Dropdown
+                size="md"
                 value={dropdownValue}
                 displayLabel={dropdownDisplayLabel}
                 onChange={onDropdownChange}
@@ -442,6 +448,11 @@ export function EmailRunner({
                 placeholder={templates.length ? 'Pick a template' : 'No templates'}
                 searchable
                 disabled={status === 'running'}
+                /* Open list taller so big template libraries with
+                   variation sub-rows show several at once. Matches
+                   the popup.js template picker's vertical footprint. */
+                maxHeight={320}
+                style={{ width: '100%' }}
               />
             </Field>
 

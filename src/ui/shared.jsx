@@ -142,6 +142,14 @@ export function inputBaseStyle({ focused, error, size = 'md' }) {
    override on the element to retint. `--gb-march-dur` (0.7s default)
    controls how fast the ants march.
 ─────────────────────────────────────────────────────────────── */
+/* Spotlight-fill active/focus visual.
+   Replaces the previous marching-ants + brand-ring combo with a
+   single calmer treatment ported from Claude Design's call-log
+   tabs page: a radial brand-tint gradient FILLS the element on
+   focus and gently pulses in opacity. Same visual on virtual-
+   focus rows (.gb-kbd-active) and on real keyboard-focused form
+   fields (data-gb-kbd-scope :focus-visible) so the user sees
+   one consistent indicator throughout. */
 const MARCHING_ANTS_STYLE_ID = '__gb-marching-ants';
 export function ensureMarchingAntsStyle() {
   if (typeof document === 'undefined' || document.getElementById(MARCHING_ANTS_STYLE_ID)) return;
@@ -165,58 +173,38 @@ export function ensureMarchingAntsStyle() {
         the ants so the user immediately knows the difference between
         a one-shot row vs a form field. */
   el.textContent = `
-    @keyframes gb-march {
-      to {
-        background-position:
-          16px 0,    -16px 100%,
-          0 -16px,   100% 16px;
-      }
-    }
-    /* Quick-action row: an inline SVG rect-with-dashed-stroke, drawn
-       to fill the host via background-image so we don't have to mount
-       per-row React markup. SVG strokes follow the path's rounded
-       corners cleanly (CSS linear-gradient edges can't), and
-       stroke-dashoffset animates inside the SVG via SMIL so the
-       dashes literally march around the perimeter without browser-
-       level animation hooks.
-
-       inset:0 keeps the overlay INSIDE the host so it cannot be
-       clipped by a scrolling grid parent (CallLog 168px wrap, the
-       QuickTaskMenu 220px templates list, etc.). The host solid
-       border is suppressed via border-color transparent !important
-       below so the dashes are the visible perimeter, not a double
-       border. */
-    .gb-kbd-active {
+    /* Spotlight-fill — single overlay pseudo-element with a radial
+       brand-tint gradient that breathes gently. Used for:
+         .gb-kbd-active                            — virtual focus
+                                                     (Quick log / Quick task rows)
+         [data-gb-kbd-scope] :focus-visible:not(...) — native focus
+                                                     (form fields, buttons)
+       Excludes <input> and <textarea> because their wrapper
+       (Input.jsx / Textarea.jsx) already paints its own focus
+       visual via inputBaseStyle — overlaying the spotlight on top
+       would double-draw a focus indicator. */
+    .gb-kbd-active,
+    [data-gb-kbd-scope] *:focus-visible:not(input):not(textarea) {
       position: relative;
-      border-color: transparent !important;
+      outline: none !important;
     }
-    .gb-kbd-active::after {
+    .gb-kbd-active::before,
+    [data-gb-kbd-scope] *:focus-visible:not(input):not(textarea)::before {
       content: '';
       position: absolute;
       inset: 0;
-      pointer-events: none;
       border-radius: inherit;
-      background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30' preserveAspectRatio='none'><rect x='1' y='1' width='98' height='28' rx='4' ry='4' fill='none' stroke='%237db82a' stroke-width='2' stroke-dasharray='5 3'><animate attributeName='stroke-dashoffset' from='0' to='-16' dur='0.6s' repeatCount='indefinite'/></rect></svg>");
-      background-size: 100% 100%;
-      background-repeat: no-repeat;
+      pointer-events: none;
+      background: radial-gradient(120% 140% at 50% 50%,
+        color-mix(in srgb, var(--gb-brand-label) 30%, transparent) 0%,
+        color-mix(in srgb, var(--gb-brand-label) 10%, transparent) 60%,
+        transparent 100%);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gb-brand-label) 35%, transparent);
+      animation: gb-spotlight 1.8s ease-in-out infinite;
     }
-
-    /* Form-field focus: solid brand outline + soft focus ring. The
-       !important flags override inline styles on Dropdown / PillTag /
-       Segmented buttons that set their own borders.
-
-       Native <input> and <textarea> live INSIDE a wrapper component
-       (Input.jsx / Textarea.jsx) that already paints a brand border
-       + focus ring via inputBaseStyle when focused — applying the
-       same treatment to the inner native field too produced a
-       double-border effect (one around the wrapper, one around the
-       text node). The :not() selectors exclude them so only the
-       wrapper's focus visual shows. We still neutralise the
-       browser's default outline on the native fields below. */
-    [data-gb-kbd-scope] *:focus-visible:not(input):not(textarea) {
-      outline: none !important;
-      border-color: var(--gb-brand-fg) !important;
-      box-shadow: 0 0 0 3px var(--gb-brand-tint-medium), inset 0 0 0 1px var(--gb-brand-fg) !important;
+    @keyframes gb-spotlight {
+      0%, 100% { opacity: 0.8; }
+      50%      { opacity: 1; }
     }
     [data-gb-kbd-scope] input:focus-visible,
     [data-gb-kbd-scope] textarea:focus-visible {
