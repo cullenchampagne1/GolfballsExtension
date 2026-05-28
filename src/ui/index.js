@@ -22,6 +22,7 @@ export { Input } from './components/Input.jsx';
 export { Textarea } from './components/Textarea.jsx';
 export { RichTextEditor } from './components/RichTextEditor.jsx';
 export { Dropdown } from './components/Dropdown.jsx';
+export { TemplatePicker, parseTemplateValue } from './components/TemplatePicker.jsx';
 export { ColorField } from './components/ColorField.jsx';
 export { ColorButton } from './components/ColorButton.jsx';
 export { ColorPicker, ColorPickerPopover } from './components/ColorPicker.jsx';
