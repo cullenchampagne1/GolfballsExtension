@@ -959,47 +959,64 @@ const COLS = '30px 1.3fr 1.1fr 100px 1.0fr 70px 1.5fr 90px 110px';
    orchestrator advances. */
 function ScanBeam({ top, height }) {
   const transition = 'transform .35s cubic-bezier(.3,.7,.2,1)';
+  /* motion.div wrapper so AnimatePresence in the parent can fade
+     the beam out on the post-blast settle. Opacity exit reads as a
+     "the orchestrator is done" gentle fade. */
   return (
-    <>
-      <div aria-hidden style={{
+    <motion.div
+      aria-hidden
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+      style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+    >
+      <div style={{
         position: 'absolute', left: 0, right: 0, top: 0,
         transform: `translateY(${top}px)`,
         height,
         background: 'linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--gb-brand-label) 16%, transparent) 35%, color-mix(in srgb, var(--gb-brand-label) 28%, transparent) 50%, color-mix(in srgb, var(--gb-brand-label) 16%, transparent) 65%, transparent 100%)',
         transition,
-        pointerEvents: 'none',
         zIndex: 3,
       }} />
-      <div aria-hidden style={{
+      <div style={{
         position: 'absolute', left: 0, right: 0, top: 0,
         transform: `translateY(${top}px)`,
         height: 1,
         background: 'var(--gb-brand-label)',
         boxShadow: '0 0 14px 1px var(--gb-brand-label)',
-        transition, pointerEvents: 'none', zIndex: 4,
+        transition, zIndex: 4,
       }} />
-      <div aria-hidden style={{
+      <div style={{
         position: 'absolute', left: 0, right: 0, top: 0,
         transform: `translateY(${top + height}px)`,
         height: 1,
         background: 'var(--gb-brand-label)',
         boxShadow: '0 0 14px 1px var(--gb-brand-label)',
-        transition, pointerEvents: 'none', zIndex: 4,
+        transition, zIndex: 4,
       }} />
-    </>
+    </motion.div>
   );
 }
 
 function TasksTable({ rows, status, query, allChecked, selected, onToggle, onToggleAll, sortChain = [], onSort, onQuickMenu, busyRows, emailStatusByRow = {} }) {
   /* Beam dwells on the last 'sending' row through the inter-send
      delay so the visual stays tied to the orchestrator's cursor.
-     Mirrors CRMSearch's behaviour exactly. */
+     When the WHOLE blast settles (every entry is sent/failed, none
+     in flight), clear activeRowId after a short grace period so the
+     beam fades out via AnimatePresence below — the SENT badges
+     stay in the Action column as a record of what was sent. */
   const containerRef = useRef(null);
+  const hasEntries = Object.keys(emailStatusByRow).length > 0;
+  const allSettled = hasEntries && Object.values(emailStatusByRow).every(
+    (st) => st === 'sent' || st === 'failed' || st === 'error',
+  );
   const [activeRowId, setActiveRowId] = useState(null);
   useEffect(() => {
-    if (Object.keys(emailStatusByRow).length === 0) {
-      setActiveRowId(null);
-      return;
+    if (!hasEntries) { setActiveRowId(null); return; }
+    if (allSettled) {
+      const t = setTimeout(() => setActiveRowId(null), 500);
+      return () => clearTimeout(t);
     }
     for (const [id, st] of Object.entries(emailStatusByRow)) {
       if (st === 'sending') {
@@ -1007,9 +1024,8 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
         return;
       }
     }
-    // No row currently sending — keep activeRowId on the last one
-    // so the beam dwells through the inter-send delay.
-  }, [emailStatusByRow]);
+    // Mid-blast, no row sending right now — keep the beam dwelling.
+  }, [emailStatusByRow, hasEntries, allSettled]);
   const [scanRect, setScanRect] = useState(null);
   useEffect(() => {
     if (!activeRowId) { setScanRect(null); return; }
@@ -1074,9 +1090,14 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
         />
       ))}
       {/* Same moving light bar CRMSearch has — sweeps over the
-          currently-sending row and stays on it through the delay
-          to the next send. */}
-      {scanRect && <ScanBeam top={scanRect.top} height={scanRect.height} />}
+          currently-sending row, dwells through the inter-send delay,
+          and fades out (AnimatePresence opacity exit) once the blast
+          settles via the allSettled effect above. */}
+      <AnimatePresence>
+        {scanRect && (
+          <ScanBeam key="scan" top={scanRect.top} height={scanRect.height} />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
