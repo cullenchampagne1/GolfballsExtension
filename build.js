@@ -24,25 +24,27 @@ const root = dirname(fileURLToPath(import.meta.url));
 const isWatch = process.argv.includes('--watch');
 const mode = isWatch ? 'development' : 'production';
 
-// Each surface = one src dir → one react-dist dir. Both follow the same
-// "one IIFE bundle per .jsx file" convention so the output can be dropped
-// straight into a content-script `js` array or referenced from an HTML host.
+// Each surface = one src dir → one react-dist dir. The first three are
+// React components (.jsx → IIFE); the fourth is ES-module bridge entries
+// (`*.entry.js`) used to expose pure-JS engine modules to legacy vanilla
+// content scripts via a `window.__gb*` global.
 const surfaces = [
-  { srcDir: 'src/content',    outDir: 'react-dist/content'    },
-  { srcDir: 'src/popup',      outDir: 'react-dist/popup'      },
-  { srcDir: 'src/playground', outDir: 'react-dist/playground' },
+  { srcDir: 'src/content',       outDir: 'react-dist/content',    suffix: '.jsx',      stripSuffix: '.jsx' },
+  { srcDir: 'src/popup',         outDir: 'react-dist/popup',      suffix: '.jsx',      stripSuffix: '.jsx' },
+  { srcDir: 'src/playground',    outDir: 'react-dist/playground', suffix: '.jsx',      stripSuffix: '.jsx' },
+  { srcDir: 'src/vanilla-build', outDir: 'react-dist/vanilla',    suffix: '.entry.js', stripSuffix: '.entry.js' },
 ];
 
 let total = 0;
-for (const { srcDir, outDir } of surfaces) {
+for (const { srcDir, outDir, suffix, stripSuffix } of surfaces) {
   const srcPath = resolve(root, srcDir);
   const outPath = resolve(root, outDir);
   if (!existsSync(srcPath)) continue;
-  const entries = readdirSync(srcPath).filter((f) => f.endsWith('.jsx'));
+  const entries = readdirSync(srcPath).filter((f) => f.endsWith(suffix));
   if (entries.length === 0) continue;
 
   for (const file of entries) {
-    const name = file.replace(/\.jsx$/, '');
+    const name = file.slice(0, file.length - stripSuffix.length);
     console.log(`building ${srcDir}/${name} (${mode})...`);
     await build({
       configFile: false,
