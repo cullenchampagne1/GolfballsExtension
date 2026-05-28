@@ -351,13 +351,19 @@ export function TemplateEditor({ tpl, onDelete }) {
     setVars(vs => vs.map(v => v.name === oldName ? { ...v, name: newName } : v));
   };
   const handleDeleteVar = name => setVars(vs => vs.filter(v => v.name !== name));
-  const openSmartByName = (name, anchor) => {
+  /* RichTextEditor.onChipClick → (name, chipEl, { x, y })
+     VariableTable BodyVar.onOpenSmart → (v, btnEl, { x, y })
+     Both pass viewport cursor coords as the 3rd arg. SmartPopover wants
+     `cursor`, not an anchor element, so we capture { x, y } here and
+     thread it through. Previously we dropped the cursor and the popover
+     fell back to viewport-centre placement — that's the "way off cursor"
+     bug the user kept reporting. */
+  const openSmartByName = (name, _anchor, cursor) => {
     const v = vars.find(x => x.name === name);
-    if (v && anchor) setSmartTarget({ variable: v, anchor });
+    if (v && cursor) setSmartTarget({ variable: v, cursor });
   };
-  // VariableTable's BodyVar passes (v, anchor) on bolt click.
-  const openSmartFromTable = (v, anchor) => {
-    if (v && anchor) setSmartTarget({ variable: v, anchor });
+  const openSmartFromTable = (v, _anchor, cursor) => {
+    if (v && cursor) setSmartTarget({ variable: v, cursor });
   };
 
   /* ── Auto-save ──────────────────────────────────────────────
@@ -740,7 +746,7 @@ export function TemplateEditor({ tpl, onDelete }) {
           <SmartPopover
             key="smart"
             variable={smartTarget.variable}
-            anchor={smartTarget.anchor}
+            cursor={smartTarget.cursor}
             onClose={() => setSmartTarget(null)}
             onSave={handleSaveSmart}
           />
