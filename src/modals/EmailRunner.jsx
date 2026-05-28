@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Btn, DraggablePopup, Dot, Dropdown, Field, RangeSlider, Tag, I, Spinner } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
+import { pickFromAddress } from '../lib/sender.js';
 
 /* ───────────────────────────────────────────────────────────────
    EmailRunner — draggable bottom-anchored panel that drives a bulk
@@ -357,12 +358,19 @@ export function EmailRunner({
           const htmlBody  = renderStr(rawBody, resolvedVars)
                           + (signature ? '<br><div>' + signature + '</div>' : '');
 
-          // 4. Send via Power Automate.
+          /* 4. Send via Power Automate.
+             `from` resolves per-row: when the template has
+             senderRandomize=true, pickFromAddress fires a fresh
+             random pick for each contact so a 50-row blast varies
+             between the configured senders. Otherwise it returns
+             the address mapped from the template's senderAccount
+             slug (golfballs.com / prioritylogo.com today). */
+          const from = pickFromAddress(selectedTpl);
           const send = await dispatchBg({
             action: 'paAutomate',
             paUrl,
             payload: {
-              emails: [{ to: toEmail, subject, htmlBody, replyMode }],
+              emails: [{ from, to: toEmail, subject, htmlBody, replyMode }],
             },
           });
           if (send?.ok) {
