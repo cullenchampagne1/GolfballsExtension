@@ -391,12 +391,19 @@ export function EmailRunner({
             });
         const resolvedVars = resolved?.resolved || {};
         const toEmail      = resolved?.toEmail  || '';
+        /* The resolver pulls contact.firstName + lastName off the
+           fetched page via the schema engine and ships it as
+           displayName. We prefer that over the caller-supplied
+           contactName because the page is the source of truth — if
+           the row came from an account-page list with no contact
+           text, this still produces a real name for the trail. */
+        const pageName = (resolved?.displayName || '').trim();
         if (resolved?.error) {
           /* Bubble the resolver's own message up so a parse / engine
              failure shows the cause instead of "No recipient email". */
-          outcome = { status: 'error', error: `Resolve failed: ${resolved.error}` };
+          outcome = { status: 'error', error: `Resolve failed: ${resolved.error}`, name: pageName };
         } else if (!toEmail) {
-          outcome = { status: 'error', error: 'No recipient email resolved' };
+          outcome = { status: 'error', error: 'No recipient email resolved', name: pageName };
         } else {
           // 3. Render template strings.
           const subject  = renderStr(rawSubject, resolvedVars);
@@ -434,9 +441,9 @@ export function EmailRunner({
           // eslint-disable-next-line no-console
           console.log('[gb] EmailRunner ← paAutomate response:', send);
           if (send?.ok) {
-            outcome = { status: 'sent', email: toEmail };
+            outcome = { status: 'sent', email: toEmail, name: pageName };
           } else {
-            outcome = { status: 'error', error: send?.error || 'PA send failed', email: toEmail };
+            outcome = { status: 'error', error: send?.error || 'PA send failed', email: toEmail, name: pageName };
           }
         }
       } catch (e) {
@@ -451,7 +458,13 @@ export function EmailRunner({
           : { ...cur, failed: cur.failed + 1 }
       ));
       setTrail((cur) => {
-        const next = [...cur, { name: c.name || '(unknown)', status: outcome.status, email: outcome.email }];
+        /* Display name preference: engine-extracted (firstName +
+           lastName off the fetched page) → caller-supplied
+           contactName → '(unknown)'. The first wins because the page
+           is canonical; the second is the task-row text we get when
+           the engine couldn't run (e.g. fetch failed before resolve). */
+        const displayName = outcome.name || c.contactName || c.name || '(unknown)';
+        const next = [...cur, { name: displayName, status: outcome.status, email: outcome.email }];
         // Cap to last 4 so the list never grows past the rendered slot
         // height — also kills the panel scrollbar.
         return next.length > 4 ? next.slice(next.length - 4) : next;

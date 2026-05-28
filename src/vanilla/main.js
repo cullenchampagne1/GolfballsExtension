@@ -78,11 +78,23 @@ window.__gbContentReady = true;
     if (msg.action === 'resolveVarsForHtml') {
       try {
         const doc = new DOMParser().parseFromString(msg.html || '', 'text/html');
+        /* Match the window-global path: include the contact's display
+           name so EmailRunner's trail row can label itself with the
+           actual name rather than '(unknown)'. */
+        let displayName = '';
+        try {
+          const engine = window.__gbPageEngine;
+          if (engine && typeof engine.resolvePath === 'function') {
+            const first = engine.resolvePath(doc, 'contact.firstName', '') || '';
+            const last  = engine.resolvePath(doc, 'contact.lastName',  '') || '';
+            displayName = `${first} ${last}`.trim();
+          }
+        } catch {}
         resolveAllVarsAsync(msg.vars, msg.toField, doc)
-          .then(result => sendResponse(result))
-          .catch((err) => sendResponse({ resolved: {}, toEmail: '', error: err?.message || 'resolve failed' }));
+          .then(result => sendResponse({ ...result, displayName }))
+          .catch((err) => sendResponse({ resolved: {}, toEmail: '', displayName, error: err?.message || 'resolve failed' }));
       } catch (e) {
-        sendResponse({ resolved: {}, toEmail: '', error: e?.message || 'parse failed' });
+        sendResponse({ resolved: {}, toEmail: '', displayName: '', error: e?.message || 'parse failed' });
       }
       return true;
     }
@@ -285,10 +297,25 @@ window.__gbContentReady = true;
   window.__gbResolveVarsForHtml = (html, vars, toField) => {
     try {
       const doc = new DOMParser().parseFromString(html || '', 'text/html');
+      /* Pull the contact's display name straight off the page via the
+         schema engine — independent of whatever template vars are
+         defined. EmailRunner needs this for the per-row trail label;
+         doing it here keeps the parse + engine call in one place
+         instead of re-parsing the HTML on the React side. */
+      let displayName = '';
+      try {
+        const engine = window.__gbPageEngine;
+        if (engine && typeof engine.resolvePath === 'function') {
+          const first = engine.resolvePath(doc, 'contact.firstName', '') || '';
+          const last  = engine.resolvePath(doc, 'contact.lastName',  '') || '';
+          displayName = `${first} ${last}`.trim();
+        }
+      } catch {}
       return resolveAllVarsAsync(vars, toField, doc)
-        .catch((err) => ({ resolved: {}, toEmail: '', error: err?.message || 'resolve failed' }));
+        .then((res) => ({ ...res, displayName }))
+        .catch((err) => ({ resolved: {}, toEmail: '', displayName, error: err?.message || 'resolve failed' }));
     } catch (e) {
-      return Promise.resolve({ resolved: {}, toEmail: '', error: e?.message || 'parse failed' });
+      return Promise.resolve({ resolved: {}, toEmail: '', displayName: '', error: e?.message || 'parse failed' });
     }
   };
 
