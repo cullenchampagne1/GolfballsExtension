@@ -262,6 +262,35 @@ function exportRows(rows) {
   return rows.map(({ id, ...rest }) => rest); // eslint-disable-line no-unused-vars
 }
 
+/* ── effectiveRuleValue ────────────────────────────────────────
+   Applies the rule's smart options to its literal value BEFORE
+   the rule's evaluator hands it to the comparison. Exported for
+   the future runtime evaluator so the same "smart-then-validate"
+   order the email-template variable resolver uses also applies
+   here — if smart.fallback fills the empty value, the rule should
+   see the filled string, not the empty one.
+
+   Pipeline order (matches variable-resolution.js's applySmart):
+     1. fallback     → fill in when value is empty
+     2. extract      → optional regex capture
+     3. transform    → upper / lower / titleCase / etc.
+     4. format       → number / currency / date / percent
+
+   No regex / format helpers here yet — kept light until the
+   runtime needs them. */
+export function effectiveRuleValue(row) {
+  if (!row) return '';
+  let v = row.value == null ? '' : String(row.value);
+  const smart = row.smart || {};
+  if ((v === '' || v == null) && typeof smart.fallback === 'string' && smart.fallback.length) {
+    v = smart.fallback;
+  }
+  if (smart.transform === 'upper')      v = v.toUpperCase();
+  else if (smart.transform === 'lower') v = v.toLowerCase();
+  else if (smart.transform === 'trim')  v = v.trim();
+  return v;
+}
+
 export function AccountConditions({ initial, onChange }) {
   const [rows, setRows] = useState(() => {
     if (!Array.isArray(initial)) return [];
@@ -430,11 +459,21 @@ function RuleRow({ row, onPatch, onRemove }) {
         gap: 6,
       }}
     >
-      {/* ── Top row ────────────────────────────────────────────── */}
+      {/* ── Top row ──────────────────────────────────────────────
+          Grid uses `minmax(0, …)` on the flexible columns so the
+          path button can shrink BELOW its content's natural width
+          — without that, a long path like
+          `contact.account.creditApproved` would grow the column,
+          push the op + value sideways, and overlap neighboring
+          dropdowns. minmax(0, 2fr) for the path gives it twice the
+          slack of the value column (so it stays readable), but the
+          inner span's text-overflow:ellipsis kicks in once the
+          column runs out of room. Layout no longer shifts when the
+          user picks a longer / shorter path. */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '1fr 140px 1fr auto auto',
+          gridTemplateColumns: 'minmax(0, 2fr) 140px minmax(0, 1fr) auto auto',
           gap: 8,
           alignItems: 'center',
         }}
