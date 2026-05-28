@@ -799,8 +799,8 @@ function MainView({
     // the actual send behavior never disagree — explicit Boolean +
     // string-trim checks defend against non-canonical legacy values
     // that earlier flag migrations may have left in storage.
-    const paOn   = flags.powerAutomateEnabled === true;
-    const paUrl  = typeof flags.powerAutomateUrl === 'string' && flags.powerAutomateUrl.trim().length > 0;
+    const paOn   = !!flags.powerAutomateEnabled;
+    const paUrl  = !!(flags.powerAutomateUrl && String(flags.powerAutomateUrl).trim());
     const paReady = paOn && paUrl;
 
     // When PA is configured we send through it; otherwise fall back to

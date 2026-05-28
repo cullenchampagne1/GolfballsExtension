@@ -4,6 +4,7 @@ import { Btn } from '../Btn.jsx';
 import { IconBtn } from '../IconBtn.jsx';
 import { SectionLabel } from '../SectionLabel.jsx';
 import { Tag } from '../Tag.jsx';
+import { Dropdown } from '../Dropdown.jsx';
 import { SmartPopover } from '../SmartPopover.jsx';
 import { I } from '../../icons.jsx';
 import { contactSchema } from '../../../lib/page-schemas/contact.js';
@@ -135,9 +136,43 @@ const SCHEMA_NODES = (() => {
   }));
 })();
 
-/* Type lookup by path — used to pick the right op list + value
-   widget when the user changes the path on an existing row. */
+/* Type lookup by path — keyed off the CANONICAL path
+   (every array index normalized to [0]). Live row paths can carry
+   a user-edited index (orders[2].total) so we normalize before
+   looking up the schema type. */
 const TYPE_BY_PATH = Object.fromEntries(SCHEMA_NODES.map((n) => [n.path, n.type]));
+const canonicalPath = (p) => (p || '').replace(/\[\d+\]/g, '[0]');
+const typeForPath = (p) => TYPE_BY_PATH[canonicalPath(p)] || 'string';
+
+/* Find array-index positions in a path. Returns the path split
+   into [text, idxNumber, text, idxNumber, …] so the UI can render
+   editable inputs for the index positions. Single-array paths in
+   the contact schema mean this usually has at most one index, but
+   the helper handles N. */
+function splitIndices(path) {
+  if (!path) return [{ text: '' }];
+  const parts = [];
+  const re = /\[(\d+)\]/g;
+  let lastIdx = 0;
+  let m;
+  while ((m = re.exec(path)) !== null) {
+    parts.push({ text: path.slice(lastIdx, m.index) });
+    parts.push({ index: Number(m[1]), at: m.index });
+    lastIdx = m.index + m[0].length;
+  }
+  parts.push({ text: path.slice(lastIdx) });
+  return parts;
+}
+
+/* Rewrite the Nth array-index in a path. Used when the user bumps
+   the index on a `orders[0].total` row to e.g. `orders[3].total`. */
+function setIndexAt(path, nthIndex, newValue) {
+  let count = 0;
+  return (path || '').replace(/\[(\d+)\]/g, (whole) => {
+    if (count++ === nthIndex) return `[${Math.max(0, Number(newValue) || 0)}]`;
+    return whole;
+  });
+}
 
 let _uidSeq = 0;
 const uid = () => `cnd_${Date.now().toString(36)}_${(_uidSeq++).toString(36)}`;
@@ -271,13 +306,18 @@ export function AccountConditions({ initial, onChange }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <AnimatePresence initial={false}>
           {rows.map((row) => (
+            /* No `layout` and no scale on the entry — those caused
+               the row to nudge sideways during mount and made the
+               op dropdown's open-state feel un-grounded. A plain
+               fade is enough; the height-clip + the parent
+               flex-gap handle the slide-in cleanly. */
             <motion.div
               key={row.id}
-              layout
-              initial={{ opacity: 0, y: -4, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -4, scale: 0.98 }}
-              transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
+              style={{ overflow: 'hidden' }}
             >
               <RuleRow
                 row={row}
@@ -298,12 +338,24 @@ export function AccountConditions({ initial, onChange }) {
    PathPickerPopover anchored beneath it; the smart bolt opens the
    shared SmartPopover anchored to the cursor. */
 function RuleRow({ row, onPatch, onRemove }) {
-  const type = TYPE_BY_PATH[row.path] || 'string';
+  const type = typeForPath(row.path);
   const ops  = OPS_BY_TYPE[type] || OPS_BY_TYPE.string;
+  const opOptions = ops.map((o) => ({ id: o.id, label: o.label }));
   const [pickerOpen, setPickerOpen] = useState(false);
   const [smartCursor, setSmartCursor] = useState(null);
   const hasSmart = !!(row.smart && Object.keys(row.smart).length);
   const noValue  = NO_VALUE_OPS.has(row.op);
+  /* Indices that the user can bump (one input per [N] in the
+     path — usually 0 or 1 for the contact schema). */
+  const indexSlots = useMemo(() => {
+    const out = [];
+    let count = 0;
+    (row.path || '').replace(/\[(\d+)\]/g, (_, n) => {
+      out.push({ value: Number(n), nth: count++ });
+      return _;
+    });
+    return out;
+  }, [row.path]);
 
   /* When the user picks a path whose type doesn't permit the
      current op, fall back to the first op for the new type so we
@@ -320,11 +372,15 @@ function RuleRow({ row, onPatch, onRemove }) {
     setPickerOpen(false);
   };
 
+  const onIndexChange = (nth, newValue) => {
+    onPatch({ path: setIndexAt(row.path, nth, newValue) });
+  };
+
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'auto 1fr 120px 1fr auto auto',
+        gridTemplateColumns: 'auto 1fr 130px 1fr auto auto',
         gap: 8,
         alignItems: 'center',
         padding: '8px 10px',
@@ -335,40 +391,47 @@ function RuleRow({ row, onPatch, onRemove }) {
     >
       <Tag size="xs" tone={TYPE_TONE[type] || 'neutral'}>{type}</Tag>
 
-      <div style={{ position: 'relative' }}>
+      <div style={{ position: 'relative', display: 'flex', gap: 4, alignItems: 'center', minWidth: 0 }}>
         <PathButton
           path={row.path}
           type={type}
           open={pickerOpen}
           onClick={() => setPickerOpen((o) => !o)}
         />
+        {/* Per-index editable inputs, one per [N] in the path.
+            Hides when the path has no array index. Each input bumps
+            the matching index without re-opening the picker so the
+            user can dial in "compare against the SECOND order"
+            without re-walking the schema tree. */}
+        {indexSlots.map((slot) => (
+          <IndexInput
+            key={slot.nth}
+            value={slot.value}
+            onChange={(v) => onIndexChange(slot.nth, v)}
+          />
+        ))}
         {pickerOpen && (
           <PathPickerPopover
-            currentPath={row.path}
+            /* Canonical (all [N] → [0]) so the picker can highlight
+               the schema entry the user originally chose, even
+               when they've bumped the array index. */
+            currentPath={canonicalPath(row.path)}
             onClose={() => setPickerOpen(false)}
             onSelect={onPickPath}
           />
         )}
       </div>
 
-      <select
+      {/* Op dropdown — the design-system Dropdown gives consistent
+          chrome with everything else (font, border, focus ring,
+          custom popover) instead of the native <select> that
+          looked out of place. */}
+      <Dropdown
+        size="sm"
         value={row.op}
-        onChange={(e) => onPatch({ op: e.target.value })}
-        style={{
-          height: 28,
-          padding: '0 8px',
-          background: 'var(--gb-surface-2)',
-          border: '1px solid var(--gb-border-default)',
-          borderRadius: 'var(--gb-r-sm)',
-          color: 'var(--gb-text-primary)',
-          fontFamily: 'var(--gb-font-sans)',
-          fontSize: 11.5,
-          outline: 'none',
-          cursor: 'pointer',
-        }}
-      >
-        {ops.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-      </select>
+        options={opOptions}
+        onChange={(id) => onPatch({ op: id })}
+      />
 
       <RuleValueInput
         type={type}
@@ -423,6 +486,59 @@ function RuleRow({ row, onPatch, onRemove }) {
   );
 }
 
+/* ── IndexInput ─────────────────────────────────────────────────
+   Tiny numeric input rendered after the path button for each [N]
+   in the row's path. Keeps a local draft so the user can clear
+   the field and type a fresh number without React snapping it
+   back to 0 mid-keystroke. Commits when the value parses to a
+   non-negative integer. */
+function IndexInput({ value, onChange }) {
+  const [draft, setDraft] = useState(String(value ?? 0));
+  const focusedRef = useRef(false);
+  useEffect(() => {
+    if (!focusedRef.current) setDraft(String(value ?? 0));
+  }, [value]);
+  return (
+    <input
+      type="number"
+      min={0}
+      step={1}
+      value={draft}
+      onFocus={() => { focusedRef.current = true; }}
+      onBlur={() => {
+        focusedRef.current = false;
+        const n = Math.max(0, Math.floor(Number(draft)));
+        if (!Number.isFinite(n)) { setDraft(String(value ?? 0)); return; }
+        setDraft(String(n));
+        if (n !== value) onChange(n);
+      }}
+      onChange={(e) => {
+        const v = e.target.value;
+        setDraft(v);
+        if (v === '') return;
+        const n = Number(v);
+        if (Number.isFinite(n) && n >= 0 && n !== value) onChange(Math.floor(n));
+      }}
+      style={{
+        width: 40,
+        height: 28,
+        padding: '0 4px',
+        background: 'var(--gb-surface-2)',
+        border: '1px solid var(--gb-border-default)',
+        borderRadius: 'var(--gb-r-sm)',
+        color: 'var(--gb-text-primary)',
+        fontFamily: 'var(--gb-font-mono)',
+        fontSize: 11,
+        fontWeight: 600,
+        textAlign: 'center',
+        outline: 'none',
+        flexShrink: 0,
+      }}
+      title="Array index"
+    />
+  );
+}
+
 /* ── PathButton ─────────────────────────────────────────────────
    The custom dropdown trigger the user specifically liked from
    the design. Mono path text + type dot + rotating caret. */
@@ -435,7 +551,8 @@ function PathButton({ path, type, open, onClick }) {
         display: 'inline-flex',
         alignItems: 'center',
         gap: 6,
-        width: '100%',
+        flex: 1,
+        minWidth: 0,
         height: 28,
         padding: '0 8px',
         background: open ? 'var(--gb-brand-tint-medium)' : 'var(--gb-surface-2)',
