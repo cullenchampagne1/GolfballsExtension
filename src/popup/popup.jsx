@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import { useDevSettings } from '../lib/devSettings.js';
-import { dropConditional } from '../lib/variableResolution.js';
+import { dropConditional, renderTemplate } from '../lib/variableResolution.js';
 import {
   Btn, Dropdown, Dot, Tag, KeyVal, SectionLabel, Field, Textarea,
   Spinner, I, T, inputBaseStyle, ToastHost,
@@ -59,9 +59,12 @@ const sendMessage = (tabId, msg) =>
    TEMPLATE RENDERING HELPERS — preserved 1:1 from popup.js
 ============================================================ */
 
+/* Thin wrapper around the shared renderTemplate so the popup picks
+   up OR-block syntax (`{{a|b}}`) and the conditional-drop behavior
+   without diverging from the bulk path. The `defs` arg keeps the
+   smart.conditional sentence/line/paragraph drop working as before. */
 function renderStr(str, vars, defs) {
-  const text = defs ? dropConditional(str, defs, vars) : (str || '');
-  return text.replace(/\{\{(\w+)\}\}/g, (_, k) => vars[k] ?? `{{${k}}}`);
+  return renderTemplate(str, vars, defs);
 }
 
 function buildMailto(to, subject, body) {

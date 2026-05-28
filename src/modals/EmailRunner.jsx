@@ -4,6 +4,7 @@ import { Btn, DraggablePopup, Dot, Dropdown, Field, RangeSlider, Tag, I, Spinner
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { pickFromAddress } from '../lib/sender.js';
 import { useDevSetting } from '../lib/devSettings.js';
+import { renderTemplate } from '../lib/variableResolution.js';
 
 /* ───────────────────────────────────────────────────────────────
    EmailRunner — draggable bottom-anchored panel that drives a bulk
@@ -83,14 +84,12 @@ const sendBg = (msg) => new Promise((resolve) => {
   } catch { resolve(null); }
 });
 
-/* Same {{var}} substitution the popup uses for single-contact sends.
-   Unknown tokens pass through in their original {{form}} so the rep
-   at least sees a placeholder is missing rather than getting silent
-   blanks in their outbound email. */
-const renderStr = (str, vars) => {
-  if (!str) return '';
-  return String(str).replace(/\{\{(\w+)\}\}/g, (_, k) => vars?.[k] ?? `{{${k}}}`);
-};
+/* Delegates to the shared renderer so OR-blocks (`{{a|b}}`) and
+   conditional drop-out behave identically to the popup's
+   single-contact path. Unknown / fully-unresolved tokens still pass
+   through as `{{...}}` so the rep notices missing data instead of
+   silently sending blanks. */
+const renderStr = (str, vars) => renderTemplate(str, vars);
 
 /* The vanilla sendViaPA handler appends emailSignature for the popup's
    single-contact path; the orchestrator hits paAutomate directly so we

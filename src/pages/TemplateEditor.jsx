@@ -59,6 +59,13 @@ function convertVars(tpl) {
     if (v.type === 'builtin') {
       kind   = 'builtin';
       config = v.builtin || 'page.data';
+    } else if (v.type === 'schema' || v.type === 'path') {
+      /* 'path' is the internal engine kind that predated the
+         user-facing 'schema' alias; both store the same `path` key
+         and resolve identically. New variables save as 'schema';
+         existing 'path' variables keep working without conversion. */
+      kind   = 'schema';
+      config = v.path || '';
     } else if (v.type === 'selector') {
       kind   = 'dom';
       config = v.selector || '';
@@ -84,6 +91,11 @@ function convertVars(tpl) {
    which inbound field to scan. */
 function varDef(v) {
   if (v.kind === 'builtin') return { type: 'builtin',  builtin:  v.config };
+  /* 'schema' resolves via the page-engine field tree (contact +
+     account variants share one path namespace). Saved as the
+     `schema` type so legacy `path` defs and new `schema` defs both
+     route through the same resolver branch. */
+  if (v.kind === 'schema')  return { type: 'schema',   path:     v.config };
   if (v.kind === 'dom')     return { type: 'selector', selector: v.config };
   if (v.kind === 'regex')   return {
     type: 'regex',

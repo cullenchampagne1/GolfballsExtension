@@ -25,6 +25,48 @@
  * @param {Record<string, string>} resolved — resolved values keyed by name
  * @returns {string}
  */
+/**
+ * renderTemplate(template, resolved, defs?)
+ *
+ * Substitutes `{{name}}` placeholders against `resolved`. Supports
+ * the OR-block syntax `{{var1|var2|var3}}` — the substitution falls
+ * through the pipe-separated candidates in order and returns the
+ * first non-empty value. When none resolve, the original `{{...}}`
+ * passes through so the sender notices a missing variable instead
+ * of getting a silent blank.
+ *
+ * When `defs` is supplied, `dropConditional` runs first so
+ * `smart.conditional` placeholders with empty values strip their
+ * surrounding sentence / line / paragraph before substitution. The
+ * conditional check looks up each candidate name independently —
+ * an OR-block is "empty for conditional purposes" only when EVERY
+ * candidate resolved empty.
+ *
+ * @param {string} template — raw text with {{var}} / {{a|b}} placeholders
+ * @param {Record<string,string>} resolved — resolved values keyed by name
+ * @param {Record<string,object>=} defs — variable definitions (optional)
+ * @returns {string}
+ */
+export function renderTemplate(template, resolved, defs) {
+  if (template == null) return '';
+  const text = defs ? dropConditional(template, defs, resolved) : String(template);
+  return text.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (orig, raw) => {
+    /* Pipe-separated candidates. Each gets trimmed; empty parts are
+       dropped (so `{{|x}}` collapses to `{{x}}` rather than rolling
+       a stray empty pick into a no-op match). */
+    const names = String(raw).split('|').map((s) => s.trim()).filter(Boolean);
+    if (names.length === 0) return orig;
+    for (const name of names) {
+      const v = resolved?.[name];
+      if (v != null && String(v).length > 0) return v;
+    }
+    /* No candidate resolved — surface the original placeholder so
+       the rep sees something is missing rather than emitting an
+       awkward blank. Matches the legacy single-var behavior. */
+    return orig;
+  });
+}
+
 export function dropConditional(template, defs, resolved) {
   if (!template || !defs) return template || '';
   let out = String(template);
