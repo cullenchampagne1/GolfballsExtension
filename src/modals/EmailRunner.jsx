@@ -274,36 +274,40 @@ export function EmailRunner({
      means "random across variations per contact." */
   const ORIGINAL_PIN = '__original';
 
-  /* Dropdown option shape — ported from popup.jsx. Templates with
-     variations expose an inline-expanding parent + sub-options.
-     Three modes per template:
+  /* Dropdown option shape — templates with variations render as a
+     `pickableParent` row whose chevron exposes the per-variation
+     overrides. Three modes per template:
 
-       Random per contact   id = t.id (no ::)         selectedVariationId = null
-       Original             id = t.id::__original     selectedVariationId = '__original'
-       Variation X          id = t.id::<v.id>         selectedVariationId = '<v.id>'
+       Random (default)   id = t.id (no ::)         selectedVariationId = null
+                          → bulk loop picks per contact using the
+                            variationWeights sliders (Original
+                            included in the pool as "Variation 1")
+       Variation 1        id = t.id::__original     selectedVariationId = '__original'
+                          → bare template, no variation, sent to all
+       Variation N        id = t.id::<v.id>         selectedVariationId = '<v.id>'
+                          → that specific variation pinned for all
 
-     Picking the parent ROW in the open picker expands it (Dropdown
-     component behavior) — it doesn't pick. To send "just the
-     original template, no random pick" the user picks the
-     explicit Original sub-option. */
+     The Original is exposed as "Variation 1" so the saved
+     variations enumerate from 2 onward — matches the rep's mental
+     model that the parent template is just the first variant. */
   const dropdownOptions = useMemo(() => templates.map((t) => {
     const variations = Array.isArray(t.variations) ? t.variations : [];
     const subOptions = variations.length > 0 ? [
-      /* Brand accent on Random so it's visually distinct from the
-         specific picks below — it's the default mode, not just
-         another item in the list. */
-      { id: t.id, label: 'Random per contact', accent: 'brand' },
-      { id: `${t.id}::${ORIGINAL_PIN}`, label: 'Original (no variation)' },
-      ...variations.map((v) => ({
+      { id: `${t.id}::${ORIGINAL_PIN}`, label: 'Variation 1' },
+      ...variations.map((v, i) => ({
         id: `${t.id}::${v.id}`,
-        label: v.label || 'Variation',
+        label: v.label || `Variation ${i + 2}`,
       })),
     ] : undefined;
     return {
       id: t.id,
       label: t.name || 'Untitled',
-      sub: variations.length ? `${variations.length} variation${variations.length === 1 ? '' : 's'}` : null,
+      sub: variations.length ? `${variations.length + 1} variations` : null,
       subOptions,
+      /* Row-click picks (= Random mode); chevron expands the list
+         of specific picks. No standalone "Random" entry in the
+         submenu — the parent IS the random pick. */
+      pickableParent: variations.length > 0,
     };
   }), [templates]);
 
@@ -323,38 +327,53 @@ export function EmailRunner({
   const dropdownDisplayLabel = (() => {
     if (!selectedTpl) return '';
     const baseName = selectedTpl.name || 'Untitled';
-    if (selectedVariationId === ORIGINAL_PIN) return `${baseName} · Original`;
+    if (selectedVariationId === ORIGINAL_PIN) return `${baseName} · Variation 1`;
     if (selectedVariationId) {
-      const v = (selectedTpl.variations || []).find((x) => x.id === selectedVariationId);
-      return `${baseName} · ${v?.label || 'Variation'}`;
+      const vIdx = (selectedTpl.variations || []).findIndex((x) => x.id === selectedVariationId);
+      const v = vIdx >= 0 ? selectedTpl.variations[vIdx] : null;
+      return `${baseName} · ${v?.label || `Variation ${vIdx + 2}`}`;
     }
-    /* No pin — if the template has variations, the picker defaulted
-       to Random; surface that in the header so the user can tell
-       what the bulk loop will do without re-opening the picker. */
-    if (isRandomMode) return `${baseName} · Random`;
+    /* No pin — picker defaulted to Random; bare template name
+       reads as the random pick (no suffix needed since the parent
+       row IS the random mode now). */
     return baseName;
   })();
 
-  /* Initialize variation weights to an equal split when the
-     template's variation set changes. We preserve user-tuned weights
-     across unrelated re-renders by checking whether the current key
-     set already matches the template's variation ids — that lets
-     reps tweak the sliders without losing their balance on every
-     state update. */
-  useEffect(() => {
+  /* The weightable pool used by the Random-mode picker AND the
+     sliders UI. The bare template is exposed as "Variation 1"
+     (id = ORIGINAL_PIN, variation = null); saved variations follow
+     numbered from 2. Building this once avoids re-deriving it at
+     every render of the sliders + every pick in the orchestrator. */
+  const weightableItems = useMemo(() => {
     const variations = Array.isArray(selectedTpl?.variations) ? selectedTpl.variations : [];
-    if (variations.length === 0) {
+    if (variations.length === 0) return [];
+    return [
+      { id: ORIGINAL_PIN, label: 'Variation 1', variation: null },
+      ...variations.map((v, i) => ({
+        id: v.id,
+        label: v.label || `Variation ${i + 2}`,
+        variation: v,
+      })),
+    ];
+  }, [selectedTpl]);
+
+  /* Initialize variation weights to an equal split when the pool
+     changes (template swap OR variations added/removed). User-tuned
+     weights are preserved across unrelated re-renders by checking
+     whether the current key set already matches the pool ids. */
+  useEffect(() => {
+    if (weightableItems.length === 0) {
       setVariationWeights((cur) => (Object.keys(cur).length === 0 ? cur : {}));
       return;
     }
     setVariationWeights((cur) => {
-      const ids = variations.map((v) => v.id);
+      const ids = weightableItems.map((it) => it.id);
       const sameSet = ids.length === Object.keys(cur).length && ids.every((id) => id in cur);
       if (sameSet) return cur;
       const equal = 100 / ids.length;
       return Object.fromEntries(ids.map((id) => [id, equal]));
     });
-  }, [selectedId, selectedTpl]);
+  }, [weightableItems]);
 
   /* Drag handler — A goes to `raw`, the rest split the remainder
      in proportion to their CURRENT values (relative balance among
@@ -362,10 +381,8 @@ export function EmailRunner({
      at 0) we fall back to an equal split so the bar moves
      predictably instead of getting stuck. */
   const onWeightChange = (targetId, raw) => {
-    if (!selectedTpl) return;
-    const variations = Array.isArray(selectedTpl.variations) ? selectedTpl.variations : [];
     const clamped = Math.max(0, Math.min(100, Number(raw) || 0));
-    const others = variations.filter((v) => v.id !== targetId).map((v) => v.id);
+    const others = weightableItems.filter((it) => it.id !== targetId).map((it) => it.id);
     if (others.length === 0) {
       setVariationWeights({ [targetId]: 100 });
       return;
@@ -453,14 +470,24 @@ export function EmailRunner({
              pinnedV       → use that specific variation
              null + vars   → random variation per contact
              null + no vars → parent only */
-        /* Random mode rolls a fresh variation per contact using the
-           rep's slider weights. Equal weights → uniform random;
-           skewed weights → that distribution. ORIGINAL_PIN sends the
-           bare template (no variation), pinnedV sends one specific
-           variation to everyone. */
-        const v = selectedVariationId === ORIGINAL_PIN
-          ? null
-          : pinnedV || (variations.length ? pickWeighted(variations, variationWeights) : null);
+        /* Random mode rolls a fresh pick per contact using the
+           rep's slider weights. The pool is `weightableItems`
+           which includes the bare template ("Variation 1") AND
+           every saved variation — so the original is in the rotation
+           and the rep can weight it directly. Equal weights →
+           uniform random; skewed weights → that distribution.
+           ORIGINAL_PIN forces the bare template; pinnedV pins one
+           specific variation for every contact. */
+        let v;
+        if (selectedVariationId === ORIGINAL_PIN) {
+          v = null;
+        } else if (pinnedV) {
+          v = pinnedV;
+        } else if (weightableItems.length) {
+          v = pickWeighted(weightableItems, variationWeights)?.variation ?? null;
+        } else {
+          v = null;
+        }
         const rawSubject = v?.subject || selectedTpl.subject || '';
         const rawBody    = v?.body    || selectedTpl.body    || '';
 
@@ -629,16 +656,13 @@ export function EmailRunner({
                 if (!templates.length) return 'No email templates saved yet';
                 if (variationCount === 0) return null;
                 if (selectedVariationId) {
-                  /* User picked a specific variation in the dropdown
-                     — every contact gets that one. */
+                  /* User pinned a specific variation via the chevron
+                     menu — every contact gets that one. */
                   return 'Only this variation will send to every contact';
                 }
-                /* Parent template selected — bulk loop picks a random
-                   variation per contact. The hint nudges the user
-                   that the dropdown can be opened to pin one. */
-                return `Click the dropdown and pick a variation to send only that one${
-                  variationCount === 1 ? '' : ` (1 of ${variationCount})`
-                }`;
+                /* Parent template selected = Random mode. Tweak the
+                   weights below, or open the chevron to pin one. */
+                return `Each contact gets a weighted random pick (1 of ${variationCount + 1} variations)`;
               })()}
             >
               {/* Match the popup.js template picker exactly: size sm
@@ -686,17 +710,17 @@ export function EmailRunner({
                       border: '1px solid var(--gb-border-subtle)',
                       borderRadius: 'var(--gb-r-sm)',
                     }}>
-                      {(selectedTpl.variations || []).map((v, idx) => (
+                      {weightableItems.map((it, idx) => (
                         <motion.div
-                          key={v.id}
+                          key={it.id}
                           initial={{ opacity: 0, x: -8 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: idx * 0.05, duration: 0.2 }}
                         >
                           <VariationWeightRow
-                            label={v.label || `Variation ${idx + 1}`}
-                            value={variationWeights[v.id] || 0}
-                            onChange={(val) => onWeightChange(v.id, val)}
+                            label={it.label}
+                            value={variationWeights[it.id] || 0}
+                            onChange={(val) => onWeightChange(it.id, val)}
                             disabled={status === 'running'}
                           />
                         </motion.div>

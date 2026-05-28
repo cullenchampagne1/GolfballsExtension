@@ -429,10 +429,23 @@ function Row({ o, value, depth, expandedIds, onToggleExpand, onPick, kbdActiveId
     ? `var(--gb-${o.accent === 'brand' ? 'brand-label' : `${o.accent}-fg`})`
     : null;
 
+  /* `pickableParent` decouples row-click from expansion: clicking
+     the row body picks the parent (and closes the menu), while
+     clicking the chevron toggles expansion. Used by EmailRunner
+     where the parent template represents the "random across
+     variations" pick — chevron exposes the specific-variation
+     overrides without forcing the user through an extra step to
+     get the default behavior. */
   const handleClick = () => {
     if (o.disabled) return;
-    if (hasSubs) { onToggleExpand(o.id); return; }
+    if (hasSubs && !o.pickableParent) { onToggleExpand(o.id); return; }
     onPick(o);
+  };
+  const handleChevronClick = (e) => {
+    if (o.disabled) return;
+    if (!o.pickableParent) return; // legacy behavior — row-click already toggled
+    e.stopPropagation();
+    onToggleExpand(o.id);
   };
 
   return (
@@ -484,11 +497,23 @@ function Row({ o, value, depth, expandedIds, onToggleExpand, onPick, kbdActiveId
           <span style={{ display: 'flex', flexShrink: 0 }}>{o.trailing}</span>
         )}
         {hasSubs && (
-          /* Right-pointing chevron that rotates 90° on expand. */
+          /* Right-pointing chevron that rotates 90° on expand. When
+             the parent is pickableParent, this is the ONLY surface
+             that toggles expansion — slightly larger hit area so the
+             control doesn't feel fiddly to click separately from the
+             row body. */
           <motion.span
             animate={{ rotate: expanded ? 90 : 0 }}
             transition={T.fast}
-            style={{ display: 'flex', color: 'var(--gb-text-muted)', flexShrink: 0 }}
+            onClick={handleChevronClick}
+            style={{
+              display: 'flex',
+              color: 'var(--gb-text-muted)',
+              flexShrink: 0,
+              padding: o.pickableParent ? '4px' : 0,
+              margin: o.pickableParent ? '-4px' : 0,
+              cursor: o.pickableParent ? 'pointer' : 'inherit',
+            }}
           >
             <I.chevr size={10} />
           </motion.span>
