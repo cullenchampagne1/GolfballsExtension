@@ -48,6 +48,22 @@ export const DEV_SETTINGS = [
     default: false,
   },
 
+  /* ── Outbound email account host ──────────────────────────────
+     The local part (before @) used when constructing the `from`
+     address for the PA flow. The configured sender accounts in
+     src/lib/sender.js carry just the domain; we glue the host on
+     here. Empty falls back to the registry default. Different
+     reps run the same extension under their own mailbox, so this
+     stays per-machine (devSettings) rather than per-template. */
+  {
+    key:     'email.localPart',
+    label:   'Email account host',
+    desc:    'Local part of the sender address (the bit before @). Combined with the chosen sender account at send time — e.g. "cullen" + "golfballs.com" → cullen@golfballs.com.',
+    type:    'string',
+    default: 'cullen',
+    placeholder: 'cullen',
+  },
+
   /* ── 3D viewer ball defaults ──────────────────────────────────
      Camera is fixed now (straight-on, floor aligns with the panel
      bottom). The remaining tunables are the BALL — initial scale +

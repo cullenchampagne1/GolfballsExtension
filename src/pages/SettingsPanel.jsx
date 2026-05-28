@@ -514,12 +514,47 @@ function NumberCell({ def, value, onChange }) {
   );
 }
 
+/* ── StringCell — controlled text input for `string` dev settings.
+       Backed by a local draft so typing doesn't fight React's
+       re-renders. Commits on every change (debouncing is unnecessary
+       for the kind of settings that use this — local-part of an
+       email address, a small label, etc.) and on blur clamps to a
+       trimmed value so a stray leading space doesn't persist. */
+function StringCell({ def, value, onChange }) {
+  const [draft, setDraft] = useState(value ?? '');
+  const focusedRef = useRef(false);
+  useEffect(() => {
+    if (!focusedRef.current) setDraft(value ?? '');
+  }, [value]);
+  return (
+    <Input
+      size="sm"
+      value={draft}
+      placeholder={def.placeholder || ''}
+      onFocus={() => { focusedRef.current = true; }}
+      onBlur={() => {
+        focusedRef.current = false;
+        const trimmed = (draft || '').trim();
+        if (trimmed !== draft) setDraft(trimmed);
+        if (trimmed !== value) onChange(trimmed);
+      }}
+      onChange={(v) => {
+        setDraft(v);
+        if (v !== value) onChange(v);
+      }}
+      style={{ width: 140 }}
+    />
+  );
+}
+
 /* ── Developer-settings row — bool toggles to a Switch, number to a
-       narrow Input with a unit suffix, action to a button that fires the
-       row's `runner`. Add new control types here as the registry grows. */
+       narrow Input with a unit suffix, string to a text Input, action
+       to a button that fires the row's `runner`. Add new control
+       types here as the registry grows. */
 function DevSettingRow({ def, value, onChange }) {
   const isBool   = def.type === 'bool';
   const isNum    = def.type === 'number';
+  const isString = def.type === 'string';
   const isAction = def.type === 'action';
   return (
     <div style={{
@@ -544,6 +579,9 @@ function DevSettingRow({ def, value, onChange }) {
         )}
         {isNum && (
           <NumberCell def={def} value={value} onChange={onChange} />
+        )}
+        {isString && (
+          <StringCell def={def} value={value} onChange={onChange} />
         )}
         {isAction && (
           <Btn
