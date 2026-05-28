@@ -52,6 +52,25 @@ function ensureNoScrollStyle() {
 }
 const fmtSeconds = (n) => `${n}s`;
 
+/* Weighted random pick over `items` using `weights[item.id]`. Items
+   with zero (or missing) weight are effectively excluded — set a
+   slider to 0% to take a variation out of the pool. Falls back to a
+   uniform pick when every weight is zero so a misconfigured weights
+   map still rotates between variations instead of always returning
+   the first. */
+function pickWeighted(items, weights) {
+  if (!Array.isArray(items) || items.length === 0) return null;
+  const total = items.reduce((s, it) => s + Math.max(0, weights?.[it.id] || 0), 0);
+  if (total <= 0) return items[Math.floor(Math.random() * items.length)];
+  let roll = Math.random() * total;
+  for (const it of items) {
+    const w = Math.max(0, weights?.[it.id] || 0);
+    if (roll < w) return it;
+    roll -= w;
+  }
+  return items[items.length - 1];
+}
+
 /* Promise wrapper around chrome.runtime.sendMessage so the orchestrator
    reads top-to-bottom. Resolves null on lastError instead of throwing
    so the loop can decide what to do per-step. */
@@ -199,6 +218,12 @@ export function EmailRunner({
      the parent list (CRMSearch / TaskList) via the row callbacks. */
   const [trail, setTrail] = useState([]); // [{ name, status, email? }]
   const [paUrl, setPaUrl] = useState('');
+  /* Per-variation weights used by the Random-mode picker. Keys are
+     variation ids; values sum to 100. Initialized to equal split
+     when a template is picked and reset whenever the variation set
+     changes; user drags on the sliders below redistribute the
+     remainder proportionally. */
+  const [variationWeights, setVariationWeights] = useState({});
   /* Run-cancellation token. Each onRun increments it; the loop checks
      it between iterations so closing the panel mid-send (or starting
      a fresh run) stops the orchestrator cleanly without leaving stale
@@ -264,7 +289,10 @@ export function EmailRunner({
   const dropdownOptions = useMemo(() => templates.map((t) => {
     const variations = Array.isArray(t.variations) ? t.variations : [];
     const subOptions = variations.length > 0 ? [
-      { id: t.id, label: 'Random per contact' },
+      /* Brand accent on Random so it's visually distinct from the
+         specific picks below — it's the default mode, not just
+         another item in the list. */
+      { id: t.id, label: 'Random per contact', accent: 'brand' },
       { id: `${t.id}::${ORIGINAL_PIN}`, label: 'Original (no variation)' },
       ...variations.map((v) => ({
         id: `${t.id}::${v.id}`,
@@ -285,14 +313,76 @@ export function EmailRunner({
     ? `${selectedId}::${selectedVariationId}`
     : selectedId;
   const selectedTpl = templates.find((t) => t.id === selectedId);
+  /* True when the selected template has variations AND no specific
+     one is pinned — the bulk loop will randomly pick a variation
+     per contact using `variationWeights` below. Drives both the
+     dropdown label suffix and the sliders section's visibility. */
+  const isRandomMode = !!selectedTpl
+    && Array.isArray(selectedTpl.variations) && selectedTpl.variations.length > 0
+    && !selectedVariationId;
   const dropdownDisplayLabel = (() => {
     if (!selectedTpl) return '';
     const baseName = selectedTpl.name || 'Untitled';
-    if (!selectedVariationId)            return baseName;
     if (selectedVariationId === ORIGINAL_PIN) return `${baseName} · Original`;
-    const v = (selectedTpl.variations || []).find((x) => x.id === selectedVariationId);
-    return `${baseName} · ${v?.label || 'Variation'}`;
+    if (selectedVariationId) {
+      const v = (selectedTpl.variations || []).find((x) => x.id === selectedVariationId);
+      return `${baseName} · ${v?.label || 'Variation'}`;
+    }
+    /* No pin — if the template has variations, the picker defaulted
+       to Random; surface that in the header so the user can tell
+       what the bulk loop will do without re-opening the picker. */
+    if (isRandomMode) return `${baseName} · Random`;
+    return baseName;
   })();
+
+  /* Initialize variation weights to an equal split when the
+     template's variation set changes. We preserve user-tuned weights
+     across unrelated re-renders by checking whether the current key
+     set already matches the template's variation ids — that lets
+     reps tweak the sliders without losing their balance on every
+     state update. */
+  useEffect(() => {
+    const variations = Array.isArray(selectedTpl?.variations) ? selectedTpl.variations : [];
+    if (variations.length === 0) {
+      setVariationWeights((cur) => (Object.keys(cur).length === 0 ? cur : {}));
+      return;
+    }
+    setVariationWeights((cur) => {
+      const ids = variations.map((v) => v.id);
+      const sameSet = ids.length === Object.keys(cur).length && ids.every((id) => id in cur);
+      if (sameSet) return cur;
+      const equal = 100 / ids.length;
+      return Object.fromEntries(ids.map((id) => [id, equal]));
+    });
+  }, [selectedId, selectedTpl]);
+
+  /* Drag handler — A goes to `raw`, the rest split the remainder
+     in proportion to their CURRENT values (relative balance among
+     them is preserved). When the others sum to zero (everyone was
+     at 0) we fall back to an equal split so the bar moves
+     predictably instead of getting stuck. */
+  const onWeightChange = (targetId, raw) => {
+    if (!selectedTpl) return;
+    const variations = Array.isArray(selectedTpl.variations) ? selectedTpl.variations : [];
+    const clamped = Math.max(0, Math.min(100, Number(raw) || 0));
+    const others = variations.filter((v) => v.id !== targetId).map((v) => v.id);
+    if (others.length === 0) {
+      setVariationWeights({ [targetId]: 100 });
+      return;
+    }
+    setVariationWeights((cur) => {
+      const oldOthersSum = others.reduce((s, id) => s + (cur[id] || 0), 0);
+      const remainder = 100 - clamped;
+      const next = { [targetId]: clamped };
+      if (oldOthersSum <= 0) {
+        const each = remainder / others.length;
+        for (const id of others) next[id] = each;
+      } else {
+        for (const id of others) next[id] = remainder * ((cur[id] || 0) / oldOthersSum);
+      }
+      return next;
+    });
+  };
 
   const onDropdownChange = (id) => {
     if (typeof id === 'string' && id.includes('::')) {
@@ -363,9 +453,14 @@ export function EmailRunner({
              pinnedV       → use that specific variation
              null + vars   → random variation per contact
              null + no vars → parent only */
+        /* Random mode rolls a fresh variation per contact using the
+           rep's slider weights. Equal weights → uniform random;
+           skewed weights → that distribution. ORIGINAL_PIN sends the
+           bare template (no variation), pinnedV sends one specific
+           variation to everyone. */
         const v = selectedVariationId === ORIGINAL_PIN
           ? null
-          : pinnedV || (variations.length ? variations[Math.floor(Math.random() * variations.length)] : null);
+          : pinnedV || (variations.length ? pickWeighted(variations, variationWeights) : null);
         const rawSubject = v?.subject || selectedTpl.subject || '';
         const rawBody    = v?.body    || selectedTpl.body    || '';
 
@@ -565,6 +660,53 @@ export function EmailRunner({
               />
             </Field>
 
+            {/* Variation weights — only renders in Random mode.
+                Sliders animate in one-by-one; dragging one redistributes
+                the remainder across the others so the total stays at
+                100%. The orchestrator's per-row pick uses these
+                weights via pickWeighted(). */}
+            <AnimatePresence initial={false}>
+              {isRandomMode && (
+                <motion.div
+                  key="variation-weights"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+                  style={{ overflow: 'hidden' }}
+                >
+                  <Field
+                    label="Variation weights"
+                    hint="Sliders always sum to 100% — each contact gets a roll weighted by these."
+                  >
+                    <div style={{
+                      display: 'flex', flexDirection: 'column', gap: 8,
+                      padding: 10,
+                      background: 'var(--gb-surface-1)',
+                      border: '1px solid var(--gb-border-subtle)',
+                      borderRadius: 'var(--gb-r-sm)',
+                    }}>
+                      {(selectedTpl.variations || []).map((v, idx) => (
+                        <motion.div
+                          key={v.id}
+                          initial={{ opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: idx * 0.05, duration: 0.2 }}
+                        >
+                          <VariationWeightRow
+                            label={v.label || `Variation ${idx + 1}`}
+                            value={variationWeights[v.id] || 0}
+                            onChange={(val) => onWeightChange(v.id, val)}
+                            disabled={status === 'running'}
+                          />
+                        </motion.div>
+                      ))}
+                    </div>
+                  </Field>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <Field label="Delay between sends" hint={`${fmtSeconds(delay[0])}–${fmtSeconds(delay[1])} (random per contact)`}>
               <RangeSlider
                 values={delay}
@@ -672,5 +814,51 @@ export function EmailRunner({
             </Btn>
           </div>
     </DraggablePopup>
+  );
+}
+
+/* One row in the Random-mode weights panel: variation label,
+   horizontal range slider, percentage readout. `accent-color`
+   tints the native range thumb + track so the control reads
+   brand without a custom thumb implementation — the rounded
+   numeric on the right is what the rep watches when balancing
+   the split. */
+function VariationWeightRow({ label, value, onChange, disabled }) {
+  const rounded = Math.round(value);
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.4fr) 36px',
+      gap: 10,
+      alignItems: 'center',
+    }}>
+      <div style={{
+        fontSize: 11,
+        color: 'var(--gb-text-secondary)',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>{label}</div>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={rounded}
+        onChange={(e) => onChange(Number(e.target.value))}
+        disabled={disabled}
+        style={{
+          width: '100%',
+          accentColor: 'var(--gb-brand-fg)',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          opacity: disabled ? 0.5 : 1,
+        }}
+      />
+      <div style={{
+        fontSize: 11,
+        fontWeight: 600,
+        fontVariantNumeric: 'tabular-nums',
+        color: 'var(--gb-text-primary)',
+        textAlign: 'right',
+      }}>{rounded}%</div>
+    </div>
   );
 }
