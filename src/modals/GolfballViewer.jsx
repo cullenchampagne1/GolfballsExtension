@@ -799,10 +799,14 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         let decalProjectionParams = null;  // { position, orientation, size, texture }
         // ── Decal — projected onto the top pole ────────────────
         if (decalDataUrl) {
+          // eslint-disable-next-line no-console
+          console.log('[gb-decal] starting decal build, dataUrl length =', decalDataUrl?.length, 'prefix =', decalDataUrl?.slice(0, 40));
           const texLoader = new THREE.TextureLoader();
           const decalTexture = await new Promise((res, rej) => {
             texLoader.load(decalDataUrl, res, undefined, rej);
           });
+          // eslint-disable-next-line no-console
+          console.log('[gb-decal] texture loaded, image=', decalTexture.image?.width, 'x', decalTexture.image?.height, 'disposed?', disposed);
           if (disposed) return;
           // Texture flags: clamp to edge so edge pixels don't tile across
           // the decal's edges; sRGB so white reads as white.
@@ -820,7 +824,18 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           const decalOrientation = new THREE.Euler(0, 0, 0);
           const decalSize = new THREE.Vector3(targetRadius * 0.7, targetRadius * 0.7, targetRadius * 2);
 
+          /* Force matrixWorld up-to-date BEFORE DecalGeometry projects.
+             DecalGeometry walks ballMesh.matrixWorld to transform the
+             projector into mesh-local space; if matrixWorld is stale
+             (Three.js only refreshes it during render), the projection
+             can collapse and produce an empty mesh. Symptom matches
+             "decal silently doesn't show" — happened after the ball-
+             rotation init order changed (group rotation is now set
+             before the first render). */
+          ballGroup.updateMatrixWorld(true);
           const decalGeo = new DecalGeometry(ballMesh, decalPosition, decalOrientation, decalSize);
+          // eslint-disable-next-line no-console
+          console.log('[gb-decal] decalGeo built, vertex count =', decalGeo.attributes?.position?.count, 'ballMesh matrixWorld[0..3] =', ballMesh.matrixWorld.elements.slice(0, 4));
           const decalMat = new THREE.MeshStandardMaterial({
             map: decalTexture,
             transparent: true,
@@ -838,8 +853,15 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // decal would stay glued to the origin.
           decalMesh.position.copy(ballMesh.position);
           decalMesh.scale.copy(ballMesh.scale);
+          /* Render after the ball so depth+polygonOffset are honored
+             in the correct order. Without this, scene order isn't
+             guaranteed and the decal occasionally lost the depth
+             tiebreak when the lighting overhaul changed sort hints. */
+          decalMesh.renderOrder = 1;
           ballGroup.add(decalMesh);
           objectsToDispose.push(decalGeo, decalMat);
+          // eslint-disable-next-line no-console
+          console.log('[gb-decal] decalMesh added to ballGroup, visible =', decalMesh.visible, 'parent children count =', ballGroup.children.length);
           // Stash projection params for explode-time per-shard reuse.
           decalProjectionParams = {
             position: decalPosition.clone(),
