@@ -57,16 +57,30 @@ export function Dropdown({
   // Critical in the toolbar popup where the viewport is only ~340px tall —
   // without this clamp the menu spills past the popup's bottom edge and
   // gets clipped by Chrome.
-  /* Walk the zoom chain so we can compensate when the dropdown's
-     parent (typically body) has CSS zoom — getBoundingClientRect
-     returns post-zoom viewport coords, but the popover is portaled
-     to body and its position/width are interpreted in PRE-zoom
-     CSS pixels. Divide both the position and width by the cumulative
-     zoom so the popover lands directly under the trigger AND its
-     menu rendered width matches the trigger's rendered width
-     (previously the menu came out ~zoom-factor narrower than the
-     trigger, e.g. a 90%-zoom page → menu ~10% narrower → it looked
-     like the dropdown had a small popover next to the input). */
+  /* Two compounding scale transforms can be in play here:
+
+       1) Body / ancestor CSS `zoom` (editor, popup, modal hosts).
+          getBoundingClientRect returns POST-zoom viewport coords in
+          modern Chromium, but a fixed-positioned popover portaled to
+          body is laid out in PRE-zoom CSS pixels — the browser
+          multiplies by the cumulative zoom when painting. So to land
+          the popover's TOP-LEFT under the trigger we divide r.left
+          and r.bottom by the zoom chain.
+
+       2) The popover's own CSS `scale` (from data-gb-scale="popovers"
+          → `scale: var(--gb-scale-popovers)` with transform-origin
+          top-left). This doesn't move the top-left corner — it only
+          scales the popover's CONTENT around that anchor. So the
+          rendered visual width = CSS width × popover scale × body
+          zoom. To make the popover's visible width MATCH the
+          trigger's visible width we divide r.width by the popover
+          scale only (the body zoom cancels: trigger and popover both
+          live inside the same zoomed body).
+
+     The previous version divided width by the zoom chain too, which
+     was correct for body zoom but ignored the popover scale — so a
+     `popovers` slider set to 0.85 left the menu ~15% narrower than
+     the input it sat under (the "tiny text + width mismatch" bug). */
   function readZoomChain() {
     if (typeof window === 'undefined' || typeof document === 'undefined') return 1;
     let z = 1;
@@ -81,6 +95,13 @@ export function Dropdown({
     }
     return z || 1;
   }
+  function readPopoverScale() {
+    try {
+      const v = getComputedStyle(document.documentElement).getPropertyValue('--gb-scale-popovers');
+      const n = parseFloat(String(v || '').trim());
+      return Number.isFinite(n) && n > 0 ? n : 1;
+    } catch { return 1; }
+  }
   const [pos, setPos] = useState(null);
   useEffect(() => {
     if (!open) { setPos(null); return undefined; }
@@ -89,9 +110,16 @@ export function Dropdown({
       if (!el) return;
       const r = el.getBoundingClientRect();
       const z = readZoomChain();
+      const s = readPopoverScale();
       const top = (r.bottom + 4) / z;
       const left = r.left / z;
-      const width = r.width / z;
+      /* Popover's rendered visual width = css_width × popover_scale ×
+         body_zoom. r.width is already the trigger's visual width
+         (modern Chromium includes ancestor zoom + transforms in
+         getBoundingClientRect). To make the popover paint at the
+         SAME visual width as the trigger we divide r.width by
+         (S × Z) — both factors multiply when the popover is rendered. */
+      const width = r.width / (s * z);
       // documentElement.clientHeight tracks the actual rendered viewport,
       // including dynamic Chrome popup auto-resizing — window.innerHeight
       // can lag a frame during the resize.
@@ -331,7 +359,10 @@ export function Dropdown({
                 />
               </div>
             )}
-            <div className="gb-dd-list" data-gb-scale="popovers" style={{ maxHeight: pos.maxListHeight, overflowY: 'auto', padding: 4, scrollbarWidth: 'none' }}>
+            {/* data-gb-scale lives on the outer motion.div only — having
+                it here too would double-apply the popovers scale (S × S),
+                shrinking the list's text far below the trigger's. */}
+            <div className="gb-dd-list" style={{ maxHeight: pos.maxListHeight, overflowY: 'auto', padding: 4, scrollbarWidth: 'none' }}>
               {filtered.length === 0 ? (
                 <div style={{ padding: '10px 8px', fontSize: 11.5, color: 'var(--gb-text-muted)', textAlign: 'center' }}>
                   No matches
