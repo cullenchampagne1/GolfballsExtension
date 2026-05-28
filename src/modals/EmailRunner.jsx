@@ -408,15 +408,17 @@ export function EmailRunner({
                           + (signature ? '<br><div>' + signature + '</div>' : '');
 
           /* 4. Send via Power Automate.
-             `from` resolves per-row: when the template has
-             senderRandomize=true, pickFromAddress fires a fresh
-             random pick for each contact so a 50-row blast varies
-             between the configured senders. The local part comes
-             from the rep's devSetting so the rest of the address
-             ends up like cullen@golfballs.com. */
-          const from = pickFromAddress(selectedTpl, emailLocalPart);
+             TEMP: `from` is omitted so PA's send action falls back to
+             the connection mailbox identity. Specifying `from` triggers
+             a Send-As permission check in Microsoft Graph, and the M365
+             mailbox driving this flow only has Send-As granted for
+             golfballs.com — prioritylogo.com sends create the draft but
+             fail to send. Restore the pickFromAddress line and put
+             `from` back in the payload once Send-As is granted for
+             cullen@prioritylogo.com in M365. */
+          // const from = pickFromAddress(selectedTpl, emailLocalPart);
           const paPayload = {
-            emails: [{ from, to: toEmail, subject, htmlBody, replyMode }],
+            emails: [{ to: toEmail, subject, htmlBody, replyMode }],
           };
           /* Eyes-on log so the rep can copy the EXACT payload going
              to PA and compare against the popup's network call.
