@@ -259,6 +259,11 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
      wired below; TaskRow reads from the map to replace the Quick Task
      button cell with the live send state. */
   const [emailStatusByRow, setEmailStatusByRow] = useState({});
+  /* True while EmailRunner is mid-blast. Drives the scan beam's dwell
+     behavior in TasksTable: when running, the beam stays anchored to
+     the just-sent row through the inter-send delay; when the
+     orchestrator finishes (or the panel closes), the beam fades out. */
+  const [emailRunRunning, setEmailRunRunning] = useState(false);
   /* "Urgent only" filter — set to 'urgent' by the modal-aware
      action in the action shelf to narrow the visible list to
      overdue + due-today tasks. Cleared via the filter chip in the
@@ -875,6 +880,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
           onQuickMenu={(id, anchor) => setQt({ mode: 'main', taskId: id, anchor })}
           busyRows={busyRowsRef.current}
           emailStatusByRow={emailStatusByRow}
+          emailRunRunning={emailRunRunning}
         />
         {/* re-render hook — busyVersion changes force the table to repick
             up busyRowsRef without doing structural state churn */}
@@ -943,6 +949,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
       onResetRowStates={() => setEmailStatusByRow({})}
       onRowStart={(id) => setEmailStatusByRow((m) => ({ ...m, [id]: 'sending' }))}
       onRowDone={(id, outcome) => setEmailStatusByRow((m) => ({ ...m, [id]: outcome.status }))}
+      onRunStateChange={setEmailRunRunning}
     />
     </>
   );
@@ -975,7 +982,7 @@ function ScanBeam({ top, height }) {
         position: 'absolute', left: 0, right: 0, top: 0,
         transform: `translateY(${top}px)`,
         height,
-        background: 'linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--gb-brand-label) 16%, transparent) 35%, color-mix(in srgb, var(--gb-brand-label) 28%, transparent) 50%, color-mix(in srgb, var(--gb-brand-label) 16%, transparent) 65%, transparent 100%)',
+        background: 'linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--gb-brand-label) 7%, transparent) 35%, color-mix(in srgb, var(--gb-brand-label) 12%, transparent) 50%, color-mix(in srgb, var(--gb-brand-label) 7%, transparent) 65%, transparent 100%)',
         transition,
         zIndex: 3,
       }} />
@@ -983,38 +990,38 @@ function ScanBeam({ top, height }) {
         position: 'absolute', left: 0, right: 0, top: 0,
         transform: `translateY(${top}px)`,
         height: 1,
-        background: 'var(--gb-brand-label)',
-        boxShadow: '0 0 14px 1px var(--gb-brand-label)',
+        background: 'color-mix(in srgb, var(--gb-brand-label) 60%, transparent)',
+        boxShadow: '0 0 6px 0 color-mix(in srgb, var(--gb-brand-label) 50%, transparent)',
         transition, zIndex: 4,
       }} />
       <div style={{
         position: 'absolute', left: 0, right: 0, top: 0,
         transform: `translateY(${top + height}px)`,
         height: 1,
-        background: 'var(--gb-brand-label)',
-        boxShadow: '0 0 14px 1px var(--gb-brand-label)',
+        background: 'color-mix(in srgb, var(--gb-brand-label) 60%, transparent)',
+        boxShadow: '0 0 6px 0 color-mix(in srgb, var(--gb-brand-label) 50%, transparent)',
         transition, zIndex: 4,
       }} />
     </motion.div>
   );
 }
 
-function TasksTable({ rows, status, query, allChecked, selected, onToggle, onToggleAll, sortChain = [], onSort, onQuickMenu, busyRows, emailStatusByRow = {} }) {
+function TasksTable({ rows, status, query, allChecked, selected, onToggle, onToggleAll, sortChain = [], onSort, onQuickMenu, busyRows, emailStatusByRow = {}, emailRunRunning = false }) {
   /* Beam dwells on the last 'sending' row through the inter-send
      delay so the visual stays tied to the orchestrator's cursor.
-     When the WHOLE blast settles (every entry is sent/failed, none
-     in flight), clear activeRowId after a short grace period so the
-     beam fades out via AnimatePresence below — the SENT badges
-     stay in the Action column as a record of what was sent. */
+     The dwell key is `emailRunRunning` — `allSettled` over so-far-
+     known rows would flip true between every send (the just-sent
+     row is the only entry) and prematurely fade the beam out. We
+     only release the dwell when the orchestrator actually finishes,
+     then clear activeRowId after a short grace period so the beam
+     fades out via AnimatePresence below. SENT badges stay in the
+     Action column as a record of what was sent. */
   const containerRef = useRef(null);
   const hasEntries = Object.keys(emailStatusByRow).length > 0;
-  const allSettled = hasEntries && Object.values(emailStatusByRow).every(
-    (st) => st === 'sent' || st === 'failed' || st === 'error',
-  );
   const [activeRowId, setActiveRowId] = useState(null);
   useEffect(() => {
     if (!hasEntries) { setActiveRowId(null); return; }
-    if (allSettled) {
+    if (!emailRunRunning) {
       const t = setTimeout(() => setActiveRowId(null), 500);
       return () => clearTimeout(t);
     }
@@ -1024,8 +1031,9 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
         return;
       }
     }
-    // Mid-blast, no row sending right now — keep the beam dwelling.
-  }, [emailStatusByRow, hasEntries, allSettled]);
+    // Mid-blast, no row sending right now — keep the beam dwelling
+    // on the last anchored row until the next onRowStart fires.
+  }, [emailStatusByRow, hasEntries, emailRunRunning]);
   const [scanRect, setScanRect] = useState(null);
   useEffect(() => {
     if (!activeRowId) { setScanRect(null); return; }

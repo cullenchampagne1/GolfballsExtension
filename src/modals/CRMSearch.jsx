@@ -510,6 +510,12 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
        'sending' | 'sent' | 'error'
      Cleared on every fresh blast via onResetRowStates. */
   const [emailStatusByRow, setEmailStatusByRow] = useState({});
+  /* True while EmailRunner is mid-blast. Lets ResultsTable's scan
+     beam dwell on the just-sent row through the inter-send delay
+     instead of fading out the moment that row's status flips to
+     'sent' (allSettled over so-far-known rows would otherwise
+     trigger the auto-clear between every send). */
+  const [emailRunRunning, setEmailRunRunning] = useState(false);
   const openQueryBuilder = () => setQbOpen(true);
   const applyQbFilter = (filter) => {
     setQbFilter(filter);   // triggers the auto re-run effect
@@ -1061,6 +1067,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
           activeIdx={activeIdx}
           allChecked={allVisibleSelected}
           emailStatusByRow={emailStatusByRow}
+          emailRunRunning={emailRunRunning}
           onToggle={toggleSel}
           onToggleAll={toggleAll}
           sortKey={sortKey}
@@ -1116,6 +1123,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
       onResetRowStates={() => setEmailStatusByRow({})}
       onRowStart={(id) => setEmailStatusByRow((m) => ({ ...m, [id]: 'sending' }))}
       onRowDone={(id, outcome) => setEmailStatusByRow((m) => ({ ...m, [id]: outcome.status }))}
+      onRunStateChange={setEmailRunRunning}
     />
     </>
   );
@@ -1136,7 +1144,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
 const COLS_BASE        = '30px 1.3fr 1.1fr 80px 1.9fr 70px 0.9fr 0.9fr 110px 0px';
 const COLS_WITH_STATUS = '30px 1.3fr 1.1fr 80px 1.9fr 70px 0.9fr 0.9fr 110px 96px';
 
-function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, allChecked, emailStatusByRow = {}, onToggle, onToggleAll, sortKey, sortDir, onSort, mode, onDeleteIndexed, onSubmitServer, loadingMore }) {
+function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, allChecked, emailStatusByRow = {}, emailRunRunning = false, onToggle, onToggleAll, sortKey, sortDir, onSort, mode, onDeleteIndexed, onSubmitServer, loadingMore }) {
   const Header = ({ label, k }) => (
     <SortHeader label={label} sortKey={k} activeKey={sortKey} dir={sortDir} onSort={onSort} />
   );
@@ -1158,27 +1166,31 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
   const [showStatusCol, setShowStatusCol] = useState(false);
   useEffect(() => {
     if (!hasEntries) { setShowStatusCol(false); return; }
-    if (!allSettled) { setShowStatusCol(true); return; }
+    if (emailRunRunning) { setShowStatusCol(true); return; }
     /* Blast just finished — keep the column for a beat so the badges
-       are readable, then slide it out. Cleared on dependency change
-       (e.g. a new blast starts before the timer fires). */
+       are readable, then slide it out. Keyed off emailRunRunning so
+       the column doesn't pop out + back in between sends. */
     const t = setTimeout(() => setShowStatusCol(false), 1800);
     return () => clearTimeout(t);
-  }, [hasEntries, allSettled]);
+  }, [hasEntries, emailRunRunning]);
   const gridCols = showStatusCol ? COLS_WITH_STATUS : COLS_BASE;
 
-  /* Scan beam — beam follows whichever row is currently sending,
-     AND keeps showing on that row through the inter-send delay. When
-     the WHOLE blast finishes (allSettled), the beam fades out after
-     a short delay so the final badge is visible for a moment before
-     the light fades. AnimatePresence below handles the opacity exit. */
+  /* Scan beam — follows whichever row is currently sending and
+     dwells on it through the inter-send delay. Dwell is keyed off
+     the orchestrator's running flag (`emailRunRunning`) — using
+     `allSettled` over so-far-known rows would flip true between
+     every send (the just-sent row is the only entry) and fade the
+     beam out prematurely. Once the orchestrator finishes, the beam
+     fades out after a short delay so the final badge is readable.
+     AnimatePresence below handles the opacity exit. */
   const containerRef = useRef(null);
   const [activeRowId, setActiveRowId] = useState(null);
   useEffect(() => {
     if (!hasEntries) { setActiveRowId(null); return; }
-    if (allSettled) {
-      /* Short delay before clearing so the beam doesn't pop off
-         simultaneously with the SENT badge appearing. */
+    if (!emailRunRunning) {
+      /* Orchestrator finished — keep the beam for a beat so the
+         final badge isn't simultaneously popping in as the beam
+         pops off. */
       const t = setTimeout(() => setActiveRowId(null), 500);
       return () => clearTimeout(t);
     }
@@ -1189,8 +1201,8 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
       }
     }
     // Mid-blast, no row sending right this instant — keep the beam
-    // dwelling on the last one (inter-send delay).
-  }, [emailStatusByRow, hasEntries, allSettled]);
+    // dwelling on the last one through the inter-send delay.
+  }, [emailStatusByRow, hasEntries, emailRunRunning]);
   const [scanRect, setScanRect] = useState(null);
   useEffect(() => {
     if (!activeRowId) { setScanRect(null); return; }
@@ -1395,7 +1407,7 @@ function ScanBeam({ top, height }) {
         position: 'absolute', left: 0, right: 0, top: 0,
         transform: `translateY(${top}px)`,
         height,
-        background: 'linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--gb-brand-label) 16%, transparent) 35%, color-mix(in srgb, var(--gb-brand-label) 28%, transparent) 50%, color-mix(in srgb, var(--gb-brand-label) 16%, transparent) 65%, transparent 100%)',
+        background: 'linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--gb-brand-label) 7%, transparent) 35%, color-mix(in srgb, var(--gb-brand-label) 12%, transparent) 50%, color-mix(in srgb, var(--gb-brand-label) 7%, transparent) 65%, transparent 100%)',
         transition,
         zIndex: 3,
       }} />
@@ -1403,8 +1415,8 @@ function ScanBeam({ top, height }) {
         position: 'absolute', left: 0, right: 0, top: 0,
         transform: `translateY(${top}px)`,
         height: 1,
-        background: 'var(--gb-brand-label)',
-        boxShadow: '0 0 14px 1px var(--gb-brand-label)',
+        background: 'color-mix(in srgb, var(--gb-brand-label) 60%, transparent)',
+        boxShadow: '0 0 6px 0 color-mix(in srgb, var(--gb-brand-label) 50%, transparent)',
         transition,
         zIndex: 4,
       }} />
@@ -1412,8 +1424,8 @@ function ScanBeam({ top, height }) {
         position: 'absolute', left: 0, right: 0, top: 0,
         transform: `translateY(${top + height}px)`,
         height: 1,
-        background: 'var(--gb-brand-label)',
-        boxShadow: '0 0 14px 1px var(--gb-brand-label)',
+        background: 'color-mix(in srgb, var(--gb-brand-label) 60%, transparent)',
+        boxShadow: '0 0 6px 0 color-mix(in srgb, var(--gb-brand-label) 50%, transparent)',
         transition,
         zIndex: 4,
       }} />
