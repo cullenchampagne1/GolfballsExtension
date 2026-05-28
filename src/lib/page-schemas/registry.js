@@ -14,13 +14,16 @@
    pattern; more-specific schemas should come first.
 ─────────────────────────────────────────────────────────────── */
 
-import { contactSchema } from './contact.js';
+import { contactSchema, accountSchema } from './contact.js';
 
-/** All registered schemas, in detection priority order. Specific
- *  → general so a Page=240 with #tbContactId matches contact even
- *  if some future "generic CRM" schema also wants Page=240. */
+/** All registered schemas, in detection priority order. Contact is
+ *  more specific (it confirms via #tbContactId which is unique to
+ *  contact-detail pages) so it runs first — that lets a contact
+ *  page that ALSO carries an #AccountID hidden input still match
+ *  contactSchema instead of accountSchema. */
 const SCHEMAS = [
   contactSchema,
+  accountSchema,
 ];
 
 /** Match a doc's URL against a schema's detect.url. We accept three

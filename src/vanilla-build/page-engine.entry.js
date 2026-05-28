@@ -31,7 +31,7 @@ import {
   detectSchema,
 } from '../lib/page-engine/index.js';
 
-import { contactSchema } from '../lib/page-schemas/contact.js';
+import { contactSchema, accountSchema } from '../lib/page-schemas/contact.js';
 import { listSchemas, getSchemaById } from '../lib/page-schemas/registry.js';
 
 /* Single namespace so we can grow the API without sprawling
@@ -67,6 +67,7 @@ const api = Object.freeze({
      full field tree even before a real page is loaded). */
   schemas: Object.freeze({
     contact: contactSchema,
+    account: accountSchema,
   }),
 });
 
