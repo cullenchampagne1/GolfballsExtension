@@ -258,13 +258,13 @@ export function TemplateEditor({ tpl, onDelete }) {
   const [paReady, setPaReady] = useState(false);
   useEffect(() => {
     chrome.storage.local.get('featureFlags', ({ featureFlags }) => {
-      setPaEnabled(featureFlags && featureFlags.powerAutomateEnabled === true);
+      setPaEnabled(!!(featureFlags && featureFlags.powerAutomateEnabled));
       setPaReady(true);
     });
     function onChanged(changes) {
       if (!changes.featureFlags) return;
       const v = changes.featureFlags.newValue;
-      setPaEnabled(v && v.powerAutomateEnabled === true);
+      setPaEnabled(!!(v && v.powerAutomateEnabled));
     }
     chrome.storage.onChanged.addListener(onChanged);
     return () => chrome.storage.onChanged.removeListener(onChanged);
