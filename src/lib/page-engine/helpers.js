@@ -166,6 +166,152 @@ export function readHrefParam(rowEl, cellIdx, paramName) {
   } catch { return null; }
 }
 
+/** Find a `.portlet` element by its visible caption text. The CRM
+ *  pages stamp the same id on multiple sibling tables (the account
+ *  page's Open + Completed Tasks tables share `#TableTasks`); the
+ *  only stable disambiguator is the caption text in the portlet
+ *  header. Search is trimmed, lowercased, and substring — "Open
+ *  Tasks" matches "Open Tasks " or " Open Tasks". Returns null
+ *  when no portlet matches. */
+function findPortletByCaption(doc, captionText) {
+  if (!captionText) return null;
+  const target = String(captionText).trim().toLowerCase();
+  /* `.portlet .caption` is the standard Metro template wrapping
+     for portlet headers — both .portlet.box.red (open tasks) and
+     .portlet.box.green (account contacts) use it. */
+  const captions = doc.querySelectorAll('.portlet .caption');
+  for (const cap of captions) {
+    const text = (cap.textContent || '').trim().toLowerCase();
+    if (text.includes(target)) {
+      /* Walk up to the .portlet ancestor — we want to scope to the
+         whole portlet (header + body) so subsequent table queries
+         find the right one. */
+      let el = cap;
+      while (el && !(el.classList && el.classList.contains('portlet'))) {
+        el = el.parentElement;
+      }
+      return el;
+    }
+  }
+  return null;
+}
+
+/** First `<table>` inside the portlet whose caption matches. Used
+ *  when the table itself has no id (Account Contacts) OR shares an
+ *  id with another table on the page (Open/Completed Tasks on the
+ *  account page both id="TableTasks"). */
+function findTableByPortletCaption(doc, captionText) {
+  const portlet = findPortletByCaption(doc, captionText);
+  if (!portlet) return null;
+  return portlet.querySelector('table');
+}
+
+/** All <tr> rows of the Account Contacts table on an account page.
+ *  Returns [] on contact pages (no such table) — that's the
+ *  fail-safe path for the unified schema's `contacts[]` array. */
+export function accountContactRows(doc) {
+  const table = findTableByPortletCaption(doc, 'Account Contacts');
+  if (!table) return [];
+  return Array.from(table.querySelectorAll('tbody tr'));
+}
+
+/** Read a single field off the FIRST row of the Account Contacts
+ *  table — used by `contact.*` fields on the account page so the
+ *  unified schema collapses to the "most representative contact"
+ *  without templates needing to know which page they're on. Field
+ *  names map to the table's columns:
+ *      fullName    → cell 0 text
+ *      firstName   → cell 0 text, first whitespace-separated token
+ *      lastName    → cell 0 text, rest after the first token
+ *      email       → cell 1 text
+ *      phone       → cell 2 text
+ *      contactType → cell 3 text
+ *      partnerCampaign → cell 4 text
+ *      detailUrl   → cell 0 first anchor's href (Page=240 link) */
+export function firstAccountContactField(doc, field) {
+  const rows = accountContactRows(doc);
+  if (rows.length === 0) return null;
+  const row = rows[0];
+  const cells = row.children;
+  const cellText = (idx) => {
+    const c = cells[idx];
+    return c ? (c.textContent || '').trim() : '';
+  };
+  switch (field) {
+    case 'fullName':        return cellText(0) || null;
+    case 'firstName': {
+      const full = cellText(0);
+      if (!full) return null;
+      return full.split(/\s+/)[0] || null;
+    }
+    case 'lastName': {
+      const full = cellText(0);
+      if (!full) return null;
+      const parts = full.split(/\s+/);
+      return parts.length > 1 ? parts.slice(1).join(' ') : '';
+    }
+    case 'email':           return cellText(1) || null;
+    case 'phone':           return cellText(2) || null;
+    case 'contactType':     return cellText(3) || null;
+    case 'partnerCampaign': return cellText(4) || null;
+    case 'detailUrl': {
+      const a = cells[0]?.querySelector?.('a[href]');
+      return a ? (a.href || a.getAttribute('href')) : null;
+    }
+    default:                return null;
+  }
+}
+
+/** Cell-level row helper for the Account Contacts table — name
+ *  splitter for the firstName/lastName itemFields under the
+ *  `contacts[]` array. `which` picks 'first' vs 'last' on the
+ *  whitespace-split name in `cellIdx`. */
+export function splitNameCell(rowEl, cellIdx, which) {
+  if (!rowEl) return null;
+  const cell = rowEl.children?.[cellIdx];
+  if (!cell) return null;
+  const full = (cell.textContent || '').trim();
+  if (!full) return null;
+  const parts = full.split(/\s+/);
+  if (which === 'first') return parts[0] || null;
+  if (which === 'last')  return parts.length > 1 ? parts.slice(1).join(' ') : '';
+  return full;
+}
+
+/** Pull the href off the first <a> in a cell. Used by the
+ *  contacts[] array to surface each contact's Page=240 detail link
+ *  without re-parsing the cell text. */
+export function firstCellHref(rowEl, cellIdx) {
+  if (!rowEl) return null;
+  const cell = rowEl.children?.[cellIdx];
+  if (!cell) return null;
+  const a = cell.querySelector('a[href]');
+  return a ? (a.href || a.getAttribute('href')) : null;
+}
+
+/** Open-tasks rows on the account page. The Open Tasks AND
+ *  Completed Tasks portlets BOTH render `<table id="TableTasks">`
+ *  (the CRM duplicates the id — invalid HTML but real). Scope by
+ *  the portlet's caption so we land on the right table. Returns
+ *  `[{ el, key }, ...]` where `key` is the taskrow_<id> suffix —
+ *  the extract.js array path forwards `key` as `ctx.rowKey` so the
+ *  same `keyedField`-based itemFields shape used by the contact
+ *  schema works unchanged. */
+export function openTaskRows(doc) {
+  return _taskRowsForPortlet(doc, 'Open Tasks');
+}
+export function completedTaskRows(doc) {
+  return _taskRowsForPortlet(doc, 'Completed Tasks');
+}
+function _taskRowsForPortlet(doc, caption) {
+  const portlet = findPortletByCaption(doc, caption);
+  if (!portlet) return [];
+  const table = portlet.querySelector('#TableTasks') || portlet.querySelector('table');
+  if (!table) return [];
+  const rows = Array.from(table.querySelectorAll('tr[id^="taskrow_"]'));
+  return rows.map((el) => ({ el, key: el.id.slice('taskrow_'.length) }));
+}
+
 /** Registry — extract.js looks up by name when a schema field uses
  *  `extract: { fn: 'name', args: [...] }`. Order of params is
  *  always (doc, ...args). For row-scoped fns, extract.js routes via
@@ -177,6 +323,12 @@ export const FN_REGISTRY = {
   queryKeyedRows,
   readHrefParam,
   keyedField,
+  accountContactRows,
+  firstAccountContactField,
+  splitNameCell,
+  firstCellHref,
+  openTaskRows,
+  completedTaskRows,
 };
 
 /** Look up a named extractor. Returns null if not registered so

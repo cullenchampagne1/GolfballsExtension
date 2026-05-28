@@ -48,7 +48,12 @@
       "territoryName": "P5 / BDR (Cullen)",
       "createdBy": "Jacob",
       "createdDate": "2021-11-22T14:18:33",
-      "contextNotes": ""
+      "contextNotes": "",
+      "modifiedDate": "2026-05-20T11:19:55",
+      "taxExempt": "",
+      "partnerCampaign": "Select",
+      "industry": "Select",
+      "linkedInUrl": ""
     },
     "stats": {
       "orderCount": 3,
@@ -523,7 +528,8 @@
         "date": "2020-10-15T20:12:00",
         "sizeBytes": 11162
       }
-    ]
+    ],
+    "contacts": []
   },
   "flat": {
     "ids.contact": "6025834",
@@ -558,6 +564,11 @@
     "account.createdBy": "Jacob",
     "account.createdDate": "2021-11-22T14:18:33",
     "account.contextNotes": "",
+    "account.modifiedDate": "2026-05-20T11:19:55",
+    "account.taxExempt": "",
+    "account.partnerCampaign": "Select",
+    "account.industry": "Select",
+    "account.linkedInUrl": "",
     "stats.orderCount": 3,
     "stats.totalRevenue": 969.52,
     "stats.lastOrderDate": "2025-09-09",
@@ -606,6 +617,14 @@
     "emails[0].to": "",
     "emails[0].subject": "",
     "emails[0].date": "",
-    "emails[0].sizeBytes": ""
+    "emails[0].sizeBytes": "",
+    "contacts[0].fullName": "",
+    "contacts[0].firstName": "",
+    "contacts[0].lastName": "",
+    "contacts[0].email": "",
+    "contacts[0].phone": "",
+    "contacts[0].contactType": "",
+    "contacts[0].partnerCampaign": "",
+    "contacts[0].detailUrl": ""
   }
 }

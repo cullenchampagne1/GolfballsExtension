@@ -169,6 +169,19 @@ function runExtract(root, extract, ctx) {
  *    path      — breadcrumb (for error messages)
  *    errors    — collected per-field errors
  *    warnings  — soft notices ("required field empty", etc.) */
+/** Resolve a field's effective extract directive for the current
+ *  schema. When a field carries an `extractByPage` map, the entry
+ *  matching the active schema id overrides the default `extract`.
+ *  Used by the unified CRM schema where the same logical field
+ *  (e.g. contact.firstName) reads from a different DOM region on
+ *  contact pages vs. account pages. Falls back to `extract` when no
+ *  per-page override is declared OR the override is undefined. */
+function resolveExtract(def, schemaId) {
+  if (!def) return null;
+  const override = def.extractByPage && def.extractByPage[schemaId];
+  return override !== undefined ? override : def.extract;
+}
+
 function walkFields(fields, root, ctx) {
   const out = {};
   for (const [name, def] of Object.entries(fields || {})) {
@@ -186,7 +199,7 @@ function walkFields(fields, root, ctx) {
     }
 
     // Leaf field — extract + transform + coerce.
-    let raw = runExtract(root, def.extract, childCtx);
+    let raw = runExtract(root, resolveExtract(def, ctx.schemaId), childCtx);
     if (def.transform) raw = applyTransform(def.transform, raw);
     const value = coerceType(raw, def.type);
 
@@ -221,37 +234,45 @@ function walkFields(fields, root, ctx) {
  *  form (`extract.keyedRows`) for tables where each <tr> id encodes
  *  the row's primary key — see contact schema's tasks/opportunities. */
 function extractArray(def, root, ctx) {
-  if (!def.extract) return [];
+  const extract = resolveExtract(def, ctx.schemaId);
+  if (!extract) return [];
+
+  /* `const` short-circuit — used by extractByPage to mark a field as
+     "not present on this page" without forcing the array machinery
+     to walk a non-existent table. Same shape as the leaf path. */
+  if ('const' in extract) {
+    return Array.isArray(extract.const) ? extract.const : [];
+  }
 
   let rows = [];
-  if (def.extract.keyedRows) {
+  if (extract.keyedRows) {
     /* keyedRows shape:
          { keyedRows: { container, rowPrefix } }
        container — CSS selector for the table/parent
        rowPrefix — id prefix that each row carries
                    (rowPrefix='taskrow_' matches <tr id="taskrow_676578">). */
-    const { container, rowPrefix } = def.extract.keyedRows;
+    const { container, rowPrefix } = extract.keyedRows;
     rows = queryRows(ctx.doc || root, `${container} tr[id^="${rowPrefix}"]`).map((el) => ({
       el,
       key: el.id.slice(rowPrefix.length),
     }));
-  } else if (def.extract.fn) {
-    const fn = getFn(def.extract.fn);
+  } else if (extract.fn) {
+    const fn = getFn(extract.fn);
     if (!fn) {
-      ctx.errors.push(`unknown array extractor fn: ${def.extract.fn}`);
+      ctx.errors.push(`unknown array extractor fn: ${extract.fn}`);
       return [];
     }
     try {
-      const result = fn(ctx.doc || root, ...(def.extract.args || []));
+      const result = fn(ctx.doc || root, ...(extract.args || []));
       rows = Array.isArray(result)
         ? result.map((el) => (el && el.el ? el : { el }))
         : [];
     } catch (e) {
-      ctx.errors.push(`array extractor "${def.extract.fn}" threw: ${e.message}`);
+      ctx.errors.push(`array extractor "${extract.fn}" threw: ${e.message}`);
       return [];
     }
-  } else if (def.extract.sel) {
-    const sel = safeSelector(def.extract.sel);
+  } else if (extract.sel) {
+    const sel = safeSelector(extract.sel);
     if (!sel) return [];
     try { rows = Array.from((ctx.doc || root).querySelectorAll(sel)).map((el) => ({ el })); }
     catch (e) { ctx.errors.push(`bad array selector "${sel}": ${e.message}`); return []; }
@@ -261,7 +282,7 @@ function extractArray(def, root, ctx) {
      pathological pages with thousands of rows). 200 is generous —
      the contact page's biggest table tops out at ~20 rows of the
      visible (first-page) DataTable. */
-  const max = def.extract.max || 200;
+  const max = extract.max || 200;
   if (rows.length > max) rows = rows.slice(0, max);
 
   if (!def.itemFields) {
@@ -309,6 +330,12 @@ export function extract(schema, doc) {
   }
   const ctx = {
     doc,
+    /* Forwarded into walkFields so each field can resolve its
+       per-schema override via `extractByPage[schemaId]`. The unified
+       CRM schema reuses fields like contact.firstName across the
+       contact + account variants — the override map switches the
+       extractor without duplicating the field. */
+    schemaId: schema.id,
     path: '',
     errors: result.errors,
     warnings: result.warnings,
