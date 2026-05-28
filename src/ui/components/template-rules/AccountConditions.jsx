@@ -137,39 +137,53 @@ const SCHEMA_NODES = (() => {
 })();
 
 /* Type lookup by path — keyed off the CANONICAL path
-   (every array index normalized to [0]). Live row paths can carry
-   a user-edited index (orders[2].total) so we normalize before
-   looking up the schema type. */
+   (every array index normalized to [0]). Live row paths stay
+   canonical; the per-row arraySelector + arrayIndex carry the
+   user's choice separately. */
 const TYPE_BY_PATH = Object.fromEntries(SCHEMA_NODES.map((n) => [n.path, n.type]));
 const canonicalPath = (p) => (p || '').replace(/\[\d+\]/g, '[0]');
 const typeForPath = (p) => TYPE_BY_PATH[canonicalPath(p)] || 'string';
 
-/* Find array-index positions in a path. Returns the path split
-   into [text, idxNumber, text, idxNumber, …] so the UI can render
-   editable inputs for the index positions. Single-array paths in
-   the contact schema mean this usually has at most one index, but
-   the helper handles N. */
-function splitIndices(path) {
-  if (!path) return [{ text: '' }];
-  const parts = [];
-  const re = /\[(\d+)\]/g;
-  let lastIdx = 0;
-  let m;
-  while ((m = re.exec(path)) !== null) {
-    parts.push({ text: path.slice(lastIdx, m.index) });
-    parts.push({ index: Number(m[1]), at: m.index });
-    lastIdx = m.index + m[0].length;
-  }
-  parts.push({ text: path.slice(lastIdx) });
-  return parts;
-}
+/* Does the path traverse an array? (`orders[0].total` yes;
+   `contact.firstName` no; `stats` no.) */
+const pathHasArray = (p) => /\[\d+\]/.test(p || '');
 
-/* Rewrite the Nth array-index in a path. Used when the user bumps
-   the index on a `orders[0].total` row to e.g. `orders[3].total`. */
-function setIndexAt(path, nthIndex, newValue) {
-  let count = 0;
-  return (path || '').replace(/\[(\d+)\]/g, (whole) => {
-    if (count++ === nthIndex) return `[${Math.max(0, Number(newValue) || 0)}]`;
+/* ── Array selector ────────────────────────────────────────────
+   When a row's path goes through an array (`orders[0].total`,
+   `orders[0].number`, …), the user picks HOW to combine across
+   items. Five modes:
+
+     index   compare a single item at a fixed [N]    → IndexInput
+     first   shorthand for index=0                    → no input
+     last    the final item (engine resolves at eval) → no input
+     any     true if ANY item matches the op          → no input
+     none    true if NO item matches the op           → no input
+
+   Stored on the row as { arraySelector, arrayIndex }. The path
+   itself stays canonical (always [0]); the selector drives both
+   the UI display and the future engine evaluation. */
+export const ARRAY_SELECTORS = [
+  { id: 'index', label: 'Index' },
+  { id: 'first', label: 'First' },
+  { id: 'last',  label: 'Last' },
+  { id: 'any',   label: 'Any' },
+  { id: 'none',  label: 'None' },
+];
+
+/* Render a path with the array slot replaced to reflect the
+   current selector — used for the PathButton's display text. The
+   canonical path keeps [0]; this swap is purely visual. */
+function decoratePathDisplay(path, arraySelector, arrayIndex) {
+  if (!pathHasArray(path)) return path || '';
+  let replaced = false;
+  return path.replace(/\[\d+\]/g, (whole) => {
+    if (replaced) return whole;
+    replaced = true;
+    if (arraySelector === 'index') return `[${Math.max(0, Number(arrayIndex) || 0)}]`;
+    if (arraySelector === 'first') return '[first]';
+    if (arraySelector === 'last')  return '[last]';
+    if (arraySelector === 'any')   return '[any]';
+    if (arraySelector === 'none')  return '[none]';
     return whole;
   });
 }
@@ -203,14 +217,29 @@ const LEGACY_OP_MAP = {
 };
 function normalizeRow(raw) {
   if (!raw || typeof raw !== 'object') return null;
-  // Already in new shape — accept verbatim, just (re)stamp the id.
+  // Already in new shape — accept verbatim, just (re)stamp the id
+  // and fill in array-selector defaults when the path traverses
+  // an array but the saved row predates that field.
   if (raw.path) {
+    const path = raw.path;
+    const hasArr = pathHasArray(path);
+    let arraySelector = raw.arraySelector;
+    let arrayIndex    = raw.arrayIndex;
+    if (hasArr) {
+      /* Pull the first [N] off the path so a row saved before the
+         selector existed (where the index lived IN the path
+         literally) still surfaces with the right index pre-filled. */
+      const m = path.match(/\[(\d+)\]/);
+      if (arrayIndex == null && m) arrayIndex = Number(m[1]) || 0;
+      if (!arraySelector) arraySelector = 'index';
+    }
     return {
       id:    raw.id || uid(),
-      path:  raw.path,
+      path:  canonicalPath(path),
       op:    raw.op || '',
       value: raw.value != null ? String(raw.value) : '',
       smart: raw.smart || {},
+      ...(hasArr ? { arraySelector, arrayIndex: arrayIndex ?? 0 } : {}),
     };
   }
   // Legacy shape — best-effort migration.
@@ -260,7 +289,10 @@ export function AccountConditions({ initial, onChange }) {
     const path = firstLeaf?.path || '';
     const type = TYPE_BY_PATH[path] || 'string';
     const op   = OPS_BY_TYPE[type]?.[0]?.id || '';
-    emit([...rows, { id: uid(), path, op, value: '', smart: {} }]);
+    const arr  = pathHasArray(path)
+      ? { arraySelector: 'index', arrayIndex: 0 }
+      : {};
+    emit([...rows, { id: uid(), path, op, value: '', smart: {}, ...arr }]);
   };
   const patchRule = (id, patch) => emit(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   const removeRule = (id) => emit(rows.filter((r) => r.id !== id));
@@ -306,18 +338,21 @@ export function AccountConditions({ initial, onChange }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <AnimatePresence initial={false}>
           {rows.map((row) => (
-            /* No `layout` and no scale on the entry — those caused
-               the row to nudge sideways during mount and made the
-               op dropdown's open-state feel un-grounded. A plain
-               fade is enough; the height-clip + the parent
-               flex-gap handle the slide-in cleanly. */
+            /* Plain fade entry — no height clip, no overflow:
+               hidden. Anything that needed clipping (the row's own
+               background corner) is handled by the row's own
+               border-radius. Importantly: NO overflow:hidden lets
+               the path picker (position: absolute inside) extend
+               past the row's box without being masked. The picker
+               clip-bug the user reported was caused by an earlier
+               height animation that wrapped this in overflow:
+               hidden. */
             <motion.div
               key={row.id}
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
-              style={{ overflow: 'hidden' }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
             >
               <RuleRow
                 row={row}
@@ -345,35 +380,34 @@ function RuleRow({ row, onPatch, onRemove }) {
   const [smartCursor, setSmartCursor] = useState(null);
   const hasSmart = !!(row.smart && Object.keys(row.smart).length);
   const noValue  = NO_VALUE_OPS.has(row.op);
-  /* Indices that the user can bump (one input per [N] in the
-     path — usually 0 or 1 for the contact schema). */
-  const indexSlots = useMemo(() => {
-    const out = [];
-    let count = 0;
-    (row.path || '').replace(/\[(\d+)\]/g, (_, n) => {
-      out.push({ value: Number(n), nth: count++ });
-      return _;
-    });
-    return out;
-  }, [row.path]);
+  const isArr    = pathHasArray(row.path);
+  const arraySelector = row.arraySelector || 'index';
+  const arrayIndex    = row.arrayIndex ?? 0;
+  /* Path string the user actually sees on the button — canonical
+     path with the [0] swapped for the live selector. The stored
+     path stays canonical so the picker's match logic and the
+     schema type lookup work uniformly across all selector modes. */
+  const displayPath = decoratePathDisplay(row.path, arraySelector, arrayIndex);
 
   /* When the user picks a path whose type doesn't permit the
      current op, fall back to the first op for the new type so we
-     never leave the row in a broken (path/op mismatch) state. */
+     never leave the row in a broken (path/op mismatch) state.
+     Also seeds array-selector defaults when the new path traverses
+     an array. */
   const onPickPath = (node) => {
     const nextType = node.type;
     const nextOps  = OPS_BY_TYPE[nextType] || OPS_BY_TYPE.string;
     const stillValid = nextOps.some((o) => o.id === row.op);
+    const arrPatch = pathHasArray(node.path)
+      ? { arraySelector: row.arraySelector || 'index', arrayIndex: row.arrayIndex ?? 0 }
+      : { arraySelector: undefined, arrayIndex: undefined };
     onPatch({
-      path:  node.path,
+      path:  canonicalPath(node.path),
       op:    stillValid ? row.op : (nextOps[0]?.id || ''),
       value: '', // dropping the old value avoids a number landing in a string field after the swap
+      ...arrPatch,
     });
     setPickerOpen(false);
-  };
-
-  const onIndexChange = (nth, newValue) => {
-    onPatch({ path: setIndexAt(row.path, nth, newValue) });
   };
 
   return (
@@ -393,28 +427,42 @@ function RuleRow({ row, onPatch, onRemove }) {
 
       <div style={{ position: 'relative', display: 'flex', gap: 4, alignItems: 'center', minWidth: 0 }}>
         <PathButton
-          path={row.path}
+          path={displayPath}
           type={type}
           open={pickerOpen}
           onClick={() => setPickerOpen((o) => !o)}
         />
-        {/* Per-index editable inputs, one per [N] in the path.
-            Hides when the path has no array index. Each input bumps
-            the matching index without re-opening the picker so the
-            user can dial in "compare against the SECOND order"
-            without re-walking the schema tree. */}
-        {indexSlots.map((slot) => (
-          <IndexInput
-            key={slot.nth}
-            value={slot.value}
-            onChange={(v) => onIndexChange(slot.nth, v)}
+        {/* Array selector — only shown when the path traverses an
+            array. The IndexInput slides in when "Index" is picked
+            and slides out for the other selectors. */}
+        {isArr && (
+          <ArraySelectorPicker
+            value={arraySelector}
+            onChange={(id) => onPatch({ arraySelector: id })}
           />
-        ))}
+        )}
+        <AnimatePresence initial={false}>
+          {isArr && arraySelector === 'index' && (
+            <motion.div
+              key="idx"
+              initial={{ opacity: 0, width: 0, marginLeft: -4 }}
+              animate={{ opacity: 1, width: 44, marginLeft: 0 }}
+              exit={{ opacity: 0, width: 0, marginLeft: -4 }}
+              transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
+              style={{ overflow: 'hidden', flexShrink: 0 }}
+            >
+              <IndexInput
+                value={arrayIndex}
+                onChange={(n) => onPatch({ arrayIndex: n })}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
         {pickerOpen && (
           <PathPickerPopover
-            /* Canonical (all [N] → [0]) so the picker can highlight
-               the schema entry the user originally chose, even
-               when they've bumped the array index. */
+            /* Canonical so the picker highlights the schema entry
+               the user originally chose, even when they've bumped
+               the array index or picked a non-index selector. */
             currentPath={canonicalPath(row.path)}
             onClose={() => setPickerOpen(false)}
             onSelect={onPickPath}
@@ -482,6 +530,24 @@ function RuleRow({ row, onPatch, onRemove }) {
           />
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+/* ── ArraySelectorPicker ────────────────────────────────────────
+   Compact Dropdown that picks how to aggregate across an array's
+   items. Tiny — 96px wide — so the row still fits its path on
+   the left. The same design-system Dropdown the op uses, kept
+   visually quiet by passing a short label list and `size="sm"`. */
+function ArraySelectorPicker({ value, onChange }) {
+  return (
+    <div style={{ width: 96, flexShrink: 0 }}>
+      <Dropdown
+        size="sm"
+        value={value}
+        options={ARRAY_SELECTORS}
+        onChange={onChange}
+      />
     </div>
   );
 }
