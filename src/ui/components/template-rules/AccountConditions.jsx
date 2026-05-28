@@ -368,10 +368,18 @@ export function AccountConditions({ initial, onChange }) {
 }
 
 /* ── RuleRow ────────────────────────────────────────────────────
-   Grid: [type tag] [path button ▾] [op select] [value input]
-         [smart bolt] [trash]. Path-button click toggles an inline
-   PathPickerPopover anchored beneath it; the smart bolt opens the
-   shared SmartPopover anchored to the cursor. */
+   Top row:   [path button ▾] [op select] [value input] [smart] [trash]
+   Sub-row:   [Array item: <selector ▾> <index # if Index>]
+              — only rendered when the path traverses an array.
+
+   The sub-row is its own AnimatePresence so it slides + fades in
+   when the user picks an array path AND slides out when they pick
+   a non-array path. Keeping the array controls on their own line
+   gives the path button + value the full row width — which was
+   the squish the user reported. The type tag on the left came out
+   too: the row's path text already encodes the type (and the path
+   picker shows a tag next to each leaf), so the dedicated column
+   was redundant noise. */
 function RuleRow({ row, onPatch, onRemove }) {
   const type = typeForPath(row.path);
   const ops  = OPS_BY_TYPE[type] || OPS_BY_TYPE.string;
@@ -413,106 +421,159 @@ function RuleRow({ row, onPatch, onRemove }) {
   return (
     <div
       style={{
-        display: 'grid',
-        gridTemplateColumns: 'auto 1fr 130px 1fr auto auto',
-        gap: 8,
-        alignItems: 'center',
         padding: '8px 10px',
         background: 'var(--gb-surface-1)',
         border: '1px solid var(--gb-border-subtle)',
         borderRadius: 'var(--gb-r-md)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
       }}
     >
-      <Tag size="xs" tone={TYPE_TONE[type] || 'neutral'}>{type}</Tag>
-
-      <div style={{ position: 'relative', display: 'flex', gap: 4, alignItems: 'center', minWidth: 0 }}>
-        <PathButton
-          path={displayPath}
-          type={type}
-          open={pickerOpen}
-          onClick={() => setPickerOpen((o) => !o)}
-        />
-        {/* Array selector — only shown when the path traverses an
-            array. The IndexInput slides in when "Index" is picked
-            and slides out for the other selectors. */}
-        {isArr && (
-          <ArraySelectorPicker
-            value={arraySelector}
-            onChange={(id) => onPatch({ arraySelector: id })}
+      {/* ── Top row ────────────────────────────────────────────── */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 140px 1fr auto auto',
+          gap: 8,
+          alignItems: 'center',
+        }}
+      >
+        <div style={{ position: 'relative', minWidth: 0 }}>
+          <PathButton
+            path={displayPath}
+            type={type}
+            open={pickerOpen}
+            onClick={() => setPickerOpen((o) => !o)}
           />
-        )}
-        <AnimatePresence initial={false}>
-          {isArr && arraySelector === 'index' && (
-            <motion.div
-              key="idx"
-              initial={{ opacity: 0, width: 0, marginLeft: -4 }}
-              animate={{ opacity: 1, width: 44, marginLeft: 0 }}
-              exit={{ opacity: 0, width: 0, marginLeft: -4 }}
-              transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
-              style={{ overflow: 'hidden', flexShrink: 0 }}
-            >
-              <IndexInput
-                value={arrayIndex}
-                onChange={(n) => onPatch({ arrayIndex: n })}
-              />
-            </motion.div>
+          {pickerOpen && (
+            <PathPickerPopover
+              /* Canonical so the picker highlights the schema entry
+                 the user originally chose, even when they've bumped
+                 the array index or picked a non-index selector. */
+              currentPath={canonicalPath(row.path)}
+              onClose={() => setPickerOpen(false)}
+              onSelect={onPickPath}
+            />
           )}
-        </AnimatePresence>
-        {pickerOpen && (
-          <PathPickerPopover
-            /* Canonical so the picker highlights the schema entry
-               the user originally chose, even when they've bumped
-               the array index or picked a non-index selector. */
-            currentPath={canonicalPath(row.path)}
-            onClose={() => setPickerOpen(false)}
-            onSelect={onPickPath}
-          />
-        )}
+        </div>
+
+        {/* Op dropdown — the design-system Dropdown gives consistent
+            chrome with the path button (font, border, focus ring,
+            custom popover) instead of the native <select>. */}
+        <Dropdown
+          size="sm"
+          value={row.op}
+          options={opOptions}
+          onChange={(id) => onPatch({ op: id })}
+        />
+
+        <RuleValueInput
+          type={type}
+          op={row.op}
+          value={row.value}
+          noValue={noValue}
+          onChange={(v) => onPatch({ value: v })}
+        />
+
+        {/* Smart-options bolt — applies the same fallback / transform /
+            format (and eventually code) pipeline the template variable
+            resolver uses, BUT to the rule's literal value, so the
+            comparison literal can resolve dynamically (e.g.
+            "{{stats.orderCount}} > 10" comparing one path against
+            another, or a code expression evaluating to a number). */}
+        <IconBtn
+          size="xs"
+          variant={hasSmart ? 'tinted' : 'ghost'}
+          status={hasSmart ? 'brand' : undefined}
+          icon={<I.bolt />}
+          tooltip={hasSmart ? 'Smart options set' : 'Add smart options'}
+          disabled={noValue}
+          onClick={(e) => setSmartCursor({ x: e.clientX, y: e.clientY })}
+        />
+
+        <IconBtn
+          size="xs"
+          variant="ghost"
+          danger
+          icon={<I.trash />}
+          tooltip="Remove condition"
+          onClick={onRemove}
+        />
       </div>
 
-      {/* Op dropdown — the design-system Dropdown gives consistent
-          chrome with everything else (font, border, focus ring,
-          custom popover) instead of the native <select> that
-          looked out of place. */}
-      <Dropdown
-        size="sm"
-        value={row.op}
-        options={opOptions}
-        onChange={(id) => onPatch({ op: id })}
-      />
-
-      <RuleValueInput
-        type={type}
-        op={row.op}
-        value={row.value}
-        noValue={noValue}
-        onChange={(v) => onPatch({ value: v })}
-      />
-
-      {/* Smart-options bolt — applies the same fallback / transform /
-          format (and eventually code) pipeline the template variable
-          resolver uses, BUT to the rule's literal value, so the
-          comparison literal can resolve dynamically (e.g.
-          "{{stats.orderCount}} > 10" comparing one path against
-          another, or a code expression evaluating to a number). */}
-      <IconBtn
-        size="xs"
-        variant={hasSmart ? 'tinted' : 'ghost'}
-        status={hasSmart ? 'brand' : undefined}
-        icon={<I.bolt />}
-        tooltip={hasSmart ? 'Smart options set' : 'Add smart options'}
-        disabled={noValue}
-        onClick={(e) => setSmartCursor({ x: e.clientX, y: e.clientY })}
-      />
-
-      <IconBtn
-        size="xs"
-        variant="ghost"
-        danger
-        icon={<I.trash />}
-        tooltip="Remove condition"
-        onClick={onRemove}
-      />
+      {/* ── Array-item sub-row ─────────────────────────────────
+          Slides in when the row's path traverses an array; the
+          IndexInput slides in next to the selector when Index is
+          picked. Height-collapse is contained to THIS subtree so
+          the path picker popover above (which can be tall) is
+          never clipped. */}
+      <AnimatePresence initial={false}>
+        {isArr && (
+          <motion.div
+            key="arr-row"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                paddingTop: 6,
+                borderTop: '1px solid var(--gb-border-subtle)',
+              }}
+            >
+              <span style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                letterSpacing: 0.4,
+                textTransform: 'uppercase',
+                color: 'var(--gb-text-muted)',
+                flexShrink: 0,
+              }}>
+                Array item
+              </span>
+              <div style={{ width: 140, flexShrink: 0 }}>
+                <Dropdown
+                  size="sm"
+                  value={arraySelector}
+                  options={ARRAY_SELECTORS}
+                  onChange={(id) => onPatch({ arraySelector: id })}
+                />
+              </div>
+              <AnimatePresence initial={false}>
+                {arraySelector === 'index' && (
+                  <motion.div
+                    key="idx"
+                    initial={{ opacity: 0, width: 0, marginLeft: -8 }}
+                    animate={{ opacity: 1, width: 60, marginLeft: 0 }}
+                    exit={{ opacity: 0, width: 0, marginLeft: -8 }}
+                    transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
+                    style={{ overflow: 'hidden', flexShrink: 0 }}
+                  >
+                    <IndexInput
+                      value={arrayIndex}
+                      onChange={(n) => onPatch({ arrayIndex: n })}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <span style={{
+                fontSize: 10.5,
+                color: 'var(--gb-text-muted)',
+                flex: 1,
+                textAlign: 'right',
+              }}>
+                {arrayHintText(arraySelector)}
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {smartCursor && (
@@ -534,22 +595,15 @@ function RuleRow({ row, onPatch, onRemove }) {
   );
 }
 
-/* ── ArraySelectorPicker ────────────────────────────────────────
-   Compact Dropdown that picks how to aggregate across an array's
-   items. Tiny — 96px wide — so the row still fits its path on
-   the left. The same design-system Dropdown the op uses, kept
-   visually quiet by passing a short label list and `size="sm"`. */
-function ArraySelectorPicker({ value, onChange }) {
-  return (
-    <div style={{ width: 96, flexShrink: 0 }}>
-      <Dropdown
-        size="sm"
-        value={value}
-        options={ARRAY_SELECTORS}
-        onChange={onChange}
-      />
-    </div>
-  );
+/* Per-selector hint shown at the right of the array sub-row. Helps
+   the user understand the aggregation without leaving the editor. */
+function arrayHintText(selector) {
+  if (selector === 'index') return 'compare one item at this index';
+  if (selector === 'first') return 'compare the first item';
+  if (selector === 'last')  return 'compare the most recent item';
+  if (selector === 'any')   return 'pass if any item matches';
+  if (selector === 'none')  return 'pass if no item matches';
+  return '';
 }
 
 /* ── IndexInput ─────────────────────────────────────────────────
