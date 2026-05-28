@@ -751,6 +751,10 @@ function PlaygroundSurface() {
         {mounted === 'taskList' && (
           <TaskList
             key="taskList"
+            /* Same playground-only mock blast wiring as CRMSearch:
+               mock tasks + mock send loop so the rep can debug the
+               per-row email animation without an extension context. */
+            useMock
             onClosed={() => setMounted(null)}
           />
         )}

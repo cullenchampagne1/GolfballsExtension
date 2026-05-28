@@ -57,6 +57,19 @@ const DragHandleDots = () => (
   </svg>
 );
 
+/* The popover portals to document.body. If body itself has CSS
+   zoom (the editor page uses [data-gb-scale="editor"] which
+   translates to body { zoom }), every left/top we set on the
+   popover gets multiplied by that zoom before it's painted. Read
+   the body zoom so we can divide our positions by it and the
+   popover lands at the visual coords we actually intended. */
+function readBodyZoom() {
+  try {
+    const v = parseFloat(getComputedStyle(document.body).zoom);
+    return Number.isFinite(v) && v > 0 ? v : 1;
+  } catch { return 1; }
+}
+
 /* Resolve the popovers scale at drag/position time. Prefers reading
    the COMPUTED `scale` property off the popup element (the source of
    truth for what the browser actually rendered with) — that's robust
@@ -168,7 +181,9 @@ export function DraggablePopup({
     if (left > maxLeft) left = maxLeft;
     if (top < 8) top = 8;
     if (top > maxTop) top = maxTop;
-    return { left: Math.max(8, left), top };
+    /* Compensate for body zoom — see readBodyZoom comment. */
+    const bz = readBodyZoom();
+    return { left: Math.max(8, left) / bz, top: top / bz };
   };
 
   const [pos, setPos] = useState(computeInitialPos);
@@ -194,17 +209,21 @@ export function DraggablePopup({
       const dx = ev.clientX - start.px;
       const dy = ev.clientY - start.py;
       const scale = readPopoverScale(rootRef.current);
+      const bz = readBodyZoom();
       /* Use the popup's ACTUAL rendered height when possible — the
          element's offsetHeight gives the real content height (which
          caps at maxHeight), so the clamp respects content collapses
          and growth, not just the maxHeight constant. */
-      const realW = (rootRef.current?.offsetWidth  || W) * scale;
-      const realH = (rootRef.current?.offsetHeight || H) * scale;
+      const realW = (rootRef.current?.offsetWidth  || W) * scale * bz;
+      const realH = (rootRef.current?.offsetHeight || H) * scale * bz;
       const maxLeft = Math.max(0, window.innerWidth  - realW);
       const maxTop  = Math.max(0, window.innerHeight - realH);
+      /* Mouse delta is in viewport pixels; CSS pixels on the popup are
+         in body-zoom pre-zoom space. Divide the delta by body zoom
+         so the popup tracks the cursor 1:1 visually. */
       setPos({
-        left: Math.max(0, Math.min(maxLeft, start.left + dx)),
-        top:  Math.max(0, Math.min(maxTop,  start.top  + dy)),
+        left: Math.max(0, Math.min(maxLeft, start.left + dx / bz)),
+        top:  Math.max(0, Math.min(maxTop,  start.top  + dy / bz)),
       });
     };
     const onUp = () => {
