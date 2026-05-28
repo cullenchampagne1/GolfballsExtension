@@ -241,7 +241,7 @@ export function EmailRunner({
   const dropdownOptions = useMemo(() => templates.map((t) => {
     const variations = Array.isArray(t.variations) ? t.variations : [];
     const subOptions = variations.length > 0 ? [
-      { id: t.id, label: `${t.name || 'Untitled'} (original — random per contact)` },
+      { id: t.id, label: `${t.name || 'Untitled'} (random per contact)` },
       ...variations.map((v) => ({
         id: `${t.id}::${v.id}`,
         label: v.label || 'Variation',
@@ -338,21 +338,43 @@ export function EmailRunner({
 
         // 1. Fetch the contact page HTML through the background proxy.
         const fetched = await dispatchBg({ action: 'fetchRaw', url: c.contactUrl });
-        if (!fetched?.ok || typeof fetched.text !== 'string') {
-          throw new Error(fetched?.error || 'Fetch failed');
+        if (!fetched) {
+          /* sendBg resolved null — most likely chrome.runtime.lastError
+             ("Could not establish connection. Receiving end does not
+             exist."). Surface that explicitly so the row badge tells
+             the user what to debug rather than a generic "Fetch failed". */
+          throw new Error('Background not reachable (extension reloaded?)');
+        }
+        if (!fetched.ok || typeof fetched.text !== 'string') {
+          throw new Error(fetched.error || `Fetch failed (HTTP ${fetched.status || '?'})`);
         }
 
-        // 2. Resolve template vars against the fetched HTML (no tab).
-        const resolved = await dispatchBg({
-          action:  'resolveVarsForHtml',
-          html:    fetched.text,
-          vars:    tplVars,
-          toField: tplToField,
-        });
+        /* 2. Resolve template vars against the fetched HTML. Prefer
+           the direct window global exposed by vanilla/main.js — it
+           runs in this same content-script realm with a parsed
+           Document, no cross-context message routing. Falls back to
+           the runtime message (which round-trips through the
+           background) when the global isn't on the page yet (e.g.
+           main.js hasn't finished loading). The global is the path
+           the user wants — the message route was the fragile one
+           reported as "every send fails to evaluate." */
+        const directResolve = useMock ? null : window.__gbResolveVarsForHtml;
+        const resolved = directResolve
+          ? await directResolve(fetched.text, tplVars, tplToField)
+          : await dispatchBg({
+              action:  'resolveVarsForHtml',
+              html:    fetched.text,
+              vars:    tplVars,
+              toField: tplToField,
+            });
         const resolvedVars = resolved?.resolved || {};
         const toEmail      = resolved?.toEmail  || '';
-        if (!toEmail) {
-          outcome = { status: 'error', error: 'No recipient email' };
+        if (resolved?.error) {
+          /* Bubble the resolver's own message up so a parse / engine
+             failure shows the cause instead of "No recipient email". */
+          outcome = { status: 'error', error: `Resolve failed: ${resolved.error}` };
+        } else if (!toEmail) {
+          outcome = { status: 'error', error: 'No recipient email resolved' };
         } else {
           // 3. Render template strings.
           const subject  = renderStr(rawSubject, resolvedVars);
@@ -450,11 +472,21 @@ export function EmailRunner({
           >
             <Field
               label="Template"
-              hint={templates.length
-                ? (variationCount > 0 && !selectedVariationId
-                  ? `Random pick across ${variationCount} variation${variationCount === 1 ? '' : 's'} per contact`
-                  : null)
-                : 'No email templates saved yet'}
+              hint={(() => {
+                if (!templates.length) return 'No email templates saved yet';
+                if (variationCount === 0) return null;
+                if (selectedVariationId) {
+                  /* User picked a specific variation in the dropdown
+                     — every contact gets that one. */
+                  return 'Only this variation will send to every contact';
+                }
+                /* Parent template selected — bulk loop picks a random
+                   variation per contact. The hint nudges the user
+                   that the dropdown can be opened to pin one. */
+                return `Click the dropdown and pick a variation to send only that one${
+                  variationCount === 1 ? '' : ` (1 of ${variationCount})`
+                }`;
+              })()}
             >
               {/* Match the popup.js template picker exactly: size sm
                   (28px row), brand-glow dot for leading indicator,
