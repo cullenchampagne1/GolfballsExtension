@@ -245,16 +245,23 @@ export function TemplateEditor({ tpl, onDelete }) {
     });
   }, []);
 
-  // Feature flag — `powerAutomateEnabled` (Direct Send via Power
-  // Automate) is the gate consumed here. Live-updated so flipping
-  // the toggle in Settings immediately reveals / hides the sender
-  // picker and reply-mode controls. The flag was previously named
-  // `replyWithTemplateEnabled`; that legacy key got migrated away
-  // in flags.js but this read site was missed at rename time, so
-  // PA-dependent UI never appeared no matter what the user did.
+  // Per-template PA controls (reply mode toggle, sender picker)
+  // show whenever PA is CONFIGURED — i.e. a flow URL is saved.
+  // Rationale: the toggle is a kill-switch ("temporarily route
+  // through Outlook again") that the rep flips per-day or per-
+  // campaign; the per-template settings live in the template itself
+  // and should be editable any time the rep is willing to configure
+  // PA, regardless of whether it's currently armed. Gating these
+  // controls on the toggle hid them whenever the rep flipped PA off
+  // — they had to re-enable PA just to edit a template's reply mode,
+  // which was the bug the user reported.
+  //
+  // The popup's send-button predicate STILL requires both toggle AND
+  // URL — that one reflects what actually happens on click, so it
+  // should track the live "armed" state, not the configuration state.
   //
   // `paReady` blocks the initial render until the async storage check
-  // resolves — otherwise the editor paints first with paEnabled=false
+  // resolves — otherwise the editor paints first with paConfigured=false
   // (hiding reply mode + sender pills), then the async result lands and
   // those controls visibly pop in. The whole template panel takes ~1
   // frame longer to appear but renders in its final shape.
@@ -262,13 +269,15 @@ export function TemplateEditor({ tpl, onDelete }) {
   const [paReady, setPaReady] = useState(false);
   useEffect(() => {
     chrome.storage.local.get('featureFlags', ({ featureFlags }) => {
-      setPaEnabled(!!(featureFlags && featureFlags.powerAutomateEnabled));
+      const url = featureFlags && featureFlags.powerAutomateUrl;
+      setPaEnabled(!!(url && String(url).trim()));
       setPaReady(true);
     });
     function onChanged(changes) {
       if (!changes.featureFlags) return;
       const v = changes.featureFlags.newValue;
-      setPaEnabled(!!(v && v.powerAutomateEnabled));
+      const url = v && v.powerAutomateUrl;
+      setPaEnabled(!!(url && String(url).trim()));
     }
     chrome.storage.onChanged.addListener(onChanged);
     return () => chrome.storage.onChanged.removeListener(onChanged);
