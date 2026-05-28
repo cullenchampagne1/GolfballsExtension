@@ -516,8 +516,17 @@ function PathPickerPopover({ currentPath, onClose, onSelect }) {
     });
   };
 
+  /* Click semantics differ by node type:
+       leaf       click → select (close picker, set row.path)
+       object     click → expand (objects have no selectable state)
+       array      click → select (array gets array-level ops);
+                  chevron click → expand inline (drill into items)
+     This is the only way to give the user BOTH "filter on the
+     whole array" (hasAny / countGt) and "filter on a specific
+     item field" (orders[0].total > 100) from one picker. */
   const pickRow = (r) => {
-    if (r.isFolder) toggleExpand(r.path);
+    if (r.type === 'array') onSelect(r);
+    else if (r.isFolder) toggleExpand(r.path);
     else onSelect(r);
   };
 
@@ -532,6 +541,18 @@ function PathPickerPopover({ currentPath, onClose, onSelect }) {
       e.preventDefault();
       const r = rows[focusedIdx];
       if (r) pickRow(r);
+    } else if (e.key === 'ArrowRight') {
+      /* Arrow-right expands the focused folder/array — Enter would
+         select an array, so this gives keyboard users an explicit
+         "drill into" gesture. */
+      e.preventDefault();
+      const r = rows[focusedIdx];
+      if (r?.isFolder) toggleExpand(r.path);
+    } else if (e.key === 'ArrowLeft') {
+      /* Mirror: collapse the focused folder/array. No-op on leaves. */
+      e.preventDefault();
+      const r = rows[focusedIdx];
+      if (r?.isFolder && expanded.has(r.path)) toggleExpand(r.path);
     } else if (e.key === 'Escape') {
       onClose();
     }
@@ -607,6 +628,7 @@ function PathPickerPopover({ currentPath, onClose, onSelect }) {
             isCurrent={r.path === currentPath}
             onMouseEnter={() => setFocusedIdx(i)}
             onClick={() => pickRow(r)}
+            onToggleExpand={() => toggleExpand(r.path)}
           />
         ))}
       </div>
@@ -636,28 +658,36 @@ function initialExpansion(currentPath) {
 
 /* Filter the flat list by search query and apply the expanded
    set so collapsed branches' children stay hidden. When the user
-   is searching we ignore expansion entirely — every match shows. */
+   is searching we ignore expansion entirely — every match shows.
+
+   Array semantics: listPaths emits an entry for the array path
+   itself (e.g. `orders`) plus per-item paths anchored at `[0]`
+   (e.g. `orders[0].number`). Item paths only ever have one [0]
+   parent — the array — and there's no separate folder node for
+   `orders[0]` for the user to expand. So when an ancestor key
+   ends in `[N]`, we accept it as visible if EITHER the full key
+   OR the base array name is in the expanded set. This way
+   clicking `orders` reveals every `orders[0].*` field below. */
 function filterAndProject(nodes, search, expanded) {
   const q = search.trim().toLowerCase();
   return nodes.filter((n) => {
     if (q) return n.path.toLowerCase().includes(q) || n.label.toLowerCase().includes(q);
     if (n.depth === 0) return true;
-    /* Walk parents — every ancestor must be in the expanded set
-       for this node to appear. Path parts are split on dot and
-       bracket; we rebuild keys the same way ancestors were
-       inserted into the expanded set. */
     const parts = n.path.split(/[.[]/).filter(Boolean);
     let acc = '';
     for (let i = 0; i < parts.length - 1; i++) {
       acc = acc ? `${acc}.${parts[i]}` : parts[i];
       acc = acc.replace(/\.0\]$/, '[0]');
-      if (!expanded.has(acc)) return false;
+      if (expanded.has(acc)) continue;
+      const baseKey = acc.replace(/\[\d+\]$/, '');
+      if (baseKey !== acc && expanded.has(baseKey)) continue;
+      return false;
     }
     return true;
   });
 }
 
-function PathPickerRow({ node, focused, expanded, isCurrent, onClick, onMouseEnter }) {
+function PathPickerRow({ node, focused, expanded, isCurrent, onClick, onMouseEnter, onToggleExpand }) {
   const indent = node.depth * 12;
   /* Leaf labels show just the final path segment so the row reads
      "firstName" instead of "contact.firstName" — the path itself
@@ -665,9 +695,18 @@ function PathPickerRow({ node, focused, expanded, isCurrent, onClick, onMouseEnt
      hierarchy. Folder labels show the full path so users searching
      can tell "stats" from "contact.stats". */
   const leafLabel = node.path.split('.').slice(-1)[0].replace(/\[0\]/g, '');
+  /* Arrays are SELECTABLE (array ops live on the array path itself
+     — hasAny / countGt / etc.) so the row's chevron has its own
+     click target. Clicking the chevron expands inline without
+     picking; clicking anywhere else on the row selects the array
+     and closes the picker. Objects don't have a selectable state,
+     so for them the whole row expands and no separate chevron is
+     needed (kept for visual consistency). */
+  const showTag = !node.isFolder || node.type === 'array';
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={-1}
       onClick={onClick}
       onMouseEnter={onMouseEnter}
       style={{
@@ -693,6 +732,7 @@ function PathPickerRow({ node, focused, expanded, isCurrent, onClick, onMouseEnt
         textAlign: 'left',
         fontFamily: 'var(--gb-font-sans)',
         transition: 'background-color .12s, border-color .12s',
+        userSelect: 'none',
       }}
     >
       <div style={{
@@ -702,21 +742,33 @@ function PathPickerRow({ node, focused, expanded, isCurrent, onClick, onMouseEnt
         justifyContent: 'flex-end',
       }}>
         {node.isFolder ? (
-          <motion.span
-            animate={{ rotate: expanded ? 90 : 0 }}
-            transition={{ duration: 0.15 }}
+          /* Chevron with its own click target. stopPropagation
+             so it doesn't bubble up to the row's onClick (which
+             would select the array). For pure objects this is a
+             redundant click (row click also expands) but keeps
+             the visual + keyboard model uniform. */
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onToggleExpand?.(); }}
+            aria-label={expanded ? 'Collapse' : 'Expand'}
             style={{
-              width: 12,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              width: 14, height: 14,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              background: 'transparent', border: 'none', cursor: 'pointer',
+              padding: 0,
               color: 'var(--gb-text-muted)',
               fontFamily: 'var(--gb-font-mono)',
               fontSize: 9,
             }}
           >
-            ▸
-          </motion.span>
+            <motion.span
+              animate={{ rotate: expanded ? 90 : 0 }}
+              transition={{ duration: 0.15 }}
+              style={{ display: 'inline-flex' }}
+            >
+              ▸
+            </motion.span>
+          </button>
         ) : (
           <span style={{
             width: 6, height: 6, borderRadius: 2,
@@ -736,13 +788,13 @@ function PathPickerRow({ node, focused, expanded, isCurrent, onClick, onMouseEnt
       }}>
         {node.isFolder ? node.path : leafLabel}
       </span>
-      {!node.isFolder && (
+      {showTag && (
         <Tag size="xs" tone={TYPE_TONE[node.type] || 'neutral'}>{node.type}</Tag>
       )}
       <div style={{ display: 'inline-flex', justifyContent: 'flex-end' }}>
         {isCurrent && <I.check size={10} strokeWidth={3} style={{ color: 'var(--gb-brand-label)' }} />}
       </div>
-    </button>
+    </div>
   );
 }
 

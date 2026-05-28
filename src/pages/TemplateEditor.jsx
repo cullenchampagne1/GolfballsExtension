@@ -10,6 +10,7 @@ import {
   RichTextEditor,
   VariableTable, OrderRules, CaseRules, AccountConditions, CaseTagsEditor,
 } from '../ui/index.js';
+import { SENDER_OPTIONS } from '../lib/sender.js';
 
 /* ─────────────────────────────────────────────────────────────
    TemplateEditor — the production email-template editor page.
@@ -97,15 +98,12 @@ function varDef(v) {
 /* ────────────────────────────────────────────────────────────
    Type metadata
 ──────────────────────────────────────────────────────────── */
-/* Configured sender accounts for Direct Send via Power Automate. The
-   flow keys off the persisted id; labels are display-only. Adding more
-   accounts is a one-line change here. The `randomize` slot is special —
-   it's the same UI affordance as picking a single account, just stored
-   separately as a boolean so the flow can pick per send. */
-const SENDER_OPTIONS = [
-  { id: 'golfballs',    label: 'golfballs.com' },
-  { id: 'prioritylogo', label: 'prioritylogo.com' },
-];
+/* Sender catalog lives in src/lib/sender.js (imported above) —
+   single source of truth shared with EmailRunner and (via inlined
+   copy) the vanilla sendViaPA handler. The `randomize` slot is
+   added inline at the Segmented usage so the canonical list stays
+   pure (real senders only) and the random pseudo-entry is purely
+   a UI affordance. */
 
 const TYPE_META = {
   order: {

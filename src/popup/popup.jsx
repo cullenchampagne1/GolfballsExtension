@@ -814,6 +814,11 @@ function MainView({
         templateSubject: subject,
         contactEmail: resolvedTo,
         paUrl: flags.powerAutomateUrl,
+        /* Sender config rides along so the content-script handler
+           can resolve the `from` address per the template's pick.
+           senderRandomize=true → fresh random sender per send. */
+        senderAccount:   tpl.senderAccount   || '',
+        senderRandomize: !!tpl.senderRandomize,
       });
       window.close();
     } else {

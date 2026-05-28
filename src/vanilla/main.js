@@ -172,16 +172,32 @@ window.__gbContentReady = true;
     }
 
     if (msg.action === 'sendViaPA') {
-      // Build the lean payload, send to PA, and surface the real result as a page toast.
-      // The popup has already closed by the time PA responds, so the content script
-      // is the only place we can show feedback.
+      // Build the lean payload, send to PA, and surface the real result
+      // as a page toast. The popup has already closed by the time PA
+      // responds, so the content script is the only place we can show
+      // feedback.
       chrome.storage.local.get('emailSignature', ({ emailSignature }) => {
         let body = msg.templateHtml || '';
         if (emailSignature) {
           body += '<br><div>' + emailSignature + '</div>';
         }
+        /* Sender mapping — inlined here because this file is a vanilla
+           content script (no ESM imports). Keep in sync with
+           src/lib/sender.js if you add accounts. */
+        const SENDER_EMAILS = {
+          golfballs:    'orders@golfballs.com',
+          prioritylogo: 'orders@prioritylogo.com',
+        };
+        const SENDER_IDS = Object.keys(SENDER_EMAILS);
+        const fromAddr = (() => {
+          if (msg.senderRandomize) {
+            return SENDER_EMAILS[SENDER_IDS[Math.floor(Math.random() * SENDER_IDS.length)]];
+          }
+          return SENDER_EMAILS[msg.senderAccount] || SENDER_EMAILS[SENDER_IDS[0]];
+        })();
         const payload = {
           emails: [{
+            from:      fromAddr,
             to:        msg.contactEmail,
             subject:   msg.templateSubject,
             htmlBody:  body,
@@ -189,21 +205,18 @@ window.__gbContentReady = true;
           }],
         };
         chrome.runtime.sendMessage({ action: 'paAutomate', paUrl: msg.paUrl, payload }, (result) => {
-          // Use the React toast surface (window.__gbToast, installed by
-          // any ToastHost that's mounted) when available — falls back to
-          // the legacy vanilla notification only if no React host has
-          // installed the global yet. The design-system toasts respect
-          // the user's UI Scale settings + carry the rounded chrome.
+          /* Always go through window.__gbToast — actions-shelf mounts
+             a ToastHost on every golfballs.com page (matched in the
+             manifest), so the global is reliably installed by the
+             time a PA roundtrip completes. The legacy
+             showGbNotification fallback used to fire here and produced
+             the old-style banner the user just reported — gone now. */
           const toast = (typeof window !== 'undefined' && window.__gbToast) ? window.__gbToast : null;
           if (result?.results?.[0]?.status === 'sent') {
-            const msgText = `Email sent to ${msg.contactEmail}`;
-            if (toast?.success) toast.success(msgText, { duration: 4000 });
-            else showGbNotification(msgText, 'success', 4000);
+            toast?.success?.(`Email sent to ${msg.contactEmail}`, { duration: 4000 });
           } else {
             const err = result?.results?.[0]?.error || result?.error || 'Unknown error';
-            const msgText = `Email failed: ${err}`;
-            if (toast?.error) toast.error(msgText, { duration: 6000 });
-            else showGbNotification(msgText, 'error', 6000);
+            toast?.error?.(`Email failed: ${err}`, { duration: 6000 });
           }
         });
       });
