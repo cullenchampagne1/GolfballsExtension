@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Btn, DraggablePopup, Dot, Dropdown, Field, RangeSlider, Tag, I, Spinner } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { pickFromAddress } from '../lib/sender.js';
+import { useDevSetting } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    EmailRunner — draggable bottom-anchored panel that drives a bulk
@@ -175,6 +176,10 @@ export function EmailRunner({
   useMock = false,
 }) {
   const toast = useToast();
+  /* Per-rep mailbox name (devSettings 'email.localPart'). Glues
+     onto the per-template domain at send time to form the From:
+     address — e.g. 'cullen' + 'golfballs.com' → cullen@golfballs.com. */
+  const emailLocalPart = useDevSetting('email.localPart');
   const [templates, setTemplates] = useState([]);
   const [selectedId, setSelectedId] = useState('');
   const [selectedVariationId, setSelectedVariationId] = useState(null);
@@ -362,10 +367,10 @@ export function EmailRunner({
              `from` resolves per-row: when the template has
              senderRandomize=true, pickFromAddress fires a fresh
              random pick for each contact so a 50-row blast varies
-             between the configured senders. Otherwise it returns
-             the address mapped from the template's senderAccount
-             slug (golfballs.com / prioritylogo.com today). */
-          const from = pickFromAddress(selectedTpl);
+             between the configured senders. The local part comes
+             from the rep's devSetting so the rest of the address
+             ends up like cullen@golfballs.com. */
+          const from = pickFromAddress(selectedTpl, emailLocalPart);
           const send = await dispatchBg({
             action: 'paAutomate',
             paUrl,

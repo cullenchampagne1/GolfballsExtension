@@ -176,24 +176,30 @@ window.__gbContentReady = true;
       // as a page toast. The popup has already closed by the time PA
       // responds, so the content script is the only place we can show
       // feedback.
-      chrome.storage.local.get('emailSignature', ({ emailSignature }) => {
+      chrome.storage.local.get(['emailSignature', 'devSettings'], ({ emailSignature, devSettings }) => {
         let body = msg.templateHtml || '';
         if (emailSignature) {
           body += '<br><div>' + emailSignature + '</div>';
         }
-        /* Sender mapping — inlined here because this file is a vanilla
+        /* Sender mapping — inlined because this file is a vanilla
            content script (no ESM imports). Keep in sync with
-           src/lib/sender.js if you add accounts. */
-        const SENDER_EMAILS = {
-          golfballs:    'orders@golfballs.com',
-          prioritylogo: 'orders@prioritylogo.com',
+           src/lib/sender.js when adding accounts. Only the DOMAIN
+           lives here; the local part comes from the rep's
+           devSetting ('email.localPart', defaults to 'cullen'), so
+           the rendered From: is e.g. cullen@golfballs.com. */
+        const SENDER_DOMAINS = {
+          golfballs:    'golfballs.com',
+          prioritylogo: 'prioritylogo.com',
         };
-        const SENDER_IDS = Object.keys(SENDER_EMAILS);
+        const SENDER_IDS = Object.keys(SENDER_DOMAINS);
+        const rawLocal = (devSettings && devSettings['email.localPart']) || 'cullen';
+        const localPart = String(rawLocal).trim() || 'cullen';
+        const domainFor = (id) => SENDER_DOMAINS[id] || SENDER_DOMAINS[SENDER_IDS[0]];
         const fromAddr = (() => {
-          if (msg.senderRandomize) {
-            return SENDER_EMAILS[SENDER_IDS[Math.floor(Math.random() * SENDER_IDS.length)]];
-          }
-          return SENDER_EMAILS[msg.senderAccount] || SENDER_EMAILS[SENDER_IDS[0]];
+          const id = msg.senderRandomize
+            ? SENDER_IDS[Math.floor(Math.random() * SENDER_IDS.length)]
+            : (msg.senderAccount || SENDER_IDS[0]);
+          return `${localPart}@${domainFor(id)}`;
         })();
         const payload = {
           emails: [{
