@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Btn, DraggablePopup, Dropdown, Field, RangeSlider, Tag, I, Spinner } from '../ui/index.js';
+import { Btn, DraggablePopup, Dot, Dropdown, Field, RangeSlider, Tag, I, Spinner } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 
 /* ───────────────────────────────────────────────────────────────
@@ -31,7 +31,11 @@ import { useToast } from '../ui/components/ToastHost.jsx';
    filtered by a per-run runId so a stray older run can't bleed in.
 ─────────────────────────────────────────────────────────────── */
 
-const PANEL_W = 340;
+/* Width matches the popup-popover footprint so the template picker
+   has the same visual proportions the rep is used to from the
+   toolbar popup. Less squeezed-looking dropdown trigger + roomier
+   menu. */
+const PANEL_W = 380;
 const PANEL_H = 480;
 
 /* Hide the inner body scrollbar in WebKit too — scrollbar-width:none
@@ -439,20 +443,22 @@ export function EmailRunner({
                   : null)
                 : 'No email templates saved yet'}
             >
+              {/* Match the popup.js template picker exactly: size sm
+                  (28px row), brand-glow dot for leading indicator,
+                  searchable only when the list is meaningfully long,
+                  and the 280px ceiling for the open menu so it
+                  doesn't dominate a small panel. */}
               <Dropdown
-                size="md"
+                size="sm"
                 value={dropdownValue}
                 displayLabel={dropdownDisplayLabel}
                 onChange={onDropdownChange}
                 options={dropdownOptions}
                 placeholder={templates.length ? 'Pick a template' : 'No templates'}
-                searchable
+                searchable={templates.length > 6}
+                leading={<Dot tone={selectedTpl ? 'brand' : 'muted'} size={7} glow={!!selectedTpl} />}
                 disabled={status === 'running'}
-                /* Open list taller so big template libraries with
-                   variation sub-rows show several at once. Matches
-                   the popup.js template picker's vertical footprint. */
-                maxHeight={320}
-                style={{ width: '100%' }}
+                maxHeight={280}
               />
             </Field>
 

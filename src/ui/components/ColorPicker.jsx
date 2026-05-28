@@ -88,6 +88,21 @@ export function ColorPickerPopover({
   // a generous max so the flip decision below has something to compare
   // against viewport space. ~210 covers SV square + hue + hex row;
   // +30 per swatch row (≤10 per row).
+  /* Read the body's CSS `zoom` so we can compensate when the popover
+     is portaled into a parent that's zoomed (e.g. the editor page
+     uses [data-gb-scale="editor"] which translates to body { zoom }).
+     getBoundingClientRect returns post-zoom viewport pixels, but
+     position:fixed left/top on a body-child are interpreted in the
+     body's PRE-zoom coord system — so a literal r.left would render
+     at r.left * zoom visually, dragging the popover off the anchor.
+     Dividing the desired viewport coord by body zoom puts the
+     popover back where it visually should be. */
+  function readBodyZoom() {
+    try {
+      const v = parseFloat(getComputedStyle(document.body).zoom);
+      return Number.isFinite(v) && v > 0 ? v : 1;
+    } catch { return 1; }
+  }
   const [pos, setPos] = useState(null);
   useEffect(() => {
     function update() {
@@ -100,10 +115,10 @@ export function ColorPickerPopover({
       // (the GolfballViewer light chip lives at canvas bottom-left).
       const roomBelow = window.innerHeight - r.bottom - offset;
       const flipUp = roomBelow < estH && r.top > estH + offset;
-      setPos({
-        top:  flipUp ? r.top - offset - estH : r.bottom + offset,
-        left: align === 'right' ? r.right - POPOVER_W : r.left,
-      });
+      const desiredTop  = flipUp ? r.top - offset - estH : r.bottom + offset;
+      const desiredLeft = align === 'right' ? r.right - POPOVER_W : r.left;
+      const z = readBodyZoom();
+      setPos({ top: desiredTop / z, left: desiredLeft / z });
     }
     update();
     window.addEventListener('resize', update);

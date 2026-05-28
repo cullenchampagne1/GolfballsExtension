@@ -237,11 +237,14 @@ async function apiGetTaskContactId(id) {
   return String(t.contactID || 0);
 }
 
-export function TaskList({ onClosed, bindClose }) {
+export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
   const toast      = useToast();
   const draggable  = useDevSetting('taskList.draggable') ?? false;
   const forceMock  = useDevSetting('taskList.useMock')   ?? false;
-  const useMock    = forceMock || !hasExtensionContext();
+  /* Playground passes useMock={true} explicitly so the rep can drive
+     the email-blast animation without an extension context. Falls
+     back to the dev flag / no-ext-context check otherwise. */
+  const useMock    = useMockProp ?? (forceMock || !hasExtensionContext());
 
   const [tasks, setTasks]         = useState([]);
   const [status, setStatus]       = useState('loading');   // 'loading' | 'ready' | 'error'
@@ -696,18 +699,21 @@ export function TaskList({ onClosed, bindClose }) {
   const hasSelection = selCount > 0;
 
   /* Selected-task → contact tuples for the Email Runner side panel.
-     Tasks already carry a built contactUrl (Page=240&customerID=...);
-     drop rows missing one so we don't queue a no-op send.
+     Tasks built from a real CRM scrape carry contactUrl
+     (Page=240&customerID=…). Mock tasks ship with an empty
+     contactUrl, so in useMock we synthesise a `mock://…` placeholder
+     — EmailRunner's mock dispatchBg returns canned HTML regardless of
+     the URL, so the loop runs and the rep sees the per-row animation.
      `contactId` here is the task row id (not the underlying contact's
      customerId) — that's the key TaskRow uses to look itself up in
      emailStatusByRow when the EmailRunner pumps a row-level update. */
   const selectedContacts = useMemo(() => visibleTasks
-    .filter((t) => selected.has(t.id) && t.contactUrl)
+    .filter((t) => selected.has(t.id) && (t.contactUrl || useMock))
     .map((t) => ({
       contactId:   t.id,
       contactName: t.contact || '',
-      contactUrl:  t.contactUrl,
-    })), [visibleTasks, selected]);
+      contactUrl:  t.contactUrl || (useMock ? `mock://contact/${t.id}` : ''),
+    })), [visibleTasks, selected, useMock]);
 
   return (
     <>
@@ -931,6 +937,7 @@ export function TaskList({ onClosed, bindClose }) {
       open={emailRunnerOpen}
       anchorHostId="__gb-tl"
       cursor={emailRunnerCursor}
+      useMock={useMock}
       contacts={selectedContacts}
       onClose={() => setEmailRunnerOpen(false)}
       onResetRowStates={() => setEmailStatusByRow({})}
