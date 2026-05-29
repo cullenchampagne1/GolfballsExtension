@@ -155,8 +155,9 @@ function Avatar({ name, email, size = 32, ring }) {
       background: `oklch(0.30 0.07 ${hue})`,
       color: `oklch(0.86 0.10 ${hue})`,
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: size * 0.36, fontWeight: 700,
+      fontSize: size * 0.36, fontWeight: 700, lineHeight: 1,
       fontFamily: 'var(--gb-font-mono)', letterSpacing: -0.3,
+      textAlign: 'center',
       flexShrink: 0,
       border: '1px solid color-mix(in srgb, currentColor 30%, transparent)',
       boxShadow: ring

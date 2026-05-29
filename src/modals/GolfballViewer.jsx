@@ -855,19 +855,26 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
              where the projection found them, and the decal also tracks
              the ball through drag / zoom / throw afterward. */
           decalGeo.applyMatrix4(ballGroup.matrixWorld.clone().invert());
-          /* MeshBasicMaterial (UNLIT) — the diagnostic confirmed the
-             texture has ink (40%) and the geometry sits on the front
-             pole, so the only thing left that hid it was lighting: a
-             MeshStandardMaterial decal renders by the scene lights,
-             and on the shadowed/edge-lit pole it came out too dark to
-             read against the ball. Basic shows the logo at its actual
-             texture colors regardless of lighting. depthTest:false +
-             renderOrder keep it drawing over the ball surface (it
-             conforms at the same radius and would otherwise z-fight);
-             FrontSide culling still hides it when spun to the back. */
+          /* Push the decal shell ~1 unit proud of the ball surface.
+             The verts sit on the sphere at radius ~100 — coincident
+             with the ball — so even unlit + depthTest-off it can lose
+             to the surface. Scaling the geometry about the (centered)
+             origin nudges it to radius ~101, just outside the ball,
+             which is also what made the old floating-decal build
+             visible (only that one floated 65 units). */
+          decalGeo.scale(1.012, 1.012, 1.012);
+          /* MeshBasicMaterial (UNLIT) + DoubleSide. The diagnostic
+             ruled out texture (40% ink), placement (front pole), and
+             depth — and the opaque debug circle ALSO didn't show,
+             which points at the projected faces being back-wound
+             (FrontSide-culled) and/or surface-coincident. Unlit shows
+             true colors regardless of lighting; DoubleSide renders the
+             patch no matter its winding; frustumCulled:false stops a
+             tight-bounds cull from dropping it. */
           const decalMat = new THREE.MeshBasicMaterial({
             map: decalTexture,
             transparent: true,
+            side: THREE.DoubleSide,
             depthTest: false,
             depthWrite: false,
             polygonOffset: true,
@@ -878,7 +885,8 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           /* Identity transform — the geometry is already in
              ballGroup-local space (inverse baked above), so
              ballGroup's own matrix renders it back onto the ball. */
-          decalMesh.renderOrder = 1;
+          decalMesh.renderOrder = 10;
+          decalMesh.frustumCulled = false;
           ballGroup.add(decalMesh);
           objectsToDispose.push(decalGeo, decalMat);
 
@@ -916,14 +924,20 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 texInfo = `opaque ${Math.round((opaque / total) * 100)}% · ink ${Math.round((inkish / total) * 100)}%`;
               }
             } catch (te) { texInfo = 'sample-failed:' + te.message; }
+            // Confirm the decal is actually reachable in the render
+            // scene graph (rules out a parenting/visible/layer drop).
+            let inScene = false;
+            scene.traverse((o) => { if (o === decalMesh) inScene = true; });
             // eslint-disable-next-line no-console
             console.log('[gb-decal] verts=', decalGeo.attributes?.position?.count,
-              '| geoBBox(local) min=', bb && [bb.min.x.toFixed(1), bb.min.y.toFixed(1), bb.min.z.toFixed(1)],
-              'max=', bb && [bb.max.x.toFixed(1), bb.max.y.toFixed(1), bb.max.z.toFixed(1)],
-              '| ballGroup.rot=', [ballGroup.rotation.x.toFixed(2), ballGroup.rotation.y.toFixed(2), ballGroup.rotation.z.toFixed(2)],
+              '| geoBBox(local) z=', bb && [bb.min.z.toFixed(1), bb.max.z.toFixed(1)],
               '| decal worldPos=', [wp.x.toFixed(1), wp.y.toFixed(1), wp.z.toFixed(1)],
               '| tex=', (decalTexture.image?.width || '?') + 'x' + (decalTexture.image?.height || '?'),
-              '| texContent=', texInfo);
+              '| texContent=', texInfo,
+              '| mat=', decalMat.type, 'side=', decalMat.side, 'depthTest=', decalMat.depthTest,
+              '| visible=', decalMesh.visible, 'parent=', decalMesh.parent?.type,
+              'inScene=', inScene, 'layerMask=', decalMesh.layers.mask,
+              '| camLayers=', camera.layers.mask);
           } catch (e) { console.warn('[gb-decal] diag failed', e); }
           // Stash projection params for explode-time per-shard reuse.
           decalProjectionParams = {
