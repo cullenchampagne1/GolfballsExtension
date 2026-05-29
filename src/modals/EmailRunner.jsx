@@ -278,7 +278,18 @@ export function EmailRunner({
      fades out instead of staying stuck on the last sending row. */
   useEffect(() => {
     if (!open) {
+      /* Modal closing — cancel any in-flight run (token bump aborts
+         the orchestrator's between-iteration guard) and wipe the
+         run-only state so the next open lands on a fresh form. The
+         previous version dropped the run signal but left status,
+         counts, progress, and trail intact; reopening replayed the
+         post-run state and the rep couldn't start a new run without
+         hard-closing the parent list to remount us. */
       runTokenRef.current += 1;
+      setStatus('idle');
+      setCounts({ sent: 0, failed: 0 });
+      setProgress({ current: 0, total: 0 });
+      setTrail([]);
       onRunStateChange?.(false);
     }
   }, [open, onRunStateChange]);
