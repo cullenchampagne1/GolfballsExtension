@@ -17,6 +17,7 @@ import {
   getDueLabel,
   buildCustomTaskTemplate,
 } from '../lib/quickTask.js';
+import { TASK_CATEGORY_OPTIONS } from '../lib/taskCategories.js';
 
 /* ───────────────────────────────────────────────────────────────
    QuickTask — sibling of CallLog. Same layout idiom, different
@@ -364,12 +365,12 @@ export function QuickTask({
               />
             </Field>
 
-            <Field label="Category ID" hint="CRM internal · 0 = Other">
-              <Input
-                size="sm" mono
+            <Field label="Category" hint="CRM task category">
+              <Dropdown
+                size="sm" searchable
                 value={String(categoryId)}
-                placeholder="0"
-                onChange={(v) => setCategoryId(v.replace(/[^0-9]/g, ''))}
+                options={TASK_CATEGORY_OPTIONS}
+                onChange={(v) => setCategoryId(String(parseInt(v, 10) || 0))}
               />
             </Field>
 
