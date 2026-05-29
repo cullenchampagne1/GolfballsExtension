@@ -39,6 +39,35 @@ async function persistSavedQueries(list) {
   try { localStorage.setItem(QB_STORAGE_KEY, JSON.stringify(list)); } catch {}
 }
 
+/* Quick-preset user layer over the built-in QUICK_PRESETS:
+     custom  — saved queries the rep promoted to one-click presets
+     hidden  — built-in preset ids the rep removed
+   Persisted separately so the built-ins stay code-defined. */
+const QB_PRESETS_KEY = 'crmQuickPresets';
+const emptyPresetLayer = () => ({ custom: [], hidden: [] });
+function normalizePresetLayer(v) {
+  return (v && typeof v === 'object')
+    ? { custom: Array.isArray(v.custom) ? v.custom : [], hidden: Array.isArray(v.hidden) ? v.hidden : [] }
+    : emptyPresetLayer();
+}
+async function loadQuickPresets() {
+  if (hasChromeStorage()) {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(QB_PRESETS_KEY, (data) => resolve(normalizePresetLayer(data?.[QB_PRESETS_KEY])));
+    });
+  }
+  try {
+    const raw = localStorage.getItem(QB_PRESETS_KEY);
+    return normalizePresetLayer(raw ? JSON.parse(raw) : null);
+  } catch { return emptyPresetLayer(); }
+}
+async function persistQuickPresets(layer) {
+  if (hasChromeStorage()) {
+    return new Promise((resolve) => { chrome.storage.local.set({ [QB_PRESETS_KEY]: layer }, resolve); });
+  }
+  try { localStorage.setItem(QB_PRESETS_KEY, JSON.stringify(layer)); } catch {}
+}
+
 /* ───────────────────────────────────────────────────────────────
    QueryBuilder — group-based redesign.
 
@@ -139,6 +168,7 @@ export const QB_OPS = {
   ],
   date:  [
     { id: 'rel_past',     label: 'more than … ago'  },
+    { id: 'rel_recent',   label: 'less than … ago'  },
     { id: 'rel_future',   label: 'within next …'    },
     { id: 'before',       label: 'before date'      },
     { id: 'after',        label: 'after date'       },
@@ -196,6 +226,7 @@ function conditionToSolr(field, c) {
     case 'lte':          out = v ? `${k}:[* TO ${v}]` : null; break;
     case 'between':      out = (v && v2) ? `${k}:[${v} TO ${v2}]` : null; break;
     case 'rel_past':     out = `${k}:[* TO NOW-${n}${u}]`; break;
+    case 'rel_recent':   out = `${k}:[NOW-${n}${u} TO NOW]`; break;
     case 'rel_future':   out = `${k}:[NOW TO NOW%2B${n}${u}]`; break;
     case 'after_today':  out = `${k}:[NOW TO *]`; break;
     case 'before_today': out = `${k}:[* TO NOW]`; break;
@@ -237,6 +268,7 @@ function conditionToLabel(field, c) {
     case 'lte':           label = v ? `${fl} ≤ ${v}`  : null; break;
     case 'between':       label = (v && v2) ? `${fl} between ${v} and ${v2}` : null; break;
     case 'rel_past':      label = `${fl} more than ${n} ${u} ago`; break;
+    case 'rel_recent':    label = `${fl} less than ${n} ${u} ago`; break;
     case 'rel_future':    label = `${fl} within next ${n} ${u}`; break;
     case 'after_today':   label = `${fl} after today`; break;
     case 'before_today':  label = `${fl} before today`; break;
@@ -427,6 +459,7 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
   const [{ outerJoiner, groups }, setBuilder] = useState(() =>
     buildInitial({ initialState, initialConditions }));
   const [savedQueries, setSavedQueries] = useState([]);
+  const [presetLayer, setPresetLayer] = useState(emptyPresetLayer);
   const [saveName, setSaveName] = useState('');
   /* Pulse counter — re-keys the preview row's fq box so the
      animation restarts on every edit. Cheap visual cue that the
@@ -436,8 +469,15 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
   useEffect(() => {
     let alive = true;
     loadSavedQueries().then((list) => { if (alive) setSavedQueries(list); });
+    loadQuickPresets().then((layer) => { if (alive) setPresetLayer(layer); });
     return () => { alive = false; };
   }, []);
+
+  /* Built-in presets the rep hasn't removed, then their promoted ones. */
+  const visiblePresets = useMemo(() => [
+    ...QUICK_PRESETS.filter((p) => !presetLayer.hidden.includes(p.id)),
+    ...presetLayer.custom,
+  ], [presetLayer]);
 
   const bindCloseRef = useRef(null);
   const handleBindClose = useCallback((fn) => {
@@ -607,6 +647,40 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
     await persistSavedQueries(updated);
   };
 
+  /* Load a quick preset — built-ins build fresh state, promoted ones
+     carry a stored state (like a saved query). */
+  const handleLoadPreset = (p) => loadFromState(p.build ? p.build() : (p.state || { outerJoiner: 'AND', groups: [newGroup()] }));
+
+  /* Promote a saved query into the quick presets. */
+  const handlePromotePreset = async (q) => {
+    if (presetLayer.custom.some((p) => p.name === q.name)) {
+      toast?.info?.(`"${q.name}" is already a quick preset`, { duration: 1800 });
+      return;
+    }
+    const preset = {
+      id: `qp-${Date.now().toString(36)}`,
+      name: q.name,
+      desc: 'Saved query',
+      state: q.state || { outerJoiner: 'AND', groups: [{ joiner: 'AND', conditions: q.conditions || [] }] },
+      custom: true,
+    };
+    const next = { ...presetLayer, custom: [preset, ...presetLayer.custom] };
+    setPresetLayer(next);
+    await persistQuickPresets(next);
+    toast?.success?.(`Pinned "${q.name}" to quick presets`, { duration: 1800 });
+  };
+
+  /* Remove a quick preset — built-ins are hidden (recoverable in code),
+     promoted ones are dropped from the custom list. */
+  const handleDeletePreset = async (p) => {
+    const isBuiltin = QUICK_PRESETS.some((b) => b.id === p.id);
+    const next = isBuiltin
+      ? { ...presetLayer, hidden: [...new Set([...presetLayer.hidden, p.id])] }
+      : { ...presetLayer, custom: presetLayer.custom.filter((c) => c.id !== p.id) };
+    setPresetLayer(next);
+    await persistQuickPresets(next);
+  };
+
   return (
     <FloatingPanel
       width={1080}
@@ -630,11 +704,13 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
 
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         <Sidebar
-          presets={QUICK_PRESETS}
+          presets={visiblePresets}
           saved={savedQueries}
-          onLoadPreset={(p) => loadFromState(p.build())}
+          onLoadPreset={handleLoadPreset}
+          onDeletePreset={handleDeletePreset}
           onLoadSaved={handleLoadSaved}
           onDeleteSaved={handleDeleteSaved}
+          onPromoteSaved={handlePromotePreset}
         />
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -788,7 +864,7 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
 /* ════════════════════════════════════════════════════════════
    Sidebar — quick presets + saved queries
 ═══════════════════════════════════════════════════════════ */
-function Sidebar({ presets, saved, onLoadPreset, onLoadSaved, onDeleteSaved }) {
+function Sidebar({ presets, saved, onLoadPreset, onDeletePreset, onLoadSaved, onDeleteSaved, onPromoteSaved }) {
   return (
     <aside style={{
       width: 232, flexShrink: 0,
@@ -799,11 +875,24 @@ function Sidebar({ presets, saved, onLoadPreset, onLoadSaved, onDeleteSaved }) {
     }}>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '14px 12px 16px' }}>
         <SidebarHeader>Quick presets</SidebarHeader>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {presets.map((p) => (
-            <PresetButton key={p.id} name={p.name} desc={p.desc} onClick={() => onLoadPreset(p)} />
-          ))}
-        </div>
+        {presets.length === 0 ? (
+          <div style={{
+            padding: '12px 10px',
+            fontSize: 10.5, color: 'var(--gb-text-muted)',
+            fontStyle: 'italic',
+            border: '1px dashed var(--gb-border-default)',
+            borderRadius: 'var(--gb-r-sm)',
+            textAlign: 'center',
+          }}>No quick presets — pin a saved query below</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {presets.map((p) => (
+              <PresetButton key={p.id} name={p.name} desc={p.desc}
+                onClick={() => onLoadPreset(p)}
+                onDelete={() => onDeletePreset(p)} />
+            ))}
+          </div>
+        )}
 
         <SidebarHeader style={{ marginTop: 18 }}>
           <span>Saved queries</span>
@@ -834,6 +923,7 @@ function Sidebar({ presets, saved, onLoadPreset, onLoadSaved, onDeleteSaved }) {
                 query={q}
                 onLoad={() => onLoadSaved(q)}
                 onDelete={() => onDeleteSaved(q.id)}
+                onPromote={() => onPromoteSaved(q)}
               />
             ))}
           </div>
@@ -856,16 +946,17 @@ function SidebarHeader({ children, style }) {
   );
 }
 
-function PresetButton({ name, desc, onClick }) {
+function PresetButton({ name, desc, onClick, onDelete }) {
   const [hover, setHover] = useState(false);
   return (
-    <button
-      type="button"
+    <div
+      role="button" tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        display: 'flex', flexDirection: 'column', gap: 2,
+        display: 'flex', alignItems: 'center', gap: 6,
         padding: '8px 10px',
         background: hover ? 'var(--gb-brand-tint-soft)' : 'var(--gb-surface-2)',
         border: '1px solid ' + (hover ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-subtle)'),
@@ -877,13 +968,25 @@ function PresetButton({ name, desc, onClick }) {
         transition: 'background-color .15s, border-color .15s',
       }}
     >
-      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{name}</span>
-      <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>{desc}</span>
-    </button>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+        <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{desc}</span>
+      </div>
+      {onDelete && (
+        <span style={{ opacity: hover ? 1 : 0, transition: 'opacity .15s', flexShrink: 0 }}>
+          <IconBtn
+            size="xs" variant="ghost" danger
+            icon={<I.close size={9} />}
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            tooltip="Remove preset"
+          />
+        </span>
+      )}
+    </div>
   );
 }
 
-function SavedQueryRow({ query, onLoad, onDelete }) {
+function SavedQueryRow({ query, onLoad, onDelete, onPromote }) {
   return (
     <div
       style={{
@@ -903,6 +1006,14 @@ function SavedQueryRow({ query, onLoad, onDelete }) {
           color: 'var(--gb-text-primary)',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>{query.name}</span>
+        {onPromote && (
+          <IconBtn
+            size="xs" variant="ghost"
+            icon={<I.bolt size={10} />}
+            onClick={(e) => { e.stopPropagation(); onPromote(); }}
+            tooltip="Make quick preset"
+          />
+        )}
         <IconBtn
           size="xs" variant="ghost" danger
           icon={<I.close size={9} />}
@@ -1268,7 +1379,7 @@ function ValueEditor({ field, condition, onPatch }) {
     );
   }
   if (field.type === 'date') {
-    if (condition.op === 'rel_past' || condition.op === 'rel_future') {
+    if (condition.op === 'rel_past' || condition.op === 'rel_recent' || condition.op === 'rel_future') {
       return (
         <>
           <div style={{ width: 64 }}>
@@ -1290,7 +1401,7 @@ function ValueEditor({ field, condition, onPatch }) {
             />
           </div>
           <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
-            {condition.op === 'rel_past' ? 'ago' : 'from now'}
+            {condition.op === 'rel_future' ? 'from now' : 'ago'}
           </span>
         </>
       );
