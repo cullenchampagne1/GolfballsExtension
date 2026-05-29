@@ -62,16 +62,20 @@ function parseColor(v) {
   return null;
 }
 
-/* A text color needs lightening when it's both DARK (low luminance,
-   so it'd be low-contrast on our dark surface) and GRAYISH (low
-   chroma — we leave saturated brand/accent colors alone so a red
-   warning or a green link keeps its hue). */
+/* A grayscale text color (low chroma) gets unified to the standard
+   light text so every shade of gray an email throws at us reads the
+   same on the dark surface — both the dark grays (footers, black
+   body text) AND the muted light grays (e.g. a job-title line) that
+   otherwise look washed-out and inconsistent next to the body. Only
+   already-near-white text is left as-is (it's already legible), and
+   saturated colors (high chroma — links, brand marks, warnings) keep
+   their hue. */
 function needsLighten(v) {
   const c = parseColor(v);
   if (!c) return false;
   const lum = (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255; // 0..1
   const chroma = Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b);
-  return lum < 0.55 && chroma <= 40;
+  return chroma <= 40 && lum < 0.82;
 }
 
 function normaliseEmailDom(container) {

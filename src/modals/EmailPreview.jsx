@@ -513,10 +513,15 @@ export function EmailPreview({
                 </div>
               )}
 
-              <ReplyComposer
-                replyTo={recipient.email ? `${sender.name} <${sender.email}>` : sender.name}
-                subject={`RE: ${subject}`}
-              />
+              {/* Composer only after load — rendering it during the
+                  loading state parked it under the spinner, then it
+                  jolted to the bottom when the (tall) thread arrived. */}
+              {!loading && thread.length > 0 && (
+                <ReplyComposer
+                  replyTo={recipient.email ? `${sender.name} <${sender.email}>` : sender.name}
+                  subject={`RE: ${subject}`}
+                />
+              )}
             </div>
           </div>
 
