@@ -78,43 +78,56 @@ function needsLighten(v) {
   return chroma <= 40 && lum < 0.82;
 }
 
-function normaliseEmailDom(container) {
+/* THEME-AWARE text fix. Emails are authored for a white background
+   with dark text. On a DARK theme that dark text would be invisible,
+   so we lighten the dark/gray runs. On a LIGHT theme the surface is
+   already light, so the email's dark text is correct as-authored —
+   lightening it (the previous behavior) turned it near-white and it
+   vanished. So we only rewrite text colors when the pane is dark. */
+function normaliseEmailDom(container, isDark) {
   let seen = 0; let changed = 0;
   container.querySelectorAll('*').forEach((el) => {
-    /* White / near-white backgrounds → transparent so the email
-       blends into the pane's own surface instead of sitting on a
-       flat gray slab. */
+    /* White / near-white backgrounds → transparent so the email blends
+       into the pane's own surface (works in both themes — the host
+       surface shows through). */
     const bgAttr = el.getAttribute && el.getAttribute('bgcolor');
     if (bgAttr && isLightBg(bgAttr)) el.setAttribute('bgcolor', 'transparent');
 
     if (el.style) {
       if (isLightBg(el.style.backgroundColor)) el.style.backgroundColor = 'transparent';
       if (isLightBg(el.style.background)) el.style.background = 'transparent';
-      /* Lighten dark grayish text (black AND the medium grays emails
-         use for footers / signatures) so it contrasts on dark; leave
-         saturated colors. */
-      if (el.style.color) { seen += 1; if (needsLighten(el.style.color)) { el.style.color = LIGHT_TEXT; changed += 1; } }
+      if (isDark && el.style.color) { seen += 1; if (needsLighten(el.style.color)) { el.style.color = LIGHT_TEXT; changed += 1; } }
     }
 
     const colorAttr = el.getAttribute && el.getAttribute('color');
-    if (colorAttr) { seen += 1; if (needsLighten(colorAttr)) { el.setAttribute('color', LIGHT_TEXT); changed += 1; } }
+    if (isDark && colorAttr) { seen += 1; if (needsLighten(colorAttr)) { el.setAttribute('color', LIGHT_TEXT); changed += 1; } }
   });
-  /* Rewrite color rules inside the email's own <style> blocks too —
-     Outlook leans on class rules (p.MsoNormal {color:#242424}) that
-     the per-element walk above never sees, which is why text stayed
-     gray. Replace any grayish `color:` in CSS text with the light
-     token. */
-  container.querySelectorAll('style').forEach((s) => {
-    const css = s.textContent || '';
-    const next = css.replace(/color\s*:\s*([^;}!]+)/gi, (m, val) =>
-      (needsLighten(val) ? `color: ${LIGHT_TEXT}` : m));
-    if (next !== css) { s.textContent = next; changed += 1; }
-  });
+  if (isDark) {
+    /* Outlook sets body color via <style> class rules (p.MsoNormal
+       { color:#242424 }) the per-element walk never sees — rewrite
+       grayish colors there too. */
+    container.querySelectorAll('style').forEach((s) => {
+      const css = s.textContent || '';
+      const next = css.replace(/color\s*:\s*([^;}!]+)/gi, (m, val) =>
+        (needsLighten(val) ? `color: ${LIGHT_TEXT}` : m));
+      if (next !== css) { s.textContent = next; changed += 1; }
+    });
+  }
   try {
     // eslint-disable-next-line no-console
-    console.log('[gb-email] color normalise — seen', seen, 'changed', changed,
-      'styleBlocks', container.querySelectorAll('style').length);
+    console.log('[gb-email] normalise — dark', isDark, 'seen', seen, 'changed', changed);
   } catch { /* ignore */ }
+}
+
+/* Is the extension theme dark? Decide from the resolved
+   --gb-text-primary: a light primary text means a dark surface. */
+function themeIsDark() {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue('--gb-text-primary').trim();
+    const c = parseColor(v);
+    if (c) return (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255 > 0.5;
+  } catch { /* ignore */ }
+  return true; // default dark
 }
 
 export function EmailHtmlView({ html, style }) {
@@ -124,18 +137,20 @@ export function EmailHtmlView({ html, style }) {
     const host = hostRef.current;
     if (!host) return;
     const shadow = host.shadowRoot || host.attachShadow({ mode: 'open' });
+    const isDark = themeIsDark();
     /* base href keeps relative links/images resolving against the
-       mail host; color-scheme:dark hands the email's own form
-       controls + default colors a dark baseline. */
+       mail host; color-scheme + surface/text follow the active theme
+       (the --gb tokens already re-theme) so the email reads correctly
+       in both dark and light. */
     shadow.innerHTML = `
       <base href="https://api.golfballs.com">
       <style>
         :host {
           display: block;
-          color-scheme: dark;
+          color-scheme: ${isDark ? 'dark' : 'light'};
           padding: 20px 22px;
-          background: var(--gb-surface-1, #1e2024);
-          color: var(--gb-text-primary, #e8eaed);
+          background: var(--gb-surface-1, ${isDark ? '#1e2024' : '#ffffff'});
+          color: var(--gb-text-primary, ${isDark ? '#e8eaed' : '#1a1a1a'});
           font-family: Calibri, 'Segoe UI', Arial, sans-serif;
           font-size: 13px;
           line-height: 1.6;
@@ -149,7 +164,7 @@ export function EmailHtmlView({ html, style }) {
       <div id="gb-email-content">${html || ''}</div>
     `;
     const content = shadow.querySelector('#gb-email-content');
-    if (content) normaliseEmailDom(content);
+    if (content) normaliseEmailDom(content, isDark);
   }, [html]);
 
   return (
