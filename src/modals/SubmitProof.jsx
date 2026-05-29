@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react';
 import {
   FloatingPanel, ModalHeader, Btn, Field, Input, Textarea, Dropdown, Tag, Segmented, I,
+  ProofCard,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
@@ -156,16 +157,6 @@ const MOCK_GALLERY = [
   { name: 'Acme Logo v1',    proofLink: '#', thumbUrl: '', status: 'Rejected', label: 'v1' },
   { name: 'Pre-prod sample', proofLink: '#', thumbUrl: '', status: 'Pending',  label: 'pre' },
 ];
-
-// Tone mapping for the status pill — matches the design's per-status
-// colors. Falls back to 'neutral' for anything unrecognised.
-const STATUS_TONE = {
-  Approved: 'brand',
-  Revised:  'warning',
-  Rejected: 'error',
-  Pending:  'neutral',
-};
-function statusTone(status) { return STATUS_TONE[status] || 'neutral'; }
 
 /* ───────────────────────────────────────────────────────────────
    Public component
@@ -1211,9 +1202,11 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
                   fontSize: 10, fontWeight: 800, textTransform: 'uppercase',
                   letterSpacing: 1, color: 'var(--gb-text-muted)', marginBottom: 12,
                 }}>Previous Proofs ({gallery.length})</div>
-                {gallery.map((p, i) => (
-                  <GalleryItem key={i} proof={p} index={i} />
-                ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {gallery.map((p, i) => (
+                    <ProofCard key={p.id || i} proof={p} index={i} />
+                  ))}
+                </div>
               </div>
               {/* Footer extender — matches the form column's footer in
                   height + background + top border so the modal reads as
@@ -1551,136 +1544,6 @@ function DynamicItemBlock({ item, suffix, fields, data, autoName, customName, on
   );
 }
 
-/* GalleryItem — square thumbnail card with the 3D-sphere faux logo
-   when no real thumbnail is available. Sphere uses brand + canvas
-   tokens (theme-aware), with an inset shadow for depth and a centered
-   monospace label (e.g. "v3"). Below the thumbnail sits a pill row
-   with the proof name + status badge + open-arrow.
-   Adapted from SubmitProofView in the design handoff
-   (surfaces-3.jsx ~line 519). */
-function GalleryItem({ proof, index = 0 }) {
-  const toast = useToast();
-  const label = proof.label || (proof.name?.match(/v\d+/i)?.[0] || '');
-  // Alternating bg gradient so adjacent thumbnails read as distinct.
-  const bg = index % 2
-    ? 'linear-gradient(135deg, var(--gb-surface-2) 0%, var(--gb-surface-canvas) 50%, var(--gb-surface-2) 100%)'
-    : 'linear-gradient(135deg, var(--gb-surface-2) 0%, var(--gb-surface-canvas) 100%)';
-  const onOpen = () => {
-    if (!proof.proofLink || proof.proofLink === '#') return;
-    window.open(proof.proofLink, '_blank', 'noopener,noreferrer');
-  };
-  const onCopy = (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    if (!proof.proofLink) return;
-    try {
-      navigator.clipboard?.writeText(proof.proofLink);
-      toast?.success?.('Link copied');
-    } catch {
-      toast?.error?.('Couldn’t copy link');
-    }
-  };
-  return (
-    <div style={{
-      display: 'flex', flexDirection: 'column',
-      marginBottom: 14,
-    }}>
-      {/* Thumbnail — click to open. Bottom corners squared off so it
-          reads as one piece with the info row welded below it. */}
-      <div
-        onClick={onOpen}
-        style={{
-          width: '100%', aspectRatio: '1',
-          borderRadius: 'var(--gb-r-md) var(--gb-r-md) 0 0',
-          background: bg,
-          border: '1px solid var(--gb-border-subtle)',
-          borderBottom: 'none',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          position: 'relative', overflow: 'hidden',
-          cursor: proof.proofLink && proof.proofLink !== '#' ? 'pointer' : 'default',
-        }}
-      >
-        {proof.thumbUrl ? (
-          <img
-            src={proof.thumbUrl}
-            alt=""
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-          />
-        ) : (
-          <div style={{
-            width: '60%', aspectRatio: '1',
-            borderRadius: '50%',
-            background: `radial-gradient(circle at 35% 30%,
-              color-mix(in srgb, var(--gb-brand-label) 28%, var(--gb-surface-canvas)) 0%,
-              var(--gb-surface-canvas) 75%)`,
-            boxShadow: 'inset 0 -10px 30px rgba(0,0,0,0.45)',
-            position: 'relative',
-          }}>
-            {label && (
-              <div style={{
-                position: 'absolute', top: '50%', left: '50%',
-                transform: 'translate(-50%, -50%)',
-                fontSize: 18, fontWeight: 800,
-                color: 'color-mix(in srgb, var(--gb-brand-label) 70%, transparent)',
-                fontFamily: 'var(--gb-font-mono)',
-                letterSpacing: -0.5,
-                whiteSpace: 'nowrap',
-              }}>{label}</div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Info row — flat-top, rounded-bottom, attached to the
-          thumbnail with no gap. Name truncates first; status tag
-          sits flush right and overlaps the truncated name's ellipsis
-          if necessary (flex-shrink: 0 on the tag). */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        background: 'var(--gb-surface-2)',
-        border: '1px solid var(--gb-border-subtle)',
-        borderRadius: '0 0 var(--gb-r-md) var(--gb-r-md)',
-        padding: '5px 6px 5px 8px',
-      }}>
-        <span
-          title={proof.name}
-          style={{
-            flex: 1, minWidth: 0,
-            fontSize: 11, fontWeight: 600,
-            color: 'var(--gb-text-primary)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}
-        >{proof.name}</span>
-        {proof.status && (
-          <Tag tone={statusTone(proof.status)} size="xs">{proof.status}</Tag>
-        )}
-        <button
-          type="button"
-          onClick={onCopy}
-          title="Copy proof link"
-          aria-label="Copy proof link"
-          style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 22, height: 22, padding: 0,
-            background: 'transparent',
-            border: 'none',
-            borderRadius: 'var(--gb-r-xs)',
-            color: 'var(--gb-text-muted)',
-            cursor: 'pointer',
-            outline: 'none',
-            flexShrink: 0,
-            transition: 'color .12s, background-color .12s',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--gb-text-primary)'; e.currentTarget.style.background = 'var(--gb-fill-soft)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--gb-text-muted)'; e.currentTarget.style.background = 'transparent'; }}
-        >
-          <I.copy size={11} />
-        </button>
-      </div>
-    </div>
-  );
-}
 
 function ResultsPanel({ results, onClose }) {
   const success = results.filter((r) => r.proofLink).length;
