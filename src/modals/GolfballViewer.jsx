@@ -827,10 +827,17 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           }
           if (disposed) return;
           // Texture flags: clamp to edge so edge pixels don't tile across
-          // the decal's edges; sRGB so white reads as white.
+          // the decal's edges; sRGB so white reads as white. Linear
+          // filter + no mipmaps keeps a non-power-of-two crop (896×896)
+          // safe under a WebGL1 fallback (Windows/ANGLE on weaker GPUs),
+          // where an NPOT texture with mipmaps samples as black.
           decalTexture.colorSpace = THREE.SRGBColorSpace;
           decalTexture.wrapS = THREE.ClampToEdgeWrapping;
           decalTexture.wrapT = THREE.ClampToEdgeWrapping;
+          decalTexture.minFilter = THREE.LinearFilter;
+          decalTexture.magFilter = THREE.LinearFilter;
+          decalTexture.generateMipmaps = false;
+          decalTexture.needsUpdate = true;
           objectsToDispose.push(decalTexture);
 
           // Camera is straight-on at +Z, so the decal projects from
@@ -855,34 +862,25 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
              where the projection found them, and the decal also tracks
              the ball through drag / zoom / throw afterward. */
           decalGeo.applyMatrix4(ballGroup.matrixWorld.clone().invert());
-          /* Push the decal shell ~1 unit proud of the ball surface.
-             The verts sit on the sphere at radius ~100 — coincident
-             with the ball — so even unlit + depthTest-off it can lose
-             to the surface. Scaling the geometry about the (centered)
-             origin nudges it to radius ~101, just outside the ball,
-             which is also what made the old floating-decal build
-             visible (only that one floated 65 units). */
-          decalGeo.scale(1.012, 1.012, 1.012);
-          /* MeshBasicMaterial (UNLIT) + DoubleSide. The diagnostic
-             ruled out texture (40% ink), placement (front pole), and
-             depth — and the opaque debug circle ALSO didn't show,
-             which points at the projected faces being back-wound
-             (FrontSide-culled) and/or surface-coincident. Unlit shows
-             true colors regardless of lighting; DoubleSide renders the
-             patch no matter its winding; frustumCulled:false stops a
-             tight-bounds cull from dropping it. */
-          /* decalDebug → a SOLID OPAQUE RED material with no map, no
-             transparency, no UVs in play. This strips every texture /
-             alpha / UV variable: if a flat red patch shows on the
-             ball, the geometry + render path are fine and the problem
-             is the texture/crop; if even solid red is invisible, the
-             mesh is being dropped from the render entirely (geometry /
-             scene / layers) and the [gb-decal] line below says which. */
+          /* Push the decal shell ~2 units proud of the ball surface
+             (radius ~100 → ~102). This is the CROSS-PLATFORM-safe way
+             to beat z-fighting: depthTest stays ON (it behaves
+             identically on Mac GL and Windows ANGLE/D3D), and the
+             decal sits physically just in front of the surface so it
+             always wins the depth test. The previous depthTest:false
+             path worked on Mac but vanished on Windows — exactly the
+             render-state ANGLE treats differently — and polygonOffset
+             is likewise driver-dependent, so both are gone. */
+          decalGeo.scale(1.02, 1.02, 1.02);
+          /* MeshBasicMaterial (UNLIT) + DoubleSide — true logo colors
+             regardless of scene lighting; renders the projected patch
+             no matter its winding. decalDebug swaps in a solid opaque
+             red (no texture) to isolate texture issues from render
+             ones. */
           const decalMat = decalDebug
             ? new THREE.MeshBasicMaterial({
                 color: 0xff0000,
                 side: THREE.DoubleSide,
-                depthTest: false,
                 depthWrite: false,
                 toneMapped: false,
               })
@@ -890,10 +888,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 map: decalTexture,
                 transparent: true,
                 side: THREE.DoubleSide,
-                depthTest: false,
                 depthWrite: false,
-                polygonOffset: true,
-                polygonOffsetFactor: -4,
                 toneMapped: false,
               });
           decalMesh = new THREE.Mesh(decalGeo, decalMat);
@@ -952,7 +947,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               '| mat=', decalMat.type, 'side=', decalMat.side, 'depthTest=', decalMat.depthTest,
               '| visible=', decalMesh.visible, 'parent=', decalMesh.parent?.type,
               'inScene=', inScene, 'layerMask=', decalMesh.layers.mask,
-              '| camLayers=', camera.layers.mask);
+              '| camLayers=', camera.layers.mask,
+              '| webgl2=', renderer.capabilities?.isWebGL2,
+              'maxTex=', renderer.capabilities?.maxTextureSize);
           } catch (e) { console.warn('[gb-decal] diag failed', e); }
           // Stash projection params for explode-time per-shard reuse.
           decalProjectionParams = {
