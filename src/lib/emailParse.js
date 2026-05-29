@@ -198,14 +198,32 @@ function quotedHeader(segment) {
  */
 export function splitThreadHtml(html) {
   if (!html || !RPLY_DIVIDER.test(html)) return null;
-  // Keep the dividers so each quoted segment starts at its header.
-  const dividers = html.match(RPLY_DIVIDER_G) || [];
   const pieces = html.split(RPLY_DIVIDER_G);
-  // pieces[0] = reply; pieces[1..] = quoted bodies (header at start of each).
+  // pieces[0] = live reply; pieces[1..] = quoted segments. Each quoted
+  // segment begins INSIDE its divRplyFwdMsg <div> (the header block),
+  // so we pull the From/Sent/To/Subject out into fields and strip the
+  // header div from the rendered body — otherwise that metadata
+  // duplicates into the message body (the "second email still shows
+  // the metadata" bug).
   const messages = [{ quoted: false, bodyHtml: pieces[0] }];
   for (let i = 1; i < pieces.length; i++) {
-    const seg = (dividers[i - 1] || '') + pieces[i];
-    messages.push({ quoted: true, bodyHtml: seg, ...quotedHeader(pieces[i]) });
+    const seg = pieces[i];
+    messages.push({ quoted: true, bodyHtml: stripHeaderDiv(seg), ...quotedHeader(seg) });
   }
   return messages;
+}
+
+/* The segment starts immediately after the divRplyFwdMsg opening
+   tag, so we're at <div> depth 1. Walk div open/close tags until the
+   depth returns to 0 — that closes the header block — and return only
+   what follows (the actual quoted body). */
+function stripHeaderDiv(seg) {
+  let depth = 1;
+  const re = /<\/?div\b[^>]*>/gi;
+  let m;
+  while ((m = re.exec(seg))) {
+    if (m[0][1] === '/') depth -= 1; else depth += 1;
+    if (depth === 0) return seg.slice(re.lastIndex);
+  }
+  return seg;
 }
