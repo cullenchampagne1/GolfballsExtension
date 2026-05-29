@@ -35,7 +35,7 @@ import { I } from '../../icons.jsx';
    on first mount so existing templates render correctly.
 
    This file is pure UI + save-state; the rule evaluator in
-   src/vanilla/modals/email-preview.js still expects the legacy
+   src/lib/caseMatch.js (evalCaseRule) still expects the legacy
    flat form. The user has the engine port scheduled separately —
    any flat-rules consumers will be migrated when that lands.
 ─────────────────────────────────────────────────────────────── */

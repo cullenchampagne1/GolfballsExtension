@@ -244,7 +244,7 @@ function PopupApp() {
                 'src/vanilla/calendar.js', 'src/vanilla/smart-detection.js',
                 'src/vanilla/variable-resolution.js', 'src/vanilla/modals/logo-extractor.js',
                 'src/vanilla/modals/charge-modal.js', 'src/vanilla/modals/order-edit-modal.js',
-                'src/vanilla/modals/email-preview.js', 'src/vanilla/page-utils.js',
+                'src/vanilla/page-utils.js', 'react-dist/content/email-preview.js',
                 'react-dist/content/watch-list.js', 'src/vanilla/modals/crm-query-builder.js',
                 'src/vanilla/main.js',
               ] },
