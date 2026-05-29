@@ -660,6 +660,11 @@ export function EmailRunner({
                 onChange={onTemplatePickerChange}
                 placeholder={templates.length ? 'Pick a template' : 'No templates'}
                 disabled={status === 'running'}
+                /* Inside the EmailRunner's short scrolling panel an
+                   absolute-positioned overlay either gets clipped by
+                   the body's overflow or floats past the panel edge
+                   — push siblings down instead. */
+                floating={false}
               />
             </Field>
 
