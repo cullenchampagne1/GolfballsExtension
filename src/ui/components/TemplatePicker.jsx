@@ -391,7 +391,14 @@ function ListBody({
   valueTplId, valueVarId, mode, onChange,
 }) {
   if (templates.length === 0) return <EmptyHint>{placeholder}</EmptyHint>;
-  const matchedSet = new Set(matched.map((t) => t.id));
+  /* `matched` + `rest` are only populated when useGroups is true
+     (mode='single' on a page with matched ids). The flat path
+     leaves them null, so derive the match-set from the parent's
+     prop list directly. Without this guard, the flat path
+     crashed on the first render after the ListBody refactor —
+     the playground TypeError the user surfaced. */
+  const matchedArr = matched || [];
+  const matchedSet = new Set(matchedArr.map((t) => t.id));
   const renderRow = (tpl, idx, isMatched) => (
     <Row
       key={tpl.id}
@@ -408,14 +415,15 @@ function ListBody({
     />
   );
   if (useGroups) {
+    const restArr = rest || [];
     return (
       <>
         <GroupHeader label="Matched on this page" tone="brand" />
-        {matched.map((tpl, idx) => renderRow(tpl, idx, true))}
-        {rest.length > 0 && (
+        {matchedArr.map((tpl, idx) => renderRow(tpl, idx, true))}
+        {restArr.length > 0 && (
           <>
             <GroupHeader label="All templates" />
-            {rest.map((tpl, idx) => renderRow(tpl, matched.length + idx, false))}
+            {restArr.map((tpl, idx) => renderRow(tpl, matchedArr.length + idx, false))}
           </>
         )}
       </>
