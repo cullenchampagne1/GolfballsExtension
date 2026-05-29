@@ -8,7 +8,7 @@ import { Dropdown } from './Dropdown.jsx';
 import { Dot } from './Dot.jsx';
 import { Segmented } from './Segmented.jsx';
 import { SOURCE_KINDS, BUILTIN_PATHS, REGEX_FIELDS } from './AddVariableModal.jsx';
-import { SchemaPathPicker } from './SchemaPathPicker.jsx';
+import { VariableSchemaPicker } from './VariableSchemaPicker.jsx';
 
 /* ────────────────────────────────────────────────────────────────
    InlineVariableForm — compact, in-table replacement for
@@ -279,13 +279,10 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
                 label="Schema path"
                 hint="Tree of the unified contact + account schema · ↓↑ ↵"
               >
-                {/* Tree-style picker — same component Account
-                    Conditions uses. portal=true so the popover
-                    renders via document.body and matches the
-                    trigger column's width; the inline form's
-                    expanding row would otherwise clip the dropdown. */}
-                <SchemaPathPicker
-                  portal
+                {/* Inline tree picker — opens in flow so the form
+                    row grows to contain it. Width matches the
+                    input column. */}
+                <VariableSchemaPicker
                   value={config}
                   onChange={setConfig}
                   placeholder="Pick a field…"
@@ -293,31 +290,31 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
               </Field>
             )}
             {kind === 'builtin' && (
-              <Field
-                label="Built-in path"
-                hint={typeId === 'account'
-                  ? 'Deprecated — use Schema. Kept so existing templates keep resolving.'
-                  : 'Pre-defined value from the page context'}
-              >
-                <Dropdown
-                  size="sm"
-                  value={config}
-                  placeholder="Select a field…"
-                  leading={<I.bolt />}
-                  searchable
-                  options={BUILTIN_PATHS[typeId] || BUILTIN_PATHS.order}
-                  onChange={setConfig}
-                />
-              </Field>
+              <>
+                {typeId === 'account' && <DeprecatedInlineNotice />}
+                <Field
+                  label="Built-in path"
+                  hint="Pre-defined value from the page context"
+                >
+                  <Dropdown
+                    size="sm"
+                    value={config}
+                    placeholder="Select a field…"
+                    leading={<I.bolt />}
+                    searchable
+                    options={BUILTIN_PATHS[typeId] || BUILTIN_PATHS.order}
+                    onChange={setConfig}
+                  />
+                </Field>
+              </>
             )}
 
             {kind === 'dom' && (
               <>
+                {typeId === 'account' && <DeprecatedInlineNotice />}
                 <Field
                   label="CSS selector"
-                  hint={typeId === 'account'
-                    ? 'Deprecated — use Schema. Selectors break across CRM redesigns.'
-                    : "First matching element's text is used"}
+                  hint="First matching element's text is used"
                 >
                   <Input
                     size="sm"
@@ -485,5 +482,35 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
         </div>
       </div>
     </motion.div>
+  );
+}
+
+/* Smaller deprecation banner sized for the inline form row.
+   Same intent as AddVariableModal's DeprecatedNotice — flagged
+   above the field, warning-tinted so the rep can't miss it. */
+function DeprecatedInlineNotice() {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'flex-start', gap: 6,
+      padding: '6px 8px',
+      background: 'var(--gb-warning-tint-soft, var(--gb-warning-tint-medium))',
+      border: '1px solid var(--gb-warning-tint-border)',
+      borderRadius: 'var(--gb-r-sm)',
+      color: 'var(--gb-warning-fg)',
+      fontSize: 10.5,
+      lineHeight: 1.4,
+    }}>
+      <span style={{
+        fontSize: 8.5, fontWeight: 800, letterSpacing: 0.5,
+        padding: '1px 4px',
+        borderRadius: 3,
+        background: 'var(--gb-warning-tint-medium)',
+        color: 'var(--gb-warning-fg)',
+        flexShrink: 0,
+        fontFamily: 'var(--gb-font-mono)',
+        textTransform: 'uppercase',
+      }}>Deprecated</span>
+      <span>Use <strong>Schema</strong> for new account variables.</span>
+    </div>
   );
 }

@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { I } from '../icons.jsx';
 import { Tag } from './Tag.jsx';
@@ -7,30 +6,19 @@ import { contactSchema } from '../../lib/page-schemas/contact.js';
 import { listPaths } from '../../lib/page-engine/resolve.js';
 
 /* ───────────────────────────────────────────────────────────────
-   SchemaPathPicker — shared tree-style picker over the page-engine
-   schema. Replaces flat <Dropdown> over a 100+ row enumeration in
-   the surfaces that need to pick a schema path (Account
-   Conditions rules, the New Variable schema kind, etc.).
+   VariableSchemaPicker — tree-style schema dropdown for the
+   New Variable form. Same mechanics as AccountConditions' rule
+   picker (PathButton + tree with search + array drill-in) but
+   wired INLINE rather than absolute-positioned: when the tree
+   opens, it takes vertical space in the form so the surrounding
+   modal body expands / scrolls naturally instead of clipping a
+   floating popover.
 
-   Behavior
-   --------
-     • Tree row layout, indented by depth. Folders (object /
-       array types) toggle their children inline.
-     • Search input filters across path + label substrings —
-       hides expansion when searching so every match shows.
-     • Arrow keys move focus through the rows; Enter commits the
-       focused row; ArrowRight expands a focused folder, ArrowLeft
-       collapses; Escape closes.
-     • Auto-expands the ancestors of the currently selected path
-       on open so the rep lands on a useful row.
-
-   The component is fully controlled — `value` + `onChange(path)`.
-   Open state is internal; the popover auto-closes on selection
-   AND on outside click.
+   • Width = 100% of the parent column (matches the input row).
+   • Tree expansion + arrow-key nav + array drill-in carry over.
+   • No portal, no fixed positioning — just normal block flow.
 ─────────────────────────────────────────────────────────────── */
 
-/* Tag tone + dot color per leaf type. Keep aligned with the
-   AccountConditions copy so both surfaces feel the same. */
 const TYPE_TONE = {
   string:   'neutral',
   number:   'brand',
@@ -50,12 +38,9 @@ const TYPE_DOT = {
   object:   'transparent',
 };
 
-/* Flat schema-node list — built once at import time. Folders are
-   retained so the picker can render the contact/account/stats
-   tree the rep navigates instead of a 100+ row flat dropdown. */
-export const SCHEMA_NODES = (() => {
+const SCHEMA_NODES = (() => {
   try {
-    const list = listPaths(contactSchema, /* sample data */ {});
+    const list = listPaths(contactSchema, /* sample */ {});
     return list.map((n) => ({
       path:     n.path,
       label:    n.label || n.path,
@@ -65,37 +50,15 @@ export const SCHEMA_NODES = (() => {
     }));
   } catch { return []; }
 })();
-export const TYPE_BY_PATH = Object.fromEntries(SCHEMA_NODES.map((n) => [n.path, n.type]));
-export const canonicalPath = (p) => (p || '').replace(/\[\d+\]/g, '[0]');
-export const typeForPath = (p) => TYPE_BY_PATH[canonicalPath(p)] || 'string';
+const TYPE_BY_PATH = Object.fromEntries(SCHEMA_NODES.map((n) => [n.path, n.type]));
+const canonicalPath = (p) => (p || '').replace(/\[\d+\]/g, '[0]');
+const typeForPath = (p) => TYPE_BY_PATH[canonicalPath(p)] || 'string';
 
-/* ── High-level wrapper — internal open state, button trigger
-   ──────────────────────────────────────────────────────────────
-   Drop into any field slot: `<SchemaPathPicker value path onChange />`.
-   The button styles itself with a fade-mask on long paths +
-   brand-tint on open. */
-export function SchemaPathPicker({
-  value,
-  onChange,
-  placeholder = '— pick a field —',
-  /* When true, leaf-only — the rep can't pick folder/array nodes.
-     Useful for surfaces that only consume scalar leaves (variable
-     value lookups) — Account Conditions explicitly wants arrays
-     as a pickable option for its `hasAny / countGt` family. */
-  leafOnly = false,
-  /* When true, the picker popover renders via createPortal to
-     document.body and positions itself with fixed coords pulled
-     from the trigger's getBoundingClientRect. Width matches the
-     trigger so the popover lines up with the input column even
-     in narrow modals. Use this inside containers that clip
-     overflow (modals with overflow:hidden / auto bodies). */
-  portal = false,
-}) {
+export function VariableSchemaPicker({ value, onChange, placeholder = '— pick a field —' }) {
   const [open, setOpen] = useState(false);
-  const triggerRef = useRef(null);
   const type = typeForPath(value);
   return (
-    <div ref={triggerRef} style={{ position: 'relative', width: '100%', minWidth: 0 }}>
+    <div style={{ position: 'relative', width: '100%', minWidth: 0 }}>
       <PathButton
         path={value}
         type={type}
@@ -103,17 +66,13 @@ export function SchemaPathPicker({
         placeholder={placeholder}
         onClick={() => setOpen((o) => !o)}
       />
-      <AnimatePresence>
+      <AnimatePresence initial={false}>
         {open && (
-          <PathPickerPopover
+          <InlineSchemaTree
             currentPath={canonicalPath(value)}
-            leafOnly={leafOnly}
-            portal={portal}
-            triggerRef={triggerRef}
             onClose={() => setOpen(false)}
             onSelect={(node) => {
-              const next = typeof node === 'string' ? node : node.path;
-              onChange(next);
+              onChange(typeof node === 'string' ? node : node.path);
               setOpen(false);
             }}
           />
@@ -123,10 +82,7 @@ export function SchemaPathPicker({
   );
 }
 
-/* ── PathButton — trigger with type dot, masked path, chevron ── */
-export function PathButton({ path, type, open, onClick, placeholder = '— pick a field —' }) {
-  /* Mask fades the last 18px of the text into transparent so
-     long paths read as "…ackHand" without a hard cut. */
+function PathButton({ path, type, open, onClick, placeholder }) {
   const fadeMask = 'linear-gradient(to right, black calc(100% - 18px), transparent 100%)';
   return (
     <button
@@ -182,51 +138,18 @@ export function PathButton({ path, type, open, onClick, placeholder = '— pick 
   );
 }
 
-/* ── Popover — inline tree browser ─────────────────────────── */
-export function PathPickerPopover({ currentPath, onClose, onSelect, leafOnly = false, portal = false, triggerRef = null }) {
+/* ── Inline tree — opens in flow, not absolute. The parent
+   modal/form body's overflow handles scroll. ────────────────── */
+function InlineSchemaTree({ currentPath, onClose, onSelect }) {
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(() => initialExpansion(currentPath));
   const [focusedIdx, setFocusedIdx] = useState(0);
   const searchRef = useRef(null);
-  const rootRef = useRef(null);
-
-  /* Portal mode: read the trigger's getBoundingClientRect on
-     open + resize/scroll so the popover stays glued to the
-     trigger column even when the modal body scrolls. Width
-     matches the trigger so the dropdown lines up with the
-     input column it sits below. */
-  const [portalPos, setPortalPos] = useState(null);
-  useEffect(() => {
-    if (!portal || !triggerRef?.current) return undefined;
-    const update = () => {
-      const r = triggerRef.current?.getBoundingClientRect();
-      if (!r) return;
-      setPortalPos({ top: r.bottom + 4, left: r.left, width: r.width });
-    };
-    update();
-    window.addEventListener('resize', update);
-    window.addEventListener('scroll', update, true);
-    return () => {
-      window.removeEventListener('resize', update);
-      window.removeEventListener('scroll', update, true);
-    };
-  }, [portal, triggerRef]);
 
   useEffect(() => {
     const r = requestAnimationFrame(() => { try { searchRef.current?.focus(); } catch {} });
     return () => cancelAnimationFrame(r);
   }, []);
-
-  /* Outside-click dismiss using mousedown so the trigger's onClick
-     still wins when the user toggles the picker from the same
-     button. */
-  useEffect(() => {
-    const onDoc = (e) => {
-      if (rootRef.current && !rootRef.current.contains(e.target)) onClose();
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [onClose]);
 
   const rows = useMemo(() => filterAndProject(SCHEMA_NODES, search, expanded), [search, expanded]);
   useEffect(() => { setFocusedIdx(0); }, [search]);
@@ -240,14 +163,9 @@ export function PathPickerPopover({ currentPath, onClose, onSelect, leafOnly = f
   };
 
   const pickRow = (r) => {
-    if (r.type === 'array') {
-      if (leafOnly) toggleExpand(r.path);
-      else onSelect(r);
-    } else if (r.isFolder) {
-      toggleExpand(r.path);
-    } else {
-      onSelect(r);
-    }
+    if (r.type === 'array') onSelect(r);
+    else if (r.isFolder) toggleExpand(r.path);
+    else onSelect(r);
   };
 
   const onKey = (e) => {
@@ -274,101 +192,75 @@ export function PathPickerPopover({ currentPath, onClose, onSelect, leafOnly = f
     }
   };
 
-  /* Pick positioning + width per mode:
-       portal=false (AccountConditions): absolute under the picker
-         container, fixed 380px wide — the original look.
-       portal=true (variable form modals): fixed coords from the
-         trigger's rect; width matches the trigger so the dropdown
-         lines up exactly under the input column it replaced. */
-  const containerStyle = portal
-    ? {
-        position: 'fixed',
-        top: portalPos?.top ?? -9999,
-        left: portalPos?.left ?? -9999,
-        width: portalPos?.width ?? 280,
-        zIndex: 1000,
-      }
-    : {
-        position: 'absolute',
-        top: 'calc(100% + 4px)',
-        left: 0,
-        width: 380,
-        maxWidth: 'calc(100vw - 24px)',
-        zIndex: 30,
-      };
-
-  const popover = (
+  return (
     <motion.div
-      ref={rootRef}
-      initial={{ opacity: 0, y: -4, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -4, scale: 0.97 }}
-      transition={{ duration: 0.18, ease: [0.34, 1.4, 0.64, 1] }}
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: 'auto' }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
       style={{
-        ...containerStyle,
-        background: 'var(--gb-surface-modal)',
-        border: '1px solid var(--gb-border-default)',
-        borderRadius: 'var(--gb-r-md)',
-        boxShadow: 'var(--gb-shadow-popover, 0 12px 32px -8px rgba(0,0,0,0.45))',
         overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        transformOrigin: 'top left',
+        marginTop: 4,
       }}
     >
       <div style={{
-        padding: '8px 10px',
-        borderBottom: '1px solid var(--gb-border-subtle)',
-        display: 'flex', alignItems: 'center', gap: 6,
         background: 'var(--gb-surface-1)',
+        border: '1px solid var(--gb-border-default)',
+        borderRadius: 'var(--gb-r-md)',
+        overflow: 'hidden',
       }}>
-        <I.search size={11} style={{ color: 'var(--gb-text-muted)' }} />
-        <input
-          ref={searchRef}
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={onKey}
-          placeholder="Filter schema · ↓↑ ↵"
-          style={{
-            flex: 1,
-            height: 26,
-            background: 'transparent',
-            border: 'none',
-            outline: 'none',
-            fontSize: 12,
-            fontFamily: 'var(--gb-font-mono)',
-            color: 'var(--gb-text-primary)',
-          }}
-        />
-        <span style={{
-          fontSize: 9.5, color: 'var(--gb-text-muted)',
-          fontFamily: 'var(--gb-font-mono)',
-        }}>{rows.length}</span>
-      </div>
-      <div style={{ maxHeight: 320, overflow: 'auto', padding: '4px 6px 8px' }}>
-        {rows.length === 0 ? (
-          <div style={{
-            padding: 18, textAlign: 'center',
-            fontSize: 11, color: 'var(--gb-text-muted)',
-          }}>No fields match</div>
-        ) : rows.map((r, i) => (
-          <PathPickerRow
-            key={r.path}
-            node={r}
-            focused={i === focusedIdx}
-            expanded={expanded.has(r.path)}
-            isCurrent={r.path === currentPath}
-            onMouseEnter={() => setFocusedIdx(i)}
-            onClick={() => pickRow(r)}
-            onToggleExpand={() => toggleExpand(r.path)}
+        <div style={{
+          padding: '8px 10px',
+          borderBottom: '1px solid var(--gb-border-subtle)',
+          display: 'flex', alignItems: 'center', gap: 6,
+          background: 'var(--gb-surface-2)',
+        }}>
+          <I.search size={11} style={{ color: 'var(--gb-text-muted)' }} />
+          <input
+            ref={searchRef}
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={onKey}
+            placeholder="Filter schema · ↓↑ ↵"
+            style={{
+              flex: 1,
+              height: 24,
+              background: 'transparent',
+              border: 'none',
+              outline: 'none',
+              fontSize: 12,
+              fontFamily: 'var(--gb-font-mono)',
+              color: 'var(--gb-text-primary)',
+            }}
           />
-        ))}
+          <span style={{
+            fontSize: 9.5, color: 'var(--gb-text-muted)',
+            fontFamily: 'var(--gb-font-mono)',
+          }}>{rows.length}</span>
+        </div>
+        <div style={{ maxHeight: 280, overflow: 'auto', padding: '4px 6px 8px' }}>
+          {rows.length === 0 ? (
+            <div style={{
+              padding: 14, textAlign: 'center',
+              fontSize: 11, color: 'var(--gb-text-muted)',
+            }}>No fields match</div>
+          ) : rows.map((r, i) => (
+            <PathRow
+              key={r.path}
+              node={r}
+              focused={i === focusedIdx}
+              expanded={expanded.has(r.path)}
+              isCurrent={r.path === currentPath}
+              onMouseEnter={() => setFocusedIdx(i)}
+              onClick={() => pickRow(r)}
+              onToggleExpand={() => toggleExpand(r.path)}
+            />
+          ))}
+        </div>
       </div>
     </motion.div>
   );
-
-  return portal ? createPortal(popover, document.body) : popover;
 }
 
 function initialExpansion(currentPath) {
@@ -406,7 +298,7 @@ function filterAndProject(nodes, search, expanded) {
   });
 }
 
-function PathPickerRow({ node, focused, expanded, isCurrent, onClick, onMouseEnter, onToggleExpand }) {
+function PathRow({ node, focused, expanded, isCurrent, onClick, onMouseEnter, onToggleExpand }) {
   const indent = node.depth * 12;
   const leafLabel = node.path.split('.').slice(-1)[0].replace(/\[0\]/g, '');
   const showTag = !node.isFolder || node.type === 'array';
