@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { I } from '../icons.jsx';
 import { Tag } from './Tag.jsx';
+import { Dropdown } from './Dropdown.jsx';
+import { Input } from './Input.jsx';
 import { contactSchema } from '../../lib/page-schemas/contact.js';
 import { listPaths } from '../../lib/page-engine/resolve.js';
 
@@ -123,64 +125,51 @@ function rewriteArrayIndex(path, mode, index) {
   return path.replace(/\[-?\d+\]/, next);
 }
 
+const ARRAY_MODE_OPTIONS = [
+  { id: 'first', label: 'First' },
+  { id: 'last',  label: 'Last' },
+  { id: 'index', label: 'Index' },
+];
+
 function ArraySelectorRow({ arrayName, mode, index, onChange }) {
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', gap: 6,
+      display: 'flex', alignItems: 'center', gap: 8,
       marginTop: 6,
-      padding: '6px 8px',
+      padding: '8px 10px',
       background: 'var(--gb-surface-2)',
       border: '1px solid var(--gb-border-default)',
       borderRadius: 'var(--gb-r-sm)',
-      fontFamily: 'var(--gb-font-mono)',
-      fontSize: 10.5,
     }}>
-      <span style={{ color: 'var(--gb-text-muted)' }}>{arrayName}[]</span>
-      <span style={{ color: 'var(--gb-text-muted)' }}>·</span>
-      <select
-        value={mode}
-        onChange={(e) => onChange(e.target.value, index)}
-        style={{
-          height: 22,
-          padding: '0 6px',
-          background: 'var(--gb-fill-subtle)',
-          border: '1px solid var(--gb-border-default)',
-          borderRadius: 3,
-          color: 'var(--gb-text-primary)',
-          fontFamily: 'inherit',
-          fontSize: 10.5,
-          fontWeight: 600,
-          cursor: 'pointer',
-        }}
-      >
-        <option value="first">first</option>
-        <option value="last">last</option>
-        <option value="index">index</option>
-      </select>
-      {mode === 'index' && (
-        <input
-          type="number"
-          min={0}
-          value={index}
-          onChange={(e) => {
-            const v = parseInt(e.target.value, 10);
-            onChange('index', Number.isFinite(v) ? Math.max(0, v) : 0);
-          }}
-          style={{
-            width: 56,
-            height: 22,
-            padding: '0 6px',
-            background: 'var(--gb-fill-subtle)',
-            border: '1px solid var(--gb-border-default)',
-            borderRadius: 3,
-            color: 'var(--gb-text-primary)',
-            fontFamily: 'inherit',
-            fontSize: 10.5,
-            fontWeight: 600,
-            outline: 'none',
-            textAlign: 'right',
-          }}
+      <span style={{
+        fontFamily: 'var(--gb-font-mono)',
+        fontSize: 11,
+        color: 'var(--gb-text-muted)',
+        whiteSpace: 'nowrap',
+      }}>
+        {arrayName}[]
+      </span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Dropdown
+          size="sm"
+          value={mode}
+          options={ARRAY_MODE_OPTIONS}
+          onChange={(id) => onChange(id, index)}
         />
+      </div>
+      {mode === 'index' && (
+        <div style={{ width: 72 }}>
+          <Input
+            size="sm"
+            type="number"
+            min={0}
+            value={String(index)}
+            onChange={(e) => {
+              const v = parseInt(e.target.value, 10);
+              onChange('index', Number.isFinite(v) ? Math.max(0, v) : 0);
+            }}
+          />
+        </div>
       )}
     </div>
   );
