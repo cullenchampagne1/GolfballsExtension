@@ -191,7 +191,6 @@ export function CallLog({
             onFocus={() => ff.setActive(i)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); customise(tpl); return; }
-              if (e.key === 'Tab') return;
               ff.onRowKey(e, i, fireTemplate);
             }}
             onClick={() => fireTemplate(tpl)}
@@ -302,7 +301,7 @@ function CommandRow({ tpl, hotkey, isActive, flashing, rowRef, onFocus, onKeyDow
         <span role="button" tabIndex={-1} title="Customise · ⇧↵" onClick={(e) => { e.stopPropagation(); onCustomise(tpl); }}
           style={{ width: 24, height: 24, borderRadius: 'var(--gb-r-sm)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-tertiary)', cursor: 'pointer', opacity: lit ? 1 : 0, transform: lit ? 'none' : 'translateX(4px)', pointerEvents: lit ? 'auto' : 'none', transition: 'opacity .15s, transform .15s' }}><I.edit size={12} /></span>
         {tpl.callVoicemail && <Voicemail size={13} style={{ color: COMPOSER_TONE.warning.fg, flexShrink: 0 }} />}
-        {catLabel && <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: tone.bg, color: tone.fg, border: `1px solid ${tone.bd}`, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3, whiteSpace: 'nowrap', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>{catLabel}</span>}
+        {catLabel && <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: tone.bg, color: tone.fg, border: `1px solid ${tone.bd}`, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3, whiteSpace: 'nowrap', flexShrink: 0 }}>{catLabel}</span>}
       </span>
     </button>
   );

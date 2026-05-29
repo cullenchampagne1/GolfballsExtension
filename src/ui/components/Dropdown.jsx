@@ -111,7 +111,6 @@ export function Dropdown({
       const r = el.getBoundingClientRect();
       const z = readZoomChain();
       const s = readPopoverScale();
-      const top = (r.bottom + 4) / z;
       const left = r.left / z;
       /* Popover's rendered visual width = css_width × popover_scale ×
          body_zoom. r.width is already the trigger's visual width
@@ -125,8 +124,22 @@ export function Dropdown({
       // can lag a frame during the resize.
       const viewportH = document.documentElement.clientHeight || window.innerHeight;
       const ceiling = typeof maxHeight === 'number' ? maxHeight : 240;
-      const maxListHeight = Math.max(80, Math.min(ceiling, viewportH / z - top - 8));
-      setPos({ top, left, width, maxListHeight });
+      const vh = viewportH / z;
+      const belowTop = (r.bottom + 4) / z;      // menu top if opening downward
+      const roomBelow = vh - belowTop - 8;
+      const roomAbove = r.top / z - 4 - 8;       // room above the trigger
+      /* Flip the menu ABOVE the trigger when there isn't enough room
+         below for a usable list AND there's more room above — e.g. a
+         field pinned near the bottom of the settings page, where the
+         downward menu was getting clipped to a sliver. Anchored by its
+         bottom edge so it hugs the trigger regardless of content height. */
+      if (roomBelow < Math.min(ceiling, 160) && roomAbove > roomBelow) {
+        const maxListHeight = Math.max(80, Math.min(ceiling, roomAbove));
+        setPos({ placement: 'top', bottom: vh - r.top / z + 4, left, width, maxListHeight });
+      } else {
+        const maxListHeight = Math.max(80, Math.min(ceiling, roomBelow));
+        setPos({ placement: 'bottom', top: belowTop, left, width, maxListHeight });
+      }
     }
     update();
     const onScroll = (e) => {
@@ -326,13 +339,15 @@ export function Dropdown({
             ref={popoverRef}
             className="gb-dd-popover"
             data-gb-scale="popovers"
-            initial={{ opacity: 0, y: -4, scaleY: 0.95 }}
+            initial={{ opacity: 0, y: pos.placement === 'top' ? 4 : -4, scaleY: 0.95 }}
             animate={{ opacity: 1, y: 0, scaleY: 1 }}
-            exit={{ opacity: 0, y: -4, scaleY: 0.95, transition: T.base }}
+            exit={{ opacity: 0, y: pos.placement === 'top' ? 4 : -4, scaleY: 0.95, transition: T.base }}
             transition={T.bounce}
             style={{
-              position: 'fixed', top: pos.top, left: pos.left, width: pos.width,
-              transformOrigin: 'top', zIndex: 2147483400,
+              position: 'fixed',
+              ...(pos.placement === 'top' ? { bottom: pos.bottom } : { top: pos.top }),
+              left: pos.left, width: pos.width,
+              transformOrigin: pos.placement === 'top' ? 'bottom' : 'top', zIndex: 2147483400,
               background: 'var(--gb-surface-modal)',
               border: '1px solid var(--gb-border-default)',
               borderRadius: 'var(--gb-r-md)',
