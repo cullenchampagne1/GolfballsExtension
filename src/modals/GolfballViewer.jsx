@@ -828,14 +828,32 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
              DecalGeometry walks ballMesh.matrixWorld to transform the
              projector into mesh-local space; if matrixWorld is stale
              (Three.js only refreshes it during render), the projection
-             can collapse and produce an empty mesh. Symptom matches
-             "decal silently doesn't show" — happened after the ball-
-             rotation init order changed (group rotation is now set
-             before the first render). */
+             can collapse and produce an empty mesh. The previous fix
+             called updateMatrixWorld on ballGroup with force=true —
+             which SHOULD propagate to ballMesh — but the decal still
+             went invisible on 2026-05-29, so we belt-and-suspenders
+             the chain: explicit local-matrix rebuilds on each node
+             first (so updateMatrix sees the latest scale + position
+             before composing matrixWorld), then a recursive group
+             call, then a direct mesh call as a final guarantee.
+             Geometry's boundingBox is also recomputed since
+             DecalGeometry's early-out uses it for AABB rejection. */
+          ballMesh.updateMatrix();
+          ballGroup.updateMatrix();
           ballGroup.updateMatrixWorld(true);
+          ballMesh.updateMatrixWorld(true);
+          if (!ballMesh.geometry.boundingBox) ballMesh.geometry.computeBoundingBox();
           const decalGeo = new DecalGeometry(ballMesh, decalPosition, decalOrientation, decalSize);
           // eslint-disable-next-line no-console
           console.log('[gb-decal] decalGeo built, vertex count =', decalGeo.attributes?.position?.count, 'ballMesh matrixWorld[0..3] =', ballMesh.matrixWorld.elements.slice(0, 4));
+          /* Empty decal = projection silently failed (matrixWorld
+             still stale, or projection box missed every triangle).
+             Surface it to the host so the toast layer can flag it
+             instead of just rendering a no-op decal. */
+          if (!decalGeo.attributes?.position?.count) {
+            console.warn('[gb-decal] DecalGeometry produced 0 vertices — projection missed the mesh');
+            try { onError?.('Decal projection produced no geometry'); } catch { /* ignore */ }
+          }
           const decalMat = new THREE.MeshStandardMaterial({
             map: decalTexture,
             transparent: true,
