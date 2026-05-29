@@ -19,6 +19,7 @@ import { CallLog } from '../modals/CallLog.jsx';
 import { submitCallLog } from '../lib/submitCallLog.js';
 import { QuickTask } from '../modals/QuickTask.jsx';
 import { submitQuickTask } from '../lib/submitQuickTask.js';
+import { EmailPreview } from '../modals/EmailPreview.jsx';
 import { ActionsShelf } from '../ui/components/ActionsShelf.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { findPhone } from '../lib/findPhone.js';
@@ -45,7 +46,7 @@ const MODAL_REGISTRY = [
   { id: 'charge',       label: 'Charge',          icon: 'card',    wired: false },
   { id: 'orderEdit',    label: 'Order Edit',      icon: 'edit',    wired: false },
   { id: 'watchList',    label: 'Watch List',      icon: 'eye',     wired: true  },
-  { id: 'emailPreview', label: 'Email Preview',   icon: 'mail',    wired: false },
+  { id: 'emailPreview', label: 'Email Preview',   icon: 'mail',    wired: true  },
   { id: 'imageViewer',  label: 'Image Viewer',    icon: 'eye',     wired: true  },
   { id: 'submitProof',  label: 'Submit Proof',    icon: 'send',    wired: true  },
   { id: 'crmSearch',    label: 'CRM Search',      icon: 'search',  wired: true  },
@@ -55,6 +56,93 @@ const MODAL_REGISTRY = [
   { id: 'callLog',      label: 'Call Log',        icon: 'phone',   wired: true  },
   { id: 'quickTask',    label: 'Quick Task',      icon: 'check',   wired: true  },
   { id: 'calendar',     label: 'Calendar',        icon: 'cog',     wired: false },
+];
+
+/* ── Email Preview fixtures ───────────────────────────────────
+   Two hand-crafted `email` records (the shape parseEml emits:
+   { subject, from, to, date, bodyHtml }) so the EmailPreview thread
+   builder + categorize rail can be exercised without a CRM page:
+
+     single  — one inbound customer message, no quoted history.
+     thread  — a reply chain in Outlook's quoted-reply format
+               (divRplyFwdMsg + a bold From/Sent/To/Subject header
+               block) so splitThreadHtml() cuts it into 3 cards.
+
+   The header blocks deliberately mirror real Outlook markup — bold
+   labels closed by a </p> before each quoted body — which is exactly
+   what findQuoteBoundaries / stripHeaderBlock anchor on. */
+const EMAIL_SINGLE_HTML = `
+  <div style="font-family:Calibri,'Segoe UI',sans-serif;font-size:11pt;color:#1f1f1f;">
+    <p>Hi Bob,</p>
+    <p>Quick question on the custom logo Pro V1s — can we still hit the
+       tournament date if we approve the proof this week? Also curious about
+       volume pricing past 50 dozen.</p>
+    <p>Thanks,<br>Alice</p>
+  </div>`;
+
+const EMAIL_THREAD_HTML = `
+  <div style="font-family:Calibri,'Segoe UI',sans-serif;font-size:11pt;color:#1f1f1f;">
+    <p>Hi Alice — the proof looks great, we'll get these into production and
+       ship Friday so you're well ahead of the tournament. Volume pricing
+       past 50 dozen is 8% off; I'll attach the sheet.</p>
+    <p>Best,<br>Bob</p>
+  </div>
+  <div id="divRplyFwdMsg">
+    <hr style="border:none;border-top:1px solid #ccc;">
+    <p style="margin:0"><b>From:</b> Alice Carter &lt;alice.carter@acmegolf.com&gt;<br>
+       <b>Sent:</b> Monday, May 25, 2026 9:14 AM<br>
+       <b>To:</b> Bob Lee &lt;bob.lee@golfballs.com&gt;<br>
+       <b>Subject:</b> RE: Custom logo golf balls — proof?</p>
+    <p>Hi Bob, any update on the logo proof? Hoping to approve today so we
+       stay on schedule for the member-guest.</p>
+  </div>
+  <div id="divRplyFwdMsg">
+    <hr style="border:none;border-top:1px solid #ccc;">
+    <p style="margin:0"><b>From:</b> Bob Lee &lt;bob.lee@golfballs.com&gt;<br>
+       <b>Sent:</b> Friday, May 22, 2026 4:02 PM<br>
+       <b>To:</b> Alice Carter &lt;alice.carter@acmegolf.com&gt;<br>
+       <b>Subject:</b> Custom logo golf balls — proof?</p>
+    <p>Hi Alice, attached is the first proof for your logo on Pro V1s. Let me
+       know if the placement looks right and we'll lock it in.</p>
+  </div>`;
+
+const EMAIL_FIXTURES = {
+  single: {
+    email: {
+      subject: 'Custom logo golf balls — quick question',
+      from: 'Alice Carter <alice.carter@acmegolf.com>',
+      to: 'Bob Lee <bob.lee@golfballs.com>',
+      date: 'Mon, 25 May 2026 09:14:00 -0700',
+      bodyHtml: EMAIL_SINGLE_HTML,
+    },
+    meta: {
+      from: 'Alice Carter <alice.carter@acmegolf.com>',
+      to: 'Bob Lee <bob.lee@golfballs.com>',
+      subject: 'Custom logo golf balls — quick question',
+      date: 'Mon, 25 May 2026 09:14:00 -0700',
+    },
+  },
+  thread: {
+    email: {
+      subject: 'RE: Custom logo golf balls — proof?',
+      from: 'Bob Lee <bob.lee@golfballs.com>',
+      to: 'Alice Carter <alice.carter@acmegolf.com>',
+      date: 'Tue, 26 May 2026 08:30:00 -0700',
+      bodyHtml: EMAIL_THREAD_HTML,
+    },
+    meta: {
+      from: 'Bob Lee <bob.lee@golfballs.com>',
+      to: 'Alice Carter <alice.carter@acmegolf.com>',
+      subject: 'RE: Custom logo golf balls — proof?',
+      date: 'Tue, 26 May 2026 08:30:00 -0700',
+    },
+  },
+};
+
+/* Sample recommendations for the case-mode categorize rail. */
+const EMAIL_RECOMMENDED = [
+  { category: 'Sales', subcategory: 'Quote', label: 'Sales · Quote' },
+  { category: 'Art', subcategory: 'Proof', label: 'Art · Proof' },
 ];
 
 /* Playground seed for the Watch List / Task List modal. Writes a
@@ -329,6 +417,10 @@ function PlaygroundSurface() {
   // the playground; submitQuickTask will refuse for lack of contactId/
   // employeeId, which is the desired sandbox behavior.
   const [taskContext, setTaskContext] = useState(null);
+  /* Email Preview debug controls — which fixture (single vs multi-
+     thread) and whether to open in case mode (categorize rail on). */
+  const [emailVariant, setEmailVariant] = useState('thread');
+  const [emailCase, setEmailCase] = useState(true);
   const notify = useSettingNotification();
   const toast = useToast();
 
@@ -807,6 +899,24 @@ function PlaygroundSurface() {
             onClosed={() => { setMounted(null); setCallContext(null); }}
           />
         )}
+        {mounted === 'emailPreview' && (
+          /* Keyed on variant + mode so flipping either control in the
+             Email Preview pane remounts the modal with the new fixture.
+             The modal's own header Case/Inbox toggle still works for
+             live flips once open. */
+          <EmailPreview
+            key={`email-${emailVariant}-${emailCase}`}
+            email={EMAIL_FIXTURES[emailVariant].email}
+            meta={EMAIL_FIXTURES[emailVariant].meta}
+            loading={false}
+            defaultCase={emailCase}
+            recommended={EMAIL_RECOMMENDED}
+            onApplyCategory={(category, subcategory) => toast?.success?.(`Applied ${category} · ${subcategory}`, { duration: 1800 })}
+            onJunk={() => toast?.info?.('Marked as junk')}
+            applyState={null}
+            onClosed={() => setMounted(null)}
+          />
+        )}
       </AnimatePresence>
     </div>
     {/* /scaled wrapper */}
@@ -838,6 +948,42 @@ function PlaygroundSurface() {
         })}
       </div>
     </DraggablePanel>
+
+    {/* ── Email Preview debug pane — only while that modal is open ── */}
+    {mounted === 'emailPreview' && (
+      <DraggablePanel title="Email Preview" width={216} initial={{ top: 14, left: 230 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8, color: 'var(--gb-text-muted)' }}>Content</div>
+            <Segmented
+              size="sm"
+              value={emailVariant}
+              onChange={setEmailVariant}
+              options={[
+                { id: 'single', label: 'Single' },
+                { id: 'thread', label: 'Thread' },
+              ]}
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8, color: 'var(--gb-text-muted)' }}>View</div>
+            <Segmented
+              size="sm"
+              value={emailCase ? 'case' : 'inbox'}
+              onChange={(v) => setEmailCase(v === 'case')}
+              options={[
+                { id: 'inbox', label: 'Normal' },
+                { id: 'case', label: 'Case' },
+              ]}
+            />
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', lineHeight: 1.4 }}>
+            Switching remounts the modal with that fixture. The modal's header
+            toggle also flips Case/Normal live.
+          </div>
+        </div>
+      </DraggablePanel>
+    )}
 
     {/* ── Notifications pane (top-right default) ── */}
     <DraggablePanel title="Notifications" width={220} initial={{ top: 14, right: 14 }}>
