@@ -480,16 +480,15 @@ function Shell({ children, onManage, templateCount, minHeight = 340 }) {
       <div style={{
         flex: 1,
         padding: '14px 14px 14px',
-        /* overflowY: 'auto' so the body can scroll when the
-           TemplatePicker expands variations and the total stack
-           (picker + button stack + Send) exceeds the popup's
-           viewport height. The previous overflow: hidden clipped
-           the picker's bottom rows because Chrome's popup hits a
-           ~600px ceiling — switching to auto keeps every row
-           reachable without the picker having to fight a tight
-           inner max-height. */
-        overflowY: 'auto',
-        overflowX: 'hidden',
+        /* Body stays overflow:hidden so MainView's `flex:1,
+           minHeight:0` wrapper can use `margin-top:auto` to pin
+           Send to the bottom without the resolved-info + Send
+           rows getting squashed by `flex-shrink` competition
+           inside a scrollable body. The picker handles its own
+           overflow via the `listMaxHeight` prop — its option
+           list scrolls internally when variations expand past
+           the cap, leaving the surrounding stack stable. */
+        overflow: 'hidden',
         display: 'flex', flexDirection: 'column',
       }}>
         {children}
