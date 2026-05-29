@@ -145,6 +145,40 @@ function isDoneToday(task, nowMs) {
   return (nowMs - task.doneAt) < 24 * 3600 * 1000;
 }
 
+/* Scrape the host page for a contact / account id + name and
+   return a context object suitable for seeding a new watch item.
+   Returns null on any other page so the rep can still pick a type
+   manually. Mirrors what smart-detection.js does at the vanilla
+   layer but stays self-contained so the React modal isn't bound
+   to a script load order. */
+function inferContextFromPage() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return null;
+  const href = window.location.href || '';
+  const text = (id) => {
+    const el = document.getElementById(id);
+    if (!el) return '';
+    /* Span labels render as textContent; matching input fields
+       expose .value. Try both so this covers display-mode and
+       edit-mode page variants. */
+    return ((el.value || el.textContent || '').trim()) || '';
+  };
+  const contactM = href.match(/[?&]customerID=(\d+)/i);
+  if (contactM) {
+    const first = text('lblContactFirstName') || text('tbContactFirstName');
+    const last  = text('lblContactLastName')  || text('tbContactLastName');
+    const name  = [first, last].filter(Boolean).join(' ').trim();
+    return { type: 'contact', id: contactM[1], name };
+  }
+  const accountM = href.match(/[?&]accountID=(\d+)/i);
+  if (accountM) {
+    /* Account display page uses the bare 'Name' input. Fall back
+       to the company-name label that contact pages also expose. */
+    const name = text('Name') || text('lblContactCompanyName') || '';
+    return { type: 'account', id: accountM[1], name };
+  }
+  return null;
+}
+
 /* ── Public component ────────────────────────────────────────── */
 export function WatchList({ onClosed, bindClose }) {
   const toast = useToast();
@@ -264,7 +298,11 @@ export function WatchList({ onClosed, bindClose }) {
 
   const startNew = () => {
     setEditingId('__new');
-    setDraft({ title: '', due: '', priority: 'med', context: null });
+    /* Pre-fill linked context when the rep is already standing on a
+       contact or account page — saves them typing the id and name
+       they can see right above the popup. Falls back to standalone
+       (context: null) on any other page. */
+    setDraft({ title: '', due: '', priority: 'med', context: inferContextFromPage() });
   };
   const startEdit = (task) => {
     setEditingId(task.id);
