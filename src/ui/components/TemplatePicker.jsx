@@ -116,13 +116,19 @@ export function TemplatePicker({
      1" at the top of the sub-list; picking it pins the parent
      body without falling back to random. */
   const isOriginalPinned = valueVarId === ORIGINAL_VARIATION_ID;
-  const selectedVar = selectedTpl && valueVarId && !isOriginalPinned
-    ? (selectedTpl.variations || []).find((v) => v.id === valueVarId) || null
+  const selectedVarIdx = selectedTpl && valueVarId && !isOriginalPinned
+    ? (selectedTpl.variations || []).findIndex((v) => v.id === valueVarId)
+    : -1;
+  const selectedVar = selectedVarIdx >= 0
+    ? selectedTpl.variations[selectedVarIdx]
     : null;
+  /* Always positional — saved labels can collide with "Variation
+     1" (the synthetic original), so the displayed name comes from
+     the row's slot in the unified pool. */
   const pinnedDisplayName = isOriginalPinned
     ? 'Variation 1'
     : selectedVar
-      ? (selectedVar.label || selectedVar.name || 'variation')
+      ? `Variation ${selectedVarIdx + 2}`
       : null;
 
   const toggleExpand = (id, e) => {
@@ -491,12 +497,12 @@ function Row({
                 );
               }
               const idx = tpl.variations.findIndex((x) => x.id === pinnedVarId);
-              const v = idx >= 0 ? tpl.variations[idx] : null;
-              return v ? (
+              return idx >= 0 ? (
                 <>
                   {' · '}
+                  {/* Positional name — matches the sub-list. */}
                   <span style={{ color: 'var(--gb-info-fg)' }}>
-                    {v.label || v.name || `Variation ${idx + 2}`}
+                    Variation {idx + 2}
                   </span>
                 </>
               ) : null;
@@ -560,11 +566,13 @@ function Row({
             {tpl.variations.map((v, vi) => (
               <SubRow
                 key={v.id}
-                /* Saved variations renumber from 2 because the
-                   original took Variation 1's slot. Custom labels
-                   still win — only the auto-numbered fallback
-                   shifts. */
-                label={v.label || v.name || `Variation ${vi + 2}`}
+                /* Saved variations always renumber positionally
+                   from 2 — the original took Variation 1. We
+                   intentionally ignore v.label / v.name here
+                   because legacy templates can carry stored
+                   labels like "Variation 1" that would collide
+                   with the synthetic Variation 1 row above. */
+                label={`Variation ${vi + 2}`}
                 meta={v.preview || ''}
                 isPicked={pinnedVarId === v.id}
                 onPick={() => onPickVariation(v.id)}
