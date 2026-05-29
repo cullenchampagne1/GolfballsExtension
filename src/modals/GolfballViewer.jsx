@@ -764,16 +764,31 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         );
         ballMesh.castShadow = true;
         ballMesh.receiveShadow = false;
-        // The OBJ ships at an arbitrary size; rescale so its bounding-
-        // box diameter is ~100 units (matches our camera framing).
+        // The OBJ ships at an arbitrary size; fit it so its bounding
+        // sphere is ~100 units radius (matches the camera framing).
+        //
+        // CRITICAL: bake the fit (center + scale) INTO the geometry
+        // and leave ballMesh's OWN transform at identity. DecalGeometry
+        // emits its vertices in WORLD space using ballMesh.matrixWorld;
+        // the decal is then copied onto a sibling mesh that mirrors
+        // ballMesh's transform. That round-trips to the right place
+        // ONLY when ballMesh's transform is identity (or ~unit scale).
+        // The working build relied on the OLD OBJ shipping at ~radius
+        // 60 so ballMesh.scale landed near 1. The 2026-05 asset swap to
+        // a ~0.01-radius model pushed ballMesh.scale to ~10000, which
+        // multiplied the decal's world-space verts by 10000 and flung
+        // the print ~1,000,000 units off-screen ("icon no longer
+        // printing"). Baking the fit into the geometry makes the decal
+        // path scale-independent — ballMesh.scale stays 1 forever.
         ballMesh.geometry.computeBoundingSphere();
         const bsphere = ballMesh.geometry.boundingSphere;
         const targetRadius = 100;
-        const scale = targetRadius / bsphere.radius;
-        ballMesh.scale.setScalar(scale);
-        // Recenter the geometry on the origin so OrbitControls rotates
-        // around the ball's middle, not its model-space center.
-        ballMesh.position.set(-bsphere.center.x * scale, -bsphere.center.y * scale, -bsphere.center.z * scale);
+        const fit = targetRadius / bsphere.radius;
+        ballMesh.geometry.translate(-bsphere.center.x, -bsphere.center.y, -bsphere.center.z);
+        ballMesh.geometry.scale(fit, fit, fit);
+        ballMesh.geometry.computeBoundingSphere();
+        ballMesh.geometry.computeBoundingBox();
+        // ballMesh.scale stays (1,1,1) and position (0,0,0).
         // Wrap ball+decal in a Group so throw-mode translates and
         // rotates the whole assembly together. The mesh's recentering
         // offset lives INSIDE the group so the group's origin is the
@@ -827,53 +842,16 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           /* Force matrixWorld up-to-date BEFORE DecalGeometry projects.
              DecalGeometry walks ballMesh.matrixWorld to transform the
              projector into mesh-local space; if matrixWorld is stale
-             (Three.js only refreshes it during render), the projection
-             can collapse and produce an empty mesh. The previous fix
-             called updateMatrixWorld on ballGroup with force=true —
-             which SHOULD propagate to ballMesh — but the decal still
-             went invisible on 2026-05-29, so we belt-and-suspenders
-             the chain: explicit local-matrix rebuilds on each node
-             first (so updateMatrix sees the latest scale + position
-             before composing matrixWorld), then a recursive group
-             call, then a direct mesh call as a final guarantee.
-             Geometry's boundingBox is also recomputed since
-             DecalGeometry's early-out uses it for AABB rejection. */
-          ballMesh.updateMatrix();
-          ballGroup.updateMatrix();
+             (Three.js only refreshes it during render) the projection
+             collapses to an empty mesh. ballMesh's transform is now
+             identity (the fit is baked into the geometry above), so
+             matrixWorld == ballGroup.matrixWorld here. */
           ballGroup.updateMatrixWorld(true);
-          ballMesh.updateMatrixWorld(true);
-          if (!ballMesh.geometry.boundingBox) ballMesh.geometry.computeBoundingBox();
           const decalGeo = new DecalGeometry(ballMesh, decalPosition, decalOrientation, decalSize);
-          // eslint-disable-next-line no-console
-          console.log('[gb-decal] decalGeo built, vertex count =', decalGeo.attributes?.position?.count, 'ballMesh matrixWorld[0..3] =', ballMesh.matrixWorld.elements.slice(0, 4));
-          /* Empty decal = projection silently failed (matrixWorld
-             still stale, or projection box missed every triangle).
-             Surface it to the host so the toast layer can flag it
-             instead of just rendering a no-op decal. */
           if (!decalGeo.attributes?.position?.count) {
             console.warn('[gb-decal] DecalGeometry produced 0 vertices — projection missed the mesh');
             try { onError?.('Decal projection produced no geometry'); } catch { /* ignore */ }
           }
-          /* THREE's DecalGeometry emits vertices in WORLD space (see
-             three/examples/jsm/geometries/DecalGeometry.js — the
-             final pass calls `applyMatrix4( projectorMatrix )` to
-             transform projector-local back to world). The old code
-             then put decalMesh under ballGroup AND copied
-             ballMesh.position + ballMesh.scale onto it — which
-             multiplied those world-space vertices a second time
-             through ballMesh's scale (~10000× under the current
-             0.01-radius OBJ), pushing the decal ~1,000,000 units
-             from the origin. Invisible. The earlier matrixWorld
-             fix did its job (8808 vertices, as the console
-             confirms); the regression was in how we PARENT and
-             TRANSFORM the resulting mesh.
-             Fix: bake ballGroup.matrixWorld⁻¹ into the geometry so
-             its vertices become ballGroup-local. Then decalMesh
-             can sit under ballGroup with identity transform and
-             still follow throw-mode + zoom because ballGroup's
-             matrixWorld is applied to it during render. */
-          const ballGroupInv = ballGroup.matrixWorld.clone().invert();
-          decalGeo.applyMatrix4(ballGroupInv);
           const decalMat = new THREE.MeshStandardMaterial({
             map: decalTexture,
             transparent: true,
@@ -885,16 +863,18 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             metalness: 0,
           });
           decalMesh = new THREE.Mesh(decalGeo, decalMat);
-          /* Identity transform. The geometry's vertices are already
-             in ballGroup-local coords (we baked the inverse above),
-             so ballGroup.matrixWorld during render places them
-             correctly. Position/scale stay at default (0, 0, 0) /
-             (1, 1, 1). Added under ballGroup so throw-mode
-             translation/rotation moves the decal with the ball. */
+          /* Mirror ballMesh's transform (now identity, since the fit
+             is baked into the geometry) and parent under ballGroup so
+             throw-mode translation/rotation + zoom move the decal with
+             the ball. DecalGeometry emitted world-space verts against
+             ballMesh.matrixWorld == ballGroup.matrixWorld; at the
+             default identity group transform those verts already sit
+             on the visible ball, so the identity copy renders them in
+             place. */
+          decalMesh.position.copy(ballMesh.position);
+          decalMesh.scale.copy(ballMesh.scale);
           /* Render after the ball so depth+polygonOffset are honored
-             in the correct order. Without this, scene order isn't
-             guaranteed and the decal occasionally lost the depth
-             tiebreak when the lighting overhaul changed sort hints. */
+             in the correct order. */
           decalMesh.renderOrder = 1;
           ballGroup.add(decalMesh);
           objectsToDispose.push(decalGeo, decalMat);
