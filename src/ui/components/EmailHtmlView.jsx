@@ -37,7 +37,8 @@ const WHITE_BG = /^(#ffffff|#fff|white|rgb\(\s*255\s*,\s*255\s*,\s*255\s*\)|rgba
 const NEAR_WHITE = /^#(f[0-9a-f]|e[0-9a-f])[0-9a-f]{4}$/i;
 const DARK_TXT = /^(#000000|#000|#111111|#111|#222222|#222|#333333|#333|black|rgb\(\s*0\s*,\s*0\s*,\s*0\s*\)|rgba\(\s*0\s*,\s*0\s*,\s*0\s*,?\s*1?\s*\))$/i;
 
-const LIGHT_TEXT = '#eceef2';
+const LIGHT_TEXT = '#eceef2';   // unified light text (dark theme)
+const DARK_TEXT  = '#1a1c1f';   // unified dark text  (light theme)
 
 function isLightBg(v) {
   if (!v) return false;
@@ -62,58 +63,79 @@ function parseColor(v) {
   return null;
 }
 
-/* A grayscale text color (low chroma) gets unified to the standard
-   light text so every shade of gray an email throws at us reads the
-   same on the dark surface — both the dark grays (footers, black
-   body text) AND the muted light grays (e.g. a job-title line) that
-   otherwise look washed-out and inconsistent next to the body. Only
-   already-near-white text is left as-is (it's already legible), and
-   saturated colors (high chroma — links, brand marks, warnings) keep
-   their hue. */
-function needsLighten(v) {
-  const c = parseColor(v);
-  if (!c) return false;
-  const lum = (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255; // 0..1
-  const chroma = Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b);
-  return chroma <= 40 && lum < 0.82;
+function lumChroma(c) {
+  return {
+    lum: (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255, // 0..1
+    chroma: Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b),
+  };
 }
 
-/* THEME-AWARE text fix. Emails are authored for a white background
-   with dark text. On a DARK theme that dark text would be invisible,
-   so we lighten the dark/gray runs. On a LIGHT theme the surface is
-   already light, so the email's dark text is correct as-authored —
-   lightening it (the previous behavior) turned it near-white and it
-   vanished. So we only rewrite text colors when the pane is dark. */
+/* WHITE-SHADE TEXT ENGINE. Emails hard-code text colors for a white
+   canvas. Saturated/brand colors (links, warnings) are kept, but the
+   grayscale runs are remapped so they stay legible on the active theme:
+     • DARK theme  — dark / near-black / gray text → light (else it
+                     vanishes on the dark surface).
+     • LIGHT theme — near-white / very-light gray text → dark (else it
+                     vanishes on the light surface).
+   Mid-tone grays are left alone (legible either way). Returns the
+   replacement color, or null to leave the original untouched. */
+function remapTextColor(v, isDark) {
+  const c = parseColor(v);
+  if (!c) return null;
+  const { lum, chroma } = lumChroma(c);
+  if (chroma > 40) return null;                       // saturated hue — keep it
+  if (isDark) return lum < 0.82 ? LIGHT_TEXT : null;  // darkish → lighten
+  return lum > 0.62 ? DARK_TEXT : null;               // whitish → darken
+}
+
+/* Normalise the email body for the active theme. White / near-white
+   backgrounds blend into the pane (→ transparent shows the current
+   surface through); grayscale text is remapped by the white-shade
+   engine above (both themes). Saturated colors + images are untouched. */
 function normaliseEmailDom(container, isDark) {
-  let seen = 0; let changed = 0;
+  const fix = (v) => remapTextColor(v, isDark);
   container.querySelectorAll('*').forEach((el) => {
-    /* White / near-white backgrounds → transparent so the email blends
-       into the pane's own surface (works in both themes — the host
-       surface shows through). */
     const bgAttr = el.getAttribute && el.getAttribute('bgcolor');
     if (bgAttr && isLightBg(bgAttr)) el.setAttribute('bgcolor', 'transparent');
 
     if (el.style) {
       if (isLightBg(el.style.backgroundColor)) el.style.backgroundColor = 'transparent';
       if (isLightBg(el.style.background)) el.style.background = 'transparent';
-      if (isDark && el.style.color) { seen += 1; if (needsLighten(el.style.color)) { el.style.color = LIGHT_TEXT; changed += 1; } }
+      if (el.style.color) { const next = fix(el.style.color); if (next) el.style.color = next; }
     }
 
     const colorAttr = el.getAttribute && el.getAttribute('color');
-    if (isDark && colorAttr) { seen += 1; if (needsLighten(colorAttr)) { el.setAttribute('color', LIGHT_TEXT); changed += 1; } }
+    if (colorAttr) { const next = fix(colorAttr); if (next) el.setAttribute('color', next); }
   });
-  if (isDark) {
-    /* Outlook sets body color via <style> class rules (p.MsoNormal
-       { color:#242424 }) the per-element walk never sees — rewrite
-       grayish colors there too. */
-    container.querySelectorAll('style').forEach((s) => {
-      const css = s.textContent || '';
-      const next = css.replace(/color\s*:\s*([^;}!]+)/gi, (m, val) =>
-        (needsLighten(val) ? `color: ${LIGHT_TEXT}` : m));
-      if (next !== css) { s.textContent = next; changed += 1; }
+
+  /* Outlook sets body color via <style> class rules (p.MsoNormal
+     { color:#242424 }) the per-element walk never sees — remap those
+     too. The leading boundary keeps us from matching `background-color`. */
+  container.querySelectorAll('style').forEach((s) => {
+    const css = s.textContent || '';
+    const next = css.replace(/(^|[;{\s])(color\s*:\s*)([^;}!]+)/gi, (m, pre, prop, val) => {
+      const r = fix(val.trim());
+      return r ? `${pre}${prop}${r}` : m;
     });
+    if (next !== css) s.textContent = next;
+  });
+}
+
+/* Does the email's own HTML already inset its content? Marketing /
+   templated emails wrap in a padded table layout with their own
+   gutters; plain Outlook div/p replies have none. Used to decide
+   whether to add our own side padding (so we never double it up). */
+function emailProvidesSidePadding(content) {
+  const kids = Array.from(content.children).filter((n) => n.nodeType === 1);
+  for (const k of kids) {
+    if (k.tagName === 'TABLE') return true;
+    try {
+      const cs = getComputedStyle(k);
+      if ((parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.marginLeft) || 0) >= 12) return true;
+    } catch { /* ignore */ }
+    if (k.querySelector && k.querySelector('table')) return true;
   }
-  void seen; void changed;
+  return false;
 }
 
 /* Is the extension theme dark? Decide from the resolved
@@ -145,14 +167,14 @@ export function EmailHtmlView({ html, style }) {
         :host {
           display: block;
           color-scheme: ${isDark ? 'dark' : 'light'};
-          padding: 18px 28px;
+          padding: 16px 0;
           background: var(--gb-surface-1, ${isDark ? '#1e2024' : '#ffffff'});
           color: var(--gb-text-primary, ${isDark ? '#e8eaed' : '#1a1a1a'});
           font-family: Calibri, 'Segoe UI', Arial, sans-serif;
           font-size: 13px;
           line-height: 1.6;
         }
-        #gb-email-content { max-width: 100%; }
+        #gb-email-content { max-width: 100%; box-sizing: border-box; }
         #gb-email-content * { max-width: 100%; box-sizing: border-box; }
         #gb-email-content a { color: var(--gb-brand-label, #8fce2e); }
         #gb-email-content img { height: auto; }
@@ -161,7 +183,16 @@ export function EmailHtmlView({ html, style }) {
       <div id="gb-email-content">${html || ''}</div>
     `;
     const content = shadow.querySelector('#gb-email-content');
-    if (content) normaliseEmailDom(content, isDark);
+    if (content) {
+      normaliseEmailDom(content, isDark);
+      /* Add our own side gutter only when the email's HTML doesn't
+         already inset its content — keeps padded marketing templates
+         from getting a double gutter while plain replies still breathe. */
+      if (!emailProvidesSidePadding(content)) {
+        content.style.paddingLeft = '26px';
+        content.style.paddingRight = '26px';
+      }
+    }
   }, [html]);
 
   return (

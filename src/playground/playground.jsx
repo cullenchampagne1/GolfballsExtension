@@ -442,10 +442,6 @@ function PlaygroundSurface() {
   // the playground; submitQuickTask will refuse for lack of contactId/
   // employeeId, which is the desired sandbox behavior.
   const [taskContext, setTaskContext] = useState(null);
-  /* Email Preview debug controls — which fixture (single vs multi-
-     thread) and whether to open in case mode (categorize rail on). */
-  const [emailVariant, setEmailVariant] = useState('thread');
-  const [emailCase, setEmailCase] = useState(true);
   const notify = useSettingNotification();
   const toast = useToast();
 
@@ -925,21 +921,19 @@ function PlaygroundSurface() {
           />
         )}
         {mounted === 'emailPreview' && (
-          /* Keyed on variant + mode so flipping either control in the
-             Email Preview pane remounts the modal with the new fixture.
-             The modal's own header Case/Inbox toggle still works for
-             live flips once open. */
+          /* Opens on the multi-thread fixture in case mode — the richest
+             debug state. Flip to inbox via the modal's own header toggle. */
           <EmailPreview
-            key={`email-${emailVariant}-${emailCase}`}
-            email={EMAIL_FIXTURES[emailVariant].email}
-            meta={EMAIL_FIXTURES[emailVariant].meta}
+            key="emailPreview"
+            email={EMAIL_FIXTURES.thread.email}
+            meta={EMAIL_FIXTURES.thread.meta}
             loading={false}
-            defaultCase={emailCase}
+            defaultCase
             recommended={EMAIL_RECOMMENDED}
             caseTemplates={EMAIL_CASE_TEMPLATES.filter((t) => matchesCaseTpl(t, {
-              from: EMAIL_FIXTURES[emailVariant].email.from,
-              subject: EMAIL_FIXTURES[emailVariant].email.subject,
-              body: (EMAIL_FIXTURES[emailVariant].email.bodyHtml || '').replace(/<[^>]+>/g, ' '),
+              from: EMAIL_FIXTURES.thread.email.from,
+              subject: EMAIL_FIXTURES.thread.email.subject,
+              body: (EMAIL_FIXTURES.thread.email.bodyHtml || '').replace(/<[^>]+>/g, ' '),
             }))}
             onSendTemplate={(tpl) => toast?.info?.(`Send "${tpl.name}" (playground — no transport)`, { duration: 2500 })}
             onApplyCategory={(category, subcategory) => toast?.success?.(`Applied ${category} · ${subcategory}`, { duration: 1800 })}
@@ -979,42 +973,6 @@ function PlaygroundSurface() {
         })}
       </div>
     </DraggablePanel>
-
-    {/* ── Email Preview debug pane — only while that modal is open ── */}
-    {mounted === 'emailPreview' && (
-      <DraggablePanel title="Email Preview" width={216} initial={{ top: 14, left: 230 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8, color: 'var(--gb-text-muted)' }}>Content</div>
-            <Segmented
-              size="sm"
-              value={emailVariant}
-              onChange={setEmailVariant}
-              options={[
-                { id: 'single', label: 'Single' },
-                { id: 'thread', label: 'Thread' },
-              ]}
-            />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8, color: 'var(--gb-text-muted)' }}>View</div>
-            <Segmented
-              size="sm"
-              value={emailCase ? 'case' : 'inbox'}
-              onChange={(v) => setEmailCase(v === 'case')}
-              options={[
-                { id: 'inbox', label: 'Normal' },
-                { id: 'case', label: 'Case' },
-              ]}
-            />
-          </div>
-          <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', lineHeight: 1.4 }}>
-            Switching remounts the modal with that fixture. The modal's header
-            toggle also flips Case/Normal live.
-          </div>
-        </div>
-      </DraggablePanel>
-    )}
 
     {/* ── Notifications pane (top-right default) ── */}
     <DraggablePanel title="Notifications" width={220} initial={{ top: 14, right: 14 }}>
