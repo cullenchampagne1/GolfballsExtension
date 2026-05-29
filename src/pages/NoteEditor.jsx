@@ -292,21 +292,6 @@ function TaskPanel({ data, set }) {
           />
         </Field>
       </div>
-
-      {/* Priority preview row — same dashed card from the design. */}
-      <Card padding={10} style={{ background: 'var(--gb-fill-subtle)', borderStyle: 'dashed' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 11 }}>
-          <span style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8, color: 'var(--gb-text-muted)' }}>
-            Preview
-          </span>
-          <Dot tone={priorityTone} glow />
-          <span style={{ color: 'var(--gb-text-tertiary)' }}>{priorityLabel}</span>
-          <NIcons.clock size={11} style={{ color: 'var(--gb-text-muted)', marginLeft: 6 }} />
-          <span style={{ color: 'var(--gb-text-tertiary)' }}>
-            Due {data.daysOut ? `in ${data.daysOut}d` : 'today'}
-          </span>
-        </div>
-      </Card>
     </>
   );
 }

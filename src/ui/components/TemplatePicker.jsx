@@ -99,6 +99,17 @@ export function TemplatePicker({
      restoring a previously-pinned variation so the rep sees the
      active sub-row without expanding again. */
   forceExpandId = null,
+  /* Layout mode for the open list:
+       true  (default, popup) — absolute-positioned overlay that
+             floats above the surrounding controls. Right call when
+             the container is tall (or scrolls cleanly) but wrong
+             when the picker lives inside a short scrolling panel,
+             because the overlay either gets clipped by the panel's
+             overflow or floats out past it.
+       false (EmailRunner) — inline expansion that pushes siblings
+             down via a height tween. The previous behaviour; safe
+             inside any height-constrained popup. */
+  floating = true,
 }) {
   const [open, setOpen] = useState(initialOpen);
   useEffect(() => { setOpen(initialOpen); }, [initialOpen]);
@@ -277,16 +288,18 @@ export function TemplatePicker({
         <SwapChip open={open} />
       </button>
 
-      {/* Absolute-positioned overlay so the list floats over the
-          surrounding action buttons / Send instead of pushing them
-          down. AnimatePresence handles the open/close fade + slide
-          (which is why we dropped the ExpandWhen wrapper here —
-          ExpandWhen's max-height tween would clip the box-shadow
-          during the animation). Scrollbar is hidden via the
-          .gb-tpl-list class (style injected on mount). */}
-      <AnimatePresence>
-        {open && (
+      {/* List rendering. Two layout modes:
+            • floating=true  → absolute overlay that floats above
+              the surrounding action row (used in the popup).
+            • floating=false → inline height-tween that pushes
+              siblings down (used inside the EmailRunner panel,
+              where an overlay either clips or floats past the
+              short scrolling body). Scrollbar is hidden via the
+              .gb-tpl-list class (style injected on mount). */}
+      <AnimatePresence initial={false}>
+        {open && (floating ? (
           <motion.div
+            key="floating"
             initial={{ opacity: 0, y: -4, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
@@ -312,70 +325,103 @@ export function TemplatePicker({
                 overflowY: 'auto',
               }}
             >
-          {templates.length === 0 ? (
-            <EmptyHint>{placeholder}</EmptyHint>
-          ) : useGroups ? (
-            <>
-              <GroupHeader label="Matched on this page" tone="brand" />
-              {matched.map((tpl, idx) => (
-                <Row
-                  key={tpl.id}
-                  tpl={tpl}
-                  idx={idx}
-                  mode={mode}
-                  isMatched
-                  isSelected={valueTplId === tpl.id && !valueVarId}
-                  pinnedVarId={valueTplId === tpl.id ? valueVarId : null}
-                  expanded={expanded.has(tpl.id)}
-                  onPickParent={() => onChange(tpl.id)}
-                  onToggleExpand={(e) => toggleExpand(tpl.id, e)}
-                  onPickVariation={(vid) => onChange(`${tpl.id}::${vid}`)}
-                />
-              ))}
-              {rest.length > 0 && (
-                <>
-                  <GroupHeader label="All templates" />
-                  {rest.map((tpl, idx) => (
-                    <Row
-                      key={tpl.id}
-                      tpl={tpl}
-                      idx={matched.length + idx}
-                      mode={mode}
-                      isMatched={false}
-                      isSelected={valueTplId === tpl.id && !valueVarId}
-                      pinnedVarId={valueTplId === tpl.id ? valueVarId : null}
-                      expanded={expanded.has(tpl.id)}
-                      onPickParent={() => onChange(tpl.id)}
-                      onToggleExpand={(e) => toggleExpand(tpl.id, e)}
-                      onPickVariation={(vid) => onChange(`${tpl.id}::${vid}`)}
-                    />
-                  ))}
-                </>
-              )}
-            </>
-          ) : (
-            templates.map((tpl, idx) => (
-              <Row
-                key={tpl.id}
-                tpl={tpl}
-                idx={idx}
-                mode={mode}
-                isMatched={matchedSet.has(tpl.id)}
-                isSelected={valueTplId === tpl.id && !valueVarId}
-                pinnedVarId={valueTplId === tpl.id ? valueVarId : null}
-                expanded={expanded.has(tpl.id)}
-                onPickParent={() => onChange(tpl.id)}
-                onToggleExpand={(e) => toggleExpand(tpl.id, e)}
-                onPickVariation={(vid) => onChange(`${tpl.id}::${vid}`)}
-              />
-            ))
-          )}
+            <ListBody
+              templates={templates}
+              placeholder={placeholder}
+              useGroups={useGroups}
+              matched={matched}
+              rest={rest}
+              expanded={expanded}
+              toggleExpand={toggleExpand}
+              valueTplId={valueTplId}
+              valueVarId={valueVarId}
+              mode={mode}
+              onChange={onChange}
+            />
             </div>
           </motion.div>
-        )}
+        ) : (
+          <motion.div
+            key="inline"
+            initial={{ height: 0, opacity: 0, marginTop: 0 }}
+            animate={{ height: 'auto', opacity: 1, marginTop: 4 }}
+            exit={{ height: 0, opacity: 0, marginTop: 0 }}
+            transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div
+              className="gb-tpl-list"
+              style={{
+                background: 'var(--gb-surface-modal, var(--gb-surface-2))',
+                border: '1px solid var(--gb-border-default)',
+                borderRadius: 'var(--gb-r-md)',
+                padding: 5,
+                display: 'flex', flexDirection: 'column', gap: 1,
+                maxHeight: listMaxHeight,
+                overflowY: 'auto',
+              }}
+            >
+              <ListBody
+                templates={templates}
+                placeholder={placeholder}
+                useGroups={useGroups}
+                matched={matched}
+                rest={rest}
+                expanded={expanded}
+                toggleExpand={toggleExpand}
+                valueTplId={valueTplId}
+                valueVarId={valueVarId}
+                mode={mode}
+                onChange={onChange}
+              />
+            </div>
+          </motion.div>
+        ))}
       </AnimatePresence>
     </div>
   );
+}
+
+/* Shared list contents used by both floating and inline modes.
+   Pulled out so the two motion wrappers don't fork the rendering
+   logic — only the surrounding positioning + animation differs. */
+function ListBody({
+  templates, placeholder, useGroups, matched, rest,
+  expanded, toggleExpand,
+  valueTplId, valueVarId, mode, onChange,
+}) {
+  if (templates.length === 0) return <EmptyHint>{placeholder}</EmptyHint>;
+  const matchedSet = new Set(matched.map((t) => t.id));
+  const renderRow = (tpl, idx, isMatched) => (
+    <Row
+      key={tpl.id}
+      tpl={tpl}
+      idx={idx}
+      mode={mode}
+      isMatched={isMatched}
+      isSelected={valueTplId === tpl.id && !valueVarId}
+      pinnedVarId={valueTplId === tpl.id ? valueVarId : null}
+      expanded={expanded.has(tpl.id)}
+      onPickParent={() => onChange(tpl.id)}
+      onToggleExpand={(e) => toggleExpand(tpl.id, e)}
+      onPickVariation={(vid) => onChange(`${tpl.id}::${vid}`)}
+    />
+  );
+  if (useGroups) {
+    return (
+      <>
+        <GroupHeader label="Matched on this page" tone="brand" />
+        {matched.map((tpl, idx) => renderRow(tpl, idx, true))}
+        {rest.length > 0 && (
+          <>
+            <GroupHeader label="All templates" />
+            {rest.map((tpl, idx) => renderRow(tpl, matched.length + idx, false))}
+          </>
+        )}
+      </>
+    );
+  }
+  return templates.map((tpl, idx) => renderRow(tpl, idx, matchedSet.has(tpl.id)));
 }
 
 /* ── Collapsed bar — right-side state badge ──────────────────
