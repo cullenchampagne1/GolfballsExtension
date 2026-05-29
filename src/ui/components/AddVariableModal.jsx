@@ -246,12 +246,14 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
               label="Schema path"
               hint="Tree of the unified contact + account schema · arrow keys + Enter to pick"
             >
-              {/* Tree-style SchemaPathPicker (same surface
-                  Account Conditions uses) — replaces the flat
-                  SCHEMA_OPTIONS dropdown so the rep can drill
-                  into contact / account / stats / etc instead
-                  of scrolling a 100+ row enumeration. */}
+              {/* Tree-style SchemaPathPicker (same component
+                  Account Conditions uses). portal=true so the
+                  popover renders via createPortal to document.body
+                  and pins its width to the trigger column — the
+                  modal body's overflow:auto would otherwise clip
+                  the popover at the bottom. */}
               <SchemaPathPicker
+                portal
                 value={config}
                 onChange={setConfig}
                 placeholder="Pick a field…"
