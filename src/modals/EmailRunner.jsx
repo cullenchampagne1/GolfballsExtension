@@ -635,6 +635,23 @@ export function EmailRunner({
               scrollbarWidth: 'none',
             }}
           >
+            {/* Template + variation weights are only meaningful while
+                composing the run. Once the run starts (or completes),
+                collapse them out so the RunStatusCard + trail panel
+                can grow into the freed vertical space — without this
+                the body's natural height exceeded the panel's 480 cap
+                and the trail rows lived below the scroll edge of the
+                popup, in the DOM but off-screen ("invisible"). */}
+            <AnimatePresence initial={false}>
+            {status === 'idle' && (
+            <motion.div
+              key="form-fields"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+              style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 14 }}
+            >
             <Field
               label="Template"
               hint={(() => {
@@ -750,6 +767,9 @@ export function EmailRunner({
                 disabled={status === 'running'}
               />
             </Field>
+            </motion.div>
+            )}
+            </AnimatePresence>
 
             {/* Run progress card. While running, the rep sees a radial
                 progress, the current recipient, a sweeping scan light,
