@@ -678,21 +678,43 @@ function TaskRow({ task, index, isResolving, onToggle, onEdit, onDelete, nowMs }
           </div>
         </div>
 
-        {/* Right edge: age readout, swapped for Edit/Remove on hover */}
-        {hover ? (
-          <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+        {/* Right slot — fixed 56×26 so the swap between age readout
+            and action buttons happens IN PLACE. Both children are
+            always rendered, only opacity + pointer-events flip.
+            Without this, the unmount/mount on hover changed the
+            row's intrinsic width AND height by a few pixels, and
+            motion.li `layout` faithfully animated every neighbor
+            to absorb the shift — the "flash" the user saw. */}
+        <div style={{
+          position: 'relative',
+          width: 56, height: 26, flexShrink: 0,
+        }}>
+          <motion.span
+            animate={{ opacity: hover ? 0 : 1 }}
+            transition={{ duration: 0.12 }}
+            style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+              fontSize: 10.5,
+              color: showStripe ? urgentColor : 'var(--gb-text-muted)',
+              fontFamily: 'var(--gb-font-mono)',
+              fontWeight: urgency === 'critical' ? 700 : 500,
+              pointerEvents: hover ? 'none' : 'auto',
+            }}
+          >{task.done ? 'done' : relAge(task.createdAt, nowMs)}</motion.span>
+          <motion.div
+            animate={{ opacity: hover ? 1 : 0 }}
+            transition={{ duration: 0.12 }}
+            style={{
+              position: 'absolute', inset: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2,
+              pointerEvents: hover ? 'auto' : 'none',
+            }}
+          >
             <RowAction title="Edit watch item" onClick={onEdit} icon={<I.edit size={12} />} />
             <RowAction title="Remove from watch list" onClick={onDelete} icon={<I.trash size={12} />} danger />
-          </div>
-        ) : (
-          <span style={{
-            fontSize: 10.5,
-            color: showStripe ? urgentColor : 'var(--gb-text-muted)',
-            fontFamily: 'var(--gb-font-mono)',
-            flexShrink: 0,
-            fontWeight: urgency === 'critical' ? 700 : 500,
-          }}>{task.done ? 'done' : relAge(task.createdAt, nowMs)}</span>
-        )}
+          </motion.div>
+        </div>
       </div>
     </motion.li>
   );
