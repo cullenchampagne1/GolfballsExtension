@@ -57,6 +57,12 @@ const typeForPath = (p) => TYPE_BY_PATH[canonicalPath(p)] || 'string';
 export function VariableSchemaPicker({ value, onChange, placeholder = '— pick a field —' }) {
   const [open, setOpen] = useState(false);
   const type = typeForPath(value);
+  /* Surface array selector only when the active path actually
+     contains an array segment. Variables resolve to a single
+     value — no any / none modes — so the dropdown carries the
+     three single-value picks: first (=[0]), last (=[-1]), or a
+     specific index. */
+  const arrayInfo = useMemo(() => parseArraySegment(value), [value]);
   return (
     <div style={{ position: 'relative', width: '100%', minWidth: 0 }}>
       <PathButton
@@ -78,6 +84,104 @@ export function VariableSchemaPicker({ value, onChange, placeholder = '— pick 
           />
         )}
       </AnimatePresence>
+      {arrayInfo && (
+        <ArraySelectorRow
+          arrayName={arrayInfo.arrayName}
+          mode={arrayInfo.mode}
+          index={arrayInfo.index}
+          onChange={(mode, index) => onChange(rewriteArrayIndex(value, mode, index))}
+        />
+      )}
+    </div>
+  );
+}
+
+/* Detects the FIRST `[N]` segment in a path and reports its
+   mode + index. Returns null when the path has no array. */
+function parseArraySegment(path) {
+  if (!path) return null;
+  const m = /\[(-?\d+)\]/.exec(path);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  /* The bit before `[` is the array's field name — kept short for
+     the row's caption ("orders" rather than the full prefix). */
+  const arrayName = path.slice(0, m.index).split('.').pop() || 'items';
+  return {
+    arrayName,
+    mode: n === 0 ? 'first' : n === -1 ? 'last' : 'index',
+    index: n >= 0 ? n : 0,
+  };
+}
+
+/* Rewrite the first `[N]` in `path` according to mode + index.
+   first → [0], last → [-1], index → [N] (clamped to >= 0). */
+function rewriteArrayIndex(path, mode, index) {
+  if (!path) return path;
+  const next = mode === 'first' ? '[0]'
+    : mode === 'last' ? '[-1]'
+    : `[${Math.max(0, index | 0)}]`;
+  return path.replace(/\[-?\d+\]/, next);
+}
+
+function ArraySelectorRow({ arrayName, mode, index, onChange }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 6,
+      marginTop: 6,
+      padding: '6px 8px',
+      background: 'var(--gb-surface-2)',
+      border: '1px solid var(--gb-border-default)',
+      borderRadius: 'var(--gb-r-sm)',
+      fontFamily: 'var(--gb-font-mono)',
+      fontSize: 10.5,
+    }}>
+      <span style={{ color: 'var(--gb-text-muted)' }}>{arrayName}[]</span>
+      <span style={{ color: 'var(--gb-text-muted)' }}>·</span>
+      <select
+        value={mode}
+        onChange={(e) => onChange(e.target.value, index)}
+        style={{
+          height: 22,
+          padding: '0 6px',
+          background: 'var(--gb-fill-subtle)',
+          border: '1px solid var(--gb-border-default)',
+          borderRadius: 3,
+          color: 'var(--gb-text-primary)',
+          fontFamily: 'inherit',
+          fontSize: 10.5,
+          fontWeight: 600,
+          cursor: 'pointer',
+        }}
+      >
+        <option value="first">first</option>
+        <option value="last">last</option>
+        <option value="index">index</option>
+      </select>
+      {mode === 'index' && (
+        <input
+          type="number"
+          min={0}
+          value={index}
+          onChange={(e) => {
+            const v = parseInt(e.target.value, 10);
+            onChange('index', Number.isFinite(v) ? Math.max(0, v) : 0);
+          }}
+          style={{
+            width: 56,
+            height: 22,
+            padding: '0 6px',
+            background: 'var(--gb-fill-subtle)',
+            border: '1px solid var(--gb-border-default)',
+            borderRadius: 3,
+            color: 'var(--gb-text-primary)',
+            fontFamily: 'inherit',
+            fontSize: 10.5,
+            fontWeight: 600,
+            outline: 'none',
+            textAlign: 'right',
+          }}
+        />
+      )}
     </div>
   );
 }
