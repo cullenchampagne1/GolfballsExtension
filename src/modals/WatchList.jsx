@@ -148,14 +148,27 @@ function isDoneToday(task, nowMs) {
 /* Scrape the host page for a contact / account id + name and
    return a context object suitable for seeding a new watch item.
    Returns null on any other page so the rep can still pick a type
-   manually. Mirrors what smart-detection.js does at the vanilla
-   layer but stays self-contained so the React modal isn't bound
-   to a script load order. */
+   manually.
+
+   ID resolution has to cover three rendering modes because the
+   ASP.NET admin doesn't render the same names everywhere:
+     1) bare client id            → #lblContactFirstName
+     2) WebForms `ctl00_` prefix  → #ctl00_lblContactFirstName
+     3) suffix attribute match    → [id$="_lblContactFirstName"]
+   smart-detection.js gets away with just the bare lookup on most
+   pages, but the WatchList opener was returning empty names on a
+   subset — covering all three modes here makes the auto-fill
+   robust regardless of which template the page chose. */
 function inferContextFromPage() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return null;
   const href = window.location.href || '';
+  const findEl = (id) =>
+    document.getElementById(id)
+    || document.getElementById(`ctl00_${id}`)
+    || document.querySelector(`[id$="_${id}"]`)
+    || null;
   const text = (id) => {
-    const el = document.getElementById(id);
+    const el = findEl(id);
     if (!el) return '';
     /* Span labels render as textContent; matching input fields
        expose .value. Try both so this covers display-mode and
