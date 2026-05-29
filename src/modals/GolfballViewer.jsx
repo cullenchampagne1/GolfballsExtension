@@ -58,8 +58,8 @@ async function loadThreeAndModel() {
   // accessible so chrome.runtime.getURL gives a load-anywhere URL.
   if (!cache.modelPromise) {
     const url = (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
-      ? chrome.runtime.getURL('assets/golfball_model/Golf_ball.obj')
-      : 'assets/golfball_model/Golf_ball.obj';
+      ? chrome.runtime.getURL('icons/golfball_model/Golf_ball.obj')
+      : 'icons/golfball_model/Golf_ball.obj';
     cache.modelPromise = new Promise((resolve, reject) => {
       const loader = new OBJLoader();
       loader.load(
@@ -84,14 +84,14 @@ async function loadThreeAndModel() {
 }
 
 /* HDRI scene registry — one entry per scene. Add a row, drop the
-   matching .exr in /assets, and the drawer picks it up automatically.
+   matching .exr in /icons, and the drawer picks it up automatically.
    `icon` is the glyph component used in the drawer chip; `file` is
    the manifest-listed web-accessible resource path. */
 export const SCENES = [
-  { key: 'goldenGate',  label: 'Golden Gate hills', file: 'assets/golden_gate_hills_4k.exr', icon: 'bridge' },
-  { key: 'sunsetFairway', label: 'Sunset fairway',   file: 'assets/sunset_fairway_4k.exr',   icon: 'sunset' },
-  { key: 'lilienstein', label: 'Lilienstein',       file: 'assets/lilienstein_4k.exr',      icon: 'mountain' },
-  { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'assets/moonlit_golf_4k.exr',     icon: 'moon' },
+  { key: 'goldenGate',  label: 'Golden Gate hills', file: 'icons/golden_gate_hills_4k.exr', icon: 'bridge' },
+  { key: 'sunsetFairway', label: 'Sunset fairway',   file: 'icons/sunset_fairway_4k.exr',   icon: 'sunset' },
+  { key: 'lilienstein', label: 'Lilienstein',       file: 'icons/lilienstein_4k.exr',      icon: 'mountain' },
+  { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'icons/moonlit_golf_4k.exr',     icon: 'moon' },
 ];
 
 export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, onError, onSceneChange, onThrowChange }, ref) {
@@ -764,31 +764,16 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         );
         ballMesh.castShadow = true;
         ballMesh.receiveShadow = false;
-        // The OBJ ships at an arbitrary size; fit it so its bounding
-        // sphere is ~100 units radius (matches the camera framing).
-        //
-        // CRITICAL: bake the fit (center + scale) INTO the geometry
-        // and leave ballMesh's OWN transform at identity. DecalGeometry
-        // emits its vertices in WORLD space using ballMesh.matrixWorld;
-        // the decal is then copied onto a sibling mesh that mirrors
-        // ballMesh's transform. That round-trips to the right place
-        // ONLY when ballMesh's transform is identity (or ~unit scale).
-        // The working build relied on the OLD OBJ shipping at ~radius
-        // 60 so ballMesh.scale landed near 1. The 2026-05 asset swap to
-        // a ~0.01-radius model pushed ballMesh.scale to ~10000, which
-        // multiplied the decal's world-space verts by 10000 and flung
-        // the print ~1,000,000 units off-screen ("icon no longer
-        // printing"). Baking the fit into the geometry makes the decal
-        // path scale-independent — ballMesh.scale stays 1 forever.
+        // The OBJ ships at an arbitrary size; rescale so its bounding-
+        // box diameter is ~100 units (matches our camera framing).
         ballMesh.geometry.computeBoundingSphere();
         const bsphere = ballMesh.geometry.boundingSphere;
         const targetRadius = 100;
-        const fit = targetRadius / bsphere.radius;
-        ballMesh.geometry.translate(-bsphere.center.x, -bsphere.center.y, -bsphere.center.z);
-        ballMesh.geometry.scale(fit, fit, fit);
-        ballMesh.geometry.computeBoundingSphere();
-        ballMesh.geometry.computeBoundingBox();
-        // ballMesh.scale stays (1,1,1) and position (0,0,0).
+        const scale = targetRadius / bsphere.radius;
+        ballMesh.scale.setScalar(scale);
+        // Recenter the geometry on the origin so OrbitControls rotates
+        // around the ball's middle, not its model-space center.
+        ballMesh.position.set(-bsphere.center.x * scale, -bsphere.center.y * scale, -bsphere.center.z * scale);
         // Wrap ball+decal in a Group so throw-mode translates and
         // rotates the whole assembly together. The mesh's recentering
         // offset lives INSIDE the group so the group's origin is the
@@ -814,14 +799,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         let decalProjectionParams = null;  // { position, orientation, size, texture }
         // ── Decal — projected onto the top pole ────────────────
         if (decalDataUrl) {
-          // eslint-disable-next-line no-console
-          console.log('[gb-decal] starting decal build, dataUrl length =', decalDataUrl?.length, 'prefix =', decalDataUrl?.slice(0, 40));
           const texLoader = new THREE.TextureLoader();
           const decalTexture = await new Promise((res, rej) => {
             texLoader.load(decalDataUrl, res, undefined, rej);
           });
-          // eslint-disable-next-line no-console
-          console.log('[gb-decal] texture loaded, image=', decalTexture.image?.width, 'x', decalTexture.image?.height, 'disposed?', disposed);
           if (disposed) return;
           // Texture flags: clamp to edge so edge pixels don't tile across
           // the decal's edges; sRGB so white reads as white.
@@ -839,19 +820,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           const decalOrientation = new THREE.Euler(0, 0, 0);
           const decalSize = new THREE.Vector3(targetRadius * 0.7, targetRadius * 0.7, targetRadius * 2);
 
-          /* Force matrixWorld up-to-date BEFORE DecalGeometry projects.
-             DecalGeometry walks ballMesh.matrixWorld to transform the
-             projector into mesh-local space; if matrixWorld is stale
-             (Three.js only refreshes it during render) the projection
-             collapses to an empty mesh. ballMesh's transform is now
-             identity (the fit is baked into the geometry above), so
-             matrixWorld == ballGroup.matrixWorld here. */
-          ballGroup.updateMatrixWorld(true);
           const decalGeo = new DecalGeometry(ballMesh, decalPosition, decalOrientation, decalSize);
-          if (!decalGeo.attributes?.position?.count) {
-            console.warn('[gb-decal] DecalGeometry produced 0 vertices — projection missed the mesh');
-            try { onError?.('Decal projection produced no geometry'); } catch { /* ignore */ }
-          }
           const decalMat = new THREE.MeshStandardMaterial({
             map: decalTexture,
             transparent: true,
@@ -863,23 +832,14 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             metalness: 0,
           });
           decalMesh = new THREE.Mesh(decalGeo, decalMat);
-          /* Mirror ballMesh's transform (now identity, since the fit
-             is baked into the geometry) and parent under ballGroup so
-             throw-mode translation/rotation + zoom move the decal with
-             the ball. DecalGeometry emitted world-space verts against
-             ballMesh.matrixWorld == ballGroup.matrixWorld; at the
-             default identity group transform those verts already sit
-             on the visible ball, so the identity copy renders them in
-             place. */
+          // Decal must match the ball's transform so its UV mapping
+          // aligns. Added to the same Group as the ball so throw-mode
+          // translation/rotation moves them together; otherwise the
+          // decal would stay glued to the origin.
           decalMesh.position.copy(ballMesh.position);
           decalMesh.scale.copy(ballMesh.scale);
-          /* Render after the ball so depth+polygonOffset are honored
-             in the correct order. */
-          decalMesh.renderOrder = 1;
           ballGroup.add(decalMesh);
           objectsToDispose.push(decalGeo, decalMat);
-          // eslint-disable-next-line no-console
-          console.log('[gb-decal] decalMesh added to ballGroup, visible =', decalMesh.visible, 'parent children count =', ballGroup.children.length);
           // Stash projection params for explode-time per-shard reuse.
           decalProjectionParams = {
             position: decalPosition.clone(),

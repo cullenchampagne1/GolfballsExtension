@@ -1,8 +1,100 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FloatingPanel, IconBtn, Btn, Tag, I, Spinner } from '../ui/index.js';
 import { EmailHtmlView } from '../ui/components/EmailHtmlView.jsx';
 import { CategorizeRail } from '../ui/components/CategorizeRail.jsx';
 import { categorySections } from '../lib/caseMatch.js';
+import { splitThreadHtml } from '../lib/emailParse.js';
+
+const OUR_DOMAINS = /(golfballs\.com|loyaltylogo\.com|gbcadmin)/i;
+function plainPreview(html, n = 120) {
+  return (html || '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ').trim().slice(0, n);
+}
+
+/* Build the renderable thread from the parsed email. When the body
+   carries an Outlook quoted history we split it into one card per
+   message (newest first); otherwise it's a single-message thread.
+   The top card inherits the EML envelope headers; quoted cards use
+   the From/Sent/To/Subject parsed out of each divRplyFwdMsg block. */
+function buildThread(email, meta) {
+  const bodyHtml = email?.bodyHtml || '';
+  const split = splitThreadHtml(bodyHtml);
+  const topFrom = email?.from || meta?.from || '';
+  if (!split) {
+    return [{
+      id: 'm0', from: topFrom, to: email?.to || meta?.to || '',
+      date: email?.date || meta?.date || '', subject: email?.subject || meta?.subject || '',
+      bodyHtml, direction: OUR_DOMAINS.test(topFrom) ? 'out' : 'in',
+    }];
+  }
+  return split.map((m, i) => {
+    const from = m.quoted ? (m.from || '') : topFrom;
+    return {
+      id: `m${i}`,
+      from,
+      to: m.quoted ? (m.to || '') : (email?.to || meta?.to || ''),
+      date: m.quoted ? (m.sent || '') : (email?.date || meta?.date || ''),
+      subject: m.quoted ? (m.subject || '') : (email?.subject || meta?.subject || ''),
+      bodyHtml: m.bodyHtml,
+      direction: OUR_DOMAINS.test(from) ? 'out' : 'in',
+    };
+  });
+}
+
+function MessageCard({ msg, expanded, onToggle }) {
+  const sender = splitAddress(msg.from);
+  return (
+    <div style={{
+      background: 'var(--gb-surface-1)',
+      border: '1px solid var(--gb-border-subtle)',
+      borderRadius: 'var(--gb-r-md)',
+      marginBottom: 10,
+      overflow: 'hidden',
+      boxShadow: expanded ? '0 4px 16px -8px rgba(0,0,0,.4)' : 'none',
+      transition: 'box-shadow .2s, border-color .2s',
+    }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          width: '100%', display: 'grid', gridTemplateColumns: '36px 1fr auto',
+          gap: 12, alignItems: 'center', padding: '11px 13px',
+          background: 'transparent', border: 'none', cursor: 'pointer',
+          textAlign: 'left', fontFamily: 'inherit', color: 'inherit',
+        }}
+      >
+        <Avatar name={sender.name} email={sender.email} size={30} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, minWidth: 0 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{sender.name || 'Unknown'}</span>
+            {sender.email && (
+              <span style={{
+                fontSize: 11, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
+              }}>&lt;{sender.email}&gt;</span>
+            )}
+            {msg.direction === 'out' && <Tag size="xs" tone="brand">SENT</Tag>}
+          </div>
+          <div style={{
+            fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 2,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>
+            {expanded ? (msg.to ? `to ${splitAddress(msg.to).name}` : '') : plainPreview(msg.bodyHtml)}
+          </div>
+        </div>
+        <span style={{
+          fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-tertiary)',
+          fontFamily: 'var(--gb-font-mono)', whiteSpace: 'nowrap', alignSelf: 'flex-start', paddingTop: 2,
+        }}>{msg.date}</span>
+      </button>
+      {expanded && (
+        <div style={{ borderTop: '1px solid var(--gb-border-subtle)' }}>
+          <EmailHtmlView html={msg.bodyHtml} style={{ border: 'none', borderRadius: 0, background: 'transparent' }} />
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ───────────────────────────────────────────────────────────────
    EmailPreview — React port of the vanilla email-preview modal.
@@ -300,6 +392,20 @@ export function EmailPreview({
   const applied = applyState && applyState.category ? applyState : null;
   const sections = categorySections();
 
+  /* Thread cards — split the reply body on Outlook's quoted-reply
+     dividers so a reply chain reads as separate messages. Newest
+     (index 0) is expanded by default once the body lands. */
+  const thread = useMemo(() => (email ? buildThread(email, meta) : []), [email, meta]);
+  const [expanded, setExpanded] = useState(() => new Set());
+  useEffect(() => {
+    if (thread.length) setExpanded(new Set([thread[0].id]));
+  }, [email?.bodyHtml]); // eslint-disable-line react-hooks/exhaustive-deps
+  const toggleMsg = (id) => setExpanded((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+
   return (
     <FloatingPanel
       draggable={false}
@@ -337,21 +443,23 @@ export function EmailPreview({
               padding: '16px 20px',
               display: 'flex', flexDirection: 'column',
             }}>
-              {/* Meta strip */}
-              <div style={{
-                display: 'flex', flexDirection: 'column', gap: 3,
-                marginBottom: 14,
-                padding: '10px 12px',
-                background: 'var(--gb-surface-1)',
-                border: '1px solid var(--gb-border-subtle)',
-                borderRadius: 'var(--gb-r-md)',
-              }}>
-                <MetaRow k="From">{email?.from || meta?.from || '—'}</MetaRow>
-                <MetaRow k="To">{email?.to || meta?.to || '—'}</MetaRow>
-                {(email?.date || meta?.date) && <MetaRow k="Date">{email?.date || meta?.date}</MetaRow>}
-              </div>
+              {/* Thread summary line */}
+              {!loading && thread.length > 0 && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
+                  fontSize: 10.5, fontWeight: 700, letterSpacing: 1,
+                  textTransform: 'uppercase', color: 'var(--gb-text-muted)',
+                }}>
+                  <span>Thread</span>
+                  <span style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
+                  <span style={{
+                    fontFamily: 'var(--gb-font-mono)', letterSpacing: 0, textTransform: 'none',
+                    color: 'var(--gb-text-tertiary)', fontWeight: 600,
+                  }}>{thread.length} message{thread.length === 1 ? '' : 's'}</span>
+                </div>
+              )}
 
-              {/* Email body — Shadow DOM dark-mode render, or spinner / error */}
+              {/* Body — thread of collapsible cards, or spinner / error */}
               {loading ? (
                 <div style={{
                   flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -359,8 +467,15 @@ export function EmailPreview({
                 }}>
                   <Spinner size={16} /> Loading email…
                 </div>
-              ) : email?.bodyHtml ? (
-                <EmailHtmlView html={email.bodyHtml} style={{ flex: '0 0 auto' }} />
+              ) : thread.length > 0 ? (
+                thread.map((msg) => (
+                  <MessageCard
+                    key={msg.id}
+                    msg={msg}
+                    expanded={expanded.has(msg.id)}
+                    onToggle={() => toggleMsg(msg.id)}
+                  />
+                ))
               ) : (
                 <div style={{
                   flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',

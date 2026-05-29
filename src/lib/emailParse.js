@@ -162,3 +162,50 @@ export function plainTextBody(raw, cap = 12000) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return `<pre style="white-space:pre-wrap;font:13px/1.5 monospace;margin:0;">${safe}</pre>`;
 }
+
+/* ── Quoted-thread splitting ──────────────────────────────────
+   Outlook wraps each quoted prior message in a
+   <div id="divRplyFwdMsg"> whose leading text is a bold header
+   block (From: / Sent: / To: / Subject:). Splitting the HTML on
+   that divider turns a single flat reply blob into a real thread:
+   the top segment is the new reply, each following segment is one
+   older message we can render as its own collapsible card. */
+
+const RPLY_DIVIDER = /<div\b[^>]*\bid\s*=\s*3?D?"?divRplyFwdMsg[^>]*>/i;
+const RPLY_DIVIDER_G = /<div\b[^>]*\bid\s*=\s*3?D?"?divRplyFwdMsg[^>]*>/gi;
+
+/** Pull From/Sent/To/Subject out of a quoted header block. */
+function quotedHeader(segment) {
+  const head = segment.slice(0, 1200);
+  const grab = (label) => {
+    const m = head.match(new RegExp('<b>\\s*' + label + '\\s*:?\\s*</b>([\\s\\S]*?)(?:<br|</font|</div|</p)', 'i'));
+    if (!m) return '';
+    return m[1]
+      .replace(/<[^>]+>/g, '')
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+      .trim();
+  };
+  return { from: grab('From'), sent: grab('Sent'), to: grab('To'), subject: grab('Subject') };
+}
+
+/**
+ * Split a reply's HTML body into thread messages, newest first.
+ * Returns null when there's no quoted history (single message).
+ * Each entry: { quoted, bodyHtml, from?, sent?, to?, subject? }.
+ * The top (index 0) entry has quoted:false and carries the live
+ * reply content; the caller fills its from/date from the EML
+ * headers.
+ */
+export function splitThreadHtml(html) {
+  if (!html || !RPLY_DIVIDER.test(html)) return null;
+  // Keep the dividers so each quoted segment starts at its header.
+  const dividers = html.match(RPLY_DIVIDER_G) || [];
+  const pieces = html.split(RPLY_DIVIDER_G);
+  // pieces[0] = reply; pieces[1..] = quoted bodies (header at start of each).
+  const messages = [{ quoted: false, bodyHtml: pieces[0] }];
+  for (let i = 1; i < pieces.length; i++) {
+    const seg = (dividers[i - 1] || '') + pieces[i];
+    messages.push({ quoted: true, bodyHtml: seg, ...quotedHeader(pieces[i]) });
+  }
+  return messages;
+}
