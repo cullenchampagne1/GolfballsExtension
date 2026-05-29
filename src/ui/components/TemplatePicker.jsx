@@ -258,18 +258,15 @@ export function TemplatePicker({
           size={7}
           glow={!!selectedTpl}
         />
-        <div style={{ minWidth: 0 }}>
-          <div style={{
-            fontSize: 12, fontWeight: 600,
-            color: selectedTpl ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>{collapsedLabel}</div>
-          <div style={{
-            fontSize: 9.5, color: 'var(--gb-text-muted)', marginTop: 2,
-            fontFamily: 'var(--gb-font-mono)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>{collapsedSub}</div>
-        </div>
+        {/* Single-line current selection — the sub-line (type ·
+            mode · variation count) was removed; mode + count now
+            live in the badges to the right of the label. */}
+        <div style={{
+          minWidth: 0,
+          fontSize: 12, fontWeight: 600,
+          color: selectedTpl ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{collapsedLabel}</div>
         <CollapsedBadge
           mode={mode}
           selectedTpl={selectedTpl}

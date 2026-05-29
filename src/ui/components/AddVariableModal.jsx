@@ -10,7 +10,7 @@ import { KindPickerGrid } from './KindPickerGrid.jsx';
 import { CompactModal } from './CompactModal.jsx';
 import { ModalHeader } from './ModalHeader.jsx';
 import { ModalFooter } from './ModalFooter.jsx';
-import { SchemaPathPicker } from './SchemaPathPicker.jsx';
+import { VariableSchemaPicker } from './VariableSchemaPicker.jsx';
 
 /* ── Kind icons (BoltIcon comes from I.bolt) ───────────────────── */
 const PickerIcon  = (p) => <Icon {...p}><path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/></Icon>;
@@ -246,14 +246,12 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
               label="Schema path"
               hint="Tree of the unified contact + account schema · arrow keys + Enter to pick"
             >
-              {/* Tree-style SchemaPathPicker (same component
-                  Account Conditions uses). portal=true so the
-                  popover renders via createPortal to document.body
-                  and pins its width to the trigger column — the
-                  modal body's overflow:auto would otherwise clip
-                  the popover at the bottom. */}
-              <SchemaPathPicker
-                portal
+              {/* Inline tree picker — opens in flow so the modal
+                  body's overflow:auto scrolls naturally; width
+                  matches the input column. Same mechanic as
+                  Account Conditions' rule picker (search + arrow
+                  nav + array drill-in) with no popover chrome. */}
+              <VariableSchemaPicker
                 value={config}
                 onChange={setConfig}
                 placeholder="Pick a field…"
@@ -261,39 +259,30 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
             </Field>
           )}
           {kind === 'builtin' && (
-            <Field
-              label="Built-in path"
-              /* The built-in kind predates the page-engine schema.
-                 Existing templates still resolve via the legacy
-                 `smartPageVariables` path; new account variables
-                 should use Schema instead so the unified
-                 contact/account extractor covers them. */
-              hint={typeId === 'account'
-                ? 'Deprecated — use Schema for new variables. Existing templates keep resolving via the legacy path.'
-                : 'Pre-defined value resolved from the page context'}
-            >
-              <Dropdown
-                value={config}
-                placeholder="Select a field…"
-                leading={<I.bolt />}
-                searchable
-                options={BUILTIN_PATHS[typeId] || BUILTIN_PATHS.order}
-                onChange={setConfig}
-              />
-            </Field>
+            <>
+              {typeId === 'account' && <DeprecatedNotice />}
+              <Field
+                label="Built-in path"
+                hint="Pre-defined value resolved from the page context"
+              >
+                <Dropdown
+                  value={config}
+                  placeholder="Select a field…"
+                  leading={<I.bolt />}
+                  searchable
+                  options={BUILTIN_PATHS[typeId] || BUILTIN_PATHS.order}
+                  onChange={setConfig}
+                />
+              </Field>
+            </>
           )}
 
           {kind === 'dom' && (
             <>
+              {typeId === 'account' && <DeprecatedNotice />}
               <Field
                 label="CSS selector"
-                /* Same deprecation note as Built-in for account
-                   templates — Schema is the durable path; DOM
-                   selectors stay supported but break when the CRM
-                   re-skins or renames classes, which Schema doesn't. */
-                hint={typeId === 'account'
-                  ? 'Deprecated — use Schema for new variables. Selectors stay supported, but break across CRM redesigns.'
-                  : "First matching element's .textContent is used"}
+                hint="First matching element's .textContent is used"
               >
                 <Input
                   value={config}
@@ -443,5 +432,40 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
           </Btn>
         </ModalFooter>
     </CompactModal>
+  );
+}
+
+/* Warning banner shown above the Built-in + DOM kind config blocks
+   for account templates. Surfaces louder than a Field hint so the
+   rep notices the legacy path before they wire a fragile selector
+   they'll need to maintain through every CRM redesign. */
+function DeprecatedNotice() {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'flex-start', gap: 8,
+      padding: '8px 10px',
+      background: 'var(--gb-warning-tint-soft, var(--gb-warning-tint-medium))',
+      border: '1px solid var(--gb-warning-tint-border)',
+      borderRadius: 'var(--gb-r-sm)',
+      color: 'var(--gb-warning-fg)',
+      fontSize: 11,
+      lineHeight: 1.4,
+    }}>
+      <span style={{
+        fontSize: 9, fontWeight: 800, letterSpacing: 0.6,
+        padding: '1px 5px',
+        borderRadius: 3,
+        background: 'var(--gb-warning-tint-medium)',
+        color: 'var(--gb-warning-fg)',
+        flexShrink: 0,
+        fontFamily: 'var(--gb-font-mono)',
+        textTransform: 'uppercase',
+      }}>Deprecated</span>
+      <span>
+        Use <strong>Schema</strong> for new account variables — the unified
+        contact/account extractor is the durable path. Existing variables
+        keep resolving through this kind.
+      </span>
+    </div>
   );
 }
