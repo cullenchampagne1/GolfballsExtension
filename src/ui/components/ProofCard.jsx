@@ -315,7 +315,7 @@ export function ProofCard({
            (not the thumb) keeps the thumb + info row visually
            glued so the card lifts as ONE element. */
         filter: lift
-          ? 'drop-shadow(0 14px 24px rgba(0,0,0,.42)) drop-shadow(0 0 0 color-mix(in srgb, var(--gb-brand-label) 14%, transparent))'
+          ? 'drop-shadow(0 4px 8px rgba(0,0,0,.18))'
           : 'drop-shadow(0 0 0 transparent)',
         transition: 'transform .22s cubic-bezier(.34,1.4,.64,1), filter .22s',
         width: '100%',
@@ -418,35 +418,6 @@ export function ProofCard({
             <Tag tone={statusTone(proof.status)} size="xs">{proof.status}</Tag>
           )}
         </div>
-        {(proof.item || proof.notes) && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            fontSize: 10.5,
-            color: 'var(--gb-text-muted)',
-            fontFamily: 'var(--gb-font-mono)',
-          }}>
-            {proof.item && (
-              <span style={{
-                padding: '1px 6px',
-                background: 'var(--gb-fill-subtle)',
-                border: '1px solid var(--gb-border-default)',
-                borderRadius: 4,
-                color: 'var(--gb-text-tertiary)',
-                fontSize: 9.5, letterSpacing: .3,
-              }}>{proof.item}</span>
-            )}
-            {proof.notes && (
-              <span style={{
-                flex: 1, minWidth: 0,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                color: 'var(--gb-text-muted)',
-                fontFamily: 'var(--gb-font-sans)',
-                fontSize: 10.5,
-              }} title={proof.notes}>{proof.notes}</span>
-            )}
-          </div>
-        )}
-
         {hasConnection && (
           <ConnectionStrip account={proof.account} contacts={proof.contacts} />
         )}

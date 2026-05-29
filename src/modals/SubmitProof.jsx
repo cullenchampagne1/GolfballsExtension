@@ -158,10 +158,10 @@ const MOCK_ARTISTS = [
    no-op. addedDays drives the corner age chip on the thumb. */
 const MOCK_ACCOUNT = { name: 'Acme Industries', id: 'CUST-4650030' };
 const MOCK_GALLERY = [
-  { id: 'm_1', name: 'Acme Logo v3',    proofLink: null, thumbUrl: '', status: 'Approved', label: 'v3',  hue: 60, addedDays: 1, item: 'Ball', account: MOCK_ACCOUNT, contacts: ['Cullen Champagne', 'Rita Soto'], notes: 'Final dark gradient' },
-  { id: 'm_2', name: 'Acme Logo v2',    proofLink: null, thumbUrl: '', status: 'Revised',  label: 'v2',  hue: 60, addedDays: 4, item: 'Ball', account: MOCK_ACCOUNT, contacts: ['Cullen Champagne'],              notes: 'Two-tone, vendor wants Pantone' },
-  { id: 'm_3', name: 'Acme Logo v1',    proofLink: null, thumbUrl: '', status: 'Rejected', label: 'v1',  hue: 60, addedDays: 4, item: 'Ball', account: MOCK_ACCOUNT, contacts: ['Cullen Champagne'],              notes: 'Outline too thin' },
-  { id: 'm_4', name: 'Pre-prod sample', proofLink: null, thumbUrl: '', status: 'Pending',  label: 'pre', hue: 60, addedDays: 6, item: 'Ball', account: MOCK_ACCOUNT, contacts: [],                                notes: 'Awaiting rep approval' },
+  { id: 'm_1', name: 'Acme Logo v3',    proofLink: null, thumbUrl: '', status: 'Approved', label: 'v3',  hue: 60, addedDays: 1, account: MOCK_ACCOUNT, contacts: ['Cullen Champagne', 'Rita Soto'] },
+  { id: 'm_2', name: 'Acme Logo v2',    proofLink: null, thumbUrl: '', status: 'Revised',  label: 'v2',  hue: 60, addedDays: 4, account: MOCK_ACCOUNT, contacts: ['Cullen Champagne'] },
+  { id: 'm_3', name: 'Acme Logo v1',    proofLink: null, thumbUrl: '', status: 'Rejected', label: 'v1',  hue: 60, addedDays: 4, account: MOCK_ACCOUNT, contacts: ['Cullen Champagne'] },
+  { id: 'm_4', name: 'Pre-prod sample', proofLink: null, thumbUrl: '', status: 'Pending',  label: 'pre', hue: 60, addedDays: 6, account: MOCK_ACCOUNT, contacts: [] },
 ];
 
 /* ───────────────────────────────────────────────────────────────
