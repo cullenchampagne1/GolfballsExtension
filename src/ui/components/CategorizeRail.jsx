@@ -88,18 +88,18 @@ function BreadcrumbChip({ focused, chipIdx, sections }) {
       className="gb-ev-chip"
       style={{
         marginTop: 8,
-        display: 'inline-flex', alignItems: 'center', gap: 8,
-        padding: '5px 10px',
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        padding: '2px 8px',
         background: 'var(--gb-brand-tint-medium)',
         border: '1px solid var(--gb-brand-tint-border)',
         color: 'var(--gb-brand-label)',
         borderRadius: 'var(--gb-r-pill)',
-        fontSize: 10.5, fontWeight: 600,
+        fontSize: 9.5, fontWeight: 600,
         maxWidth: '100%',
       }}
     >
       <span style={{
-        fontSize: 9.5, fontWeight: 800, letterSpacing: 0.6,
+        fontSize: 8.5, fontWeight: 800, letterSpacing: 0.5,
         textTransform: 'uppercase',
         fontFamily: 'var(--gb-font-mono)',
       }}>{sect?.title || focused.section}</span>
@@ -291,27 +291,40 @@ export function CategorizeRail({
 
   const sections = useMemo(() => {
     const arr = [];
+    /* Chip selection is 1–9 within a focused section, so a category
+       with MORE than 9 subcategories (e.g. Returns/Reprint, 14) can't
+       be fully reached by number. Split such sections into tab-targets
+       of ≤9 each — tab walks to each chunk, then 1–9 selects within it,
+       so every subcategory stays reachable by tab-then-number. */
+    const pushChunked = (baseId, title, baseSubtitle, accent, subs) => {
+      if (!subs || subs.length === 0) return;
+      if (subs.length <= 9) {
+        arr.push({ id: baseId, title, subtitle: baseSubtitle, accent, subs });
+        return;
+      }
+      for (let i = 0; i < subs.length; i += 9) {
+        const chunk = subs.slice(i, i + 9);
+        arr.push({
+          id: `${baseId}#${Math.floor(i / 9)}`,
+          title,
+          subtitle: `${i + 1}–${i + chunk.length}`,
+          accent,
+          subs: chunk,
+        });
+      }
+    };
+
     if (recommended && recommended.length) {
-      arr.push({
-        id: '__recommended__',
-        title: '✦ Recommended',
-        subtitle: 'From template match',
-        accent: true,
-        subs: recommended.map((r) => ({
+      pushChunked('__recommended__', '✦ Recommended', 'From template match', true,
+        recommended.map((r) => ({
           category: r.category,
           subcategory: r.subcategory,
           label: r.label || `${r.subcategory} · ${r.category}`,
-        })),
-      });
+        })));
     }
     (sectionsProp || []).forEach(({ category, subs }) => {
-      if (!subs || subs.length === 0) return;
-      arr.push({
-        id: category,
-        title: category,
-        accent: false,
-        subs: subs.map((s) => ({ category, subcategory: s, label: s })),
-      });
+      pushChunked(category, category, null, false,
+        (subs || []).map((s) => ({ category, subcategory: s, label: s })));
     });
     return arr;
   }, [sectionsProp, recommended]);
@@ -349,7 +362,7 @@ export function CategorizeRail({
 
   return (
     <div style={{
-      width, flexShrink: 0,
+      width, flex: '1 1 0%',
       background: 'var(--gb-surface-1)',
       display: 'flex', flexDirection: 'column',
       minHeight: 0,
@@ -359,7 +372,12 @@ export function CategorizeRail({
         borderBottom: '1px solid var(--gb-border-subtle)',
         flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Reply template picker + send — the primary action, pinned on top. */}
+        {topSlot}
+
+        {/* Categorize header + the small focus breadcrumb sit BELOW the
+            dropdown so the rail reads top-down: pick a reply → categorize. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: topSlot ? 12 : 0 }}>
           <span style={{
             fontSize: 9.5, fontWeight: 700, letterSpacing: 1.2,
             textTransform: 'uppercase',
@@ -385,12 +403,16 @@ export function CategorizeRail({
         </div>
 
         <BreadcrumbChip focused={focused} chipIdx={chipIdx} sections={sections} />
-
-        {/* Sticky top control — template picker + send (case mode). */}
-        {topSlot && <div style={{ marginTop: 10 }}>{topSlot}</div>}
       </div>
 
-      <div data-cc-scroll style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '12px 12px 20px' }}>
+      {/* Own scroll area — independent of the email column. Edges fade so
+          rows glide in/out as Tab walks the sections. */}
+      <div data-cc-scroll style={{
+        flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden',
+        padding: '12px 12px 20px',
+        WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 18px), transparent 100%)',
+        maskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 18px), transparent 100%)',
+      }}>
         {sections.map((sect) => (
           <CategorySection
             key={sect.id}

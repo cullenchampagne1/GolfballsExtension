@@ -174,11 +174,14 @@ export function EmailHtmlView({ html, style }) {
           font-size: 13px;
           line-height: 1.6;
         }
-        #gb-email-content { max-width: 100%; box-sizing: border-box; }
-        #gb-email-content * { max-width: 100%; box-sizing: border-box; }
-        #gb-email-content a { color: var(--gb-brand-label, #8fce2e); }
-        #gb-email-content img { height: auto; }
-        #gb-email-content table { max-width: 100% !important; }
+        /* Clamp EVERYTHING to the view width — emails ship fixed-width
+           images / tables that otherwise stretch past the modal. The
+           !important beats inline width/height + the email's own CSS. */
+        #gb-email-content { max-width: 100%; box-sizing: border-box; overflow-wrap: anywhere; }
+        #gb-email-content * { max-width: 100% !important; box-sizing: border-box; }
+        #gb-email-content a { color: var(--gb-brand-label, #8fce2e); overflow-wrap: anywhere; }
+        #gb-email-content img, #gb-email-content video { max-width: 100% !important; height: auto !important; }
+        #gb-email-content table { max-width: 100% !important; table-layout: auto; }
       </style>
       <div id="gb-email-content">${html || ''}</div>
     `;
