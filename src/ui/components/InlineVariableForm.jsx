@@ -8,19 +8,7 @@ import { Dropdown } from './Dropdown.jsx';
 import { Dot } from './Dot.jsx';
 import { Segmented } from './Segmented.jsx';
 import { SOURCE_KINDS, BUILTIN_PATHS, REGEX_FIELDS } from './AddVariableModal.jsx';
-import { contactSchema } from '../../lib/page-schemas/contact.js';
-import { listPaths } from '../../lib/page-engine/index.js';
-
-/* Schema-kind path options — same source as AddVariableModal's
-   SCHEMA_OPTIONS, recomputed here to avoid a circular-import (the
-   modal already imports from this file via the table). */
-const SCHEMA_OPTIONS = (() => {
-  try {
-    return listPaths(contactSchema, {})
-      .filter((n) => n.type !== 'object' && n.type !== 'array')
-      .map((n) => ({ id: n.path, label: n.label || n.path, group: n.path.split('.')[0] }));
-  } catch { return []; }
-})();
+import { SchemaPathPicker } from './SchemaPathPicker.jsx';
 
 /* ────────────────────────────────────────────────────────────────
    InlineVariableForm — compact, in-table replacement for
@@ -289,17 +277,14 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
             {kind === 'schema' && (
               <Field
                 label="Schema path"
-                hint="Resolves via the unified contact + account page-engine schema"
+                hint="Tree of the unified contact + account schema · ↓↑ ↵"
               >
-                <Dropdown
-                  size="sm"
+                {/* Tree-style picker — same surface Account
+                    Conditions uses. */}
+                <SchemaPathPicker
                   value={config}
-                  placeholder="Pick a field…"
-                  leading={<I.search />}
-                  searchable
-                  options={SCHEMA_OPTIONS}
                   onChange={setConfig}
-                  maxHeight={280}
+                  placeholder="Pick a field…"
                 />
               </Field>
             )}
@@ -324,7 +309,12 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
 
             {kind === 'dom' && (
               <>
-                <Field label="CSS selector" hint="First matching element's text is used">
+                <Field
+                  label="CSS selector"
+                  hint={typeId === 'account'
+                    ? 'Deprecated — use Schema. Selectors break across CRM redesigns.'
+                    : "First matching element's text is used"}
+                >
                   <Input
                     size="sm"
                     value={config}

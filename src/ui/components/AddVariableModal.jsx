@@ -10,27 +10,7 @@ import { KindPickerGrid } from './KindPickerGrid.jsx';
 import { CompactModal } from './CompactModal.jsx';
 import { ModalHeader } from './ModalHeader.jsx';
 import { ModalFooter } from './ModalFooter.jsx';
-import { contactSchema } from '../../lib/page-schemas/contact.js';
-import { listPaths } from '../../lib/page-engine/index.js';
-
-/* Pre-compute the unified schema's leaf paths once — used by the
-   Schema-kind Dropdown so the rep picks `contact.firstName` etc.
-   instead of typing it. Filtered to leaves; the schema's nested
-   objects (`contact`, `account`, `stats`) and array containers
-   surface in the path strings already. Labels follow the schema's
-   field labels so the picker reads like a sentence. */
-const SCHEMA_OPTIONS = (() => {
-  try {
-    const list = listPaths(contactSchema, /* sample data */ {});
-    return list
-      .filter((n) => n.type !== 'object' && n.type !== 'array')
-      .map((n) => ({
-        id:    n.path,
-        label: n.label || n.path,
-        group: n.path.split('.')[0],
-      }));
-  } catch { return []; }
-})();
+import { SchemaPathPicker } from './SchemaPathPicker.jsx';
 
 /* ── Kind icons (BoltIcon comes from I.bolt) ───────────────────── */
 const PickerIcon  = (p) => <Icon {...p}><path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/></Icon>;
@@ -264,16 +244,17 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
           {kind === 'schema' && (
             <Field
               label="Schema path"
-              hint="Resolved via the page-engine field tree (works on contact + account pages)"
+              hint="Tree of the unified contact + account schema · arrow keys + Enter to pick"
             >
-              <Dropdown
+              {/* Tree-style SchemaPathPicker (same surface
+                  Account Conditions uses) — replaces the flat
+                  SCHEMA_OPTIONS dropdown so the rep can drill
+                  into contact / account / stats / etc instead
+                  of scrolling a 100+ row enumeration. */}
+              <SchemaPathPicker
                 value={config}
-                placeholder="Pick a field…"
-                leading={<I.search />}
-                searchable
-                options={SCHEMA_OPTIONS}
                 onChange={setConfig}
-                maxHeight={320}
+                placeholder="Pick a field…"
               />
             </Field>
           )}
@@ -302,7 +283,16 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
 
           {kind === 'dom' && (
             <>
-              <Field label="CSS selector" hint="First matching element's .textContent is used">
+              <Field
+                label="CSS selector"
+                /* Same deprecation note as Built-in for account
+                   templates — Schema is the durable path; DOM
+                   selectors stay supported but break when the CRM
+                   re-skins or renames classes, which Schema doesn't. */
+                hint={typeId === 'account'
+                  ? 'Deprecated — use Schema for new variables. Selectors stay supported, but break across CRM redesigns.'
+                  : "First matching element's .textContent is used"}
+              >
                 <Input
                   value={config}
                   placeholder=".order-total .amount"
