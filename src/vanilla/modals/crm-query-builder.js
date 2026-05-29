@@ -60,6 +60,7 @@ const QB_OPS = {
   ],
   date:  [
     { value: 'rel_past',     label: 'more than … ago'  },
+    { value: 'rel_recent',   label: 'less than … ago'  },
     { value: 'rel_future',   label: 'within next …'    },
     { value: 'before',       label: 'before date'      },
     { value: 'after',        label: 'after date'       },
@@ -114,6 +115,7 @@ function qbConditionToSolr(fld, c) {
     case 'lte':          return v  ? `${k}:[* TO ${v}]`    : null;
     case 'between':      return (v && v2) ? `${k}:[${v} TO ${v2}]` : null;
     case 'rel_past':     return `${k}:[* TO NOW-${n}${u}]`;
+    case 'rel_recent':   return `${k}:[NOW-${n}${u} TO NOW]`;
     case 'rel_future':   return `${k}:[NOW TO NOW%2B${n}${u}]`;
     case 'after_today':  return `${k}:[NOW TO *]`;
     case 'before_today': return `${k}:[* TO NOW]`;
@@ -1229,7 +1231,7 @@ function qbBuildValueArea(area, fld, c) {
       }
       break;
     case 'date':
-      if (op === 'rel_past' || op === 'rel_future') {
+      if (op === 'rel_past' || op === 'rel_recent' || op === 'rel_future') {
         area.appendChild(inp('1', 'num', 'number'));
         const unitDd = qbCustomSelect({
           options: QB_UNITS.map(u => ({ value: u, label: u })),
@@ -1238,7 +1240,7 @@ function qbBuildValueArea(area, fld, c) {
         });
         if (!c.unit) c.unit = 'years';
         area.appendChild(unitDd);
-        area.appendChild(lbl(op === 'rel_past' ? 'ago' : 'from now'));
+        area.appendChild(lbl(op === 'rel_future' ? 'from now' : 'ago'));
       } else if (op === 'before' || op === 'after') {
         area.appendChild(inp('', 'val', 'date'));
       }
