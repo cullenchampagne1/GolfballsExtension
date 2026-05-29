@@ -1127,6 +1127,15 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
         .filter((c) => c.contactUrl)}
       onClose={() => setEmailRunnerOpen(false)}
       onResetRowStates={() => setEmailStatusByRow({})}
+      /* Flip every selected contact to 'queued' the moment Run
+         fires so the per-row badge reads as committed-pending
+         instead of staying on its default state until the loop
+         reaches it. */
+      onRowsQueued={(ids) => setEmailStatusByRow((m) => {
+        const next = { ...m };
+        for (const id of ids) next[id] = 'queued';
+        return next;
+      })}
       onRowStart={(id) => setEmailStatusByRow((m) => ({ ...m, [id]: 'sending' }))}
       onRowDone={(id, outcome) => setEmailStatusByRow((m) => ({ ...m, [id]: outcome.status }))}
       onRunStateChange={setEmailRunRunning}

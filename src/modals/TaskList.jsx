@@ -1026,6 +1026,15 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
       contacts={selectedContacts}
       onClose={() => setEmailRunnerOpen(false)}
       onResetRowStates={() => setEmailStatusByRow({})}
+      /* All queued ids land at once so every selected row flips
+         to 'queued' the moment the run starts — the rep sees the
+         whole blast committed at a glance rather than watching
+         rows go silent then suddenly fire one at a time. */
+      onRowsQueued={(ids) => setEmailStatusByRow((m) => {
+        const next = { ...m };
+        for (const id of ids) next[id] = 'queued';
+        return next;
+      })}
       onRowStart={(id) => setEmailStatusByRow((m) => ({ ...m, [id]: 'sending' }))}
       onRowDone={(id, outcome) => setEmailStatusByRow((m) => ({ ...m, [id]: outcome.status }))}
       onRunStateChange={setEmailRunRunning}
@@ -1417,10 +1426,14 @@ const STATE_META = {
 };
 
 function resolveRowState({ task, emailStatus, actionState }) {
-  /* Email-blast in flight against this row wins. The orchestrator
-     queues every selected row up front; the value here flips
-     between 'sending', 'sent', and 'error' as the row's slot
-     advances. */
+  /* Email-blast in flight against this row wins. EmailRunner
+     drops 'queued' on every contact when the rep clicks Run, then
+     each row transitions to 'sending' as its slot advances, then
+     'sent' or 'failed' as the slot completes. The 'queued' branch
+     intentionally outranks actionState — the rep just committed
+     an email blast and they want to see that intent reflected
+     immediately, not whatever Quick Task verb-ed the row last. */
+  if (emailStatus === 'queued')  return 'queued';
   if (emailStatus === 'sending') return 'sending';
   if (emailStatus === 'sent')    return 'sent';
   if (emailStatus === 'error')   return 'failed';
