@@ -1,6 +1,28 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { Dot } from './Dot.jsx';
 import { I } from '../icons.jsx';
+
+/* Inject the once-per-document CSS that hides the option list's
+   scrollbar (Firefox + WebKit + legacy Edge). Inline styles can't
+   target ::-webkit-scrollbar, hence the global rule. Also defines
+   the row stagger keyframes the option list relies on. */
+const PICKER_STYLE_ID = '__gb-template-picker-style';
+function ensurePickerStyle() {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById(PICKER_STYLE_ID)) return;
+  const el = document.createElement('style');
+  el.id = PICKER_STYLE_ID;
+  el.textContent = `
+    .gb-tpl-list { scrollbar-width: none; -ms-overflow-style: none; }
+    .gb-tpl-list::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
+    @keyframes gb-tpl-row-in {
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  `;
+  document.head.appendChild(el);
+}
 
 /* ───────────────────────────────────────────────────────────────
    TemplatePicker — inline expanding picker shared by the
@@ -81,6 +103,21 @@ export function TemplatePicker({
   const [open, setOpen] = useState(initialOpen);
   useEffect(() => { setOpen(initialOpen); }, [initialOpen]);
   useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
+  useEffect(() => { ensurePickerStyle(); }, []);
+  const rootRef = useRef(null);
+
+  /* Outside-click dismiss so the dropdown closes when the rep
+     clicks something else (action button, other field). Uses
+     mousedown so the trigger button's onClick still wins when
+     the user toggles closed from the same button. */
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDoc = (e) => {
+      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
 
   /* Set<tplId> of parents whose variations are currently expanded
      inline. Local UI state — does NOT affect selection. */
@@ -182,11 +219,15 @@ export function TemplatePicker({
 
   return (
     <div
+      ref={rootRef}
       style={{
+        /* position: relative anchors the absolute-positioned
+           option list below so it floats over siblings (action
+           buttons, Send) instead of pushing them down. */
+        position: 'relative',
         background: 'var(--gb-surface-2)',
         border: `1px solid ${open ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'}`,
         borderRadius: 'var(--gb-r-md)',
-        overflow: 'hidden',
         transition: 'border-color .18s',
         opacity: disabled ? 0.55 : 1,
       }}
@@ -239,28 +280,41 @@ export function TemplatePicker({
         <SwapChip open={open} />
       </button>
 
-      {/* Inline expanding option list. ExpandWhen tracks the inner
-          height via ResizeObserver so the max-height tween hits the
-          right target even as the variation sub-lists open. */}
-      <ExpandWhen open={open}>
-        <div style={{
-          borderTop: '1px dashed var(--gb-border-default)',
-          padding: 5,
-          display: 'flex', flexDirection: 'column', gap: 1,
-          /* `listMaxHeight` caps the scrollable region so the picker
-             never expands past the popup body and gets clipped.
-             When a variation expands inside a row, the content
-             grows past this cap and the option list shows a
-             scrollbar; rows below the expanded one still push
-             down inside the scrollable region. */
-          maxHeight: listMaxHeight,
-          overflowY: 'auto',
-          /* Visible thin scrollbar so the rep knows the list scrolls
-             when variations are expanded. The popup's host page
-             style sheet doesn't get to override these (the popup
-             is its own document). */
-          scrollbarWidth: 'thin',
-        }}>
+      {/* Absolute-positioned overlay so the list floats over the
+          surrounding action buttons / Send instead of pushing them
+          down. AnimatePresence handles the open/close fade + slide
+          (which is why we dropped the ExpandWhen wrapper here —
+          ExpandWhen's max-height tween would clip the box-shadow
+          during the animation). Scrollbar is hidden via the
+          .gb-tpl-list class (style injected on mount). */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.18, ease: [0.34, 1.4, 0.64, 1] }}
+            style={{
+              position: 'absolute',
+              top: 'calc(100% + 4px)',
+              left: -1, right: -1,
+              zIndex: 30,
+              transformOrigin: 'top center',
+            }}
+          >
+            <div
+              className="gb-tpl-list"
+              style={{
+                background: 'var(--gb-surface-modal, var(--gb-surface-2))',
+                border: '1px solid var(--gb-border-default)',
+                borderRadius: 'var(--gb-r-md)',
+                boxShadow: '0 12px 32px -8px rgba(0,0,0,0.45), 0 2px 4px rgba(0,0,0,0.18)',
+                padding: 5,
+                display: 'flex', flexDirection: 'column', gap: 1,
+                maxHeight: listMaxHeight,
+                overflowY: 'auto',
+              }}
+            >
           {templates.length === 0 ? (
             <EmptyHint>{placeholder}</EmptyHint>
           ) : useGroups ? (
@@ -319,8 +373,10 @@ export function TemplatePicker({
               />
             ))
           )}
-        </div>
-      </ExpandWhen>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -731,20 +787,5 @@ function CheckIcon({ size = 10, style }) {
   );
 }
 
-/* Inject the row-stagger keyframes once. Loose CSS animation
-   instead of motion.div so the lists can re-render rapidly during
-   typeahead / filter changes without restarting animations. */
-const KF_ID = '__gb-tpl-picker-anims';
-(function ensureKeyframes() {
-  if (typeof document === 'undefined') return;
-  if (document.getElementById(KF_ID)) return;
-  const s = document.createElement('style');
-  s.id = KF_ID;
-  s.textContent = `
-    @keyframes gb-tpl-row-in {
-      from { opacity: 0; transform: translateY(-4px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-  `;
-  document.head.appendChild(s);
-})();
+/* Keyframes + scrollbar-hide rules now live in ensurePickerStyle
+   (top of file) and are injected when the first picker mounts. */
