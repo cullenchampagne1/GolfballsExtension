@@ -197,6 +197,13 @@ export function EmailRunner({
   onRowStart,
   onRowDone,
   onResetRowStates,
+  /* Fires once at the start of a run with the full id list so the
+     parent list can flip every contact to a "queued" state badge
+     immediately. Without this, rows sit on their natural "new"
+     status until each one's onRowStart lands — which is wrong
+     because the user has already committed the run and the rows
+     are demonstrably queued for send. */
+  onRowsQueued,
   /* Fires `true` when the orchestrator starts a run, `false` when it
      finishes (cleanly OR via cancel). TaskList uses this so its scan
      beam dwells on the just-sent row through the inter-send delay
@@ -381,10 +388,13 @@ export function EmailRunner({
       toast?.error?.('Power Automate URL not set in Settings — enable PA to send.');
       return;
     }
-    /* Reset row UI on the parent list, bump the run token (older
-       in-flight loops will see the mismatch and bail before their
-       next iteration), and kick off a fresh local orchestrator. */
+    /* Reset row UI on the parent list, mark every contact in the
+       blast as queued so the row badges flip from new → queued
+       immediately, then bump the run token and kick off the loop.
+       The per-row onRowStart that runs inside the loop will then
+       transition each queued row to sending in turn. */
     onResetRowStates?.();
+    onRowsQueued?.(contacts.map((c) => c.contactId));
     runTokenRef.current += 1;
     const token = runTokenRef.current;
     setCounts({ sent: 0, failed: 0 });
@@ -558,10 +568,20 @@ export function EmailRunner({
            is canonical; the second is the task-row text we get when
            the engine couldn't run (e.g. fetch failed before resolve). */
         const displayName = outcome.name || c.contactName || c.name || '(unknown)';
-        const next = [...cur, { name: displayName, status: outcome.status, email: outcome.email }];
-        // Cap to last 4 so the list never grows past the rendered slot
-        // height — also kills the panel scrollbar.
-        return next.length > 4 ? next.slice(next.length - 4) : next;
+        /* Stable monotonic seq so AnimatePresence keys persist
+           across the rolling slice window we show in the trail
+           card (latest two). Without it, a moving window would
+           reassign keys and break the layout-shift animation. */
+        const seq = (cur[cur.length - 1]?.seq ?? 0) + 1;
+        const next = [...cur, {
+          seq,
+          name: displayName,
+          status: outcome.status,
+          email: outcome.email,
+        }];
+        /* Keep a short buffer for the count chips upstream — the
+           render slice below caps the visible window at 2. */
+        return next.length > 8 ? next.slice(next.length - 8) : next;
       });
 
       // 5. Random delay between sends — skip after the last one.
@@ -955,36 +975,39 @@ function RunStatusCard({ status, progress, sentCount, failedCount, trail }) {
         />
       )}
 
-      {/* Trail — last few rows with sent / fail tags. AnimatePresence
-          slides new rows in from the right and old rows out the
-          left. Kept short so the card doesn't blow up the panel. */}
+      {/* Trail — shows the latest two completed sends. Each row
+          slides UP into place: the newest enters from below the
+          card (y: +rowHeight → 0), the previous one layout-shifts
+          up to make room, and the oldest exits by sliding up
+          above the card (y: 0 → -rowHeight, fades out). The
+          card's overflow:hidden clips entering + exiting rows so
+          the animation reads as a single continuous scroll
+          rather than items popping in/out. mode="popLayout"
+          removes exiting items from layout flow immediately so
+          the remaining row's layout shift starts at the same
+          frame as the new row's enter. */}
       {trail.length > 0 && (
         <div style={{
-          display: 'flex', flexDirection: 'column',
           background: 'var(--gb-surface-2)',
           border: '1px solid var(--gb-border-subtle)',
           borderRadius: 'var(--gb-r-sm)',
           overflow: 'hidden',
           position: 'relative', zIndex: 1,
         }}>
-          <AnimatePresence initial={false}>
-            {trail.map((r, i) => (
+          <AnimatePresence initial={false} mode="popLayout">
+            {trail.slice(-2).map((r, i, arr) => (
               <motion.div
-                key={`${r.name}-${r.email || ''}-${i}`}
+                key={r.seq}
                 layout
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10, height: 0 }}
-                transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                initial={{ opacity: 0, y: 36 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -36 }}
+                transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
                 style={{
                   display: 'grid', gridTemplateColumns: '18px minmax(0,1fr) auto',
                   gap: 10, alignItems: 'center',
-                  /* Bumped right padding so the sent/fail tags don't
-                     kiss the card edge — the previous 9px pinned the
-                     tag against the border, which read as cramped at
-                     the panel's small form factor. */
                   padding: '8px 12px',
-                  borderBottom: i < trail.length - 1 ? '1px solid var(--gb-border-subtle)' : 'none',
+                  borderBottom: i < arr.length - 1 ? '1px solid var(--gb-border-subtle)' : 'none',
                 }}
               >
                 <TrailIcon status={r.status} />
