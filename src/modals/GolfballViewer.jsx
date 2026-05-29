@@ -854,6 +854,26 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             console.warn('[gb-decal] DecalGeometry produced 0 vertices — projection missed the mesh');
             try { onError?.('Decal projection produced no geometry'); } catch { /* ignore */ }
           }
+          /* THREE's DecalGeometry emits vertices in WORLD space (see
+             three/examples/jsm/geometries/DecalGeometry.js — the
+             final pass calls `applyMatrix4( projectorMatrix )` to
+             transform projector-local back to world). The old code
+             then put decalMesh under ballGroup AND copied
+             ballMesh.position + ballMesh.scale onto it — which
+             multiplied those world-space vertices a second time
+             through ballMesh's scale (~10000× under the current
+             0.01-radius OBJ), pushing the decal ~1,000,000 units
+             from the origin. Invisible. The earlier matrixWorld
+             fix did its job (8808 vertices, as the console
+             confirms); the regression was in how we PARENT and
+             TRANSFORM the resulting mesh.
+             Fix: bake ballGroup.matrixWorld⁻¹ into the geometry so
+             its vertices become ballGroup-local. Then decalMesh
+             can sit under ballGroup with identity transform and
+             still follow throw-mode + zoom because ballGroup's
+             matrixWorld is applied to it during render. */
+          const ballGroupInv = ballGroup.matrixWorld.clone().invert();
+          decalGeo.applyMatrix4(ballGroupInv);
           const decalMat = new THREE.MeshStandardMaterial({
             map: decalTexture,
             transparent: true,
@@ -865,12 +885,12 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             metalness: 0,
           });
           decalMesh = new THREE.Mesh(decalGeo, decalMat);
-          // Decal must match the ball's transform so its UV mapping
-          // aligns. Added to the same Group as the ball so throw-mode
-          // translation/rotation moves them together; otherwise the
-          // decal would stay glued to the origin.
-          decalMesh.position.copy(ballMesh.position);
-          decalMesh.scale.copy(ballMesh.scale);
+          /* Identity transform. The geometry's vertices are already
+             in ballGroup-local coords (we baked the inverse above),
+             so ballGroup.matrixWorld during render places them
+             correctly. Position/scale stay at default (0, 0, 0) /
+             (1, 1, 1). Added under ballGroup so throw-mode
+             translation/rotation moves the decal with the ball. */
           /* Render after the ball so depth+polygonOffset are honored
              in the correct order. Without this, scene order isn't
              guaranteed and the decal occasionally lost the depth
