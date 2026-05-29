@@ -36,6 +36,15 @@ import { I } from '../icons.jsx';
 
 const TINT_LIGHT = 'color-mix(in srgb, var(--gb-brand-label) 30%, transparent)';
 
+/* Sentinel variation id meaning "the parent template's base body" —
+   i.e., the synthetic Variation 1 that the picker exposes at the
+   top of every sub-list. Picking it pins the original so the rep
+   can lock that body in without falling back to random. Both the
+   EmailRunner orchestrator and the popup's renderStr already treat
+   a varId of '__original' as "no variation match" and fall through
+   to tpl.subject / tpl.body. */
+export const ORIGINAL_VARIATION_ID = '__original';
+
 /** Split a composite value into [tplId, varId]. */
 export function parseTemplateValue(value) {
   if (!value) return [null, null];
@@ -102,9 +111,19 @@ export function TemplatePicker({
 
   const matchedSet = useMemo(() => new Set(matchedIds), [matchedIds]);
   const selectedTpl = templates.find((t) => t.id === valueTplId) || null;
-  const selectedVar = selectedTpl
+  /* A pinned variation lookup that also recognizes the synthetic
+     ORIGINAL_VARIATION_ID. The original is exposed as "Variation
+     1" at the top of the sub-list; picking it pins the parent
+     body without falling back to random. */
+  const isOriginalPinned = valueVarId === ORIGINAL_VARIATION_ID;
+  const selectedVar = selectedTpl && valueVarId && !isOriginalPinned
     ? (selectedTpl.variations || []).find((v) => v.id === valueVarId) || null
     : null;
+  const pinnedDisplayName = isOriginalPinned
+    ? 'Variation 1'
+    : selectedVar
+      ? (selectedVar.label || selectedVar.name || 'variation')
+      : null;
 
   const toggleExpand = (id, e) => {
     e?.stopPropagation?.();
@@ -117,29 +136,31 @@ export function TemplatePicker({
 
   /* Sub-line on the collapsed bar reads differently per mode +
      selection state. Kept compact so the 320–380px form factor
-     doesn't wrap. */
-  const varCount = selectedTpl?.variations?.length || 0;
+     doesn't wrap. The variation count we show is N+1 because the
+     sub-list always includes a synthetic Variation 1 = the
+     parent's base body alongside the N saved variations. */
+  const savedVarCount = selectedTpl?.variations?.length || 0;
+  const totalVarCount = savedVarCount > 0 ? savedVarCount + 1 : 0;
   const collapsedSub = (() => {
     if (!selectedTpl) {
       return `${templates.length} available`;
     }
-    if (selectedVar) {
-      const name = selectedVar.label || selectedVar.name || 'variation';
+    if (pinnedDisplayName) {
       return mode === 'single'
         ? `pinned · ${selectedTpl.type || 'email'}`
-        : `pinned · ${name}`;
+        : `pinned · ${pinnedDisplayName}`;
     }
-    if (varCount === 0) {
+    if (totalVarCount === 0) {
       return `${selectedTpl.type || 'email'} · no variations`;
     }
     return mode === 'random'
-      ? `random · ${varCount} variations`
-      : `using base body · ${varCount} variation${varCount === 1 ? '' : 's'}`;
+      ? `random · ${totalVarCount} variations`
+      : `using base body · ${totalVarCount} variation${totalVarCount === 1 ? '' : 's'}`;
   })();
 
   const collapsedLabel = selectedTpl
-    ? (mode === 'single' && selectedVar
-      ? `${selectedTpl.name || 'Untitled'} · ${selectedVar.label || selectedVar.name}`
+    ? (mode === 'single' && pinnedDisplayName
+      ? `${selectedTpl.name || 'Untitled'} · ${pinnedDisplayName}`
       : (selectedTpl.name || 'Untitled'))
     : placeholder;
 
@@ -202,7 +223,13 @@ export function TemplatePicker({
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>{collapsedSub}</div>
         </div>
-        <CollapsedBadge mode={mode} selectedTpl={selectedTpl} selectedVar={selectedVar} />
+        <CollapsedBadge
+          mode={mode}
+          selectedTpl={selectedTpl}
+          /* Treat the synthetic Variation 1 the same as any
+             pinned saved variation so the pin badge renders. */
+          hasPinnedVariation={!!pinnedDisplayName}
+        />
         <SwapChip open={open} />
       </button>
 
@@ -296,9 +323,9 @@ export function TemplatePicker({
    EmailRunner: shuffle when selected parent has variations,
    check when it doesn't. Pin appears on pinned-variation parents.
    Popup: pin only — selected parent reads as the parent body. */
-function CollapsedBadge({ mode, selectedTpl, selectedVar }) {
+function CollapsedBadge({ mode, selectedTpl, hasPinnedVariation }) {
   if (!selectedTpl) return <span />;
-  if (selectedVar) {
+  if (hasPinnedVariation) {
     return (
       <span
         title="Variation pinned"
@@ -351,6 +378,12 @@ function GroupHeader({ label, tone }) {
       textTransform: 'uppercase', letterSpacing: 0.8,
       color: tone === 'brand' ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
       display: 'flex', alignItems: 'center', gap: 5,
+      /* Defensive flex-shrink:0 — the option list is a flex column
+         with maxHeight + overflowY:auto, and flex children default
+         to shrink:1, which would squash every row to fit instead
+         of producing a scrollbar. Set on every direct child of
+         the list so the scroll behavior is reliable. */
+      flexShrink: 0,
     }}>
       {tone === 'brand' && <Dot tone="brand" glow size={5} />}
       {label}
@@ -365,6 +398,7 @@ function EmptyHint({ children }) {
       fontSize: 11, fontStyle: 'italic',
       color: 'var(--gb-text-muted)',
       textAlign: 'center',
+      flexShrink: 0,
     }}>{children}</div>
   );
 }
@@ -392,6 +426,12 @@ function Row({
         animation: `gb-tpl-row-in .22s cubic-bezier(.4,0,.2,1) ${Math.min(idx, 8) * 0.03}s both`,
         overflow: 'hidden',
         transition: 'background .18s',
+        /* Defensive flex-shrink:0 — the option list (parent) is a
+           flex column with maxHeight + overflowY:auto. Without
+           this, the row's natural height is shrunk by flex layout
+           to fit the cap, so the rows squish + overlap instead of
+           overflowing and triggering the scrollbar. */
+        flexShrink: 0,
       }}
     >
       <div style={{
@@ -433,18 +473,30 @@ function Row({
             {hasVariations && (
               <>
                 {' · '}
+                {/* +1 because the sub-list includes a synthetic
+                    Variation 1 = the parent's base body alongside
+                    the N saved variations. */}
                 <span style={{ color: isSelected ? 'var(--gb-brand-label)' : undefined }}>
-                  {tpl.variations.length} var
+                  {tpl.variations.length + 1} var
                 </span>
               </>
             )}
             {pinnedVarId && (() => {
-              const v = tpl.variations.find((x) => x.id === pinnedVarId);
+              if (pinnedVarId === ORIGINAL_VARIATION_ID) {
+                return (
+                  <>
+                    {' · '}
+                    <span style={{ color: 'var(--gb-info-fg)' }}>Variation 1</span>
+                  </>
+                );
+              }
+              const idx = tpl.variations.findIndex((x) => x.id === pinnedVarId);
+              const v = idx >= 0 ? tpl.variations[idx] : null;
               return v ? (
                 <>
                   {' · '}
                   <span style={{ color: 'var(--gb-info-fg)' }}>
-                    {v.label || v.name || 'variation'}
+                    {v.label || v.name || `Variation ${idx + 2}`}
                   </span>
                 </>
               ) : null;
@@ -492,10 +544,28 @@ function Row({
               width: 1,
               background: 'var(--gb-border-default)',
             }} />
+            {/* Synthetic Variation 1 = the parent template's base
+                body. Picking it pins the original so it goes out as
+                a fixed selection (no random roll). Both the
+                EmailRunner orchestrator and the popup renderer
+                already fall through to tpl.subject / tpl.body when
+                varId === ORIGINAL_VARIATION_ID, so no resolver
+                change is needed. */}
+            <SubRow
+              key={ORIGINAL_VARIATION_ID}
+              label="Variation 1"
+              meta="original — parent template body"
+              isPicked={pinnedVarId === ORIGINAL_VARIATION_ID}
+              onPick={() => onPickVariation(ORIGINAL_VARIATION_ID)}
+            />
             {tpl.variations.map((v, vi) => (
               <SubRow
                 key={v.id}
-                label={v.label || v.name || `Variation ${vi + 1}`}
+                /* Saved variations renumber from 2 because the
+                   original took Variation 1's slot. Custom labels
+                   still win — only the auto-numbered fallback
+                   shifts. */
+                label={v.label || v.name || `Variation ${vi + 2}`}
                 meta={v.preview || ''}
                 isPicked={pinnedVarId === v.id}
                 onPick={() => onPickVariation(v.id)}
