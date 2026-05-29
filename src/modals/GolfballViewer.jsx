@@ -855,24 +855,24 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
              where the projection found them, and the decal also tracks
              the ball through drag / zoom / throw afterward. */
           decalGeo.applyMatrix4(ballGroup.matrixWorld.clone().invert());
-          const decalMat = new THREE.MeshStandardMaterial({
+          /* MeshBasicMaterial (UNLIT) — the diagnostic confirmed the
+             texture has ink (40%) and the geometry sits on the front
+             pole, so the only thing left that hid it was lighting: a
+             MeshStandardMaterial decal renders by the scene lights,
+             and on the shadowed/edge-lit pole it came out too dark to
+             read against the ball. Basic shows the logo at its actual
+             texture colors regardless of lighting. depthTest:false +
+             renderOrder keep it drawing over the ball surface (it
+             conforms at the same radius and would otherwise z-fight);
+             FrontSide culling still hides it when spun to the back. */
+          const decalMat = new THREE.MeshBasicMaterial({
             map: decalTexture,
             transparent: true,
-            /* The decal conforms to the sphere at radius ~100, the
-               same depth as the ball surface — with depthTest on it
-               z-fights and the opaque ball wins, so the print never
-               shows (the old build only "worked" because the fit-
-               scale copy floated the decal in FRONT of the ball).
-               depthTest:false + renderOrder draws the decal over the
-               ball every frame; FrontSide culling still hides it when
-               its face rotates away, so a spun ball doesn't show the
-               print through the back. */
             depthTest: false,
             depthWrite: false,
             polygonOffset: true,
             polygonOffsetFactor: -4,
-            roughness: 0.5,
-            metalness: 0,
+            toneMapped: false,
           });
           decalMesh = new THREE.Mesh(decalGeo, decalMat);
           /* Identity transform — the geometry is already in
