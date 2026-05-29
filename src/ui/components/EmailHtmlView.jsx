@@ -83,7 +83,7 @@ export function EmailHtmlView({ html, style }) {
           display: block;
           color-scheme: dark;
           padding: 20px 22px;
-          background: var(--gb-surface-1, ${DARK_SURFACE});
+          background: var(--gb-surface-1, #1e2024);
           color: var(--gb-text-secondary, ${LIGHT_TEXT});
           font-family: Calibri, 'Segoe UI', Arial, sans-serif;
           font-size: 13px;

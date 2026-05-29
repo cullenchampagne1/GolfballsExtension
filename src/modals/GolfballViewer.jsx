@@ -842,6 +842,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           const decalOrientation = new THREE.Euler(0, 0, 0);
           const decalSize = new THREE.Vector3(targetRadius * 0.7, targetRadius * 0.7, targetRadius * 2);
 
+          ballGroup.updateMatrixWorld(true);
           const decalGeo = new DecalGeometry(ballMesh, decalPosition, decalOrientation, decalSize);
           const decalMat = new THREE.MeshStandardMaterial({
             map: decalTexture,
@@ -854,14 +855,42 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             metalness: 0,
           });
           decalMesh = new THREE.Mesh(decalGeo, decalMat);
-          // Decal must match the ball's transform so its UV mapping
-          // aligns. Added to the same Group as the ball so throw-mode
-          // translation/rotation moves them together; otherwise the
-          // decal would stay glued to the origin.
-          decalMesh.position.copy(ballMesh.position);
-          decalMesh.scale.copy(ballMesh.scale);
+          /* DecalGeometry emits vertices in WORLD space (confirmed
+             in three/examples/jsm/geometries/DecalGeometry.js — the
+             final pass calls applyMatrix4(projectorMatrix) to map
+             projector-space back to world). The ball sits at world
+             radius ~100 centered at the origin, and ballGroup is at
+             identity when the decal is built, so the decal renders
+             ON the ball only when decalMesh carries NO extra
+             transform. The legacy `position.copy/scale.copy(ballMesh)`
+             multiplied the world verts by the fit scale (~1.66),
+             floating the print ~65 units off the surface. Leave it
+             identity; ballGroup carries the decal through
+             rotation / zoom / throw afterward. */
+          decalMesh.renderOrder = 1;
           ballGroup.add(decalMesh);
           objectsToDispose.push(decalGeo, decalMat);
+
+          /* One-shot diagnostics — pinpoints an invisible decal in a
+             single console line. Reports the geometry's world-space
+             bounds, the ball's effective scale, and the decal's final
+             world position so we can tell placement from depth/material
+             at a glance. */
+          try {
+            decalGeo.computeBoundingBox();
+            const bb = decalGeo.boundingBox;
+            decalMesh.updateMatrixWorld(true);
+            const wp = new THREE.Vector3();
+            decalMesh.getWorldPosition(wp);
+            // eslint-disable-next-line no-console
+            console.log('[gb-decal] verts=', decalGeo.attributes?.position?.count,
+              '| geoBBox min=', bb && [bb.min.x.toFixed(1), bb.min.y.toFixed(1), bb.min.z.toFixed(1)],
+              'max=', bb && [bb.max.x.toFixed(1), bb.max.y.toFixed(1), bb.max.z.toFixed(1)],
+              '| ballMesh.scale=', ballMesh.scale.x.toFixed(3),
+              '| ballGroup.scale=', ballGroup.scale.x.toFixed(3),
+              '| decal worldPos=', [wp.x.toFixed(1), wp.y.toFixed(1), wp.z.toFixed(1)],
+              '| tex=', decalTexture.image?.width + 'x' + decalTexture.image?.height);
+          } catch (e) { console.warn('[gb-decal] diag failed', e); }
           // Stash projection params for explode-time per-shard reuse.
           decalProjectionParams = {
             position: decalPosition.clone(),
