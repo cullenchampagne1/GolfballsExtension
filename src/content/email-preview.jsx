@@ -5,6 +5,30 @@ import { ToastHost, useToast } from '../ui/components/ToastHost.jsx';
 import { EmailPreview } from '../modals/EmailPreview.jsx';
 import { parseEml, isFullHtmlPage, stripPageChrome, plainTextBody } from '../lib/emailParse.js';
 import { filterCaseTemplates, pickBestCaseTemplate, recommendedFromTemplate, matchesCaseTpl } from '../lib/caseMatch.js';
+import { pickFromAddress, DEFAULT_LOCAL_PART } from '../lib/sender.js';
+
+/* The party on the thread that ISN'T us — the reply target. */
+const OUR_DOMAINS = /(golfballs\.com|loyaltylogo\.com|gbcadmin)/i;
+function bareEmail(s) {
+  const m = String(s || '').match(/<([^>]+)>/);
+  return (m ? m[1] : String(s || '')).trim();
+}
+function customerEmail(email, meta) {
+  const from = bareEmail(email?.from || meta?.from);
+  const to = bareEmail(email?.to || meta?.to);
+  if (from && !OUR_DOMAINS.test(from)) return from;
+  if (to && !OUR_DOMAINS.test(to)) return to;
+  return from || to || '';
+}
+/* HTML → mailto-friendly plain text (breaks preserved). */
+function htmlToPlain(html) {
+  return String(html || '')
+    .replace(/<br\s*\/?>(?=)/gi, '\n')
+    .replace(/<\/(p|div|h[1-6]|li)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/\n{3,}/g, '\n\n').trim();
+}
 
 /* ───────────────────────────────────────────────────────────────
    email-preview.jsx — content-script entry for the React Email
@@ -162,14 +186,42 @@ if (!window.__gbEmailPreviewLoaded) {
       }
     };
 
+    /* Send the picked reply template — mirrors the popup: post to the
+       Power Automate flow when it's enabled + configured, otherwise open
+       an Outlook (mailto) compose window. */
     const onSendTemplate = async (tpl) => {
       if (sendingTemplate) return;
+      const to = customerEmail(email, target.meta);
+      if (!to) { toast?.error?.('No customer email to reply to', { duration: 4000 }); return; }
+      const baseSubject = (email?.subject || target.meta?.subject || '').replace(/^\s*RE:\s*/i, '');
+      const subject = `RE: ${baseSubject}`;
+      const rawBody = tpl.body || '';
+
       setSendingTemplate(true);
-      /* TODO: real reply-send transport (Power Automate / CRM reply
-         endpoint) isn't wired yet — surface the pick so the workflow is
-         testable end-to-end once the send pipe lands. */
-      toast?.info?.(`Reply template "${tpl.name || tpl.subject || 'Untitled'}" ready — send pipe not wired yet`, { duration: 3500 });
-      setSendingTemplate(false);
+      const cfg = await new Promise((res) => chrome.storage.local.get(['featureFlags', 'emailSignature', 'devSettings'], res));
+      const flags = cfg.featureFlags || {};
+      const paOn = flags.powerAutomateEnabled === true;
+      const paUrl = typeof flags.powerAutomateUrl === 'string' && flags.powerAutomateUrl.trim().length > 0;
+      const localPart = (cfg.devSettings && cfg.devSettings['email.localPart']) || DEFAULT_LOCAL_PART;
+      const from = pickFromAddress(tpl, localPart);
+
+      if (paOn && paUrl) {
+        const sig = cfg.emailSignature ? `<br><div>${cfg.emailSignature}</div>` : '';
+        const payload = { emails: [{ from, to, subject, htmlBody: rawBody + sig, replyMode: 'reply' }] };
+        chrome.runtime.sendMessage({ action: 'paAutomate', paUrl: flags.powerAutomateUrl, payload }, (result) => {
+          setSendingTemplate(false);
+          if (result?.results?.[0]?.status === 'sent') {
+            toast?.success?.(`Reply sent to ${to}`, { duration: 4000 });
+          } else {
+            toast?.error?.(`Send failed: ${result?.results?.[0]?.error || result?.error || 'Power Automate error'}`, { duration: 6000 });
+          }
+        });
+      } else {
+        const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(htmlToPlain(rawBody))}`;
+        try { window.open(mailto, '_blank'); } catch { /* popup blocked */ }
+        setSendingTemplate(false);
+        toast?.info?.(`Opening Outlook reply to ${to}`, { duration: 2500 });
+      }
     };
 
     const onJunk = async () => {
