@@ -58,8 +58,8 @@ async function loadThreeAndModel() {
   // accessible so chrome.runtime.getURL gives a load-anywhere URL.
   if (!cache.modelPromise) {
     const url = (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
-      ? chrome.runtime.getURL('icons/golfball_model/Golf_ball.obj')
-      : 'icons/golfball_model/Golf_ball.obj';
+      ? chrome.runtime.getURL('assets/golfball_model/Golf_ball.obj')
+      : 'assets/golfball_model/Golf_ball.obj';
     cache.modelPromise = new Promise((resolve, reject) => {
       const loader = new OBJLoader();
       loader.load(
@@ -84,14 +84,14 @@ async function loadThreeAndModel() {
 }
 
 /* HDRI scene registry — one entry per scene. Add a row, drop the
-   matching .exr in /icons, and the drawer picks it up automatically.
+   matching .exr in /assets, and the drawer picks it up automatically.
    `icon` is the glyph component used in the drawer chip; `file` is
    the manifest-listed web-accessible resource path. */
 export const SCENES = [
-  { key: 'goldenGate',  label: 'Golden Gate hills', file: 'icons/golden_gate_hills_4k.exr', icon: 'bridge' },
-  { key: 'sunsetFairway', label: 'Sunset fairway',   file: 'icons/sunset_fairway_4k.exr',   icon: 'sunset' },
-  { key: 'lilienstein', label: 'Lilienstein',       file: 'icons/lilienstein_4k.exr',      icon: 'mountain' },
-  { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'icons/moonlit_golf_4k.exr',     icon: 'moon' },
+  { key: 'goldenGate',  label: 'Golden Gate hills', file: 'assets/golden_gate_hills_4k.exr', icon: 'bridge' },
+  { key: 'sunsetFairway', label: 'Sunset fairway',   file: 'assets/sunset_fairway_4k.exr',   icon: 'sunset' },
+  { key: 'lilienstein', label: 'Lilienstein',       file: 'assets/lilienstein_4k.exr',      icon: 'mountain' },
+  { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'assets/moonlit_golf_4k.exr',     icon: 'moon' },
 ];
 
 export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, onError, onSceneChange, onThrowChange }, ref) {
