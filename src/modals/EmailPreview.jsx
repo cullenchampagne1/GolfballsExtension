@@ -395,7 +395,12 @@ function ReplyComposer({ replyTo, subject }) {
             }}>Draft</span>
           </button>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
+            style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+          >
             <div style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '10px 14px', borderBottom: '1px solid var(--gb-border-subtle)',
@@ -428,7 +433,7 @@ function ReplyComposer({ replyTo, subject }) {
                 Send
               </Btn>
             </div>
-          </div>
+          </motion.div>
         )}
       </div>
     </div>
