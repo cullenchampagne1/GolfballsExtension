@@ -61,6 +61,7 @@ export { ResolveHint } from './components/ResolveHint.jsx';
 export { CollapsibleChecklist } from './components/CollapsibleChecklist.jsx';
 export { CollapsibleSection } from './components/CollapsibleSection.jsx';
 export { TYPE_ICONS, TYPE_COLORS } from './typeIcons.jsx';
+export { ProofCard, ProofSphere, STATUS_TONE as PROOF_STATUS_TONE, statusTone as proofStatusTone } from './components/ProofCard.jsx';
 
 export { FeatureSpotlight } from './components/FeatureSpotlight.jsx';
 export { ExpandableFeature } from './components/ExpandableFeature.jsx';
