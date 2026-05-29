@@ -1,73 +1,101 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   FloatingPanel, ModalHeader,
-  Btn, Dropdown, Input, Textarea, Segmented, Field, SectionLabel,
-  PillTag, CollapsibleSection,
-  I, Icon, useToast,
-  ensureMarchingAntsStyle,
+  Btn, Kbd,
+  KeyboardComposer, useComposerFilter, COMPOSER_TONE,
+  Icon, I, useToast,
 } from '../ui/index.js';
 import {
   CALL_CATEGORY_OPTIONS,
-  CALL_DIRECTION_OPTIONS,
   loadCallTemplates,
   subscribeToCallTemplates,
   getCategoryLabel,
+  getCallCategoryTone,
   buildCustomTemplate,
 } from '../lib/callLog.js';
 import { useModalTopState } from '../lib/actionRegistry.js';
 
 /* ───────────────────────────────────────────────────────────────
-   CallLog — quick-action modal for logging an outbound (or
-   inbound) sales call.
+   CallLog — the redesigned, keyboard-first call logger.
 
-   Layout (top to bottom):
-     • Header — phone icon + "Log call" + contact/phone subtitle
-     • Quick Log section — 3-column compact button grid (matches
-       the legacy quick-action panel's density). Each cell is one
-       enabled call_log noteTemplate.
-     • Custom Log section — full-fidelity equivalent of the
-       template editor. Direction switcher (full-width), Category
-       dropdown (full-width), Subject + Description, Voicemail
-       toggle (FeatureSpotlight, same component the editor uses),
-       Next-step actions (StepsEditor, same component the editor
-       uses).
-     • Footer — tel: hint + Cancel / Save buttons
+   Replaces the preset grid + collapsible custom form with the shared
+   KeyboardComposer (ui/components/KeyboardComposer.jsx) — the same
+   one the Quick Task modal uses:
 
-   Both paths pipe through the same `onSubmit(template)` prop so
-   the CRM call doesn't have to branch.
+     • A filter bar over the rep's saved call templates (↑↓ walk, 1–9
+       fire the Nth, Enter fires the top match).
+     • Press / (or type a word like "inbound", "vm", or a category) and
+       the bar grows into a keyboard-only composer. Category, Direction
+       and a Voicemail flag become coloured chips via the / menu;
+       Subject + Note are explicit fields; a live preview mirrors the
+       activity log as it's built.
+
+   Both paths fund the same onSubmit(template) prop, so the CRM
+   activity-log POST (src/lib/callLog.js + submit pipeline) is
+   unchanged. Category is the real CRM enum.
 
    Props
      contactName  string                 display name (header)
-     contactType  'contact' | 'account'  used by the caller for routing
+     contactType  'contact' | 'account'  (informational)
      phone        string                 number dialed; shown in subtitle
      onSubmit     (template) => Promise<{ ok, error? }>   REQUIRED
      onClosed     () => void
      bindClose    (fn) => void
 ─────────────────────────────────────────────────────────────── */
 
-/* Direction icons — inbound = arrow toward you, outbound = away.
-   Matches NoteEditor.jsx's NIcons so a rep sees the same glyph
-   on both surfaces. */
-const Inbound  = (p) => (<Icon {...p}><polyline points="7 17 17 7"/><polyline points="7 7 17 7 17 17"/></Icon>);
-const Outbound = (p) => (<Icon {...p}><polyline points="17 7 7 17"/><polyline points="17 17 7 17 7 7"/></Icon>);
-/* Voicemail cassette — matches the legacy quick-action panel's icon. */
-const Voicemail = (p) => (
-  <Icon {...p}>
-    <rect x="3" y="6" width="18" height="12" rx="2" />
-    <circle cx="8" cy="12" r="2" />
-    <circle cx="16" cy="12" r="2" />
-    <path d="M10 12h4" />
-  </Icon>
-);
-/* Mic icon — same path NoteEditor.jsx uses for the voicemail
-   FeatureSpotlight, kept inline here since it's the only consumer
-   in this file. */
-const MicIcon = (p) => (
-  <Icon {...p}>
-    <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
-    <path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8" />
-  </Icon>
-);
+const Inbound  = (p) => <Icon {...p}><polyline points="7 17 17 7" /><polyline points="7 7 17 7 17 17" /></Icon>;
+const Outbound = (p) => <Icon {...p}><polyline points="17 7 7 17" /><polyline points="17 17 7 17 7 7" /></Icon>;
+const Voicemail = (p) => <Icon {...p}><circle cx="6" cy="14" r="3.2" /><circle cx="18" cy="14" r="3.2" /><path d="M6 17.2h12" /></Icon>;
+
+const dirGlyph = (tpl) => (tpl.callVoicemail ? <Voicemail size={15} /> : tpl.callDirection === 1 ? <Inbound size={15} /> : <Outbound size={15} />);
+
+/* Schema for the composer's / menu: real Category enum + Direction + a
+   Voicemail flag. Tokens carry string ids (category / direction) and a
+   boolean (vm) that map straight onto the call template shape. */
+function buildCallSchema() {
+  const catOptions = CALL_CATEGORY_OPTIONS
+    .filter((o) => o.id !== '0')
+    .map((o) => ({ value: o.id, label: o.label, tone: getCallCategoryTone(o.id) }));
+  const catMap = {};
+  catOptions.forEach((o) => {
+    catMap[o.label.toLowerCase()] = o.value;
+    catMap[o.label.toLowerCase().split(/[ /]/)[0]] = o.value;
+  });
+  const DIR = { in: '1', inbound: '1', incoming: '1', out: '0', outbound: '0', outgoing: '0', call: '0' };
+  const VM = new Set(['vm', 'voicemail', 'vmail']);
+  const dot = (tone) => <span style={{ width: 7, height: 7, borderRadius: '50%', background: (COMPOSER_TONE[tone] || COMPOSER_TONE.neutral).solid, display: 'inline-block' }} />;
+
+  return {
+    filterPlaceholder: 'Filter call templates…   or / to compose',
+    subjectPlaceholder: 'What was the call about?',
+    requiredKey: 'category',
+    fromTemplate: (tpl) => {
+      const t = { direction: String(tpl.callDirection || 0) };
+      if (tpl.callCategory) t.category = String(tpl.callCategory);
+      if (tpl.callVoicemail) t.vm = true;
+      return t;
+    },
+    tokenTypes: [
+      {
+        key: 'category', menuLabel: 'Category', options: catOptions, shorthand: (w) => catMap[w] || null,
+        chip: (v) => ({ tone: getCallCategoryTone(v), label: getCategoryLabel(v) || 'Category', icon: dot(getCallCategoryTone(v)) }),
+      },
+      {
+        key: 'direction', menuLabel: 'Direction', shorthand: (w) => DIR[w] || null,
+        options: [
+          { value: '0', label: 'Outbound', tone: 'brand', icon: <Outbound size={12} /> },
+          { value: '1', label: 'Inbound', tone: 'brand', icon: <Inbound size={12} /> },
+        ],
+        chip: (v) => ({ tone: 'brand', label: v === '1' ? 'Inbound' : 'Outbound', icon: v === '1' ? <Inbound size={12} /> : <Outbound size={12} /> }),
+      },
+      {
+        key: 'vm', menuLabel: 'Flag', shorthand: (w) => (VM.has(w) ? true : null),
+        options: [{ value: true, label: 'Left voicemail', tone: 'warning', icon: <Voicemail size={12} /> }],
+        chip: () => ({ tone: 'warning', label: 'Voicemail', icon: <Voicemail size={12} /> }),
+      },
+    ],
+  };
+}
 
 export function CallLog({
   contactName = 'Contact',
@@ -77,234 +105,102 @@ export function CallLog({
   onClosed,
   bindClose,
 }) {
+  void contactType;
   const toast = useToast();
+  const schema = React.useMemo(() => buildCallSchema(), []);
 
-  /* ── Preset templates ─────────────────────────────────────── */
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [flashId, setFlashId] = useState(null);
 
-  /* ── Custom log form state ─────────────────────────────────── */
-  const [direction, setDirection] = useState(0);   // 0 = Outbound default
-  const [category, setCategory]   = useState(0);   // CRM enum id; 0 = unset
-  const [subject, setSubject]     = useState('');
-  const [body, setBody]           = useState('');
-  const [voicemail, setVoicemail] = useState(false);
-  const [savingCustom, setSavingCustom] = useState(false);
-
-  /* Keyboard nav over the Quick log grid.
-       - Tab from idle (-1) → highlight the first quick action.
-       - Tab walks forward; Shift+Tab walks back.
-       - Enter fires handlePresetClick on the highlighted row.
-       - Tab past the last row opens Custom log + focuses its first
-         field so the user's next Tab keystroke flows naturally
-         through the form. Shift+Tab from row 0 releases the
-         highlight back to idle.
-     The active row gets an inset brand ring (PresetGridButton reads
-     isKbdActive). We blur whatever was focused at the start of a
-     Tab session so the browser's own Tab routing doesn't fight us. */
-  const [activeQuickIdx, setActiveQuickIdx] = useState(-1);
-  const [customOpen, setCustomOpen] = useState(false);
-  const customFormRef = useRef(null);
+  const composerRef = useRef(null);
+  const f = useComposerFilter(templates, { getText: (t) => getCategoryLabel(t.callCategory) });
 
   const bindCloseRef = useRef(null);
-  const handleBindClose = (fn) => {
-    bindCloseRef.current = fn;
-    if (bindClose) bindClose(fn);
-  };
+  const handleBindClose = (fn) => { bindCloseRef.current = fn; if (bindClose) bindClose(fn); };
   const animatedClose = () => bindCloseRef.current?.();
 
-  useEffect(() => { ensureMarchingAntsStyle(); }, []);
-
-  /* Single-visible-modal coordination — see useModalTopState. */
   const modalVisible = useModalTopState('call-log', 'Call Log');
 
   useEffect(() => {
     let alive = true;
-    loadCallTemplates().then((t) => {
-      if (!alive) return;
-      setTemplates(t);
-      setLoading(false);
-    });
+    loadCallTemplates().then((t) => { if (!alive) return; setTemplates(t); setLoading(false); });
     const unsub = subscribeToCallTemplates((next) => { if (alive) setTemplates(next); });
     return () => { alive = false; unsub(); };
   }, []);
 
-  /* Keep activeQuickIdx in bounds when the template list changes. */
   useEffect(() => {
-    setActiveQuickIdx((i) => (i >= templates.length ? -1 : i));
-  }, [templates.length]);
+    const id = setTimeout(() => composerRef.current?.focus(), 60);
+    return () => clearTimeout(id);
+  }, []);
 
-  /* Document-level Tab/Shift+Tab/Enter handler. Only intercepts when
-     the user isn't typing into an input/textarea/contenteditable —
-     once focus is inside the Custom log form, native Tab takes over
-     and walks the fields. */
-  useEffect(() => {
-    const isTypingTarget = (el) => {
-      if (!el) return false;
-      const tag = el.tagName && el.tagName.toLowerCase();
-      if (tag === 'input' || tag === 'textarea' || el.isContentEditable) return true;
-      /* Crucial: once focus is anywhere inside the Custom log form
-         (Segmented Outbound/Inbound, Dropdown trigger, PillTag, Save
-         button, etc.) the handler must bow out so the BROWSER walks
-         the form's natural tab order. Without this the Tab keystroke
-         was re-firing our "from idle, highlight first quick row"
-         branch and the user got bounced back to the top of the
-         quick log. */
-      if (customFormRef.current?.contains(el)) return true;
-      return false;
-    };
-    const onKey = (e) => {
-      if (e.key === 'Escape' && activeQuickIdx >= 0) {
-        e.preventDefault();
-        setActiveQuickIdx(-1);
-        return;
-      }
-      if (e.key === 'Enter' && activeQuickIdx >= 0) {
-        const tpl = templates[activeQuickIdx];
-        if (tpl) {
-          e.preventDefault();
-          handlePresetClick(tpl);
-        }
-        return;
-      }
-      if (e.key !== 'Tab') return;
-      /* Shift+Tab from the FIRST focusable in the Custom log form
-         should hop back to the last quick-log row instead of bouncing
-         out of the modal. Same marching-ants visual either direction
-         so Tab and Shift+Tab feel symmetric. */
-      if (e.shiftKey && customFormRef.current?.contains(e.target)) {
-        const focusables = customFormRef.current.querySelectorAll(
-          'input, textarea, select, button:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        );
-        if (focusables[0] === e.target && templates.length > 0) {
-          e.preventDefault();
-          try { e.target.blur?.(); } catch {}
-          setActiveQuickIdx(templates.length - 1);
-          return;
-        }
-      }
-      // Let typing targets handle Tab themselves (browser-default
-      // focus rotation through the Custom form's fields).
-      if (isTypingTarget(e.target)) return;
-      if (templates.length === 0) return;
-
-      if (e.shiftKey) {
-        if (activeQuickIdx <= 0) {
-          // From the first row (or idle) → release the highlight and
-          // fall through to default Tab so the user can leave the
-          // modal naturally.
-          setActiveQuickIdx(-1);
-          return;
-        }
-        e.preventDefault();
-        setActiveQuickIdx((i) => i - 1);
-        return;
-      }
-
-      // Tab forward.
-      if (activeQuickIdx === -1) {
-        e.preventDefault();
-        // Take focus off whatever button currently holds it so the
-        // visual highlight is the only thing telling the user where
-        // they are.
-        try { document.activeElement?.blur?.(); } catch {}
-        setActiveQuickIdx(0);
-        return;
-      }
-      if (activeQuickIdx < templates.length - 1) {
-        e.preventDefault();
-        setActiveQuickIdx((i) => i + 1);
-        return;
-      }
-      // Past the last quick action: open the Custom log section,
-      // release the highlight, and focus the first focusable in
-      // the form so the user's next Tab walks normally.
-      e.preventDefault();
-      setActiveQuickIdx(-1);
-      setCustomOpen(true);
-      // Wait a tick for the collapsible to render its body before
-      // querying it for a focusable. requestAnimationFrame after a
-      // microtask lines up nicely with motion's mount.
-      Promise.resolve().then(() => requestAnimationFrame(() => {
-        const root = customFormRef.current;
-        if (!root) return;
-        const focusable = root.querySelector(
-          'input, textarea, select, button:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        );
-        try { focusable?.focus({ preventScroll: false }); } catch {}
-      }));
-    };
-    document.addEventListener('keydown', onKey, true);
-    return () => document.removeEventListener('keydown', onKey, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeQuickIdx, templates]);
-
-  /* Preset click: submit immediately. Same toast on success/failure
-     as the custom path so the rep gets uniform feedback. */
-  const handlePresetClick = async (tpl) => {
-    if (busyId) return;
+  const fireTemplate = async (tpl) => {
+    if (!tpl || busy) return;
     if (!tpl.callCategory) {
       toast?.error?.(`"${tpl.name}" has no category. Open Note Templates and pick one.`);
       return;
     }
-    if (!onSubmit) {
-      toast?.error?.('Call-log submit is not wired up');
-      return;
-    }
-    setBusyId(tpl.id);
+    if (!onSubmit) { toast?.error?.('Call-log submit is not wired up'); return; }
+    setFlashId(tpl.id); setTimeout(() => setFlashId((id) => (id === tpl.id ? null : id)), 650);
+    setBusy(true);
     try {
       const result = await onSubmit(tpl);
-      if (result?.ok) {
-        toast?.success?.(`Logged: ${tpl.name}`, { duration: 2200 });
-        animatedClose();
-      } else {
-        toast?.error?.(`Couldn't log call: ${result?.error || 'unknown error'}`);
-        setBusyId(null);
-      }
-    } catch (err) {
-      toast?.error?.(`Couldn't log call: ${err?.message || err}`);
-      setBusyId(null);
-    }
+      if (result?.ok) { toast?.success?.(`Logged: ${tpl.name}`, { duration: 2200 }); animatedClose(); }
+      else { toast?.error?.(`Couldn't log call: ${result?.error || 'unknown error'}`); setBusy(false); }
+    } catch (err) { toast?.error?.(`Couldn't log call: ${err?.message || err}`); setBusy(false); }
   };
 
-  const handleCustomSubmit = async () => {
-    if (savingCustom || busyId) return;
-    if (!category) {
-      toast?.warning?.('Pick a category before saving');
-      return;
-    }
-    if (!subject.trim() && !body.trim()) {
-      toast?.warning?.('Add a subject or description');
-      return;
-    }
-    if (!onSubmit) {
-      toast?.error?.('Call-log submit is not wired up');
-      return;
-    }
-    setSavingCustom(true);
+  const logComposed = async ({ tokens, subject, body }) => {
+    if (busy) return;
+    if (!onSubmit) { toast?.error?.('Call-log submit is not wired up'); return; }
     const synthetic = buildCustomTemplate({
       subject, body,
-      callDirection: direction,
-      callCategory: category,
-      callVoicemail: voicemail,
+      callDirection: parseInt(tokens.direction ?? '0', 10) || 0,
+      callCategory: parseInt(tokens.category, 10) || 0,
+      callVoicemail: !!tokens.vm,
     });
+    setBusy(true);
     try {
       const result = await onSubmit(synthetic);
-      if (result?.ok) {
-        toast?.success?.('Call logged', { duration: 2200 });
-        animatedClose();
-      } else {
-        toast?.error?.(`Couldn't log call: ${result?.error || 'unknown error'}`);
-        setSavingCustom(false);
-      }
-    } catch (err) {
-      toast?.error?.(`Couldn't log call: ${err?.message || err}`);
-      setSavingCustom(false);
-    }
+      if (result?.ok) { toast?.success?.('Call logged', { duration: 2200 }); animatedClose(); }
+      else { toast?.error?.(`Couldn't log call: ${result?.error || 'unknown error'}`); setBusy(false); }
+    } catch (err) { toast?.error?.(`Couldn't log call: ${err?.message || err}`); setBusy(false); }
   };
 
-  const anyBusy = !!busyId || savingCustom;
+  const customise = (tpl) => composerRef.current?.loadTemplate({ ...tpl, subject: tpl.subject || tpl.name, body: tpl.body || '' });
+
+  const renderList = (ff) => (
+    <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px 8px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 6px 8px' }}>
+        <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Quick log</span>
+        {templates.length > 0 && <span style={{ fontSize: 10, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{ff.results.length} of {templates.length}</span>}
+      </div>
+      {loading ? (
+        <ListHint>Loading templates…</ListHint>
+      ) : templates.length === 0 ? (
+        <BuildPrompt onBuild={() => composerRef.current?.openMenu()} text="No call templates yet." />
+      ) : ff.results.length === 0 ? (
+        <BuildPrompt onBuild={() => composerRef.current?.openMenu()} text="No template matches." />
+      ) : (
+        ff.results.map((tpl, i) => (
+          <CommandRow
+            key={tpl.id} tpl={tpl} hotkey={i + 1}
+            isActive={ff.active === i} flashing={flashId === tpl.id}
+            rowRef={(el) => (ff.rowRefs.current[i] = el)}
+            onFocus={() => ff.setActive(i)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); customise(tpl); return; }
+              if (e.key === 'Tab') return;
+              ff.onRowKey(e, i, fireTemplate);
+            }}
+            onClick={() => fireTemplate(tpl)}
+            onCustomise={customise}
+          />
+        ))
+      )}
+    </div>
+  );
 
   return (
     <FloatingPanel
@@ -321,293 +217,110 @@ export function CallLog({
         subtitle={`${contactName}${phone ? ' · ' + phone : ''}`}
       />
 
-      <div style={{
-        padding: 14,
-        display: 'flex', flexDirection: 'column', gap: 14,
-        maxHeight: '76vh', overflowY: 'auto',
-      }}>
-        {/* ── Quick log — 3-column compact button grid ────────
-            Mirrors the density of the legacy in-page panel
-            (src/vanilla/call-log-panel.js). Each cell is one
-            template; click fires onPick straight to the CRM.
-            Truncated label + IN/OUT meta is enough info for a
-            rep who already knows their template names — the
-            full category label is in the button's title attr
-            for tooltip discovery. */}
-        <div>
-          <SectionLabel>Quick log</SectionLabel>
-          {loading ? (
-            <EmptyHint>Loading templates…</EmptyHint>
-          ) : templates.length === 0 ? (
-            <EmptyHint>
-              No call templates configured. Open the Notes editor to add one.
-            </EmptyHint>
-          ) : (
-            /* Scroll container — caps the section's vertical
-               footprint so a rep with 20+ templates doesn't push
-               the custom-log form off-screen. paddingRight keeps
-               content from sliding under the scrollbar. 168px
-               shows ~4 rows of 30px buttons before scrolling. */
-            <div style={{
-              maxHeight: 168,
-              overflowY: 'auto',
-              paddingRight: 4,
-              marginTop: 6,
-            }}>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                gap: 5,
-              }}>
-                {templates.map((tpl, idx) => (
-                  <PresetGridButton
-                    key={tpl.id}
-                    tpl={tpl}
-                    busy={busyId === tpl.id}
-                    disabled={anyBusy && busyId !== tpl.id}
-                    isKbdActive={idx === activeQuickIdx}
-                    onPick={() => handlePresetClick(tpl)}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── Custom log — collapsed by default ────────────
-            Quick Log is the primary path (one-tap submit), so we
-            keep it always-visible up top and tuck Custom Log into
-            a collapsible section. Most reps use a preset; the
-            minority who need an ad-hoc log expand this. The save
-            button lives INSIDE the collapsed body so it doesn't
-            clutter the modal footer when the form isn't visible. */}
-        <CollapsibleSection
-          icon={<I.edit />}
-          title="Custom log"
-          subtitle="No preset fits? Build a one-off entry."
-          open={customOpen}
-          onOpenChange={setCustomOpen}
-        >
-          <div
-            ref={customFormRef}
-            style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}
-          >
-            {/* Direction + Category share a row. Both use size="md"
-                (32px) so the visual heights match — sm + an inline
-                28px on Segmented + a 28px Dropdown looked uneven
-                because Segmented's container is content-box (its
-                "height" was inner-only, plus 4px padding + 2px
-                border = ~34px outer), while inputBaseStyle on the
-                Dropdown is border-box. md on both = uniform 32px
-                outer for both. */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'end' }}>
-              <Field label="Direction">
-                <Segmented
-                  size="md"
-                  value={String(direction)}
-                  onChange={(v) => setDirection(parseInt(v, 10) | 0)}
-                  options={CALL_DIRECTION_OPTIONS.map((o) => ({
-                    ...o,
-                    icon: o.id === '1' ? <Inbound /> : <Outbound />,
-                  }))}
-                  full
-                />
-              </Field>
-              <Field label="Category" required>
-                <Dropdown
-                  size="md"
-                  searchable
-                  value={String(category)}
-                  options={CALL_CATEGORY_OPTIONS}
-                  placeholder="Select category…"
-                  onChange={(v) => setCategory(parseInt(v, 10) || 0)}
-                  style={{ width: '100%' }}
-                />
-              </Field>
-            </div>
-
-            {/* Subject input + inline Voicemail toggle share the
-                SAME row. The Input flexes to fill remaining width
-                while the PillTag pins to the right at the same
-                28px height as the input (Input size="sm" maps to
-                28px via inputBaseStyle, so we override PillTag's
-                default padding to match). PillTag's on/off state
-                is conveyed entirely by the tint — brand when on,
-                neutral when off — no embedded switch widget. */}
-            <Field label="Subject">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Input
-                  size="sm"
-                  value={subject}
-                  onChange={setSubject}
-                  placeholder="Brief subject for the activity log…"
-                  style={{ flex: 1, minWidth: 0 }}
-                />
-                <PillTag
-                  on={voicemail}
-                  icon={<MicIcon />}
-                  onClick={() => setVoicemail((v) => !v)}
-                  style={{ height: 28, padding: '0 10px', flexShrink: 0 }}
-                >
-                  Voicemail
-                </PillTag>
-              </div>
-            </Field>
-
-            <Field label="Description">
-              <Textarea
-                value={body}
-                onChange={setBody}
-                placeholder="What happened on the call…"
-                rows={4}
-                resize="vertical"
-              />
-            </Field>
-
-            {/* Save lives INSIDE the collapsible — it's only useful
-                when the form is visible, and putting it here keeps
-                the modal footer minimal (Cancel + tel: hint) when
-                the rep is just picking a preset. */}
-            <Btn
-              size="sm"
-              variant="primary"
-              full
-              icon={<I.send />}
-              onClick={handleCustomSubmit}
-              disabled={anyBusy}
-            >
-              {savingCustom ? 'Saving…' : 'Save custom log'}
-            </Btn>
-          </div>
-        </CollapsibleSection>
+      <div
+        style={{ display: 'flex', flexDirection: 'column', height: 'min(72vh, 600px)' }}
+        onKeyDown={(e) => {
+          if (e.key === '/') {
+            const tag = (e.target.tagName || '').toLowerCase();
+            if (tag !== 'input' && tag !== 'textarea') { e.preventDefault(); composerRef.current?.openMenu(); return; }
+          }
+          f.onContainerKey(e, fireTemplate);
+        }}
+      >
+        <KeyboardComposer
+          ref={composerRef}
+          schema={schema}
+          f={f}
+          onLog={logComposed}
+          onFilterEnter={fireTemplate}
+          renderList={renderList}
+          contact={contactName}
+          composeTitle="Composing a custom log"
+          subjectLabel="Subject"
+          noteLabel="Note"
+          saveLabel="Save"
+          leadIcon={<I.phone size={15} />}
+          previewFooterMeta={<span>logs now</span>}
+          previewReadyLabel="ready"
+          previewNeedLabel="needs category"
+          previewUntitled="Untitled call"
+        />
       </div>
 
-      {/* ── Footer — minimal now that Save lives inside the
-            Custom Log collapsible. tel: hint left, Cancel right.
-            Reps who just want to dismiss without logging hit
-            Cancel (or the header close button); preset clicks
-            auto-close on success. */}
       <div style={{
         padding: 12,
         borderTop: '1px solid var(--gb-border-subtle)',
         background: 'var(--gb-surface-2)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+        display: 'flex', alignItems: 'center', gap: 10,
       }}>
-        <span style={{
-          fontSize: 10.5, color: 'var(--gb-text-muted)',
-          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        }}>
-          {phone ? `Dialed ${phone} via tel:` : 'No phone — log only'}
+        <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {phone ? `Dialed ${phone} via tel:` : 'Log a call'}
         </span>
-        <Btn size="sm" variant="secondary" onClick={animatedClose} disabled={anyBusy}>Cancel</Btn>
+        <Kbd>/</Kbd>
+        <span style={{ fontSize: 10.5, color: 'var(--gb-text-ghost)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <Kbd>↑↓</Kbd> move · <Kbd>↵</Kbd> log
+        </span>
+        <span style={{ flex: 1 }} />
+        <Btn size="sm" variant="secondary" onClick={animatedClose} disabled={busy}>Cancel</Btn>
       </div>
     </FloatingPanel>
   );
 }
 
-/* ── Helpers / sub-components ─────────────────────────────── */
-
-function EmptyHint({ children }) {
-  return (
-    <div style={{
-      padding: '12px 10px', marginTop: 6,
-      fontSize: 11, color: 'var(--gb-text-muted)',
-      background: 'var(--gb-fill-subtle)',
-      border: '1px dashed var(--gb-border-default)',
-      borderRadius: 'var(--gb-r-sm)',
-      textAlign: 'center', fontStyle: 'italic',
-    }}>{children}</div>
-  );
-}
-
-/* A single 3-col-grid cell. Compact button styled like the legacy
-   in-page quick-log buttons: icon + truncated name + tiny IN/OUT
-   meta on the right. Busy state shows a spinner where the IN/OUT
-   tag was so the cell width stays stable mid-submit. */
-function PresetGridButton({ tpl, busy, disabled, isKbdActive, onPick }) {
+/* ── Preset row — scannable: hotkey · dir glyph · name/subject · category. */
+function CommandRow({ tpl, hotkey, isActive, flashing, rowRef, onFocus, onKeyDown, onClick, onCustomise }) {
   const [hover, setHover] = useState(false);
-  const ref = useRef(null);
-  const dirLabel = tpl.callDirection === 1 ? 'IN' : 'OUT';
+  const lit = hover || isActive;
+  const tone = COMPOSER_TONE[getCallCategoryTone(tpl.callCategory)] || COMPOSER_TONE.neutral;
   const catLabel = getCategoryLabel(tpl.callCategory);
-  const Glyph = tpl.callVoicemail ? Voicemail : I.phone;
-  const inactive = disabled || busy;
-
-  /* Scroll-into-view when the keyboard nav highlights this row, so
-     the active cell stays visible inside the scrolling 168px wrapper
-     even on rep accounts with 20+ templates. */
-  useEffect(() => {
-    if (isKbdActive && ref.current) {
-      try { ref.current.scrollIntoView({ block: 'nearest' }); } catch {}
-    }
-  }, [isKbdActive]);
+  const secondary = (tpl.subject && tpl.subject !== tpl.name) ? tpl.subject : (tpl.body || '');
 
   return (
     <button
-      ref={ref}
-      type="button"
-      disabled={inactive}
-      onClick={onPick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      /* title attr gives the rep the full category label + step
-         hints on hover even though the cell itself is too narrow
-         to render them inline. */
-      title={[tpl.name, catLabel && `Category: ${catLabel}`, tpl.callVoicemail && 'Voicemail'].filter(Boolean).join('\n')}
-      /* gb-kbd-active layers the marching-ants animation onto the
-         border. The dashed outline "spins" around the perimeter
-         while the inner tint stays calm — it's a motion cue, not a
-         visual punch. */
-      className={isKbdActive ? 'gb-kbd-active' : undefined}
+      type="button" ref={rowRef} className={`clr-row${flashing ? ' clr-row-flash' : ''}`}
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      onKeyDown={onKeyDown} onFocus={onFocus} onClick={onClick}
       style={{
-        display: 'grid',
-        gridTemplateColumns: '14px 1fr auto',
-        alignItems: 'center',
-        gap: 6,
-        height: 30,
-        padding: '0 8px',
-        background: hover && !inactive
-          ? 'var(--gb-brand-tint-medium)'
-          : 'var(--gb-brand-tint-soft)',
-        border: '1px solid var(--gb-brand-tint-border)',
-        color: 'var(--gb-brand-label)',
-        borderRadius: 'var(--gb-r-sm)',
-        cursor: inactive ? 'default' : 'pointer',
-        opacity: disabled ? 0.5 : 1,
-        textAlign: 'left',
-        fontFamily: 'var(--gb-font-sans)',
-        boxShadow: hover && !inactive ? '0 2px 6px rgba(0,0,0,0.06)' : 'none',
-        transition: 'all var(--gb-anim-fast)',
-        minWidth: 0,
+        position: 'relative', outline: 'none', display: 'grid', gridTemplateColumns: '24px 22px 1fr auto',
+        alignItems: 'center', gap: 11, width: '100%', textAlign: 'left', padding: '10px 12px 10px 13px',
+        background: isActive ? tone.bgMed : hover ? tone.bg : 'transparent',
+        border: '1px solid', borderColor: isActive ? tone.bd : 'transparent',
+        borderRadius: 'var(--gb-r-md)', cursor: 'pointer', fontFamily: 'var(--gb-font-sans)',
+        transition: 'background .15s ease, border-color .15s ease', '--clr-flash': tone.solid,
       }}
     >
-      <Glyph size={12} />
-      <span style={{
-        fontSize: 11, fontWeight: 600,
-        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-        minWidth: 0,
-      }}>{tpl.name || 'Untitled'}</span>
-      {busy ? (
-        <RowSpinner />
-      ) : (
-        <span style={{
-          fontSize: 8.5, fontWeight: 700, letterSpacing: 0.4,
-          opacity: 0.75,
-          flexShrink: 0,
-        }}>{dirLabel}</span>
-      )}
+      <span aria-hidden style={{ position: 'absolute', left: 0, top: 7, bottom: 7, width: 3, borderRadius: 3, background: tone.solid, transform: isActive ? 'scaleY(1)' : hover ? 'scaleY(.4)' : 'scaleY(0)', opacity: isActive ? 1 : hover ? 0.55 : 0, boxShadow: isActive ? `0 0 8px ${tone.solid}` : 'none', transition: 'transform .2s cubic-bezier(.34,1.4,.64,1), opacity .18s ease' }} />
+      <span style={{ display: 'flex', justifyContent: 'center' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 17, height: 17, padding: '0 4px', borderRadius: 4, fontSize: 9.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', background: isActive ? tone.bgMed : 'var(--gb-fill-inverse-medium)', border: `1px solid ${isActive ? tone.bd : 'var(--gb-border-default)'}`, color: isActive ? tone.fg : 'var(--gb-text-tertiary)', transition: 'all .15s' }}>{hotkey}</span>
+      </span>
+      <span style={{ display: 'flex', justifyContent: 'center', color: tone.fg }}>{dirGlyph(tpl)}</span>
+      <span style={{ minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tpl.name || 'Untitled'}</span>
+        {secondary && <span style={{ display: 'block', fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{secondary}</span>}
+      </span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        <span role="button" tabIndex={-1} title="Customise · ⇧↵" onClick={(e) => { e.stopPropagation(); onCustomise(tpl); }}
+          style={{ width: 24, height: 24, borderRadius: 'var(--gb-r-sm)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-tertiary)', cursor: 'pointer', opacity: lit ? 1 : 0, transform: lit ? 'none' : 'translateX(4px)', pointerEvents: lit ? 'auto' : 'none', transition: 'opacity .15s, transform .15s' }}><I.edit size={12} /></span>
+        {tpl.callVoicemail && <Voicemail size={13} style={{ color: COMPOSER_TONE.warning.fg, flexShrink: 0 }} />}
+        {catLabel && <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: tone.bg, color: tone.fg, border: `1px solid ${tone.bd}`, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3, whiteSpace: 'nowrap', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>{catLabel}</span>}
+      </span>
     </button>
   );
 }
 
-function RowSpinner() {
+function ListHint({ children }) {
+  return <div style={{ padding: '14px 10px', fontSize: 11.5, color: 'var(--gb-text-muted)', textAlign: 'center', fontStyle: 'italic' }}>{children}</div>;
+}
+
+function BuildPrompt({ onBuild, text }) {
   return (
-    <span style={{
-      width: 10, height: 10, borderRadius: '50%',
-      border: '1.5px solid currentColor',
-      borderTopColor: 'transparent',
-      animation: 'gb-spin .8s linear infinite',
-      display: 'inline-block',
-      flexShrink: 0,
-    }} />
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '24px 16px', textAlign: 'center' }}>
+      <I.search size={20} style={{ color: 'var(--gb-text-ghost)' }} />
+      <div style={{ fontSize: 12, color: 'var(--gb-text-tertiary)', fontWeight: 600 }}>{text}</div>
+      <button type="button" className="clr-focusable clr-no-lift" onClick={onBuild}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 13px', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+        <I.plus size={13} /> Build a custom log <Kbd>↵</Kbd>
+      </button>
+    </div>
   );
 }
