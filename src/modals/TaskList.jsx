@@ -10,6 +10,7 @@ import { loadTaskTemplates } from '../lib/quickTask.js';
 import { submitQuickTask } from '../lib/submitQuickTask.js';
 import { EmailRunner } from './EmailRunner.jsx';
 import { QuickTaskPopover } from './QuickTaskPopover.jsx';
+import { QuickTask } from './QuickTask.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 
 /* ───────────────────────────────────────────────────────────────
@@ -296,6 +297,10 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
      • mode 'datePicker'  — sub-panel; returnMode says where Back lands
      • mode 'templates'   — sub-panel; returnMode same role */
   const [qt, setQt] = useState(null);
+  /* When true, the redesigned QuickTask modal is open in compose mode
+     for a bulk "Add to all" — its composed task is applied to every
+     selected row via runQuickAction('bulk-create-task'). */
+  const [bulkCompose, setBulkCompose] = useState(false);
   const [pushDays, setPushDays] = useState(7);
   const [taskTpls, setTaskTpls] = useState([]);
   /* Per-row work-in-progress flag (Complete/Push/etc.). Lives outside
@@ -596,6 +601,10 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
      separate spinner. The verb-ed state lingers for ~1.8s then
      clears so the row falls back to its natural CRM status. */
   const runQuickAction = useCallback(async (action, payload = {}) => {
+    /* "Add to all" opens the full QuickTask composer instead of the
+       popover's preset list — the composed task is then broadcast to
+       every selected row through the normal bulk-create-task path. */
+    if (action === 'bulk-compose') { setQt(null); setBulkCompose(true); return; }
     const isBulk = action.startsWith('bulk-');
     const ids = isBulk ? Array.from(selected) : [payload.taskId];
     if (!ids.length) { setQt(null); return; }
@@ -1014,6 +1023,18 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
         onClose={() => setQt(null)}
         onAction={runQuickAction}
       />
+
+      {/* Bulk "Add to all" → compose one task in the full QuickTask
+          builder, then apply it to every selected row. onComposed
+          hands back the task shape submitQuickTask already speaks. */}
+      {bulkCompose && (
+        <QuickTask
+          contactName={`${selCount} selected task${selCount === 1 ? '' : 's'}`}
+          autoCompose
+          onComposed={(data) => runQuickAction('bulk-create-task', { template: data })}
+          onClosed={() => setBulkCompose(false)}
+        />
+      )}
     </FloatingPanel>
 
     {/* Email Runner side panel — sits to the right with air between,

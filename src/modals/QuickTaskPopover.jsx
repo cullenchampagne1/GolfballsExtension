@@ -315,7 +315,7 @@ export function QuickTaskPopover({
               <Btn
                 size="sm" variant="secondary"
                 icon={<I.plus size={11} />}
-                onClick={() => setPane('templates')}
+                onClick={() => (isBulk ? onAction('bulk-compose') : setPane('templates'))}
               >{isBulk ? 'Add to all' : 'Add task'}</Btn>
             </div>
           </div>
