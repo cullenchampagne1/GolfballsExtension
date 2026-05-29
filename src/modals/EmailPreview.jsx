@@ -42,6 +42,27 @@ function buildThread(email, meta) {
       };
     });
   }
+  /* Quoted headers often carry only a display name ("From: Caleb
+     Twachtman") with no address, while the envelope + To: lines DO
+     have addresses. Build a name→email registry across the whole
+     thread so every card can show "Name <email>" like the main
+     message, not just the bare name. */
+  const registry = new Map();
+  const learn = (raw) => {
+    const a = splitAddress(raw);
+    if (a.name && a.email && a.email.includes('@')) {
+      const key = a.name.trim().toLowerCase();
+      if (!registry.has(key)) registry.set(key, a.email);
+    }
+  };
+  [topFrom, email?.to, meta?.from, meta?.to].forEach(learn);
+  msgs.forEach((m) => { learn(m.from); learn(m.to); });
+  msgs.forEach((m) => {
+    const a = splitAddress(m.from);
+    m.fromName = a.name;
+    m.fromEmail = a.email && a.email.includes('@') ? a.email : (registry.get(a.name.trim().toLowerCase()) || '');
+  });
+
   /* splitThreadHtml returns newest-first (the live reply, then each
      older quoted message). Reverse so the thread reads chronologically
      — oldest at top, most recent at the bottom, right above the reply
@@ -49,21 +70,31 @@ function buildThread(email, meta) {
   return msgs.reverse();
 }
 
-/* The customer is the party on the thread that ISN'T us. Reply
-   should always go to them (like Reply-All picking the other side),
-   regardless of whether the opened message was inbound or one we
-   sent. Scan every from/to for the first non-golfballs address. */
-function findCustomerAddress(thread, fallback) {
+/* The customer is the party on the thread that ISN'T us. Reply always
+   goes to them (Reply-All semantics) — so opening a message WE sent
+   last still drafts a follow-up TO the customer, not back to
+   ourselves. Prefer a resolved name+email; scan envelope first, then
+   every message's from/to. */
+function findCustomerAddress(thread, ...fallbacks) {
+  const pick = (raw) => {
+    if (!raw) return null;
+    const a = splitAddress(raw);
+    const probe = `${a.name} ${a.email}`;
+    return OUR_DOMAINS.test(probe) ? null : (a.email && a.email.includes('@') ? `${a.name} <${a.email}>` : raw.trim());
+  };
   for (const m of thread) {
-    for (const addr of [m.from, m.to]) {
-      if (addr && !OUR_DOMAINS.test(addr)) return addr.trim();
-    }
+    const c = pick(m.fromEmail ? `${m.fromName} <${m.fromEmail}>` : m.from) || pick(m.to);
+    if (c) return c;
   }
-  return fallback || '';
+  for (const f of fallbacks) { const c = pick(f); if (c) return c; }
+  return fallbacks.find(Boolean) || '';
 }
 
 function MessageCard({ msg, expanded, onToggle }) {
-  const sender = splitAddress(msg.from);
+  /* Prefer the thread-resolved name/email (buildThread fills the
+     email from the registry when the quoted header only had a name)
+     so every card shows "Name <email>" like the main message. */
+  const sender = { name: msg.fromName || splitAddress(msg.from).name, email: msg.fromEmail || splitAddress(msg.from).email };
   return (
     <motion.div
       layout
@@ -169,21 +200,30 @@ function splitAddress(raw) {
 function Avatar({ name, email, size = 32, ring }) {
   const hue = hueFromString(email || name);
   const initials = (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+  /* Absolute-center the initials. inline-flex centering left them
+     riding low because the mono font's line box carries descender
+     space; a positioned child with translate(-50%,-50%) ignores font
+     metrics and sits dead-center in the circle. */
   return (
     <span style={{
+      position: 'relative',
       width: size, height: size, borderRadius: '50%',
       background: `oklch(0.30 0.07 ${hue})`,
       color: `oklch(0.86 0.10 ${hue})`,
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: size * 0.36, fontWeight: 700, lineHeight: 1,
-      fontFamily: 'var(--gb-font-mono)', letterSpacing: -0.3,
-      textAlign: 'center',
-      flexShrink: 0,
+      display: 'inline-block', flexShrink: 0,
       border: '1px solid color-mix(in srgb, currentColor 30%, transparent)',
       boxShadow: ring
         ? `0 0 0 2px var(--gb-surface-canvas), 0 0 0 3px color-mix(in srgb, oklch(0.78 0.18 ${hue}) 50%, transparent)`
         : 'none',
-    }}>{initials}</span>
+    }}>
+      <span style={{
+        position: 'absolute', top: '50%', left: '50%',
+        transform: 'translate(-50%, -50%)',
+        fontSize: size * 0.36, fontWeight: 700, lineHeight: 1,
+        fontFamily: 'var(--gb-font-mono)', letterSpacing: -0.3,
+        whiteSpace: 'nowrap',
+      }}>{initials}</span>
+    </span>
   );
 }
 

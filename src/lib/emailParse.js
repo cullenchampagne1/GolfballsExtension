@@ -171,59 +171,80 @@ export function plainTextBody(raw, cap = 12000) {
    the top segment is the new reply, each following segment is one
    older message we can render as its own collapsible card. */
 
-const RPLY_DIVIDER = /<div\b[^>]*\bid\s*=\s*3?D?"?divRplyFwdMsg[^>]*>/i;
-const RPLY_DIVIDER_G = /<div\b[^>]*\bid\s*=\s*3?D?"?divRplyFwdMsg[^>]*>/gi;
-
-/** Pull From/Sent/To/Subject out of a quoted header block. */
+/** Pull From/Sent/To/Subject out of a quoted header block. Tag-
+   agnostic: Outlook wraps the labels differently across versions
+   (<b>From:</b>, <b><span>From:</span></b>, <span style=bold>…</span>),
+   so we anchor on the ">Label:" text and read the value up to the
+   next <br> / block close, stripping markup + entities. */
 function quotedHeader(segment) {
-  const head = segment.slice(0, 1200);
+  const head = segment.slice(0, 1600);
   const grab = (label) => {
-    const m = head.match(new RegExp('<b>\\s*' + label + '\\s*:?\\s*</b>([\\s\\S]*?)(?:<br|</font|</div|</p)', 'i'));
-    if (!m) return '';
-    return m[1]
+    const idx = head.search(new RegExp('>\\s*' + label + '\\s*:', 'i'));
+    if (idx === -1) return '';
+    const after = head.slice(idx + 1); // skip the leading '>'
+    const end = after.search(/<br|<\/p>|<\/div>/i);
+    return (end === -1 ? after : after.slice(0, end))
       .replace(/<[^>]+>/g, '')
-      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+      .replace(new RegExp('^\\s*' + label + '\\s*:\\s*', 'i'), '')
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"')
       .trim();
   };
-  return { from: grab('From'), sent: grab('Sent'), to: grab('To'), subject: grab('Subject') };
+  return { from: grab('From'), sent: grab('Sent') || grab('Date'), to: grab('To'), subject: grab('Subject') };
+}
+
+/* A "From:" label that starts a quoted-reply header, matched
+   independent of the wrapping element (<b>, <b><span>, <span
+   style=bold>, …) by anchoring on the ">From:" text. */
+const FROM_LABEL = />\s*From\s*:/gi;
+
+/* Find the byte offsets where each quoted message begins. Anchor on
+   a From: label, confirm it's a real header (a Sent:/Date: AND a
+   Subject: label follow close behind — also tag-agnostic), then walk
+   back to the opening of the enclosing block (<div>/<p>) so the split
+   lands on a clean element boundary rather than mid-tag. */
+function findQuoteBoundaries(html) {
+  const bounds = [];
+  let m;
+  FROM_LABEL.lastIndex = 0;
+  while ((m = FROM_LABEL.exec(html)) !== null) {
+    const win = html.slice(m.index, m.index + 900);
+    if (!/>\s*(Sent|Date)\s*:/i.test(win) || !/>\s*Subject\s*:/i.test(win)) continue;
+    const before = html.slice(0, m.index);
+    const start = Math.max(before.lastIndexOf('<div'), before.lastIndexOf('<p'));
+    bounds.push(start >= 0 ? start : m.index);
+  }
+  return [...new Set(bounds)].sort((a, b) => a - b);
 }
 
 /**
  * Split a reply's HTML body into thread messages, newest first.
  * Returns null when there's no quoted history (single message).
  * Each entry: { quoted, bodyHtml, from?, sent?, to?, subject? }.
- * The top (index 0) entry has quoted:false and carries the live
- * reply content; the caller fills its from/date from the EML
- * headers.
+ * The top (index 0) entry carries the live reply content; the caller
+ * fills its from/date from the EML headers.
  */
 export function splitThreadHtml(html) {
-  if (!html || !RPLY_DIVIDER.test(html)) return null;
-  const pieces = html.split(RPLY_DIVIDER_G);
-  // pieces[0] = live reply; pieces[1..] = quoted segments. Each quoted
-  // segment begins INSIDE its divRplyFwdMsg <div> (the header block),
-  // so we pull the From/Sent/To/Subject out into fields and strip the
-  // header div from the rendered body — otherwise that metadata
-  // duplicates into the message body (the "second email still shows
-  // the metadata" bug).
-  const messages = [{ quoted: false, bodyHtml: pieces[0] }];
-  for (let i = 1; i < pieces.length; i++) {
-    const seg = pieces[i];
-    messages.push({ quoted: true, bodyHtml: stripHeaderDiv(seg), ...quotedHeader(seg) });
+  if (!html) return null;
+  const bounds = findQuoteBoundaries(html);
+  if (bounds.length === 0) return null;
+  const cuts = [0, ...bounds, html.length];
+  const messages = [];
+  for (let i = 0; i < cuts.length - 1; i++) {
+    const seg = html.slice(cuts[i], cuts[i + 1]);
+    if (i === 0) messages.push({ quoted: false, bodyHtml: seg });
+    else messages.push({ quoted: true, bodyHtml: stripHeaderBlock(seg), ...quotedHeader(seg) });
   }
-  return messages;
+  return messages.length > 1 ? messages : null;
 }
 
-/* The segment starts immediately after the divRplyFwdMsg opening
-   tag, so we're at <div> depth 1. Walk div open/close tags until the
-   depth returns to 0 — that closes the header block — and return only
-   what follows (the actual quoted body). */
-function stripHeaderDiv(seg) {
-  let depth = 1;
-  const re = /<\/?div\b[^>]*>/gi;
-  let m;
-  while ((m = re.exec(seg))) {
-    if (m[0][1] === '/') depth -= 1; else depth += 1;
-    if (depth === 0) return seg.slice(re.lastIndex);
-  }
-  return seg;
+/* Each quoted segment starts at the header block's opening element.
+   Drop everything up to and including the block element that closes
+   right after the Subject: value, leaving just the quoted body. */
+function stripHeaderBlock(seg) {
+  const subjIdx = seg.search(/<b[^>]*>\s*Subject\s*:/i);
+  if (subjIdx === -1) return seg;
+  const rest = seg.slice(subjIdx);
+  const closeM = rest.match(/<\/(div|p)>/i);
+  if (!closeM) return seg;
+  return seg.slice(subjIdx + closeM.index + closeM[0].length);
 }

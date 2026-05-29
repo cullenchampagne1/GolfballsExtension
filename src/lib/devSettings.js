@@ -47,13 +47,6 @@ export const DEV_SETTINGS = [
     type:    'bool',
     default: false,
   },
-  {
-    key:     'golfballViewer.decalDebug',
-    label:   'Golfball viewer: decal debug circle',
-    desc:    'Print a solid black circle on the ball instead of the cropped logo. If the circle shows but your logo doesn\'t, the captured texture is the problem; if even the circle is missing, the decal mesh/projection is.',
-    type:    'bool',
-    default: false,
-  },
 
   /* ── Outbound email account host ──────────────────────────────
      The local part (before @) used when constructing the `from`

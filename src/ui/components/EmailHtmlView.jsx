@@ -113,10 +113,7 @@ function normaliseEmailDom(container, isDark) {
       if (next !== css) { s.textContent = next; changed += 1; }
     });
   }
-  try {
-    // eslint-disable-next-line no-console
-    console.log('[gb-email] normalise — dark', isDark, 'seen', seen, 'changed', changed);
-  } catch { /* ignore */ }
+  void seen; void changed;
 }
 
 /* Is the extension theme dark? Decide from the resolved

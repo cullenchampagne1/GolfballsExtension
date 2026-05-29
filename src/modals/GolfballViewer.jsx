@@ -180,12 +180,6 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   const debugEnabledRef = useRef(debugEnabled);
   useEffect(() => { debugEnabledRef.current = debugEnabled; }, [debugEnabled]);
   const [debug, setDebug] = useState(null);
-  /* Decal diagnostic — when on, paint a solid black circle instead
-     of the user's cropped logo. If the circle shows but the real
-     logo doesn't, the problem is the captured texture (e.g. the
-     alignment crop went empty/transparent under modal scaling); if
-     even the circle is missing, it's the decal mesh/projection. */
-  const decalDebug = !!useDevSetting('golfballViewer.decalDebug');
   const [debugCopied, setDebugCopied] = useState(false);
   // Throw mode — toggled by the in-frame chip button. When on:
   //   • OrbitControls are disabled so drag = throw, not orbit
@@ -805,38 +799,20 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         let decalProjectionParams = null;  // { position, orientation, size, texture }
         // ── Decal — projected onto the top pole ────────────────
         if (decalDataUrl) {
-          let decalTexture;
-          if (decalDebug) {
-            /* Diagnostic texture: opaque black disc on transparent.
-               Bypasses the captured logo entirely so we can tell a
-               texture/crop problem apart from a mesh/projection one. */
-            const c = document.createElement('canvas');
-            c.width = 512; c.height = 512;
-            const cx = c.getContext('2d');
-            cx.clearRect(0, 0, 512, 512);
-            cx.fillStyle = '#000';
-            cx.beginPath();
-            cx.arc(256, 256, 230, 0, Math.PI * 2);
-            cx.fill();
-            decalTexture = new THREE.CanvasTexture(c);
-          } else {
-            const texLoader = new THREE.TextureLoader();
-            decalTexture = await new Promise((res, rej) => {
-              texLoader.load(decalDataUrl, res, undefined, rej);
-            });
-          }
+          const texLoader = new THREE.TextureLoader();
+          const decalTexture = await new Promise((res, rej) => {
+            texLoader.load(decalDataUrl, res, undefined, rej);
+          });
           if (disposed) return;
-          // Texture flags: clamp to edge so edge pixels don't tile across
-          // the decal's edges; sRGB so white reads as white. Linear
-          // filter + no mipmaps keeps a non-power-of-two crop (896×896)
-          // safe under a WebGL1 fallback (Windows/ANGLE on weaker GPUs),
-          // where an NPOT texture with mipmaps samples as black.
+          // sRGB so white reads as white; clamp to edge so edge pixels
+          // don't tile. Mipmaps (default min filter) + max anisotropy
+          // keep the logo crisp instead of pixelated/aliased as it
+          // curves over the ball — NPOT mipmaps are fine on WebGL2,
+          // which the viewer runs (confirmed: webgl2=true).
           decalTexture.colorSpace = THREE.SRGBColorSpace;
           decalTexture.wrapS = THREE.ClampToEdgeWrapping;
           decalTexture.wrapT = THREE.ClampToEdgeWrapping;
-          decalTexture.minFilter = THREE.LinearFilter;
-          decalTexture.magFilter = THREE.LinearFilter;
-          decalTexture.generateMipmaps = false;
+          try { decalTexture.anisotropy = renderer.capabilities.getMaxAnisotropy(); } catch { /* ignore */ }
           decalTexture.needsUpdate = true;
           objectsToDispose.push(decalTexture);
 
@@ -872,25 +848,22 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
              render-state ANGLE treats differently — and polygonOffset
              is likewise driver-dependent, so both are gone. */
           decalGeo.scale(1.02, 1.02, 1.02);
-          /* MeshBasicMaterial (UNLIT) + DoubleSide — true logo colors
-             regardless of scene lighting; renders the projected patch
-             no matter its winding. decalDebug swaps in a solid opaque
-             red (no texture) to isolate texture issues from render
-             ones. */
-          const decalMat = decalDebug
-            ? new THREE.MeshBasicMaterial({
-                color: 0xff0000,
-                side: THREE.DoubleSide,
-                depthWrite: false,
-                toneMapped: false,
-              })
-            : new THREE.MeshBasicMaterial({
-                map: decalTexture,
-                transparent: true,
-                side: THREE.DoubleSide,
-                depthWrite: false,
-                toneMapped: false,
-              });
+          /* MeshStandardMaterial (LIT) — same as the original working
+             build, so the print picks up the ball's lighting and reads
+             as printed-on rather than a flat sticker. (The unlit Basic
+             experiment showed the right shape but the wrong, washed-out
+             color because it bypassed the scene's lighting + tone
+             mapping.) DoubleSide guards against back-wound projected
+             faces; depthTest stays default-on and the proud geometry
+             handles z-fighting cross-platform. */
+          const decalMat = new THREE.MeshStandardMaterial({
+            map: decalTexture,
+            transparent: true,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+            roughness: 0.5,
+            metalness: 0,
+          });
           decalMesh = new THREE.Mesh(decalGeo, decalMat);
           /* Identity transform — the geometry is already in
              ballGroup-local space (inverse baked above), so
@@ -900,57 +873,6 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           ballGroup.add(decalMesh);
           objectsToDispose.push(decalGeo, decalMat);
 
-          /* One-shot diagnostics — pinpoints an invisible decal in a
-             single console line. Reports the geometry's world-space
-             bounds, the ball's effective scale, and the decal's final
-             world position so we can tell placement from depth/material
-             at a glance. */
-          try {
-            decalGeo.computeBoundingBox();
-            const bb = decalGeo.boundingBox;
-            decalMesh.updateMatrixWorld(true);
-            const wp = new THREE.Vector3();
-            decalMesh.getWorldPosition(wp);
-            /* Sample the texture for non-transparent + non-white pixels
-               so we can tell an EMPTY crop (the modal-scaling capture
-               bug) from a placement/render problem. */
-            let texInfo = 'n/a';
-            try {
-              const img = decalTexture.image;
-              if (img && img.width) {
-                const tc = document.createElement('canvas');
-                tc.width = Math.min(64, img.width); tc.height = Math.min(64, img.height);
-                const tcx = tc.getContext('2d');
-                tcx.drawImage(img, 0, 0, tc.width, tc.height);
-                const d = tcx.getImageData(0, 0, tc.width, tc.height).data;
-                let opaque = 0; let inkish = 0;
-                for (let p = 0; p < d.length; p += 4) {
-                  if (d[p + 3] > 20) {
-                    opaque++;
-                    if (d[p] < 235 || d[p + 1] < 235 || d[p + 2] < 235) inkish++;
-                  }
-                }
-                const total = (tc.width * tc.height) || 1;
-                texInfo = `opaque ${Math.round((opaque / total) * 100)}% · ink ${Math.round((inkish / total) * 100)}%`;
-              }
-            } catch (te) { texInfo = 'sample-failed:' + te.message; }
-            // Confirm the decal is actually reachable in the render
-            // scene graph (rules out a parenting/visible/layer drop).
-            let inScene = false;
-            scene.traverse((o) => { if (o === decalMesh) inScene = true; });
-            // eslint-disable-next-line no-console
-            console.log('[gb-decal] verts=', decalGeo.attributes?.position?.count,
-              '| geoBBox(local) z=', bb && [bb.min.z.toFixed(1), bb.max.z.toFixed(1)],
-              '| decal worldPos=', [wp.x.toFixed(1), wp.y.toFixed(1), wp.z.toFixed(1)],
-              '| tex=', (decalTexture.image?.width || '?') + 'x' + (decalTexture.image?.height || '?'),
-              '| texContent=', texInfo,
-              '| mat=', decalMat.type, 'side=', decalMat.side, 'depthTest=', decalMat.depthTest,
-              '| visible=', decalMesh.visible, 'parent=', decalMesh.parent?.type,
-              'inScene=', inScene, 'layerMask=', decalMesh.layers.mask,
-              '| camLayers=', camera.layers.mask,
-              '| webgl2=', renderer.capabilities?.isWebGL2,
-              'maxTex=', renderer.capabilities?.maxTextureSize);
-          } catch (e) { console.warn('[gb-decal] diag failed', e); }
           // Stash projection params for explode-time per-shard reuse.
           decalProjectionParams = {
             position: decalPosition.clone(),
