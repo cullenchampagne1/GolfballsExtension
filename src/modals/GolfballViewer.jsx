@@ -58,8 +58,8 @@ async function loadThreeAndModel() {
   // accessible so chrome.runtime.getURL gives a load-anywhere URL.
   if (!cache.modelPromise) {
     const url = (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
-      ? chrome.runtime.getURL('icons/golfball_model/Golf_ball.obj')
-      : 'icons/golfball_model/Golf_ball.obj';
+      ? chrome.runtime.getURL('assets/golfball_model/Golf_ball.obj')
+      : 'assets/golfball_model/Golf_ball.obj';
     cache.modelPromise = new Promise((resolve, reject) => {
       const loader = new OBJLoader();
       loader.load(
@@ -88,10 +88,10 @@ async function loadThreeAndModel() {
    `icon` is the glyph component used in the drawer chip; `file` is
    the manifest-listed web-accessible resource path. */
 export const SCENES = [
-  { key: 'goldenGate',  label: 'Golden Gate hills', file: 'icons/golden_gate_hills_4k.exr', icon: 'bridge' },
-  { key: 'sunsetFairway', label: 'Sunset fairway',   file: 'icons/sunset_fairway_4k.exr',   icon: 'sunset' },
-  { key: 'lilienstein', label: 'Lilienstein',       file: 'icons/lilienstein_4k.exr',      icon: 'mountain' },
-  { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'icons/moonlit_golf_4k.exr',     icon: 'moon' },
+  { key: 'goldenGate',  label: 'Golden Gate hills', file: 'assets/golden_gate_hills_4k.exr', icon: 'bridge' },
+  { key: 'sunsetFairway', label: 'Sunset fairway',   file: 'assets/sunset_fairway_4k.exr',   icon: 'sunset' },
+  { key: 'lilienstein', label: 'Lilienstein',       file: 'assets/lilienstein_4k.exr',      icon: 'mountain' },
+  { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'assets/moonlit_golf_4k.exr',     icon: 'moon' },
 ];
 
 export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, onError, onSceneChange, onThrowChange }, ref) {
@@ -180,6 +180,12 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   const debugEnabledRef = useRef(debugEnabled);
   useEffect(() => { debugEnabledRef.current = debugEnabled; }, [debugEnabled]);
   const [debug, setDebug] = useState(null);
+  /* Decal diagnostic — when on, paint a solid black circle instead
+     of the user's cropped logo. If the circle shows but the real
+     logo doesn't, the problem is the captured texture (e.g. the
+     alignment crop went empty/transparent under modal scaling); if
+     even the circle is missing, it's the decal mesh/projection. */
+  const decalDebug = !!useDevSetting('golfballViewer.decalDebug');
   const [debugCopied, setDebugCopied] = useState(false);
   // Throw mode — toggled by the in-frame chip button. When on:
   //   • OrbitControls are disabled so drag = throw, not orbit
@@ -799,10 +805,26 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         let decalProjectionParams = null;  // { position, orientation, size, texture }
         // ── Decal — projected onto the top pole ────────────────
         if (decalDataUrl) {
-          const texLoader = new THREE.TextureLoader();
-          const decalTexture = await new Promise((res, rej) => {
-            texLoader.load(decalDataUrl, res, undefined, rej);
-          });
+          let decalTexture;
+          if (decalDebug) {
+            /* Diagnostic texture: opaque black disc on transparent.
+               Bypasses the captured logo entirely so we can tell a
+               texture/crop problem apart from a mesh/projection one. */
+            const c = document.createElement('canvas');
+            c.width = 512; c.height = 512;
+            const cx = c.getContext('2d');
+            cx.clearRect(0, 0, 512, 512);
+            cx.fillStyle = '#000';
+            cx.beginPath();
+            cx.arc(256, 256, 230, 0, Math.PI * 2);
+            cx.fill();
+            decalTexture = new THREE.CanvasTexture(c);
+          } else {
+            const texLoader = new THREE.TextureLoader();
+            decalTexture = await new Promise((res, rej) => {
+              texLoader.load(decalDataUrl, res, undefined, rej);
+            });
+          }
           if (disposed) return;
           // Texture flags: clamp to edge so edge pixels don't tile across
           // the decal's edges; sRGB so white reads as white.
