@@ -37,8 +37,7 @@ const WHITE_BG = /^(#ffffff|#fff|white|rgb\(\s*255\s*,\s*255\s*,\s*255\s*\)|rgba
 const NEAR_WHITE = /^#(f[0-9a-f]|e[0-9a-f])[0-9a-f]{4}$/i;
 const DARK_TXT = /^(#000000|#000|#111111|#111|#222222|#222|#333333|#333|black|rgb\(\s*0\s*,\s*0\s*,\s*0\s*\)|rgba\(\s*0\s*,\s*0\s*,\s*0\s*,?\s*1?\s*\))$/i;
 
-const DARK_SURFACE = '#1e2024';   // matches the surface-1 family
-const LIGHT_TEXT   = '#d6d8dc';
+const LIGHT_TEXT = '#d6d8dc';
 
 function isLightBg(v) {
   if (!v) return false;
@@ -48,13 +47,17 @@ function isLightBg(v) {
 
 function normaliseEmailDom(container) {
   container.querySelectorAll('*').forEach((el) => {
-    // bgcolor attribute (table-based emails lean on this heavily)
+    /* White / near-white backgrounds → transparent so the email
+       blends into the pane's own surface instead of sitting on a
+       flat gray slab. The :host already paints surface-1, so a
+       transparent element just shows that through — they read as
+       one continuous dark document. */
     const bgAttr = el.getAttribute && el.getAttribute('bgcolor');
-    if (bgAttr && isLightBg(bgAttr)) el.setAttribute('bgcolor', DARK_SURFACE);
+    if (bgAttr && isLightBg(bgAttr)) el.setAttribute('bgcolor', 'transparent');
 
     if (el.style) {
-      if (isLightBg(el.style.backgroundColor)) el.style.backgroundColor = DARK_SURFACE;
-      if (isLightBg(el.style.background)) el.style.background = DARK_SURFACE;
+      if (isLightBg(el.style.backgroundColor)) el.style.backgroundColor = 'transparent';
+      if (isLightBg(el.style.background)) el.style.background = 'transparent';
       if (el.style.color && DARK_TXT.test(el.style.color.trim())) el.style.color = LIGHT_TEXT;
     }
 
