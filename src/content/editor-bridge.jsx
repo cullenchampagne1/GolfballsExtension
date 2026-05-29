@@ -142,6 +142,24 @@ async function deleteTemplate() {
   animateView('ed-empty');
 }
 
+/* Sidebar row delete — same flow as deleteTemplate but driven by
+   a specific id so the user can delete from the row's 3-dot menu
+   without opening the template first. If the row IS the open
+   one, also tear down the form back to the empty state. */
+async function deleteTemplateById(id) {
+  const tpl = templates.find((t) => t.id === id);
+  if (!tpl) return;
+  if (!(await gbConfirm(`Delete "${tpl.name || 'Untitled template'}"?`, { tone: 'danger', confirmLabel: 'Delete' }))) return;
+  templates = templates.filter((t) => t.id !== id);
+  await saveTemplates();
+  if (currentId === id) {
+    setCurrentId(null);
+    hide('ed-form');
+    show('ed-empty');
+    animateView('ed-empty');
+  }
+}
+
 // ── Note templates: open / new / delete ────────────────────────
 async function newNoteTemplate() {
   if (!window.__gbOpenNote) {
@@ -191,6 +209,20 @@ async function deleteNoteTemplate() {
   hide('ed-note-form');
   show('ed-empty');
   animateView('ed-empty');
+}
+
+async function deleteNoteTemplateById(id) {
+  const tpl = noteTemplates.find((t) => t.id === id);
+  if (!tpl) return;
+  if (!(await gbConfirm(`Delete "${tpl.name || 'Untitled note'}"?`, { tone: 'danger', confirmLabel: 'Delete' }))) return;
+  noteTemplates = noteTemplates.filter((t) => t.id !== id);
+  await saveNoteTemplates();
+  if (currentNoteId === id) {
+    setCurrentNoteId(null);
+    hide('ed-note-form');
+    show('ed-empty');
+    animateView('ed-empty');
+  }
 }
 
 // ── React-side save bridges ────────────────────────────────────
@@ -368,6 +400,8 @@ window.newTemplate      = newTemplate;
 window.newNoteTemplate  = newNoteTemplate;
 window.deleteTemplate   = deleteTemplate;
 window.deleteNoteTemplate = deleteNoteTemplate;
+window.deleteTemplateById     = deleteTemplateById;
+window.deleteNoteTemplateById = deleteNoteTemplateById;
 window.openSettings     = openSettings;
 window.closeSettings    = closeSettings;
 window.openCaseTplEditor = openCaseTplEditor;
