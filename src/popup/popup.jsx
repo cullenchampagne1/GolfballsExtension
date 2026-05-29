@@ -717,13 +717,33 @@ function MainView({
 
   const onSend = async () => {
     if (!tpl || !canSend || !tab) return;
-    // Per-template variations override the parent's subject/body when
-    // the user explicitly picked one. Parent stays usable on its own —
-    // selecting a parent without a variation falls back to its own
-    // content. The variation list lives on tpl.variations: [{id, label,
-    // subject?, body?}] — fields are optional so a partial variation
-    // inherits whichever field it omits from the parent.
-    const variation = (tpl.variations || []).find((v) => v.id === selectedVariationId);
+    /* Three selection paths land here:
+         1. selectedVariationId pins a real saved variation  →
+            use that one's subject/body (each field falls back
+            to the parent's when omitted).
+         2. selectedVariationId is the synthetic Variation 1
+            sentinel (ORIGINAL_VARIATION_ID = '__original') OR
+            null, AND the template has variations  →  random
+            mode: roll one slot uniformly across [original, …
+            variations] at send time. ORIGINAL_VARIATION_ID is
+            treated as null in the find() above (no matching
+            saved variation) so this branch catches both cases.
+         3. No variations on the template  →  always parent body.
+       The random roll is uniform — the popup is a single-send
+       surface so there's no slider UX for weighting. */
+    const variations = Array.isArray(tpl.variations) ? tpl.variations : [];
+    const pinnedSaved = variations.find((v) => v.id === selectedVariationId);
+    let variation = pinnedSaved || null;
+    /* Parent click with no pin AND the template has variations →
+       roll uniformly across [original, …saved]. ORIGINAL_VARIATION_ID
+       is handled by the default branch above (pinnedSaved is null,
+       variation stays null, renderStr falls through to tpl.subject /
+       tpl.body) — that's the "pinned Variation 1" path, distinct
+       from this "no pin → random" path. */
+    if (!pinnedSaved && !selectedVariationId && variations.length > 0) {
+      const idx = Math.floor(Math.random() * (variations.length + 1));
+      variation = idx === 0 ? null : variations[idx - 1];
+    }
     const subject  = renderStr(variation?.subject || tpl.subject, resolvedVars, tpl.vars);
     const rawBody  = renderStr(variation?.body    || tpl.body,    resolvedVars, tpl.vars);
     const plainBody = toPlainText(rawBody);
@@ -826,22 +846,25 @@ function MainView({
             <Reveal key="template-block" gap={0}>
               <SectionLabel divider={false} style={{ marginBottom: 2 }}>Template</SectionLabel>
               {hasTemplates ? (
-                /* Shared TemplatePicker (mode='single' — popup is a
-                   single-send, no random across recipients). Matched
-                   templates are grouped under a "Matched on this
-                   page" header with brand-glow dots; everything else
-                   sits under "All templates". The picker opens
-                   inline inside the popup body, so Chrome's popup
-                   auto-resize no longer races a flying menu.
+                /* Shared TemplatePicker (mode='random' — selecting
+                   a parent with variations means "pick one at
+                   random at send time"; selecting Variation 1
+                   pins the original; selecting any other variation
+                   pins that one). Matched templates are grouped
+                   under a "Matched on this page" header with brand-
+                   glow dots; the rest sits under "All templates".
+                   The picker opens inline inside the popup body so
+                   Chrome's popup auto-resize no longer races a
+                   flying menu.
 
                    listMaxHeight is tighter than the EmailRunner
                    default (360) so the expanding option list fits
                    inside the popup body without the host shell's
-                   overflow: hidden clipping the bottom rows. 220
+                   overflow:hidden clipping the bottom rows. 220
                    leaves visible room for the action buttons + the
                    resolved-info block + Send beneath the picker. */
                 <TemplatePicker
-                  mode="single"
+                  mode="random"
                   templates={templates}
                   matchedIds={matchedIds}
                   value={dropdownValue}

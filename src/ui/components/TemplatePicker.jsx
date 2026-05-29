@@ -554,7 +554,6 @@ function Row({
             <SubRow
               key={ORIGINAL_VARIATION_ID}
               label="Variation 1"
-              meta="original — parent template body"
               isPicked={pinnedVarId === ORIGINAL_VARIATION_ID}
               onPick={() => onPickVariation(ORIGINAL_VARIATION_ID)}
             />
