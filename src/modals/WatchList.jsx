@@ -512,6 +512,20 @@ export const URGENCY_TINT = {
   done:     'var(--gb-text-muted)',
 };
 
+/* Compact age readout used on the right edge of TaskRow when it
+   isn't hovered. Minutes under an hour, hours under a day, days
+   beyond — tuned for an at-a-glance sense of "how long has this
+   been sitting" without taking up more than a chip's worth of
+   horizontal space. */
+function relAge(createdAt, nowMs) {
+  const ms = Math.max(0, nowMs - (createdAt || nowMs));
+  const HOUR = 3600 * 1000;
+  const DAY = 24 * HOUR;
+  if (ms < HOUR) return `${Math.max(1, Math.round(ms / 60000))}m`;
+  if (ms < DAY)  return `${Math.round(ms / HOUR)}h`;
+  return `${Math.round(ms / DAY)}d`;
+}
+
 /* ── FilterLabel — label + count badge composed for Segmented.
    Segmented accepts ReactNode labels and recolors them via its
    own active/inactive tints, so we just lay out text + Tag. */
@@ -526,12 +540,21 @@ function FilterLabel({ text, count, active }) {
   );
 }
 
-/* ── TaskRow ─────────────────────────────────────────────────── */
+/* ── TaskRow — compact ~44px two-line row.
+   Layout: [checkbox] · [priority dot + title] / [context + due] · [age|actions]
+   The right edge swaps the relative-age readout for Edit/Remove on hover —
+   keeps the resting row clean while still putting actions one mouse-move
+   away. The 3px urgency stripe on the left and the priority Dot inline
+   with the title carry the same priority/urgency signal the old taller
+   row used a colored border + separate row to convey. */
 function TaskRow({ task, index, isResolving, onToggle, onEdit, onDelete, nowMs }) {
+  const [hover, setHover] = useState(false);
   const link = contextUrl(task.context);
   const dueColor = dueLabelColor(task);
   const urgency = urgencyLevel(task, nowMs);
   const urgentColor = URGENCY_TINT[urgency];
+  const showStripe = urgency !== 'normal' && urgency !== 'done';
+  const ctxColor = 'var(--gb-text-tertiary)';
 
   return (
     <motion.li
@@ -548,74 +571,87 @@ function TaskRow({ task, index, isResolving, onToggle, onEdit, onDelete, nowMs }
       }
       style={{ overflow: 'hidden', listStyle: 'none' }}
     >
-      <div style={{
-        position: 'relative',
-        display: 'flex', alignItems: 'flex-start', gap: 11,
-        padding: '11px 12px',
-        background: 'var(--gb-surface-1)',
-        border: '1px solid ' + (urgency === 'critical' ? 'var(--gb-error)' : 'var(--gb-border-default)'),
-        borderRadius: 'var(--gb-r-md)',
-        transition: 'border-color .2s, background-color .2s',
-        boxShadow: urgency === 'critical'
-          ? '0 0 0 1px color-mix(in srgb, var(--gb-error) 35%, transparent)'
-          : 'none',
-      }}>
-        {/* Urgency stripe — 3px tall colored bar on the left edge,
-            keyed to how long the item has been sitting unresolved.
-            Critical items also recolor the row border above. */}
-        <div
+      <div
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        style={{
+          position: 'relative',
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '6px 10px 6px 11px',
+          borderRadius: 8,
+          border: '1px solid ' + (hover ? 'var(--gb-border-default)' : 'transparent'),
+          background: hover ? 'var(--gb-surface-1)' : 'transparent',
+          transition: 'background-color .14s, border-color .14s',
+        }}
+      >
+        {/* Urgency stripe — 3px colored bar on the left edge keyed to
+            how long the item has been sitting unresolved. Stays put
+            even with the borderless resting state. */}
+        <span
           aria-hidden
           style={{
-            position: 'absolute', top: 6, bottom: 6, left: -1, width: 3,
+            position: 'absolute', left: -1, top: 7, bottom: 7, width: 3,
             background: urgentColor,
             borderRadius: 2,
-            opacity: urgency === 'normal' || urgency === 'done' ? 0 : 1,
+            opacity: showStripe ? 1 : 0,
             transition: 'opacity .2s, background-color .2s',
           }}
         />
-        {/* 18×18 checkbox */}
+
         <TaskCheckbox done={task.done} onToggle={onToggle} />
 
-        {/* Title + meta */}
+        {/* Two tight lines: title (with priority dot) + context/due */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontSize: 12.5, fontWeight: 600,
-            color: 'var(--gb-text-primary)',
-            textDecoration: task.done ? 'line-through' : 'none',
-            wordBreak: 'break-word',
-          }}>{task.title}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+            <Dot
+              tone={task.priority === 'high' ? 'error' : task.priority === 'med' ? 'warning' : 'muted'}
+              size={6}
+            />
+            <span
+              title={task.title}
+              style={{
+                fontSize: 12.5, fontWeight: 600,
+                color: 'var(--gb-text-primary)',
+                textDecoration: task.done ? 'line-through' : 'none',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}
+            >{task.title}</span>
+          </div>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 6,
-            marginTop: 4, flexWrap: 'wrap',
+            marginTop: 2, minWidth: 0,
+            fontSize: 10.5,
           }}>
-            <Dot tone={
-              task.priority === 'high' ? 'error' :
-              task.priority === 'med'  ? 'warning' : 'muted'
-            } />
             {task.context ? (
               link ? (
                 <a
                   href={link}
                   target="_blank"
                   rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  title={formatContext(task.context)}
                   style={{
                     display: 'inline-flex', alignItems: 'center', gap: 4,
-                    fontSize: 10.5, fontWeight: 500,
-                    color: 'var(--gb-text-tertiary)',
-                    textDecoration: 'none',
+                    color: ctxColor, textDecoration: 'none', fontWeight: 500,
+                    flexShrink: 0, maxWidth: '70%',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--gb-brand-label)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--gb-text-tertiary)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = ctxColor; }}
                 >
                   <ContextIcon type={task.context.type} />
                   {formatContext(task.context)}
                 </a>
               ) : (
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                  fontSize: 10.5, fontWeight: 500,
-                  color: 'var(--gb-text-tertiary)',
-                }}>
+                <span
+                  title={formatContext(task.context)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    color: ctxColor, fontWeight: 500,
+                    flexShrink: 0, maxWidth: '70%',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}
+                >
                   <ContextIcon type={task.context.type} />
                   {formatContext(task.context)}
                 </span>
@@ -623,9 +659,8 @@ function TaskRow({ task, index, isResolving, onToggle, onEdit, onDelete, nowMs }
             ) : (
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4,
-                fontSize: 10.5, fontWeight: 500,
-                color: 'var(--gb-text-ghost)',
-                fontStyle: 'italic',
+                color: 'var(--gb-text-ghost)', fontStyle: 'italic', fontWeight: 500,
+                flexShrink: 0,
               }}>
                 <StandaloneIcon />
                 Standalone
@@ -633,41 +668,59 @@ function TaskRow({ task, index, isResolving, onToggle, onEdit, onDelete, nowMs }
             )}
             {task.due && (
               <>
-                <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>·</span>
+                <span style={{ color: 'var(--gb-text-ghost)' }}>·</span>
                 <span style={{
-                  fontSize: 10.5, fontWeight: 600,
-                  color: dueColor,
+                  fontWeight: 600, color: dueColor,
+                  flexShrink: 0, whiteSpace: 'nowrap',
                 }}>{formatHumanDate(task.due)}</span>
               </>
             )}
           </div>
         </div>
 
-        {/* Edit + delete — solid (secondary) so they read as
-            real chips and balance the two-line row content. */}
-        <div style={{
-          display: 'flex', gap: 4, flexShrink: 0,
-          alignSelf: 'center', // vertically center against both lines
-        }}>
-          <Btn
-            variant="secondary"
-            size="sm"
-            icon={<I.edit size={12} />}
-            onClick={onEdit}
-            style={{ height: 30, width: 30, padding: 0 }}
-            title="Edit watch item"
-          />
-          <Btn
-            variant="secondary"
-            size="sm"
-            icon={<I.trash size={12} />}
-            onClick={onDelete}
-            style={{ height: 30, width: 30, padding: 0 }}
-            title="Remove from watch list"
-          />
-        </div>
+        {/* Right edge: age readout, swapped for Edit/Remove on hover */}
+        {hover ? (
+          <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+            <RowAction title="Edit watch item" onClick={onEdit} icon={<I.edit size={12} />} />
+            <RowAction title="Remove from watch list" onClick={onDelete} icon={<I.trash size={12} />} danger />
+          </div>
+        ) : (
+          <span style={{
+            fontSize: 10.5,
+            color: showStripe ? urgentColor : 'var(--gb-text-muted)',
+            fontFamily: 'var(--gb-font-mono)',
+            flexShrink: 0,
+            fontWeight: urgency === 'critical' ? 700 : 500,
+          }}>{task.done ? 'done' : relAge(task.createdAt, nowMs)}</span>
+        )}
       </div>
     </motion.li>
+  );
+}
+
+/* Compact 26×26 ghost button used in the row's hover-revealed
+   actions slot. Transparent until hovered so the resting row stays
+   silent, then picks up a tinted surface — danger tone for delete. */
+function RowAction({ icon, title, onClick, danger }) {
+  const [h, setH] = useState(false);
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      onMouseEnter={() => setH(true)}
+      onMouseLeave={() => setH(false)}
+      style={{
+        width: 26, height: 26, flexShrink: 0, padding: 0,
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        border: '1px solid ' + (h ? (danger ? 'var(--gb-error-tint-border)' : 'var(--gb-border-default)') : 'transparent'),
+        background: h ? (danger ? 'var(--gb-error-tint-medium)' : 'var(--gb-fill-subtle)') : 'transparent',
+        color: h ? (danger ? 'var(--gb-error-fg)' : 'var(--gb-text-secondary)') : 'var(--gb-text-muted)',
+        borderRadius: 6,
+        cursor: 'pointer',
+        transition: 'background-color .12s, border-color .12s, color .12s',
+      }}
+    >{icon}</button>
   );
 }
 
