@@ -871,16 +871,31 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
              true colors regardless of lighting; DoubleSide renders the
              patch no matter its winding; frustumCulled:false stops a
              tight-bounds cull from dropping it. */
-          const decalMat = new THREE.MeshBasicMaterial({
-            map: decalTexture,
-            transparent: true,
-            side: THREE.DoubleSide,
-            depthTest: false,
-            depthWrite: false,
-            polygonOffset: true,
-            polygonOffsetFactor: -4,
-            toneMapped: false,
-          });
+          /* decalDebug → a SOLID OPAQUE RED material with no map, no
+             transparency, no UVs in play. This strips every texture /
+             alpha / UV variable: if a flat red patch shows on the
+             ball, the geometry + render path are fine and the problem
+             is the texture/crop; if even solid red is invisible, the
+             mesh is being dropped from the render entirely (geometry /
+             scene / layers) and the [gb-decal] line below says which. */
+          const decalMat = decalDebug
+            ? new THREE.MeshBasicMaterial({
+                color: 0xff0000,
+                side: THREE.DoubleSide,
+                depthTest: false,
+                depthWrite: false,
+                toneMapped: false,
+              })
+            : new THREE.MeshBasicMaterial({
+                map: decalTexture,
+                transparent: true,
+                side: THREE.DoubleSide,
+                depthTest: false,
+                depthWrite: false,
+                polygonOffset: true,
+                polygonOffsetFactor: -4,
+                toneMapped: false,
+              });
           decalMesh = new THREE.Mesh(decalGeo, decalMat);
           /* Identity transform — the geometry is already in
              ballGroup-local space (inverse baked above), so

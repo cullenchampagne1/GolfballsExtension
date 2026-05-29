@@ -37,7 +37,7 @@ const WHITE_BG = /^(#ffffff|#fff|white|rgb\(\s*255\s*,\s*255\s*,\s*255\s*\)|rgba
 const NEAR_WHITE = /^#(f[0-9a-f]|e[0-9a-f])[0-9a-f]{4}$/i;
 const DARK_TXT = /^(#000000|#000|#111111|#111|#222222|#222|#333333|#333|black|rgb\(\s*0\s*,\s*0\s*,\s*0\s*\)|rgba\(\s*0\s*,\s*0\s*,\s*0\s*,?\s*1?\s*\))$/i;
 
-const LIGHT_TEXT = '#d6d8dc';
+const LIGHT_TEXT = '#eceef2';
 
 function isLightBg(v) {
   if (!v) return false;
@@ -79,6 +79,7 @@ function needsLighten(v) {
 }
 
 function normaliseEmailDom(container) {
+  let seen = 0; let changed = 0;
   container.querySelectorAll('*').forEach((el) => {
     /* White / near-white backgrounds → transparent so the email
        blends into the pane's own surface instead of sitting on a
@@ -92,12 +93,28 @@ function normaliseEmailDom(container) {
       /* Lighten dark grayish text (black AND the medium grays emails
          use for footers / signatures) so it contrasts on dark; leave
          saturated colors. */
-      if (el.style.color && needsLighten(el.style.color)) el.style.color = LIGHT_TEXT;
+      if (el.style.color) { seen += 1; if (needsLighten(el.style.color)) { el.style.color = LIGHT_TEXT; changed += 1; } }
     }
 
     const colorAttr = el.getAttribute && el.getAttribute('color');
-    if (colorAttr && needsLighten(colorAttr)) el.setAttribute('color', LIGHT_TEXT);
+    if (colorAttr) { seen += 1; if (needsLighten(colorAttr)) { el.setAttribute('color', LIGHT_TEXT); changed += 1; } }
   });
+  /* Rewrite color rules inside the email's own <style> blocks too —
+     Outlook leans on class rules (p.MsoNormal {color:#242424}) that
+     the per-element walk above never sees, which is why text stayed
+     gray. Replace any grayish `color:` in CSS text with the light
+     token. */
+  container.querySelectorAll('style').forEach((s) => {
+    const css = s.textContent || '';
+    const next = css.replace(/color\s*:\s*([^;}!]+)/gi, (m, val) =>
+      (needsLighten(val) ? `color: ${LIGHT_TEXT}` : m));
+    if (next !== css) { s.textContent = next; changed += 1; }
+  });
+  try {
+    // eslint-disable-next-line no-console
+    console.log('[gb-email] color normalise — seen', seen, 'changed', changed,
+      'styleBlocks', container.querySelectorAll('style').length);
+  } catch { /* ignore */ }
 }
 
 export function EmailHtmlView({ html, style }) {
