@@ -11,6 +11,7 @@ import {
   I, Icon,
 } from '../ui/index.js';
 import { CALL_CATEGORY_OPTIONS } from '../lib/callLog.js';
+import { TASK_CATEGORY_OPTIONS } from '../lib/taskCategories.js';
 
 /* ─────────────────────────────────────────────────────────────
    NoteEditor — the production quick-note template editor page.
@@ -283,12 +284,12 @@ function TaskPanel({ data, set }) {
             }}
           />
         </Field>
-        <Field label="Category ID" hint="CRM internal · 0 = Other">
-          <Input
-            size="sm" mono
+        <Field label="Category" hint="CRM task category">
+          <Dropdown
+            size="sm" searchable
             value={String(data.categoryId ?? 0)}
-            placeholder="0"
-            onChange={(v) => set({ categoryId: parseInt(v.replace(/[^0-9]/g, ''), 10) || 0 })}
+            options={TASK_CATEGORY_OPTIONS}
+            onChange={(v) => set({ categoryId: parseInt(v, 10) || 0 })}
           />
         </Field>
       </div>
