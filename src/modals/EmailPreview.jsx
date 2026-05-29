@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FloatingPanel, IconBtn, Btn, Tag, I, Spinner } from '../ui/index.js';
+import { AnimatePresence, motion } from 'motion/react';
+import { FloatingPanel, IconBtn, Btn, Tag, I, Spinner, RichTextEditor } from '../ui/index.js';
 import { EmailHtmlView } from '../ui/components/EmailHtmlView.jsx';
 import { CategorizeRail } from '../ui/components/CategorizeRail.jsx';
 import { categorySections } from '../lib/caseMatch.js';
@@ -44,15 +45,18 @@ function buildThread(email, meta) {
 function MessageCard({ msg, expanded, onToggle }) {
   const sender = splitAddress(msg.from);
   return (
-    <div style={{
-      background: 'var(--gb-surface-1)',
-      border: '1px solid var(--gb-border-subtle)',
-      borderRadius: 'var(--gb-r-md)',
-      marginBottom: 10,
-      overflow: 'hidden',
-      boxShadow: expanded ? '0 4px 16px -8px rgba(0,0,0,.4)' : 'none',
-      transition: 'box-shadow .2s, border-color .2s',
-    }}>
+    <motion.div
+      layout
+      transition={{ layout: { duration: 0.3, ease: [0.4, 0, 0.2, 1] } }}
+      style={{
+        background: 'var(--gb-surface-1)',
+        border: '1px solid var(--gb-border-subtle)',
+        borderRadius: 'var(--gb-r-md)',
+        marginBottom: 10,
+        overflow: 'hidden',
+        boxShadow: expanded ? '0 4px 16px -8px rgba(0,0,0,.4)' : 'none',
+        transition: 'box-shadow .2s, border-color .2s',
+      }}>
       <button
         type="button"
         onClick={onToggle}
@@ -87,12 +91,21 @@ function MessageCard({ msg, expanded, onToggle }) {
           fontFamily: 'var(--gb-font-mono)', whiteSpace: 'nowrap', alignSelf: 'flex-start', paddingTop: 2,
         }}>{msg.date}</span>
       </button>
-      {expanded && (
-        <div style={{ borderTop: '1px solid var(--gb-border-subtle)' }}>
-          <EmailHtmlView html={msg.bodyHtml} style={{ border: 'none', borderRadius: 0, background: 'transparent' }} />
-        </div>
-      )}
-    </div>
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            key="body"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+            style={{ overflow: 'hidden', borderTop: '1px solid var(--gb-border-subtle)' }}
+          >
+            <EmailHtmlView html={msg.bodyHtml} style={{ border: 'none', borderRadius: 0, background: 'transparent' }} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -260,14 +273,13 @@ function MetaRow({ k, children }) {
   );
 }
 
-/* Sticky reply composer — UI only for now (no send wiring). */
+/* Sticky reply composer — UI only for now (no send wiring). Uses the
+   same RichTextEditor as the template/signature editors so the rep
+   gets the full formatting toolbar (bold/italic/lists/colors). */
 function ReplyComposer({ replyTo, subject }) {
   const [expanded, setExpanded] = useState(false);
   const [body, setBody] = useState('');
-  const taRef = useRef(null);
-  useEffect(() => {
-    if (expanded) requestAnimationFrame(() => { try { taRef.current?.focus({ preventScroll: true }); } catch { /* ignore */ } });
-  }, [expanded]);
+  const hasText = body.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim().length > 0;
 
   return (
     <div style={{
@@ -334,19 +346,14 @@ function ReplyComposer({ replyTo, subject }) {
               <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>SUBJECT</span>
               <span style={{ color: 'var(--gb-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{subject}</span>
             </div>
-            <textarea
-              ref={taRef}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="Write your reply…"
-              rows={5}
-              style={{
-                width: '100%', padding: 14,
-                background: 'transparent', border: 'none', outline: 'none', resize: 'vertical',
-                color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)',
-                fontSize: 12.5, lineHeight: 1.6, minHeight: 96,
-              }}
-            />
+            <div style={{ padding: '4px 6px' }}>
+              <RichTextEditor
+                initialHtml={body}
+                onChange={setBody}
+                placeholder="Write your reply…"
+                minHeight={120}
+              />
+            </div>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '8px 14px', borderTop: '1px solid var(--gb-border-subtle)',
@@ -356,7 +363,7 @@ function ReplyComposer({ replyTo, subject }) {
               <IconBtn size="sm" variant="ghost" icon={<I.copy />} tooltip="Attach" />
               <span style={{ flex: 1 }} />
               <Btn size="sm" variant="ghost" onClick={() => { setBody(''); setExpanded(false); }}>Discard</Btn>
-              <Btn size="sm" variant="primary" status="brand" icon={<I.send size={11} />} disabled={!body.trim()}>
+              <Btn size="sm" variant="primary" status="brand" icon={<I.send size={11} />} disabled={!hasText}>
                 Send · ⌘↩
               </Btn>
             </div>
@@ -438,10 +445,14 @@ export function EmailPreview({
             display: 'flex', flexDirection: 'column',
             borderRight: isCase ? '1px solid var(--gb-border-default)' : 'none',
           }}>
+            {/* Block (not flex) scroll container — flex-column let the
+               message cards shrink to fit instead of overflowing, so a
+               tall email got clipped before its signature. Plain block
+               flow lets them stack at full height and the column
+               scrolls. */}
             <div style={{
               flex: 1, minHeight: 0, overflow: 'auto',
               padding: '16px 20px',
-              display: 'flex', flexDirection: 'column',
             }}>
               {/* Thread summary line */}
               {!loading && thread.length > 0 && (

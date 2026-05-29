@@ -195,6 +195,34 @@ if (!window.__gbEmailPreviewLoaded) {
     ));
   };
 
+  /* Liquid-glass hover affordance for the inbox rows. The legacy
+     modal gave each clickable row a hover highlight; the React port
+     dropped it, so there was no signal the row opens a preview.
+     This injects a translucent brand-tinted glass overlay (blur +
+     inset ring + left accent) on hover — matching the in-page
+     liquid-glass language used by the other surfaces. */
+  const ROW_STYLE_ID = '__gb-email-row-style';
+  function ensureRowStyle() {
+    if (document.getElementById(ROW_STYLE_ID)) return;
+    const el = document.createElement('style');
+    el.id = ROW_STYLE_ID;
+    el.textContent = `
+      tr[data-gb-ep] { cursor: pointer; transition: background-color .18s ease, box-shadow .18s ease; }
+      tr[data-gb-ep]:hover {
+        background: color-mix(in srgb, var(--gb-brand-label, #8fce2e) 12%, transparent) !important;
+        box-shadow:
+          inset 3px 0 0 0 var(--gb-brand-label, #8fce2e),
+          inset 0 0 0 1px color-mix(in srgb, var(--gb-brand-label, #8fce2e) 22%, transparent) !important;
+      }
+      tr[data-gb-ep]:hover > td {
+        -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+        background: color-mix(in srgb, var(--gb-surface-1, #1e2024) 22%, transparent) !important;
+      }
+      tr[data-gb-ep]:active { transform: translateY(0.5px); }
+    `;
+    (document.head || document.documentElement).appendChild(el);
+  }
+
   function attachRow(row, link) {
     if (row.__gbEpAttached) return;
     const href = link.getAttribute('href') || '';
@@ -202,6 +230,7 @@ if (!window.__gbEmailPreviewLoaded) {
     const messageGuid = (href.match(/MessageGUID=([^&]+)/i) || [])[1] || '';
     if (!messageId) return;
     row.__gbEpAttached = true;
+    row.setAttribute('data-gb-ep', '1');
 
     const cells = row.querySelectorAll('td');
     const meta = {
@@ -225,6 +254,7 @@ if (!window.__gbEmailPreviewLoaded) {
 
   window.__gbEmailPreviewScan = function () {
     if (window.__gbFeatureFlags?.emailPreviewEnabled === false) return;
+    ensureRowStyle();
     document.querySelectorAll(ROW_LINK_SEL).forEach((link) => {
       const row = link.closest('tr');
       if (row) attachRow(row, link);

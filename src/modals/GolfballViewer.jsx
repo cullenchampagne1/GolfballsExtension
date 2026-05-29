@@ -847,7 +847,16 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           const decalMat = new THREE.MeshStandardMaterial({
             map: decalTexture,
             transparent: true,
-            depthTest: true,
+            /* The decal conforms to the sphere at radius ~100, the
+               same depth as the ball surface — with depthTest on it
+               z-fights and the opaque ball wins, so the print never
+               shows (the old build only "worked" because the fit-
+               scale copy floated the decal in FRONT of the ball).
+               depthTest:false + renderOrder draws the decal over the
+               ball every frame; FrontSide culling still hides it when
+               its face rotates away, so a spun ball doesn't show the
+               print through the back. */
+            depthTest: false,
             depthWrite: false,
             polygonOffset: true,
             polygonOffsetFactor: -4,
