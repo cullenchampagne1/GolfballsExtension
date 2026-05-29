@@ -498,11 +498,17 @@ function Row({
     >
       <div style={{
         display: 'grid',
+        /* Compact single-line grid:
+             dot · label · (var-count tag) · state badge · (chevron)
+           Both the var-count tag and the chevron are conditional on
+           hasVariations; the grid template just adds those columns
+           when the row carries variations so non-variation rows
+           don't reserve the empty slots. */
         gridTemplateColumns: hasVariations
-          ? 'auto minmax(0, 1fr) auto auto'
+          ? 'auto minmax(0, 1fr) auto auto auto'
           : 'auto minmax(0, 1fr) auto',
-        gap: 7, alignItems: 'center',
-        padding: '6px 7px',
+        gap: 6, alignItems: 'center',
+        padding: '5px 7px',
       }}>
         <Dot
           tone={isMatched ? 'brand' : isAnyHere ? 'info' : 'muted'}
@@ -515,56 +521,31 @@ function Row({
           style={{
             background: 'transparent', border: 'none', padding: 0,
             cursor: 'pointer', textAlign: 'left',
-            color: 'inherit', fontFamily: 'inherit',
+            fontFamily: 'inherit',
             minWidth: 0,
-          }}
-        >
-          <div style={{
             fontSize: 11.5, fontWeight: 600,
             color: isSelected
               ? 'var(--gb-brand-label)'
               : pinnedVarId ? 'var(--gb-text-secondary)' : 'var(--gb-text-primary)',
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>{tpl.name || 'Untitled'}</div>
-          <div style={{
-            fontSize: 9, color: 'var(--gb-text-muted)',
-            fontFamily: 'var(--gb-font-mono)', marginTop: 1,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {tpl.type || 'email'}
-            {hasVariations && (
-              <>
-                {' · '}
-                {/* +1 because the sub-list includes a synthetic
-                    Variation 1 = the parent's base body alongside
-                    the N saved variations. */}
-                <span style={{ color: isSelected ? 'var(--gb-brand-label)' : undefined }}>
-                  {tpl.variations.length + 1} var
-                </span>
-              </>
-            )}
-            {pinnedVarId && (() => {
-              if (pinnedVarId === ORIGINAL_VARIATION_ID) {
-                return (
-                  <>
-                    {' · '}
-                    <span style={{ color: 'var(--gb-info-fg)' }}>Variation 1</span>
-                  </>
-                );
-              }
-              const idx = tpl.variations.findIndex((x) => x.id === pinnedVarId);
-              return idx >= 0 ? (
-                <>
-                  {' · '}
-                  {/* Positional name — matches the sub-list. */}
-                  <span style={{ color: 'var(--gb-info-fg)' }}>
-                    Variation {idx + 2}
-                  </span>
-                </>
-              ) : null;
-            })()}
-          </div>
-        </button>
+          }}
+        >{tpl.name || 'Untitled'}</button>
+        {hasVariations && (
+          /* Compact variation-count chip next to the name —
+             replaces the second-line "N var" sub-text. Mono so
+             tabular nums line up across rows; +1 because the
+             pool always includes the synthetic Variation 1 =
+             parent body. */
+          <span style={{
+            padding: '1px 5px',
+            borderRadius: 3,
+            background: isSelected ? 'var(--gb-brand-tint-soft)' : 'var(--gb-fill-subtle)',
+            color: isSelected ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
+            fontSize: 9, fontWeight: 700, letterSpacing: 0.4,
+            fontFamily: 'var(--gb-font-mono)',
+            whiteSpace: 'nowrap',
+          }}>{tpl.variations.length + 1}v</span>
+        )}
         {/* Row state indicator */}
         <RowStateBadge mode={mode} isSelected={isSelected} pinnedVarId={pinnedVarId} hasVariations={hasVariations} />
         {hasVariations && (
@@ -579,7 +560,7 @@ function Row({
             onClick={onToggleExpand}
             aria-label={expanded ? 'Collapse variations' : 'Expand variations'}
             style={{
-              width: 20, height: 20, padding: 0,
+              width: 16, height: 16, padding: 0,
               background: 'transparent',
               border: 'none', borderRadius: 3, cursor: 'pointer',
               color: expanded ? 'var(--gb-text-secondary)' : 'var(--gb-text-tertiary)',
@@ -588,7 +569,7 @@ function Row({
               transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)',
             }}
           >
-            <ChevDownIcon size={10} />
+            <ChevDownIcon size={9} />
           </button>
         )}
       </div>
@@ -642,34 +623,48 @@ function Row({
 }
 
 function RowStateBadge({ mode, isSelected, pinnedVarId, hasVariations }) {
-  /* When the parent itself is selected, paint a solid brand check.
-     In random mode with variations, the indicator carries a shuffle
-     glyph instead so the rep can tell the row will roll at send
-     time. A pinned-variation parent gets an info-tinted pin. */
+  /* Compact single-line variants — all 14×14 max so the badge
+     fits next to the variation-count chip without crowding.
+       isSelected + random + has variations → bare shuffle icon,
+         no background, brand color. Removes the box that read
+         as a stuck button at the smaller row size.
+       isSelected (otherwise) → solid brand check (small box).
+       pinnedVarId → info-tinted pin (small box). */
   if (isSelected) {
-    const icon = mode === 'random' && hasVariations
-      ? <ShuffleIcon size={9} />
-      : <CheckIcon size={10} />;
+    if (mode === 'random' && hasVariations) {
+      return (
+        <span
+          aria-label="Random across variations"
+          style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 14, height: 14,
+            color: 'var(--gb-brand-label)',
+          }}
+        >
+          <ShuffleIcon size={9} />
+        </span>
+      );
+    }
     return (
       <div style={{
-        width: 16, height: 16, borderRadius: 4,
+        width: 14, height: 14, borderRadius: 3,
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         background: 'var(--gb-brand-label)',
         color: 'var(--gb-text-on-brand, var(--gb-surface-deep))',
-      }}>{icon}</div>
+      }}><CheckIcon size={9} /></div>
     );
   }
   if (pinnedVarId) {
     return (
       <div style={{
-        width: 16, height: 16, borderRadius: 4,
+        width: 14, height: 14, borderRadius: 3,
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
         background: 'var(--gb-info-tint-medium)',
         color: 'var(--gb-info-fg)',
-      }}><PinIcon size={9} /></div>
+      }}><PinIcon size={8} /></div>
     );
   }
-  return <span style={{ width: 16, height: 16 }} />;
+  return <span style={{ width: 14, height: 14 }} />;
 }
 
 function SubRow({ label, meta, isPicked, onPick }) {
