@@ -27,6 +27,16 @@ let noteTemplates = [];
 let currentId     = null;
 let currentNoteId = null;
 let orderTabId    = null;
+
+/* Mirror the active-template ids to window so the React sidebar's
+   polling effect (editor-sidebar.jsx) can read them. The sidebar
+   syncs its `active` row from window.currentId / window.currentNoteId
+   every 300ms — without this mirror it always reads undefined and
+   clobbers its own click-time optimistic state, which is why the
+   row's brand-tint background was vanishing the moment the mouse
+   came off. Route every write to these locals through the setters. */
+function setCurrentId(id)     { currentId     = id; if (typeof window !== 'undefined') window.currentId     = id; }
+function setCurrentNoteId(id) { currentNoteId = id; if (typeof window !== 'undefined') window.currentNoteId = id; }
 // Tracks the view that was visible before openSettings() so
 // closeSettings() can restore it.
 let _settingsPreviousView = 'ed-empty';
@@ -108,7 +118,7 @@ function openTemplate(id) {
   if (currentId === id && !$('ed-form').classList.contains('hidden')) return;
   const tpl = templates.find((t) => t.id === id);
   if (!tpl) return;
-  currentId = id;
+  setCurrentId(id);
   hide('ed-empty');
   hide('ed-note-form');
   hide('ed-settings');
@@ -126,7 +136,7 @@ async function deleteTemplate() {
   if (!(await gbConfirm('Delete this email template?', { tone: 'danger', confirmLabel: 'Delete' }))) return;
   templates = templates.filter((t) => t.id !== currentId);
   await saveTemplates();
-  currentId = null;
+  setCurrentId(null);
   hide('ed-form');
   show('ed-empty');
   animateView('ed-empty');
@@ -159,7 +169,7 @@ function openNoteTemplate(id) {
   if (currentNoteId === id && !$('ed-note-form').classList.contains('hidden')) return;
   const tpl = noteTemplates.find((t) => t.id === id);
   if (!tpl) return;
-  currentNoteId = id;
+  setCurrentNoteId(id);
   hide('ed-empty');
   hide('ed-form');
   hide('ed-settings');
@@ -177,7 +187,7 @@ async function deleteNoteTemplate() {
   if (!(await gbConfirm('Delete this note template?', { tone: 'danger', confirmLabel: 'Delete' }))) return;
   noteTemplates = noteTemplates.filter((t) => t.id !== currentNoteId);
   await saveNoteTemplates();
-  currentNoteId = null;
+  setCurrentNoteId(null);
   hide('ed-note-form');
   show('ed-empty');
   animateView('ed-empty');
@@ -189,7 +199,7 @@ async function deleteNoteTemplate() {
  */
 async function applyTemplatePatch(tpl) {
   if (!tpl || !tpl.id) return;
-  currentId = tpl.id;
+  setCurrentId(tpl.id);
   const idx = templates.findIndex((t) => t.id === tpl.id);
   if (idx >= 0) templates[idx] = tpl; else templates.push(tpl);
   await saveTemplates();
@@ -198,7 +208,7 @@ async function applyTemplatePatch(tpl) {
 }
 async function applyNotePatch(tpl) {
   if (!tpl || !tpl.id) return;
-  currentNoteId = tpl.id;
+  setCurrentNoteId(tpl.id);
   const idx = noteTemplates.findIndex((t) => t.id === tpl.id);
   if (idx >= 0) noteTemplates[idx] = tpl; else noteTemplates.push(tpl);
   await saveNoteTemplates();
