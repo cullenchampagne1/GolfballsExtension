@@ -58,6 +58,11 @@ export function TemplatePicker({
   initialOpen = false,
   placeholder = 'Pick a template',
   disabled = false,
+  /* Cap the visible scrollable height of the option list. Default
+     360 fits comfortably in the EmailRunner panel; the popup
+     overrides with a smaller value so the list never tries to grow
+     past the popup body and get clipped by its overflow. */
+  listMaxHeight = 360,
   /* When non-null, expand exactly that template's variations on
      mount — useful for the demo phase bar but also helpful when
      restoring a previously-pinned variation so the rep sees the
@@ -209,7 +214,19 @@ export function TemplatePicker({
           borderTop: '1px dashed var(--gb-border-default)',
           padding: 5,
           display: 'flex', flexDirection: 'column', gap: 1,
-          maxHeight: 360, overflowY: 'auto',
+          /* `listMaxHeight` caps the scrollable region so the picker
+             never expands past the popup body and gets clipped.
+             When a variation expands inside a row, the content
+             grows past this cap and the option list shows a
+             scrollbar; rows below the expanded one still push
+             down inside the scrollable region. */
+          maxHeight: listMaxHeight,
+          overflowY: 'auto',
+          /* Visible thin scrollbar so the rep knows the list scrolls
+             when variations are expanded. The popup's host page
+             style sheet doesn't get to override these (the popup
+             is its own document). */
+          scrollbarWidth: 'thin',
         }}>
           {templates.length === 0 ? (
             <EmptyHint>{placeholder}</EmptyHint>
@@ -437,17 +454,23 @@ function Row({
         {/* Row state indicator */}
         <RowStateBadge mode={mode} isSelected={isSelected} pinnedVarId={pinnedVarId} hasVariations={hasVariations} />
         {hasVariations && (
+          /* Chevron is a pure rotate-on-toggle affordance — no
+             background swap. The fill behind the arrow when
+             expanded read as a stuck button-press to the rep, so
+             we drop it and let the rotation + the variation list
+             carry the "open" signal. Color tints brighter when
+             active so there's still a subtle state change. */
           <button
             type="button"
             onClick={onToggleExpand}
             aria-label={expanded ? 'Collapse variations' : 'Expand variations'}
             style={{
               width: 20, height: 20, padding: 0,
-              background: expanded ? 'var(--gb-fill-medium, var(--gb-fill-subtle))' : 'transparent',
+              background: 'transparent',
               border: 'none', borderRadius: 3, cursor: 'pointer',
-              color: 'var(--gb-text-tertiary)',
+              color: expanded ? 'var(--gb-text-secondary)' : 'var(--gb-text-tertiary)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'background .18s, transform .25s cubic-bezier(.4,0,.2,1)',
+              transition: 'color .18s, transform .25s cubic-bezier(.4,0,.2,1)',
               transform: expanded ? 'rotate(0deg)' : 'rotate(-90deg)',
             }}
           >

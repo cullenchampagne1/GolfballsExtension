@@ -480,7 +480,16 @@ function Shell({ children, onManage, templateCount, minHeight = 340 }) {
       <div style={{
         flex: 1,
         padding: '14px 14px 14px',
-        overflow: 'hidden',
+        /* overflowY: 'auto' so the body can scroll when the
+           TemplatePicker expands variations and the total stack
+           (picker + button stack + Send) exceeds the popup's
+           viewport height. The previous overflow: hidden clipped
+           the picker's bottom rows because Chrome's popup hits a
+           ~600px ceiling — switching to auto keeps every row
+           reachable without the picker having to fight a tight
+           inner max-height. */
+        overflowY: 'auto',
+        overflowX: 'hidden',
         display: 'flex', flexDirection: 'column',
       }}>
         {children}
@@ -824,7 +833,14 @@ function MainView({
                    page" header with brand-glow dots; everything else
                    sits under "All templates". The picker opens
                    inline inside the popup body, so Chrome's popup
-                   auto-resize no longer races a flying menu. */
+                   auto-resize no longer races a flying menu.
+
+                   listMaxHeight is tighter than the EmailRunner
+                   default (360) so the expanding option list fits
+                   inside the popup body without the host shell's
+                   overflow: hidden clipping the bottom rows. 220
+                   leaves visible room for the action buttons + the
+                   resolved-info block + Send beneath the picker. */
                 <TemplatePicker
                   mode="single"
                   templates={templates}
@@ -832,6 +848,7 @@ function MainView({
                   value={dropdownValue}
                   onChange={onTemplatePickerChange}
                   placeholder="Pick a template"
+                  listMaxHeight={220}
                 />
               ) : (
                 <div style={{
