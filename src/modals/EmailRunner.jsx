@@ -746,8 +746,30 @@ export function EmailRunner({
             display: 'flex', alignItems: 'center', gap: 8,
             flexShrink: 0,
           }}>
-            <Btn size="sm" variant="secondary" onClick={onClose} disabled={status === 'running'}>
-              {status === 'done' ? 'Close' : 'Cancel'}
+            <Btn
+              size="sm"
+              variant={status === 'running' ? 'tinted' : 'secondary'}
+              status={status === 'running' ? 'error' : undefined}
+              icon={status === 'running' ? <StopIcon size={11} /> : undefined}
+              onClick={() => {
+                if (status === 'running') {
+                  /* Mid-run cancel — bumping the token short-circuits
+                     the orchestrator's between-iteration guard so it
+                     returns out of the for-loop without sending the
+                     remaining contacts. We also flip status to 'done'
+                     and signal run-state false so the parent list's
+                     scan beam fades out. The panel stays open with
+                     the trail intact so the rep sees what HAD sent
+                     before they pulled the brake. */
+                  runTokenRef.current += 1;
+                  setStatus('done');
+                  onRunStateChange?.(false);
+                  return;
+                }
+                onClose?.();
+              }}
+            >
+              {status === 'running' ? 'Cancel run' : status === 'done' ? 'Close' : 'Cancel'}
             </Btn>
             <div style={{ flex: 1 }} />
             <Btn
@@ -956,8 +978,12 @@ function RunStatusCard({ status, progress, sentCount, failedCount, trail }) {
                 transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
                 style={{
                   display: 'grid', gridTemplateColumns: '18px minmax(0,1fr) auto',
-                  gap: 8, alignItems: 'center',
-                  padding: '7px 9px',
+                  gap: 10, alignItems: 'center',
+                  /* Bumped right padding so the sent/fail tags don't
+                     kiss the card edge — the previous 9px pinned the
+                     tag against the border, which read as cramped at
+                     the panel's small form factor. */
+                  padding: '8px 12px',
                   borderBottom: i < trail.length - 1 ? '1px solid var(--gb-border-subtle)' : 'none',
                 }}
               >
@@ -1073,5 +1099,17 @@ function TrailIcon({ status }) {
         </svg>
       )}
     </motion.div>
+  );
+}
+
+/* Stop square glyph used by the mid-run Cancel button. Filled
+   instead of stroked so the "this terminates the run" affordance
+   reads at the 11px size where a stroked square loses fidelity. */
+function StopIcon({ size = 11 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"
+      style={{ display: 'block' }}>
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+    </svg>
   );
 }

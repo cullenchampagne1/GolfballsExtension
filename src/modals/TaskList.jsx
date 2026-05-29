@@ -264,6 +264,17 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
      the just-sent row through the inter-send delay; when the
      orchestrator finishes (or the panel closes), the beam fades out. */
   const [emailRunRunning, setEmailRunRunning] = useState(false);
+  /* Per-row Quick Task lifecycle state — keyed by task.id. Values
+     are members of STATE_META (see TaskRow's resolveRowState):
+       'queued' → 'updating' → 'completed'
+                 'reopening' → 'reopened'
+                 'moving'    → 'moved'
+                 'adding'    → 'added'
+     runQuickAction drops 'queued' on every selected row up front so
+     the rep can see the bulk loop's order, then walks each row
+     through its verb-ing → verb-ed phases. Cleared after a brief
+     settle so the row falls back to its natural status. */
+  const [actionStateByRow, setActionStateByRow] = useState({});
   /* "Urgent only" filter — set to 'urgent' by the modal-aware
      action in the action shelf to narrow the visible list to
      overdue + due-today tasks. Cleared via the filter chip in the
@@ -553,13 +564,20 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
     toast?.success?.(`Opened ${tasksToOpen.length} contact${tasksToOpen.length === 1 ? '' : 's'}`, { duration: 2200 });
   };
   const onQuickTask = (e) => {
-    /* Bulk Quick Task — opens the moveable popover anchored at the
-       trigger button's top-right corner. DraggablePopup spawns 12px
-       to the right + 8px below the anchor, so {x,y} lands the popup
-       just past the button without overlapping it. */
+    /* Footer Quick Task — picks mode based on selection size:
+       single row → main (per-task subject, push card, etc.);
+       multi → bulk (broadcasts the action across selected ids).
+       Anchor is the trigger button's top-right corner so the
+       moveable popover spawns just past the footer without
+       overlapping the table. */
     const rect = e?.currentTarget?.getBoundingClientRect?.();
     const anchor = rect ? { x: rect.right, y: rect.top } : null;
-    setQt({ mode: 'bulk', taskId: 'bulk', anchor });
+    const ids = Array.from(selected);
+    if (ids.length === 1) {
+      setQt({ mode: 'main', taskId: ids[0], anchor });
+    } else {
+      setQt({ mode: 'bulk', taskId: 'bulk', anchor });
+    }
   };
 
   /* Mutates one task in local state so the table reflects the change
@@ -572,7 +590,11 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
   /* ── Quick-Task action dispatcher ────────────────────────────
      Handles the leaves of the menu state machine. The menu owns its
      own navigation (main → datePicker / templates → action); this
-     fires once the user lands on an actionable item. */
+     fires once the user lands on an actionable item. Each row walks
+     the status column through queued → verb-ing → verb-ed so the
+     rep can read the bulk loop's progress without watching a
+     separate spinner. The verb-ed state lingers for ~1.8s then
+     clears so the row falls back to its natural CRM status. */
   const runQuickAction = useCallback(async (action, payload = {}) => {
     const isBulk = action.startsWith('bulk-');
     const ids = isBulk ? Array.from(selected) : [payload.taskId];
@@ -581,10 +603,47 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
     setQt(null);
     for (const id of ids) markBusy(id);
 
-    /* Helper that pushes one task's mutation through the relevant CRM
-       endpoint, then patches local state on success. Errors are caught
-       per-row so a partial failure in a bulk run doesn't stop the rest. */
+    /* Action → status lifecycle. Mirrors what the rep actually
+       SEES happening to the row: editing the task body is
+       "updating", a date push slides the due forward so it's
+       "moving", a brand-new task is "adding". The reopen branch
+       gets its own warning-tinted pair so the rep notices when a
+       completed task came back on the active list. */
+    const verbingMap = {
+      complete: 'updating', 'bulk-complete': 'updating',
+      reopen:   'reopening',
+      push:     'moving', 'bulk-push': 'moving',
+      'set-date': 'moving', 'bulk-set-date': 'moving',
+      'create-task': 'adding', 'bulk-create-task': 'adding',
+    };
+    const verbedMap = {
+      complete: 'completed', 'bulk-complete': 'completed',
+      reopen:   'reopened',
+      push:     'moved', 'bulk-push': 'moved',
+      'set-date': 'moved', 'bulk-set-date': 'moved',
+      'create-task': 'added', 'bulk-create-task': 'added',
+    };
+    const verbing = verbingMap[action] || 'updating';
+    const verbed  = verbedMap[action]  || 'completed';
+
+    /* Drop 'queued' on every target row up front so the rep can
+       see what the bulk loop is going to walk through. We avoid
+       overwriting rows that are mid-email (emailStatusByRow wins
+       in resolveRowState) — those will reveal their action state
+       once the blast clears the row. */
+    setActionStateByRow((cur) => {
+      const next = { ...cur };
+      for (const id of ids) next[id] = 'queued';
+      return next;
+    });
+
+    /* Per-row helper. Transitions the row to verb-ing before the
+       API call, verb-ed after success, and surfaces an error tag
+       via the toast (the badge holds at verb-ing on failure since
+       there's no "failed" state in the action lifecycle yet — the
+       toast carries the error message). */
     const runOne = async (id) => {
+      setActionStateByRow((cur) => ({ ...cur, [id]: verbing }));
       try {
         if (action === 'complete' || action === 'bulk-complete') {
           await apiCompleteTask(id);
@@ -613,8 +672,26 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
           });
           if (!res?.ok) throw new Error(res?.error || 'Create task failed');
         }
+        setActionStateByRow((cur) => ({ ...cur, [id]: verbed }));
+        /* Fall back to natural status after a beat so the row
+           doesn't permanently advertise its last action. */
+        setTimeout(() => {
+          setActionStateByRow((cur) => {
+            if (cur[id] !== verbed) return cur;
+            const next = { ...cur };
+            delete next[id];
+            return next;
+          });
+        }, 1800);
       } catch (err) {
         toast?.error?.(`Task ${id}: ${err?.message || err}`, { duration: 4000 });
+        /* On error, clear the state immediately so the row stops
+           pretending the action is still pending. */
+        setActionStateByRow((cur) => {
+          const next = { ...cur };
+          delete next[id];
+          return next;
+        });
       } finally {
         clearBusy(id);
       }
@@ -879,9 +956,9 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
           onToggleAll={toggleAll}
           sortChain={sortChain}
           onSort={onSortClick}
-          onQuickMenu={(id, anchor) => setQt({ mode: 'main', taskId: id, anchor })}
           busyRows={busyRowsRef.current}
           emailStatusByRow={emailStatusByRow}
+          actionStateByRow={actionStateByRow}
           emailRunRunning={emailRunRunning}
         />
         {/* re-render hook — busyVersion changes force the table to repick
@@ -958,9 +1035,13 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
 }
 
 /* ── TasksTable ──────────────────────────────────────────────
-   Columns mirror the legacy modal's set + order: Checkbox, Account,
-   Contact, Due Date, Category, Priority, Subject, Status, Action. */
-const COLS = '30px 1.3fr 1.1fr 100px 1.0fr 70px 1.5fr 90px 110px';
+   Columns: Checkbox, Account, Contact, Due Date, Category,
+   Priority, Subject, Status (state column).
+   The legacy "Action" (Quick Task button) cell was removed —
+   Quick Task is now opened via the footer button against the
+   selected row(s). Status becomes the unified state column that
+   animates through queued → in-flight → settled per row. */
+const COLS = '30px 1.3fr 1.1fr 100px 1.0fr 70px 1.5fr 120px';
 
 /* Scan beam — same three-layer overlay CRMSearch uses (gradient body
    + two glowing hairlines) absolutely positioned over the active
@@ -980,13 +1061,21 @@ function ScanBeam({ top, height }) {
       transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
       style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
     >
+      {/* All three beam layers clamp to zIndex 1 — below the sticky
+          header (zIndex 4) so the beam paints behind the header
+          band when the active row scrolls up under it. The header's
+          translucent background + backdrop blur lets the beam show
+          through; the column labels stay readable on top. Row
+          content has no z-index so the beam still wins over rows
+          (paint order + low gradient opacity keeps row text
+          readable through the gradient). */}
       <div style={{
         position: 'absolute', left: 0, right: 0, top: 0,
         transform: `translateY(${top}px)`,
         height,
         background: 'linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--gb-brand-label) 7%, transparent) 35%, color-mix(in srgb, var(--gb-brand-label) 12%, transparent) 50%, color-mix(in srgb, var(--gb-brand-label) 7%, transparent) 65%, transparent 100%)',
         transition,
-        zIndex: 3,
+        zIndex: 1,
       }} />
       <div style={{
         position: 'absolute', left: 0, right: 0, top: 0,
@@ -994,7 +1083,7 @@ function ScanBeam({ top, height }) {
         height: 1,
         background: 'color-mix(in srgb, var(--gb-brand-label) 60%, transparent)',
         boxShadow: '0 0 6px 0 color-mix(in srgb, var(--gb-brand-label) 50%, transparent)',
-        transition, zIndex: 4,
+        transition, zIndex: 2,
       }} />
       <div style={{
         position: 'absolute', left: 0, right: 0, top: 0,
@@ -1002,13 +1091,13 @@ function ScanBeam({ top, height }) {
         height: 1,
         background: 'color-mix(in srgb, var(--gb-brand-label) 60%, transparent)',
         boxShadow: '0 0 6px 0 color-mix(in srgb, var(--gb-brand-label) 50%, transparent)',
-        transition, zIndex: 4,
+        transition, zIndex: 2,
       }} />
     </motion.div>
   );
 }
 
-function TasksTable({ rows, status, query, allChecked, selected, onToggle, onToggleAll, sortChain = [], onSort, onQuickMenu, busyRows, emailStatusByRow = {}, emailRunRunning = false }) {
+function TasksTable({ rows, status, query, allChecked, selected, onToggle, onToggleAll, sortChain = [], onSort, busyRows, emailStatusByRow = {}, actionStateByRow = {}, emailRunRunning = false }) {
   /* Beam dwells on the last 'sending' row through the inter-send
      delay so the visual stays tied to the orchestrator's cursor.
      The dwell key is `emailRunRunning` — `allSettled` over so-far-
@@ -1050,16 +1139,27 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
     <div ref={containerRef} style={{ position: 'relative' }}>
       {/* Sticky header — sortable. Click a label to set sort; click
           again to toggle direction. The arrow next to the label
-          indicates the active column. */}
+          indicates the active column.
+
+          Background is intentionally translucent (75% surface-1)
+          so the scan beam shows through when the active sending
+          row scrolls up under the sticky header. Z-index bumped
+          to 4 so the column LABELS still paint on top of the beam
+          gradient (which the beam clamps to zIndex 1 below) —
+          rep gets a glowing band sweeping behind the column row,
+          matching how the beam currently slides behind each
+          actual row item. */}
       <div style={{
         display: 'grid', gridTemplateColumns: COLS,
         padding: '8px 14px', gap: 12,
-        background: 'var(--gb-surface-1)',
+        background: 'color-mix(in srgb, var(--gb-surface-1) 75%, transparent)',
+        backdropFilter: 'blur(4px)',
+        WebkitBackdropFilter: 'blur(4px)',
         borderBottom: '1px solid var(--gb-border-subtle)',
         fontSize: 9.5, fontWeight: 700, letterSpacing: 1,
         textTransform: 'uppercase',
         color: 'var(--gb-text-muted)',
-        position: 'sticky', top: 0, zIndex: 1,
+        position: 'sticky', top: 0, zIndex: 4,
       }}>
         <div>
           <Checkbox checked={allChecked} onChange={onToggleAll} />
@@ -1070,8 +1170,7 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
         <SortHeader col={SORT_COLS.category} sortChain={sortChain} onSort={onSort} />
         <SortHeader col={SORT_COLS.priority} sortChain={sortChain} onSort={onSort} />
         <SortHeader col={SORT_COLS.subject}  sortChain={sortChain} onSort={onSort} />
-        <div>Status</div>
-        <div style={{ textAlign: 'right' }}>Action</div>
+        <div style={{ textAlign: 'right', paddingRight: 4 }}>Status</div>
       </div>
 
       {status === 'loading' && (
@@ -1095,8 +1194,8 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
           isSelected={selected.has(t.id)}
           isBusy={busyRows?.has(t.id) || false}
           emailStatus={emailStatusByRow[t.id]}
+          actionState={actionStateByRow[t.id]}
           onToggle={(e) => onToggle(t.id, idx, e?.shiftKey)}
-          onQuickMenu={onQuickMenu}
         />
       ))}
       {/* Same moving light bar CRMSearch has — sweeps over the
@@ -1156,7 +1255,7 @@ function SortHeader({ col, sortChain = [], onSort }) {
   );
 }
 
-function TaskRow({ task, isSelected, isBusy, emailStatus, onToggle, onQuickMenu }) {
+function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle }) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const overdue  = task.dueDate < today && task.status !== 'Complete';
   const dueToday = task.dueDate.toDateString() === today.toDateString();
@@ -1266,101 +1365,132 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, onToggle, onQuickMenu 
         color: 'var(--gb-text-secondary)',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{task.subject}</div>
-      <div>
-        <Tag tone={complete ? 'success' : 'info'} size="xs">
-          {complete ? 'Complete' : 'New'}
-        </Tag>
-      </div>
+      {/* Status column — the unified row state. Resolves the most
+          recent transition (email lifecycle > action lifecycle >
+          natural task status) and animates the badge between phases
+          via AnimatePresence so the per-row morph reads as one
+          motion (queued → updating → completed, etc.). */}
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        {/* Quick Task button swaps to the live email-send status while
-            a blast is touching this row. Same cell, no layout shift —
-            matches the Quick Actions row-spinner pattern. AnimatePresence
-            cross-fades the content so the swap reads as one motion. */}
-        <AnimatePresence mode="wait" initial={false}>
-          {emailStatus ? (
-            <motion.div
-              key={`email-${emailStatus}`}
-              initial={{ opacity: 0, x: 6 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -6 }}
-              transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-              style={{
-                height: 26, padding: '0 10px',
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                background: emailStatus === 'error'
-                  ? 'var(--gb-error-tint-soft, var(--gb-surface-2))'
-                  : emailStatus === 'sent'
-                    ? 'var(--gb-brand-tint-soft)'
-                    : 'var(--gb-surface-2)',
-                border: '1px solid ' + (
-                  emailStatus === 'error' ? 'var(--gb-error-tint-border, var(--gb-border-default))'
-                  : emailStatus === 'sent' ? 'var(--gb-brand-tint-border)'
-                  : 'var(--gb-border-default)'
-                ),
-                borderRadius: 'var(--gb-r-sm)',
-                color: emailStatus === 'error'
-                  ? 'var(--gb-error-fg)'
-                  : emailStatus === 'sent'
-                    ? 'var(--gb-brand-label)'
-                    : 'var(--gb-text-tertiary)',
-                fontSize: 10.5, fontWeight: 700,
-                letterSpacing: 0.5, textTransform: 'uppercase',
-                userSelect: 'none',
-              }}
-            >
-              {emailStatus === 'sending' && <><Spinner size={11} /> Sending</>}
-              {emailStatus === 'sent'    && <><CheckIcon size={11} /> Sent</>}
-              {emailStatus === 'error'   && <>Failed</>}
-            </motion.div>
-          ) : (
-            <motion.button
-              key="qt-btn"
-              type="button"
-              data-checkbox /* reuses TaskRow's "don't toggle on click" sentinel */
-              initial={{ opacity: 0, x: -6 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 6 }}
-              transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-              onClick={(e) => {
-                e.stopPropagation();
-                const rect = e.currentTarget.getBoundingClientRect();
-                /* Anchor as {x,y} for DraggablePopup's cursorAnchor.
-                   Using the button's top-right corner makes the
-                   popover spawn just past the trigger row. */
-                onQuickMenu?.(task.id, { x: rect.right, y: rect.top });
-              }}
-              disabled={isBusy}
-          style={{
-            height: 26, padding: '0 8px',
-            display: 'inline-flex', alignItems: 'center', gap: 4,
-            background: 'var(--gb-surface-2)',
-            border: '1px solid var(--gb-border-default)',
-            borderRadius: 'var(--gb-r-sm)',
-            color: 'var(--gb-text-secondary)',
-            fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
-            cursor: isBusy ? 'wait' : 'pointer',
-            opacity: isBusy ? 0.6 : 1,
-            transition: 'background-color .12s, color .12s, border-color .12s',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--gb-surface-3)'; e.currentTarget.style.color = 'var(--gb-text-primary)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--gb-surface-2)'; e.currentTarget.style.color = 'var(--gb-text-secondary)'; }}
-        >
-          {isBusy ? (
-            <Spinner />
-          ) : (
-            <>
-              Quick Task
-              <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </>
-          )}
-            </motion.button>
-          )}
-        </AnimatePresence>
+        <StatusBadge state={resolveRowState({ task, emailStatus, actionState })} />
       </div>
     </div>
   );
+}
+
+/* ── Row-state resolution + badge ────────────────────────────
+   The status column folds three signals into one badge so the rep
+   never has to scan two cells to know what the row is doing:
+
+     1. emailStatus — set by EmailRunner's per-row callbacks
+        ('sending' / 'sent' / 'error') as a blast walks the
+        selection. Wins while a blast is in flight.
+     2. actionState — Quick Task's per-action lifecycle: the
+        bulk loop drops 'queued' on every selected row before
+        starting, transitions each to its action verb-ing state
+        ('updating' / 'moving' / 'adding' / 'reopening'), then
+        the action-ed result ('completed' / 'moved' / 'added' /
+        'reopened'). Wins when no email is in flight.
+     3. task.status — the natural CRM state ('Complete' vs the
+        default 'New'). The fallback when nothing's happening.
+
+   Each state's tone + label + spinner config lives in STATE_META
+   so the StatusBadge component stays a thin wrapper around the
+   metadata. AnimatePresence-keyed by the resolved state's id so
+   transitions read as one continuous motion. */
+const STATE_META = {
+  new:        { tone: 'info',    label: 'New' },
+  complete:   { tone: 'success', label: 'Complete' },
+  /* Email lifecycle. */
+  queued:     { tone: 'neutral', label: 'Queued' },
+  sending:    { tone: 'brand',   label: 'Sending',    spinner: true },
+  sent:       { tone: 'success', label: 'Sent' },
+  failed:     { tone: 'error',   label: 'Failed' },
+  /* Action lifecycles — verb-ing → verb-ed. */
+  updating:   { tone: 'brand',   label: 'Updating',   spinner: true },
+  completed:  { tone: 'success', label: 'Completed' },
+  reopening:  { tone: 'warning', label: 'Reopening',  spinner: true },
+  reopened:   { tone: 'warning', label: 'Reopened' },
+  moving:     { tone: 'info',    label: 'Moving',     spinner: true },
+  moved:      { tone: 'info',    label: 'Moved' },
+  adding:     { tone: 'brand',   label: 'Adding',     spinner: true },
+  added:      { tone: 'success', label: 'Added' },
+};
+
+function resolveRowState({ task, emailStatus, actionState }) {
+  /* Email-blast in flight against this row wins. The orchestrator
+     queues every selected row up front; the value here flips
+     between 'sending', 'sent', and 'error' as the row's slot
+     advances. */
+  if (emailStatus === 'sending') return 'sending';
+  if (emailStatus === 'sent')    return 'sent';
+  if (emailStatus === 'error')   return 'failed';
+  if (actionState) return actionState;
+  if (task?.status === 'Complete') return 'complete';
+  return 'new';
+}
+
+function StatusBadge({ state }) {
+  const meta = STATE_META[state] || STATE_META.new;
+  return (
+    <AnimatePresence mode="wait" initial={false}>
+      <motion.div
+        key={state}
+        initial={{ opacity: 0, y: -4 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 4 }}
+        transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+        style={{
+          height: 22, padding: '0 8px',
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          background: tintBg(meta.tone),
+          border: '1px solid ' + tintBorder(meta.tone),
+          borderRadius: 'var(--gb-r-sm)',
+          color: tintFg(meta.tone),
+          fontSize: 10, fontWeight: 700,
+          letterSpacing: 0.5, textTransform: 'uppercase',
+          userSelect: 'none',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {meta.spinner && <Spinner size={9} />}
+        {meta.label}
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+/* Token lookups used by the StatusBadge — kept inline so the
+   resolution stays predictable across the brand/success/info/error
+   /warning/neutral palette. Falls back to neutral on unknown tones. */
+function tintBg(tone) {
+  switch (tone) {
+    case 'brand':   return 'var(--gb-brand-tint-soft)';
+    case 'success': return 'var(--gb-success-tint-soft, var(--gb-success-tint-medium))';
+    case 'error':   return 'var(--gb-error-tint-soft, var(--gb-error-tint-medium))';
+    case 'warning': return 'var(--gb-warning-tint-soft, var(--gb-warning-tint-medium))';
+    case 'info':    return 'var(--gb-info-tint-soft, var(--gb-info-tint-medium))';
+    default:        return 'var(--gb-fill-subtle)';
+  }
+}
+function tintBorder(tone) {
+  switch (tone) {
+    case 'brand':   return 'var(--gb-brand-tint-border)';
+    case 'success': return 'var(--gb-success-tint-border)';
+    case 'error':   return 'var(--gb-error-tint-border)';
+    case 'warning': return 'var(--gb-warning-tint-border)';
+    case 'info':    return 'var(--gb-info-tint-border)';
+    default:        return 'var(--gb-border-default)';
+  }
+}
+function tintFg(tone) {
+  switch (tone) {
+    case 'brand':   return 'var(--gb-brand-label)';
+    case 'success': return 'var(--gb-success-fg)';
+    case 'error':   return 'var(--gb-error-fg)';
+    case 'warning': return 'var(--gb-warning-fg)';
+    case 'info':    return 'var(--gb-info-fg)';
+    default:        return 'var(--gb-text-tertiary)';
+  }
 }
 
 /* Same checkbox shape as CRMSearch's, kept inline so the modal stays

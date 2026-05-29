@@ -1227,12 +1227,19 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
       <div style={{
         display: 'grid', gridTemplateColumns: gridCols,
         padding: '8px 14px', gap: 12,
-        background: 'var(--gb-surface-1)',
+        /* Translucent header background + backdrop blur so the scan
+           beam shows through when the active sending row scrolls up
+           under the sticky header. Matches the TaskList header so
+           both surfaces feel consistent. Z-index bumped above the
+           beam (zIndex 1-2) so column labels stay readable on top. */
+        background: 'color-mix(in srgb, var(--gb-surface-1) 75%, transparent)',
+        backdropFilter: 'blur(4px)',
+        WebkitBackdropFilter: 'blur(4px)',
         borderBottom: '1px solid var(--gb-border-subtle)',
         fontSize: 9.5, fontWeight: 700, letterSpacing: 1,
         textTransform: 'uppercase',
         color: 'var(--gb-text-muted)',
-        position: 'sticky', top: 0, zIndex: 1,
+        position: 'sticky', top: 0, zIndex: 4,
         transition: 'grid-template-columns .35s cubic-bezier(0.4, 0, 0.2, 1)',
       }}>
         <div>
@@ -1409,13 +1416,18 @@ function ScanBeam({ top, height }) {
       transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
       style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
     >
+      {/* All three beam layers clamp to zIndex 1-2 — below the
+          sticky header (zIndex 4) so the beam paints behind the
+          header band when the active sending row scrolls up under
+          it. Header's translucent background + blur lets the beam
+          show through; column labels stay readable on top. */}
       <div style={{
         position: 'absolute', left: 0, right: 0, top: 0,
         transform: `translateY(${top}px)`,
         height,
         background: 'linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--gb-brand-label) 7%, transparent) 35%, color-mix(in srgb, var(--gb-brand-label) 12%, transparent) 50%, color-mix(in srgb, var(--gb-brand-label) 7%, transparent) 65%, transparent 100%)',
         transition,
-        zIndex: 3,
+        zIndex: 1,
       }} />
       <div style={{
         position: 'absolute', left: 0, right: 0, top: 0,
@@ -1424,7 +1436,7 @@ function ScanBeam({ top, height }) {
         background: 'color-mix(in srgb, var(--gb-brand-label) 60%, transparent)',
         boxShadow: '0 0 6px 0 color-mix(in srgb, var(--gb-brand-label) 50%, transparent)',
         transition,
-        zIndex: 4,
+        zIndex: 2,
       }} />
       <div style={{
         position: 'absolute', left: 0, right: 0, top: 0,
@@ -1433,7 +1445,7 @@ function ScanBeam({ top, height }) {
         background: 'color-mix(in srgb, var(--gb-brand-label) 60%, transparent)',
         boxShadow: '0 0 6px 0 color-mix(in srgb, var(--gb-brand-label) 50%, transparent)',
         transition,
-        zIndex: 4,
+        zIndex: 2,
       }} />
     </motion.div>
   );
