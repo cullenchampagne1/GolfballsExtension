@@ -844,6 +844,17 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
 
           ballGroup.updateMatrixWorld(true);
           const decalGeo = new DecalGeometry(ballMesh, decalPosition, decalOrientation, decalSize);
+          /* DecalGeometry emits WORLD-space verts. The ball is rotated
+             on load by the dev-settings default (ballGroup.rotation),
+             so a decal mesh with an identity transform parented under
+             ballGroup gets DOUBLE-rotated — the print lands off the
+             camera-facing pole (often on the far side, backface-culled
+             → invisible). Bake ballGroup.matrixWorld⁻¹ into the
+             geometry so its verts become ballGroup-LOCAL: then the
+             render-time ballGroup.matrixWorld puts them back exactly
+             where the projection found them, and the decal also tracks
+             the ball through drag / zoom / throw afterward. */
+          decalGeo.applyMatrix4(ballGroup.matrixWorld.clone().invert());
           const decalMat = new THREE.MeshStandardMaterial({
             map: decalTexture,
             transparent: true,
@@ -864,18 +875,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             metalness: 0,
           });
           decalMesh = new THREE.Mesh(decalGeo, decalMat);
-          /* DecalGeometry emits vertices in WORLD space (confirmed
-             in three/examples/jsm/geometries/DecalGeometry.js — the
-             final pass calls applyMatrix4(projectorMatrix) to map
-             projector-space back to world). The ball sits at world
-             radius ~100 centered at the origin, and ballGroup is at
-             identity when the decal is built, so the decal renders
-             ON the ball only when decalMesh carries NO extra
-             transform. The legacy `position.copy/scale.copy(ballMesh)`
-             multiplied the world verts by the fit scale (~1.66),
-             floating the print ~65 units off the surface. Leave it
-             identity; ballGroup carries the decal through
-             rotation / zoom / throw afterward. */
+          /* Identity transform — the geometry is already in
+             ballGroup-local space (inverse baked above), so
+             ballGroup's own matrix renders it back onto the ball. */
           decalMesh.renderOrder = 1;
           ballGroup.add(decalMesh);
           objectsToDispose.push(decalGeo, decalMat);
@@ -891,14 +893,37 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             decalMesh.updateMatrixWorld(true);
             const wp = new THREE.Vector3();
             decalMesh.getWorldPosition(wp);
+            /* Sample the texture for non-transparent + non-white pixels
+               so we can tell an EMPTY crop (the modal-scaling capture
+               bug) from a placement/render problem. */
+            let texInfo = 'n/a';
+            try {
+              const img = decalTexture.image;
+              if (img && img.width) {
+                const tc = document.createElement('canvas');
+                tc.width = Math.min(64, img.width); tc.height = Math.min(64, img.height);
+                const tcx = tc.getContext('2d');
+                tcx.drawImage(img, 0, 0, tc.width, tc.height);
+                const d = tcx.getImageData(0, 0, tc.width, tc.height).data;
+                let opaque = 0; let inkish = 0;
+                for (let p = 0; p < d.length; p += 4) {
+                  if (d[p + 3] > 20) {
+                    opaque++;
+                    if (d[p] < 235 || d[p + 1] < 235 || d[p + 2] < 235) inkish++;
+                  }
+                }
+                const total = (tc.width * tc.height) || 1;
+                texInfo = `opaque ${Math.round((opaque / total) * 100)}% · ink ${Math.round((inkish / total) * 100)}%`;
+              }
+            } catch (te) { texInfo = 'sample-failed:' + te.message; }
             // eslint-disable-next-line no-console
             console.log('[gb-decal] verts=', decalGeo.attributes?.position?.count,
-              '| geoBBox min=', bb && [bb.min.x.toFixed(1), bb.min.y.toFixed(1), bb.min.z.toFixed(1)],
+              '| geoBBox(local) min=', bb && [bb.min.x.toFixed(1), bb.min.y.toFixed(1), bb.min.z.toFixed(1)],
               'max=', bb && [bb.max.x.toFixed(1), bb.max.y.toFixed(1), bb.max.z.toFixed(1)],
-              '| ballMesh.scale=', ballMesh.scale.x.toFixed(3),
-              '| ballGroup.scale=', ballGroup.scale.x.toFixed(3),
+              '| ballGroup.rot=', [ballGroup.rotation.x.toFixed(2), ballGroup.rotation.y.toFixed(2), ballGroup.rotation.z.toFixed(2)],
               '| decal worldPos=', [wp.x.toFixed(1), wp.y.toFixed(1), wp.z.toFixed(1)],
-              '| tex=', decalTexture.image?.width + 'x' + decalTexture.image?.height);
+              '| tex=', (decalTexture.image?.width || '?') + 'x' + (decalTexture.image?.height || '?'),
+              '| texContent=', texInfo);
           } catch (e) { console.warn('[gb-decal] diag failed', e); }
           // Stash projection params for explode-time per-shard reuse.
           decalProjectionParams = {

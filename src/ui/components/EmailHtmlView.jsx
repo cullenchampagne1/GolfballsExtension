@@ -45,24 +45,54 @@ function isLightBg(v) {
   return WHITE_BG.test(s) || NEAR_WHITE.test(s);
 }
 
+/* Parse a CSS color string to {r,g,b} (0-255) or null. Handles
+   #rgb, #rrggbb, rgb()/rgba(), and the few named colors emails
+   actually use for text. */
+const NAMED = { black: [0, 0, 0], gray: [128, 128, 128], grey: [128, 128, 128], dimgray: [105, 105, 105], dimgrey: [105, 105, 105] };
+function parseColor(v) {
+  if (!v) return null;
+  const s = v.trim().toLowerCase();
+  if (NAMED[s]) return { r: NAMED[s][0], g: NAMED[s][1], b: NAMED[s][2] };
+  let m = s.match(/^#([0-9a-f]{3})$/i);
+  if (m) return { r: parseInt(m[1][0] + m[1][0], 16), g: parseInt(m[1][1] + m[1][1], 16), b: parseInt(m[1][2] + m[1][2], 16) };
+  m = s.match(/^#([0-9a-f]{6})$/i);
+  if (m) return { r: parseInt(m[1].slice(0, 2), 16), g: parseInt(m[1].slice(2, 4), 16), b: parseInt(m[1].slice(4, 6), 16) };
+  m = s.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (m) return { r: +m[1], g: +m[2], b: +m[3] };
+  return null;
+}
+
+/* A text color needs lightening when it's both DARK (low luminance,
+   so it'd be low-contrast on our dark surface) and GRAYISH (low
+   chroma — we leave saturated brand/accent colors alone so a red
+   warning or a green link keeps its hue). */
+function needsLighten(v) {
+  const c = parseColor(v);
+  if (!c) return false;
+  const lum = (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255; // 0..1
+  const chroma = Math.max(c.r, c.g, c.b) - Math.min(c.r, c.g, c.b);
+  return lum < 0.55 && chroma <= 40;
+}
+
 function normaliseEmailDom(container) {
   container.querySelectorAll('*').forEach((el) => {
     /* White / near-white backgrounds → transparent so the email
        blends into the pane's own surface instead of sitting on a
-       flat gray slab. The :host already paints surface-1, so a
-       transparent element just shows that through — they read as
-       one continuous dark document. */
+       flat gray slab. */
     const bgAttr = el.getAttribute && el.getAttribute('bgcolor');
     if (bgAttr && isLightBg(bgAttr)) el.setAttribute('bgcolor', 'transparent');
 
     if (el.style) {
       if (isLightBg(el.style.backgroundColor)) el.style.backgroundColor = 'transparent';
       if (isLightBg(el.style.background)) el.style.background = 'transparent';
-      if (el.style.color && DARK_TXT.test(el.style.color.trim())) el.style.color = LIGHT_TEXT;
+      /* Lighten dark grayish text (black AND the medium grays emails
+         use for footers / signatures) so it contrasts on dark; leave
+         saturated colors. */
+      if (el.style.color && needsLighten(el.style.color)) el.style.color = LIGHT_TEXT;
     }
 
     const colorAttr = el.getAttribute && el.getAttribute('color');
-    if (colorAttr && DARK_TXT.test(colorAttr.trim())) el.setAttribute('color', LIGHT_TEXT);
+    if (colorAttr && needsLighten(colorAttr)) el.setAttribute('color', LIGHT_TEXT);
   });
 }
 

@@ -322,7 +322,7 @@ function ReplyComposer({ replyTo, subject }) {
                 Reply to {replyTo}
               </div>
               <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1, fontFamily: 'var(--gb-font-mono)' }}>
-                Click to write a draft · ⌘↩ to send
+                Click to write a draft
               </div>
             </div>
             <span style={{
@@ -364,7 +364,7 @@ function ReplyComposer({ replyTo, subject }) {
               <span style={{ flex: 1 }} />
               <Btn size="sm" variant="ghost" onClick={() => { setBody(''); setExpanded(false); }}>Discard</Btn>
               <Btn size="sm" variant="primary" status="brand" icon={<I.send size={11} />} disabled={!hasText}>
-                Send · ⌘↩
+                Send
               </Btn>
             </div>
           </div>
@@ -405,7 +405,8 @@ export function EmailPreview({
   const thread = useMemo(() => (email ? buildThread(email, meta) : []), [email, meta]);
   const [expanded, setExpanded] = useState(() => new Set());
   useEffect(() => {
-    if (thread.length) setExpanded(new Set([thread[0].id]));
+    // Expand every message by default once the body lands.
+    if (thread.length) setExpanded(new Set(thread.map((m) => m.id)));
   }, [email?.bodyHtml]); // eslint-disable-line react-hooks/exhaustive-deps
   const toggleMsg = (id) => setExpanded((s) => {
     const n = new Set(s);
@@ -454,42 +455,58 @@ export function EmailPreview({
               flex: 1, minHeight: 0, overflow: 'auto',
               padding: '16px 20px',
             }}>
-              {/* Thread summary line */}
-              {!loading && thread.length > 0 && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
-                  fontSize: 10.5, fontWeight: 700, letterSpacing: 1,
-                  textTransform: 'uppercase', color: 'var(--gb-text-muted)',
-                }}>
-                  <span>Thread</span>
-                  <span style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
-                  <span style={{
-                    fontFamily: 'var(--gb-font-mono)', letterSpacing: 0, textTransform: 'none',
-                    color: 'var(--gb-text-tertiary)', fontWeight: 600,
-                  }}>{thread.length} message{thread.length === 1 ? '' : 's'}</span>
-                </div>
-              )}
-
-              {/* Body — thread of collapsible cards, or spinner / error */}
+              {/* Loading screen — a clean centered panel while the EML
+                  fetches. Keeping a dedicated loading state means the
+                  thread renders in its final (all-expanded) layout in
+                  one go and fades in softly, instead of cards popping +
+                  height-animating open as data lands. */}
               {loading ? (
                 <div style={{
-                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  gap: 10, color: 'var(--gb-text-muted)', fontSize: 12, minHeight: 200,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                  gap: 12, color: 'var(--gb-text-muted)', fontSize: 12, minHeight: 320,
                 }}>
-                  <Spinner size={16} /> Loading email…
+                  <div style={{
+                    width: 44, height: 44, borderRadius: '50%',
+                    background: 'var(--gb-brand-tint-medium)',
+                    border: '1px solid var(--gb-brand-tint-border)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'var(--gb-brand-label)',
+                  }}>
+                    <Spinner size={18} />
+                  </div>
+                  <span>Loading email…</span>
                 </div>
               ) : thread.length > 0 ? (
-                thread.map((msg) => (
-                  <MessageCard
-                    key={msg.id}
-                    msg={msg}
-                    expanded={expanded.has(msg.id)}
-                    onToggle={() => toggleMsg(msg.id)}
-                  />
-                ))
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.22, ease: 'easeOut' }}
+                >
+                  {/* Thread summary line */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
+                    fontSize: 10.5, fontWeight: 700, letterSpacing: 1,
+                    textTransform: 'uppercase', color: 'var(--gb-text-muted)',
+                  }}>
+                    <span>Thread</span>
+                    <span style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
+                    <span style={{
+                      fontFamily: 'var(--gb-font-mono)', letterSpacing: 0, textTransform: 'none',
+                      color: 'var(--gb-text-tertiary)', fontWeight: 600,
+                    }}>{thread.length} message{thread.length === 1 ? '' : 's'}</span>
+                  </div>
+                  {thread.map((msg) => (
+                    <MessageCard
+                      key={msg.id}
+                      msg={msg}
+                      expanded={expanded.has(msg.id)}
+                      onToggle={() => toggleMsg(msg.id)}
+                    />
+                  ))}
+                </motion.div>
               ) : (
                 <div style={{
-                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
                   color: 'var(--gb-text-muted)', fontSize: 12, minHeight: 200,
                 }}>
                   Couldn't load the email body.
