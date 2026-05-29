@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { I } from '../icons.jsx';
 import { Tag } from './Tag.jsx';
 
@@ -98,19 +99,31 @@ export function ProofSphere({ label, hue = 90, status }) {
   );
 }
 
-function AccountGlyph({ size = 13 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      style={{ display: 'block', flexShrink: 0 }}>
-      <rect x="4" y="3" width="16" height="18" rx="1.5" />
-      <path d="M9 8h2M13 8h2M9 12h2M13 12h2M9 16h2M13 16h2" />
-    </svg>
-  );
-}
-
 function initialsOf(name) {
   return (name || '').split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
+}
+
+/* Account avatar — first/last initials in a small circle. Uses
+   a slightly darker brand fill than the contact MiniAvatar so
+   the eye can tell the account row apart from the contact row
+   without reading labels. */
+function AccountAvatar({ name, size = 20 }) {
+  return (
+    <span
+      title={name}
+      style={{
+        width: size, height: size, borderRadius: '50%',
+        background: 'color-mix(in srgb, var(--gb-brand-label) 22%, var(--gb-surface-canvas))',
+        border: '1.5px solid var(--gb-surface-2)',
+        boxShadow: '0 0 0 1px var(--gb-brand-tint-border)',
+        color: 'var(--gb-brand-label)',
+        fontSize: 8.5, fontWeight: 800, letterSpacing: -.2,
+        fontFamily: 'var(--gb-font-mono)',
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0,
+      }}
+    >{initialsOf(name)}</span>
+  );
 }
 
 function MiniAvatar({ name, i = 0, ring = 'var(--gb-surface-2)' }) {
@@ -142,9 +155,7 @@ function ConnectionStrip({ account, contacts = [] }) {
       borderTop: '1px solid var(--gb-border-subtle)',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-        <span style={{ color: 'var(--gb-text-muted)', display: 'inline-flex' }}>
-          <AccountGlyph />
-        </span>
+        <AccountAvatar name={account.name} />
         <span
           title={account.id ? `${account.name} · ${account.id}` : account.name}
           style={{
@@ -209,9 +220,10 @@ function relTime(days) {
   return `${days} d`;
 }
 
-const overlayBtnStyle = {
+const overlayBtnBaseStyle = {
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-  width: 24, height: 24,
+  width: 26, height: 26,
+  padding: 0,
   borderRadius: 'var(--gb-r-sm)',
   background: 'color-mix(in srgb, var(--gb-surface-deep) 70%, transparent)',
   backdropFilter: 'blur(6px)',
@@ -219,7 +231,26 @@ const overlayBtnStyle = {
   color: 'var(--gb-text-secondary)',
   cursor: 'pointer',
   pointerEvents: 'auto',
+  outline: 'none',
 };
+
+/* Overlay action button — copy / open. Wrapping in motion.button
+   gives us a unified tap+hover scale and lets the icon swap
+   between copy and check using AnimatePresence when a click
+   succeeds. */
+function OverlayActionBtn({ title, onClick, children }) {
+  return (
+    <motion.button
+      type="button"
+      title={title}
+      onClick={(e) => { e.stopPropagation(); e.preventDefault(); onClick?.(e); }}
+      whileHover={{ scale: 1.08, backgroundColor: 'color-mix(in srgb, var(--gb-surface-deep) 88%, transparent)' }}
+      whileTap={{ scale: 0.88 }}
+      transition={{ type: 'spring', stiffness: 480, damping: 26 }}
+      style={overlayBtnBaseStyle}
+    >{children}</motion.button>
+  );
+}
 
 export function ProofCard({
   proof,
@@ -230,6 +261,8 @@ export function ProofCard({
   onFocus,
 }) {
   const [hover, setHover] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef(null);
   const lift = hover || focused;
   /* Alternating-but-deterministic backdrop. Seeded off the id (or
      index when no id) so re-renders don't reshuffle the rhythm. */
@@ -243,15 +276,21 @@ export function ProofCard({
     else if (proof.proofLink && proof.proofLink !== '#') {
       window.open(proof.proofLink, '_blank', 'noopener,noreferrer');
     }
+    /* Null link → no-op; the motion.button still plays the press
+       animation so template data feels alive. */
   };
 
-  const handleCopy = (e) => {
-    e.stopPropagation();
-    e.preventDefault();
+  const handleCopy = () => {
     if (onCopy) onCopy(proof);
-    else if (proof.proofLink) {
+    else if (proof.proofLink && proof.proofLink !== '#') {
       try { navigator.clipboard?.writeText(proof.proofLink); } catch { /* ignore */ }
     }
+    /* Feedback flash regardless of whether anything was actually
+       copied — the icon swap reads as a confirmation gesture and
+       gives template data the same micro-interaction as live data. */
+    setCopied(true);
+    clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopied(false), 1100);
   };
 
   const showAge = Number.isFinite(proof.addedDays);
@@ -272,7 +311,13 @@ export function ProofCard({
         textAlign: 'left',
         outline: 'none',
         transform: lift ? 'translateY(-2px)' : 'translateY(0)',
-        transition: 'transform .22s cubic-bezier(.34,1.4,.64,1)',
+        /* Card-level lift shadow — owning it on the outer button
+           (not the thumb) keeps the thumb + info row visually
+           glued so the card lifts as ONE element. */
+        filter: lift
+          ? 'drop-shadow(0 14px 24px rgba(0,0,0,.42)) drop-shadow(0 0 0 color-mix(in srgb, var(--gb-brand-label) 14%, transparent))'
+          : 'drop-shadow(0 0 0 transparent)',
+        transition: 'transform .22s cubic-bezier(.34,1.4,.64,1), filter .22s',
         width: '100%',
       }}
     >
@@ -284,10 +329,7 @@ export function ProofCard({
         borderBottom: 'none',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         position: 'relative', overflow: 'hidden',
-        boxShadow: lift
-          ? '0 12px 28px -10px rgba(0,0,0,.55), 0 0 0 1px color-mix(in srgb, var(--gb-brand-label) 18%, transparent)'
-          : 'none',
-        transition: 'box-shadow .22s, border-color .22s, background-color .22s',
+        transition: 'border-color .22s, background-color .22s',
       }}>
         {proof.thumbUrl ? (
           <img
@@ -313,24 +355,33 @@ export function ProofCard({
           transition: 'opacity .25s',
           pointerEvents: 'none',
         }} />
-        <div style={{
-          position: 'absolute', right: 8, top: 8,
-          display: 'flex', gap: 6,
-          opacity: lift ? 1 : 0,
-          transform: lift ? 'translateY(0)' : 'translateY(-4px)',
-          transition: 'opacity .22s, transform .22s',
-        }}>
-          <span
-            role="button"
-            tabIndex={-1}
-            onClick={handleCopy}
-            style={overlayBtnStyle}
-            title="Copy proof link"
-          ><I.copy size={11} /></span>
-          <span style={overlayBtnStyle} title="Open">
+        <motion.div
+          animate={{ opacity: lift ? 1 : 0, y: lift ? 0 : -4 }}
+          transition={{ duration: 0.22 }}
+          style={{
+            position: 'absolute', right: 8, top: 8,
+            display: 'flex', gap: 6,
+            pointerEvents: lift ? 'auto' : 'none',
+          }}
+        >
+          <OverlayActionBtn title={copied ? 'Copied' : 'Copy proof link'} onClick={handleCopy}>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span
+                key={copied ? 'check' : 'copy'}
+                initial={{ scale: 0.6, opacity: 0, rotate: -10 }}
+                animate={{ scale: 1,   opacity: 1, rotate: 0 }}
+                exit={{    scale: 0.6, opacity: 0, rotate:  10 }}
+                transition={{ duration: 0.16 }}
+                style={{ display: 'inline-flex', color: copied ? 'var(--gb-brand-label)' : 'inherit' }}
+              >
+                {copied ? <I.check size={12} /> : <I.copy size={11} />}
+              </motion.span>
+            </AnimatePresence>
+          </OverlayActionBtn>
+          <OverlayActionBtn title="Open" onClick={handleOpen}>
             <I.chevr size={11} />
-          </span>
-        </div>
+          </OverlayActionBtn>
+        </motion.div>
         {showAge && (
           <span style={{
             position: 'absolute', left: 8, bottom: 8,
