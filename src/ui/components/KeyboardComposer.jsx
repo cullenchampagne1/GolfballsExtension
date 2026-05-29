@@ -110,7 +110,12 @@ export function useComposerFilter(templates, opts = {}) {
 
   React.useEffect(() => { setActive((a) => (a < 0 ? a : Math.min(a, Math.max(0, results.length - 1)))); }, [results.length]);
 
-  const focusRow = React.useCallback((idx) => { rowRefs.current[idx]?.focus(); }, []);
+  const focusRow = React.useCallback((idx, smooth) => {
+    const el = rowRefs.current[idx];
+    if (!el) return;
+    try { el.focus({ preventScroll: !!smooth }); } catch { el.focus(); }
+    if (smooth) { try { el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch { /* ignore */ } }
+  }, []);
 
   /* Panel-scoped key handler — attach to the modal body's onKeyDown.
        1–9  → fire the Nth visible result  (when not typing) */
@@ -123,6 +128,10 @@ export function useComposerFilter(templates, opts = {}) {
     }
   };
 
+  /* Row navigation. Arrows AND Tab/Shift+Tab walk the list (so the
+     animated accent-bar selection tracks focus). Tab past the last row
+     wraps to the first with a smooth scroll back to the top; Shift+Tab
+     off the first row steps back up to the filter bar. */
   const onRowKey = (e, idx, onFire) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -131,6 +140,14 @@ export function useComposerFilter(templates, opts = {}) {
       e.preventDefault();
       if (idx === 0) { searchRef.current?.focus(); setActive(-1); }
       else { const n = idx - 1; setActive(n); focusRow(n); }
+    } else if (e.key === 'Tab' && !e.shiftKey) {
+      e.preventDefault();
+      if (idx < results.length - 1) { const n = idx + 1; setActive(n); focusRow(n); }
+      else { setActive(0); focusRow(0, true); }            // wrap to top, animated
+    } else if (e.key === 'Tab' && e.shiftKey) {
+      e.preventDefault();
+      if (idx > 0) { const n = idx - 1; setActive(n); focusRow(n); }
+      else { searchRef.current?.focus(); setActive(-1); }   // back up to the filter bar
     } else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault(); onFire?.(results[idx]);
     }

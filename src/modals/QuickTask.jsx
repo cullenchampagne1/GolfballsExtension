@@ -98,6 +98,8 @@ export function QuickTask({
   contactName = 'Contact',
   contactType = 'contact',
   onSubmit,
+  onComposed,
+  autoCompose = false,
   onClosed,
   bindClose,
 }) {
@@ -128,19 +130,42 @@ export function QuickTask({
     return () => { alive = false; unsub(); };
   }, []);
 
-  /* Land focus in the composer's filter bar on open. */
+  /* On open: drop straight into the composer / menu when asked
+     (the "add a task" entry), else land in the filter bar. */
   useEffect(() => {
-    const id = setTimeout(() => composerRef.current?.focus(), 60);
+    const id = setTimeout(() => {
+      if (autoCompose) composerRef.current?.openMenu();
+      else composerRef.current?.focus();
+    }, 60);
     return () => clearTimeout(id);
-  }, []);
+  }, [autoCompose]);
 
-  /* Fire a stored template straight to the CRM. */
+  /* Normalise a template (preset or composed) into the plain task
+     payload the return-to-caller (onComposed) path hands back. */
+  const toTaskData = (tpl) => {
+    const r = qtResolveDue(tpl.daysOut != null ? { kind: 'relative', days: tpl.daysOut } : due);
+    return {
+      name: tpl.name || '',
+      subject: tpl.subject || tpl.name || '',
+      body: tpl.body || '',
+      priority: parseInt(tpl.priority || DEFAULT_PRIORITY, 10),
+      categoryId: parseInt(tpl.categoryId || 0, 10),
+      categoryLabel: getTaskCategoryLabel(tpl.categoryId),
+      daysOut: r.daysOut > 0 ? r.daysOut : 0,
+      dueDate: r.crmDate,
+    };
+  };
+
+  /* Fire a stored template — submit to the CRM, or (when onComposed is
+     wired, e.g. opened from the popup with no page context) hand the
+     data back to the caller instead. */
   const fireTemplate = async (tpl) => {
     if (!tpl || busy) return;
     if (!tpl.subject && !tpl.name) {
       toast?.error?.(`"${tpl.name || 'Untitled'}" has no subject. Open the Notes editor and add one.`);
       return;
     }
+    if (onComposed) { onComposed(toTaskData(tpl)); animatedClose(); return; }
     if (!onSubmit) { toast?.error?.('Quick-task submit is not wired up'); return; }
     setFlashId(tpl.id); setTimeout(() => setFlashId((id) => (id === tpl.id ? null : id)), 650);
     setBusy(true);
@@ -155,9 +180,20 @@ export function QuickTask({
   const logComposed = async ({ tokens, subject, body }) => {
     if (busy) return;
     if (!subject) { toast?.warning?.('Add a subject before adding the task'); return; }
-    if (!onSubmit) { toast?.error?.('Quick-task submit is not wired up'); return; }
     const resolved = qtResolveDue(due);
     const daysOut = resolved.daysOut > 0 ? resolved.daysOut : 0;
+    if (onComposed) {
+      onComposed({
+        name: subject, subject, body,
+        priority: parseInt(tokens.priority || DEFAULT_PRIORITY, 10),
+        categoryId: parseInt(tokens.category || 0, 10),
+        categoryLabel: getTaskCategoryLabel(tokens.category),
+        daysOut, dueDate: resolved.crmDate,
+      });
+      animatedClose();
+      return;
+    }
+    if (!onSubmit) { toast?.error?.('Quick-task submit is not wired up'); return; }
     const synthetic = buildCustomTaskTemplate({
       subject, body,
       priority: tokens.priority || DEFAULT_PRIORITY,
@@ -210,7 +246,6 @@ export function QuickTask({
             onFocus={() => ff.setActive(i)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); customise(tpl); return; }
-              if (e.key === 'Tab') return;
               ff.onRowKey(e, i, fireTemplate);
             }}
             onClick={() => fireTemplate(tpl)}
@@ -318,7 +353,7 @@ function TaskRow({ tpl, hotkey, isActive, flashing, rowRef, onFocus, onKeyDown, 
         <span role="button" tabIndex={-1} title="Customise · ⇧↵" onClick={(e) => { e.stopPropagation(); onCustomise(tpl); }}
           style={{ width: 24, height: 24, borderRadius: 'var(--gb-r-sm)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-tertiary)', cursor: 'pointer', opacity: lit ? 1 : 0, transform: lit ? 'none' : 'translateX(4px)', pointerEvents: lit ? 'auto' : 'none', transition: 'opacity .15s, transform .15s' }}><I.edit size={12} /></span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: COMPOSER_TONE.brand.bg, color: COMPOSER_TONE.brand.fg, border: `1px solid ${COMPOSER_TONE.brand.bd}`, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3, whiteSpace: 'nowrap' }}>{due === 'today' ? 'TODAY' : due.replace('in ', '+')}</span>
-        {catLabel && <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: tone.bg, color: tone.fg, border: `1px solid ${tone.bd}`, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3, whiteSpace: 'nowrap', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis' }}>{catLabel}</span>}
+        {catLabel && <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: tone.bg, color: tone.fg, border: `1px solid ${tone.bd}`, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3, whiteSpace: 'nowrap', flexShrink: 0 }}>{catLabel}</span>}
       </span>
     </button>
   );
