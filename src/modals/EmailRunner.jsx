@@ -805,13 +805,17 @@ export function EmailRunner({
                   /* Mid-run cancel — bumping the token short-circuits
                      the orchestrator's between-iteration guard so it
                      returns out of the for-loop without sending the
-                     remaining contacts. We also flip status to 'done'
-                     and signal run-state false so the parent list's
-                     scan beam fades out. The panel stays open with
-                     the trail intact so the rep sees what HAD sent
-                     before they pulled the brake. */
+                     remaining contacts. Reset status back to 'idle'
+                     and clear the run-only state (counts / progress
+                     / trail) so the form fades back in and the rep
+                     can edit + re-run without closing the panel.
+                     Signals run-state false so the parent list's
+                     scan beam fades out. */
                   runTokenRef.current += 1;
-                  setStatus('done');
+                  setStatus('idle');
+                  setCounts({ sent: 0, failed: 0 });
+                  setProgress({ current: 0, total: 0 });
+                  setTrail([]);
                   onRunStateChange?.(false);
                   return;
                 }
