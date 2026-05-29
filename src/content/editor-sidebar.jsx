@@ -290,6 +290,20 @@ function TemplateRow({ tpl, isNote, type, active, onClick, onMove, folders, onDr
                   <FolderIcon size={11} style={{ color: 'var(--gb-brand-label)' }} /> {f.name}
                 </MenuItem>
               ))}
+              <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '4px 6px 2px' }} />
+              <MenuItem
+                danger
+                onClick={() => {
+                  setMenuOpen(false);
+                  /* The bridge owns the confirm prompt + persistence
+                     + "if this was the open one, drop the form back
+                     to empty" handling — we just forward by id. */
+                  const fn = isNote ? window.deleteNoteTemplateById : window.deleteTemplateById;
+                  if (typeof fn === 'function') fn(tpl.id);
+                }}
+              >
+                <I.trash size={11} /> Delete {isNote ? 'note' : 'template'}
+              </MenuItem>
             </ActionMenu>
           )}
         </AnimatePresence>

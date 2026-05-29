@@ -177,29 +177,19 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
 
   const canAdd = !!name && !!config;
 
-  // Keep the form's bottom edge (the Add/Cancel row) in view as the
-  // height animates open or the user swaps kinds (each kind has its own
-  // height). We track the action row, not the wrapper — that way:
-  //   - `block: 'nearest'` only nudges the page when the actions actually
-  //     leave the viewport, so a form opened mid-screen doesn't jump.
-  //   - The previous `block: 'end'` aligned the wrapper's bottom to the
-  //     viewport bottom while the wrapper was still height: 0, which
-  //     scrolled the page UP while the form grew DOWN — the "wrong
-  //     direction" feel.
-  // ResizeObserver fires once per layout change during the height tween,
-  // so the page tracks the bottom edge in lockstep with the animation.
+  /* The form previously ran a ResizeObserver that called
+     anchor.scrollIntoView({ block: 'nearest' }) on every layout
+     tick while the height tween was animating. The intent was to
+     keep the action row visible; the effect was that — with no
+     scrollable ancestor in the editor's column — `nearest`
+     resolved to the window and every frame scrolled the page
+     down. By the time the user finished swapping kinds, the
+     editor had drifted up and stuck there until reload (the
+     "whole UI gets pushed up" bug). Removed entirely; the table
+     column is short enough that the form fits without forced
+     scrolling, and the user can scroll manually if needed. */
   const formRef = useRef(null);
   const bottomRef = useRef(null);
-  useEffect(() => {
-    const el = formRef.current;
-    const anchor = bottomRef.current;
-    if (!el || !anchor) return undefined;
-    const observer = new ResizeObserver(() => {
-      anchor.scrollIntoView({ behavior: 'auto', block: 'nearest' });
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
 
   return (
     <motion.div
@@ -392,29 +382,34 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
                     />
                   </Field>
                 </div>
-                {/* Optional scope: narrow the regex match to a CSS subtree
-                    of the page (case templates often want to match within
-                    a specific email body container, not the whole page). */}
-                <Field label="Scope (optional CSS selector)" hint="Limit the regex to a subtree on the page">
-                  <Input
-                    size="sm"
-                    mono
-                    value={regexScope}
-                    placeholder=".email-body, #thread-1, etc."
-                    leading={<I.search />}
-                    onChange={setRegexScope}
-                    trailing={
-                      <Btn
-                        variant={pickingScope ? 'ghost' : 'tinted'}
-                        size="xs"
-                        icon={<PickerIcon />}
-                        onClick={pickingScope ? cancelPickScope : startPickScope}
-                      >
-                        {pickingScope ? 'Cancel' : 'Pick'}
-                      </Btn>
-                    }
-                  />
-                </Field>
+                {/* Optional scope: narrow the regex to a CSS subtree of
+                    the page. Only meaningful for order / account variables
+                    where regex runs against the rendered DOM. Case-template
+                    regex variables match against the email payload (subject
+                    / body / from), which has no DOM to scope, so we hide
+                    the field entirely there. */}
+                {typeId !== 'case' && (
+                  <Field label="Scope (optional CSS selector)" hint="Limit the regex to a subtree on the page">
+                    <Input
+                      size="sm"
+                      mono
+                      value={regexScope}
+                      placeholder=".email-body, #thread-1, etc."
+                      leading={<I.search />}
+                      onChange={setRegexScope}
+                      trailing={
+                        <Btn
+                          variant={pickingScope ? 'ghost' : 'tinted'}
+                          size="xs"
+                          icon={<PickerIcon />}
+                          onClick={pickingScope ? cancelPickScope : startPickScope}
+                        >
+                          {pickingScope ? 'Cancel' : 'Pick'}
+                        </Btn>
+                      }
+                    />
+                  </Field>
+                )}
               </>
             )}
 
@@ -473,7 +468,10 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
               ...(kind === 'regex' ? {
                 source: regexField,
                 group: Number(regexGroup) || 1,
-                ...(regexScope ? { scope: regexScope } : {}),
+                /* scope only applies to DOM-side regex; case templates
+                   match against email data so we never emit it there
+                   even if leftover state from a kind switch is around. */
+                ...(typeId !== 'case' && regexScope ? { scope: regexScope } : {}),
               } : {}),
             })}
           >
