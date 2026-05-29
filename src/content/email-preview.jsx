@@ -4,7 +4,7 @@ import { ensureTheme } from '../lib/theme.js';
 import { ToastHost, useToast } from '../ui/components/ToastHost.jsx';
 import { EmailPreview } from '../modals/EmailPreview.jsx';
 import { parseEml, isFullHtmlPage, stripPageChrome, plainTextBody } from '../lib/emailParse.js';
-import { filterCaseTemplates, pickBestCaseTemplate, recommendedFromTemplate } from '../lib/caseMatch.js';
+import { filterCaseTemplates, pickBestCaseTemplate, recommendedFromTemplate, matchesCaseTpl } from '../lib/caseMatch.js';
 
 /* ───────────────────────────────────────────────────────────────
    email-preview.jsx — content-script entry for the React Email
@@ -98,6 +98,8 @@ if (!window.__gbEmailPreviewLoaded) {
     const [email, setEmail] = useState(null);
     const [loading, setLoading] = useState(true);
     const [recommended, setRecommended] = useState([]);
+    const [caseTemplates, setCaseTemplates] = useState([]);
+    const [sendingTemplate, setSendingTemplate] = useState(false);
     const [applyState, setApplyState] = useState(null); // 'saving' | { category, subcategory }
 
     useEffect(() => {
@@ -138,6 +140,10 @@ if (!window.__gbEmailPreviewLoaded) {
           };
           const best = pickBestCaseTemplate(caseTpls, snapshot);
           setRecommended(recommendedFromTemplate(best));
+          /* Reply-template dropdown only lists templates whose match
+             rules fit this email (best match first). */
+          const matched = caseTpls.filter((t) => matchesCaseTpl(t, snapshot));
+          setCaseTemplates(best ? [best, ...matched.filter((t) => t.id !== best.id)] : matched);
         } catch { /* no templates — rail still shows all categories */ }
       })();
       return () => { alive = false; };
@@ -154,6 +160,16 @@ if (!window.__gbEmailPreviewLoaded) {
         setApplyState(null);
         toast?.error?.(error || 'Could not update case', { duration: 4000 });
       }
+    };
+
+    const onSendTemplate = async (tpl) => {
+      if (sendingTemplate) return;
+      setSendingTemplate(true);
+      /* TODO: real reply-send transport (Power Automate / CRM reply
+         endpoint) isn't wired yet — surface the pick so the workflow is
+         testable end-to-end once the send pipe lands. */
+      toast?.info?.(`Reply template "${tpl.name || tpl.subject || 'Untitled'}" ready — send pipe not wired yet`, { duration: 3500 });
+      setSendingTemplate(false);
     };
 
     const onJunk = async () => {
@@ -178,6 +194,9 @@ if (!window.__gbEmailPreviewLoaded) {
         defaultCase={isCasePage()}
         caseId={currentCaseId()}
         recommended={recommended}
+        caseTemplates={caseTemplates}
+        onSendTemplate={onSendTemplate}
+        sendingTemplate={sendingTemplate}
         applyState={applyState}
         onApplyCategory={onApplyCategory}
         onJunk={onJunk}

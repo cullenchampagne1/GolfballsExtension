@@ -145,7 +145,7 @@ export function EmailHtmlView({ html, style }) {
         :host {
           display: block;
           color-scheme: ${isDark ? 'dark' : 'light'};
-          padding: 20px 22px;
+          padding: 18px 28px;
           background: var(--gb-surface-1, ${isDark ? '#1e2024' : '#ffffff'});
           color: var(--gb-text-primary, ${isDark ? '#e8eaed' : '#1a1a1a'});
           font-family: Calibri, 'Segoe UI', Arial, sans-serif;
