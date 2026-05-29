@@ -64,7 +64,25 @@ export function VariableSchemaPicker({ value, onChange, placeholder = '— pick 
      value — no any / none modes — so the dropdown carries the
      three single-value picks: first (=[0]), last (=[-1]), or a
      specific index. */
-  const arrayInfo = useMemo(() => parseArraySegment(value), [value]);
+  const detected = useMemo(() => parseArraySegment(value), [value]);
+  /* mode='index' with index=0 writes [0] — identical to mode='first'
+     in the path. So local override forces "Index" to stick when the
+     user picks it explicitly even if the number happens to be 0. The
+     override resets whenever the path's array name changes (user
+     picked a different array in the tree). */
+  const [forceIndex, setForceIndex] = useState(false);
+  const arrayKey = detected?.arrayName || null;
+  const prevKey = useRef(arrayKey);
+  useEffect(() => {
+    if (prevKey.current !== arrayKey) {
+      setForceIndex(false);
+      prevKey.current = arrayKey;
+    }
+  }, [arrayKey]);
+  const arrayInfo = detected && {
+    ...detected,
+    mode: forceIndex ? 'index' : detected.mode,
+  };
   return (
     <div style={{ position: 'relative', width: '100%', minWidth: 0 }}>
       <PathButton
@@ -91,7 +109,10 @@ export function VariableSchemaPicker({ value, onChange, placeholder = '— pick 
           arrayName={arrayInfo.arrayName}
           mode={arrayInfo.mode}
           index={arrayInfo.index}
-          onChange={(mode, index) => onChange(rewriteArrayIndex(value, mode, index))}
+          onChange={(mode, index) => {
+            setForceIndex(mode === 'index');
+            onChange(rewriteArrayIndex(value, mode, index));
+          }}
         />
       )}
     </div>
