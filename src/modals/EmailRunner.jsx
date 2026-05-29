@@ -330,7 +330,11 @@ export function EmailRunner({
       { id: ORIGINAL_PIN, label: 'Variation 1', variation: null },
       ...variations.map((v, i) => ({
         id: v.id,
-        label: v.label || `Variation ${i + 2}`,
+        /* Positional name only — saved templates can carry a
+           stored v.label like "Variation 1" that would collide
+           with the synthetic Variation 1 above. Force the
+           picker's numbering so the weights table matches. */
+        label: `Variation ${i + 2}`,
         variation: v,
       })),
     ];
