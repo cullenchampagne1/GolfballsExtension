@@ -19,7 +19,7 @@ import { LiquidDrawer } from '../ui/components/LiquidDrawer.jsx';
      <ImagePreview url={...} itemLink={...} onClosed={...} bindClose={...} />
 
    `url` is OPTIONAL. When omitted the modal opens against a bundled
-   fallback (icons/photo_ball.jpg) so the design + interactions are
+   fallback (assets/photo_ball.jpg) so the design + interactions are
    testable in the playground without a real logo URL to extract.
    The decode-error Callout only renders when a `url` WAS passed AND
    the image failed to load — the fallback path is its own thing.
@@ -87,11 +87,11 @@ const PREVIEW_GRID = {
 function resolveFallbackUrl() {
   try {
     if (typeof chrome !== 'undefined' && chrome.runtime?.getURL) {
-      return chrome.runtime.getURL('icons/photo_ball.jpg');
+      return chrome.runtime.getURL('assets/photo_ball.jpg');
     }
   } catch { /* not in an extension context */ }
   // Last-resort relative path — works for standalone preview pages.
-  return 'icons/photo_ball.jpg';
+  return 'assets/photo_ball.jpg';
 }
 
 /** Image-tile icon used in the header. Inlined because the design-

@@ -7,7 +7,7 @@ import React, { useEffect, useRef, useState } from 'react';
 
    The hard part (grass + sky + HDRI lighting + soft Cycles
    shadow + DoF + grass blades occluding the ball) is baked
-   ONCE in Blender into icons/mockup_base.png — see the bake
+   ONCE in Blender into assets/mockup_base.png — see the bake
    script in this repo's history. The ball in that bake is a
    pure WHITE Principled-BSDF, so the rendered pixels in the
    ball region equal `white × lighting = lighting`. We can then
@@ -35,7 +35,7 @@ import React, { useEffect, useRef, useState } from 'react';
    chips in the bottom-right, percent readout bottom-left.
 ─────────────────────────────────────────────────────────────── */
 
-const BAKE_PATH = 'icons/mockup_base.png';
+const BAKE_PATH = 'assets/mockup_base.png';
 const BAKE_W = 1080;
 const BAKE_H = 1080;
 // Ball position in the bake — square 1080×1080 frame, ball centered.

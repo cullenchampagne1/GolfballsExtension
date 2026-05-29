@@ -675,7 +675,7 @@ function PlaygroundSurface() {
           />
         )}
         {mounted === 'imageViewer' && (
-          /* No `url` passed → ImagePreview falls back to icons/photo_ball.jpg
+          /* No `url` passed → ImagePreview falls back to assets/photo_ball.jpg
              so the modal opens fully populated for design iteration. */
           <ImagePreview
             key="imageViewer"
