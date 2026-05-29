@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { FloatingPanel, IconBtn, Btn, Tag, I, Spinner, RichTextEditor } from '../ui/index.js';
+import { FloatingPanel, IconBtn, Btn, Tag, I, Spinner, RichTextEditor, Dropdown } from '../ui/index.js';
 import { EmailHtmlView } from '../ui/components/EmailHtmlView.jsx';
 import { CategorizeRail } from '../ui/components/CategorizeRail.jsx';
-import { categorySections } from '../lib/caseMatch.js';
+import { categorySections, recommendedFromTemplate } from '../lib/caseMatch.js';
 import { splitThreadHtml } from '../lib/emailParse.js';
 
 const OUR_DOMAINS = /(golfballs\.com|loyaltylogo\.com|gbcadmin)/i;
@@ -435,17 +435,67 @@ function ReplyComposer({ replyTo, subject }) {
   );
 }
 
+/* Sticky case-mode control: a template picker (only the case email
+   templates whose match rules fit this email) + a Send button. Picking
+   one drives the rail's ✦ Recommended chips; Send fires onSendTemplate. */
+function TemplateSendBar({ templates, selectedId, onSelect, onSend, sending }) {
+  const hasTemplates = templates.length > 0;
+  const options = templates.map((t) => ({ id: t.id, label: t.name || t.subject || 'Untitled template' }));
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {hasTemplates ? (
+          <Dropdown
+            size="sm"
+            searchable
+            value={selectedId}
+            options={options}
+            placeholder="Pick a reply template…"
+            onChange={onSelect}
+          />
+        ) : (
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', height: 28,
+            fontSize: 11, fontStyle: 'italic', color: 'var(--gb-text-muted)',
+          }}>No matching reply templates</span>
+        )}
+      </div>
+      <Btn
+        size="sm" variant="primary" status="brand"
+        icon={<I.send size={11} />}
+        disabled={!hasTemplates || !selectedId || sending}
+        onClick={onSend}
+      >
+        {sending ? 'Sending…' : 'Send'}
+      </Btn>
+    </div>
+  );
+}
+
 export function EmailPreview({
   email, meta, loading,
   defaultCase = false,
   caseId,
   recommended = [],
+  caseTemplates = [],
+  onSendTemplate,
+  sendingTemplate = false,
   onApplyCategory,
   onJunk,
   applyState,
   onClosed, bindClose,
 }) {
   const [viewMode, setViewMode] = useState(defaultCase ? 'case' : 'inbox');
+  /* Selected case template drives both the rail's ✦ Recommended chips
+     and what Send fires. Defaults to the first match (the list arrives
+     pre-filtered to templates whose rules match this email). */
+  const [selectedTplId, setSelectedTplId] = useState(() => caseTemplates[0]?.id || '');
+  useEffect(() => {
+    setSelectedTplId((id) => (caseTemplates.some((t) => t.id === id) ? id : (caseTemplates[0]?.id || '')));
+  }, [caseTemplates]);
+  const selectedTpl = caseTemplates.find((t) => t.id === selectedTplId) || null;
+  /* A picked template's tags win over the caller-supplied recommended. */
+  const effectiveRecommended = selectedTpl ? recommendedFromTemplate(selectedTpl) : recommended;
   const [focused, setFocused] = useState(null);
   const isCase = viewMode === 'case';
   /* FloatingPanel hands its animated-close fn to bindClose; capture
@@ -597,11 +647,20 @@ export function EmailPreview({
             <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               <CategorizeRail
                 sections={sections}
-                recommended={recommended}
+                recommended={effectiveRecommended}
                 applied={applied}
                 focused={focused}
                 onFocus={setFocused}
                 onApply={(c, s) => onApplyCategory?.(c, s)}
+                topSlot={
+                  <TemplateSendBar
+                    templates={caseTemplates}
+                    selectedId={selectedTplId}
+                    onSelect={setSelectedTplId}
+                    onSend={() => selectedTpl && onSendTemplate?.(selectedTpl)}
+                    sending={sendingTemplate}
+                  />
+                }
               />
               {/* Junk action pinned under the rail */}
               <div style={{

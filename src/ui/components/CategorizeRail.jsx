@@ -77,23 +77,9 @@ function Kbd({ children }) {
 }
 
 function BreadcrumbChip({ focused, chipIdx, sections }) {
-  if (!focused) {
-    return (
-      <div style={{
-        marginTop: 8,
-        display: 'inline-flex', alignItems: 'center', gap: 6,
-        padding: '4px 10px',
-        background: 'var(--gb-fill-subtle)',
-        border: '1px solid var(--gb-border-default)',
-        borderRadius: 'var(--gb-r-pill)',
-        fontSize: 10.5,
-        color: 'var(--gb-text-muted)',
-      }}>
-        <Kbd>Tab</Kbd>
-        <span>to start walking sections</span>
-      </div>
-    );
-  }
+  /* Only a position indicator now — no keyboard-hint empty state
+     (the rail's top is the template + send bar). */
+  if (!focused) return null;
   const sect = sections.find((s) => s.id === focused.section);
   const sub = sect?.subs?.[chipIdx];
   return (
@@ -299,6 +285,7 @@ export function CategorizeRail({
   onApply,
   width = 380,
   title = 'Categorize',
+  topSlot,
 }) {
   useEffect(() => { ensureFocusStyle(); }, []);
 
@@ -399,16 +386,8 @@ export function CategorizeRail({
 
         <BreadcrumbChip focused={focused} chipIdx={chipIdx} sections={sections} />
 
-        <div style={{
-          marginTop: 10,
-          display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
-          fontSize: 10.5, color: 'var(--gb-text-muted)',
-        }}>
-          <Kbd>Tab</Kbd><span>walks sections</span>
-          <span>·</span>
-          <Kbd>1</Kbd><Kbd>–</Kbd><Kbd>9</Kbd><span>or</span>
-          <Kbd>↓</Kbd><Kbd>↑</Kbd><Kbd>↵</Kbd><span>fires a row</span>
-        </div>
+        {/* Sticky top control — template picker + send (case mode). */}
+        {topSlot && <div style={{ marginTop: 10 }}>{topSlot}</div>}
       </div>
 
       <div data-cc-scroll style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '12px 12px 20px' }}>

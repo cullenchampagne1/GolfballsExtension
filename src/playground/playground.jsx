@@ -20,6 +20,7 @@ import { submitCallLog } from '../lib/submitCallLog.js';
 import { QuickTask } from '../modals/QuickTask.jsx';
 import { submitQuickTask } from '../lib/submitQuickTask.js';
 import { EmailPreview } from '../modals/EmailPreview.jsx';
+import { matchesCaseTpl } from '../lib/caseMatch.js';
 import { ActionsShelf } from '../ui/components/ActionsShelf.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { findPhone } from '../lib/findPhone.js';
@@ -141,8 +142,32 @@ const EMAIL_FIXTURES = {
 
 /* Sample recommendations for the case-mode categorize rail. */
 const EMAIL_RECOMMENDED = [
-  { category: 'Sales', subcategory: 'Quote', label: 'Sales · Quote' },
-  { category: 'Art', subcategory: 'Proof', label: 'Art · Proof' },
+  { category: 'Product Inquiry', subcategory: 'Sale Made - No', label: 'Sale Made - No · Product Inquiry' },
+];
+
+/* Sample case reply templates (the shape the caseMatch engine consumes:
+   type:'case', caseRules to match the email, caseTags → ✦ Recommended).
+   The rail's reply dropdown lists only those whose rules match the open
+   email, so the debug state exercises the real matching engine. */
+const EMAIL_CASE_TEMPLATES = [
+  {
+    id: 'ct-logo', type: 'case', enabled: true, name: 'Logo proof follow-up',
+    caseRules: [{ field: 'subject', op: 'contains', value: 'logo' }],
+    caseTags: [
+      { category: 'Transfer', subcategory: 'Custom Logo' },
+      { category: 'Product Inquiry', subcategory: 'Sale Made - No' },
+    ],
+  },
+  {
+    id: 'ct-pricing', type: 'case', enabled: true, name: 'Volume pricing quote',
+    caseRules: [{ field: 'subject', op: 'contains', value: 'question' }],
+    caseTags: [{ category: 'Product Inquiry', subcategory: 'Sale Made - Yes' }],
+  },
+  {
+    id: 'ct-general', type: 'case', enabled: true, name: 'General reply',
+    caseRules: [],
+    caseTags: [{ category: 'General Inquiry', subcategory: 'General website guidance / use' }],
+  },
 ];
 
 /* Playground seed for the Watch List / Task List modal. Writes a
@@ -911,6 +936,12 @@ function PlaygroundSurface() {
             loading={false}
             defaultCase={emailCase}
             recommended={EMAIL_RECOMMENDED}
+            caseTemplates={EMAIL_CASE_TEMPLATES.filter((t) => matchesCaseTpl(t, {
+              from: EMAIL_FIXTURES[emailVariant].email.from,
+              subject: EMAIL_FIXTURES[emailVariant].email.subject,
+              body: (EMAIL_FIXTURES[emailVariant].email.bodyHtml || '').replace(/<[^>]+>/g, ' '),
+            }))}
+            onSendTemplate={(tpl) => toast?.info?.(`Send "${tpl.name}" (playground — no transport)`, { duration: 2500 })}
             onApplyCategory={(category, subcategory) => toast?.success?.(`Applied ${category} · ${subcategory}`, { duration: 1800 })}
             onJunk={() => toast?.info?.('Marked as junk')}
             applyState={null}
