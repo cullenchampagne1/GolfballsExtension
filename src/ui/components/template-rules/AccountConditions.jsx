@@ -889,6 +889,12 @@ function PathPickerPopover({ currentPath, onClose, onSelect }) {
         overflow: 'hidden',
         display: 'flex',
         flexDirection: 'column',
+        /* Visual scale-down per user request — the 380×~360 popover
+           overwhelmed the rule row at the editor's form factor.
+           transform:scale keeps interaction working at the smaller
+           apparent size; top-left origin so the popover stays
+           pinned under the trigger button. */
+        transform: 'scale(0.75)',
         transformOrigin: 'top left',
       }}
     >
