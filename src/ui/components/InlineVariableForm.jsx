@@ -279,9 +279,13 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
                 label="Schema path"
                 hint="Tree of the unified contact + account schema · ↓↑ ↵"
               >
-                {/* Tree-style picker — same surface Account
-                    Conditions uses. */}
+                {/* Tree-style picker — same component Account
+                    Conditions uses. portal=true so the popover
+                    renders via document.body and matches the
+                    trigger column's width; the inline form's
+                    expanding row would otherwise clip the dropdown. */}
                 <SchemaPathPicker
+                  portal
                   value={config}
                   onChange={setConfig}
                   placeholder="Pick a field…"

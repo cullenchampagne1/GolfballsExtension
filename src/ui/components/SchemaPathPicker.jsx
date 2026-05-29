@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { I } from '../icons.jsx';
 import { Tag } from './Tag.jsx';
@@ -82,11 +83,19 @@ export function SchemaPathPicker({
      value lookups) — Account Conditions explicitly wants arrays
      as a pickable option for its `hasAny / countGt` family. */
   leafOnly = false,
+  /* When true, the picker popover renders via createPortal to
+     document.body and positions itself with fixed coords pulled
+     from the trigger's getBoundingClientRect. Width matches the
+     trigger so the popover lines up with the input column even
+     in narrow modals. Use this inside containers that clip
+     overflow (modals with overflow:hidden / auto bodies). */
+  portal = false,
 }) {
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef(null);
   const type = typeForPath(value);
   return (
-    <div style={{ position: 'relative', width: '100%', minWidth: 0 }}>
+    <div ref={triggerRef} style={{ position: 'relative', width: '100%', minWidth: 0 }}>
       <PathButton
         path={value}
         type={type}
@@ -99,6 +108,8 @@ export function SchemaPathPicker({
           <PathPickerPopover
             currentPath={canonicalPath(value)}
             leafOnly={leafOnly}
+            portal={portal}
+            triggerRef={triggerRef}
             onClose={() => setOpen(false)}
             onSelect={(node) => {
               const next = typeof node === 'string' ? node : node.path;
@@ -172,12 +183,34 @@ export function PathButton({ path, type, open, onClick, placeholder = '— pick 
 }
 
 /* ── Popover — inline tree browser ─────────────────────────── */
-export function PathPickerPopover({ currentPath, onClose, onSelect, leafOnly = false }) {
+export function PathPickerPopover({ currentPath, onClose, onSelect, leafOnly = false, portal = false, triggerRef = null }) {
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(() => initialExpansion(currentPath));
   const [focusedIdx, setFocusedIdx] = useState(0);
   const searchRef = useRef(null);
   const rootRef = useRef(null);
+
+  /* Portal mode: read the trigger's getBoundingClientRect on
+     open + resize/scroll so the popover stays glued to the
+     trigger column even when the modal body scrolls. Width
+     matches the trigger so the dropdown lines up with the
+     input column it sits below. */
+  const [portalPos, setPortalPos] = useState(null);
+  useEffect(() => {
+    if (!portal || !triggerRef?.current) return undefined;
+    const update = () => {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (!r) return;
+      setPortalPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    };
+    update();
+    window.addEventListener('resize', update);
+    window.addEventListener('scroll', update, true);
+    return () => {
+      window.removeEventListener('resize', update);
+      window.removeEventListener('scroll', update, true);
+    };
+  }, [portal, triggerRef]);
 
   useEffect(() => {
     const r = requestAnimationFrame(() => { try { searchRef.current?.focus(); } catch {} });
@@ -241,7 +274,30 @@ export function PathPickerPopover({ currentPath, onClose, onSelect, leafOnly = f
     }
   };
 
-  return (
+  /* Pick positioning + width per mode:
+       portal=false (AccountConditions): absolute under the picker
+         container, fixed 380px wide — the original look.
+       portal=true (variable form modals): fixed coords from the
+         trigger's rect; width matches the trigger so the dropdown
+         lines up exactly under the input column it replaced. */
+  const containerStyle = portal
+    ? {
+        position: 'fixed',
+        top: portalPos?.top ?? -9999,
+        left: portalPos?.left ?? -9999,
+        width: portalPos?.width ?? 280,
+        zIndex: 1000,
+      }
+    : {
+        position: 'absolute',
+        top: 'calc(100% + 4px)',
+        left: 0,
+        width: 380,
+        maxWidth: 'calc(100vw - 24px)',
+        zIndex: 30,
+      };
+
+  const popover = (
     <motion.div
       ref={rootRef}
       initial={{ opacity: 0, y: -4, scale: 0.97 }}
@@ -249,12 +305,7 @@ export function PathPickerPopover({ currentPath, onClose, onSelect, leafOnly = f
       exit={{ opacity: 0, y: -4, scale: 0.97 }}
       transition={{ duration: 0.18, ease: [0.34, 1.4, 0.64, 1] }}
       style={{
-        position: 'absolute',
-        top: 'calc(100% + 4px)',
-        left: 0,
-        width: 380,
-        maxWidth: 'calc(100vw - 24px)',
-        zIndex: 30,
+        ...containerStyle,
         background: 'var(--gb-surface-modal)',
         border: '1px solid var(--gb-border-default)',
         borderRadius: 'var(--gb-r-md)',
@@ -316,6 +367,8 @@ export function PathPickerPopover({ currentPath, onClose, onSelect, leafOnly = f
       </div>
     </motion.div>
   );
+
+  return portal ? createPortal(popover, document.body) : popover;
 }
 
 function initialExpansion(currentPath) {
