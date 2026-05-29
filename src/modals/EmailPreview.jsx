@@ -21,25 +21,45 @@ function buildThread(email, meta) {
   const bodyHtml = email?.bodyHtml || '';
   const split = splitThreadHtml(bodyHtml);
   const topFrom = email?.from || meta?.from || '';
+  let msgs;
   if (!split) {
-    return [{
+    msgs = [{
       id: 'm0', from: topFrom, to: email?.to || meta?.to || '',
       date: email?.date || meta?.date || '', subject: email?.subject || meta?.subject || '',
       bodyHtml, direction: OUR_DOMAINS.test(topFrom) ? 'out' : 'in',
     }];
+  } else {
+    msgs = split.map((m, i) => {
+      const from = m.quoted ? (m.from || '') : topFrom;
+      return {
+        id: `m${i}`,
+        from,
+        to: m.quoted ? (m.to || '') : (email?.to || meta?.to || ''),
+        date: m.quoted ? (m.sent || '') : (email?.date || meta?.date || ''),
+        subject: m.quoted ? (m.subject || '') : (email?.subject || meta?.subject || ''),
+        bodyHtml: m.bodyHtml,
+        direction: OUR_DOMAINS.test(from) ? 'out' : 'in',
+      };
+    });
   }
-  return split.map((m, i) => {
-    const from = m.quoted ? (m.from || '') : topFrom;
-    return {
-      id: `m${i}`,
-      from,
-      to: m.quoted ? (m.to || '') : (email?.to || meta?.to || ''),
-      date: m.quoted ? (m.sent || '') : (email?.date || meta?.date || ''),
-      subject: m.quoted ? (m.subject || '') : (email?.subject || meta?.subject || ''),
-      bodyHtml: m.bodyHtml,
-      direction: OUR_DOMAINS.test(from) ? 'out' : 'in',
-    };
-  });
+  /* splitThreadHtml returns newest-first (the live reply, then each
+     older quoted message). Reverse so the thread reads chronologically
+     — oldest at top, most recent at the bottom, right above the reply
+     composer. */
+  return msgs.reverse();
+}
+
+/* The customer is the party on the thread that ISN'T us. Reply
+   should always go to them (like Reply-All picking the other side),
+   regardless of whether the opened message was inbound or one we
+   sent. Scan every from/to for the first non-golfballs address. */
+function findCustomerAddress(thread, fallback) {
+  for (const m of thread) {
+    for (const addr of [m.from, m.to]) {
+      if (addr && !OUR_DOMAINS.test(addr)) return addr.trim();
+    }
+  }
+  return fallback || '';
 }
 
 function MessageCard({ msg, expanded, onToggle }) {
@@ -516,13 +536,19 @@ export function EmailPreview({
 
               {/* Composer only after load — rendering it during the
                   loading state parked it under the spinner, then it
-                  jolted to the bottom when the (tall) thread arrived. */}
-              {!loading && thread.length > 0 && (
-                <ReplyComposer
-                  replyTo={recipient.email ? `${sender.name} <${sender.email}>` : sender.name}
-                  subject={`RE: ${subject}`}
-                />
-              )}
+                  jolted to the bottom when the (tall) thread arrived.
+                  Reply target is always the CUSTOMER (the non-golfballs
+                  party), so opening a message we sent still drafts a
+                  reply TO them, not back to ourselves. */}
+              {!loading && thread.length > 0 && (() => {
+                const cust = splitAddress(findCustomerAddress(thread, email?.from || meta?.from));
+                return (
+                  <ReplyComposer
+                    replyTo={cust.email ? `${cust.name} <${cust.email}>` : cust.name}
+                    subject={`RE: ${subject}`}
+                  />
+                );
+              })()}
             </div>
           </div>
 
