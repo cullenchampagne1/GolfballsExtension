@@ -301,6 +301,17 @@ export function EmailRunner({
     }
   }, [open, onRunStateChange]);
 
+  /* Unmount cancel. When the PARENT modal closes (TaskList /
+     CRMSearch shuts), EmailRunner unmounts without ever flipping
+     `open` to false, so the open-effect above never fires and the
+     orchestrator's async loop keeps walking the contact list in
+     the background — sending the rest of the blast with no UI to
+     stop it. Bump the token on unmount so the next between-
+     iteration guard short-circuits. */
+  useEffect(() => () => {
+    runTokenRef.current += 1;
+  }, []);
+
   useEffect(() => { ensureNoScrollStyle(); }, []);
 
   /* Sentinel composite-id suffix that pins the parent template
@@ -559,6 +570,16 @@ export function EmailRunner({
              bulk path matches the popup path 1:1. */
           // eslint-disable-next-line no-console
           console.log('[gb] EmailRunner → paAutomate payload:', paPayload);
+          /* Last-chance cancel guard before the actual send. The
+             between-iteration check at line ~454 catches a cancel
+             that arrives before this iteration starts; the post-
+             await check at line ~579 catches one that arrives
+             AFTER this send completes. Without this third check,
+             a cancel that arrives DURING the variable-resolution
+             await above would still fire one more PA send — the
+             reason a closed panel kept blasting in the
+             background. */
+          if (runTokenRef.current !== token) return;
           const send = await dispatchBg({
             action: 'paAutomate',
             paUrl,
