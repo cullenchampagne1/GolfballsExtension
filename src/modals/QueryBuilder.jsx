@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  FloatingPanel, ModalHeader, Btn, Input, IconBtn, Tag, I,
+  FloatingPanel, ModalHeader, Btn, Input, IconBtn, Tag, I, Dropdown, DatePicker,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
@@ -1148,44 +1148,45 @@ function NotPill({ on, onClick }) {
   );
 }
 
-/* ── Native selects + inputs — styled to match the design system.
-   We use native <select> for FieldSelect specifically to keep
-   optgroup category grouping, which our custom Dropdown doesn't
-   support. baseControlStyle gives them the inline-styled look that
-   matches our token system. */
+/* ── Field / op / value pickers — every control routes through
+   the design-system Dropdown, Input, and DatePicker so the query
+   builder reads as one tool rather than a mashup of styled
+   native form elements. Dropdown supports per-option grouping
+   via `group`, so FieldSelect can still surface category headers
+   (Identity, Contact, Account, …) without a native optgroup. */
+
+const QB_UNIT_OPTIONS = QB_UNITS.map((u) => ({ id: u, label: u }));
+
 function FieldSelect({ value, onChange }) {
-  const byCategory = useMemo(() => {
-    const m = new Map();
-    for (const f of QB_FIELDS) {
-      if (!m.has(f.category)) m.set(f.category, []);
-      m.get(f.category).push(f);
-    }
-    return [...m.entries()];
-  }, []);
+  const options = useMemo(
+    () => QB_FIELDS.map((f) => ({ id: f.key, label: f.label, group: f.category })),
+    [],
+  );
   return (
-    <select
+    <Dropdown
+      size="sm"
       value={value}
-      onChange={(e) => onChange(e.target.value)}
-      style={baseControlStyle({ width: 180 })}
-    >
-      {byCategory.map(([cat, fields]) => (
-        <optgroup key={cat} label={cat}>
-          {fields.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
-        </optgroup>
-      ))}
-    </select>
+      options={options}
+      onChange={onChange}
+      style={{ width: 180 }}
+      searchable
+    />
   );
 }
 
 function OpSelect({ value, ops, onChange }) {
+  const options = useMemo(
+    () => ops.map((o) => ({ id: o.id, label: o.label })),
+    [ops],
+  );
   return (
-    <select
+    <Dropdown
+      size="sm"
       value={value}
-      onChange={(e) => onChange(e.target.value)}
-      style={baseControlStyle({ width: 152 })}
-    >
-      {ops.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-    </select>
+      options={options}
+      onChange={onChange}
+      style={{ width: 152 }}
+    />
   );
 }
 
@@ -1202,80 +1203,92 @@ function ValueEditor({ field, condition, onPatch }) {
   }
   if (field.type === 'enum') {
     return (
-      <select
-        value={condition.val || field.options[0]}
-        onChange={(e) => onPatch({ val: e.target.value })}
-        style={baseControlStyle({ flex: 1, minWidth: 130 })}
-      >
-        {field.options.map((o) => <option key={o} value={o}>{o}</option>)}
-      </select>
+      <div style={{ flex: 1, minWidth: 130 }}>
+        <Dropdown
+          size="sm"
+          value={condition.val || field.options[0]}
+          options={field.options.map((o) => ({ id: o, label: o }))}
+          onChange={(v) => onPatch({ val: v })}
+        />
+      </div>
     );
   }
   if (field.type === 'text') {
     return (
-      <input
-        type="text"
-        value={condition.val}
-        onChange={(e) => onPatch({ val: e.target.value })}
-        placeholder="value…"
-        style={baseControlStyle({ flex: 1, minWidth: 140 })}
-      />
+      <div style={{ flex: 1, minWidth: 140 }}>
+        <Input
+          size="sm"
+          value={condition.val}
+          placeholder="value…"
+          onChange={(v) => onPatch({ val: v })}
+        />
+      </div>
     );
   }
   if (field.type === 'int' || field.type === 'float') {
+    const inputMode = field.type === 'int' ? 'numeric' : 'decimal';
     if (condition.op === 'between') {
       return (
         <>
-          <input
-            type="number"
-            inputMode={field.type === 'int' ? 'numeric' : 'decimal'}
-            value={condition.val}
-            onChange={(e) => onPatch({ val: e.target.value })}
-            placeholder="min"
-            style={baseControlStyle({ width: 90, mono: true })}
-          />
+          <div style={{ width: 90 }}>
+            <Input
+              size="sm" mono
+              type="number"
+              inputMode={inputMode}
+              value={condition.val}
+              placeholder="min"
+              onChange={(v) => onPatch({ val: v })}
+            />
+          </div>
           <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>to</span>
-          <input
-            type="number"
-            inputMode={field.type === 'int' ? 'numeric' : 'decimal'}
-            value={condition.val2}
-            onChange={(e) => onPatch({ val2: e.target.value })}
-            placeholder="max"
-            style={baseControlStyle({ width: 90, mono: true })}
-          />
+          <div style={{ width: 90 }}>
+            <Input
+              size="sm" mono
+              type="number"
+              inputMode={inputMode}
+              value={condition.val2}
+              placeholder="max"
+              onChange={(v) => onPatch({ val2: v })}
+            />
+          </div>
         </>
       );
     }
     return (
-      <input
-        type="number"
-        inputMode={field.type === 'int' ? 'numeric' : 'decimal'}
-        value={condition.val}
-        onChange={(e) => onPatch({ val: e.target.value })}
-        placeholder="0"
-        style={baseControlStyle({ flex: 1, minWidth: 100, maxWidth: 160, mono: true })}
-      />
+      <div style={{ flex: 1, minWidth: 100, maxWidth: 160 }}>
+        <Input
+          size="sm" mono
+          type="number"
+          inputMode={inputMode}
+          value={condition.val}
+          placeholder="0"
+          onChange={(v) => onPatch({ val: v })}
+        />
+      </div>
     );
   }
   if (field.type === 'date') {
     if (condition.op === 'rel_past' || condition.op === 'rel_future') {
       return (
         <>
-          <input
-            type="number"
-            inputMode="numeric"
-            value={condition.num}
-            onChange={(e) => onPatch({ num: e.target.value })}
-            placeholder="1"
-            style={baseControlStyle({ width: 64, mono: true })}
-          />
-          <select
-            value={condition.unit || 'years'}
-            onChange={(e) => onPatch({ unit: e.target.value })}
-            style={baseControlStyle({ width: 92 })}
-          >
-            {QB_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-          </select>
+          <div style={{ width: 64 }}>
+            <Input
+              size="sm" mono
+              type="number"
+              inputMode="numeric"
+              value={condition.num}
+              placeholder="1"
+              onChange={(v) => onPatch({ num: v })}
+            />
+          </div>
+          <div style={{ width: 92 }}>
+            <Dropdown
+              size="sm"
+              value={condition.unit || 'years'}
+              options={QB_UNIT_OPTIONS}
+              onChange={(v) => onPatch({ unit: v })}
+            />
+          </div>
           <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
             {condition.op === 'rel_past' ? 'ago' : 'from now'}
           </span>
@@ -1284,34 +1297,18 @@ function ValueEditor({ field, condition, onPatch }) {
     }
     if (condition.op === 'before' || condition.op === 'after') {
       return (
-        <input
-          type="date"
-          value={condition.val}
-          onChange={(e) => onPatch({ val: e.target.value })}
-          style={baseControlStyle({ flex: 1, minWidth: 150, maxWidth: 200, mono: true })}
-        />
+        <div style={{ flex: 1, minWidth: 150, maxWidth: 220 }}>
+          <DatePicker
+            value={condition.val}
+            includeTime={false}
+            onChange={(v) => onPatch({ val: v })}
+          />
+        </div>
       );
     }
     return null;
   }
   return null;
-}
-
-function baseControlStyle({ width, minWidth, maxWidth, flex, mono }) {
-  return {
-    width, minWidth, maxWidth, flex,
-    height: 28,
-    background: 'var(--gb-fill-inverse-medium)',
-    border: '1px solid var(--gb-border-default)',
-    borderRadius: 'var(--gb-r-sm)',
-    padding: '0 8px',
-    fontSize: 11.5,
-    fontFamily: mono ? 'var(--gb-font-mono)' : 'var(--gb-font-sans)',
-    fontWeight: 500,
-    color: 'var(--gb-text-primary)',
-    outline: 'none',
-    boxSizing: 'border-box',
-  };
 }
 
 /* ── Header chrome bits ── */
