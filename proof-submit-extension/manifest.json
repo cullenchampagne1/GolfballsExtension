@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "Golfballs Proof Submit",
+  "version": "1.0",
+  "description": "Quick image viewer + proof submission for golfballs.com.",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://api.golfballs.com/*",
+    "https://*.golfballs.com/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/photo_ball.jpg",
+        "icons/golfball_model/Golf_ball.obj",
+        "icons/golden_gate_hills_4k.exr",
+        "icons/lilienstein_4k.exr",
+        "icons/moonlit_golf_4k.exr",
+        "icons/sunset_fairway_4k.exr",
+        "icons/mockup_base.png"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*.golfballs.com/*"],
+      "js": [
+        "react-dist/content/image-preview.js",
+        "react-dist/content/submit-proof.js",
+        "open-listener.js"
+      ],
+      "all_frames": false
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "Open image viewer"
+  }
+}
