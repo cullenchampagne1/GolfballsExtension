@@ -468,16 +468,16 @@ function CollapsedBadge({ mode, selectedTpl, hasPinnedVariation }) {
 function SwapChip({ open }) {
   return (
     <div style={{
-      display: 'inline-flex', alignItems: 'center', gap: 3,
-      padding: '3px 6px',
+      display: 'inline-flex', alignItems: 'center', gap: 2,
+      padding: '1px 5px',
       background: open ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)',
       color: open ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
-      borderRadius: 4,
-      fontSize: 9, fontWeight: 700, letterSpacing: 0.4,
+      borderRadius: 3,
+      fontSize: 8, fontWeight: 700, letterSpacing: 0.3,
       textTransform: 'uppercase', whiteSpace: 'nowrap',
       transition: 'background .18s, color .18s',
     }}>
-      <SwapIcon size={9} />
+      <SwapIcon size={7} />
       {open ? 'cancel' : 'swap'}
     </div>
   );

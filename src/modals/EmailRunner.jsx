@@ -39,7 +39,14 @@ import { renderTemplate } from '../lib/variableResolution.js';
    toolbar popup. Less squeezed-looking dropdown trigger + roomier
    menu. */
 const PANEL_W = 380;
-const PANEL_H = 480;
+/* Vertical budget: header + template field + (variation weights
+   when present) + delay range + footer all stack inside an
+   overflow:auto body. At 480 the form was clipping the delay
+   slider and the footer's Send button when the template
+   dropdown was open OR when variation weights expanded. 620
+   fits the full idle form comfortably and leaves the dropdown
+   room to expand under its 240-cap without spilling. */
+const PANEL_H = 620;
 
 /* Hide the inner body scrollbar in WebKit too — scrollbar-width:none
    handles Firefox. Injected once at first EmailRunner mount. */
@@ -693,6 +700,13 @@ export function EmailRunner({
                    the body's overflow or floats past the panel edge
                    — push siblings down instead. */
                 floating={false}
+                /* Bound the open list to ~240 so the picker can
+                   stretch with the template count but the inline
+                   expansion never pushes the form below the panel
+                   floor. The body's overflow:auto kicks in past
+                   240 list rows so users can still scroll the
+                   list with a wheel. */
+                listMaxHeight={240}
               />
             </Field>
 
