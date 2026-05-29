@@ -99,6 +99,72 @@ export function subscribeToTaskTemplates(handler) {
   return () => chrome.storage.onChanged.removeListener(onChanged);
 }
 
+/* ── Due-date helpers ─────────────────────────────────────────
+   The redesigned composer's inline Due control offers quick
+   relative chips (Today / +1d / … / +1w) AND a typed mm/dd/yy
+   specific date. Both collapse to the `daysOut` integer the
+   template shape + submitQuickTask already speak, so the submit
+   path is unchanged — qtResolveDue() turns a `due` object into
+   { daysOut, crmDate, human, … } and the modal hands daysOut to
+   buildCustomTaskTemplate. Shared here so the control and the
+   submit math can't drift. */
+const QT_DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const QT_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Quick relative-due chips for the inline Due control. */
+export const QT_QUICK = [
+  { key: 'today', days: 0, label: 'Today' },
+  { key: 'd1',    days: 1, label: '+1d' },
+  { key: 'd2',    days: 2, label: '+2d' },
+  { key: 'd3',    days: 3, label: '+3d' },
+  { key: 'w1',    days: 7, label: '+1w' },
+];
+
+/** Relative day count → Date at local midnight (0 = today). */
+export function qtDateFromDays(days) {
+  const d = new Date(); d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + (parseInt(days, 10) || 0));
+  return d;
+}
+/** CRM m/d/yyyy string. */
+export function qtCrmDate(d) { return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`; }
+/** Human "Fri, May 30". */
+export function qtHuman(d) { return `${QT_DOW[d.getDay()]}, ${QT_MON[d.getMonth()]} ${d.getDate()}`; }
+
+/** Auto-format raw digits into mm/dd/yy as the rep types. */
+export function qtFormatTyped(raw) {
+  const n = String(raw).replace(/[^0-9]/g, '').slice(0, 6);
+  return [n.slice(0, 2), n.slice(2, 4), n.slice(4, 6)].filter(Boolean).join('/');
+}
+/** Parse mm/dd/yy (or m/d/yy, 4-digit year ok) → Date | null. */
+export function qtParseTyped(str) {
+  const m = String(str).match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (!m) return null;
+  const mo = +m[1]; const day = +m[2]; let yr = +m[3];
+  if (yr < 100) yr += 2000;
+  if (mo < 1 || mo > 12 || day < 1 || day > 31) return null;
+  const d = new Date(yr, mo - 1, day); d.setHours(0, 0, 0, 0);
+  if (d.getMonth() !== mo - 1 || d.getDate() !== day) return null; // reject 02/31 etc
+  return d;
+}
+/** Days-from-today for an absolute date (can be negative). */
+export function qtDiffDays(d) {
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  return Math.round((d - t) / 86400000);
+}
+
+/** Canonical due-value → { daysOut, crmDate, human, isToday, isPast, kind }.
+ *  `due` is { kind:'relative', days } or { kind:'specific', date }. */
+export function qtResolveDue(due) {
+  if (due && due.kind === 'specific' && due.date) {
+    const diff = qtDiffDays(due.date);
+    return { daysOut: diff, crmDate: qtCrmDate(due.date), human: qtHuman(due.date), isToday: diff === 0, isPast: diff < 0, kind: 'specific' };
+  }
+  const days = due ? (due.days || 0) : 0;
+  const d = qtDateFromDays(days);
+  return { daysOut: days, crmDate: qtCrmDate(d), human: qtHuman(d), isToday: days === 0, isPast: false, kind: 'relative' };
+}
+
 /** Build a synthetic task template from the custom-form fields.
  *  Same shape stored templates have so the submit pipe doesn't
  *  branch on preset vs custom. */
