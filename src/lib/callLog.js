@@ -65,6 +65,25 @@ export const CALL_CATEGORY_OPTIONS = [
   { id: '55', label: 'Website Concerns' },
 ];
 
+/* Status-tint hint per call category, so the redesigned composer's
+   rows + chips are colour-coded and scannable instead of a wall of
+   identical green. Errors/fraud go red, issues/returns amber, sales
+   moments green, the rest informational/neutral. Cosmetic only — the
+   id→label list above is the load-bearing data. Unmapped ids fall
+   back to neutral. */
+export const CALL_CATEGORY_TONES = {
+  '1': 'info', '2': 'info', '3': 'success', '5': 'neutral', '16': 'success',
+  '17': 'info', '18': 'brand', '21': 'brand', '27': 'warning', '29': 'success',
+  '30': 'brand', '35': 'neutral', '36': 'warning', '37': 'neutral', '39': 'brand',
+  '40': 'success', '41': 'warning', '49': 'error', '50': 'error', '51': 'info',
+  '52': 'error', '53': 'warning', '54': 'error', '55': 'info',
+};
+
+/** Tone token for a call-category id — defaults to neutral. */
+export function getCallCategoryTone(id) {
+  return CALL_CATEGORY_TONES[String(id ?? '')] || 'neutral';
+}
+
 /* Direction options for the Segmented switcher. 0 = Outbound is
    the default because that's what a rep is doing when they click
    "Call {contact}" from the shelf — they're placing the call. */
