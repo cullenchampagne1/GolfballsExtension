@@ -46,10 +46,12 @@ import { useFeatureFlag } from '../lib/useFeatureFlag.js';
 // One row per planned modal. `id` doubles as the React-key + the
 // `mounted` state value when wired. `wired: true` means the onClick
 // actually mounts the modal; `false` means a "coming soon" toast.
+// Migrated (wired) modals first — they all share the tinted/brand
+// "Watch List" button style. Unmigrated (coming-soon) ones are grouped
+// at the bottom and keep their plain secondary style, so the filled
+// buttons read as one consistent set instead of being interspersed.
 const MODAL_REGISTRY = [
   { id: 'margin',       label: 'Margin',          icon: 'calc',    wired: true  },
-  { id: 'charge',       label: 'Charge',          icon: 'card',    wired: false },
-  { id: 'orderEdit',    label: 'Order Edit',      icon: 'edit',    wired: false },
   { id: 'watchList',    label: 'Watch List',      icon: 'eye',     wired: true  },
   { id: 'emailPreview', label: 'Email Preview',   icon: 'mail',    wired: true  },
   { id: 'textPreview',  label: 'Text Preview',    icon: 'mail',    wired: true  },
@@ -62,6 +64,9 @@ const MODAL_REGISTRY = [
   { id: 'callLog',      label: 'Call Log',        icon: 'phone',   wired: true  },
   { id: 'quickTask',    label: 'Quick Task',      icon: 'check',   wired: true  },
   { id: 'calendar',     label: 'Order Dates',     icon: 'cog',     wired: true  },
+  // ── Not yet migrated — kept as-is (plain secondary buttons) ──
+  { id: 'charge',       label: 'Charge',          icon: 'card',    wired: false },
+  { id: 'orderEdit',    label: 'Order Edit',      icon: 'edit',    wired: false },
 ];
 
 /* ── Email Preview fixtures ───────────────────────────────────
