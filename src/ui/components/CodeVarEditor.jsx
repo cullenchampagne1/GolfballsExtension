@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { EditorView, keymap, lineNumbers, highlightActiveLine, placeholder as cmPlaceholder } from '@codemirror/view';
+import { EditorView, keymap, lineNumbers, highlightActiveLine, placeholder as cmPlaceholder, tooltips } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { javascript } from '@codemirror/lang-javascript';
@@ -95,7 +95,7 @@ const GB_THEME = EditorView.theme({
     overflow: 'hidden',
   },
   '&.cm-focused': { outline: 'none', borderColor: 'var(--gb-brand-tint-border)' },
-  '.cm-content': { fontFamily: 'var(--gb-font-mono)', padding: '8px 0', caretColor: 'var(--gb-brand-label)' },
+  '.cm-content': { fontFamily: 'var(--gb-font-mono)', padding: '8px 0', caretColor: 'var(--gb-brand-label)', minHeight: '128px' },
   '.cm-line': { padding: '0 8px' },
   '.cm-gutters': { backgroundColor: 'transparent', border: 'none', color: 'var(--gb-text-ghost)' },
   '.cm-lineNumbers .cm-gutterElement': { padding: '0 4px 0 8px', minWidth: '18px' },
@@ -175,6 +175,12 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
           highlightActiveLine(),
           javascript(),
           syntaxHighlighting(GB_HIGHLIGHT, { fallback: true }),
+          /* Render autocomplete + lint tooltips into document.body as
+             position:fixed so they escape the editor's AND the form's
+             overflow:hidden + motion transform (a transformed ancestor
+             would otherwise contain a fixed tooltip and re-clip it).
+             Without this the dropdown is cut off at the editor's edge. */
+          tooltips({ position: 'fixed', parent: typeof document !== 'undefined' ? document.body : undefined }),
           autocompletion({ override: [completionSource], icons: true, activateOnTyping: true }),
           linter(cmLinter, { delay: 300 }),
           lintGutter(),
@@ -238,7 +244,7 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div ref={hostRef} style={{ minHeight: 92 }} />
+      <div ref={hostRef} />
 
       {/* Namespace legend + test action */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
