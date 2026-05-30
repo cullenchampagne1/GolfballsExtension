@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { motion } from 'motion/react';
 import { FloatingPanel, IconBtn, Btn, Tag, I, Spinner, RichTextEditor, Dropdown } from '../ui/index.js';
 import { EmailHtmlView } from '../ui/components/EmailHtmlView.jsx';
 import { CategorizeRail } from '../ui/components/CategorizeRail.jsx';
@@ -96,9 +96,7 @@ function MessageCard({ msg, expanded, onToggle }) {
      so every card shows "Name <email>" like the main message. */
   const sender = { name: msg.fromName || splitAddress(msg.from).name, email: msg.fromEmail || splitAddress(msg.from).email };
   return (
-    <motion.div
-      layout
-      transition={{ layout: { duration: 0.3, ease: [0.4, 0, 0.2, 1] } }}
+    <div
       style={{
         background: 'var(--gb-surface-1)',
         border: '1px solid var(--gb-border-subtle)',
@@ -106,7 +104,7 @@ function MessageCard({ msg, expanded, onToggle }) {
         marginBottom: 10,
         overflow: 'hidden',
         boxShadow: expanded ? '0 4px 16px -8px rgba(0,0,0,.4)' : 'none',
-        transition: 'box-shadow .2s, border-color .2s',
+        transition: 'box-shadow .25s ease, border-color .25s ease',
       }}>
       <button
         type="button"
@@ -142,21 +140,16 @@ function MessageCard({ msg, expanded, onToggle }) {
           fontFamily: 'var(--gb-font-mono)', whiteSpace: 'nowrap', alignSelf: 'flex-start', paddingTop: 2,
         }}>{msg.date}</span>
       </button>
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            key="body"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
-            style={{ overflow: 'hidden', borderTop: '1px solid var(--gb-border-subtle)' }}
-          >
-            <EmailHtmlView html={msg.bodyHtml} style={{ border: 'none', borderRadius: 0, background: 'transparent' }} />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+      {/* CSS grid-rows collapse — smooth height transition without framer
+          measuring the async shadow-DOM body (the old layout + height:auto
+          combo was the jitter). Content stays mounted so collapse animates
+          too; the thread defaults to all-expanded anyway. */}
+      <div style={{ display: 'grid', gridTemplateRows: expanded ? '1fr' : '0fr', transition: 'grid-template-rows .3s cubic-bezier(.4, 0, .2, 1)' }}>
+        <div style={{ overflow: 'hidden', minHeight: 0, borderTop: expanded ? '1px solid var(--gb-border-subtle)' : '1px solid transparent' }}>
+          <EmailHtmlView html={msg.bodyHtml} style={{ border: 'none', borderRadius: 0, background: 'transparent' }} />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -340,7 +333,9 @@ function MetaRow({ k, children }) {
 function ReplyComposer({ replyTo, subject }) {
   const [expanded, setExpanded] = useState(false);
   const [body, setBody] = useState('');
+  const [nonce, setNonce] = useState(0); // bump to reset the editor on discard
   const hasText = body.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim().length > 0;
+  const discard = () => { setBody(''); setExpanded(false); setNonce((n) => n + 1); };
 
   return (
     <div style={{
@@ -359,7 +354,7 @@ function ReplyComposer({ replyTo, subject }) {
         overflow: 'hidden',
         transition: 'border-color .25s, box-shadow .25s',
       }}>
-        {!expanded ? (
+        {!expanded && (
           <button
             type="button"
             onClick={() => setExpanded(true)}
@@ -394,13 +389,13 @@ function ReplyComposer({ replyTo, subject }) {
               textTransform: 'uppercase', flexShrink: 0,
             }}>Draft</span>
           </button>
-        ) : (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            transition={{ duration: 0.3, ease: [0.32, 0.72, 0, 1] }}
-            style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
-          >
+        )}
+
+        {/* grid-rows collapse — smooth open/close via CSS, no framer
+            height measurement (was jittery). The editor stays mounted so
+            the close animates too; discard bumps `nonce` to clear it. */}
+        <div style={{ display: 'grid', gridTemplateRows: expanded ? '1fr' : '0fr', transition: 'grid-template-rows .28s cubic-bezier(.32, .72, 0, 1)' }}>
+          <div style={{ overflow: 'hidden', minHeight: 0 }}>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 10,
               padding: '10px 14px', borderBottom: '1px solid var(--gb-border-subtle)',
@@ -414,7 +409,8 @@ function ReplyComposer({ replyTo, subject }) {
             </div>
             <div style={{ padding: '4px 6px' }}>
               <RichTextEditor
-                initialHtml={body}
+                key={nonce}
+                initialHtml=""
                 onChange={setBody}
                 placeholder="Write your reply…"
                 minHeight={120}
@@ -428,13 +424,13 @@ function ReplyComposer({ replyTo, subject }) {
               <IconBtn size="sm" variant="ghost" icon={<I.bolt />} tooltip="Pick template" />
               <IconBtn size="sm" variant="ghost" icon={<I.copy />} tooltip="Attach" />
               <span style={{ flex: 1 }} />
-              <Btn size="sm" variant="ghost" onClick={() => { setBody(''); setExpanded(false); }}>Discard</Btn>
+              <Btn size="sm" variant="ghost" onClick={discard}>Discard</Btn>
               <Btn size="sm" variant="primary" status="brand" icon={<I.send size={11} />} disabled={!hasText}>
                 Send
               </Btn>
             </div>
-          </motion.div>
-        )}
+          </div>
+        </div>
       </div>
     </div>
   );
