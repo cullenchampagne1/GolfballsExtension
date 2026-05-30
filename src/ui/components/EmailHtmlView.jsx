@@ -138,13 +138,22 @@ function emailProvidesSidePadding(content) {
   return false;
 }
 
-/* Is the extension theme dark? Decide from the resolved
-   --gb-text-primary: a light primary text means a dark surface. */
-function themeIsDark() {
+/* Is the surface the email sits ON dark? Read the tokens from the
+   email host's OWN computed style — not document.documentElement —
+   because the modal can be dark while the underlying CRM page (the
+   <html> root) is light/un-themed, which made the old root-based check
+   misread the theme and leave dark email text unlightened on a dark
+   pane. Prefer the actual surface (--gb-surface-1); fall back to the
+   text token, then default dark. */
+function surfaceIsDark(el) {
+  const root = el || (typeof document !== 'undefined' ? document.documentElement : null);
+  if (!root || typeof getComputedStyle === 'undefined') return true;
   try {
-    const v = getComputedStyle(document.documentElement).getPropertyValue('--gb-text-primary').trim();
-    const c = parseColor(v);
-    if (c) return (0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b) / 255 > 0.5;
+    const cs = getComputedStyle(root);
+    const bg = parseColor(cs.getPropertyValue('--gb-surface-1').trim());
+    if (bg) return (0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b) / 255 < 0.5;
+    const tx = parseColor(cs.getPropertyValue('--gb-text-primary').trim());
+    if (tx) return (0.2126 * tx.r + 0.7152 * tx.g + 0.0722 * tx.b) / 255 > 0.5;
   } catch { /* ignore */ }
   return true; // default dark
 }
@@ -156,7 +165,7 @@ export function EmailHtmlView({ html, style }) {
     const host = hostRef.current;
     if (!host) return;
     const shadow = host.shadowRoot || host.attachShadow({ mode: 'open' });
-    const isDark = themeIsDark();
+    const isDark = surfaceIsDark(host);
     /* base href keeps relative links/images resolving against the
        mail host; color-scheme + surface/text follow the active theme
        (the --gb tokens already re-theme) so the email reads correctly
