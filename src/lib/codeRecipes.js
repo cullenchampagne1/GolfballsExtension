@@ -4,8 +4,9 @@
    These are the ports of the legacy smart-detection builtins
    (oos_item / recommended_replacement) into code-variable form. They
    read the page through the DOM helpers (h.dom / h.domAll) and, for
-   the replacement, call the catalog through h.send — the same path
-   the old builtins used, just expressed as user-editable code.
+   the replacement, fetch the brand catalog with h.fetchText and parse
+   it out of __NEXT_DATA__ inline — fully self-contained, with only the
+   generic (CORS-safe) transport as a helper.
 
    Shared by the editor's "Recipes" inserter (author one now) and the
    migration sweep (convert existing builtin vars to these bodies).
@@ -37,10 +38,10 @@ for (const el of h.domAll('span, td, div, p')) {
 }
 return [...names].join('\n');`;
 
-/* Best in-stock replacement for each OOS item. Async — pulls the
-   brand catalog through the background worker (h.send →
-   fetchBrandProducts) and scores candidates by name / price /
-   decoration similarity. */
+/* Best in-stock replacement for each OOS item. Async — fetches each
+   brand page with h.fetchText, parses the catalog out of __NEXT_DATA__
+   inline, and scores candidates by name / price / decoration
+   similarity. */
 const RECOMMENDED_REPLACEMENT_BODY = String.raw`// Recommended in-stock replacement for each OOS item.
 const BRANDS = [
   { kw: ['titleist'], slug: 'Titleist' },
@@ -72,6 +73,24 @@ const sim = (a, b) => {
   for (const g of g1) if (g2.has(g)) x++;
   return (2 * x) / (g1.size + g2.size);
 };
+// Brand catalog: load the brand page and pull the Solr docs out of
+// __NEXT_DATA__. Plain GET via h.fetchText (no special background
+// action) so the entire flow lives in this block.
+const fetchProducts = async (slug) => {
+  try {
+    const html = await h.fetchText('https://www.golfballs.com/Golf-Balls/' + encodeURIComponent(slug) + '.html');
+    const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+    if (!m) return [];
+    const nd = JSON.parse(m[1]);
+    const deps = nd?.props?.pageProps?.contentManagerPage?.page?.dependencies;
+    if (!Array.isArray(deps)) return [];
+    for (const dep of deps) {
+      const docs = dep?.value?.response?.docs;
+      if (Array.isArray(docs) && docs.length > 0) return docs;
+    }
+    return [];
+  } catch { return []; }
+};
 // OOS item names (same scan as the Out-of-stock items recipe).
 const oos = new Set();
 for (const el of h.domAll('span, td, div, p')) {
@@ -90,10 +109,7 @@ const cache = {};
 for (const name of oos) {
   const slug = slugFor(name);
   if (!slug) continue;
-  if (!cache[slug]) {
-    const r = await h.send('fetchBrandProducts', { slug });
-    cache[slug] = (r && r.ok && r.products) || [];
-  }
+  if (!cache[slug]) cache[slug] = await fetchProducts(slug);
   const products = cache[slug];
   if (!products.length) continue;
   const exact = products.find((p) => p.title_s && p.title_s.toLowerCase() === name.toLowerCase());
