@@ -3,6 +3,7 @@ import { mountFloating } from '../lib/mountFloating.js';
 import { ensureTheme } from '../lib/theme.js';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 import { ImagePreview } from '../modals/ImagePreview.jsx';
+import { installLogoArming } from '../lib/logoArming.js';
 
 /* ───────────────────────────────────────────────────────────────
    image-preview.jsx — content-script entry for the Image Preview
@@ -12,21 +13,23 @@ import { ImagePreview } from '../modals/ImagePreview.jsx';
 
      window.__gbOpenImagePreview(opts)
        Production entry. Called when an image is identified on the
-       host page (CRM page button, paste, drop, etc.). `opts` may
-       include `{ url, itemLink }` to seed the modal with a known
-       image; if omitted, the modal opens in drop-zone state so the
-       user can paste / drop a URL or file.
+       host page (the hover affordance below, paste, drop, etc.).
+       `opts` may include `{ url, dataUrl, itemLink }` to seed the
+       modal with a known image; if omitted, the modal opens in
+       drop-zone state so the user can paste / drop a URL or file.
 
      window.__gbDevOpenImageModal()
        Dev entry — fires from content/main.js's dev panel
        (devFireModal → image-viewer). Opens with a placeholder SVG
        so the modal can be inspected without a real page context.
 
-   This script LOADS AFTER content/logo-extractor.js in the manifest,
-   so our window.__gbDevOpenImageModal definition wins (overwrites
-   the legacy one). The production logo-extraction code in
-   logo-extractor.js stays intact until that path is migrated too —
-   for now, both files coexist and the React modal is what dev opens.
+   This entry also installs the page image-arming (installLogoArming):
+   it scans the CRM order pages for logo/render images and attaches the
+   floating hover button that resolves the underlying logo and opens
+   this modal. That arming used to live in the vanilla
+   logo-extractor.js (now deleted); main.js drives it via the
+   window.__gbScanForRenderImages / __gbHideHoverBtn globals, exactly
+   like the email/text-preview scanners.
 
    The "Submit Proof" hand-off goes through window.__gbOpenSubmitProof
    (defined by submit-proof.jsx) so the two modals stay decoupled.
@@ -109,4 +112,9 @@ if (!window.__gbImagePreviewLoaded) {
     const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
     window.__gbOpenImagePreview({ url, orderId: 'TEST-1234', customerId: 'DEV-CUST-99' });
   };
+
+  // Production page-image arming. Defined after __gbOpenImagePreview so
+  // the hover button's click handler can reach it. Exposes
+  // window.__gbScanForRenderImages / __gbHideHoverBtn for main.js.
+  installLogoArming();
 }

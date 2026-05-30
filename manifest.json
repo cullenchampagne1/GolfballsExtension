@@ -34,7 +34,6 @@
         "src/vanilla/smart-detection.js",
         "react-dist/vanilla/page-engine.js",
         "src/vanilla/variable-resolution.js",
-        "src/vanilla/modals/logo-extractor.js",
         "react-dist/content/image-preview.js",
         "react-dist/content/submit-proof.js",
         "src/vanilla/modals/charge-modal.js",

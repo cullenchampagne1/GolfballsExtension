@@ -196,10 +196,10 @@ window.__gbContentReady = true;
       }
       if ('imagePreviewEnabled' in msg.flags) {
         if (msg.flags.imagePreviewEnabled) {
-          __gbScanForRenderImages();
+          if (window.__gbScanForRenderImages) window.__gbScanForRenderImages();
         } else {
-          if (typeof __gbHideHoverBtn === 'function') __gbHideHoverBtn();
-          document.getElementById('__gb-logo-hover-btn')?.remove();
+          window.__gbHideHoverBtn?.();
+          document.getElementById('__gb-img-hover-btn')?.remove();
         }
       }
       if ('signifydGlowEnabled' in msg.flags) {
@@ -391,7 +391,7 @@ window.__gbContentReady = true;
         if (window.__gbEmailPreviewScan) __gbEmailPreviewScan();
         if (window.__gbTextPreviewScan) __gbTextPreviewScan(); // <-- ADDED THIS
     }
-    if (window.__gbFeatureFlags.imagePreviewEnabled !== false) __gbScanForRenderImages();
+    if (window.__gbFeatureFlags.imagePreviewEnabled !== false && window.__gbScanForRenderImages) window.__gbScanForRenderImages();
     if (window.__gbFeatureFlags.signifydGlowEnabled !== false) __gbApplySignifydGlow();
   });
 
@@ -419,7 +419,7 @@ window.__gbContentReady = true;
         if (window.__gbEmailPreviewScan) __gbEmailPreviewScan();
         if (window.__gbTextPreviewScan) __gbTextPreviewScan(); // <-- ADDED THIS
     }
-    if (window.__gbFeatureFlags?.imagePreviewEnabled  !== false) __gbScanForRenderImages();
+    if (window.__gbFeatureFlags?.imagePreviewEnabled  !== false && window.__gbScanForRenderImages) window.__gbScanForRenderImages();
     if (window.__gbFeatureFlags?.signifydGlowEnabled  !== false) __gbApplySignifydGlow();
   });
   __gbObserver.observe(document.body, { childList: true, subtree: true });
