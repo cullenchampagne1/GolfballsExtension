@@ -435,7 +435,7 @@ export function TemplateEditor({ tpl, onDelete }) {
     if (ruleData != null) {
       if (typeId === 'account')   next.accountConditions = ruleData;
       else if (typeId === 'case') next.caseRules = ruleData.map((r) => ({ field: r.left, op: r.op, value: r.right }));
-      else                        next.rules = ruleData.map((r) => ({ selector: r.left, operator: r.op, value: r.right }));
+      else                        next.rules = ruleData; // order: grouped tree from RuleGroups
     }
     return next;
   }
@@ -654,6 +654,7 @@ export function TemplateEditor({ tpl, onDelete }) {
               : typeId === 'case' ? tpl.caseRules
                 : tpl.rules
           }
+          varNames={vars.map((v) => v.name)}
           onChange={setRuleData}
         />
       </div>

@@ -190,6 +190,14 @@ export function treeUsesVars(tree) {
     && g.conditions.some((c) => c && c.source === 'var'));
 }
 
+/** True when `x` is a grouped tree (vs a legacy flat rule array).
+ *  Matching routes grouped trees through this engine and leaves flat
+ *  arrays on the legacy checkRules / checkAccountConditions path, so
+ *  existing templates keep their exact behavior. */
+export function isGroupedTree(x) {
+  return !!x && !Array.isArray(x) && Array.isArray(x.groups);
+}
+
 /** The set of variable names referenced anywhere in the tree. */
 export function varsReferenced(tree) {
   const out = new Set();

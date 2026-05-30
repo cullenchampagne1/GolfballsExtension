@@ -33,6 +33,7 @@ import {
 
 import { contactSchema, accountSchema } from '../lib/page-schemas/contact.js';
 import { listSchemas, getSchemaById } from '../lib/page-schemas/registry.js';
+import { evalTree, treeUsesVars, varsReferenced, isGroupedTree, applyOp } from '../lib/matchEngine.js';
 
 /* Single namespace so we can grow the API without sprawling
    globals. Frozen so accidental writes from other content scripts
@@ -62,6 +63,16 @@ const api = Object.freeze({
   detectSchema,
   listSchemas,
   getSchemaById,
+
+  /* Grouped AND/OR rule matching (matchEngine). evalTree(tree,
+     getValue) evaluates a rule tree against a caller-supplied value
+     resolver; the rest let the matcher split var-free vs var-driven
+     conditions and detect grouped (vs legacy flat) rules. */
+  evalTree,
+  treeUsesVars,
+  varsReferenced,
+  isGroupedTree,
+  applyOp,
 
   /* Direct schema access for the picker UI (so it can show the
      full field tree even before a real page is loaded). */

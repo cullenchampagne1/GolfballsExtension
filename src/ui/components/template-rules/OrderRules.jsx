@@ -1,234 +1,77 @@
-import React, { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
-import { Btn } from '../Btn.jsx';
-import { IconBtn } from '../IconBtn.jsx';
-import { Input } from '../Input.jsx';
+import React from 'react';
 import { Dropdown } from '../Dropdown.jsx';
-import { Card } from '../Card.jsx';
-import { ResolveHint } from '../ResolveHint.jsx';
-import { SectionLabel } from '../SectionLabel.jsx';
-import { I, Icon } from '../../icons.jsx';
+import { Btn } from '../Btn.jsx';
+import { RuleGroups } from './RuleGroups.jsx';
+import { OPS_BY_TYPE } from '../../../lib/matchEngine.js';
 
-/* Same target icon AddVariableModal/InlineVariableForm use for "Pick" so
-   the picker affordance reads the same in rules and variables. */
-const PickerIcon = (p) => (
-  <Icon {...p}><path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/></Icon>
-);
+/* ───────────────────────────────────────────────────────────────
+   OrderRules — auto-match rules for order templates, now a thin
+   wrapper over the shared grouped RuleGroups.
 
-/* Shared list-row animation — `popLayout` pops the exiting element out
-   of the flex flow so the remaining rows shift up smoothly via `layout`
-   instead of the parent's gap collapsing in one frame. */
-const ROW_TRANSITION = { duration: 0.22, ease: [0.32, 0.72, 0, 1] };
-const ROW_INITIAL    = { opacity: 0, y: -6, scale: 0.97 };
-const ROW_ANIMATE    = { opacity: 1, y: 0,  scale: 1 };
-const ROW_EXIT       = { opacity: 0, scale: 0.94, transition: { duration: 0.14 } };
+   Order pages have no page-engine schema yet, so the only subject a
+   condition can test is one of the template's own VARIABLES (which
+   can run DOM/code to read anything on the page). Existing
+   selector-based rules (source:'dom') still resolve and render as a
+   read-only chip with a "Use variable" swap until they're re-authored.
 
-/* Operator ids match backup/editor.js so saved `rules` import 1:1. */
-const OP_OPTIONS = [
-  { id: 'contains',   label: 'contains' },
-  { id: 'equals',     label: 'equals' },
-  { id: 'startsWith', label: 'starts with' },
-  { id: 'endsWith',   label: 'ends with' },
-  { id: 'exists',     label: 'is set' },
-  { id: 'notExists',  label: 'is not set' },
-];
-const NO_VAL = ['exists', 'notExists'];
+   Props: initial (saved rules — legacy flat array or grouped tree),
+   onChange (emits the grouped tree), varNames (this template's vars).
+─────────────────────────────────────────────────────────────── */
 
-const emptyStyle = {
-  padding: '13px 12px', textAlign: 'center', fontSize: 11,
-  color: 'var(--gb-text-muted)', background: 'var(--gb-fill-subtle)',
-  border: '1px dashed var(--gb-border-default)', borderRadius: 'var(--gb-r-md)',
-};
-
-let _uid = 0;
-
-/**
- * OrderRules — auto-match DOM rule rows for order templates.
- * Props: `initial` (saved `rules` to import — old {selector,operator,value}
- * or new shape), `onChange` (emits rule array on edit).
- */
-export function OrderRules({ initial, onChange }) {
-  const [rules, setRules] = useState(() =>
-    (Array.isArray(initial) ? initial : []).map((r) => ({
-      _id: ++_uid,
-      left: r.left ?? r.selector ?? '',
-      op: r.op ?? r.operator ?? 'contains',
-      right: r.right ?? r.value ?? '',
-    })),
-  );
-
-  // Live resolved hints — map of _id → resolved text (what the selector
-  // currently matches on the order tab). Updated via __gbResolveVars
-  // whenever rules change.
-  const [hints, setHints] = useState({});
-
-  // Live resolution of rule selectors on the order tab. For each rule
-  // with a selector (left), call __gbResolveVars to see what it matches.
-  useEffect(() => {
-    if (typeof window.__gbResolveVars !== 'function' || rules.length === 0) {
-      setHints({});
-      return undefined;
-    }
-    let cancelled = false;
-    const obj = {};
-    rules.forEach((r) => {
-      if (r.left) obj[`__rule_${r._id}`] = { type: 'selector', selector: r.left };
-    });
-    if (Object.keys(obj).length === 0) {
-      setHints({});
-      return undefined;
-    }
-    const timer = setTimeout(() => {
-      Promise.resolve(window.__gbResolveVars(obj)).then((res) => {
-        if (cancelled) return;
-        const resolved = (res && res.resolved) || {};
-        const nextHints = {};
-        rules.forEach((r) => {
-          const val = resolved[`__rule_${r._id}`];
-          nextHints[r._id] = val ? String(val) : null;
-        });
-        setHints(nextHints);
-      });
-    }, 300);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [rules]);
-
-  // Cross-tab element picker. Backup's `startPick('rule:N')` flow used a
-  // fixed `i` index; React rows can be reordered/deleted so we key the
-  // pickMode by the row's stable `_id`. fieldId on the wire encodes both
-  // a namespace (so other pickers ignore it) and the id.
-  const [pickingId, setPickingId] = useState(null);
-  useEffect(() => {
-    if (!pickingId) return undefined;
-    let mounted = true;
-    const apply = (result) => {
-      if (!result || !result.fieldId) return false;
-      const m = result.fieldId.match(/^pick_orderrule:(\d+)$/);
-      if (!m) return false;
-      edit(Number(m[1]), { left: result.selector || '' });
-      setPickingId(null);
-      return true;
-    };
-    // Seed from any pickResult that landed before subscription —
-    // onChanged only fires on subsequent writes.
-    chrome.storage.local.get(['pickResult'], (data) => {
-      if (!mounted) return;
-      apply(data?.pickResult);
-    });
-    function onChanged(changes) {
-      if (!changes.pickResult) return;
-      apply(changes.pickResult.newValue);
-    }
-    chrome.storage.onChanged.addListener(onChanged);
-    return () => { mounted = false; chrome.storage.onChanged.removeListener(onChanged); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickingId, rules]);
-
-  const startPick = (id) => {
-    setPickingId(id);
-    chrome.runtime.sendMessage({ action: 'startPick', fieldId: `pick_orderrule:${id}` });
+/* Legacy flat order rule { left/selector, op/operator, right/value }
+   → a grouped condition. Selectors carry over as source:'dom' so they
+   keep matching through the engine's DOM resolver. */
+function fromLegacy(r) {
+  return {
+    source: 'dom',
+    ref:   r.left ?? r.selector ?? '',
+    type:  'string',
+    op:    r.op ?? r.operator ?? 'contains',
+    value: r.right ?? r.value ?? '',
+    not:   false,
   };
-  const cancelPick = () => {
-    setPickingId(null);
-    chrome.runtime.sendMessage({ action: 'cancelPick' });
-  };
+}
 
-  const commit = (next) => {
-    setRules(next);
-    onChange?.(next.map(({ _id, ...r }) => r));
-  };
-  const add = () => commit([...rules, { _id: ++_uid, left: '', op: 'contains', right: '' }]);
-  const edit = (id, patch) => commit(rules.map((r) => (r._id === id ? { ...r, ...patch } : r)));
-  const del = (id) => {
-    if (pickingId === id) cancelPick();
-    commit(rules.filter((r) => r._id !== id));
+export function OrderRules({ initial, onChange, varNames = [] }) {
+  const options = varNames.map((n) => ({ id: n, label: n }));
+
+  const renderSubject = (condition, patch) => {
+    // Legacy selector condition — show it, offer to swap to a variable.
+    if (condition.source === 'dom') {
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
+          <span style={{
+            flex: 1, minWidth: 0, padding: '0 8px', height: 26, display: 'flex', alignItems: 'center',
+            background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', borderRadius: 4,
+            fontFamily: 'var(--gb-font-mono)', fontSize: 10.5, color: 'var(--gb-text-tertiary)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>{condition.ref || '(selector)'}</span>
+          <Btn size="xs" variant="ghost" onClick={() => patch({ source: 'var', ref: '' })}>Use variable</Btn>
+        </div>
+      );
+    }
+    return (
+      <Dropdown
+        size="sm"
+        searchable
+        value={condition.ref}
+        placeholder={options.length ? 'Pick a variable…' : 'No variables yet'}
+        options={options}
+        onChange={(v) => patch({ source: 'var', ref: v, type: 'string' })}
+      />
+    );
   };
 
   return (
-    <div>
-      <SectionLabel action={<Btn variant="ghost" size="xs" icon={<I.plus />} onClick={add}>Add rule</Btn>}>
-        Auto-match rules
-      </SectionLabel>
-
-      {rules.length === 0 ? (
-        <div style={emptyStyle}>No match rules — add one to auto-trigger this template.</div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <AnimatePresence mode="popLayout" initial={false}>
-            {rules.map((r) => {
-              const noVal = NO_VAL.includes(r.op);
-              const picking = pickingId === r._id;
-              return (
-                <motion.div
-                  key={r._id}
-                  layout
-                  initial={ROW_INITIAL}
-                  animate={ROW_ANIMATE}
-                  exit={ROW_EXIT}
-                  transition={ROW_TRANSITION}
-                >
-                  <Card padding={8}>
-                    {/* Flex layout (not grid) so when the value Input
-                        unmounts on an `exists`/`notExists` op switch,
-                        the remaining selector input can naturally grow
-                        and motion's layout animation tweens the reflow
-                        instead of snapping. */}
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                      <motion.div layout style={{ flex: 1, minWidth: 0 }}>
-                        <Input
-                          size="sm" mono value={r.left} leading={<I.search />}
-                          placeholder={picking ? 'Pick an element on the order tab…' : 'page.url or .selector'}
-                          onChange={(v) => edit(r._id, { left: v })}
-                          trailing={
-                            <IconBtn
-                              size="xs"
-                              variant="ghost"
-                              active={picking}
-                              icon={<PickerIcon />}
-                              tooltip={picking ? 'Cancel pick' : 'Pick element from page'}
-                              onClick={() => (picking ? cancelPick() : startPick(r._id))}
-                            />
-                          }
-                        />
-                      </motion.div>
-                      <motion.div layout style={{ width: 132, flexShrink: 0 }}>
-                        <Dropdown size="sm" value={r.op} options={OP_OPTIONS} onChange={(v) => edit(r._id, { op: v })} />
-                      </motion.div>
-                      <AnimatePresence initial={false}>
-                        {!noVal && (
-                          <motion.div
-                            key="val"
-                            layout
-                            initial={{ opacity: 0, width: 0 }}
-                            animate={{ opacity: 1, width: 'auto' }}
-                            exit={{ opacity: 0, width: 0 }}
-                            transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-                            style={{ flex: 1, minWidth: 0, overflow: 'hidden' }}
-                          >
-                            <Input size="sm" mono value={r.right} placeholder="value" onChange={(v) => edit(r._id, { right: v })} />
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                      <motion.div layout style={{ flexShrink: 0 }}>
-                        <IconBtn size="sm" icon={<I.trash />} danger onClick={() => del(r._id)} />
-                      </motion.div>
-                    </div>
-                  </Card>
-                  {/* Live resolved hint — shared ResolveHint component. */}
-                  {r.left && (
-                    <ResolveHint
-                      picking={picking}
-                      resolved={hints[r._id]}
-                      size="xs"
-                      style={{ marginTop: 4 }}
-                    />
-                  )}
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        </div>
-      )}
-    </div>
+    <RuleGroups
+      initial={initial}
+      fromLegacy={fromLegacy}
+      defaultSource="var"
+      renderSubject={renderSubject}
+      opsFor={() => OPS_BY_TYPE.string}
+      onChange={onChange}
+      label="Auto-match rules"
+      emptyHint="No match rules yet. Add a group of conditions that test this template's variables — combine them with AND/OR — to auto-trigger this template on a page."
+    />
   );
 }

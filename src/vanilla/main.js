@@ -158,30 +158,62 @@ window.__gbContentReady = true;
 
 
     if (msg.action === 'getPageInfo') {
-      const pageType  = smartPageType();
-      const contactId = smartContactId();
-      const accountId = smartAccountId();
+      // Async: grouped rule trees evaluate through the page engine
+      // (matchEngine), which may await. Legacy flat rules stay on the
+      // synchronous checkRules / checkAccountConditions path, unchanged.
+      (async () => {
+        const pageType  = smartPageType();
+        const contactId = smartContactId();
+        const accountId = smartAccountId();
+        const engine    = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
 
-      const matched = (msg.templates || [])
-        .filter(t => {
-          // Account templates: evaluate both DOM rules AND account conditions
-          if (t.type === 'account') {
-            return checkRules(t.rules) && checkAccountConditions(t.accountConditions);
+        // Sync value resolver for var-free grouped conditions (schema
+        // path / legacy DOM selector). Variable conditions defer to the
+        // popup's per-template resolveMatch pass — they may run code.
+        const getMatchValue = (cond) => {
+          if (!cond) return '';
+          if (cond.source === 'schema') return engine ? engine.resolvePath(document, cond.ref, '') : '';
+          if (cond.source === 'dom') {
+            try {
+              const el = document.querySelector(cond.ref);
+              return el ? ((typeof getTextOf === 'function') ? getTextOf(el) : (el.innerText || el.textContent || '').trim()) : '';
+            } catch { return ''; }
           }
-          return checkRules(t.rules);
-        })
-        .map(t => t.id);
-      // Only resolve order number on actual order pages to avoid false positives
-      // on contact/account pages whose body text contains order history table rows.
-      const email           = smartEmail();
-      const orderNo         = pageType === 'order' ? smartOrderNumber() : '';
-      const userId        = smartUserId();
-      const pageOrderTotal  = smartPageOrderTotal();
-      const pageChargeTotal = smartPageChargeTotal();
-      const pageChargeRows  = smartPageChargeRows();
-      const messageId       = smartMessageId();
-      const pageVars        = (pageType === 'contact' || pageType === 'account') ? smartPageVariables() : {};
-      sendResponse({ email, orderNo, matchedTemplateIds: matched, userId, pageOrderTotal, pageChargeTotal, pageChargeRows, messageId, pageType, contactId, accountId, pageVars });
+          return '';
+        };
+
+        const matched = [];
+        const pending = [];
+        for (const t of (msg.templates || [])) {
+          const tree = t.type === 'account' ? t.accountConditions : t.rules;
+          if (engine && engine.isGroupedTree(tree)) {
+            if (engine.treeUsesVars(tree)) {
+              pending.push(t.id);   // resolved progressively via resolveMatch
+            } else {
+              let ok = false;
+              try { ok = await engine.evalTree(tree, getMatchValue); } catch { ok = false; }
+              if (ok) matched.push(t.id);
+            }
+          } else if (t.type === 'account') {
+            if (checkRules(t.rules) && checkAccountConditions(t.accountConditions)) matched.push(t.id);
+          } else if (checkRules(t.rules)) {
+            matched.push(t.id);
+          }
+        }
+
+        // Only resolve order number on actual order pages to avoid false
+        // positives on contact/account pages whose body text contains
+        // order history table rows.
+        const email           = smartEmail();
+        const orderNo         = pageType === 'order' ? smartOrderNumber() : '';
+        const userId          = smartUserId();
+        const pageOrderTotal  = smartPageOrderTotal();
+        const pageChargeTotal = smartPageChargeTotal();
+        const pageChargeRows  = smartPageChargeRows();
+        const messageId       = smartMessageId();
+        const pageVars        = (pageType === 'contact' || pageType === 'account') ? smartPageVariables() : {};
+        sendResponse({ email, orderNo, matchedTemplateIds: matched, pendingTemplateIds: pending, userId, pageOrderTotal, pageChargeTotal, pageChargeRows, messageId, pageType, contactId, accountId, pageVars });
+      })();
       return true;
     }
 
