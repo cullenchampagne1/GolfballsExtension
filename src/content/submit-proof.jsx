@@ -20,10 +20,10 @@ import { SubmitProof } from '../modals/SubmitProof.jsx';
        dispatcher. Opens with placeholder data so the modal can be
        inspected without a real page context.
 
-   Loads AFTER content/logo-extractor.js in the manifest so our
-   __gbDevOpenProofModal definition wins. The legacy production path
-   (page-detected images) still uses logo-extractor.js until that's
-   migrated separately.
+   The page-detected-image path (the hover affordance installed by
+   image-preview.jsx) hands off here via window.__gbOpenSubmitProof
+   once the user finishes in the Image Preview modal. The legacy
+   vanilla logo-extractor.js that used to own both modals is deleted.
 ─────────────────────────────────────────────────────────────── */
 
 if (!window.__gbSubmitProofLoaded) {
