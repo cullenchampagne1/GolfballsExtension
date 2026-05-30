@@ -51,7 +51,7 @@ export const FEATURE_FLAGS = [
   {
     key: 'emailTemplatesEnabled',
     name: 'Email Templates',
-    desc: 'Shows the template dropdown, resolved-variables readout, and Send button in the popup. Turn off to use the popup as a pure action launcher (Charge, Watch List, Tasks, etc.) without any template UI.',
+    desc: 'Shows the template dropdown, resolved-variables readout, and Send button in the popup.',
     icon: 'mail',
   },
   {
