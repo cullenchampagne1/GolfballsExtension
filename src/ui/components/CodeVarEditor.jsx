@@ -112,12 +112,17 @@ const GB_THEME = EditorView.theme({
     color: 'var(--gb-text-secondary)',
     fontFamily: 'var(--gb-font-mono)',
   },
-  '.cm-tooltip.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--gb-font-mono)', fontSize: '11px', maxHeight: '180px' },
+  '.cm-tooltip.cm-tooltip-autocomplete': { maxWidth: '300px' },
+  '.cm-tooltip.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--gb-font-mono)', fontSize: '10.5px', maxHeight: '112px' },
+  '.cm-tooltip-autocomplete > ul > li': { padding: '1px 7px', lineHeight: '1.45' },
   '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
     backgroundColor: 'var(--gb-brand-tint-medium)',
     color: 'var(--gb-brand-label)',
   },
-  '.cm-completionDetail': { color: 'var(--gb-text-muted)', fontStyle: 'normal', marginLeft: '8px' },
+  '.cm-completionDetail': {
+    color: 'var(--gb-text-muted)', fontStyle: 'normal', marginLeft: '8px',
+    overflow: 'hidden', textOverflow: 'ellipsis',
+  },
   '.cm-lintRange-error': { textDecoration: 'underline wavy var(--gb-error-fg)' },
 }, { dark: true });
 
