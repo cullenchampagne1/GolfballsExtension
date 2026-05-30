@@ -209,7 +209,7 @@ export function AddVariableModal({ typeId, onClose, onAdd, varNames = [] }) {
     : kind === 'schema'  ? (config ? '(engine value)' : '— pick a field —')
     : kind === 'dom'     ? (liveResolved || (config ? '(querying…)' : '— enter a selector —'))
     : kind === 'regex'   ? (config ? '(first capture group)' : '— enter a regex —')
-    : kind === 'code'    ? (config ? '(runs on send)' : '— write code —')
+    : kind === 'code'    ? (config ? '(resolves on load)' : '— write code —')
     : '—'
   );
 
