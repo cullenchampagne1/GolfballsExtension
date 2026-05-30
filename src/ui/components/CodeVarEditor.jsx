@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { EditorView, keymap, lineNumbers, highlightActiveLine, placeholder as cmPlaceholder, tooltips } from '@codemirror/view';
+import { EditorView, keymap, lineNumbers, highlightActiveLine, placeholder as cmPlaceholder } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { javascript } from '@codemirror/lang-javascript';
@@ -92,7 +92,9 @@ const GB_THEME = EditorView.theme({
     color: 'var(--gb-text-primary)',
     border: '1px solid var(--gb-border-default)',
     borderRadius: 'var(--gb-r-sm)',
-    overflow: 'hidden',
+    /* No overflow:hidden — it clipped the autocomplete dropdown to a
+       sliver at the editor's bottom edge. The dropdown renders inside
+       the editor (in-flow, scaled space) and now extends past it. */
   },
   '&.cm-focused': { outline: 'none', borderColor: 'var(--gb-brand-tint-border)' },
   '.cm-content': { fontFamily: 'var(--gb-font-mono)', padding: '8px 0', caretColor: 'var(--gb-brand-label)', minHeight: '128px' },
@@ -175,12 +177,12 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
           highlightActiveLine(),
           javascript(),
           syntaxHighlighting(GB_HIGHLIGHT, { fallback: true }),
-          /* Render autocomplete + lint tooltips into document.body as
-             position:fixed so they escape the editor's AND the form's
-             overflow:hidden + motion transform (a transformed ancestor
-             would otherwise contain a fixed tooltip and re-clip it).
-             Without this the dropdown is cut off at the editor's edge. */
-          tooltips({ position: 'fixed', parent: typeof document !== 'undefined' ? document.body : undefined }),
+          /* Default (in-editor, absolute) tooltip positioning. The editor
+             lives under <body data-gb-scale="editor"> (a CSS zoom/scale),
+             so position:fixed or a document.body portal lands in the wrong
+             coordinate space and the dropdown disappears. Staying in-editor
+             keeps it in the same scaled space; we just make sure nothing
+             clips it (see GB_THEME — no overflow:hidden on the editor). */
           autocompletion({ override: [completionSource], icons: true, activateOnTyping: true }),
           linter(cmLinter, { delay: 300 }),
           lintGutter(),
