@@ -410,9 +410,9 @@ if (!window.__gbActionsShelfLoaded) {
         // via readTaskContext(); no override needed for the
         // common path.
         if (typeof window.__gbShowQuickTaskModal === 'function') {
-          // Open straight into the composer ( / menu) so "add a task"
-          // lands on the same keyboard builder everywhere.
-          await window.__gbShowQuickTaskModal({ autoCompose: true });
+          // Open in the default filter/list view (same as the playground);
+          // the composer is a / away. Don't force compose mode here.
+          await window.__gbShowQuickTaskModal();
         }
       },
     });
