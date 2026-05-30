@@ -43,7 +43,7 @@
         "src/vanilla/modals/order-edit-modal.js",
         "src/vanilla/page-utils.js",
         "react-dist/content/email-preview.js",
-        "src/vanilla/modals/text-preview.js",
+        "react-dist/content/text-preview.js",
         "react-dist/content/watch-list.js",
         "src/vanilla/modals/crm-query-builder.js",
         "src/vanilla/modals/campaign-editor.js",
