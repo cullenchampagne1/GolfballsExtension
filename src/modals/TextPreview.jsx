@@ -217,7 +217,7 @@ export function TextPreview({
     <FloatingPanel
       draggable={false}
       backdrop
-      width={1280}
+      width={isCase ? 1280 : 880}
       maxHeight={900}
       visible={modalVisible}
       onClose={onClosed}

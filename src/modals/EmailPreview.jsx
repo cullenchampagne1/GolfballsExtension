@@ -530,7 +530,7 @@ export function EmailPreview({
     <FloatingPanel
       draggable={false}
       backdrop
-      width={1320}
+      width={isCase ? 1320 : 920}
       maxHeight={900}
       onClose={onClosed}
       bindClose={(fn) => { closeRef.current = fn; bindClose?.(fn); }}
