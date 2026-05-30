@@ -17,11 +17,22 @@ window.__gbContentReady = true;
   // MESSAGE LISTENER (From Iframe)
   // ═══════════════════════════════════════════════════════
   
+  /* showGbNotification (the old vanilla toast) is gone — relay to the
+     page-wide React toast (window.__gbToast, installed by the actions-
+     shelf). Maps the old (message, type, duration) shape; 'loading'
+     falls back to an info pill. */
+  function gbNotify(msg, type = 'info', dur = 3000) {
+    const t = window.__gbToast;
+    if (!t || !msg) return;
+    const fn = t[type] || t.info; // success | error | warning | info
+    try { fn?.(msg, dur > 0 ? { duration: dur } : {}); } catch { /* no host */ }
+  }
+
   window.addEventListener('message', (event) => {
     const { action, message, type, duration, data } = event.data || {};
 
     if (action === 'GB_NOTIFY') {
-      showGbNotification(message, type, duration);
+      gbNotify(message, type, duration);
     }
 
     if (action === 'GB_OPEN_CALENDAR') {
@@ -31,8 +42,8 @@ window.__gbContentReady = true;
         // failing.
         if (typeof window.__gbOpenOrderCalendar === 'function') {
           window.__gbOpenOrderCalendar(data);
-        } else if (typeof showGbNotification === 'function') {
-          showGbNotification('Order Date Manager failed to load — reload the page and try again.', 'error', 5000);
+        } else {
+          window.__gbToast?.error?.('Order Date Manager failed to load — reload the page and try again.', { duration: 5000 });
         }
       }
     }
@@ -60,34 +71,38 @@ window.__gbContentReady = true;
     }
   });
 
-  /* Auto Date Push progress toast — moved here from the (now removed)
-     vanilla calendar.js. Driven by the iframe's GB_AUTO_PUSH_STEP /
-     GB_DATES_PUSHED / GB_AUTO_PUSH_ERROR messages; delegates to the
-     shared showGbNotification handle. */
+  /* Auto Date Push progress — moved here from the (removed) vanilla
+     calendar.js, now a centered React step toast. Driven by the iframe's
+     GB_AUTO_PUSH_STEP / GB_DATES_PUSHED / GB_AUTO_PUSH_ERROR messages. */
   function openAutoPushNotification(data) {
     const { daysOut } = data;
+    const t = window.__gbToast;
     const totalSteps = data.commitmentOffset !== null ? 3 : 2;
-    const handle = showGbNotification(
-      `Auto Date Push — ${daysOut} day${daysOut !== 1 ? 's' : ''} out`, 'loading', 0,
-    );
+    const steps = totalSteps === 3
+      ? ['Pushing approval date', 'Pushing commitment date', 'Submitting note']
+      : ['Pushing approval date', 'Submitting note'];
+    const id = t?.step?.({
+      steps, currentStep: 0,
+      title: `Auto Date Push — ${daysOut} day${daysOut !== 1 ? 's' : ''} out`,
+      placement: 'top-center',
+    });
     const handler = (event) => {
       const d = event.data;
       if (!d) return;
       if (d.action === 'GB_AUTO_PUSH_STEP') {
-        if (d.label) handle.update(d.label);
-        if (d.step != null) handle.setProgress(Math.round((d.step / totalSteps) * 100));
+        if (d.step != null && id != null) t?.update?.(id, { currentStep: Math.max(0, (parseInt(d.step, 10) || 1) - 1) });
       }
       if (d.action === 'GB_DATES_PUSHED') {
         window.removeEventListener('message', handler);
-        handle.update('Dates saved — submitting note…', 'success');
-        handle.setProgress(100);
-        handle.dismiss(2500);
+        if (id != null) {
+          t?.update?.(id, { currentStep: steps.length });
+          setTimeout(() => { t?.dismiss?.(id); t?.success?.('Dates saved', { placement: 'top-center', duration: 2500 }); }, 700);
+        }
       }
       if (d.action === 'GB_AUTO_PUSH_ERROR') {
         window.removeEventListener('message', handler);
-        handle.update('✗ ' + (d.error || 'Failed').slice(0, 55), 'error');
-        handle.setProgress(100);
-        handle.dismiss(5000);
+        if (id != null) t?.dismiss?.(id);
+        t?.error?.('Auto push failed: ' + String(d.error || 'Failed').slice(0, 55), { placement: 'top-center', duration: 6000 });
       }
     };
     window.addEventListener('message', handler);

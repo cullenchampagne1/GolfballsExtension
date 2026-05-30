@@ -13,14 +13,13 @@ import { CRMSearch } from '../modals/CRMSearch.jsx';
      window.__gbShowCrmSearchModal()      — opens (or toggles) the modal
      window.__gbCrmSearchModalLoaded      — single-execution guard
 
-   Important: content/crm-query-builder.js stays in the manifest for
-   now. The legacy QB has TWO consumers — (1) the legacy CRM-Search
-   modal called into it as a sub-modal, and (2) it self-injects an
-   in-page button on the CRM Search admin page (Page=360). The React
-   CRMSearch.jsx renders its own QueryBuilder.jsx sub-modal, so it
-   doesn't need (1) anymore, but the page injection in (2) still
-   relies on the legacy file. Deferring that cleanup until the admin
-   page itself migrates to React.
+   Note: the legacy vanilla crm-query-builder.js was REMOVED. It used
+   to (1) act as a sub-modal for the old CRM-Search modal and (2)
+   self-inject an in-page button on the CRM Search admin page
+   (Page=360). The React CRMSearch.jsx renders its own QueryBuilder.jsx
+   sub-modal, so (1) is gone for free; the Page=360 in-page button (2)
+   went away with the file — the modal is still reachable via the
+   Ctrl+<key> toggle below (and the popup / actions shelf).
 
    Wraps in <ToastHost> so the search-unavailable + template-data
    toasts surface even on pages without their own host.
