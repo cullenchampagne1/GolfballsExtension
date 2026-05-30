@@ -1,41 +1,53 @@
 /* ───────────────────────────────────────────────────────────────
    page-engine/code-runtime.js — sandboxed code variables.
 
-   A "code variable" is a one-shot JS expression/statement block
-   that returns a value to substitute into a template. The body is
-   compiled via `new Function('ctx', 'h', body)` and called with:
+   A "code variable" is a one-shot JS block that returns a string to
+   substitute into a template. The body is compiled via Function /
+   AsyncFunction and called with three arguments:
 
-     ctx   the page's extracted JSON (data from extract())
-     h     a frozen helpers namespace (fmt.*, coalesce, regex, upper)
+     ctx    the page's extracted JSON  (data from extract())
+     vars   the variables resolved BEFORE this one (by varOrder), so
+            a code var can build on earlier results — { name: value }
+     h      a frozen helpers namespace (fmt.*, coalesce, regex, and
+            the async server helpers send / fetchText / fetchJson)
+
+   Sync vs async
+   ─────────────
+   • runCodeSync — compiles a plain Function. No timeout, no awaiting.
+     For pure expressions over ctx/vars (the hot path: bulk email
+     rendering loops). h.server() etc. won't work here.
+   • runCode — compiles an AsyncFunction so the body can `await
+     h.fetchJson(...)`. Timeout-guarded. This is the path for code
+     that does server calls / multi-step logic.
+   The resolver picks the async path when the variable def is marked
+   `async` (the editor sets that when the body uses await / h.server).
 
    Security stance — soft sandbox.
    ──────────────────────────────────
    Templates are authored by the rep themselves and never imported
    from outside sources today. The threat model is "I might write a
    bad expression and break the renderer." Goals here:
-     • short execution (no infinite loops in the worst case)
+     • short execution (timeout for the async path)
      • no surprise side effects on the page or extension
      • clear errors when the body throws so the rep can fix it
 
    What we DO defend against:
      • Static blocklist of obvious foot-guns (`fetch(`, `chrome.`,
-       `while(true)`, `for(;;)`, `import(`). These regexes are not
-       a real sandbox — they're a tripwire that catches accidents.
+       `while(true)`, `import(`, `eval(`). Privileged work goes
+       through the sanctioned `h.*` helpers, so a correct body never
+       contains these tokens — the blocklist only trips accidents.
      • Length cap so a paste-bomb can't ship.
-     • Strict mode (forces var declarations, blocks octal literals,
-       and makes `this` undefined inside the function).
-     • Result coerced through Promise.resolve then awaited, with a
-       250ms timeout — async helpers (none today) can't hang the
-       template.
+     • Strict mode (forces var declarations, makes `this` undefined).
+     • Async result awaited with a timeout so a hung server call
+       can't freeze the resolution loop.
 
    What we DON'T defend against (the soft-sandbox compromise):
-     • Globals are still reachable in this realm (`window`, `eval`).
-       To harden, run inside a sandboxed <iframe sandbox="allow-
-       scripts"> with postMessage. Defer until we have a real
-       cross-rep template-sharing feature.
+     • Globals are still reachable in this realm (`window`). To
+       harden, run inside a sandboxed <iframe sandbox="allow-scripts">
+       with postMessage. Defer until cross-rep template sharing.
 
-   Add new helpers in the helpers object below; the picker UI reads
-   the FROZEN structure to surface autocomplete on `h.*`.
+   Add new helpers in buildHelpers() below; describeHelpers() mirrors
+   the shape so the editor can surface `h.*` autocomplete.
 ─────────────────────────────────────────────────────────────── */
 
 import {
@@ -43,17 +55,24 @@ import {
   coalesce, titleCase, parseNumber, parseDate, normalizePhone,
 } from './transforms.js';
 
-const MAX_BODY_LENGTH = 4096;
-const EXEC_TIMEOUT_MS = 250;
+const MAX_BODY_LENGTH = 8192;
+/* Async path only — server calls route through the background worker,
+   so allow enough headroom for a slow CDN / Solr round-trip while
+   still capping a runaway promise. The sync path has no timeout (it
+   can't await anything). */
+const EXEC_TIMEOUT_MS = 6000;
+
+/* AsyncFunction isn't a global binding — derive its constructor. */
+const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 
 /* Patterns we straight-up refuse. Not a security boundary — a
-   tripwire. Order matters: most-likely first so the loop bails
-   early on common patterns. */
+   tripwire. Privileged work is the helpers' job, so a real body never
+   needs these tokens. Order matters: most-likely first. */
 const BLOCKED_PATTERNS = [
   { re: /\bwhile\s*\(\s*true\s*\)/i,           reason: 'infinite while loop' },
   { re: /\bfor\s*\(\s*;\s*;\s*\)/,             reason: 'infinite for loop' },
-  { re: /\bfetch\s*\(/,                        reason: 'fetch() not allowed in code vars' },
-  { re: /\bchrome\b/,                          reason: 'chrome APIs not allowed' },
+  { re: /\bfetch\s*\(/,                        reason: 'use h.fetchJson / h.fetchText instead of fetch()' },
+  { re: /\bchrome\b/,                          reason: 'chrome APIs not allowed — use h.send()' },
   { re: /\bimport\s*\(/,                       reason: 'dynamic import not allowed' },
   { re: /\beval\s*\(/,                         reason: 'eval not allowed' },
   { re: /\bFunction\s*\(/,                     reason: 'Function constructor not allowed' },
@@ -64,10 +83,41 @@ const BLOCKED_PATTERNS = [
 ];
 
 /** Build the helpers namespace passed in as `h`. Frozen so the user
- *  can't mutate it. Each leaf is a function; `fmt` is a sub-object.
- *  Keep this small and uncluttered — every helper has to be worth
- *  the autocomplete noise. */
+ *  can't mutate it. The async server helpers route through the
+ *  background service worker (CORS / mixed-content immune) and only
+ *  work where chrome.runtime exists (content scripts + extension
+ *  pages); elsewhere they reject cleanly. */
 function buildHelpers() {
+  /* Generic background-action call. Resolves to the worker's
+     response object. Defined as a closure (not via `this`) so it
+     survives destructuring: `const { send } = h`. */
+  const send = (action, payload = {}) =>
+    new Promise((resolve, reject) => {
+      try {
+        if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) {
+          reject(new Error('server calls are unavailable in this context'));
+          return;
+        }
+        chrome.runtime.sendMessage({ action, ...payload }, (resp) => {
+          const err = chrome.runtime.lastError;
+          if (err) { reject(new Error(err.message)); return; }
+          resolve(resp);
+        });
+      } catch (e) { reject(e); }
+    });
+
+  const fetchText = async (url) => {
+    const resp = await send('fetchRaw', { url });
+    if (!resp || !resp.ok) throw new Error(resp?.error || `fetch failed (status ${resp?.status ?? '??'})`);
+    return resp.text || '';
+  };
+
+  const fetchJson = async (url) => {
+    const text = await fetchText(url);
+    try { return JSON.parse(text); }
+    catch { throw new Error('response was not valid JSON'); }
+  };
+
   const h = {
     fmt: Object.freeze({
       currency: fmtCurrency,
@@ -78,10 +128,8 @@ function buildHelpers() {
       title:    titleCase,
     }),
     coalesce,
-    /* Pull a single capture group from `str` via `pattern`. Returns
-       '' if no match. Useful for code vars that need to fish a sub-
-       string out of a longer value (e.g. extracting an order # from
-       a free-text note). */
+    /* Pull a single capture group from `str` via `pattern`. '' on no
+       match. */
     regex(str, pattern, group = 1, flags = '') {
       if (str == null || pattern == null) return '';
       try {
@@ -90,14 +138,11 @@ function buildHelpers() {
         return m ? (m[group] != null ? m[group] : m[0]) : '';
       } catch { return ''; }
     },
-    /* Pass-through type helpers — the same coercers the schema
-       uses. Lets users do e.g. `h.parseNumber(ctx.someString)`
-       in a code var without re-importing the lib. */
+    /* Pass-through type helpers — the same coercers the schema uses. */
     parseNumber,
     parseDate,
     normalizePhone,
-    /* `pick(arr, key)` → array of objects.map(o => o[key]).
-       `sum(arr, key?)` → sums numbers; key picks a property first. */
+    /* `pick(arr, key)` → arr.map(o => o[key]); `sum(arr, key?)`. */
     pick(arr, key) {
       if (!Array.isArray(arr)) return [];
       return arr.map((o) => (o != null ? o[key] : null));
@@ -113,6 +158,10 @@ function buildHelpers() {
       }
       return s;
     },
+    /* ── Server calls (async, background-routed) ── */
+    send,
+    fetchText,
+    fetchJson,
   };
   return Object.freeze(h);
 }
@@ -121,21 +170,9 @@ function buildHelpers() {
  *  every call would let mutations leak between invocations. */
 const HELPERS = buildHelpers();
 
-/** Compile a code-var body into a callable. Bodies WITHOUT a
- *  visible `return` are wrapped so the last expression is returned
- *  — supports both styles:
- *
- *    'return ctx.contact.firstName.toUpperCase()'       // explicit
- *    'ctx.contact.firstName.toUpperCase()'              // expression
- *    'const n = ctx.orders.length; n + " orders"'        // multi
- *
- * Detection: if the body contains `return` anywhere (token-level),
- * use it as-is. Otherwise wrap as a single-expression return,
- * which works for the third form too as long as the LAST statement
- * is an expression — strict mode permits this when wrapped.
- *
- * Throws on syntax errors (caller catches + surfaces). */
-export function compile(body) {
+/* Shared pre-compile validation: length + blocklist. Throws on the
+   first problem (caller surfaces the message). */
+function precheck(body) {
   if (typeof body !== 'string') throw new Error('code body must be a string');
   if (body.length > MAX_BODY_LENGTH) {
     throw new Error(`code body exceeds ${MAX_BODY_LENGTH} characters`);
@@ -143,31 +180,46 @@ export function compile(body) {
   for (const { re, reason } of BLOCKED_PATTERNS) {
     if (re.test(body)) throw new Error(`blocked: ${reason}`);
   }
-  /* Token-aware return detection: `return` inside a string literal
-     shouldn't count, but for simplicity we treat any `return`
-     keyword as "user wrote a return." False positives only mean
-     we DON'T wrap, which leaves the user's code as-is — safe. */
-  const hasReturn = /\breturn\b/.test(body);
-  const wrapped = hasReturn
-    ? `"use strict";\n${body}`
-    : `"use strict";\nreturn (${body});`;
-  return new Function('ctx', 'h', wrapped);
 }
 
-/** Run a compiled function with a timeout. JS can't truly cancel a
- *  synchronous loop in this realm, so the timeout only triggers
- *  for async returns. The static block-list above is what defends
- *  against the synchronous case. */
-function runWithTimeout(fn, ctx) {
+/* Bodies WITHOUT a visible `return` are wrapped so the last
+   expression is returned — supports `ctx.x.toUpperCase()` as well as
+   `return ...`. `return` inside a string literal yields a false
+   positive that only means we DON'T wrap (leaves the body as-is). */
+function wrapBody(body) {
+  const hasReturn = /\breturn\b/.test(body);
+  return hasReturn
+    ? `"use strict";\n${body}`
+    : `"use strict";\nreturn (${body});`;
+}
+
+/** Compile a sync code-var body. `new Function('ctx','vars','h', …)`.
+ *  Throws on syntax errors (caller catches + surfaces). */
+export function compile(body) {
+  precheck(body);
+  return new Function('ctx', 'vars', 'h', wrapBody(body));
+}
+
+/** Compile an async code-var body. Same surface, but an AsyncFunction
+ *  so the body can `await h.fetchJson(...)`. */
+export function compileAsync(body) {
+  precheck(body);
+  return new AsyncFunction('ctx', 'vars', 'h', wrapBody(body));
+}
+
+/** Run a compiled fn with a timeout. JS can't cancel a synchronous
+ *  loop in this realm, so the timeout only bites async returns; the
+ *  blocklist defends the sync case. */
+function runWithTimeout(fn, ctx, vars, timeoutMs) {
   return new Promise((resolve, reject) => {
     let settled = false;
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
       reject(new Error('code var timed out'));
-    }, EXEC_TIMEOUT_MS);
+    }, timeoutMs);
     try {
-      const result = fn(ctx, HELPERS);
+      const result = fn(ctx, vars, HELPERS);
       Promise.resolve(result).then(
         (v) => { if (settled) return; settled = true; clearTimeout(timer); resolve(v); },
         (e) => { if (settled) return; settled = true; clearTimeout(timer); reject(e); },
@@ -182,29 +234,27 @@ function runWithTimeout(fn, ctx) {
 }
 
 /**
- * runCode(body, ctx) — compile + execute, returning a Promise that
- * resolves to the body's value (or rejects with the compile/runtime
- * error).
+ * runCode(body, ctx, vars?, opts?) — compile (async) + execute,
+ * returning a Promise that resolves to the body's value (or rejects
+ * with the compile/runtime error). Use for code that may await
+ * h.server / h.fetchJson.
  *
- * Caller responsibility: convert the resolved value to a string for
- * substitution using resolve.toDisplayString(). We DON'T do that
- * here so callers that want the raw value (e.g. a code var feeding
- * a number format step) can keep it typed.
+ * Caller stringifies via resolve.toDisplayString() — we keep the raw
+ * value so a code var feeding a number-format step stays typed.
  */
-export async function runCode(body, ctx) {
-  const fn = compile(body);
-  return runWithTimeout(fn, ctx);
+export async function runCode(body, ctx, vars = {}, { timeoutMs = EXEC_TIMEOUT_MS } = {}) {
+  const fn = compileAsync(body);
+  return runWithTimeout(fn, ctx, vars, timeoutMs);
 }
 
 /**
- * Synchronous variant — no timeout, no async helpers. Used by hot
- * paths that need to render templates inside a tight loop and
- * already know the body is a synchronous expression (the common
- * case today). Errors propagate normally.
+ * Synchronous variant — no timeout, no awaiting. For hot paths that
+ * already know the body is a synchronous expression over ctx/vars.
+ * Errors propagate normally.
  */
-export function runCodeSync(body, ctx) {
+export function runCodeSync(body, ctx, vars = {}) {
   const fn = compile(body);
-  return fn(ctx, HELPERS);
+  return fn(ctx, vars, HELPERS);
 }
 
 /** Expose the helpers shape for the editor's autocomplete UI. */
@@ -223,5 +273,8 @@ export function describeHelpers() {
     'h.normalizePhone': { kind: 'fn', signature: '(v) → "+1XXXXXXXXXX"' },
     'h.pick':           { kind: 'fn', signature: '(arr, key) → arr of arr[i][key]' },
     'h.sum':            { kind: 'fn', signature: '(arr, key?) → number' },
+    'h.send':           { kind: 'fn', signature: 'async (action, payload?) → background response  // calls a background worker action' },
+    'h.fetchText':      { kind: 'fn', signature: 'async (url) → string  // GET via background (CORS/mixed-content immune)' },
+    'h.fetchJson':      { kind: 'fn', signature: 'async (url) → parsed JSON' },
   };
 }
