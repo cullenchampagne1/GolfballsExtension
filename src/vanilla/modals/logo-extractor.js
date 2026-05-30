@@ -1728,9 +1728,7 @@ if (window.__gbLoaded_logoExtractor) {} else { window.__gbLoaded_logoExtractor =
       if (btn.classList.contains('gb-done')) { __gbHideProofModal(overlay); return; }
 
       if (ctx._devMode) {
-        if (typeof showGbNotification === 'function') {
-          showGbNotification('Dev mode — proof submissions are disabled in the test console.', 'info', 3500);
-        }
+        window.__gbToast?.info?.('Dev mode — proof submissions are disabled in the test console.', { duration: 3500 });
         return;
       }
 
