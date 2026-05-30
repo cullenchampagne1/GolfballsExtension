@@ -273,6 +273,13 @@ async function __gbPushDatesAndSubmitNote(note, btn) {
 // ── Handle GB_CALENDAR_SAVE broadcast from background ────────────────────────
 // Relayed via chrome.tabs.sendMessage(allFrames) so it reaches this iframe.
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Parent (e.g. the actions-shelf "Manage order dates" action) asks this
+  // iframe to scrape the current dates and post GB_OPEN_CALENDAR back up.
+  if (msg.action === 'GB_REQUEST_OPEN_CALENDAR') {
+    __gbShowCalendarModal();
+    sendResponse({ ok: true });
+    return true;
+  }
   if (msg.action === 'GB_CALENDAR_SAVE') {
     if (!__gbCalendarState || !__gbCalendarUrl) {
       window.parent.postMessage({ action: 'GB_CALENDAR_ERROR', error: 'Calendar state lost — please reopen the calendar.' }, '*');

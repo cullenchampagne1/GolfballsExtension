@@ -4,7 +4,7 @@ import { ensureTheme } from '../lib/theme.js';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 import { ActionsShelf } from '../ui/components/ActionsShelf.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
-import { I } from '../ui/index.js';
+import { I, Icon } from '../ui/index.js';
 import { loadDevSettings, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { findPhone } from '../lib/findPhone.js';
 
@@ -138,6 +138,7 @@ if (!window.__gbActionsShelfLoaded) {
   let _taskActionUnsub = null;
   let _copyIdsActionUnsub = null;
   let _findPhoneActionUnsub = null;
+  let _orderDatesActionUnsub = null;
 
   function registerCallAction(pageType, displayName) {
     if (_callActionUnsub) { _callActionUnsub(); _callActionUnsub = null; }
@@ -394,6 +395,32 @@ if (!window.__gbActionsShelfLoaded) {
     });
   }
 
+  /* Order detail page — "Manage order dates" opens the React Order Date
+     Manager. The current dates live in the order iframe, so we ask it
+     (GB_REQUEST_OPEN_CALENDAR) to scrape them and post GB_OPEN_CALENDAR
+     back up; main.js then mounts the modal. */
+  function registerOrderDatesAction(pageType) {
+    if (_orderDatesActionUnsub) { _orderDatesActionUnsub(); _orderDatesActionUnsub = null; }
+    if (pageType !== 'order') return;
+    const flags = window.__gbFeatureFlags || {};
+    if (flags.calendarEnabled === false) return;
+    const id = readOrderId();
+    _orderDatesActionUnsub = actionRegistry.register({
+      id: 'gb-order-dates',
+      label: 'Manage order dates',
+      icon: <Icon size={13} strokeWidth={2.2}><rect x="3" y="4" width="18" height="18" rx="3" /><path d="M16 2v4M8 2v4M3 10h18" /></Icon>,
+      hint: id ? `Change approval & commitment dates for #${id}` : 'Change approval & commitment dates',
+      smartFor: ['order'],
+      handler: async () => {
+        try {
+          chrome.runtime.sendMessage({ action: 'broadcastToFrames', payload: { action: 'GB_REQUEST_OPEN_CALENDAR' } });
+        } catch {
+          window.__gbToast?.error?.('Could not reach the order frame', { duration: 3000 });
+        }
+      },
+    });
+  }
+
   function registerTaskAction(pageType, displayName) {
     if (_taskActionUnsub) { _taskActionUnsub(); _taskActionUnsub = null; }
     if (pageType !== 'contact' && pageType !== 'account') return;
@@ -459,6 +486,7 @@ if (!window.__gbActionsShelfLoaded) {
     registerTaskAction(type, label);
     registerCopyOrdersAction(type);
     registerFindPhoneAction(type);
+    registerOrderDatesAction(type);
   }
 
   /* ── Mount the shelf overlay ────────────────────────────────

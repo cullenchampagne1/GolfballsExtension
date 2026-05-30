@@ -25,7 +25,16 @@ window.__gbContentReady = true;
     }
 
     if (action === 'GB_OPEN_CALENDAR') {
-      if (window.__gbFeatureFlags?.calendarEnabled !== false) openFullScreenCalendar(data);
+      if (window.__gbFeatureFlags?.calendarEnabled !== false) {
+        // React Order Date Manager only — no legacy fallback. If the
+        // content entry didn't load, tell the rep instead of silently
+        // failing.
+        if (typeof window.__gbOpenOrderCalendar === 'function') {
+          window.__gbOpenOrderCalendar(data);
+        } else if (typeof showGbNotification === 'function') {
+          showGbNotification('Order Date Manager failed to load — reload the page and try again.', 'error', 5000);
+        }
+      }
     }
 
     if (action === 'GB_PUSH_DATES_AND_NOTE') {
@@ -50,6 +59,39 @@ window.__gbContentReady = true;
       window.__gbActiveCalendar.onError(event.data.error);
     }
   });
+
+  /* Auto Date Push progress toast — moved here from the (now removed)
+     vanilla calendar.js. Driven by the iframe's GB_AUTO_PUSH_STEP /
+     GB_DATES_PUSHED / GB_AUTO_PUSH_ERROR messages; delegates to the
+     shared showGbNotification handle. */
+  function openAutoPushNotification(data) {
+    const { daysOut } = data;
+    const totalSteps = data.commitmentOffset !== null ? 3 : 2;
+    const handle = showGbNotification(
+      `Auto Date Push — ${daysOut} day${daysOut !== 1 ? 's' : ''} out`, 'loading', 0,
+    );
+    const handler = (event) => {
+      const d = event.data;
+      if (!d) return;
+      if (d.action === 'GB_AUTO_PUSH_STEP') {
+        if (d.label) handle.update(d.label);
+        if (d.step != null) handle.setProgress(Math.round((d.step / totalSteps) * 100));
+      }
+      if (d.action === 'GB_DATES_PUSHED') {
+        window.removeEventListener('message', handler);
+        handle.update('Dates saved — submitting note…', 'success');
+        handle.setProgress(100);
+        handle.dismiss(2500);
+      }
+      if (d.action === 'GB_AUTO_PUSH_ERROR') {
+        window.removeEventListener('message', handler);
+        handle.update('✗ ' + (d.error || 'Failed').slice(0, 55), 'error');
+        handle.setProgress(100);
+        handle.dismiss(5000);
+      }
+    };
+    window.addEventListener('message', handler);
+  }
 
 // ── chrome.runtime messages from popup / background ─────────────────────────
   // MESSAGE LISTENER

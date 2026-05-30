@@ -33,7 +33,6 @@
         "theme.js",
         "libs/flatpickr.js",
         "src/vanilla/notifications.js",
-        "src/vanilla/calendar.js",
         "src/vanilla/smart-detection.js",
         "react-dist/vanilla/page-engine.js",
         "src/vanilla/variable-resolution.js",
@@ -55,6 +54,7 @@
         "react-dist/content/crm-search.js",
         "react-dist/content/crm-create-contact.js",
         "react-dist/content/actions-shelf.js",
+        "react-dist/content/calendar.js",
         "src/vanilla/main.js"
       ],
       "all_frames": false
