@@ -26,7 +26,7 @@
 
 import { extract } from './extract.js';
 import { resolve, listPaths, toDisplayString, existsAt, tokenizePath } from './resolve.js';
-import { runCode, runCodeSync, compile, describeHelpers } from './code-runtime.js';
+import { runCode, runCodeSync, compile, compileAsync, describeHelpers } from './code-runtime.js';
 import { detectSchema } from '../page-schemas/registry.js';
 
 /** Per-doc memoization. Key: Document. Value:
@@ -67,17 +67,20 @@ export function resolvePath(doc, path, defaultV = '') {
 }
 
 /** Convenience: run a code var against the engine's extracted
- *  context. The body is the rep's expression/statement block. */
-export async function evaluateCode(doc, body) {
+ *  context. The body is the rep's expression/statement block. `vars`
+ *  is the map of variables resolved before this one (by varOrder) so
+ *  a code var can build on earlier results. Async path — supports
+ *  `await h.fetchJson(...)`. */
+export async function evaluateCode(doc, body, vars = {}) {
   const ctx = runEngine(doc);
-  return runCode(body, ctx?.data || {});
+  return runCode(body, ctx?.data || {}, vars);
 }
 
 /** Sync variant — bypasses the timeout. Only safe for synchronous
  *  bodies (the common case). Throws on compile + runtime errors. */
-export function evaluateCodeSync(doc, body) {
+export function evaluateCodeSync(doc, body, vars = {}) {
   const ctx = runEngine(doc);
-  return runCodeSync(body, ctx?.data || {});
+  return runCodeSync(body, ctx?.data || {}, vars);
 }
 
 /* Re-exports — single import surface for everything the resolver
@@ -92,6 +95,7 @@ export {
   runCode,
   runCodeSync,
   compile,
+  compileAsync,
   describeHelpers,
   detectSchema,
 };
