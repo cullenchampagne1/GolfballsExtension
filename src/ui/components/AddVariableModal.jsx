@@ -24,16 +24,21 @@ const CodeIcon    = (p) => <Icon {...p}><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/><
    pages, regex moved to a Smart "Extract" transform that runs against
    the already-resolved builtin/DOM/literal value. */
 export const SOURCE_KINDS = {
-  /* `code` is the durable path everywhere — it runs JS over the page
-     json block (ctx), the other resolved variables (vars), and the
-     helpers (h.*, including async server calls). Schema is offered
-     first on account/contact pages (they have an extractor today);
-     order/case have no schema yet, so code leads there. builtin / dom
-     / regex stay for backward compat (flagged deprecated) until the
-     migration sweep removes them. */
-  order:   ['code', 'builtin', 'dom', 'literal'],
-  case:    ['code', 'builtin', 'regex', 'literal'],
-  account: ['schema', 'code', 'builtin', 'dom', 'literal'],
+  /* The durable trio is schema / code / literal. `code` runs JS over
+     the page json block (ctx), the other resolved variables (vars),
+     and helpers (h.*, including async server calls). Schema leads on
+     account/contact pages (they have an extractor today); order/case
+     have no schema yet, so code leads there.
+
+     `builtin` and `dom` are intentionally NOT offered here — we're
+     switching to code and the longer list read as cluttered. Their
+     RESOLUTION logic stays (resolveVar still handles them) so existing
+     templates keep working until the migration sweep converts them;
+     you just can't author new ones. Regex remains for case templates
+     (matching the inbound email body/subject). */
+  order:   ['code', 'literal'],
+  case:    ['code', 'regex', 'literal'],
+  account: ['schema', 'code', 'literal'],
 };
 
 const KIND_OPTIONS = {
