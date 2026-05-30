@@ -241,11 +241,12 @@ function PopupApp() {
             { target: { tabId: currentTab.id },
               files: [
                 'theme.js', 'libs/flatpickr.js', 'src/vanilla/notifications.js',
-                'src/vanilla/calendar.js', 'src/vanilla/smart-detection.js',
+                'src/vanilla/smart-detection.js',
                 'src/vanilla/variable-resolution.js', 'src/vanilla/modals/logo-extractor.js',
                 'src/vanilla/modals/charge-modal.js', 'src/vanilla/modals/order-edit-modal.js',
                 'src/vanilla/page-utils.js', 'react-dist/content/email-preview.js',
                 'react-dist/content/watch-list.js', 'src/vanilla/modals/crm-query-builder.js',
+                'react-dist/content/actions-shelf.js', 'react-dist/content/calendar.js',
                 'src/vanilla/main.js',
               ] },
             askForPageInfo,
