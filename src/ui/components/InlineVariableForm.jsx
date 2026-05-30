@@ -9,6 +9,7 @@ import { Dot } from './Dot.jsx';
 import { Segmented } from './Segmented.jsx';
 import { SOURCE_KINDS, BUILTIN_PATHS, REGEX_FIELDS } from './AddVariableModal.jsx';
 import { VariableSchemaPicker } from './VariableSchemaPicker.jsx';
+import { CodeVarEditor, isAsyncBody } from './CodeVarEditor.jsx';
 
 /* ────────────────────────────────────────────────────────────────
    InlineVariableForm — compact, in-table replacement for
@@ -29,8 +30,10 @@ import { VariableSchemaPicker } from './VariableSchemaPicker.jsx';
 const PickerIcon  = (p) => <Icon {...p}><path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/></Icon>;
 const RegexIcon   = (p) => <Icon {...p}><circle cx="12" cy="12" r="3"/><path d="M12 5v6M12 12v6M6 12h12"/></Icon>;
 const VariableIcon = (p) => <Icon {...p}><path d="M5 4 a14 14 0 000 16M19 4a14 14 0 010 16"/><path d="M9 9l6 6M9 15l6-6"/></Icon>;
+const CodeIcon = (p) => <Icon {...p}><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></Icon>;
 
 const KIND_LABELS = {
+  code:    'Code',
   builtin: 'Built-in',
   schema:  'Schema',
   dom:     'DOM',
@@ -38,6 +41,7 @@ const KIND_LABELS = {
   regex:   'Regex',
 };
 const KIND_ICONS = {
+  code:    <CodeIcon />,
   builtin: <I.bolt />,
   schema:  <I.search />,
   dom:     <I.search />,
@@ -47,7 +51,7 @@ const KIND_ICONS = {
 
 const SOFT = { duration: 0.22, ease: [0.32, 0.72, 0, 1] };
 
-export function InlineVariableForm({ typeId, onAdd, onCancel }) {
+export function InlineVariableForm({ typeId, onAdd, onCancel, varNames = [] }) {
   const [name,         setName]         = useState('');
   const [kind,         setKind]         = useState(SOURCE_KINDS[typeId]?.[0] ?? 'literal');
   const [config,       setConfig]       = useState('');
@@ -173,6 +177,7 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
     : kind === 'schema'  ? (config ? '(engine value)' : '— pick a field —')
     : kind === 'dom'     ? (liveResolved || (config ? '(querying…)' : '— enter a selector —'))
     : kind === 'regex'   ? (config ? '(first capture group)' : '— enter a regex —')
+    : kind === 'code'    ? (config ? '(runs on send)' : '— write code —')
     : '—';
 
   const canAdd = !!name && !!config;
@@ -264,6 +269,16 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
             transition={{ duration: 0.16, ease: [0.4, 0, 0.2, 1] }}
             style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
           >
+            {kind === 'code' && (
+              <Field label="Code" hint="Return a value · ctx = page data · vars · h = helpers">
+                <CodeVarEditor
+                  value={config}
+                  onChange={setConfig}
+                  typeId={typeId}
+                  varNames={varNames}
+                />
+              </Field>
+            )}
             {kind === 'schema' && (
               <Field
                 label="Schema path"
@@ -473,6 +488,7 @@ export function InlineVariableForm({ typeId, onAdd, onCancel }) {
                    even if leftover state from a kind switch is around. */
                 ...(typeId !== 'case' && regexScope ? { scope: regexScope } : {}),
               } : {}),
+              ...(kind === 'code' ? { async: isAsyncBody(config) } : {}),
             })}
           >
             Add

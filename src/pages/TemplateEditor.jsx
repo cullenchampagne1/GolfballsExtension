@@ -43,6 +43,7 @@ function convertVars(tpl) {
       ...(v.source ? { source: v.source } : {}),
       ...(v.group  ? { group:  v.group  } : {}),
       ...(v.scope  ? { scope:  v.scope  } : {}),
+      ...(v.async  ? { async:  v.async  } : {}),
       resolved: v.resolved ?? null,
       status:   v.status  || 'miss',
       smart:    v.smart   || {},
@@ -69,6 +70,9 @@ function convertVars(tpl) {
     } else if (v.type === 'selector') {
       kind   = 'dom';
       config = v.selector || '';
+    } else if (v.type === 'code') {
+      kind   = 'code';
+      config = v.body || '';
     } else if (v.type === 'regex') {
       kind   = 'regex';
       config = v.pattern  || '';
@@ -81,6 +85,7 @@ function convertVars(tpl) {
       ...(v.type === 'regex' ? { source: v.source || 'body' } : {}),
       ...(v.group ? { group: v.group } : {}),
       ...(v.scope ? { scope: v.scope } : {}),
+      ...(v.async ? { async: true } : {}),
       resolved: null, status: 'miss', smart: v.smart || {},
     };
   });
@@ -97,6 +102,10 @@ function varDef(v) {
      route through the same resolver branch. */
   if (v.kind === 'schema')  return { type: 'schema',   path:     v.config };
   if (v.kind === 'dom')     return { type: 'selector', selector: v.config };
+  /* 'code' stores the body verbatim; `async` rides along so the
+     resolver picks the timeout-guarded AsyncFunction path for bodies
+     that await h.server / h.fetchJson. */
+  if (v.kind === 'code')    return { type: 'code', body: v.config, ...(v.async ? { async: true } : {}) };
   if (v.kind === 'regex')   return {
     type: 'regex',
     pattern:  v.config,

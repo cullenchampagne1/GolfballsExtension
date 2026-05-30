@@ -216,6 +216,7 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
           <InlineVariableForm
             key="inline-add"
             typeId={typeId}
+            varNames={vars.map((v) => v.name)}
             onAdd={(payload) => { onAdd?.(payload); setAdding(false); }}
             onCancel={() => setAdding(false)}
           />
