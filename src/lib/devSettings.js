@@ -101,6 +101,14 @@ export const DEV_SETTINGS = [
     default: 0,
     min:     -180, max: 180, step: 1,
   },
+  {
+    key:     'golfballViewer.printAreaScale',
+    label:   'Golfball viewer: print area scale',
+    desc:    'Size of the printed image (decal) on the ball, as a fraction of the ball radius. Higher = larger print area. Default 0.7.',
+    type:    'number',
+    default: 0.7,
+    min:     0.2, max: 1.5, step: 0.05,
+  },
   /* ── Per-modal draggable mode ─────────────────────────────────
      Each wired modal exposes a `<name>.draggable` flag. When ON, the
      modal is a click-through tool window the user can fling around

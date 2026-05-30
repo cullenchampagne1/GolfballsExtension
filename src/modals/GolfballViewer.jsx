@@ -226,6 +226,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
       rotX: deg('golfballViewer.ballRotX', 0),
       rotY: deg('golfballViewer.ballRotY', 0),
       rotZ: deg('golfballViewer.ballRotZ', 0),
+      printAreaScale: Number(dev['golfballViewer.printAreaScale'] ?? 0.7),
     };
   }
 
@@ -823,7 +824,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // on the camera-facing face of the ball.
           const decalPosition = new THREE.Vector3(0, 0, targetRadius * 0.999);
           const decalOrientation = new THREE.Euler(0, 0, 0);
-          const decalSize = new THREE.Vector3(targetRadius * 0.7, targetRadius * 0.7, targetRadius * 2);
+          // Print-area extent (x/y) is dev-tunable; z is the projection
+          // depth through the ball and stays fixed.
+          const printAreaScale = initialBallRef.current.printAreaScale ?? 0.7;
+          const decalSize = new THREE.Vector3(targetRadius * printAreaScale, targetRadius * printAreaScale, targetRadius * 2);
 
           ballGroup.updateMatrixWorld(true);
           const decalGeo = new DecalGeometry(ballMesh, decalPosition, decalOrientation, decalSize);
@@ -2836,6 +2840,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 rad2deg(ballGroup.rotation.y),
                 rad2deg(ballGroup.rotation.z),
               ],
+              printAreaScale: initialBallRef.current.printAreaScale ?? 0.7,
             });
           }
           animationId = requestAnimationFrame(render);
@@ -3217,7 +3222,8 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                   `golfballViewer.ballScale = ${debug.scale.toFixed(2)}\n` +
                   `golfballViewer.ballRotX  = ${debug.rotDeg[0].toFixed(1)}°\n` +
                   `golfballViewer.ballRotY  = ${debug.rotDeg[1].toFixed(1)}°\n` +
-                  `golfballViewer.ballRotZ  = ${debug.rotDeg[2].toFixed(1)}°`;
+                  `golfballViewer.ballRotZ  = ${debug.rotDeg[2].toFixed(1)}°\n` +
+                  `golfballViewer.printAreaScale = ${(debug.printAreaScale ?? 0.7).toFixed(2)}`;
                 navigator.clipboard?.writeText(snippet)
                   .then(() => { setDebugCopied(true); setTimeout(() => setDebugCopied(false), 1500); })
                   .catch(() => {});
