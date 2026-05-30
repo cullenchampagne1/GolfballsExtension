@@ -17,6 +17,7 @@ import { Btn } from './Btn.jsx';
 import { Tag } from './Tag.jsx';
 import { Spinner } from '../shared.jsx';
 import { I, Icon } from '../icons.jsx';
+import { CODE_RECIPES } from '../../lib/codeRecipes.js';
 
 /* ───────────────────────────────────────────────────────────────
    CodeVarEditor — CodeMirror 6 authoring surface for `code`
@@ -140,6 +141,7 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
 
   const [testing, setTesting] = useState(false);
   const [result,  setResult]  = useState(null); // { value } | { error }
+  const [recipesOpen, setRecipesOpen] = useState(false);
 
   // Mount the editor once. Completion + lint read from refs so the
   // view never has to be rebuilt when varNames / typeId change.
@@ -262,6 +264,44 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
           <span style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)' }}>· returns coerced to text</span>
         </span>
         <div style={{ flex: 1 }} />
+        <div style={{ position: 'relative' }}>
+          <Btn size="xs" variant="ghost" icon={<I.bolt />} onClick={() => setRecipesOpen((o) => !o)}>
+            Recipes
+          </Btn>
+          {recipesOpen && (
+            <>
+              {/* Full-screen click-away. */}
+              <div onClick={() => setRecipesOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 5 }} />
+              {/* Opens upward (bottom:100%) so a long menu doesn't hit the
+                  form's bottom overflow:hidden. In-flow within the scaled
+                  page, so it positions correctly. */}
+              <div style={{
+                position: 'absolute', bottom: '100%', right: 0, marginBottom: 6, width: 250, zIndex: 6,
+                background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)',
+                borderRadius: 'var(--gb-r-md)', boxShadow: '0 8px 24px rgba(0,0,0,.32)', overflow: 'hidden',
+              }}>
+                <div style={{ padding: '6px 10px', fontSize: 9, fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', background: 'var(--gb-surface-2)', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+                  Insert recipe
+                </div>
+                {CODE_RECIPES.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => { onChange?.(r.body); setRecipesOpen(false); }}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left', padding: '8px 10px',
+                      background: 'transparent', border: 'none', borderBottom: '1px solid var(--gb-border-subtle)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{r.label}</div>
+                    <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 2, lineHeight: 1.4 }}>{r.description}</div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
         <Btn
           size="xs"
           variant="tinted"

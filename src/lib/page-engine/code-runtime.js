@@ -8,8 +8,10 @@
      ctx    the page's extracted JSON  (data from extract())
      vars   the variables resolved BEFORE this one (by varOrder), so
             a code var can build on earlier results — { name: value }
-     h      a frozen helpers namespace (fmt.*, coalesce, regex, and
-            the async server helpers send / fetchText / fetchJson)
+     h      a frozen helpers namespace — fmt.*, coalesce, regex, the
+            async server helpers (send / fetchText / fetchJson), and
+            DOM access bound to the resolving page (dom / domAll /
+            domText / doc)
 
    Sync vs async
    ─────────────
@@ -57,10 +59,11 @@ import {
 
 const MAX_BODY_LENGTH = 8192;
 /* Async path only — server calls route through the background worker,
-   so allow enough headroom for a slow CDN / Solr round-trip while
-   still capping a runaway promise. The sync path has no timeout (it
-   can't await anything). */
-const EXEC_TIMEOUT_MS = 6000;
+   so allow enough headroom for several slow CDN / Solr round-trips
+   (e.g. the recommended-replacement recipe hits the catalog once per
+   brand) while still capping a runaway promise. The sync path has no
+   timeout (it can't await anything). */
+const EXEC_TIMEOUT_MS = 10000;
 
 /* AsyncFunction isn't a global binding — derive its constructor. */
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
@@ -166,9 +169,30 @@ function buildHelpers() {
   return Object.freeze(h);
 }
 
-/** Frozen singleton — building the helpers is cheap but freezing
- *  every call would let mutations leak between invocations. */
-const HELPERS = buildHelpers();
+/** Frozen singleton of the doc-independent helpers (fmt, coalesce,
+ *  regex, parsers, server). Per-call we extend this with DOM helpers
+ *  bound to the document being resolved — see helpersFor(). */
+const STATIC_HELPERS = buildHelpers();
+
+/** Build the `h` namespace for one execution, binding the DOM helpers
+ *  to `doc` (the document being resolved). On the page that's the live
+ *  CRM DOM; in the editor's "Test on page" it's the order tab's DOM
+ *  (resolution runs there). Falls back to the ambient `document`.
+ *
+ *  DOM access is the bridge that lets selector-based variables (OOS,
+ *  recommended replacement) move into code today — before the order
+ *  schema exists — by querying the DOM now and swapping to ctx.* once
+ *  the engine extracts those fields. */
+function helpersFor(doc) {
+  const d = doc || (typeof document !== 'undefined' ? document : null);
+  const domAll  = (sel) => (d ? Array.from(d.querySelectorAll(sel)) : []);
+  const dom     = (sel) => (d ? d.querySelector(sel) : null);
+  const domText = (sel) => {
+    const el = d ? d.querySelector(sel) : null;
+    return el ? (el.innerText || el.textContent || '').trim() : '';
+  };
+  return Object.freeze({ ...STATIC_HELPERS, doc: d, dom, domAll, domText });
+}
 
 /* Shared pre-compile validation: length + blocklist. Throws on the
    first problem (caller surfaces the message). */
@@ -210,7 +234,7 @@ export function compileAsync(body) {
 /** Run a compiled fn with a timeout. JS can't cancel a synchronous
  *  loop in this realm, so the timeout only bites async returns; the
  *  blocklist defends the sync case. */
-function runWithTimeout(fn, ctx, vars, timeoutMs) {
+function runWithTimeout(fn, ctx, vars, h, timeoutMs) {
   return new Promise((resolve, reject) => {
     let settled = false;
     const timer = setTimeout(() => {
@@ -219,7 +243,7 @@ function runWithTimeout(fn, ctx, vars, timeoutMs) {
       reject(new Error('code var timed out'));
     }, timeoutMs);
     try {
-      const result = fn(ctx, vars, HELPERS);
+      const result = fn(ctx, vars, h);
       Promise.resolve(result).then(
         (v) => { if (settled) return; settled = true; clearTimeout(timer); resolve(v); },
         (e) => { if (settled) return; settled = true; clearTimeout(timer); reject(e); },
@@ -242,9 +266,9 @@ function runWithTimeout(fn, ctx, vars, timeoutMs) {
  * Caller stringifies via resolve.toDisplayString() — we keep the raw
  * value so a code var feeding a number-format step stays typed.
  */
-export async function runCode(body, ctx, vars = {}, { timeoutMs = EXEC_TIMEOUT_MS } = {}) {
+export async function runCode(body, ctx, vars = {}, { timeoutMs = EXEC_TIMEOUT_MS, doc } = {}) {
   const fn = compileAsync(body);
-  return runWithTimeout(fn, ctx, vars, timeoutMs);
+  return runWithTimeout(fn, ctx, vars, helpersFor(doc), timeoutMs);
 }
 
 /**
@@ -252,9 +276,9 @@ export async function runCode(body, ctx, vars = {}, { timeoutMs = EXEC_TIMEOUT_M
  * already know the body is a synchronous expression over ctx/vars.
  * Errors propagate normally.
  */
-export function runCodeSync(body, ctx, vars = {}) {
+export function runCodeSync(body, ctx, vars = {}, { doc } = {}) {
   const fn = compile(body);
-  return fn(ctx, vars, HELPERS);
+  return fn(ctx, vars, helpersFor(doc));
 }
 
 /** Expose the helpers shape for the editor's autocomplete UI. */
@@ -276,5 +300,9 @@ export function describeHelpers() {
     'h.send':           { kind: 'fn', signature: 'async (action, payload?) → background response  // calls a background worker action' },
     'h.fetchText':      { kind: 'fn', signature: 'async (url) → string  // GET via background (CORS/mixed-content immune)' },
     'h.fetchJson':      { kind: 'fn', signature: 'async (url) → parsed JSON' },
+    'h.dom':            { kind: 'fn', signature: '(selector) → Element | null  // queries the live page DOM' },
+    'h.domAll':         { kind: 'fn', signature: '(selector) → Element[]' },
+    'h.domText':        { kind: 'fn', signature: '(selector) → trimmed text of first match | ""' },
+    'h.doc':            { kind: 'var', signature: 'Document  // the page being resolved (advanced DOM access)' },
   };
 }
