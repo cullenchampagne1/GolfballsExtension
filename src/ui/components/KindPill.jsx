@@ -4,6 +4,8 @@ import { sizeIcon } from '../shared.jsx';
 
 /** Icons for each kind — bolt, search, picker crosshair, regex circle, edit */
 const KindIcons = {
+  code:    (p) => <Icon {...p}><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></Icon>,
+  schema:  (p) => <Icon {...p}><circle cx="11" cy="11" r="7.5"/><path d="M20.5 20.5L17 17"/></Icon>,
   builtin: (p) => <Icon {...p}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></Icon>,
   dom:     (p) => <Icon {...p}><circle cx="11" cy="11" r="7.5"/><path d="M20.5 20.5L17 17"/></Icon>,
   pick:    (p) => <Icon {...p}><path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/></Icon>,
@@ -12,6 +14,8 @@ const KindIcons = {
 };
 
 const KIND_LABELS = {
+  code:    'Code',
+  schema:  'Schema',
   builtin: 'Built-in',
   dom:     'DOM',
   pick:    'Pick',

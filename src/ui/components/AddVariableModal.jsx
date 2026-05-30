@@ -11,29 +11,33 @@ import { CompactModal } from './CompactModal.jsx';
 import { ModalHeader } from './ModalHeader.jsx';
 import { ModalFooter } from './ModalFooter.jsx';
 import { VariableSchemaPicker } from './VariableSchemaPicker.jsx';
+import { CodeVarEditor, isAsyncBody } from './CodeVarEditor.jsx';
 
 /* ── Kind icons (BoltIcon comes from I.bolt) ───────────────────── */
 const PickerIcon  = (p) => <Icon {...p}><path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/></Icon>;
 const RegexIcon   = (p) => <Icon {...p}><circle cx="12" cy="12" r="3"/><path d="M12 5v6M12 12v6M6 12h12"/></Icon>;
 const VariableIcon= (p) => <Icon {...p}><path d="M5 4 a14 14 0 000 16M19 4a14 14 0 010 16"/><path d="M9 9l6 6M9 15l6-6"/></Icon>;
+const CodeIcon    = (p) => <Icon {...p}><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></Icon>;
 
 /* Regex as a primary variable kind only makes sense for case templates
    (matching the inbound email body/subject/from). For order/account
    pages, regex moved to a Smart "Extract" transform that runs against
    the already-resolved builtin/DOM/literal value. */
 export const SOURCE_KINDS = {
-  order:   ['builtin', 'dom', 'literal'],
-  case:    ['builtin', 'regex', 'literal'],
-  /* Schema first for account templates — the engine-driven picker
-     is the recommended path now that the unified CRM schema
-     covers every legacy built-in (and adds the multi-row
-     `contacts[]` / account-only fields). Built-in stays in the
-     list for backward compat (existing templates keep working)
-     but the modal flags it as deprecated. */
-  account: ['schema', 'builtin', 'dom', 'literal'],
+  /* `code` is the durable path everywhere — it runs JS over the page
+     json block (ctx), the other resolved variables (vars), and the
+     helpers (h.*, including async server calls). Schema is offered
+     first on account/contact pages (they have an extractor today);
+     order/case have no schema yet, so code leads there. builtin / dom
+     / regex stay for backward compat (flagged deprecated) until the
+     migration sweep removes them. */
+  order:   ['code', 'builtin', 'dom', 'literal'],
+  case:    ['code', 'builtin', 'regex', 'literal'],
+  account: ['schema', 'code', 'builtin', 'dom', 'literal'],
 };
 
 const KIND_OPTIONS = {
+  code:    { icon: <CodeIcon />,  label: 'Code',     desc: 'Run JS over page data; can call the server' },
   builtin: { icon: <I.bolt />,  label: 'Built-in', desc: 'Pre-defined from the page context' },
   schema:  { icon: <I.search />,  label: 'Schema',   desc: 'Pull from the page-engine field tree' },
   dom:     { icon: <I.search />,  label: 'DOM',      desc: 'CSS selector — or pick from page' },
@@ -110,7 +114,7 @@ export const REGEX_FIELDS = [
  *   onClose () => void
  *   onAdd   ({ name, kind, config }) => void
  */
-export function AddVariableModal({ typeId, onClose, onAdd }) {
+export function AddVariableModal({ typeId, onClose, onAdd, varNames = [] }) {
   const [name,       setName]       = useState('');
   const [kind,       setKind]       = useState(SOURCE_KINDS[typeId]?.[0] ?? 'literal');
   const [config,       setConfig]       = useState('');
@@ -200,6 +204,7 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
     : kind === 'schema'  ? (config ? '(engine value)' : '— pick a field —')
     : kind === 'dom'     ? (liveResolved || (config ? '(querying…)' : '— enter a selector —'))
     : kind === 'regex'   ? (config ? '(first capture group)' : '— enter a regex —')
+    : kind === 'code'    ? (config ? '(runs on send)' : '— write code —')
     : '—'
   );
 
@@ -255,6 +260,19 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
                 value={config}
                 onChange={setConfig}
                 placeholder="Pick a field…"
+              />
+            </Field>
+          )}
+          {kind === 'code' && (
+            <Field
+              label="Code"
+              hint="Return a value · ctx = page data · vars = other variables · h = helpers"
+            >
+              <CodeVarEditor
+                value={config}
+                onChange={setConfig}
+                typeId={typeId}
+                varNames={varNames}
               />
             </Field>
           )}
@@ -426,6 +444,7 @@ export function AddVariableModal({ typeId, onClose, onAdd }) {
             onClick={() => onAdd?.({
               name, kind, config,
               ...(kind === 'regex' ? { source: regexField } : {}),
+              ...(kind === 'code'  ? { async: isAsyncBody(config) } : {}),
             })}
           >
             Add variable

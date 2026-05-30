@@ -596,6 +596,22 @@ function EmptyState({ onCreate }) {
    STAGE — MAIN
 ============================================================ */
 
+/* Loading value shown in a KeyVal row while resolution is in flight.
+   `code` rows (which may await server calls) read as brand-tinted
+   "running code…" so the rep can see which variables are still
+   executing during page validation. */
+function LoadingVal({ code }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11,
+      color: code ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)',
+    }}>
+      <Spinner size={9} />
+      {code ? 'running code…' : 'resolving…'}
+    </span>
+  );
+}
+
 function MainView({
   templates, matchedIds, selectedId, onSelect,
   selectedVariationId, onSelectVariation,
@@ -976,8 +992,18 @@ function MainView({
             <Reveal key="send-block" gap={14}>
               {hasTemplates && (
                 resolving ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 11.5, padding: '4px 0' }}>
-                    <Spinner size={11} /> Resolving variables…
+                  /* Per-variable skeleton while the page-validation round-trip
+                     runs. Code variables may do async server calls (h.server),
+                     so they get a distinct "running code…" tag instead of one
+                     global spinner — the rows reconcile in place (same keys) to
+                     their resolved values when the batch returns. */
+                  <div>
+                    <KeyVal k="To" v={<LoadingVal />} tone="default" />
+                    {Object.entries(tpl?.vars || {}).map(([name, def]) => (
+                      <KeyVal key={name} k={name}
+                        v={<LoadingVal code={def?.type === 'code'} />}
+                        tone="default" />
+                    ))}
                   </div>
                 ) : (
                   <div>
