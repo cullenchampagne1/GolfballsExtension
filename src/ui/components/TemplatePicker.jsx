@@ -78,6 +78,7 @@ export function parseTemplateValue(value) {
 export function TemplatePicker({
   templates = [],
   matchedIds = [],
+  resolvingIds = [],
   value,
   onChange,
   /* 'random' (EmailRunner) | 'single' (popup) */
@@ -158,6 +159,7 @@ export function TemplatePicker({
   }, [valueTplId, valueVarId]);
 
   const matchedSet = useMemo(() => new Set(matchedIds), [matchedIds]);
+  const resolvingSet = useMemo(() => new Set(resolvingIds), [resolvingIds]);
   const selectedTpl = templates.find((t) => t.id === valueTplId) || null;
   /* A pinned variation lookup that also recognizes the synthetic
      ORIGINAL_VARIATION_ID. The original is exposed as "Variation
@@ -337,6 +339,7 @@ export function TemplatePicker({
               valueVarId={valueVarId}
               mode={mode}
               onChange={onChange}
+              resolvingSet={resolvingSet}
             />
             </div>
           </motion.div>
@@ -373,6 +376,7 @@ export function TemplatePicker({
                 valueVarId={valueVarId}
                 mode={mode}
                 onChange={onChange}
+                resolvingSet={resolvingSet}
               />
             </div>
           </motion.div>
@@ -388,7 +392,7 @@ export function TemplatePicker({
 function ListBody({
   templates, placeholder, useGroups, matched, rest,
   expanded, toggleExpand,
-  valueTplId, valueVarId, mode, onChange,
+  valueTplId, valueVarId, mode, onChange, resolvingSet = new Set(),
 }) {
   if (templates.length === 0) return <EmptyHint>{placeholder}</EmptyHint>;
   /* `matched` + `rest` are only populated when useGroups is true
@@ -406,6 +410,7 @@ function ListBody({
       idx={idx}
       mode={mode}
       isMatched={isMatched}
+      isResolving={resolvingSet.has(tpl.id)}
       isSelected={valueTplId === tpl.id && !valueVarId}
       pinnedVarId={valueTplId === tpl.id ? valueVarId : null}
       expanded={expanded.has(tpl.id)}
@@ -518,7 +523,7 @@ function EmptyHint({ children }) {
 
 /* ── Single template row + variations ────────────────────── */
 function Row({
-  tpl, idx, mode, isMatched, isSelected, pinnedVarId,
+  tpl, idx, mode, isMatched, isResolving, isSelected, pinnedVarId,
   expanded, onPickParent, onToggleExpand, onPickVariation,
 }) {
   const hasVariations = (tpl.variations?.length || 0) > 0;
@@ -562,8 +567,8 @@ function Row({
         padding: '5px 7px',
       }}>
         <Dot
-          tone={isMatched ? 'brand' : isAnyHere ? 'info' : 'muted'}
-          glow={isMatched || isAnyHere}
+          tone={isMatched ? 'brand' : (isResolving || isAnyHere) ? 'info' : 'muted'}
+          glow={isMatched || isResolving || isAnyHere}
           size={6}
         />
         <button

@@ -159,6 +159,9 @@ function PopupApp() {
   // track it up here so onSend can resolve the right content.
   const [selectedVariationId, setSelectedVariationId] = useState(null);
   const [matchedIds, setMatchedIds] = useState([]);
+  // Templates whose match depends on variable (code) conditions still
+  // resolving — phase 2. Each id clears as its resolveMatch settles.
+  const [resolvingIds, setResolvingIds] = useState([]);
   const [resolvedVars, setResolvedVars] = useState({});
   const [resolvedTo, setResolvedTo] = useState('');
   const [resolving, setResolving] = useState(false);
@@ -230,6 +233,22 @@ function PopupApp() {
         });
         if (cancelled) return;
         renderMain(info || {}, tpls);
+
+        // Phase 2 — eagerly resolve variable-driven (pending) matches in
+        // parallel; each flips its own "resolving" dot when it settles,
+        // so slow code blocks never block the fast/var-free matches.
+        const pending = (info && info.pendingTemplateIds) || [];
+        for (const id of pending) {
+          const t = tpls.find((x) => x.id === id);
+          if (!t) continue;
+          const tree = t.type === 'account' ? t.accountConditions : t.rules;
+          sendMessage(currentTab.id, { action: 'resolveMatch', tree, vars: t.vars || {} })
+            .then((res) => {
+              if (cancelled) return;
+              setResolvingIds((prev) => prev.filter((x) => x !== id));
+              if (res && res.matched) setMatchedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+            });
+        }
       };
 
       if (alreadyLoaded) {
@@ -275,6 +294,7 @@ function PopupApp() {
   function renderMain(info, tpls = allTemplates) {
     setPageInfo(info);
     setMatchedIds(info.matchedTemplateIds || []);
+    setResolvingIds(info.pendingTemplateIds || []);
 
     // Always go to main — action buttons (charge / watch / tasks / etc.) are
     // page-context driven, not template-driven, so they should stay visible
@@ -390,6 +410,7 @@ function PopupApp() {
         <MainView
           templates={visibleTemplates}
           matchedIds={effectiveMatchedIds}
+          resolvingIds={resolvingIds}
           selectedId={selectedId}
           onSelect={setSelectedId}
           selectedVariationId={selectedVariationId}
@@ -614,7 +635,7 @@ function LoadingVal({ code }) {
 }
 
 function MainView({
-  templates, matchedIds, selectedId, onSelect,
+  templates, matchedIds, resolvingIds = [], selectedId, onSelect,
   selectedVariationId, onSelectVariation,
   tpl,
   resolving, resolvedVars, resolvedTo, pageInfo, flags, watchList, tab,
@@ -885,6 +906,7 @@ function MainView({
                   mode="random"
                   templates={templates}
                   matchedIds={matchedIds}
+                  resolvingIds={resolvingIds}
                   value={dropdownValue}
                   onChange={onTemplatePickerChange}
                   placeholder="Pick a template"

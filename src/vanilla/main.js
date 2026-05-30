@@ -217,6 +217,49 @@ window.__gbContentReady = true;
       return true;
     }
 
+    if (msg.action === 'resolveMatch') {
+      // Phase 2 of page matching: resolve ONE template's variable
+      // conditions (which may run async code) and evaluate its grouped
+      // tree. The popup fires these in parallel for the pending
+      // templates getPageInfo returned, so slow code blocks never hold
+      // up the fast/var-free matches.
+      (async () => {
+        const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
+        const tree = msg.tree;
+        if (!engine || !engine.isGroupedTree(tree)) { sendResponse({ matched: false }); return; }
+
+        // Resolve the referenced variables up front (one batch, cached).
+        let resolved = {};
+        const refVars = engine.varsReferenced(tree);
+        if (refVars.length && msg.vars) {
+          const defs = {};
+          for (const name of refVars) if (msg.vars[name]) defs[name] = msg.vars[name];
+          if (Object.keys(defs).length) {
+            try { const r = await resolveAllVarsAsync(defs, { type: 'auto' }, document); resolved = r.resolved || {}; }
+            catch { resolved = {}; }
+          }
+        }
+
+        const getValue = (cond) => {
+          if (!cond) return '';
+          if (cond.source === 'var')    return resolved[cond.ref] != null ? resolved[cond.ref] : '';
+          if (cond.source === 'schema') return engine.resolvePath(document, cond.ref, '');
+          if (cond.source === 'dom') {
+            try {
+              const el = document.querySelector(cond.ref);
+              return el ? ((typeof getTextOf === 'function') ? getTextOf(el) : (el.innerText || el.textContent || '').trim()) : '';
+            } catch { return ''; }
+          }
+          return '';
+        };
+
+        let matched = false;
+        try { matched = await engine.evalTree(tree, getValue); } catch { matched = false; }
+        sendResponse({ matched });
+      })();
+      return true;
+    }
+
     if (msg.action === 'GB_FEATURE_FLAGS') {
       window.__gbFeatureFlags = { ...(window.__gbFeatureFlags || {}), ...msg.flags };
       // Enable/disable email/text preview
