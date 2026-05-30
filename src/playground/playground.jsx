@@ -23,6 +23,8 @@ import { EmailPreview } from '../modals/EmailPreview.jsx';
 import { matchesCaseTpl } from '../lib/caseMatch.js';
 import { CalendarModal } from '../modals/CalendarModal.jsx';
 import { runOrderDateUpdate } from '../lib/submitOrderDates.js';
+import { TextPreview } from '../modals/TextPreview.jsx';
+import { parseChat } from '../lib/parseChat.js';
 import { ActionsShelf } from '../ui/components/ActionsShelf.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { findPhone } from '../lib/findPhone.js';
@@ -50,6 +52,7 @@ const MODAL_REGISTRY = [
   { id: 'orderEdit',    label: 'Order Edit',      icon: 'edit',    wired: false },
   { id: 'watchList',    label: 'Watch List',      icon: 'eye',     wired: true  },
   { id: 'emailPreview', label: 'Email Preview',   icon: 'mail',    wired: true  },
+  { id: 'textPreview',  label: 'Text Preview',    icon: 'mail',    wired: true  },
   { id: 'imageViewer',  label: 'Image Viewer',    icon: 'eye',     wired: true  },
   { id: 'submitProof',  label: 'Submit Proof',    icon: 'send',    wired: true  },
   { id: 'crmSearch',    label: 'CRM Search',      icon: 'search',  wired: true  },
@@ -141,6 +144,37 @@ const EMAIL_FIXTURES = {
     },
   },
 };
+
+/* ── Text/Chat Preview fixture — a raw SnapEngage transcript run
+   through the real parser (lib/parseChat.js), so the modal + the
+   shared categorize rail are exercisable in both Case / Notes states
+   via the modal's own header toggle. */
+const SAMPLE_CHAT_RAW = [
+  '(09:14:00) <b>Visitor</b> [Visitor joined the chat]',
+  "(09:14:00) <b>Visitor</b> Hi, I placed an order for custom polos on the 18th — order #4521098 — but they haven't shipped yet.",
+  "(09:15:00) <b>Cullen</b> Hi! I'm Cullen, happy to help. Let me pull up that order for you.",
+  '(09:15:00) <b>Cullen</b> One second…',
+  '(09:16:00) <b>Cullen</b> [Transferred to Ren]',
+  '(09:17:00) <b>Ren</b> Hi, this is Ren from the embroidery team. Looks like proof approval is still pending on our end.',
+  '(09:17:00) <b>Visitor</b> I thought I approved on Monday?',
+  '(09:19:00) <b>Ren</b> Your approval from May 19 went to the wrong proof revision (v2). We sent a v3 with updated kerning that needs a new sign-off.',
+  '(09:23:00) <b>Visitor</b> Got it. Just approved. Sorry about the confusion!',
+  '(09:23:00) <b>Ren</b> No worries at all. Your order will move to production today and ship Thursday.',
+  '(09:25:00) <b>Visitor</b> [Chat ended]',
+  'see https://snapengage.com/transcripts/4521098',
+].join('\n');
+
+const SAMPLE_TRANSCRIPT = {
+  caseId: 'CASE-78421',
+  subject: '',
+  title: 'Live Chat Transcript',
+  messages: parseChat(SAMPLE_CHAT_RAW).messages,
+};
+
+const TEXT_RECOMMENDED = [
+  { category: 'Order Status Update', subcategory: 'Tracking Update', label: 'Tracking Update · Order Status Update' },
+  { category: 'Order Status Update', subcategory: 'Misunderstanding', label: 'Misunderstanding · Order Status Update' },
+];
 
 /* Sample recommendations for the case-mode categorize rail. */
 const EMAIL_RECOMMENDED = [
@@ -931,6 +965,19 @@ function PlaygroundSurface() {
             onSubmit={({ approval, commitment }) => runOrderDateUpdate(toast, {
               orderID: '284910', calendarUrl: '', approval, commitment,
             })}
+            onClosed={() => setMounted(null)}
+          />
+        )}
+        {mounted === 'textPreview' && (
+          /* Opens in Case mode; the modal's own Case / Notes header
+             toggle flips the categorize rail on/off — both states. */
+          <TextPreview
+            key="textPreview"
+            transcript={SAMPLE_TRANSCRIPT}
+            defaultCase
+            recommended={TEXT_RECOMMENDED}
+            applyState={null}
+            onApplyCategory={(category, subcategory) => toast?.success?.(`Categorized: ${category} → ${subcategory}`, { duration: 2000 })}
             onClosed={() => setMounted(null)}
           />
         )}
