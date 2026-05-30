@@ -185,18 +185,21 @@ function CategorySection({ sect, applied, focusedSection, chipIdx, onFocus, onAp
   const ref = useRef(null);
 
   useEffect(() => {
-    if (sectionFocused && ref.current) {
-      const scroller = ref.current.closest('[data-cc-scroll]');
-      if (scroller) {
-        const top = ref.current.offsetTop - 12;
-        const visibleTop = scroller.scrollTop;
-        const visibleBot = visibleTop + scroller.clientHeight;
-        const elBot = top + ref.current.offsetHeight;
-        if (top < visibleTop || elBot > visibleBot) {
-          scroller.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
-        }
-      }
-    }
+    if (!sectionFocused || !ref.current) return;
+    const el = ref.current;
+    const scroller = el.closest('[data-cc-scroll]');
+    if (!scroller) return;
+    /* CENTER the focused section in the viewport every time it changes
+       (offsetTop was relative to the wrong ancestor → overshoot). Use
+       rect deltas so it's correct regardless of positioning; sections
+       taller than the viewport align to their top instead. */
+    const sRect = scroller.getBoundingClientRect();
+    const eRect = el.getBoundingClientRect();
+    const elTop = (eRect.top - sRect.top) + scroller.scrollTop;
+    const target = el.offsetHeight >= scroller.clientHeight
+      ? elTop - 12
+      : elTop - (scroller.clientHeight - el.offsetHeight) / 2;
+    scroller.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
   }, [sectionFocused]);
 
   return (
@@ -288,6 +291,21 @@ export function CategorizeRail({
   topSlot,
 }) {
   useEffect(() => { ensureFocusStyle(); }, []);
+
+  /* Land focus on the first section when the rail opens so Tab / 1–9
+     work immediately. Without this, focus sits outside the rail (on the
+     page or the modal shell) and the first Tab "does nothing". */
+  const scrollRef = useRef(null);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const root = scrollRef.current;
+      if (!root) return;
+      if (root.contains(document.activeElement)) return; // user already in the rail
+      const first = root.querySelector('.gb-ev-focusable');
+      try { first?.focus(); } catch { /* ignore */ }
+    }, 120);
+    return () => clearTimeout(t);
+  }, []);
 
   const sections = useMemo(() => {
     const arr = [];
@@ -407,8 +425,9 @@ export function CategorizeRail({
 
       {/* Own scroll area — independent of the email column. Edges fade so
           rows glide in/out as Tab walks the sections. */}
-      <div data-cc-scroll style={{
+      <div data-cc-scroll ref={scrollRef} style={{
         flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden',
+        position: 'relative',
         padding: '12px 12px 20px',
         WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 18px), transparent 100%)',
         maskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 18px), transparent 100%)',
