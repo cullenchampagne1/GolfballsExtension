@@ -21,6 +21,8 @@ import { QuickTask } from '../modals/QuickTask.jsx';
 import { submitQuickTask } from '../lib/submitQuickTask.js';
 import { EmailPreview } from '../modals/EmailPreview.jsx';
 import { matchesCaseTpl } from '../lib/caseMatch.js';
+import { CalendarModal } from '../modals/CalendarModal.jsx';
+import { runOrderDateUpdate } from '../lib/submitOrderDates.js';
 import { ActionsShelf } from '../ui/components/ActionsShelf.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { findPhone } from '../lib/findPhone.js';
@@ -56,7 +58,7 @@ const MODAL_REGISTRY = [
   { id: 'taskList',     label: 'Tasks',           icon: 'check',   wired: true  },
   { id: 'callLog',      label: 'Call Log',        icon: 'phone',   wired: true  },
   { id: 'quickTask',    label: 'Quick Task',      icon: 'check',   wired: true  },
-  { id: 'calendar',     label: 'Calendar',        icon: 'cog',     wired: false },
+  { id: 'calendar',     label: 'Order Dates',     icon: 'cog',     wired: true  },
 ];
 
 /* ── Email Preview fixtures ───────────────────────────────────
@@ -918,6 +920,18 @@ function PlaygroundSurface() {
               },
             })}
             onClosed={() => { setMounted(null); setCallContext(null); }}
+          />
+        )}
+        {mounted === 'calendar' && (
+          /* No calendarUrl → submitOrderDates runs the dev simulation,
+             so the centered step notification is fully exercisable here. */
+          <CalendarModal
+            key="calendar"
+            orderID="284910"
+            onSubmit={({ approval, commitment }) => runOrderDateUpdate(toast, {
+              orderID: '284910', calendarUrl: '', approval, commitment,
+            })}
+            onClosed={() => setMounted(null)}
           />
         )}
         {mounted === 'emailPreview' && (
