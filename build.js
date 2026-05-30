@@ -52,6 +52,13 @@ for (const { srcDir, outDir, suffix, stripSuffix } of surfaces) {
       // React's npm build branches on process.env.NODE_ENV; it must be a literal.
       define: { 'process.env.NODE_ENV': JSON.stringify(mode) },
       plugins: [react()],
+      /* Emit ASCII-only output (escape every non-ASCII char to \uXXXX).
+         Chrome's content-script loader runs strict UTF-8 validation that
+         rejects Unicode NONCHARACTERS (e.g. U+FFFF) and C1 controls
+         (U+0080) — which ship as raw sentinel literals inside deps like
+         three.js — with the misleading "isn't UTF-8 encoded" error.
+         Escaping them sidesteps the whole class for every bundle. */
+      esbuild: { charset: 'ascii' },
       build: {
         outDir: outPath,
         emptyOutDir: false,
