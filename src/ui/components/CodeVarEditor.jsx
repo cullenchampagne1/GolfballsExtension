@@ -6,13 +6,13 @@ import { javascript } from '@codemirror/lang-javascript';
 import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { linter, lintGutter } from '@codemirror/lint';
 import {
-  syntaxHighlighting, HighlightStyle, bracketMatching, indentOnInput,
+  syntaxHighlighting, HighlightStyle, bracketMatching, indentOnInput, syntaxTree,
 } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 
 import { contactSchema } from '../../lib/page-schemas/contact.js';
 import { listPaths } from '../../lib/page-engine/resolve.js';
-import { describeHelpers, compile, compileAsync } from '../../lib/page-engine/code-runtime.js';
+import { describeHelpers, staticCheck } from '../../lib/page-engine/code-runtime.js';
 import { Btn } from './Btn.jsx';
 import { Tag } from './Tag.jsx';
 import { Spinner } from '../shared.jsx';
@@ -93,12 +93,21 @@ const GB_THEME = EditorView.theme({
     color: 'var(--gb-text-primary)',
     border: '1px solid var(--gb-border-default)',
     borderRadius: 'var(--gb-r-sm)',
-    /* No overflow:hidden — it clipped the autocomplete dropdown to a
-       sliver at the editor's bottom edge. The dropdown renders inside
-       the editor (in-flow, scaled space) and now extends past it. */
+    /* Grow up to ~22 lines, then scroll (cm-scroller). No overflow:hidden
+       on the editor itself so the autocomplete dropdown isn't clipped to a
+       sliver — it renders in-flow (scaled space) and extends past it. */
+    maxHeight: '360px',
   },
   '&.cm-focused': { outline: 'none', borderColor: 'var(--gb-brand-tint-border)' },
-  '.cm-content': { fontFamily: 'var(--gb-font-mono)', padding: '8px 0', caretColor: 'var(--gb-brand-label)', minHeight: '128px' },
+  '.cm-scroller': { overflow: 'auto' },
+  '.cm-content': {
+    fontFamily: 'var(--gb-font-mono)',
+    /* ~3 lines of bottom padding keep room below the last line so the
+       autocomplete dropdown always has space to open downward. */
+    padding: '8px 0 52px',
+    caretColor: 'var(--gb-brand-label)',
+    minHeight: '128px',
+  },
   '.cm-line': { padding: '0 8px' },
   '.cm-gutters': { backgroundColor: 'transparent', border: 'none', color: 'var(--gb-text-ghost)' },
   '.cm-lineNumbers .cm-gutterElement': { padding: '0 4px 0 8px', minWidth: '18px' },
@@ -163,12 +172,19 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
     const cmLinter = (view) => {
       const body = view.state.doc.toString();
       if (!body.trim()) return [];
-      try {
-        (isAsyncBody(body) ? compileAsync : compile)(body);
-        return [];
-      } catch (e) {
-        return [{ from: 0, to: Math.max(1, body.length), severity: 'error', message: e.message }];
-      }
+      const diags = [];
+      // Syntax errors from the Lezer parse tree — no eval, so it's safe
+      // on extension pages (new Function is blocked under MV3 CSP).
+      syntaxTree(view.state).cursor().iterate((node) => {
+        if (node.type.isError) {
+          const to = node.to > node.from ? node.to : Math.min(view.state.doc.length, node.from + 1);
+          diags.push({ from: node.from, to, severity: 'error', message: 'Syntax error' });
+        }
+      });
+      // Length + blocklist (regex, CSP-safe).
+      const issue = staticCheck(body);
+      if (issue) diags.push({ from: 0, to: Math.max(1, body.length), severity: 'error', message: issue });
+      return diags;
     };
 
     const view = new EditorView({

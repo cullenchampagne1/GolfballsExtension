@@ -206,6 +206,21 @@ function precheck(body) {
   }
 }
 
+/** CSP-safe static validation (length + blocklist only — NO eval).
+ *  The editor lints with this plus the parser's syntax tree because
+ *  `new Function` is blocked on extension pages under MV3 CSP
+ *  (script-src 'self'). Returns an error message, or null when the
+ *  body passes the static checks. The real compile happens at
+ *  resolution time, in the page context. */
+export function staticCheck(body) {
+  if (typeof body !== 'string') return 'code body must be a string';
+  if (body.length > MAX_BODY_LENGTH) return `code body exceeds ${MAX_BODY_LENGTH} characters`;
+  for (const { re, reason } of BLOCKED_PATTERNS) {
+    if (re.test(body)) return `blocked: ${reason}`;
+  }
+  return null;
+}
+
 /* Bodies WITHOUT a visible `return` are wrapped so the last
    expression is returned — supports `ctx.x.toUpperCase()` as well as
    `return ...`. `return` inside a string literal yields a false
