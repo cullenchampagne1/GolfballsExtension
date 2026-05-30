@@ -73,14 +73,14 @@ export function resolvePath(doc, path, defaultV = '') {
  *  `await h.fetchJson(...)`. */
 export async function evaluateCode(doc, body, vars = {}) {
   const ctx = runEngine(doc);
-  return runCode(body, ctx?.data || {}, vars);
+  return runCode(body, ctx?.data || {}, vars, { doc });
 }
 
 /** Sync variant — bypasses the timeout. Only safe for synchronous
  *  bodies (the common case). Throws on compile + runtime errors. */
 export function evaluateCodeSync(doc, body, vars = {}) {
   const ctx = runEngine(doc);
-  return runCodeSync(body, ctx?.data || {}, vars);
+  return runCodeSync(body, ctx?.data || {}, vars, { doc });
 }
 
 /* Re-exports — single import surface for everything the resolver

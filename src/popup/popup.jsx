@@ -242,6 +242,7 @@ function PopupApp() {
               files: [
                 'theme.js',
                 'src/vanilla/smart-detection.js',
+                'react-dist/vanilla/page-engine.js',
                 'src/vanilla/variable-resolution.js',
                 'src/vanilla/modals/charge-modal.js', 'src/vanilla/modals/order-edit-modal.js',
                 'src/vanilla/page-utils.js', 'react-dist/content/email-preview.js',
