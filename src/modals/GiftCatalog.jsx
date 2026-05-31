@@ -397,7 +397,14 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
 }
 
 /* Apparel categories collapse into one sub-folder to keep the rail short. */
-const CAT_GROUPS = [{ id: 'Apparel', members: ['Golf Shirts', 'Golf Hats', 'Outerwear', 'Golf Gloves'] }];
+/* Collapse the long category list into a few folders so the rail stays
+   short — leaving room below for the upcoming "Saved" views. */
+const CAT_GROUPS = [
+  { id: 'Apparel', icon: 'Golf Shirts', members: ['Golf Shirts', 'Golf Hats', 'Outerwear', 'Golf Gloves'] },
+  { id: 'Bags', icon: 'Golf Bags', members: ['Logo Travel Bags', 'Golf Bags'] },
+  { id: 'On-Course', icon: 'Divot Tools', members: ['Golf Towels', 'Divot Tools', 'Ball Markers', 'Logo Tees', 'Golf Umbrellas'] },
+  { id: 'Gifts & Drinkware', icon: 'Drinkware', members: ['Drinkware', 'Custom Packaging', 'Promotional Products'] },
+];
 const groupOf = (cat) => CAT_GROUPS.find((g) => g.members.includes(cat));
 
 function CatRow({ id, label, count, value, onChange, child }) {
@@ -423,7 +430,7 @@ function GroupRow({ g, open, onToggle, value, onChange, counts, cats }) {
     <>
       <div onClick={() => { onToggle(g.id); onChange(g.id); }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 11px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', transition: 'all var(--gb-anim)', background: on ? 'var(--gb-brand-tint-medium)' : hover ? 'var(--gb-fill-subtle)' : 'transparent', border: '1px solid ' + (on ? 'var(--gb-brand-tint-border)' : 'transparent') }}>
-        <CatGlyph id="Golf Shirts" size={15} color={col} />
+        <CatGlyph id={g.icon || g.members[0]} size={15} color={col} />
         <span style={{ flex: 1, fontSize: 11.5, fontWeight: on ? 700 : 600, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>{g.id}</span>
         <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }}>{memCount}</span>
         <I.chevr size={12} style={{ color: 'var(--gb-text-muted)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform var(--gb-anim)', flexShrink: 0 }} />
@@ -435,6 +442,17 @@ function GroupRow({ g, open, onToggle, value, onChange, counts, cats }) {
   );
 }
 
+/* Placeholder row for an upcoming saved view (disabled until built). */
+function SavedStub({ label, icon }) {
+  return (
+    <div title="Coming soon" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 11px', borderRadius: 'var(--gb-r-sm)', cursor: 'default', opacity: .55 }}>
+      <span style={{ color: 'var(--gb-text-tertiary)', display: 'flex', flexShrink: 0 }}>{icon}</span>
+      <span style={{ flex: 1, fontSize: 11.5, fontWeight: 500, color: 'var(--gb-text-tertiary)' }}>{label}</span>
+      <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-pill)', padding: '1px 5px' }}>Soon</span>
+    </div>
+  );
+}
+
 function CategoryRail({ cats, value, onChange, counts, total }) {
   const startG = groupOf(value);
   const [expanded, setExpanded] = useState(() => new Set(startG ? [startG.id] : []));
@@ -442,22 +460,21 @@ function CategoryRail({ cats, value, onChange, counts, total }) {
   // Keep a group open while one of its categories is the active filter.
   useEffect(() => { const g = groupOf(value); if (g) setExpanded((s) => (s.has(g.id) ? s : new Set(s).add(g.id))); }, [value]);
 
-  // Walk canonical order; the first present member of a group emits the group once.
-  const rows = [];
-  const seen = new Set();
-  cats.forEach((c) => {
-    const g = groupOf(c);
-    if (g) { if (!seen.has(g.id)) { seen.add(g.id); rows.push({ kind: 'group', g }); } }
-    else rows.push({ kind: 'cat', c });
-  });
+  // Non-grouped categories first (canonical order), then the folders.
+  const loose = cats.filter((c) => !groupOf(c));
+  const groups = CAT_GROUPS.filter((g) => g.members.some((m) => cats.includes(m)));
 
   return (
     <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: 12, display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px' }}>Categories</div>
       <CatRow id="all" label="All Items" count={total} value={value} onChange={onChange} />
-      {rows.map((r) => r.kind === 'group'
-        ? <GroupRow key={'g:' + r.g.id} g={r.g} open={expanded.has(r.g.id)} onToggle={toggle} value={value} onChange={onChange} counts={counts} cats={cats} />
-        : <CatRow key={r.c} id={r.c} label={r.c} count={counts[r.c] || 0} value={value} onChange={onChange} />)}
+      {loose.map((c) => <CatRow key={c} id={c} label={c} count={counts[c] || 0} value={value} onChange={onChange} />)}
+      {groups.map((g) => <GroupRow key={'g:' + g.id} g={g} open={expanded.has(g.id)} onToggle={toggle} value={value} onChange={onChange} counts={counts} cats={cats} />)}
+
+      {/* Space freed by the folders, earmarked for upcoming saved views. */}
+      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '16px 10px 6px' }}>Saved</div>
+      <SavedStub label="Previous orders" icon={<I.refresh size={14} />} />
+      <SavedStub label="Preset proposals" icon={<I.card size={14} />} />
     </div>
   );
 }
@@ -578,25 +595,29 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove 
   );
 }
 
-function ProposalDock({ count, units, total, onOpen }) {
+/* Compact dock pinned to the bottom of the left rail — spans the
+   sidebar width (220px rail − 12px gutters = 196). */
+function ProposalDock({ count, total, active, onOpen }) {
   const [h, setH] = useState(false);
   return (
     <div onClick={onOpen} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
-      style={{ position: 'absolute', left: 12, bottom: 50, width: 162, zIndex: 15, cursor: 'pointer', background: 'var(--gb-surface-float)', border: '1px solid var(--gb-brand-tint-border)', borderRadius: 'var(--gb-r-lg)', boxShadow: 'var(--gb-shadow-popover)', overflow: 'hidden', transform: h ? 'translateY(-2px)' : 'none', transition: 'transform var(--gb-anim)', animation: 'pp-rise .26s cubic-bezier(.34,1.5,.64,1)' }}>
-      <div style={{ padding: '9px 11px', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ width: 26, height: 26, borderRadius: 'var(--gb-r-sm)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-          <I.card size={13} />
-          <span style={{ position: 'absolute', top: -5, right: -5, minWidth: 15, height: 15, padding: '0 4px', borderRadius: 8, background: 'var(--gb-brand-label)', color: 'var(--gb-surface-deep)', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--gb-font-mono)', boxShadow: '0 0 0 2px var(--gb-surface-float)' }}>{count}</span>
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-text-tertiary)' }}>Proposal</div>
-          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', letterSpacing: -.3 }}>{money(total)}</div>
-        </div>
-        <I.chevr size={13} style={{ color: 'var(--gb-brand-label)', flexShrink: 0 }} />
+      style={{
+        position: 'absolute', left: 12, bottom: 48, width: 196, zIndex: 15, cursor: 'pointer',
+        display: 'flex', alignItems: 'center', gap: 13, padding: '7px 9px',
+        background: (h || active) ? 'var(--gb-brand-tint-strong)' : 'var(--gb-brand-tint-medium)',
+        border: '1px solid var(--gb-brand-tint-border)', borderRadius: 'var(--gb-r-md)',
+        boxShadow: 'var(--gb-shadow-popover)', transition: 'background var(--gb-anim)',
+        animation: 'pp-rise .24s cubic-bezier(.34,1.5,.64,1)',
+      }}>
+      <span style={{ position: 'relative', display: 'flex', color: 'var(--gb-brand-label)' }}>
+        <I.card size={15} />
+        <span style={{ position: 'absolute', top: -6, right: -7, minWidth: 14, height: 14, padding: '0 3px', borderRadius: 7, background: 'var(--gb-brand-label)', color: 'var(--gb-surface-deep)', fontSize: 8.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--gb-font-mono)' }}>{count}</span>
+      </span>
+      <div style={{ flex: 1, minWidth: 0, lineHeight: 1.1 }}>
+        <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-brand-label)', opacity: .8 }}>Proposal</div>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--gb-brand-label)', fontFamily: 'var(--gb-font-mono)', letterSpacing: -.3 }}>{money(total)}</div>
       </div>
-      <div style={{ padding: '5px 11px', background: 'var(--gb-brand-tint-soft)', borderTop: '1px solid var(--gb-border-subtle)', fontSize: 9.5, fontWeight: 600, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>
-        {units} units · {count} {count === 1 ? 'product' : 'products'}
-      </div>
+      <I.chevr size={12} style={{ color: 'var(--gb-brand-label)', flexShrink: 0 }} />
     </div>
   );
 }
@@ -690,7 +711,6 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
 
   const inProposal = (id) => proposal.some((l) => l.id === id);
   const propTotal = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
-  const propUnits = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty, 0), 0);
   const addToProposal = (p) => setProposal((prev) => {
     if (prev.some((l) => l.id === p.id)) return prev;
     // Default to the smallest tier so the line starts at the highest price.
@@ -865,7 +885,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         </div>
 
         {proposal.length > 0 && !proposalOpen && (
-          <ProposalDock count={proposal.length} units={propUnits} total={propTotal} onOpen={() => setProposalOpen(true)} />
+          <ProposalDock count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} />
         )}
         </div>
       </div>
