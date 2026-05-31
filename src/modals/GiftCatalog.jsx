@@ -27,6 +27,7 @@ function ensureCatalogKeyframes() {
     @keyframes cm-slide { from { opacity:0; transform: translateY(-6px); } to { opacity:1; transform:none; } }
     @keyframes cm-fade { from { opacity:0; } to { opacity:1; } }
     @keyframes gb-spin { to { transform: rotate(360deg); } }
+    @keyframes pp-rise { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform:none; } }
     .gb-gc-norail { scrollbar-width: none; -ms-overflow-style: none; }
     .gb-gc-norail::-webkit-scrollbar { width: 0; height: 0; display: none; }`;
   (document.head || document.documentElement).appendChild(s);
@@ -42,11 +43,34 @@ const TagI  = (p) => <Icon {...p}><path d="M20.6 13.4L13 21a1.7 1.7 0 01-2.4 0L3
 const usd = (n) => (n == null ? '—' : '$' + Number(n).toFixed(2));
 
 const onSale = (p) => p.orig != null && p.orig > p.price;
+const hasPromo = (p) => !!(p && p.promo);
+const isDeal = (p) => onSale(p) || hasPromo(p);
+
+const money = (n) => '$' + (n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const rid = () => Math.random().toString(36).slice(2, 8);
+
+/* Per-unit price for a quantity, walking the custom-logo volume ladder. */
+function priceAtQty(p, qty) {
+  if (p.breaks && p.breaks.length) {
+    let price = p.breaks[0].p;
+    for (const b of p.breaks) if (qty >= b.q) price = b.p;
+    return price;
+  }
+  return p.logo || p.price || 0;
+}
+/* Has the price been hand-edited away from the tier the qty implies? */
+const isTierPrice = (p, qty, price) => Math.abs(priceAtQty(p, qty) - price) < 0.005;
+
+/* "/" quick-filters beyond category + brand. */
+const SPECIAL_CMDS = [
+  { type: 'special', id: 'sale', label: 'On sale / promo', match: (p) => isDeal(p) },
+  { type: 'special', id: 'logo', label: 'Custom-logo ready', match: (p) => !!p.logo },
+];
 
 /* Always-on magnification. The rep runs the Modals dev-scale below 1,
    which was shrinking the catalog; this constant multiplies on top so
    it reads large by default while the dev slider still adjusts it. */
-const CATALOG_SCALE = 2.5;
+const CATALOG_SCALE = 1.5;
 const CARD_W = 1180;
 const CARD_H = 760;
 
@@ -91,7 +115,7 @@ function SearchBox({ value, onChange, commands, onPick }) {
   }, []);
 
   const isCmd = value.startsWith('/');
-  const term = isCmd ? value.slice(1).trim().toLowerCase() : '';
+  const term = isCmd ? value.replace(/^\/+/, '').trim().toLowerCase() : '';
   const matches = useMemo(() => {
     if (!isCmd) return [];
     const list = term ? commands.filter((c) => c.label.toLowerCase().includes(term)) : commands;
@@ -100,11 +124,13 @@ function SearchBox({ value, onChange, commands, onPick }) {
   useEffect(() => { setHi(0); }, [term, isCmd]);
 
   const onKey = (e) => {
-    if (!isCmd || !matches.length) return;
+    if (!isCmd) return;
+    if (e.key === 'Escape') { e.preventDefault(); onChange(''); return; }
+    // Enter with nothing to pick still clears, so a stray "/typo" never lingers.
+    if (!matches.length) { if (e.key === 'Enter') { e.preventDefault(); onChange(''); } return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); setHi((i) => (i + 1) % matches.length); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((i) => (i - 1 + matches.length) % matches.length); }
     else if (e.key === 'Enter') { e.preventDefault(); onPick(matches[hi]); }
-    else if (e.key === 'Escape') { e.preventDefault(); onChange(''); }
   };
 
   const open = isCmd && focused && matches.length > 0;
@@ -125,7 +151,7 @@ function SearchBox({ value, onChange, commands, onPick }) {
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKey}
           onFocus={() => setFocused(true)} onBlur={() => setTimeout(() => setFocused(false), 120)}
-          placeholder={isCmd ? 'Filter by category or brand…' : 'Search products, or / to filter…'}
+          placeholder={isCmd ? 'Filter — type, brand, sale…' : 'Search products, or / to filter…'}
           style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 12.5, fontWeight: 500 }}
         />
         {value && (
@@ -142,9 +168,11 @@ function SearchBox({ value, onChange, commands, onPick }) {
               style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', background: i === hi ? 'var(--gb-brand-tint-soft)' : 'transparent' }}>
               {c.type === 'cat'
                 ? <CatGlyph id={c.id} size={14} color={i === hi ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)'} />
+                : c.type === 'special'
+                ? <TagI size={13} style={{ color: i === hi ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)', flexShrink: 0 }} />
                 : <span style={{ width: 11, textAlign: 'center', fontSize: 11, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)' }}>@</span>}
               <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: i === hi ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>{c.label}</span>
-              <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-text-ghost)' }}>{c.type === 'cat' ? 'Type' : 'Brand'}</span>
+              <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-text-ghost)' }}>{c.type === 'cat' ? 'Type' : c.type === 'special' ? 'Filter' : 'Brand'}</span>
               <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)', minWidth: 22, textAlign: 'right' }}>{c.count}</span>
             </div>
           ))}
@@ -226,7 +254,18 @@ function Rating({ value, count, size = 11 }) {
   );
 }
 
-function ProductCard({ p, compact, showRating, priceFocus, active, onClick }) {
+/* Sale (price cut) or promo (tag_ss deal like EVERY12GETS6) badge. */
+function DealBadge({ p }) {
+  if (onSale(p)) {
+    return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-danger, #e5484d)', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>Sale</span>;
+  }
+  if (hasPromo(p)) {
+    return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .3, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-success-solid, #2e9e5b)', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>{p.promo.label}</span>;
+  }
+  return null;
+}
+
+function ProductCard({ p, compact, showRating, priceFocus, active, inProposal, onAdd, onClick }) {
   const [hover, setHover] = useState(false);
   const logoFocus = priceFocus === 'logo' && p.logo;
   const heroPrice = logoFocus ? p.logo : p.price;
@@ -243,16 +282,18 @@ function ProductCard({ p, compact, showRating, priceFocus, active, onClick }) {
       }}>
       <div style={{ position: 'relative' }}>
         <ProductImage src={p.img} alt={p.title} pad={compact ? 12 : 16} />
-        {p.logo && (
-          <span style={{ position: 'absolute', top: 7, left: 7, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-strong)', border: '1px solid var(--gb-brand-tint-border)', backdropFilter: 'blur(4px)' }}>
-            <Gift size={9} /> Logo
-          </span>
-        )}
-        {onSale(p) && (
-          <span style={{ position: 'absolute', top: 7, right: 7, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-danger, #e5484d)', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>
-            Sale
-          </span>
-        )}
+        <div style={{ position: 'absolute', top: 7, left: 7, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 5 }}>
+          {p.logo && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-strong)', border: '1px solid var(--gb-brand-tint-border)', backdropFilter: 'blur(4px)' }}>
+              <Gift size={9} /> Logo
+            </span>
+          )}
+          <DealBadge p={p} />
+        </div>
+        <button onClick={(e) => { e.stopPropagation(); onAdd && onAdd(p); }} title={inProposal ? 'In proposal' : 'Add to proposal'}
+          style={{ position: 'absolute', top: 7, right: 7, width: 28, height: 28, borderRadius: 'var(--gb-r-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, background: inProposal ? 'var(--gb-brand-label)' : 'var(--gb-surface-float)', color: inProposal ? 'var(--gb-surface-deep)' : 'var(--gb-text-secondary)', border: '1px solid ' + (inProposal ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'), boxShadow: '0 2px 8px rgba(0,0,0,.3)', opacity: (hover || inProposal) ? 1 : 0, transition: 'opacity var(--gb-anim), background var(--gb-anim)' }}>
+          {inProposal ? <I.check size={14} strokeWidth={3} /> : <I.plus size={15} />}
+        </button>
       </div>
       <div style={{ paddingTop: compact ? 8 : 10, display: 'flex', flexDirection: 'column', gap: compact ? 4 : 5, flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -291,7 +332,7 @@ function PriceStat({ label, value, accent, was }) {
   );
 }
 
-function DetailPanel({ p, onClose }) {
+function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
   const openProduct = () => {
     if (!p.url) return;
     try { window.open('https://www.golfballs.com' + p.url + '.htm', '_blank', 'noopener'); } catch { /* ignore */ }
@@ -321,6 +362,14 @@ function DetailPanel({ p, onClose }) {
             <PriceStat label="Retail" value={usd(p.price)} was={onSale(p) ? usd(p.orig) : null} />
             {p.logo && <PriceStat label="With logo" value={usd(p.logo)} accent />}
           </div>
+          {hasPromo(p) && (
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint, rgba(46,158,91,.12))', border: '1px solid var(--gb-success-border, rgba(46,158,91,.3))' }}>
+              <TagI size={14} style={{ color: 'var(--gb-success-fg, #2e9e5b)' }} />
+              <span style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', fontWeight: 500 }}>
+                <b style={{ color: 'var(--gb-success-fg, #2e9e5b)' }}>{p.promo.label}</b> · code <span style={{ fontFamily: 'var(--gb-font-mono)' }}>{p.promo.code}</span>
+              </span>
+            </div>
+          )}
           {p.breaks && p.breaks.length > 1 && (
             <div style={{ marginTop: 18 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -355,7 +404,11 @@ function DetailPanel({ p, onClose }) {
         </div>
         <div style={{ padding: 12, borderTop: '1px solid var(--gb-border-subtle)', display: 'flex', gap: 8, flexShrink: 0, background: 'var(--gb-fill-inverse-strong)' }}>
           <Btn variant="secondary" size="md" icon={<I.eye />} style={{ flex: 1 }} onClick={openProduct}>View product</Btn>
-          <Btn variant="primary" size="md" icon={<I.plus />} style={{ flex: 1 }} onClick={() => { /* quoting wired later */ }}>Add to quote</Btn>
+          {inProposal ? (
+            <Btn variant="secondary" size="md" icon={<I.check />} style={{ flex: 1.2 }} onClick={onOpenProposal}>In proposal</Btn>
+          ) : (
+            <Btn variant="primary" size="md" icon={<I.plus />} style={{ flex: 1.2 }} onClick={() => onAdd && onAdd(p)}>Add to proposal</Btn>
+          )}
         </div>
       </motion.div>
     </>
@@ -396,6 +449,187 @@ function BrandChip({ label, count, on, onClick }) {
   );
 }
 
+/* ── Proposal: qty stepper, editable price, split lines, dock + panel ── */
+
+function QtyStepper({ value, onChange }) {
+  const [txt, setTxt] = useState(String(value));
+  useEffect(() => setTxt(String(value)), [value]);
+  const commit = (v) => { let n = parseInt(v, 10); if (isNaN(n) || n < 1) n = 1; onChange(n); setTxt(String(n)); };
+  const Step = ({ d, children }) => {
+    const [h, setH] = useState(false);
+    return (
+      <button onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} onClick={() => commit(value + d)}
+        style={{ width: 26, height: 28, border: 'none', background: h ? 'var(--gb-fill-subtle)' : 'transparent', color: h ? 'var(--gb-text-primary)' : 'var(--gb-text-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'inherit' }}>{children}</button>
+    );
+  };
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', height: 28, flexShrink: 0, background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)', overflow: 'hidden' }}>
+      <Step d={-1}><span style={{ width: 9, height: 1.6, borderRadius: 1, background: 'currentColor' }} /></Step>
+      <input value={txt} onChange={(e) => setTxt(e.target.value.replace(/[^0-9]/g, ''))} onBlur={() => commit(txt)} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+        style={{ width: 40, textAlign: 'center', border: 'none', outline: 'none', background: 'transparent', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 12, fontWeight: 700, borderLeft: '1px solid var(--gb-border-subtle)', borderRight: '1px solid var(--gb-border-subtle)', height: '100%' }} />
+      <Step d={1}><I.plus size={11} /></Step>
+    </div>
+  );
+}
+
+function PriceField({ value, onChange }) {
+  const [txt, setTxt] = useState(value.toFixed(2));
+  const [focus, setFocus] = useState(false);
+  useEffect(() => { if (!focus) setTxt(value.toFixed(2)); }, [value, focus]);
+  const commit = () => { let n = parseFloat(txt); if (isNaN(n) || n < 0) n = 0; onChange(Math.round(n * 100) / 100); };
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 1, height: 28, padding: '0 8px', flexShrink: 0, background: 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (focus ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), boxShadow: focus ? 'var(--gb-focus-ring)' : 'none', borderRadius: 'var(--gb-r-sm)', transition: 'all var(--gb-anim)' }}>
+      <span style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>$</span>
+      <input value={txt} inputMode="decimal" onFocus={() => setFocus(true)} onChange={(e) => setTxt(e.target.value.replace(/[^0-9.]/g, ''))} onBlur={() => { setFocus(false); commit(); }} onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+        style={{ width: 52, border: 'none', outline: 'none', background: 'transparent', textAlign: 'right', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 12, fontWeight: 700 }} />
+    </div>
+  );
+}
+
+function MiniThumb({ src, size = 42 }) {
+  return (
+    <div style={{ width: size, height: size, flexShrink: 0, background: '#f4f4f1', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-sm)', overflow: 'hidden' }}>
+      <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 4, boxSizing: 'border-box' }} />
+    </div>
+  );
+}
+
+/* One split row: qty × price = subtotal. Changing qty follows the
+   volume ladder unless the price was hand-edited; a "tier ↺" link
+   re-snaps it to the auto price. */
+function SplitRow({ line, split, canRemove, onChange, onRemove }) {
+  const p = line.product;
+  const onQty = (q) => {
+    const followTier = isTierPrice(p, split.qty, split.price);
+    onChange({ qty: q, price: followTier ? priceAtQty(p, q) : split.price });
+  };
+  const tier = priceAtQty(p, split.qty);
+  const custom = !isTierPrice(p, split.qty, split.price);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
+      <QtyStepper value={split.qty} onChange={onQty} />
+      <span style={{ fontSize: 11, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)' }}>×</span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <PriceField value={split.price} onChange={(pr) => onChange({ price: pr })} />
+        {custom && p.breaks && (
+          <span onClick={() => onChange({ price: tier })} style={{ fontSize: 8.5, color: 'var(--gb-text-muted)', cursor: 'pointer', fontFamily: 'var(--gb-font-mono)', paddingLeft: 2 }}>tier {usd(tier)} ↺</span>
+        )}
+      </div>
+      <div style={{ flex: 1 }} />
+      <span style={{ fontSize: 12.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)', minWidth: 66, textAlign: 'right' }}>{money(split.qty * split.price)}</span>
+      <span onClick={canRemove ? onRemove : undefined} style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: canRemove ? 'var(--gb-text-muted)' : 'var(--gb-text-ghost)', cursor: canRemove ? 'pointer' : 'default', opacity: canRemove ? 1 : .35 }}><I.close size={11} /></span>
+    </div>
+  );
+}
+
+function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove }) {
+  const p = line.product;
+  const lineTot = line.splits.reduce((s, x) => s + x.qty * x.price, 0);
+  const lineUnits = line.splits.reduce((s, x) => s + x.qty, 0);
+  return (
+    <div style={{ background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-lg)', padding: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <MiniThumb src={p.img} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{p.brand}</div>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.3, marginTop: 1 }}>{p.title}</div>
+        </div>
+        <span onClick={onRemove} style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--gb-text-muted)', cursor: 'pointer', borderRadius: 'var(--gb-r-sm)' }}><I.trash size={13} /></span>
+      </div>
+      <div style={{ marginTop: 8, borderTop: '1px solid var(--gb-border-subtle)' }}>
+        {line.splits.map((s) => (
+          <SplitRow key={s.id} line={line} split={s} canRemove={line.splits.length > 1} onChange={(patch) => onPatchSplit(s.id, patch)} onRemove={() => onRemoveSplit(s.id)} />
+        ))}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', marginTop: 6 }}>
+        <button onClick={onAddSplit} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-brand-tint-soft)', color: 'var(--gb-brand-label)', border: '1px dashed var(--gb-brand-tint-border)', fontFamily: 'inherit', fontSize: 10.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          <I.plus size={10} /> Split tier
+        </button>
+        <div style={{ flex: 1 }} />
+        <span style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', marginRight: 8 }}>{lineUnits} units</span>
+        <span style={{ fontSize: 13.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)' }}>{money(lineTot)}</span>
+      </div>
+    </div>
+  );
+}
+
+function ProposalDock({ count, units, total, onOpen }) {
+  const [h, setH] = useState(false);
+  return (
+    <div onClick={onOpen} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+      style={{ position: 'absolute', left: 12, bottom: 50, width: 162, zIndex: 15, cursor: 'pointer', background: 'var(--gb-surface-float)', border: '1px solid var(--gb-brand-tint-border)', borderRadius: 'var(--gb-r-lg)', boxShadow: 'var(--gb-shadow-popover)', overflow: 'hidden', transform: h ? 'translateY(-2px)' : 'none', transition: 'transform var(--gb-anim)', animation: 'pp-rise .26s cubic-bezier(.34,1.5,.64,1)' }}>
+      <div style={{ padding: '9px 11px', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ width: 26, height: 26, borderRadius: 'var(--gb-r-sm)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+          <I.card size={13} />
+          <span style={{ position: 'absolute', top: -5, right: -5, minWidth: 15, height: 15, padding: '0 4px', borderRadius: 8, background: 'var(--gb-brand-label)', color: 'var(--gb-surface-deep)', fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--gb-font-mono)', boxShadow: '0 0 0 2px var(--gb-surface-float)' }}>{count}</span>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-text-tertiary)' }}>Proposal</div>
+          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', letterSpacing: -.3 }}>{money(total)}</div>
+        </div>
+        <I.chevr size={13} style={{ color: 'var(--gb-brand-label)', flexShrink: 0 }} />
+      </div>
+      <div style={{ padding: '5px 11px', background: 'var(--gb-brand-tint-soft)', borderTop: '1px solid var(--gb-border-subtle)', fontSize: 9.5, fontWeight: 600, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>
+        {units} units · {count} {count === 1 ? 'product' : 'products'}
+      </div>
+    </div>
+  );
+}
+
+function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear }) {
+  const total = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
+  const units = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty, 0), 0);
+  return (
+    <>
+      <motion.div onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .18 }}
+        style={{ position: 'absolute', inset: 0, background: 'var(--gb-backdrop)', zIndex: 30 }} />
+      <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 460, damping: 40 }}
+        style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 'min(440px, 90%)', zIndex: 31, background: 'var(--gb-surface-modal)', borderLeft: '1px solid var(--gb-border-default)', boxShadow: '-20px 0 50px rgba(0,0,0,.45)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '13px 14px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0, background: 'var(--gb-fill-inverse-strong)' }}>
+          <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <I.card size={15} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Proposal</div>
+            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>{proposal.length} {proposal.length === 1 ? 'product' : 'products'} · {units} units</div>
+          </div>
+          {proposal.length > 0 && <Btn variant="ghost" size="sm" onClick={onClear}>Clear</Btn>}
+          <IconBtn size="sm" icon={<I.close />} onClick={onClose} />
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {proposal.length === 0 ? (
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'var(--gb-text-muted)', textAlign: 'center', padding: 24 }}>
+              <div style={{ width: 46, height: 46, borderRadius: 'var(--gb-r-lg)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.card size={20} /></div>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>No products yet</div>
+              <div style={{ fontSize: 11, lineHeight: 1.5, maxWidth: 220 }}>Open a product and hit <b style={{ color: 'var(--gb-brand-label)' }}>Add to proposal</b> — then set quantities, prices, and split tiers here.</div>
+            </div>
+          ) : proposal.map((line) => (
+            <ProposalLine key={line.id} line={line}
+              onPatchSplit={(sid, patch) => onPatchSplit(line.id, sid, patch)}
+              onAddSplit={() => onAddSplit(line.id)}
+              onRemoveSplit={(sid) => onRemoveSplit(line.id, sid)}
+              onRemove={() => onRemoveLine(line.id)} />
+          ))}
+        </div>
+        {proposal.length > 0 && (
+          <div style={{ flexShrink: 0, borderTop: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-inverse-strong)' }}>
+            <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'baseline', gap: 10 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Estimated total</span>
+              <span style={{ fontSize: 10.5, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)' }}>{units} units</span>
+              <div style={{ flex: 1 }} />
+              <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', letterSpacing: -.6 }}>{money(total)}</span>
+            </div>
+            <div style={{ padding: '0 12px 12px', display: 'flex', gap: 8 }}>
+              <Btn variant="secondary" size="md" icon={<I.copy />} style={{ flex: 1 }}>Save draft</Btn>
+              <Btn variant="primary" size="md" icon={<I.send />} style={{ flex: 1.4 }}>Send proposal</Btn>
+            </div>
+          </div>
+        )}
+      </motion.div>
+    </>
+  );
+}
+
 export function GiftCatalog({ onClose, density = 'comfortable', showRating = true, priceFocus = 'retail' }) {
   ensureCatalogKeyframes();
   const [catalog, setCatalog] = useState(GIFT_CATALOG_SEED);
@@ -405,8 +639,24 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const [cat, setCat] = useState('all');
   const [sort, setSort] = useState('popular');
   const [selected, setSelected] = useState(null);
+  const [special, setSpecial] = useState(null); // 'sale' | 'logo' | null
+  const [proposal, setProposal] = useState([]);
+  const [proposalOpen, setProposalOpen] = useState(false);
 
   const compact = density === 'compact';
+
+  const inProposal = (id) => proposal.some((l) => l.id === id);
+  const propTotal = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
+  const propUnits = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty, 0), 0);
+  const addToProposal = (p) => setProposal((prev) => {
+    if (prev.some((l) => l.id === p.id)) return prev;
+    const qty = p.minQty && p.minQty > 1 ? p.minQty : 12;
+    return [...prev, { id: p.id, product: p, splits: [{ id: rid(), qty, price: priceAtQty(p, qty) }] }];
+  });
+  const patchSplit = (lineId, splitId, patch) => setProposal((prev) => prev.map((l) => l.id === lineId ? { ...l, splits: l.splits.map((s) => s.id === splitId ? { ...s, ...patch } : s) } : l));
+  const addSplit = (lineId) => setProposal((prev) => prev.map((l) => { if (l.id !== lineId) return l; const last = l.splits[l.splits.length - 1]; return { ...l, splits: [...l.splits, { id: rid(), qty: last.qty, price: last.price }] }; }));
+  const removeSplit = (lineId, splitId) => setProposal((prev) => prev.flatMap((l) => { if (l.id !== lineId) return [l]; const splits = l.splits.filter((s) => s.id !== splitId); return splits.length ? [{ ...l, splits }] : []; }));
+  const removeLine = (lineId) => setProposal((prev) => prev.filter((l) => l.id !== lineId));
 
   // Seed paints instantly; the live pull replaces it when it lands.
   useEffect(() => {
@@ -437,25 +687,28 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // "/" command bar — every category + brand becomes a jump-to filter.
   const brandCounts = useMemo(() => { const m = {}; catalog.forEach((p) => { m[p.brand] = (m[p.brand] || 0) + 1; }); return m; }, [catalog]);
   const commands = useMemo(() => {
+    const specCmds = SPECIAL_CMDS.map((s) => ({ ...s, count: catalog.filter(s.match).length })).filter((s) => s.count > 0);
     const catCmds = cats.map((c) => ({ type: 'cat', id: c, label: c, count: catCounts[c] || 0 }));
     const rank = (b) => { const i = BRAND_ORDER.indexOf(b); return i === -1 ? BRAND_ORDER.length : i; };
     const brandCmds = Object.keys(brandCounts)
       .sort((a, b) => (rank(a) - rank(b)) || (brandCounts[b] - brandCounts[a]))
       .map((b) => ({ type: 'brand', id: b, label: b, count: brandCounts[b] }));
-    return [...catCmds, ...brandCmds];
-  }, [cats, catCounts, brandCounts]);
+    return [...specCmds, ...catCmds, ...brandCmds];
+  }, [cats, catCounts, brandCounts, catalog]);
   // Stack filters: a category pick keeps the active brand and vice-versa,
   // so "/titleist" then "/golf towels" narrows to both at once.
   const onPickCommand = (c) => {
     if (!c) return;
     if (c.type === 'cat') setCat(c.id);
-    else setBrand(c.id);
+    else if (c.type === 'brand') setBrand(c.id);
+    else if (c.type === 'special') setSpecial((cur) => (cur === c.id ? null : c.id));
     setQuery('');
   };
 
   const results = useMemo(() => {
     let r = inCat;
     if (brand !== 'all') r = r.filter((p) => p.brand === brand);
+    if (special) { const sc = SPECIAL_CMDS.find((s) => s.id === special); if (sc) r = r.filter(sc.match); }
     if (query.trim() && !query.startsWith('/')) {
       const q = query.toLowerCase();
       r = r.filter((p) => p.title.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q));
@@ -466,7 +719,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     else if (sort === 'priceHigh') r.sort((a, b) => (b.price || 0) - (a.price || 0));
     else if (sort === 'name') r.sort((a, b) => a.title.localeCompare(b.title));
     return r;
-  }, [inCat, brand, query, sort]);
+  }, [inCat, brand, query, sort, special]);
 
   const colMin = compact ? 150 : 188;
 
@@ -508,13 +761,13 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                     <I.search size={20} />
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>No products match</div>
-                  <Btn variant="secondary" size="sm" onClick={() => { setQuery(''); setBrand('all'); setCat('all'); }}>Clear filters</Btn>
+                  <Btn variant="secondary" size="sm" onClick={() => { setQuery(''); setBrand('all'); setCat('all'); setSpecial(null); }}>Clear filters</Btn>
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${colMin}px, 1fr))`, gap: compact ? 10 : 12 }}>
                   {results.map((p) => (
                     <ProductCard key={p.id} p={p} compact={compact} showRating={showRating} priceFocus={priceFocus}
-                      active={selected && selected.id === p.id} onClick={() => setSelected(p)} />
+                      active={selected && selected.id === p.id} inProposal={inProposal(p.id)} onAdd={addToProposal} onClick={() => setSelected(p)} />
                   ))}
                 </div>
               )}
@@ -529,6 +782,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             Showing <b style={{ color: 'var(--gb-text-primary)' }}>{results.length}</b> of {catalog.length}
             {cat !== 'all' && <> in <b style={{ color: 'var(--gb-text-secondary)' }}>{cat}</b></>}
             {brand !== 'all' && <> · <b style={{ color: 'var(--gb-text-secondary)' }}>{brand}</b></>}
+            {special && <> · <b style={{ color: 'var(--gb-success-fg, #2e9e5b)' }}>{(SPECIAL_CMDS.find((s) => s.id === special) || {}).label}</b></>}
           </span>
           <div style={{ flex: 1 }} />
           <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -536,8 +790,20 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           </span>
         </div>
 
+        {proposal.length > 0 && !proposalOpen && (
+          <ProposalDock count={proposal.length} units={propUnits} total={propTotal} onOpen={() => setProposalOpen(true)} />
+        )}
+
         <AnimatePresence>
-          {selected && <DetailPanel key="detail" p={selected} onClose={() => setSelected(null)} />}
+          {selected && (
+            <DetailPanel key="detail" p={selected} inProposal={inProposal(selected.id)} onAdd={addToProposal}
+              onOpenProposal={() => { setSelected(null); setProposalOpen(true); }} onClose={() => setSelected(null)} />
+          )}
+          {proposalOpen && (
+            <ProposalPanel key="proposal" proposal={proposal} onClose={() => setProposalOpen(false)}
+              onPatchSplit={patchSplit} onAddSplit={addSplit} onRemoveSplit={removeSplit}
+              onRemoveLine={removeLine} onClear={() => { setProposal([]); setProposalOpen(false); }} />
+          )}
         </AnimatePresence>
         </div>
       </div>

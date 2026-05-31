@@ -45,6 +45,21 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // re-index daily
 const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
 const round2 = (v) => (v == null ? null : Math.round(Number(v) * 100) / 100);
 
+/* Promo codes ride on tag_ss (e.g. "EVERY12GETS6", "BUY12GET4FREE").
+   Surface the first recognized one as a readable deal label so the
+   product reads as on-sale. */
+function parsePromo(tags) {
+  if (!Array.isArray(tags)) return null;
+  for (const t of tags) {
+    const s = String(t);
+    let m = /^BUY(\d+)GET(\d+)FREE$/i.exec(s);
+    if (m) return { code: s, label: `Buy ${m[1]} get ${m[2]} free` };
+    m = /^EVERY(\d+)GETS?(\d+)$/i.exec(s);
+    if (m) return { code: s, label: `Buy ${m[1]} get ${m[2]} free` };
+  }
+  return null;
+}
+
 /* Map a Solr doc to one of the canonical "Shop by Type" categories.
    itemType is coarse, so most signal is the title. Order matters —
    earlier checks win, so the more specific lines come first. */
@@ -100,6 +115,7 @@ export function normalizeDoc(doc) {
     mods:    Array.isArray(doc.modificationName_ss) ? doc.modificationName_ss.length : 0,
     minQty:  (breaks[0] && breaks[0].q) || 1,
     breaks,
+    promo:   parsePromo(doc.tag_ss),
   };
 }
 

@@ -113,7 +113,11 @@
         "q": 500,
         "p": 55.99
       }
-    ]
+    ],
+    "promo": {
+      "code": "EVERY12GETS6",
+      "label": "Buy 12 get 6 free"
+    }
   },
   {
     "id": "d7796dc8-3df9-4f5b-b083-012de0cf4f8f",
@@ -157,7 +161,11 @@
         "q": 500,
         "p": 25.99
       }
-    ]
+    ],
+    "promo": {
+      "code": "BUY12GET4FREE",
+      "label": "Buy 12 get 4 free"
+    }
   },
   {
     "id": "786ae3f5-c3e4-4d88-8336-99ef24f976d7",
@@ -221,7 +229,11 @@
         "q": 500,
         "p": 55.99
       }
-    ]
+    ],
+    "promo": {
+      "code": "EVERY12GETS6",
+      "label": "Buy 12 get 6 free"
+    }
   },
   {
     "id": "e50da7d9-162e-4ff3-aaaa-1f129180a4d7",
