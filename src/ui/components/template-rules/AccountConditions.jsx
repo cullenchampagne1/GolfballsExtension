@@ -82,6 +82,7 @@ function AccountSubjectPicker({ condition, patch, varNames }) {
       value={value}
       varNames={varNames}
       allowQuantifiers
+      overlay
       placeholder="Pick a field or variable…"
       onChange={(val) => {
         if (val && val.startsWith('vars.')) {

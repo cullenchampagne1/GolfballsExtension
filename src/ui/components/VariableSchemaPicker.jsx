@@ -58,7 +58,7 @@ const TYPE_BY_PATH = Object.fromEntries(SCHEMA_NODES.map((n) => [n.path, n.type]
 const canonicalPath = (p) => (p || '').replace(/\[(?:-?\d+|any|none)\]/g, '[0]');
 const typeForPath = (p) => TYPE_BY_PATH[canonicalPath(p)] || 'string';
 
-export function VariableSchemaPicker({ value, onChange, placeholder = '— pick a field —', varNames = [], allowQuantifiers = false }) {
+export function VariableSchemaPicker({ value, onChange, placeholder = '— pick a field —', varNames = [], allowQuantifiers = false, overlay = false }) {
   const [open, setOpen] = useState(false);
   const type = typeForPath(value);
   /* Surface array selector only when the active path actually
@@ -99,6 +99,7 @@ export function VariableSchemaPicker({ value, onChange, placeholder = '— pick 
           <InlineSchemaTree
             currentPath={canonicalPath(value)}
             varNames={varNames}
+            overlay={overlay}
             onClose={() => setOpen(false)}
             onSelect={(node) => {
               onChange(typeof node === 'string' ? node : node.path);
@@ -270,7 +271,7 @@ function PathButton({ path, type, open, onClick, placeholder }) {
 
 /* ── Inline tree — opens in flow, not absolute. The parent
    modal/form body's overflow handles scroll. ────────────────── */
-function InlineSchemaTree({ currentPath, varNames = [], onClose, onSelect }) {
+function InlineSchemaTree({ currentPath, varNames = [], overlay = false, onClose, onSelect }) {
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(() => initialExpansion(currentPath));
   const [focusedIdx, setFocusedIdx] = useState(0);
@@ -340,7 +341,15 @@ function InlineSchemaTree({ currentPath, varNames = [], onClose, onSelect }) {
       transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
       style={{
         overflow: 'hidden',
-        marginTop: 4,
+        ...(overlay ? {
+          /* Float over the content below instead of pushing it down.
+             Absolute (relative to the picker's positioned parent) so it
+             stays in the page's scaled coordinate space — a fixed /
+             document.body portal would mis-place under data-gb-scale. */
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50,
+          width: '100%', minWidth: 280, maxWidth: 360,
+          boxShadow: '0 10px 28px rgba(0,0,0,.34)', borderRadius: 'var(--gb-r-md)',
+        } : { marginTop: 4 }),
       }}
     >
       <div style={{
