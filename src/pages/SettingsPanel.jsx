@@ -106,12 +106,8 @@ function VariantCard({ variant, active, onClick }) {
 }
 
 /* ── Keyboard Shortcut Input ─────────────────────────────────── */
-function UiScaleRow({ label, hint, value, onChange, min = 0.5, max = 1.5, def = 1 }) {
-  const pct = Math.round((value ?? def) * 100);
-  const defPct = Math.round(def * 100);
-  const minPct = Math.round(min * 100);
-  const maxPct = Math.round(max * 100);
-  const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(minPct + (maxPct - minPct) * f));
+function UiScaleRow({ label, hint, value, onChange }) {
+  const pct = Math.round((value || 1) * 100);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
@@ -119,32 +115,32 @@ function UiScaleRow({ label, hint, value, onChange, min = 0.5, max = 1.5, def = 
         <div style={{ flex: 1, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>{hint}</div>
         <button
           type="button"
-          onClick={() => onChange(def)}
-          disabled={pct === defPct}
+          onClick={() => onChange(1)}
+          disabled={pct === 100}
           style={{
-            background: pct === defPct ? 'var(--gb-fill-soft)' : 'transparent',
+            background: pct === 100 ? 'var(--gb-fill-soft)' : 'transparent',
             border: '1px solid var(--gb-border-default)',
             borderRadius: 'var(--gb-r-sm)',
-            color: pct === defPct ? 'var(--gb-text-muted)' : 'var(--gb-brand-label)',
+            color: pct === 100 ? 'var(--gb-text-muted)' : 'var(--gb-brand-label)',
             padding: '2px 8px',
             fontSize: 10, fontWeight: 700, fontFamily: 'var(--gb-font-mono)',
-            cursor: pct === defPct ? 'default' : 'pointer',
+            cursor: pct === 100 ? 'default' : 'pointer',
             minWidth: 48, textAlign: 'center',
           }}
-          title={pct === defPct ? '' : `Reset to ${defPct}%`}
+          title={pct === 100 ? '' : 'Reset to 100%'}
         >
           {pct}%
         </button>
       </div>
       <Slider
         value={pct}
-        min={minPct}
-        max={maxPct}
+        min={50}
+        max={150}
         step={5}
         unit="%"
         showValue={false}
-        ticks={ticks}
-        onChange={(v) => onChange(Math.max(min, Math.min(max, v / 100)))}
+        ticks={[50, 75, 100, 125, 150]}
+        onChange={(v) => onChange(Math.max(0.5, Math.min(1.5, v / 100)))}
       />
     </div>
   );
@@ -651,7 +647,7 @@ export function SettingsPanel() {
     setScales(DEFAULT_SCALES);
     saveScales(DEFAULT_SCALES);
     applyScales(DEFAULT_SCALES);
-    window.__gbToast?.success('UI scale reset to defaults');
+    window.__gbToast?.success('UI scale reset to 100% across the board');
   };
 
   function setDevSetting(key, value) {
@@ -738,11 +734,8 @@ export function SettingsPanel() {
                 key={c.id}
                 label={c.label}
                 hint={c.hint}
-                value={scales[c.id] ?? c.def ?? 1}
+                value={scales[c.id] ?? 1}
                 onChange={(v) => setScale(c.id, v)}
-                min={c.min}
-                max={c.max}
-                def={c.def}
               />
             ))}
           </div>

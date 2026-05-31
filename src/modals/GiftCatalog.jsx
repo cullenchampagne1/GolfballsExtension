@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Btn, IconBtn, Tag, Dot } from '../ui/index.js';
 import { Icon, I } from '../ui/icons.jsx';
 import { loadCatalog, GIFT_CATALOG_SEED, CATEGORY_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
+import { loadDevSettings, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    GiftCatalog — Corporate Gifting Catalog modal.
@@ -72,9 +73,8 @@ const SPECIAL_CMDS = [
   { type: 'special', id: 'logo', label: 'Custom-logo ready', match: (p) => !!p.logo },
 ];
 
-/* Base card dimensions; on-screen size is this × the "Gifting Catalog"
-   dev scale (data-gb-scale="giftCatalog", default 1.8×, adjustable in
-   Settings → UI Scale). */
+/* Base card dimensions; on-screen size is this × the "Gifting Catalog:
+   zoom scale" dev setting (default 1.8×, in Settings → Developer Settings). */
 const CARD_W = 1180;
 const CARD_H = 760;
 
@@ -323,7 +323,7 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
       <motion.div onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .18 }}
         style={{ position: 'absolute', inset: 0, background: 'var(--gb-backdrop)', zIndex: 20 }} />
       <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 460, damping: 40 }}
-        style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 'min(380px, 82%)', zIndex: 21, background: 'var(--gb-surface-modal)', borderLeft: '1px solid var(--gb-border-default)', boxShadow: '-20px 0 50px rgba(0,0,0,.45)', display: 'flex', flexDirection: 'column' }}>
+        style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 'min(380px, 82%)', zIndex: 21, background: 'var(--gb-surface-modal)', borderLeft: '1px solid var(--gb-border-default)', boxShadow: '-10px 0 28px rgba(0,0,0,.18)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
           <IconBtn size="sm" variant="ghost" icon={<ArrowL />} onClick={onClose} />
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Product detail</span>
@@ -530,17 +530,16 @@ function SplitRow({ line, split, canRemove, onChange, onRemove }) {
   const tier = priceAtQty(p, split.qty);
   const custom = !isTierPrice(p, split.qty, split.price);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 0' }}>
       <QtyStepper value={split.qty} onChange={onQty} />
-      <span style={{ fontSize: 11, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)' }}>×</span>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <PriceField value={split.price} onChange={(pr) => onChange({ price: pr })} />
-        {custom && p.breaks && (
-          <span onClick={() => onChange({ price: tier })} style={{ fontSize: 8.5, color: 'var(--gb-text-muted)', cursor: 'pointer', fontFamily: 'var(--gb-font-mono)', paddingLeft: 2 }}>tier {usd(tier)} ↺</span>
-        )}
-      </div>
+      <span style={{ fontSize: 11, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)', flexShrink: 0 }}>×</span>
+      <PriceField value={split.price} onChange={(pr) => onChange({ price: pr })} />
+      {custom && p.breaks && (
+        <span onClick={() => onChange({ price: tier })} title={`Reset to tier ${usd(tier)}`}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 9.5, fontWeight: 600, color: 'var(--gb-brand-label)', cursor: 'pointer', fontFamily: 'var(--gb-font-mono)', flexShrink: 0, whiteSpace: 'nowrap' }}>↺ {usd(tier)}</span>
+      )}
       <div style={{ flex: 1 }} />
-      <span style={{ fontSize: 12.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)', minWidth: 66, textAlign: 'right' }}>{money(split.qty * split.price)}</span>
+      <span style={{ fontSize: 13, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)', minWidth: 58, textAlign: 'right', flexShrink: 0 }}>{money(split.qty * split.price)}</span>
       <span onClick={canRemove ? onRemove : undefined} style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: canRemove ? 'var(--gb-text-muted)' : 'var(--gb-text-ghost)', cursor: canRemove ? 'pointer' : 'default', opacity: canRemove ? 1 : .35 }}><I.close size={11} /></span>
     </div>
   );
@@ -610,7 +609,7 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
       <motion.div onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .18 }}
         style={{ position: 'absolute', inset: 0, background: 'var(--gb-backdrop)', zIndex: 30 }} />
       <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 460, damping: 40 }}
-        style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 'min(440px, 90%)', zIndex: 31, background: 'var(--gb-surface-modal)', borderLeft: '1px solid var(--gb-border-default)', boxShadow: '-20px 0 50px rgba(0,0,0,.45)', display: 'flex', flexDirection: 'column' }}>
+        style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 'min(440px, 90%)', zIndex: 31, background: 'var(--gb-surface-modal)', borderLeft: '1px solid var(--gb-border-default)', boxShadow: '-10px 0 28px rgba(0,0,0,.18)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '13px 14px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0, background: 'var(--gb-fill-inverse-strong)' }}>
           <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <I.card size={15} />
@@ -656,8 +655,26 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
   );
 }
 
+/* Read the catalog zoom from Developer Settings before first paint, so
+   the modal opens at the right size instead of snapping from the 1.8
+   default to a custom value. Cached module-side so reopening is instant. */
+let _catalogScale = null;
+function useCatalogScale() {
+  const [scale, setScale] = useState(_catalogScale);
+  useEffect(() => {
+    let alive = true;
+    const apply = (v) => { const n = Number(v) || 1.8; _catalogScale = n; if (alive) setScale(n); };
+    loadDevSettings().then((d) => apply(d['giftCatalog.scale']));
+    const onCh = (changes) => { if (changes && changes[DEV_STORAGE_KEY]) apply((changes[DEV_STORAGE_KEY].newValue || {})['giftCatalog.scale']); };
+    try { chrome.storage.onChanged.addListener(onCh); } catch { /* no storage */ }
+    return () => { alive = false; try { chrome.storage.onChanged.removeListener(onCh); } catch { /* */ } };
+  }, []);
+  return scale;
+}
+
 export function GiftCatalog({ onClose, density = 'comfortable', showRating = true, priceFocus = 'retail' }) {
   ensureCatalogKeyframes();
+  const scale = useCatalogScale(); // loaded before first paint to avoid a resize snap
   const [catalog, setCatalog] = useState(GIFT_CATALOG_SEED);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -763,10 +780,13 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
 
   const colMin = compact ? 150 : 188;
 
+  // Hold the first paint until the scale is known (avoids a size snap).
+  if (scale == null) return null;
+
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 999990, padding: 24, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', overflow: 'auto' }}>
-      <div data-gb-scale="giftCatalog" style={{ margin: 'auto', flexShrink: 0 }}>
+      <div style={{ margin: 'auto', flexShrink: 0, zoom: `${scale}` }}>
         <div style={{ width: CARD_W, height: CARD_H, position: 'relative', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column', animation: 'gc-pop .3s cubic-bezier(.34,1.56,.64,1)' }}>
         {/* Header */}
         <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
@@ -786,8 +806,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           <IconBtn size="md" icon={<I.close />} onClick={onClose} />
         </div>
 
-        {/* Body */}
-        <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+        {/* Body — also the positioning context for the slide-over panels,
+            so they span the sidebar's height (header + footer stay visible). */}
+        <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
           <CategoryRail cats={cats} value={cat} onChange={setCat} counts={catCounts} total={catalog.length} />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <div className="gb-gc-norail" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 16px', borderBottom: '1px solid var(--gb-border-subtle)', overflowX: 'auto', flexShrink: 0, WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 40px), transparent)', maskImage: 'linear-gradient(to right, #000 calc(100% - 40px), transparent)' }}>
@@ -814,6 +835,18 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               )}
             </div>
           </div>
+
+          <AnimatePresence>
+            {selected && (
+              <DetailPanel key="detail" p={selected} inProposal={inProposal(selected.id)} onAdd={addToProposal}
+                onOpenProposal={() => { setSelected(null); setProposalOpen(true); }} onClose={() => setSelected(null)} />
+            )}
+            {proposalOpen && (
+              <ProposalPanel key="proposal" proposal={proposal} onClose={() => setProposalOpen(false)}
+                onPatchSplit={patchSplit} onAddSplit={addSplit} onRemoveSplit={removeSplit}
+                onRemoveLine={removeLine} onClear={() => { setProposal([]); setProposalOpen(false); }} />
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Footer */}
@@ -834,18 +867,6 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         {proposal.length > 0 && !proposalOpen && (
           <ProposalDock count={proposal.length} units={propUnits} total={propTotal} onOpen={() => setProposalOpen(true)} />
         )}
-
-        <AnimatePresence>
-          {selected && (
-            <DetailPanel key="detail" p={selected} inProposal={inProposal(selected.id)} onAdd={addToProposal}
-              onOpenProposal={() => { setSelected(null); setProposalOpen(true); }} onClose={() => setSelected(null)} />
-          )}
-          {proposalOpen && (
-            <ProposalPanel key="proposal" proposal={proposal} onClose={() => setProposalOpen(false)}
-              onPatchSplit={patchSplit} onAddSplit={addSplit} onRemoveSplit={removeSplit}
-              onRemoveLine={removeLine} onClear={() => { setProposal([]); setProposalOpen(false); }} />
-          )}
-        </AnimatePresence>
         </div>
       </div>
     </div>

@@ -18,14 +18,33 @@ import seed from './giftCatalogSeed.json';
 
 export const GIFT_CATALOG_SEED = seed;
 
-/* The custom-logo catalog = products carrying the "Custom Logo"
-   modification. Every Custom-Logo/<Category> page on the site applies
-   this exact filterQuery (modificationName_ss:"Custom Logo"), scoped
-   per-category by itemType; the unbounded form is the union of them
-   all — the full catalog across every "Shop by Type". */
-const GIFT_SEARCH_TERM = '-tag_ss:DoNotIncludeinCatalog modificationName_ss:"Custom Logo"&sort=sort_default_i desc';
 const PAGE_ROWS = 60;
-const MAX_PRODUCTS = 600; // cap the live pull; sorted by popularity
+const PER_CAT_MAX = 240; // per-category cap; the sum is the full catalog
+
+/* Each Custom-Logo/<Category> page filters by its OWN itemType set (most
+   also AND modificationName:"Custom Logo"). A single global query + a
+   shared cap starved the long tail — popular golf balls filled the cap
+   and towels/hats/etc. came back nearly empty. So we query per category,
+   exactly as the live pages do, and tag each product with its category.
+   (Divot Tools / Ball Markers are split by itemType — the live pages
+   overlap them, but in a flat list they should land in one bucket.) */
+const CATEGORY_QUERIES = [
+  { cat: 'Logo Golf Balls', q: 'itemType_ss:(Consumer-Golf_Ball OR Consumer-Golf_Balls OR Corporate-Gift_Sets) AND modificationName_ss:("Custom Logo")' },
+  { cat: 'Golf Shirts', q: 'itemType_ss:Corporate-Apparel-Shirts AND modificationName_ss:("Custom Logo")' },
+  { cat: 'Golf Towels', q: 'itemType_ss:("Corporate-Towels" OR "Consumer-Accessories-Golf_Towels") AND modificationName_ss:("Custom Logo")' },
+  { cat: 'Golf Hats', q: 'itemType_ss:("Corporate-Apparel-Hats") AND modificationName_ss:("Custom Logo")' },
+  { cat: 'Divot Tools', q: 'itemType_ss:("Corporate-Divot_Tools") AND modificationName_ss:("Custom Logo")' },
+  { cat: 'Logo Tees', q: 'itemType_ss:("Corporate-Golf-Golf_Tees")' },
+  { cat: 'Logo Travel Bags', q: 'itemType_ss:("Corporate-Golf-Golf_Bags-Travel" OR "Corporate-Golf-Golf_Bags-Duffle" OR "Corporate-Golf-Golf_Bags-Shoe") AND modificationName_ss:("Custom Logo")' },
+  { cat: 'Promotional Products', q: 'itemType_ss:("Corporate-Promotional_Products") AND modificationName_ss:("Custom Logo") -itemType_ss:"Corporate-Promotional_Products-Drinkware"' },
+  { cat: 'Golf Umbrellas', q: 'itemType_ss:("Corporate-Umbrellas") AND modificationName_ss:("Custom Logo")' },
+  { cat: 'Golf Gloves', q: 'itemType_ss:("Corporate-Apparel-Gloves" OR "Consumer-Apparel-Gloves") AND modificationName_ss:("Custom Logo")' },
+  { cat: 'Custom Packaging', q: 'tag_ss:("CustomPackaging") AND modificationName_ss:("Custom Logo")' },
+  { cat: 'Drinkware', q: 'itemType_ss:("Corporate-Promotional_Products-Drinkware") AND modificationName_ss:("Custom Logo")' },
+  { cat: 'Golf Bags', q: 'itemType_ss:("Corporate-Golf-Golf_Bags-Cart" OR "Corporate-Golf-Golf_Bags-Staff" OR "Corporate-Golf-Golf_Bags-Stand" OR "Corporate-Golf-Golf_Bags-Headcovers") AND modificationName_ss:("Custom Logo")' },
+  { cat: 'Ball Markers', q: 'itemType_ss:("Corporate-Ball_Markers") AND modificationName_ss:("Custom Logo")' },
+  { cat: 'Outerwear', q: 'itemType_ss:Corporate-Apparel-Outerwear AND modificationName_ss:("Custom Logo")' },
+];
 
 /* Canonical "Shop by Type" + "Shop by Brand" taxonomies from the live
    custom-logo section — the rail/chips render in this order. */
@@ -39,7 +58,7 @@ export const BRAND_ORDER = [
   'PXG', 'Pinnacle', 'Venture Golf', 'Vice Golf', 'Wilson',
 ];
 
-const CACHE_KEY = 'gbGiftCatalogCache';
+const CACHE_KEY = 'gbGiftCatalogCache_v2'; // bumped: per-category query change invalidates old cache
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // re-index daily
 
 const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
@@ -123,11 +142,11 @@ export function normalizeDoc(doc) {
   };
 }
 
-function fetchPage(start, rows) {
+function fetchPage(searchTerm, start, rows) {
   return new Promise((resolve) => {
     try {
       chrome.runtime.sendMessage(
-        { action: 'fetchGiftCatalog', searchTerm: GIFT_SEARCH_TERM, start, rows },
+        { action: 'fetchGiftCatalog', searchTerm, start, rows },
         (resp) => {
           if (chrome.runtime.lastError || !resp || !resp.ok) { resolve({ docs: [], numFound: 0 }); return; }
           resolve({ docs: resp.docs || [], numFound: resp.numFound || 0 });
@@ -135,6 +154,25 @@ function fetchPage(start, rows) {
       );
     } catch { resolve({ docs: [], numFound: 0 }); }
   });
+}
+
+/* Pull one category's full set (paginated), tagging each product with
+   the category it came from rather than guessing via deriveCat. */
+async function fetchCategory(cat, q) {
+  const term = `${q} -tag_ss:DoNotIncludeinCatalog`;
+  const items = [];
+  let start = 0;
+  while (start < PER_CAT_MAX) {
+    const { docs, numFound } = await fetchPage(term, start, PAGE_ROWS);
+    if (!docs.length) break;
+    for (const d of docs) {
+      const p = normalizeDoc(d);
+      if (p && p.id) { p.cat = cat; items.push(p); }
+    }
+    start += PAGE_ROWS;
+    if (numFound && start >= numFound) break;
+  }
+  return items;
 }
 
 function getCache() {
@@ -164,18 +202,15 @@ export async function loadCatalog({ force = false } = {}) {
     return cached.products;
   }
 
+  // Fetch every category in parallel; merge in CATEGORY_ORDER so a
+  // product shared by two categories keeps the earlier bucket.
+  const lists = await Promise.all(CATEGORY_QUERIES.map(({ cat, q }) => fetchCategory(cat, q)));
   const out = [];
   const seenIds = new Set();
-  let start = 0;
-  while (start < MAX_PRODUCTS) {
-    const { docs, numFound } = await fetchPage(start, PAGE_ROWS);
-    if (!docs.length) break;
-    for (const d of docs) {
-      const p = normalizeDoc(d);
-      if (p && p.id && !seenIds.has(p.id)) { seenIds.add(p.id); out.push(p); }
+  for (const list of lists) {
+    for (const p of list) {
+      if (!seenIds.has(p.id)) { seenIds.add(p.id); out.push(p); }
     }
-    start += PAGE_ROWS;
-    if (numFound && start >= numFound) break;
   }
   if (out.length) { setCache({ ts: Date.now(), products: out }); return out; }
   return (cached && cached.products) || GIFT_CATALOG_SEED;

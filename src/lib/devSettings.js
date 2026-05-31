@@ -222,6 +222,17 @@ export const DEV_SETTINGS = [
     step:    1,
   },
   {
+    key:     'giftCatalog.scale',
+    label:   'Gifting Catalog: zoom scale',
+    desc:    'Magnification of the Corporate Gifting Catalog modal (1 = 100%). Default 1.8 reads large on screen; lower it if the modal overflows.',
+    type:    'number',
+    default: 1.8,
+    min:     1,
+    max:     3,
+    step:    0.1,
+    unit:    '×',
+  },
+  {
     key:     'popup.forceMatchedCount',
     label:   'Popup: force matched count',
     desc:    'Force the first N templates in the popup dropdown to render with the matched-template styling (brand dot + Matched group). 0 = off.',
