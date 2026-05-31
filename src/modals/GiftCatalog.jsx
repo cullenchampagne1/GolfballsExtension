@@ -28,6 +28,7 @@ function ensureCatalogKeyframes() {
     @keyframes cm-slide { from { opacity:0; transform: translateY(-6px); } to { opacity:1; transform:none; } }
     @keyframes cm-fade { from { opacity:0; } to { opacity:1; } }
     @keyframes gb-spin { to { transform: rotate(360deg); } }
+    @keyframes gc-orb-pulse { 0% { transform: scale(1); opacity: .5; } 70%, 100% { transform: scale(2.6); opacity: 0; } }
     @keyframes pp-rise { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform:none; } }
     .gb-gc-norail { scrollbar-width: none; -ms-overflow-style: none; }
     .gb-gc-norail::-webkit-scrollbar { width: 0; height: 0; display: none; }`;
@@ -261,15 +262,13 @@ function Rating({ value, count, size = 11 }) {
 function ProductCard({ p, compact, showRating, active, inProposal, onClick }) {
   const [hover, setHover] = useState(false);
   const ring = active ? '0 0 0 1px var(--gb-brand-label), 0 2px 8px rgba(0,0,0,.09)' : hover ? '0 2px 7px rgba(0,0,0,.07)' : '';
-  // Added-to-proposal reads as an internal brand glow (no add button/check).
-  const glow = inProposal ? 'inset 0 0 0 1.5px var(--gb-brand-label), inset 0 0 22px -6px var(--gb-brand-label)' : '';
   return (
     <div onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
-        display: 'flex', flexDirection: 'column', cursor: 'pointer', background: 'var(--gb-surface-1)',
-        border: '1px solid ' + (active || inProposal ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'),
+        display: 'flex', flexDirection: 'column', cursor: 'pointer', background: 'var(--gb-surface-1)', height: '100%',
+        border: '1px solid ' + (active ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'),
         borderRadius: 'var(--gb-r-lg)', padding: compact ? 9 : 11,
-        boxShadow: [ring, glow].filter(Boolean).join(', ') || 'none',
+        boxShadow: ring || 'none',
         transform: hover && !active ? 'translateY(-1px)' : 'none',
         transition: 'transform var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)',
       }}>
@@ -289,12 +288,20 @@ function ProductCard({ p, compact, showRating, active, inProposal, onClick }) {
         </div>
         <div style={{ fontSize: compact ? 12 : 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.32, letterSpacing: -.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: compact ? undefined : '2.6em' }}>{p.title}</div>
         <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 2 }}>
-          <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-            <span style={{ fontSize: compact ? 16 : 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.5, fontFamily: 'var(--gb-font-mono)' }}>{usd(topPrice(p))}</span>
-            {onSale(p) && p.orig && <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-ghost)', textDecoration: 'line-through', fontFamily: 'var(--gb-font-mono)' }}>{usd(p.orig)}</span>}
-          </span>
-          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>each</span>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+            <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+              <span style={{ fontSize: compact ? 16 : 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.5, fontFamily: 'var(--gb-font-mono)' }}>{usd(topPrice(p))}</span>
+              {onSale(p) && p.orig && <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-ghost)', textDecoration: 'line-through', fontFamily: 'var(--gb-font-mono)' }}>{usd(p.orig)}</span>}
+            </span>
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>each</span>
+          </div>
+          {inProposal && (
+            <span title="In proposal" style={{ position: 'relative', width: 9, height: 9, flexShrink: 0, marginBottom: 4 }}>
+              <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'var(--gb-brand-label)', animation: 'gc-orb-pulse 1.6s ease-out infinite' }} />
+              <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'var(--gb-brand-label)' }} />
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -815,10 +822,23 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${colMin}px, 1fr))`, gap: compact ? 10 : 12 }}>
-                  {results.map((p) => (
-                    <ProductCard key={p.id} p={p} compact={compact} showRating={showRating}
-                      active={selected && selected.id === p.id} inProposal={inProposal(p.id)} onClick={() => setSelected(p)} />
-                  ))}
+                  {/* Animate item changes on search/filter — but only up to a
+                      sane count so the full ~1000-item "All Items" view stays snappy. */}
+                  {results.length <= 200 ? (
+                    <AnimatePresence>
+                      {results.map((p) => (
+                        <motion.div key={p.id} initial={{ opacity: 0, scale: .95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .95 }} transition={{ duration: .17, ease: [0.32, 0.72, 0, 1] }}>
+                          <ProductCard p={p} compact={compact} showRating={showRating}
+                            active={selected && selected.id === p.id} inProposal={inProposal(p.id)} onClick={() => setSelected(p)} />
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  ) : (
+                    results.map((p) => (
+                      <ProductCard key={p.id} p={p} compact={compact} showRating={showRating}
+                        active={selected && selected.id === p.id} inProposal={inProposal(p.id)} onClick={() => setSelected(p)} />
+                    ))
+                  )}
                 </div>
               )}
             </div>
