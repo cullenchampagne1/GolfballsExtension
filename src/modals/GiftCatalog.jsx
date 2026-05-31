@@ -403,7 +403,7 @@ const CAT_GROUPS = [
   { id: 'Apparel', icon: 'Golf Shirts', members: ['Golf Shirts', 'Golf Hats', 'Outerwear', 'Golf Gloves'] },
   { id: 'Bags', icon: 'Golf Bags', members: ['Logo Travel Bags', 'Golf Bags'] },
   { id: 'On-Course', icon: 'Divot Tools', members: ['Golf Towels', 'Divot Tools', 'Ball Markers', 'Logo Tees', 'Golf Umbrellas'] },
-  { id: 'Gifts & Drinkware', icon: 'Drinkware', members: ['Drinkware', 'Custom Packaging', 'Promotional Products'] },
+  { id: 'Gifting', icon: 'Drinkware', members: ['Drinkware', 'Custom Packaging', 'Promotional Products'] },
 ];
 const groupOf = (cat) => CAT_GROUPS.find((g) => g.members.includes(cat));
 
@@ -431,13 +431,20 @@ function GroupRow({ g, open, onToggle, value, onChange, counts, cats }) {
       <div onClick={() => { onToggle(g.id); onChange(g.id); }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 11px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', transition: 'all var(--gb-anim)', background: on ? 'var(--gb-brand-tint-medium)' : hover ? 'var(--gb-fill-subtle)' : 'transparent', border: '1px solid ' + (on ? 'var(--gb-brand-tint-border)' : 'transparent') }}>
         <CatGlyph id={g.icon || g.members[0]} size={15} color={col} />
-        <span style={{ flex: 1, fontSize: 11.5, fontWeight: on ? 700 : 600, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>{g.id}</span>
-        <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }}>{memCount}</span>
+        <span style={{ flex: 1, fontSize: 11.5, fontWeight: on ? 700 : 600, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.id}</span>
+        <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)', flexShrink: 0 }}>{memCount}</span>
         <I.chevr size={12} style={{ color: 'var(--gb-text-muted)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform var(--gb-anim)', flexShrink: 0 }} />
       </div>
-      {open && g.members.filter((m) => cats.includes(m)).map((m) => (
-        <CatRow key={m} id={m} label={m} count={counts[m] || 0} value={value} onChange={onChange} child />
-      ))}
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div key="sub" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }} style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {g.members.filter((m) => cats.includes(m)).map((m) => (
+              <CatRow key={m} id={m} label={m} count={counts[m] || 0} value={value} onChange={onChange} child />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
