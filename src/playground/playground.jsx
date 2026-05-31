@@ -22,6 +22,7 @@ import { submitQuickTask } from '../lib/submitQuickTask.js';
 import { EmailPreview } from '../modals/EmailPreview.jsx';
 import { matchesCaseTpl } from '../lib/caseMatch.js';
 import { CalendarModal } from '../modals/CalendarModal.jsx';
+import { GiftCatalog } from '../modals/GiftCatalog.jsx';
 import { runOrderDateUpdate } from '../lib/submitOrderDates.js';
 import { TextPreview } from '../modals/TextPreview.jsx';
 import { parseChat } from '../lib/parseChat.js';
@@ -64,6 +65,7 @@ const MODAL_REGISTRY = [
   { id: 'callLog',      label: 'Call Log',        icon: 'phone',   wired: true  },
   { id: 'quickTask',    label: 'Quick Task',      icon: 'check',   wired: true  },
   { id: 'calendar',     label: 'Order Dates',     icon: 'cog',     wired: true  },
+  { id: 'giftCatalog',  label: 'Gift Catalog',    icon: 'card',    wired: true  },
   // ── Not yet migrated — kept as-is (plain secondary buttons) ──
   { id: 'charge',       label: 'Charge',          icon: 'card',    wired: false },
   { id: 'orderEdit',    label: 'Order Edit',      icon: 'edit',    wired: false },
@@ -826,6 +828,12 @@ function PlaygroundSurface() {
           <MarginCalc
             key="margin"
             onClosed={() => setMounted(null)}
+          />
+        )}
+        {mounted === 'giftCatalog' && (
+          <GiftCatalog
+            key="giftCatalog"
+            onClose={() => setMounted(null)}
           />
         )}
         {mounted === 'imageViewer' && (

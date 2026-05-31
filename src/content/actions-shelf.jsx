@@ -591,6 +591,22 @@ if (!window.__gbActionsShelfLoaded) {
         },
       },
     },
+    {
+      key: 'actionsShelf.showGiftCatalog',
+      def: {
+        id: 'gb-open-gift-catalog',
+        label: 'Gifting Catalog',
+        icon: <I.card size={13} />,
+        hint: 'Corporate gifting — photos, pricing, custom-logo imprint',
+        handler: () => {
+          if (typeof window.__gbOpenGiftCatalog === 'function') {
+            window.__gbOpenGiftCatalog();
+          } else {
+            window.__gbToast?.error?.('Gifting catalog not loaded on this page', { duration: 2400 });
+          }
+        },
+      },
+    },
   ];
   const _alwaysUnsubs = new Map(); // key → unsub fn
   function applyAlwaysActions(devSettings) {

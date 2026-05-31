@@ -118,6 +118,31 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // ── Corporate Gifting Catalog (PUT /api/solr-refinement, paginated) ──
+  if (msg.action === 'fetchGiftCatalog' && msg.searchTerm) {
+    const body = JSON.stringify({
+      solrQuery: { queryType: 'select', start: msg.start || 0, rows: String(msg.rows || 60), searchTerm: msg.searchTerm },
+      additionalFacets: { facetFields: [], facetQueries: [] },
+    });
+    fetch('https://www.golfballs.com/api/solr-refinement', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      credentials: 'include',
+      body,
+    })
+      .then(async r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        const resp = (j && j.response) || {};
+        sendResponse({ ok: true, docs: resp.docs || [], numFound: resp.numFound || 0 });
+      })
+      .catch(err => {
+        console.warn('[GB] fetchGiftCatalog error:', err.message);
+        sendResponse({ ok: false, error: String(err), docs: [], numFound: 0 });
+      });
+    return true;
+  }
+
   // ── 2. Calendar HTML Proxy (GET — initial state fetch) ─────
   if (msg.action === 'fetchCalendarState' && msg.url) {
     console.log("[Background] Fetching URL:", msg.url);
