@@ -107,7 +107,7 @@ function CatGlyph({ id, size = 15, color = 'currentColor' }) {
    filter mode (like Quick Notes) — type a category or brand, pick it,
    and the matching filter is applied while the search field clears so
    you can immediately type a specific term. */
-function SearchBox({ value, onChange, commands, onPick }) {
+function SearchBox({ value, onChange, commands, onPick, filtersActive, onClearAll }) {
   const [focused, setFocused] = useState(false);
   const [hi, setHi] = useState(0);
   const inputRef = useRef(null);
@@ -158,8 +158,8 @@ function SearchBox({ value, onChange, commands, onPick }) {
           placeholder={isCmd ? 'Filter — type, brand, sale…' : 'Search products, or / to filter…'}
           style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 12.5, fontWeight: 500 }}
         />
-        {value && (
-          <span onClick={() => onChange('')} style={{ cursor: 'pointer', color: 'var(--gb-text-muted)', display: 'flex', flexShrink: 0 }}>
+        {(value || filtersActive) && (
+          <span onClick={() => (onClearAll ? onClearAll() : onChange(''))} title="Clear all filters" style={{ cursor: 'pointer', color: 'var(--gb-text-muted)', display: 'flex', flexShrink: 0 }}>
             <I.close size={13} />
           </span>
         )}
@@ -396,56 +396,17 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
   );
 }
 
-/* Apparel categories collapse into one sub-folder to keep the rail short. */
-/* Collapse the long category list into a few folders so the rail stays
-   short — leaving room below for the upcoming "Saved" views. */
-const CAT_GROUPS = [
-  { id: 'Apparel', icon: 'Golf Shirts', members: ['Golf Shirts', 'Golf Hats', 'Outerwear', 'Golf Gloves'] },
-  { id: 'Bags', icon: 'Golf Bags', members: ['Logo Travel Bags', 'Golf Bags'] },
-  { id: 'On-Course', icon: 'Divot Tools', members: ['Golf Towels', 'Divot Tools', 'Ball Markers', 'Logo Tees', 'Golf Umbrellas'] },
-  { id: 'Gifting', icon: 'Drinkware', members: ['Drinkware', 'Custom Packaging', 'Promotional Products'] },
-];
-const groupOf = (cat) => CAT_GROUPS.find((g) => g.members.includes(cat));
-
-function CatRow({ id, label, count, value, onChange, child }) {
+function CatRow({ id, label, count, value, onChange }) {
   const on = value === id;
   const [hover, setHover] = useState(false);
   const col = on ? 'var(--gb-brand-label)' : hover ? 'var(--gb-text-secondary)' : 'var(--gb-text-tertiary)';
   return (
     <div onClick={() => onChange(id)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 11px', paddingLeft: child ? 28 : 11, borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', transition: 'all var(--gb-anim)', background: on ? 'var(--gb-brand-tint-medium)' : hover ? 'var(--gb-fill-subtle)' : 'transparent', border: '1px solid ' + (on ? 'var(--gb-brand-tint-border)' : 'transparent') }}>
-      <CatGlyph id={id} size={child ? 13 : 15} color={col} />
-      <span style={{ flex: 1, fontSize: child ? 11 : 11.5, fontWeight: on ? 700 : 500, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 11px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', flexShrink: 0, transition: 'all var(--gb-anim)', background: on ? 'var(--gb-brand-tint-medium)' : hover ? 'var(--gb-fill-subtle)' : 'transparent', border: '1px solid ' + (on ? 'var(--gb-brand-tint-border)' : 'transparent') }}>
+      <CatGlyph id={id} size={15} color={col} />
+      <span style={{ flex: 1, fontSize: 11.5, fontWeight: on ? 700 : 500, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
       <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }}>{count}</span>
     </div>
-  );
-}
-
-function GroupRow({ g, open, onToggle, value, onChange, counts, cats }) {
-  const on = value === g.id;
-  const [hover, setHover] = useState(false);
-  const memCount = g.members.reduce((s, m) => s + (counts[m] || 0), 0);
-  const col = on ? 'var(--gb-brand-label)' : hover ? 'var(--gb-text-secondary)' : 'var(--gb-text-tertiary)';
-  return (
-    <>
-      <div onClick={() => { onToggle(g.id); onChange(g.id); }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 11px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', transition: 'all var(--gb-anim)', background: on ? 'var(--gb-brand-tint-medium)' : hover ? 'var(--gb-fill-subtle)' : 'transparent', border: '1px solid ' + (on ? 'var(--gb-brand-tint-border)' : 'transparent') }}>
-        <CatGlyph id={g.icon || g.members[0]} size={15} color={col} />
-        <span style={{ flex: 1, fontSize: 11.5, fontWeight: on ? 700 : 600, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.id}</span>
-        <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)', flexShrink: 0 }}>{memCount}</span>
-        <I.chevr size={12} style={{ color: 'var(--gb-text-muted)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform var(--gb-anim)', flexShrink: 0 }} />
-      </div>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div key="sub" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }} style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {g.members.filter((m) => cats.includes(m)).map((m) => (
-              <CatRow key={m} id={m} label={m} count={counts[m] || 0} value={value} onChange={onChange} child />
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
   );
 }
 
@@ -460,28 +421,21 @@ function SavedStub({ label, icon }) {
   );
 }
 
-function CategoryRail({ cats, value, onChange, counts, total }) {
-  const startG = groupOf(value);
-  const [expanded, setExpanded] = useState(() => new Set(startG ? [startG.id] : []));
-  const toggle = (id) => setExpanded((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  // Keep a group open while one of its categories is the active filter.
-  useEffect(() => { const g = groupOf(value); if (g) setExpanded((s) => (s.has(g.id) ? s : new Set(s).add(g.id))); }, [value]);
-
-  // Non-grouped categories first (canonical order), then the folders.
-  const loose = cats.filter((c) => !groupOf(c));
-  const groups = CAT_GROUPS.filter((g) => g.members.some((m) => cats.includes(m)));
-
+function CategoryRail({ cats, value, onChange, counts, total, dock }) {
   return (
-    <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: 12, display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
-      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px' }}>Categories</div>
-      <CatRow id="all" label="All Items" count={total} value={value} onChange={onChange} />
-      {loose.map((c) => <CatRow key={c} id={c} label={c} count={counts[c] || 0} value={value} onChange={onChange} />)}
-      {groups.map((g) => <GroupRow key={'g:' + g.id} g={g} open={expanded.has(g.id)} onToggle={toggle} value={value} onChange={onChange} counts={counts} cats={cats} />)}
-
-      {/* Space freed by the folders, earmarked for upcoming saved views. */}
-      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '16px 10px 6px' }}>Saved</div>
-      <SavedStub label="Previous orders" icon={<I.refresh size={14} />} />
-      <SavedStub label="Preset proposals" icon={<I.card size={14} />} />
+    <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: 12, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px', flexShrink: 0 }}>Categories</div>
+      {/* Capped, scrollable list with a soft fade at the top/bottom edges. */}
+      <div className="gb-gc-norail" style={{ flex: 1, minHeight: 60, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%)', maskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%)' }}>
+        <CatRow id="all" label="All Items" count={total} value={value} onChange={onChange} />
+        {cats.map((c) => <CatRow key={c} id={c} label={c} count={counts[c] || 0} value={value} onChange={onChange} />)}
+      </div>
+      <div style={{ flexShrink: 0, marginTop: 4 }}>
+        <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '8px 10px 6px' }}>Saved</div>
+        <SavedStub label="Previous orders" icon={<I.refresh size={14} />} />
+        <SavedStub label="Preset proposals" icon={<I.card size={14} />} />
+      </div>
+      {dock && <div style={{ flexShrink: 0, marginTop: 8 }}>{dock}</div>}
     </div>
   );
 }
@@ -609,7 +563,7 @@ function ProposalDock({ count, total, active, onOpen }) {
   return (
     <div onClick={onOpen} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
       style={{
-        position: 'absolute', left: 12, bottom: 48, width: 196, zIndex: 15, cursor: 'pointer',
+        width: '100%', cursor: 'pointer',
         display: 'flex', alignItems: 'center', gap: 13, padding: '7px 9px',
         background: (h || active) ? 'var(--gb-brand-tint-strong)' : 'var(--gb-brand-tint-medium)',
         border: '1px solid var(--gb-brand-tint-border)', borderRadius: 'var(--gb-r-md)',
@@ -706,7 +660,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const [catalog, setCatalog] = useState(GIFT_CATALOG_SEED);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
-  const [brand, setBrand] = useState('all');
+  const [selBrands, setSelBrands] = useState(() => new Set()); // empty = all brands
+  const toggleBrand = (b) => setSelBrands((s) => { const n = new Set(s); n.has(b) ? n.delete(b) : n.add(b); return n; });
   const [cat, setCat] = useState('all');
   const [sort, setSort] = useState('popular');
   const [selected, setSelected] = useState(null);
@@ -753,12 +708,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     return [...ordered, ...extra];
   }, [catalog]);
 
-  const inCat = useMemo(() => {
-    if (cat === 'all') return catalog;
-    const g = CAT_GROUPS.find((x) => x.id === cat);
-    if (g) { const set = new Set(g.members); return catalog.filter((p) => set.has(p.cat)); }
-    return catalog.filter((p) => p.cat === cat);
-  }, [cat, catalog]);
+  const inCat = useMemo(() => (cat === 'all' ? catalog : catalog.filter((p) => p.cat === cat)), [cat, catalog]);
   const brands = useMemo(() => {
     const m = {}; inCat.forEach((p) => { m[p.brand] = (m[p.brand] || 0) + 1; });
     // "Shop by Brand" order; brands outside the canonical list trail by count.
@@ -766,7 +716,14 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     return Object.entries(m).sort((a, b) => (rank(a[0]) - rank(b[0])) || (b[1] - a[1]));
   }, [inCat]);
 
-  useEffect(() => { if (brand !== 'all' && !brands.find(([b]) => b === brand)) setBrand('all'); }, [brands]); // eslint-disable-line
+  // Drop selected brands not present in the current category.
+  useEffect(() => {
+    setSelBrands((s) => {
+      const present = new Set(brands.map(([b]) => b));
+      const next = new Set([...s].filter((b) => present.has(b)));
+      return next.size === s.size ? s : next;
+    });
+  }, [brands]); // eslint-disable-line
 
   // "/" command bar — every category + brand becomes a jump-to filter.
   const brandCounts = useMemo(() => { const m = {}; catalog.forEach((p) => { m[p.brand] = (m[p.brand] || 0) + 1; }); return m; }, [catalog]);
@@ -779,19 +736,22 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
       .map((b) => ({ type: 'brand', id: b, label: b, count: brandCounts[b] }));
     return [...specCmds, ...catCmds, ...brandCmds];
   }, [cats, catCounts, brandCounts, catalog]);
-  // Stack filters: a category pick keeps the active brand and vice-versa,
-  // so "/titleist" then "/golf towels" narrows to both at once.
+  // Commands stack + combine: a brand toggles into the multi-select,
+  // category replaces, special toggles — so "/titleist /callaway /sale"
+  // narrows to both brands on sale.
   const onPickCommand = (c) => {
     if (!c) return;
     if (c.type === 'cat') setCat(c.id);
-    else if (c.type === 'brand') setBrand(c.id);
+    else if (c.type === 'brand') toggleBrand(c.id);
     else if (c.type === 'special') setSpecial((cur) => (cur === c.id ? null : c.id));
     setQuery('');
   };
+  const filtersActive = cat !== 'all' || selBrands.size > 0 || !!special || !!query;
+  const clearAll = () => { setCat('all'); setSelBrands(new Set()); setSpecial(null); setQuery(''); };
 
   const results = useMemo(() => {
     let r = inCat;
-    if (brand !== 'all') r = r.filter((p) => p.brand === brand);
+    if (selBrands.size > 0) r = r.filter((p) => selBrands.has(p.brand));
     if (special) { const sc = SPECIAL_CMDS.find((s) => s.id === special); if (sc) r = r.filter(sc.match); }
     if (query.trim() && !query.startsWith('/')) {
       const q = query.toLowerCase();
@@ -803,7 +763,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     else if (sort === 'priceHigh') r.sort((a, b) => (b.price || 0) - (a.price || 0));
     else if (sort === 'name') r.sort((a, b) => a.title.localeCompare(b.title));
     return r;
-  }, [inCat, brand, query, sort, special]);
+  }, [inCat, selBrands, query, sort, special]);
 
   const colMin = compact ? 150 : 188;
 
@@ -827,7 +787,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               {loading && <span style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite', display: 'inline-block' }} />}
             </div>
           </div>
-          <SearchBox value={query} onChange={setQuery} commands={commands} onPick={onPickCommand} />
+          <SearchBox value={query} onChange={setQuery} commands={commands} onPick={onPickCommand} filtersActive={filtersActive} onClearAll={clearAll} />
           <SortSelect value={sort} onChange={setSort} />
           <IconBtn size="md" title="Rebuild catalog index" icon={<I.refresh style={{ animation: loading ? 'gb-spin .8s linear infinite' : 'none' }} />} onClick={refresh} />
           <IconBtn size="md" icon={<I.close />} onClick={onClose} />
@@ -836,12 +796,13 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         {/* Body — also the positioning context for the slide-over panels,
             so they span the sidebar's height (header + footer stay visible). */}
         <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
-          <CategoryRail cats={cats} value={cat} onChange={setCat} counts={catCounts} total={catalog.length} />
+          <CategoryRail cats={cats} value={cat} onChange={setCat} counts={catCounts} total={catalog.length}
+            dock={proposal.length > 0 ? <ProposalDock count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} /> : null} />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <div className="gb-gc-norail" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 16px', borderBottom: '1px solid var(--gb-border-subtle)', overflowX: 'auto', flexShrink: 0, WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 40px), transparent)', maskImage: 'linear-gradient(to right, #000 calc(100% - 40px), transparent)' }}>
               <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flexShrink: 0, marginRight: 2 }}>Brand</span>
-              <BrandChip label="All" count={inCat.length} on={brand === 'all'} onClick={() => setBrand('all')} />
-              {brands.map(([b, n]) => <BrandChip key={b} label={b} count={n} on={brand === b} onClick={() => setBrand(b)} />)}
+              <BrandChip label="All" count={inCat.length} on={selBrands.size === 0} onClick={() => setSelBrands(new Set())} />
+              {brands.map(([b, n]) => <BrandChip key={b} label={b} count={n} on={selBrands.has(b)} onClick={() => toggleBrand(b)} />)}
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
               {results.length === 0 ? (
@@ -850,7 +811,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                     <I.search size={20} />
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>No products match</div>
-                  <Btn variant="secondary" size="sm" onClick={() => { setQuery(''); setBrand('all'); setCat('all'); setSpecial(null); }}>Clear filters</Btn>
+                  <Btn variant="secondary" size="sm" onClick={clearAll}>Clear filters</Btn>
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${colMin}px, 1fr))`, gap: compact ? 10 : 12 }}>
@@ -882,7 +843,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           <span style={{ fontSize: 11.5, color: 'var(--gb-text-tertiary)', fontWeight: 500 }}>
             Showing <b style={{ color: 'var(--gb-text-primary)' }}>{results.length}</b> of {catalog.length}
             {cat !== 'all' && <> in <b style={{ color: 'var(--gb-text-secondary)' }}>{cat}</b></>}
-            {brand !== 'all' && <> · <b style={{ color: 'var(--gb-text-secondary)' }}>{brand}</b></>}
+            {selBrands.size > 0 && <> · <b style={{ color: 'var(--gb-text-secondary)' }}>{[...selBrands].join(', ')}</b></>}
             {special && <> · <b style={{ color: 'var(--gb-success-fg, #2e9e5b)' }}>{(SPECIAL_CMDS.find((s) => s.id === special) || {}).label}</b></>}
           </span>
           <div style={{ flex: 1 }} />
@@ -891,9 +852,6 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           </span>
         </div>
 
-        {proposal.length > 0 && !proposalOpen && (
-          <ProposalDock count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} />
-        )}
         </div>
       </div>
     </div>
