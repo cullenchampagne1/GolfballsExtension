@@ -220,6 +220,29 @@ export function arrayQuantifier(ref) {
   return null;
 }
 
+/* Parse the first array segment of a ref into { arrayName, mode, index }
+   (or null). mode is first/last/index for [0]/[-1]/[N], or any/none. */
+export function parseArrayRef(ref) {
+  if (typeof ref !== 'string' || !ref) return null;
+  const m = /\[(-?\d+|any|none)\]/.exec(ref);
+  if (!m) return null;
+  const arrayName = ref.slice(0, m.index).split('.').pop() || 'items';
+  const tok = m[1];
+  if (tok === 'any' || tok === 'none') return { arrayName, mode: tok, index: 0 };
+  const n = parseInt(tok, 10);
+  return { arrayName, mode: n === 0 ? 'first' : n === -1 ? 'last' : 'index', index: n >= 0 ? n : 0 };
+}
+/* Rewrite the first array segment per mode + index. */
+export function rewriteArrayRef(ref, mode, index) {
+  if (!ref) return ref;
+  const next = mode === 'first' ? '[0]'
+    : mode === 'last' ? '[-1]'
+    : mode === 'any'  ? '[any]'
+    : mode === 'none' ? '[none]'
+    : `[${Math.max(0, index | 0)}]`;
+  return ref.replace(/\[(?:-?\d+|any|none)\]/, next);
+}
+
 async function evalCondition(cond, getValue) {
   if (!cond) return true;
   let value;

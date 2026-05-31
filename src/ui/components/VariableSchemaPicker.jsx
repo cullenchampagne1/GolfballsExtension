@@ -58,7 +58,7 @@ const TYPE_BY_PATH = Object.fromEntries(SCHEMA_NODES.map((n) => [n.path, n.type]
 const canonicalPath = (p) => (p || '').replace(/\[(?:-?\d+|any|none)\]/g, '[0]');
 const typeForPath = (p) => TYPE_BY_PATH[canonicalPath(p)] || 'string';
 
-export function VariableSchemaPicker({ value, onChange, placeholder = '— pick a field —', varNames = [], allowQuantifiers = false, overlay = false }) {
+export function VariableSchemaPicker({ value, onChange, placeholder = '— pick a field —', varNames = [], allowQuantifiers = false, overlay = false, embedArrayRow = true }) {
   const [open, setOpen] = useState(false);
   const type = typeForPath(value);
   /* Surface array selector only when the active path actually
@@ -108,7 +108,7 @@ export function VariableSchemaPicker({ value, onChange, placeholder = '— pick 
           />
         )}
       </AnimatePresence>
-      {arrayInfo && (
+      {embedArrayRow && arrayInfo && (
         <ArraySelectorRow
           arrayName={arrayInfo.arrayName}
           mode={arrayInfo.mode}

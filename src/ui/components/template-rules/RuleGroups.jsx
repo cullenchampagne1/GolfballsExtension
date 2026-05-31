@@ -5,7 +5,7 @@ import { IconBtn } from '../IconBtn.jsx';
 import { SectionLabel } from '../SectionLabel.jsx';
 import { Dropdown } from '../Dropdown.jsx';
 import { I } from '../../icons.jsx';
-import { isValuelessOp, emptyTree } from '../../../lib/matchEngine.js';
+import { isValuelessOp, emptyTree, parseArrayRef, rewriteArrayRef } from '../../../lib/matchEngine.js';
 
 /* ───────────────────────────────────────────────────────────────
    RuleGroups — the shared grouped AND/OR rule builder.
@@ -204,6 +204,28 @@ function ConditionRow({ condition, renderSubject, opsFor, onPatch, onRemove, can
   const ops = (opsFor ? opsFor(condition) : []) || [];
   const valueless = isValuelessOp(condition.op);
   const vKind = valueKind(condition.op, valueless);
+  /* When the subject is an array path, the array-mode control moves to a
+     second row next to the value; the operator stays pinned on the top
+     row beside the field. */
+  const arrayInfo = parseArrayRef(condition.ref);
+
+  const opCell = (
+    <div style={{ width: 150, flexShrink: 0 }}>
+      <Dropdown
+        size="sm"
+        value={condition.op}
+        options={ops}
+        onChange={(v) => {
+          const patch = { op: v };
+          if (isValuelessOp(v)) patch.value = '';
+          onPatch(patch);
+        }}
+      />
+    </div>
+  );
+  const valueCell = !valueless
+    ? <ValueCell kind={vKind} value={condition.value} onChange={(v) => onPatch({ value: v })} />
+    : null;
 
   return (
     <div style={{
@@ -212,32 +234,72 @@ function ConditionRow({ condition, renderSubject, opsFor, onPatch, onRemove, can
       border: '1px solid ' + (condition.not ? 'var(--gb-error-tint-border)' : 'var(--gb-border-subtle)'),
       borderRadius: 'var(--gb-r-sm)', transition: 'border-color .2s',
     }}>
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-        <NotPill on={condition.not} onClick={() => onPatch({ not: !condition.not })} />
-        {/* Pluggable subject cell — schema/var/field picker per type. */}
-        <div style={{ flex: '1 1 160px', minWidth: 150 }}>
-          {renderSubject?.(condition, (patch) => onPatch(patch))}
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {/* Row 1 — NOT · subject · operator (· value when there's no array row). */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <NotPill on={condition.not} onClick={() => onPatch({ not: !condition.not })} />
+          <div style={{ flex: '1 1 150px', minWidth: 140 }}>
+            {renderSubject?.(condition, (patch) => onPatch(patch))}
+          </div>
+          {opCell}
+          {!arrayInfo && valueCell}
         </div>
-        <div style={{ width: 150, flexShrink: 0 }}>
-          <Dropdown
-            size="sm"
-            value={condition.op}
-            options={ops}
-            onChange={(v) => {
-              const patch = { op: v };
-              if (isValuelessOp(v)) patch.value = '';
-              onPatch(patch);
-            }}
-          />
-        </div>
-        {!valueless && (
-          <ValueCell kind={vKind} value={condition.value} onChange={(v) => onPatch({ value: v })} />
+        {/* Row 2 — array mode + value, aligned under the subject. */}
+        {arrayInfo && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 34 }}>
+            <ArrayModeControl
+              arrayInfo={arrayInfo}
+              path={condition.ref}
+              onChange={(nextRef) => onPatch({ ref: nextRef })}
+            />
+            {valueCell}
+          </div>
         )}
       </div>
       <div style={{ flexShrink: 0 }}>
         <IconBtn size="xs" variant="ghost" danger icon={<I.trash size={10} />} disabled={!canRemove} onClick={onRemove} tooltip={canRemove ? 'Remove condition' : 'At least one condition is required'} />
       </div>
     </div>
+  );
+}
+
+const ARRAY_MODE_OPTS = [
+  { id: 'first', label: 'First' },
+  { id: 'last',  label: 'Last' },
+  { id: 'index', label: 'Index' },
+  { id: 'any',   label: 'Any match' },
+  { id: 'none',  label: 'No match' },
+];
+
+/* Compact array-mode control (input height) for the value row — picks
+   which item(s) of an array subject the condition tests. */
+function ArrayModeControl({ arrayInfo, path, onChange }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+      <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 10.5, color: 'var(--gb-text-muted)', whiteSpace: 'nowrap' }}>
+        {arrayInfo.arrayName}[]
+      </span>
+      <div style={{ width: 116 }}>
+        <Dropdown
+          size="sm"
+          value={arrayInfo.mode}
+          options={ARRAY_MODE_OPTS}
+          onChange={(m) => onChange(rewriteArrayRef(path, m, arrayInfo.index))}
+        />
+      </div>
+      {arrayInfo.mode === 'index' && (
+        <input
+          type="number"
+          min={0}
+          value={String(arrayInfo.index)}
+          onChange={(e) => {
+            const v = parseInt(e.target.value, 10);
+            onChange(rewriteArrayRef(path, 'index', Number.isFinite(v) ? Math.max(0, v) : 0));
+          }}
+          style={baseControlStyle({ width: 56 })}
+        />
+      )}
+    </span>
   );
 }
 
