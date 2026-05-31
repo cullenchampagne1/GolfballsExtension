@@ -433,7 +433,7 @@ function CategoryRail({ cats, value, onChange, counts, total, dock }) {
     <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: 12, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px', flexShrink: 0 }}>Categories</div>
       {/* Capped, scrollable list with a soft fade at the top/bottom edges. */}
-      <div className="gb-gc-norail" style={{ flex: 1, minHeight: 60, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%)', maskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%)' }}>
+      <div className="gb-gc-norail" style={{ flex: 1, minHeight: 60, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, padding: '14px 0', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%)', maskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%)' }}>
         <CatRow id="all" label="All Items" count={total} value={value} onChange={onChange} />
         {cats.map((c) => <CatRow key={c} id={c} label={c} count={counts[c] || 0} value={value} onChange={onChange} />)}
       </div>
@@ -802,7 +802,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
 
         {/* Body — also the positioning context for the slide-over panels,
             so they span the sidebar's height (header + footer stay visible). */}
-        <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative' }}>
+        <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative', overflow: 'hidden', boxShadow: 'inset 0 7px 7px -7px rgba(0,0,0,.16), inset 0 -7px 7px -7px rgba(0,0,0,.16)' }}>
           <CategoryRail cats={cats} value={cat} onChange={setCat} counts={catCounts} total={catalog.length}
             dock={proposal.length > 0 ? <ProposalDock count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} /> : null} />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
