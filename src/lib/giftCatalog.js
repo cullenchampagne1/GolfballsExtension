@@ -60,6 +60,10 @@ function parsePromo(tags) {
   return null;
 }
 
+/* Strip the "(Decoration)" / "(Decorated)" qualifier the feed appends
+   to custom-logo product names — every catalog item is decorated. */
+const cleanTitle = (t) => String(t || '').replace(/\s*\((?:decorat(?:ion|ed)|custom logo)\)/ig, '').replace(/\s{2,}/g, ' ').trim();
+
 /* Map a Solr doc to one of the canonical "Shop by Type" categories.
    itemType is coarse, so most signal is the title. Order matters —
    earlier checks win, so the more specific lines come first. */
@@ -102,7 +106,7 @@ export function normalizeDoc(doc) {
 
   return {
     id:      doc.id || doc.parentCode_s || '',
-    title:   doc.title_s || doc.title_txt_en || '',
+    title:   cleanTitle(doc.title_s || doc.title_txt_en || ''),
     brand:   doc.brand_s || '',
     cat:     deriveCat(doc),
     price:   round2(price),

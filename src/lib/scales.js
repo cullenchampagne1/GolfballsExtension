@@ -32,6 +32,7 @@ const STYLE_ID    = '__gb-ui-scales-css';
 /** Each entry surfaces in the Settings panel as one labelled slider. */
 export const SCALE_CATEGORIES = [
   { id: 'modals',     label: 'Modals',                hint: 'Image viewer, charge, call log, watch list, task list, etc.' },
+  { id: 'giftCatalog', label: 'Gifting Catalog',      hint: 'The corporate gifting catalog (magnified by default)', min: 1, max: 3, def: 1.8 },
   { id: 'popovers',   label: 'Popovers',              hint: 'Dropdowns, date picker, color picker, quick task menu' },
   { id: 'toasts',     label: 'Notifications',         hint: 'Toast notifications across the app' },
   { id: 'shelf',      label: 'Smart Actions Shelf',   hint: 'Floating quick-action pill in the bottom corner' },
@@ -41,7 +42,7 @@ export const SCALE_CATEGORIES = [
 ];
 
 export const DEFAULT_SCALES = Object.fromEntries(
-  SCALE_CATEGORIES.map((c) => [c.id, 1]),
+  SCALE_CATEGORIES.map((c) => [c.id, c.def ?? 1]),
 );
 
 /** Clamp + sanitise an incoming scales blob. Anything out of range
@@ -52,7 +53,8 @@ function sanitize(raw) {
   if (raw && typeof raw === 'object') {
     for (const c of SCALE_CATEGORIES) {
       const v = Number(raw[c.id]);
-      if (Number.isFinite(v) && v >= 0.5 && v <= 1.5) out[c.id] = v;
+      const min = c.min ?? 0.5, max = c.max ?? 1.5;
+      if (Number.isFinite(v) && v >= min && v <= max) out[c.id] = v;
     }
   }
   return out;

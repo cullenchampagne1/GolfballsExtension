@@ -61,16 +61,20 @@ function priceAtQty(p, qty) {
 /* Has the price been hand-edited away from the tier the qty implies? */
 const isTierPrice = (p, qty, price) => Math.abs(priceAtQty(p, qty) - price) < 0.005;
 
+/* Highest custom-logo per-unit price (the smallest-qty tier) — shown
+   on the card by default ("from" pricing), before volume discounts. */
+const topPrice = (p) => (p.breaks && p.breaks.length ? Math.max(...p.breaks.map((b) => b.p)) : (p.logo ?? p.price ?? 0));
+const lowPrice = (p) => (p.breaks && p.breaks.length ? Math.min(...p.breaks.map((b) => b.p)) : (p.logo ?? p.price ?? 0));
+
 /* "/" quick-filters beyond category + brand. */
 const SPECIAL_CMDS = [
   { type: 'special', id: 'sale', label: 'On sale / promo', match: (p) => isDeal(p) },
   { type: 'special', id: 'logo', label: 'Custom-logo ready', match: (p) => !!p.logo },
 ];
 
-/* Always-on magnification. The rep runs the Modals dev-scale below 1,
-   which was shrinking the catalog; this constant multiplies on top so
-   it reads large by default while the dev slider still adjusts it. */
-const CATALOG_SCALE = 1.5;
+/* Base card dimensions; on-screen size is this × the "Gifting Catalog"
+   dev scale (data-gb-scale="giftCatalog", default 1.8×, adjustable in
+   Settings → UI Scale). */
 const CARD_W = 1180;
 const CARD_H = 760;
 
@@ -254,46 +258,29 @@ function Rating({ value, count, size = 11 }) {
   );
 }
 
-/* Sale (price cut) or promo (tag_ss deal like EVERY12GETS6) badge. */
-function DealBadge({ p }) {
-  if (onSale(p)) {
-    return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-danger, #e5484d)', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>Sale</span>;
-  }
-  if (hasPromo(p)) {
-    return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .3, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-success-solid, #2e9e5b)', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>{p.promo.label}</span>;
-  }
-  return null;
-}
-
-function ProductCard({ p, compact, showRating, priceFocus, active, inProposal, onAdd, onClick }) {
+function ProductCard({ p, compact, showRating, active, inProposal, onClick }) {
   const [hover, setHover] = useState(false);
-  const logoFocus = priceFocus === 'logo' && p.logo;
-  const heroPrice = logoFocus ? p.logo : p.price;
-  const heroLabel = logoFocus ? 'logo imprint' : 'each';
+  const ring = active ? '0 0 0 1px var(--gb-brand-label), 0 2px 8px rgba(0,0,0,.09)' : hover ? '0 2px 7px rgba(0,0,0,.07)' : '';
+  // Added-to-proposal reads as an internal brand glow (no add button/check).
+  const glow = inProposal ? 'inset 0 0 0 1.5px var(--gb-brand-label), inset 0 0 22px -6px var(--gb-brand-label)' : '';
   return (
     <div onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
         display: 'flex', flexDirection: 'column', cursor: 'pointer', background: 'var(--gb-surface-1)',
-        border: '1px solid ' + (active ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'),
+        border: '1px solid ' + (active || inProposal ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'),
         borderRadius: 'var(--gb-r-lg)', padding: compact ? 9 : 11,
-        boxShadow: active ? '0 0 0 1px var(--gb-brand-label), 0 2px 8px rgba(0,0,0,.09)' : hover ? '0 2px 7px rgba(0,0,0,.07)' : 'none',
+        boxShadow: [ring, glow].filter(Boolean).join(', ') || 'none',
         transform: hover && !active ? 'translateY(-1px)' : 'none',
         transition: 'transform var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)',
       }}>
       <div style={{ position: 'relative' }}>
         <ProductImage src={p.img} alt={p.title} pad={compact ? 12 : 16} />
-        <div style={{ position: 'absolute', top: 7, left: 7, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 5 }}>
-          {p.logo && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-strong)', border: '1px solid var(--gb-brand-tint-border)', backdropFilter: 'blur(4px)' }}>
-              <Gift size={9} /> Logo
-            </span>
-          )}
-          <DealBadge p={p} />
-        </div>
-        <button onClick={(e) => { e.stopPropagation(); onAdd && onAdd(p); }} title={inProposal ? 'In proposal' : 'Add to proposal'}
-          style={{ position: 'absolute', top: 7, right: 7, width: 28, height: 28, borderRadius: 'var(--gb-r-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, background: inProposal ? 'var(--gb-brand-label)' : 'var(--gb-surface-float)', color: inProposal ? 'var(--gb-surface-deep)' : 'var(--gb-text-secondary)', border: '1px solid ' + (inProposal ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'), boxShadow: '0 2px 8px rgba(0,0,0,.3)', opacity: (hover || inProposal) ? 1 : 0, transition: 'opacity var(--gb-anim), background var(--gb-anim)' }}>
-          {inProposal ? <I.check size={14} strokeWidth={3} /> : <I.plus size={15} />}
-        </button>
+        {hasPromo(p) && (
+          <span style={{ position: 'absolute', top: 7, left: 7, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .3, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-success-solid, #2e9e5b)', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>{p.promo.label}</span>
+        )}
+        {onSale(p) && (
+          <span style={{ position: 'absolute', top: 7, right: 7, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-danger, #e5484d)', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>Sale</span>
+        )}
       </div>
       <div style={{ paddingTop: compact ? 8 : 10, display: 'flex', flexDirection: 'column', gap: compact ? 4 : 5, flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -302,18 +289,12 @@ function ProductCard({ p, compact, showRating, priceFocus, active, inProposal, o
         </div>
         <div style={{ fontSize: compact ? 12 : 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.32, letterSpacing: -.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: compact ? undefined : '2.6em' }}>{p.title}</div>
         <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-              <span style={{ fontSize: compact ? 16 : 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.5, fontFamily: 'var(--gb-font-mono)' }}>{usd(heroPrice)}</span>
-              {!logoFocus && onSale(p) && <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-ghost)', textDecoration: 'line-through', fontFamily: 'var(--gb-font-mono)' }}>{usd(p.orig)}</span>}
-            </span>
-            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>{heroLabel}</span>
-          </div>
-          {!logoFocus && p.logo && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 'var(--gb-r-sm)', fontSize: 10, fontWeight: 600, color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)' }}>+logo {usd(p.logo)}</span>
-          )}
-          {logoFocus && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--gb-text-muted)' }}>retail {usd(p.price)}</span>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 2 }}>
+          <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+            <span style={{ fontSize: compact ? 16 : 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.5, fontFamily: 'var(--gb-font-mono)' }}>{usd(topPrice(p))}</span>
+            {onSale(p) && p.orig && <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-ghost)', textDecoration: 'line-through', fontFamily: 'var(--gb-font-mono)' }}>{usd(p.orig)}</span>}
+          </span>
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>each</span>
         </div>
       </div>
     </div>
@@ -359,8 +340,8 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
           <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--gb-text-primary)', lineHeight: 1.25, letterSpacing: -.2 }}>{p.title}</div>
           <div style={{ marginTop: 8 }}><Rating value={p.rating} count={p.reviews} size={12} /></div>
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-            <PriceStat label="Retail" value={usd(p.price)} was={onSale(p) ? usd(p.orig) : null} />
-            {p.logo && <PriceStat label="With logo" value={usd(p.logo)} accent />}
+            <PriceStat label="Per unit" value={usd(topPrice(p))} accent was={onSale(p) ? usd(p.orig) : null} />
+            {lowPrice(p) < topPrice(p) && <PriceStat label="Volume price" value={usd(lowPrice(p))} />}
           </div>
           {hasPromo(p) && (
             <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint, rgba(46,158,91,.12))', border: '1px solid var(--gb-success-border, rgba(46,158,91,.3))' }}>
@@ -415,25 +396,68 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
   );
 }
 
-function CategoryRail({ cats, value, onChange, counts, total }) {
-  const Row = ({ id, label, count }) => {
-    const on = value === id;
-    const [hover, setHover] = useState(false);
-    const col = on ? 'var(--gb-brand-label)' : hover ? 'var(--gb-text-secondary)' : 'var(--gb-text-tertiary)';
-    return (
-      <div onClick={() => onChange(id)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+/* Apparel categories collapse into one sub-folder to keep the rail short. */
+const CAT_GROUPS = [{ id: 'Apparel', members: ['Golf Shirts', 'Golf Hats', 'Outerwear', 'Golf Gloves'] }];
+const groupOf = (cat) => CAT_GROUPS.find((g) => g.members.includes(cat));
+
+function CatRow({ id, label, count, value, onChange, child }) {
+  const on = value === id;
+  const [hover, setHover] = useState(false);
+  const col = on ? 'var(--gb-brand-label)' : hover ? 'var(--gb-text-secondary)' : 'var(--gb-text-tertiary)';
+  return (
+    <div onClick={() => onChange(id)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 11px', paddingLeft: child ? 28 : 11, borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', transition: 'all var(--gb-anim)', background: on ? 'var(--gb-brand-tint-medium)' : hover ? 'var(--gb-fill-subtle)' : 'transparent', border: '1px solid ' + (on ? 'var(--gb-brand-tint-border)' : 'transparent') }}>
+      <CatGlyph id={id} size={child ? 13 : 15} color={col} />
+      <span style={{ flex: 1, fontSize: child ? 11 : 11.5, fontWeight: on ? 700 : 500, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+      <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }}>{count}</span>
+    </div>
+  );
+}
+
+function GroupRow({ g, open, onToggle, value, onChange, counts, cats }) {
+  const on = value === g.id;
+  const [hover, setHover] = useState(false);
+  const memCount = g.members.reduce((s, m) => s + (counts[m] || 0), 0);
+  const col = on ? 'var(--gb-brand-label)' : hover ? 'var(--gb-text-secondary)' : 'var(--gb-text-tertiary)';
+  return (
+    <>
+      <div onClick={() => { onToggle(g.id); onChange(g.id); }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 11px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', transition: 'all var(--gb-anim)', background: on ? 'var(--gb-brand-tint-medium)' : hover ? 'var(--gb-fill-subtle)' : 'transparent', border: '1px solid ' + (on ? 'var(--gb-brand-tint-border)' : 'transparent') }}>
-        <CatGlyph id={id} size={15} color={col} />
-        <span style={{ flex: 1, fontSize: 11.5, fontWeight: on ? 700 : 500, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
-        <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }}>{count}</span>
+        <CatGlyph id="Golf Shirts" size={15} color={col} />
+        <span style={{ flex: 1, fontSize: 11.5, fontWeight: on ? 700 : 600, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>{g.id}</span>
+        <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }}>{memCount}</span>
+        <I.chevr size={12} style={{ color: 'var(--gb-text-muted)', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform var(--gb-anim)', flexShrink: 0 }} />
       </div>
-    );
-  };
+      {open && g.members.filter((m) => cats.includes(m)).map((m) => (
+        <CatRow key={m} id={m} label={m} count={counts[m] || 0} value={value} onChange={onChange} child />
+      ))}
+    </>
+  );
+}
+
+function CategoryRail({ cats, value, onChange, counts, total }) {
+  const startG = groupOf(value);
+  const [expanded, setExpanded] = useState(() => new Set(startG ? [startG.id] : []));
+  const toggle = (id) => setExpanded((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  // Keep a group open while one of its categories is the active filter.
+  useEffect(() => { const g = groupOf(value); if (g) setExpanded((s) => (s.has(g.id) ? s : new Set(s).add(g.id))); }, [value]);
+
+  // Walk canonical order; the first present member of a group emits the group once.
+  const rows = [];
+  const seen = new Set();
+  cats.forEach((c) => {
+    const g = groupOf(c);
+    if (g) { if (!seen.has(g.id)) { seen.add(g.id); rows.push({ kind: 'group', g }); } }
+    else rows.push({ kind: 'cat', c });
+  });
+
   return (
     <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: 12, display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px' }}>Categories</div>
-      <Row id="all" label="All Items" count={total} />
-      {cats.map((c) => <Row key={c} id={c} label={c} count={counts[c] || 0} />)}
+      <CatRow id="all" label="All Items" count={total} value={value} onChange={onChange} />
+      {rows.map((r) => r.kind === 'group'
+        ? <GroupRow key={'g:' + r.g.id} g={r.g} open={expanded.has(r.g.id)} onToggle={toggle} value={value} onChange={onChange} counts={counts} cats={cats} />
+        : <CatRow key={r.c} id={r.c} label={r.c} count={counts[r.c] || 0} value={value} onChange={onChange} />)}
     </div>
   );
 }
@@ -529,10 +553,13 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove 
   return (
     <div style={{ background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-lg)', padding: 12 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        <MiniThumb src={p.img} />
+        <MiniThumb src={p.img} size={38} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{p.brand}</div>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.3, marginTop: 1 }}>{p.title}</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 1 }}>
+            <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+            <span style={{ fontSize: 13, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)', flexShrink: 0 }}>{money(lineTot)}</span>
+          </div>
         </div>
         <span onClick={onRemove} style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--gb-text-muted)', cursor: 'pointer', borderRadius: 'var(--gb-r-sm)' }}><I.trash size={13} /></span>
       </div>
@@ -546,8 +573,7 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove 
           <I.plus size={10} /> Split tier
         </button>
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', marginRight: 8 }}>{lineUnits} units</span>
-        <span style={{ fontSize: 13.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)' }}>{money(lineTot)}</span>
+        <span style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{lineUnits} units</span>
       </div>
     </div>
   );
@@ -650,7 +676,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const propUnits = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty, 0), 0);
   const addToProposal = (p) => setProposal((prev) => {
     if (prev.some((l) => l.id === p.id)) return prev;
-    const qty = p.minQty && p.minQty > 1 ? p.minQty : 12;
+    // Default to the smallest tier so the line starts at the highest price.
+    const qty = p.minQty || 1;
     return [...prev, { id: p.id, product: p, splits: [{ id: rid(), qty, price: priceAtQty(p, qty) }] }];
   });
   const patchSplit = (lineId, splitId, patch) => setProposal((prev) => prev.map((l) => l.id === lineId ? { ...l, splits: l.splits.map((s) => s.id === splitId ? { ...s, ...patch } : s) } : l));
@@ -665,6 +692,14 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     return () => { live = false; };
   }, []);
 
+  // Manual re-index: force a fresh crawl past the 24h cache for new
+  // prices/deals, then re-cache.
+  const refresh = () => {
+    if (loading) return;
+    setLoading(true);
+    loadCatalog({ force: true }).then((c) => { if (c && c.length) setCatalog(c); setLoading(false); });
+  };
+
   const catCounts = useMemo(() => { const m = {}; catalog.forEach((p) => { m[p.cat] = (m[p.cat] || 0) + 1; }); return m; }, [catalog]);
   // Canonical "Shop by Type" order; only categories with products show.
   const cats = useMemo(() => {
@@ -674,7 +709,12 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     return [...ordered, ...extra];
   }, [catalog]);
 
-  const inCat = useMemo(() => (cat === 'all' ? catalog : catalog.filter((p) => p.cat === cat)), [cat, catalog]);
+  const inCat = useMemo(() => {
+    if (cat === 'all') return catalog;
+    const g = CAT_GROUPS.find((x) => x.id === cat);
+    if (g) { const set = new Set(g.members); return catalog.filter((p) => set.has(p.cat)); }
+    return catalog.filter((p) => p.cat === cat);
+  }, [cat, catalog]);
   const brands = useMemo(() => {
     const m = {}; inCat.forEach((p) => { m[p.brand] = (m[p.brand] || 0) + 1; });
     // "Shop by Brand" order; brands outside the canonical list trail by count.
@@ -726,8 +766,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 999990, padding: 24, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', overflow: 'auto' }}>
-      <div data-gb-scale="modals" style={{ margin: 'auto', flexShrink: 0 }}>
-        <div style={{ zoom: `${CATALOG_SCALE}`, width: CARD_W, height: CARD_H, position: 'relative', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column', animation: 'gc-pop .3s cubic-bezier(.34,1.56,.64,1)' }}>
+      <div data-gb-scale="giftCatalog" style={{ margin: 'auto', flexShrink: 0 }}>
+        <div style={{ width: CARD_W, height: CARD_H, position: 'relative', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column', animation: 'gc-pop .3s cubic-bezier(.34,1.56,.64,1)' }}>
         {/* Header */}
         <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
           <div style={{ width: 32, height: 32, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -742,6 +782,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           </div>
           <SearchBox value={query} onChange={setQuery} commands={commands} onPick={onPickCommand} />
           <SortSelect value={sort} onChange={setSort} />
+          <IconBtn size="md" title="Rebuild catalog index" icon={<I.refresh style={{ animation: loading ? 'gb-spin .8s linear infinite' : 'none' }} />} onClick={refresh} />
           <IconBtn size="md" icon={<I.close />} onClick={onClose} />
         </div>
 
@@ -766,8 +807,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${colMin}px, 1fr))`, gap: compact ? 10 : 12 }}>
                   {results.map((p) => (
-                    <ProductCard key={p.id} p={p} compact={compact} showRating={showRating} priceFocus={priceFocus}
-                      active={selected && selected.id === p.id} inProposal={inProposal(p.id)} onAdd={addToProposal} onClick={() => setSelected(p)} />
+                    <ProductCard key={p.id} p={p} compact={compact} showRating={showRating}
+                      active={selected && selected.id === p.id} inProposal={inProposal(p.id)} onClick={() => setSelected(p)} />
                   ))}
                 </div>
               )}
