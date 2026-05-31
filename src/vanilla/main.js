@@ -172,7 +172,19 @@ window.__gbContentReady = true;
         // popup's per-template resolveMatch pass — they may run code.
         const getMatchValue = (cond) => {
           if (!cond) return '';
-          if (cond.source === 'schema') return engine ? engine.resolvePath(document, cond.ref, '') : '';
+          if (cond.source === 'schema') {
+            if (!engine) return '';
+            const quant = engine.arrayQuantifier && engine.arrayQuantifier(cond.ref);
+            if (quant) {
+              const mm = cond.ref.match(/^(.*?)\[(?:any|none)\](.*)$/);
+              if (!mm) return [];
+              const arr = engine.resolvePath(document, mm[1], []);
+              if (!Array.isArray(arr)) return [];
+              const suffix = (mm[2] || '').replace(/^\./, '');
+              return arr.map((item) => (suffix ? engine.resolve(item, suffix, '') : item));
+            }
+            return engine.resolvePath(document, cond.ref, '');
+          }
           if (cond.source === 'dom') {
             try {
               const el = document.querySelector(cond.ref);
@@ -243,7 +255,18 @@ window.__gbContentReady = true;
         const getValue = (cond) => {
           if (!cond) return '';
           if (cond.source === 'var')    return resolved[cond.ref] != null ? resolved[cond.ref] : '';
-          if (cond.source === 'schema') return engine.resolvePath(document, cond.ref, '');
+          if (cond.source === 'schema') {
+            const quant = engine.arrayQuantifier && engine.arrayQuantifier(cond.ref);
+            if (quant) {
+              const mm = cond.ref.match(/^(.*?)\[(?:any|none)\](.*)$/);
+              if (!mm) return [];
+              const arr = engine.resolvePath(document, mm[1], []);
+              if (!Array.isArray(arr)) return [];
+              const suffix = (mm[2] || '').replace(/^\./, '');
+              return arr.map((item) => (suffix ? engine.resolve(item, suffix, '') : item));
+            }
+            return engine.resolvePath(document, cond.ref, '');
+          }
           if (cond.source === 'dom') {
             try {
               const el = document.querySelector(cond.ref);

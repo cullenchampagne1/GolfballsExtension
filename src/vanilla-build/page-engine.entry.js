@@ -33,7 +33,7 @@ import {
 
 import { contactSchema, accountSchema } from '../lib/page-schemas/contact.js';
 import { listSchemas, getSchemaById } from '../lib/page-schemas/registry.js';
-import { evalTree, treeUsesVars, varsReferenced, isGroupedTree, applyOp } from '../lib/matchEngine.js';
+import { evalTree, treeUsesVars, varsReferenced, isGroupedTree, applyOp, arrayQuantifier } from '../lib/matchEngine.js';
 
 /* Single namespace so we can grow the API without sprawling
    globals. Frozen so accidental writes from other content scripts
@@ -73,6 +73,7 @@ const api = Object.freeze({
   varsReferenced,
   isGroupedTree,
   applyOp,
+  arrayQuantifier,
 
   /* Direct schema access for the picker UI (so it can show the
      full field tree even before a real page is loaded). */

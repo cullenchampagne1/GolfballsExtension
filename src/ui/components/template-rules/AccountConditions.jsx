@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dropdown } from '../Dropdown.jsx';
+import { VariableSchemaPicker } from '../VariableSchemaPicker.jsx';
 import { RuleGroups } from './RuleGroups.jsx';
 import { OPS_BY_TYPE } from '../../../lib/matchEngine.js';
 import { listPaths } from '../../../lib/page-engine/resolve.js';
@@ -50,6 +50,12 @@ const SCHEMA_OPTIONS = (() => {
   } catch { return []; }
 })();
 const ENGINE_TYPE_BY_ID = Object.fromEntries(SCHEMA_OPTIONS.map((o) => [o.id, o._engineType]));
+/* canonical schema path (array indices/quantifiers normalized) → type. */
+const ENGINE_TYPE_BY_PATH = Object.fromEntries(SCHEMA_OPTIONS.map((o) => [o.label, o._engineType]));
+const canonPath = (p) => (p || '').replace(/\[(?:-?\d+|any|none)\]/g, '[0]');
+function engineTypeForRef(ref) {
+  return ENGINE_TYPE_BY_PATH[canonPath(ref)] || typeFromSuffix(ref);
+}
 
 /* Legacy account condition → grouped condition. Accepts the current
    { path, op, value } shape and the older Solr { field, op, val,
@@ -61,30 +67,27 @@ function accountFromLegacy(r) {
   if ((opKey === 'relbefore' || opKey === 'relafter') && r.num != null) {
     value = `${r.num}:${r.unit || 'days'}`;
   }
-  const type = ENGINE_TYPE_BY_ID[`schema:${ref}`] || typeFromSuffix(ref);
+  const type = engineTypeForRef(ref);
   return { source: 'schema', ref, type, op: r.op || 'is', value, not: false };
 }
 
 function AccountSubjectPicker({ condition, patch, varNames }) {
-  const varOptions = varNames.map((n) => ({ id: `var:${n}`, label: n, group: 'Variables' }));
-  const options = [...varOptions, ...SCHEMA_OPTIONS];
-  const value =
-    condition.source === 'var'      ? `var:${condition.ref}`
-    : condition.source === 'schema' ? `schema:${condition.ref}`
-    : '';
+  // The existing schema tree picker (sub-menus + array first/last/
+  // index, plus any/none quantifiers for matching) with a Variables
+  // section added. A variable selection comes back as a `vars.<name>`
+  // pseudo-path; everything else is a schema path.
+  const value = condition.source === 'var' ? `vars.${condition.ref}` : (condition.ref || '');
   return (
-    <Dropdown
-      size="sm"
-      searchable
+    <VariableSchemaPicker
       value={value}
+      varNames={varNames}
+      allowQuantifiers
       placeholder="Pick a field or variable…"
-      options={options}
-      onChange={(id) => {
-        if (id.startsWith('var:')) {
-          patch({ source: 'var', ref: id.slice('var:'.length), type: 'string' });
-        } else if (id.startsWith('schema:')) {
-          const ref = id.slice('schema:'.length);
-          patch({ source: 'schema', ref, type: ENGINE_TYPE_BY_ID[id] || 'string' });
+      onChange={(val) => {
+        if (val && val.startsWith('vars.')) {
+          patch({ source: 'var', ref: val.slice('vars.'.length), type: 'string' });
+        } else {
+          patch({ source: 'schema', ref: val, type: engineTypeForRef(val) });
         }
       }}
     />

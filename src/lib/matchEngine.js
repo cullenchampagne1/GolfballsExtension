@@ -209,11 +209,30 @@ export function varsReferenced(tree) {
   return [...out];
 }
 
+/* Array quantifier encoded in the ref: orders[any].total / [none].
+   'any' = the condition passes if ANY array item satisfies the op;
+   'none' = if no item does. The caller's getValue returns the array of
+   per-item values for a quantified ref. */
+export function arrayQuantifier(ref) {
+  if (typeof ref !== 'string') return null;
+  if (ref.includes('[any]'))  return 'any';
+  if (ref.includes('[none]')) return 'none';
+  return null;
+}
+
 async function evalCondition(cond, getValue) {
   if (!cond) return true;
   let value;
   try { value = await getValue(cond); } catch { value = undefined; }
-  const res = applyOp(cond.op, value, cond.value);
+  const quant = arrayQuantifier(cond.ref);
+  let res;
+  if (quant) {
+    const items = Array.isArray(value) ? value : [];
+    const some = items.some((v) => applyOp(cond.op, v, cond.value));
+    res = quant === 'any' ? some : !some; // 'none' = no item passes
+  } else {
+    res = applyOp(cond.op, value, cond.value);
+  }
   return cond.not ? !res : res;
 }
 

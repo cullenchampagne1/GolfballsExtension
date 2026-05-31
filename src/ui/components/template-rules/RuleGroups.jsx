@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Btn } from '../Btn.jsx';
 import { IconBtn } from '../IconBtn.jsx';
 import { SectionLabel } from '../SectionLabel.jsx';
+import { Dropdown } from '../Dropdown.jsx';
 import { I } from '../../icons.jsx';
 import { isValuelessOp, emptyTree } from '../../../lib/matchEngine.js';
 
@@ -217,16 +218,18 @@ function ConditionRow({ condition, renderSubject, opsFor, onPatch, onRemove, can
         <div style={{ flex: '1 1 160px', minWidth: 150 }}>
           {renderSubject?.(condition, (patch) => onPatch(patch))}
         </div>
-        <NativeSelect
-          value={condition.op}
-          options={ops}
-          width={140}
-          onChange={(v) => {
-            const patch = { op: v };
-            if (isValuelessOp(v)) patch.value = '';
-            onPatch(patch);
-          }}
-        />
+        <div style={{ width: 150, flexShrink: 0 }}>
+          <Dropdown
+            size="sm"
+            value={condition.op}
+            options={ops}
+            onChange={(v) => {
+              const patch = { op: v };
+              if (isValuelessOp(v)) patch.value = '';
+              onPatch(patch);
+            }}
+          />
+        </div>
         {!valueless && (
           <ValueCell kind={vKind} value={condition.value} onChange={(v) => onPatch({ value: v })} />
         )}
@@ -271,11 +274,11 @@ function RelValue({ value, onChange }) {
   const n = m ? m[1] : '';
   const unit = m && REL_UNITS.includes(m[2]) ? m[2] : 'days';
   return (
-    <span style={{ display: 'inline-flex', gap: 4, flex: 1, minWidth: 150 }}>
+    <span style={{ display: 'inline-flex', gap: 4, flex: 1, minWidth: 160, alignItems: 'center' }}>
       <input type="number" min={0} value={n} placeholder="30" onChange={(e) => onChange(`${e.target.value || 0}:${unit}`)} style={baseControlStyle({ width: 64 })} />
-      <select value={unit} onChange={(e) => onChange(`${n || 0}:${e.target.value}`)} style={baseControlStyle({ flex: 1, minWidth: 80 })}>
-        {REL_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-      </select>
+      <div style={{ flex: 1, minWidth: 84 }}>
+        <Dropdown size="sm" value={unit} options={REL_UNITS.map((u) => ({ id: u, label: u }))} onChange={(u) => onChange(`${n || 0}:${u}`)} />
+      </div>
     </span>
   );
 }
@@ -324,14 +327,6 @@ function JoinerDivider({ value, onChange, label, small, large }) {
       )}
       {hr}
     </div>
-  );
-}
-
-function NativeSelect({ value, options, onChange, width }) {
-  return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} style={baseControlStyle({ width })}>
-      {options.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-    </select>
   );
 }
 

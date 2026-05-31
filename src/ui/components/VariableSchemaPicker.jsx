@@ -29,6 +29,7 @@ const TYPE_TONE = {
   bool:     'info',
   array:    'neutral',
   object:   'neutral',
+  variable: 'brand',
 };
 const TYPE_DOT = {
   string:   'var(--gb-text-tertiary)',
@@ -38,6 +39,7 @@ const TYPE_DOT = {
   bool:     'var(--gb-info-fg)',
   array:    'var(--gb-text-muted)',
   object:   'transparent',
+  variable: 'var(--gb-brand-label)',
 };
 
 const SCHEMA_NODES = (() => {
@@ -53,10 +55,10 @@ const SCHEMA_NODES = (() => {
   } catch { return []; }
 })();
 const TYPE_BY_PATH = Object.fromEntries(SCHEMA_NODES.map((n) => [n.path, n.type]));
-const canonicalPath = (p) => (p || '').replace(/\[\d+\]/g, '[0]');
+const canonicalPath = (p) => (p || '').replace(/\[(?:-?\d+|any|none)\]/g, '[0]');
 const typeForPath = (p) => TYPE_BY_PATH[canonicalPath(p)] || 'string';
 
-export function VariableSchemaPicker({ value, onChange, placeholder = '— pick a field —' }) {
+export function VariableSchemaPicker({ value, onChange, placeholder = '— pick a field —', varNames = [], allowQuantifiers = false }) {
   const [open, setOpen] = useState(false);
   const type = typeForPath(value);
   /* Surface array selector only when the active path actually
@@ -96,6 +98,7 @@ export function VariableSchemaPicker({ value, onChange, placeholder = '— pick 
         {open && (
           <InlineSchemaTree
             currentPath={canonicalPath(value)}
+            varNames={varNames}
             onClose={() => setOpen(false)}
             onSelect={(node) => {
               onChange(typeof node === 'string' ? node : node.path);
@@ -109,6 +112,7 @@ export function VariableSchemaPicker({ value, onChange, placeholder = '— pick 
           arrayName={arrayInfo.arrayName}
           mode={arrayInfo.mode}
           index={arrayInfo.index}
+          allowQuantifiers={allowQuantifiers}
           onChange={(mode, index) => {
             setForceIndex(mode === 'index');
             onChange(rewriteArrayIndex(value, mode, index));
@@ -123,12 +127,14 @@ export function VariableSchemaPicker({ value, onChange, placeholder = '— pick 
    mode + index. Returns null when the path has no array. */
 function parseArraySegment(path) {
   if (!path) return null;
-  const m = /\[(-?\d+)\]/.exec(path);
+  const m = /\[(-?\d+|any|none)\]/.exec(path);
   if (!m) return null;
-  const n = parseInt(m[1], 10);
   /* The bit before `[` is the array's field name — kept short for
      the row's caption ("orders" rather than the full prefix). */
   const arrayName = path.slice(0, m.index).split('.').pop() || 'items';
+  const tok = m[1];
+  if (tok === 'any' || tok === 'none') return { arrayName, mode: tok, index: 0 };
+  const n = parseInt(tok, 10);
   return {
     arrayName,
     mode: n === 0 ? 'first' : n === -1 ? 'last' : 'index',
@@ -142,17 +148,27 @@ function rewriteArrayIndex(path, mode, index) {
   if (!path) return path;
   const next = mode === 'first' ? '[0]'
     : mode === 'last' ? '[-1]'
+    : mode === 'any'  ? '[any]'
+    : mode === 'none' ? '[none]'
     : `[${Math.max(0, index | 0)}]`;
-  return path.replace(/\[-?\d+\]/, next);
+  return path.replace(/\[(?:-?\d+|any|none)\]/, next);
 }
 
-const ARRAY_MODE_OPTIONS = [
+const ARRAY_MODE_BASE = [
   { id: 'first', label: 'First' },
   { id: 'last',  label: 'Last' },
   { id: 'index', label: 'Index' },
 ];
+/* Quantifiers — only for match conditions (allowQuantifiers). 'any' =
+   the condition matches if ANY array item passes; 'none' = if no item
+   does. Variables resolve to a single value, so they never see these. */
+const ARRAY_MODE_QUANT = [
+  { id: 'any',  label: 'Any match' },
+  { id: 'none', label: 'No match' },
+];
 
-function ArraySelectorRow({ arrayName, mode, index, onChange }) {
+function ArraySelectorRow({ arrayName, mode, index, onChange, allowQuantifiers = false }) {
+  const modeOptions = allowQuantifiers ? [...ARRAY_MODE_BASE, ...ARRAY_MODE_QUANT] : ARRAY_MODE_BASE;
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 8,
@@ -174,7 +190,7 @@ function ArraySelectorRow({ arrayName, mode, index, onChange }) {
         <Dropdown
           size="sm"
           value={mode}
-          options={ARRAY_MODE_OPTIONS}
+          options={modeOptions}
           onChange={(id) => onChange(id, index)}
         />
       </div>
@@ -254,7 +270,7 @@ function PathButton({ path, type, open, onClick, placeholder }) {
 
 /* ── Inline tree — opens in flow, not absolute. The parent
    modal/form body's overflow handles scroll. ────────────────── */
-function InlineSchemaTree({ currentPath, onClose, onSelect }) {
+function InlineSchemaTree({ currentPath, varNames = [], onClose, onSelect }) {
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(() => initialExpansion(currentPath));
   const [focusedIdx, setFocusedIdx] = useState(0);
@@ -265,7 +281,17 @@ function InlineSchemaTree({ currentPath, onClose, onSelect }) {
     return () => cancelAnimationFrame(r);
   }, []);
 
-  const rows = useMemo(() => filterAndProject(SCHEMA_NODES, search, expanded), [search, expanded]);
+  const schemaRows = useMemo(() => filterAndProject(SCHEMA_NODES, search, expanded), [search, expanded]);
+  const varRows = useMemo(() => {
+    if (!varNames.length) return [];
+    const q = search.trim().toLowerCase();
+    return varNames
+      .filter((n) => !q || n.toLowerCase().includes(q))
+      .map((n) => ({ path: `vars.${n}`, label: n, type: 'variable', isFolder: false, depth: 0, isVar: true }));
+  }, [varNames, search]);
+  /* Variables first, then the schema tree — one combined list so the
+     ↓↑ ↵ keyboard nav + focusedIdx work across both sections. */
+  const rows = useMemo(() => [...varRows, ...schemaRows], [varRows, schemaRows]);
   useEffect(() => { setFocusedIdx(0); }, [search]);
 
   const toggleExpand = (path) => {
@@ -336,7 +362,7 @@ function InlineSchemaTree({ currentPath, onClose, onSelect }) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={onKey}
-            placeholder="Filter schema · ↓↑ ↵"
+            placeholder="Filter fields + variables · ↓↑ ↵"
             style={{
               flex: 1,
               height: 24,
@@ -360,20 +386,33 @@ function InlineSchemaTree({ currentPath, onClose, onSelect }) {
               fontSize: 11, color: 'var(--gb-text-muted)',
             }}>No fields match</div>
           ) : rows.map((r, i) => (
-            <PathRow
-              key={r.path}
-              node={r}
-              focused={i === focusedIdx}
-              expanded={expanded.has(r.path)}
-              isCurrent={r.path === currentPath}
-              onMouseEnter={() => setFocusedIdx(i)}
-              onClick={() => pickRow(r)}
-              onToggleExpand={() => toggleExpand(r.path)}
-            />
+            <React.Fragment key={r.path}>
+              {i === 0 && varRows.length > 0 && <TreeSection label="Variables" />}
+              {i === varRows.length && varRows.length > 0 && schemaRows.length > 0 && <TreeSection label="Schema" />}
+              <PathRow
+                node={r}
+                focused={i === focusedIdx}
+                expanded={expanded.has(r.path)}
+                isCurrent={r.path === currentPath}
+                onMouseEnter={() => setFocusedIdx(i)}
+                onClick={() => pickRow(r)}
+                onToggleExpand={() => toggleExpand(r.path)}
+              />
+            </React.Fragment>
           ))}
         </div>
       </div>
     </motion.div>
+  );
+}
+
+function TreeSection({ label }) {
+  if (!label) return null;
+  return (
+    <div style={{
+      padding: '7px 6px 3px', fontSize: 9, fontWeight: 800, letterSpacing: 0.8,
+      textTransform: 'uppercase', color: 'var(--gb-text-muted)',
+    }}>{label}</div>
   );
 }
 
