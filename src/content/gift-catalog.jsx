@@ -1,6 +1,7 @@
 import React from 'react';
 import { mountFloating } from '../lib/mountFloating.js';
 import { ensureTheme } from '../lib/theme.js';
+import { ensureScales } from '../lib/scales.js';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 import { GiftCatalog } from '../modals/GiftCatalog.jsx';
 
@@ -17,6 +18,7 @@ import { GiftCatalog } from '../modals/GiftCatalog.jsx';
 if (!window.__gbGiftCatalogLoaded) {
   window.__gbGiftCatalogLoaded = true;
   ensureTheme();
+  ensureScales();
 
   const HOST_ID = '__gb-gift-catalog';
 

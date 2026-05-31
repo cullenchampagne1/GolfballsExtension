@@ -18,34 +18,55 @@ import seed from './giftCatalogSeed.json';
 
 export const GIFT_CATALOG_SEED = seed;
 
-/* The gifting/events catalog spans customizable golf balls plus the
-   accessory lines (towels, tees, markers, gloves, gift packaging).
-   Matches the itemTypes seen loading the catalog in the HAR. */
-const GIFT_SEARCH_TERM =
-  '-tag_ss:DoNotIncludeinCatalog itemType_ss:("Consumer-Golf_Balls" OR "Consumer-Accessories" OR "Consumer-Apparel-Gloves-Mens" OR "Consumer-Packaging-Tin")&sort=sort_default_i desc';
+/* The custom-logo catalog = products carrying the "Custom Logo"
+   modification. Every Custom-Logo/<Category> page on the site applies
+   this exact filterQuery (modificationName_ss:"Custom Logo"), scoped
+   per-category by itemType; the unbounded form is the union of them
+   all — the full catalog across every "Shop by Type". */
+const GIFT_SEARCH_TERM = '-tag_ss:DoNotIncludeinCatalog modificationName_ss:"Custom Logo"&sort=sort_default_i desc';
 const PAGE_ROWS = 60;
-const MAX_PRODUCTS = 240; // cap the live pull; sorted by popularity
+const MAX_PRODUCTS = 600; // cap the live pull; sorted by popularity
+
+/* Canonical "Shop by Type" + "Shop by Brand" taxonomies from the live
+   custom-logo section — the rail/chips render in this order. */
+export const CATEGORY_ORDER = [
+  'Logo Golf Balls', 'Golf Shirts', 'Golf Towels', 'Golf Hats', 'Divot Tools',
+  'Logo Tees', 'Logo Travel Bags', 'Promotional Products', 'Golf Umbrellas',
+  'Golf Gloves', 'Custom Packaging', 'Drinkware', 'Golf Bags', 'Ball Markers', 'Outerwear',
+];
+export const BRAND_ORDER = [
+  'Titleist', 'Callaway Golf', 'TaylorMade', 'Bridgestone', 'Srixon', 'Mizuno',
+  'PXG', 'Pinnacle', 'Venture Golf', 'Vice Golf', 'Wilson',
+];
+
+const CACHE_KEY = 'gbGiftCatalogCache';
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // re-index daily
 
 const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
 const round2 = (v) => (v == null ? null : Math.round(Number(v) * 100) / 100);
 
-/* Fine category from itemType + title keywords (the Solr itemType is
-   coarse — "Consumer-Accessories" — so the rail categories come from
-   the product title). Order matters: hat clips/markers/divots overlap. */
+/* Map a Solr doc to one of the canonical "Shop by Type" categories.
+   itemType is coarse, so most signal is the title. Order matters —
+   earlier checks win, so the more specific lines come first. */
 function deriveCat(doc) {
-  const it = String(doc.itemType_s || (doc.itemType_ss || []).join(' '));
+  const it = String(doc.itemType_s || (doc.itemType_ss || []).join(' ')).toLowerCase();
   const t  = String(doc.title_s || doc.title_txt_en || '').toLowerCase();
-  if (it.includes('Golf_Balls') || t.includes('golf ball')) return 'Golf Balls';
-  if (t.includes('towel'))       return 'Towels';
-  if (t.includes('hat clip'))    return 'Hat Clips';
-  if (t.includes('poker chip'))  return 'Poker Chips';
-  if (t.includes('divot'))       return 'Divot Tools';
-  if (t.includes('ball marker') || t.includes('markers')) return 'Ball Markers';
-  if (t.includes('glove'))       return 'Gloves';
-  if (t.includes('tee'))         return 'Tees';
-  if (t.includes('tin') || it.includes('Packaging')) return 'Packaging';
-  if (it.includes('Gloves'))     return 'Gloves';
-  return 'Accessories';
+  const has = (...ks) => ks.some((k) => t.includes(k));
+  if (it.includes('golf_balls') || has('golf ball')) return 'Logo Golf Balls';
+  if (has('towel'))                       return 'Golf Towels';
+  if (has('umbrella'))                    return 'Golf Umbrellas';
+  if (has('glove'))                       return 'Golf Gloves';
+  if (has('divot'))                       return 'Divot Tools';
+  if (has('ball marker') || has('hat clip') || has('marker')) return 'Ball Markers';
+  if (has('travel bag', 'travel cover', 'shoe bag', 'duffel')) return 'Logo Travel Bags';
+  if (has('cart bag', 'stand bag', 'golf bag', 'carry bag'))   return 'Golf Bags';
+  if (has(' tee', 'tees', 'golf tee'))    return 'Logo Tees';
+  if (has('jacket', 'pullover', 'vest', 'hoodie', 'quarter zip', '1/4 zip', 'outerwear')) return 'Outerwear';
+  if (has('polo', 'shirt'))               return 'Golf Shirts';
+  if (has('hat', 'cap', 'visor', 'beanie')) return 'Golf Hats';
+  if (has('tumbler', 'mug', 'bottle', 'drinkware', 'flask', 'koozie', 'can cooler')) return 'Drinkware';
+  if (has('tin', 'gift set', 'gift box', 'packaging', 'gift tube', 'sleeve') || it.includes('packaging')) return 'Custom Packaging';
+  return 'Promotional Products';
 }
 
 /** Solr product doc → catalog product. */
@@ -96,15 +117,33 @@ function fetchPage(start, rows) {
   });
 }
 
+function getCache() {
+  return new Promise((resolve) => {
+    try { chrome.storage.local.get(CACHE_KEY, (d) => resolve((d && d[CACHE_KEY]) || null)); }
+    catch { resolve(null); }
+  });
+}
+function setCache(payload) {
+  try { chrome.storage.local.set({ [CACHE_KEY]: payload }); } catch { /* ignore */ }
+}
+
 /**
- * loadCatalog() — fetch the live gifting catalog (paginated), normalize,
- * and dedupe by id. Falls back to the bundled seed in contexts without
- * chrome.runtime (the playground) or when the live fetch yields nothing.
+ * loadCatalog({ force }) — returns the gifting catalog. Served from a
+ * 24-hour chrome.storage cache (re-indexed daily) so reopening the
+ * modal is instant; only a stale/missing cache triggers the live Solr
+ * pull. Falls back to the bundled seed when there's no chrome.runtime
+ * (the playground) or the live fetch yields nothing.
  */
-export async function loadCatalog() {
-  if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) {
-    return GIFT_CATALOG_SEED;
+export async function loadCatalog({ force = false } = {}) {
+  const hasChrome = typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage;
+  if (!hasChrome) return GIFT_CATALOG_SEED;
+
+  const cached = await getCache();
+  if (!force && cached && Array.isArray(cached.products) && cached.products.length
+      && (Date.now() - (cached.ts || 0)) < CACHE_TTL_MS) {
+    return cached.products;
   }
+
   const out = [];
   const seenIds = new Set();
   let start = 0;
@@ -118,5 +157,6 @@ export async function loadCatalog() {
     start += PAGE_ROWS;
     if (numFound && start >= numFound) break;
   }
-  return out.length ? out : GIFT_CATALOG_SEED;
+  if (out.length) { setCache({ ts: Date.now(), products: out }); return out; }
+  return (cached && cached.products) || GIFT_CATALOG_SEED;
 }

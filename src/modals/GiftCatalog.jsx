@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Btn, IconBtn, Tag, Dot } from '../ui/index.js';
 import { Icon, I } from '../ui/icons.jsx';
-import { loadCatalog, GIFT_CATALOG_SEED } from '../lib/giftCatalog.js';
+import { loadCatalog, GIFT_CATALOG_SEED, CATEGORY_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 
 /* ───────────────────────────────────────────────────────────────
    GiftCatalog — Corporate Gifting Catalog modal.
@@ -25,7 +26,9 @@ function ensureCatalogKeyframes() {
     @keyframes dp-slide { from { transform: translateX(100%); } to { transform: translateX(0); } }
     @keyframes cm-slide { from { opacity:0; transform: translateY(-6px); } to { opacity:1; transform:none; } }
     @keyframes cm-fade { from { opacity:0; } to { opacity:1; } }
-    @keyframes gb-spin { to { transform: rotate(360deg); } }`;
+    @keyframes gb-spin { to { transform: rotate(360deg); } }
+    .gb-gc-norail { scrollbar-width: none; -ms-overflow-style: none; }
+    .gb-gc-norail::-webkit-scrollbar { width: 0; height: 0; display: none; }`;
   (document.head || document.documentElement).appendChild(s);
 }
 
@@ -39,34 +42,89 @@ const TagI  = (p) => <Icon {...p}><path d="M20.6 13.4L13 21a1.7 1.7 0 01-2.4 0L3
 const usd = (n) => (n == null ? '—' : '$' + Number(n).toFixed(2));
 
 const CAT_TONE = {
-  'Golf Balls': 'brand', 'Towels': 'info', 'Tees': 'success',
-  'Gloves': 'warning', 'Divot Tools': 'brand', 'Poker Chips': 'info',
-  'Ball Markers': 'success', 'Hat Clips': 'warning', 'Packaging': 'brand',
+  'Logo Golf Balls': 'brand', 'Golf Shirts': 'info', 'Golf Towels': 'success',
+  'Golf Hats': 'warning', 'Divot Tools': 'brand', 'Logo Tees': 'success',
+  'Logo Travel Bags': 'info', 'Promotional Products': 'warning', 'Golf Umbrellas': 'info',
+  'Golf Gloves': 'warning', 'Custom Packaging': 'brand', 'Drinkware': 'info',
+  'Golf Bags': 'success', 'Ball Markers': 'success', 'Outerwear': 'warning',
 };
 
-function SearchBox({ value, onChange }) {
+const onSale = (p) => p.orig != null && p.orig > p.price;
+
+/* The search box doubles as a command bar: typing "/" switches into
+   filter mode (like Quick Notes) — type a category or brand, pick it,
+   and the matching filter is applied while the search field clears so
+   you can immediately type a specific term. */
+function SearchBox({ value, onChange, commands, onPick }) {
   const [focused, setFocused] = useState(false);
+  const [hi, setHi] = useState(0);
+  const inputRef = useRef(null);
+
+  // Focus on mount so the rep can type the moment the catalog opens.
+  useEffect(() => {
+    const t = setTimeout(() => { try { inputRef.current && inputRef.current.focus(); } catch { /* detached */ } }, 60);
+    return () => clearTimeout(t);
+  }, []);
+
+  const isCmd = value.startsWith('/');
+  const term = isCmd ? value.slice(1).trim().toLowerCase() : '';
+  const matches = useMemo(() => {
+    if (!isCmd) return [];
+    const list = term ? commands.filter((c) => c.label.toLowerCase().includes(term)) : commands;
+    return list.slice(0, 8);
+  }, [isCmd, term, commands]);
+  useEffect(() => { setHi(0); }, [term, isCmd]);
+
+  const onKey = (e) => {
+    if (!isCmd || !matches.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setHi((i) => (i + 1) % matches.length); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((i) => (i - 1 + matches.length) % matches.length); }
+    else if (e.key === 'Enter') { e.preventDefault(); onPick(matches[hi]); }
+    else if (e.key === 'Escape') { e.preventDefault(); onChange(''); }
+  };
+
+  const open = isCmd && focused && matches.length > 0;
   return (
-    <div style={{
-      flex: 1, minWidth: 0, height: 34, display: 'flex', alignItems: 'center', gap: 8,
-      padding: '0 11px', borderRadius: 'var(--gb-r-md)',
-      background: 'var(--gb-fill-inverse-medium)',
-      border: '1px solid ' + (focused ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
-      boxShadow: focused ? 'var(--gb-focus-ring)' : 'none',
-      transition: 'all var(--gb-anim)',
-    }}>
-      <I.search size={14} style={{ color: focused ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)', flexShrink: 0 }} />
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-        placeholder="Search products or brands…"
-        style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 12.5, fontWeight: 500 }}
-      />
-      {value && (
-        <span onClick={() => onChange('')} style={{ cursor: 'pointer', color: 'var(--gb-text-muted)', display: 'flex', flexShrink: 0 }}>
-          <I.close size={13} />
-        </span>
+    <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+      <div style={{
+        height: 34, display: 'flex', alignItems: 'center', gap: 8, padding: '0 11px', borderRadius: 'var(--gb-r-md)',
+        background: 'var(--gb-fill-inverse-medium)',
+        border: '1px solid ' + (isCmd || focused ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
+        boxShadow: focused ? 'var(--gb-focus-ring)' : 'none', transition: 'all var(--gb-anim)',
+      }}>
+        {isCmd
+          ? <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--gb-brand-label)', fontFamily: 'var(--gb-font-mono)', flexShrink: 0, lineHeight: 1 }}>/</span>
+          : <I.search size={14} style={{ color: focused ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)', flexShrink: 0 }} />}
+        <input
+          ref={inputRef}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={onKey}
+          onFocus={() => setFocused(true)} onBlur={() => setTimeout(() => setFocused(false), 120)}
+          placeholder={isCmd ? 'Filter by category or brand…' : 'Search products, or / to filter…'}
+          style={{ flex: 1, minWidth: 0, background: 'transparent', border: 'none', outline: 'none', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 12.5, fontWeight: 500 }}
+        />
+        {value && (
+          <span onClick={() => onChange('')} style={{ cursor: 'pointer', color: 'var(--gb-text-muted)', display: 'flex', flexShrink: 0 }}>
+            <I.close size={13} />
+          </span>
+        )}
+      </div>
+      {open && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 5px)', left: 0, right: 0, zIndex: 40, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', boxShadow: 'var(--gb-shadow-popover)', padding: 5, animation: 'cm-slide .15s ease', maxHeight: 300, overflowY: 'auto' }}>
+          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', padding: '4px 8px 6px' }}>Jump to filter</div>
+          {matches.map((c, i) => (
+            <div key={c.type + ':' + c.id} onMouseDown={(e) => { e.preventDefault(); onPick(c); }} onMouseEnter={() => setHi(i)}
+              style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', background: i === hi ? 'var(--gb-brand-tint-soft)' : 'transparent' }}>
+              {c.type === 'cat'
+                ? <Dot tone={CAT_TONE[c.id] || 'brand'} size={6} />
+                : <span style={{ width: 11, textAlign: 'center', fontSize: 11, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)' }}>@</span>}
+              <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: i === hi ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>{c.label}</span>
+              <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-text-ghost)' }}>{c.type === 'cat' ? 'Type' : 'Brand'}</span>
+              <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)', minWidth: 22, textAlign: 'right' }}>{c.count}</span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -155,8 +213,8 @@ function ProductCard({ p, compact, showRating, priceFocus, active, onClick }) {
         display: 'flex', flexDirection: 'column', cursor: 'pointer', background: 'var(--gb-surface-1)',
         border: '1px solid ' + (active ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'),
         borderRadius: 'var(--gb-r-lg)', padding: compact ? 9 : 11,
-        boxShadow: active ? '0 0 0 1px var(--gb-brand-label), var(--gb-shadow-popover)' : hover ? 'var(--gb-shadow-popover)' : 'none',
-        transform: hover && !active ? 'translateY(-2px)' : 'none',
+        boxShadow: active ? '0 0 0 1px var(--gb-brand-label), 0 2px 8px rgba(0,0,0,.09)' : hover ? '0 2px 7px rgba(0,0,0,.07)' : 'none',
+        transform: hover && !active ? 'translateY(-1px)' : 'none',
         transition: 'transform var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)',
       }}>
       <div style={{ position: 'relative' }}>
@@ -164,6 +222,11 @@ function ProductCard({ p, compact, showRating, priceFocus, active, onClick }) {
         {p.logo && (
           <span style={{ position: 'absolute', top: 7, left: 7, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-strong)', border: '1px solid var(--gb-brand-tint-border)', backdropFilter: 'blur(4px)' }}>
             <Gift size={9} /> Logo
+          </span>
+        )}
+        {onSale(p) && (
+          <span style={{ position: 'absolute', top: 7, right: 7, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-danger, #e5484d)', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>
+            Sale
           </span>
         )}
       </div>
@@ -176,7 +239,10 @@ function ProductCard({ p, compact, showRating, priceFocus, active, onClick }) {
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <span style={{ fontSize: compact ? 16 : 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.5, fontFamily: 'var(--gb-font-mono)' }}>{usd(heroPrice)}</span>
+            <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+              <span style={{ fontSize: compact ? 16 : 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.5, fontFamily: 'var(--gb-font-mono)' }}>{usd(heroPrice)}</span>
+              {!logoFocus && onSale(p) && <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-ghost)', textDecoration: 'line-through', fontFamily: 'var(--gb-font-mono)' }}>{usd(p.orig)}</span>}
+            </span>
             <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>{heroLabel}</span>
           </div>
           {!logoFocus && p.logo && (
@@ -189,11 +255,14 @@ function ProductCard({ p, compact, showRating, priceFocus, active, onClick }) {
   );
 }
 
-function PriceStat({ label, value, accent }) {
+function PriceStat({ label, value, accent, was }) {
   return (
     <div style={{ flex: 1, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: accent ? 'var(--gb-brand-tint-soft)' : 'var(--gb-fill-subtle)', border: '1px solid ' + (accent ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-subtle)') }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: accent ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)', marginBottom: 3 }}>{label}</div>
-      <div style={{ fontSize: 19, fontWeight: 800, color: accent ? 'var(--gb-brand-label)' : 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', letterSpacing: -.5 }}>{value}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+        <span style={{ fontSize: 19, fontWeight: 800, color: accent ? 'var(--gb-brand-label)' : 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', letterSpacing: -.5 }}>{value}</span>
+        {was && <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-ghost)', textDecoration: 'line-through', fontFamily: 'var(--gb-font-mono)' }}>{was}</span>}
+      </div>
     </div>
   );
 }
@@ -205,8 +274,10 @@ function DetailPanel({ p, onClose }) {
   };
   return (
     <>
-      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'var(--gb-backdrop)', zIndex: 20, animation: 'cm-fade .18s ease' }} />
-      <div style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 'min(380px, 82%)', zIndex: 21, background: 'var(--gb-surface-modal)', borderLeft: '1px solid var(--gb-border-default)', boxShadow: '-20px 0 50px rgba(0,0,0,.45)', display: 'flex', flexDirection: 'column', animation: 'dp-slide .26s cubic-bezier(.34,1.4,.64,1)' }}>
+      <motion.div onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .18 }}
+        style={{ position: 'absolute', inset: 0, background: 'var(--gb-backdrop)', zIndex: 20 }} />
+      <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 460, damping: 40 }}
+        style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 'min(380px, 82%)', zIndex: 21, background: 'var(--gb-surface-modal)', borderLeft: '1px solid var(--gb-border-default)', boxShadow: '-20px 0 50px rgba(0,0,0,.45)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
           <IconBtn size="sm" variant="ghost" icon={<ArrowL />} onClick={onClose} />
           <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Product detail</span>
@@ -215,14 +286,15 @@ function DetailPanel({ p, onClose }) {
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
           <ProductImage src={p.img} alt={p.title} pad={26} radius="var(--gb-r-lg)" />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, marginBottom: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, marginBottom: 6, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-brand-label)', fontFamily: 'var(--gb-font-mono)' }}>{p.brand}</span>
             <Tag tone="neutral" size="sm" icon={<Dot tone={CAT_TONE[p.cat] || 'brand'} size={5} />}>{p.cat}</Tag>
+            {onSale(p) && <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 'var(--gb-r-pill)', fontSize: 9.5, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-danger, #e5484d)' }}>Sale −{usd(p.orig - p.price)}</span>}
           </div>
           <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--gb-text-primary)', lineHeight: 1.25, letterSpacing: -.2 }}>{p.title}</div>
           <div style={{ marginTop: 8 }}><Rating value={p.rating} count={p.reviews} size={12} /></div>
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-            <PriceStat label="Retail" value={usd(p.price)} />
+            <PriceStat label="Retail" value={usd(p.price)} was={onSale(p) ? usd(p.orig) : null} />
             {p.logo && <PriceStat label="With logo" value={usd(p.logo)} accent />}
           </div>
           {p.breaks && p.breaks.length > 1 && (
@@ -261,7 +333,7 @@ function DetailPanel({ p, onClose }) {
           <Btn variant="secondary" size="md" icon={<I.eye />} style={{ flex: 1 }} onClick={openProduct}>View product</Btn>
           <Btn variant="primary" size="md" icon={<I.plus />} style={{ flex: 1 }} onClick={() => { /* quoting wired later */ }}>Add to quote</Btn>
         </div>
-      </div>
+      </motion.div>
     </>
   );
 }
@@ -282,7 +354,7 @@ function CategoryRail({ cats, value, onChange, counts, total }) {
   return (
     <div style={{ width: 186, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: 12, display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px' }}>Categories</div>
-      <Row id="all" label="All products" count={total} tone="muted" />
+      <Row id="all" label="All Items" count={total} tone="muted" />
       {cats.map((c) => <Row key={c} id={c} label={c} count={counts[c] || 0} tone={CAT_TONE[c] || 'brand'} />)}
     </div>
   );
@@ -318,22 +390,46 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     return () => { live = false; };
   }, []);
 
-  const cats = useMemo(() => [...new Set(catalog.map((p) => p.cat))].sort((a, b) =>
-    (catalog.filter((p) => p.cat === b).length) - (catalog.filter((p) => p.cat === a).length)), [catalog]);
   const catCounts = useMemo(() => { const m = {}; catalog.forEach((p) => { m[p.cat] = (m[p.cat] || 0) + 1; }); return m; }, [catalog]);
+  // Canonical "Shop by Type" order; only categories with products show.
+  const cats = useMemo(() => {
+    const present = new Set(catalog.map((p) => p.cat));
+    const ordered = CATEGORY_ORDER.filter((c) => present.has(c));
+    const extra = [...present].filter((c) => !CATEGORY_ORDER.includes(c)).sort();
+    return [...ordered, ...extra];
+  }, [catalog]);
 
   const inCat = useMemo(() => (cat === 'all' ? catalog : catalog.filter((p) => p.cat === cat)), [cat, catalog]);
   const brands = useMemo(() => {
     const m = {}; inCat.forEach((p) => { m[p.brand] = (m[p.brand] || 0) + 1; });
-    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+    // "Shop by Brand" order; brands outside the canonical list trail by count.
+    const rank = (b) => { const i = BRAND_ORDER.indexOf(b); return i === -1 ? BRAND_ORDER.length : i; };
+    return Object.entries(m).sort((a, b) => (rank(a[0]) - rank(b[0])) || (b[1] - a[1]));
   }, [inCat]);
 
   useEffect(() => { if (brand !== 'all' && !brands.find(([b]) => b === brand)) setBrand('all'); }, [brands]); // eslint-disable-line
 
+  // "/" command bar — every category + brand becomes a jump-to filter.
+  const brandCounts = useMemo(() => { const m = {}; catalog.forEach((p) => { m[p.brand] = (m[p.brand] || 0) + 1; }); return m; }, [catalog]);
+  const commands = useMemo(() => {
+    const catCmds = cats.map((c) => ({ type: 'cat', id: c, label: c, count: catCounts[c] || 0 }));
+    const rank = (b) => { const i = BRAND_ORDER.indexOf(b); return i === -1 ? BRAND_ORDER.length : i; };
+    const brandCmds = Object.keys(brandCounts)
+      .sort((a, b) => (rank(a) - rank(b)) || (brandCounts[b] - brandCounts[a]))
+      .map((b) => ({ type: 'brand', id: b, label: b, count: brandCounts[b] }));
+    return [...catCmds, ...brandCmds];
+  }, [cats, catCounts, brandCounts]);
+  const onPickCommand = (c) => {
+    if (!c) return;
+    if (c.type === 'cat') { setCat(c.id); setBrand('all'); }
+    else { setCat('all'); setBrand(c.id); }
+    setQuery('');
+  };
+
   const results = useMemo(() => {
     let r = inCat;
     if (brand !== 'all') r = r.filter((p) => p.brand === brand);
-    if (query.trim()) {
+    if (query.trim() && !query.startsWith('/')) {
       const q = query.toLowerCase();
       r = r.filter((p) => p.title.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q));
     }
@@ -350,7 +446,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 999990, padding: 24, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ width: 'min(1140px, 100%)', height: 'min(780px, 100%)', position: 'relative', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column', animation: 'gc-pop .3s cubic-bezier(.34,1.56,.64,1)' }}>
+      <div data-gb-scale="modals" style={{ width: 'min(1320px, 100%)', height: 'min(860px, 100%)', position: 'relative', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column', animation: 'gc-pop .3s cubic-bezier(.34,1.56,.64,1)' }}>
         {/* Header */}
         <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
           <div style={{ width: 32, height: 32, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -363,7 +459,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               {loading && <span style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite', display: 'inline-block' }} />}
             </div>
           </div>
-          <SearchBox value={query} onChange={setQuery} />
+          <SearchBox value={query} onChange={setQuery} commands={commands} onPick={onPickCommand} />
           <SortSelect value={sort} onChange={setSort} />
           <IconBtn size="md" icon={<I.close />} onClick={onClose} />
         </div>
@@ -372,7 +468,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           <CategoryRail cats={cats} value={cat} onChange={setCat} counts={catCounts} total={catalog.length} />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 16px', borderBottom: '1px solid var(--gb-border-subtle)', overflowX: 'auto', flexShrink: 0 }}>
+            <div className="gb-gc-norail" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 16px', borderBottom: '1px solid var(--gb-border-subtle)', overflowX: 'auto', flexShrink: 0, WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 40px), transparent)', maskImage: 'linear-gradient(to right, #000 calc(100% - 40px), transparent)' }}>
               <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flexShrink: 0, marginRight: 2 }}>Brand</span>
               <BrandChip label="All" count={inCat.length} on={brand === 'all'} onClick={() => setBrand('all')} />
               {brands.map(([b, n]) => <BrandChip key={b} label={b} count={n} on={brand === b} onClick={() => setBrand(b)} />)}
@@ -412,7 +508,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           </span>
         </div>
 
-        {selected && <DetailPanel p={selected} onClose={() => setSelected(null)} />}
+        <AnimatePresence>
+          {selected && <DetailPanel key="detail" p={selected} onClose={() => setSelected(null)} />}
+        </AnimatePresence>
       </div>
     </div>
   );
