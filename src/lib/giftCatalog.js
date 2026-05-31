@@ -19,32 +19,16 @@ import seed from './giftCatalogSeed.json';
 export const GIFT_CATALOG_SEED = seed;
 
 const PAGE_ROWS = 60;
-const PER_CAT_MAX = 240; // per-category cap; the sum is the full catalog
+const MAX_PRODUCTS = 1500; // safety bound; we paginate to the live numFound
 
-/* Each Custom-Logo/<Category> page filters by its OWN itemType set (most
-   also AND modificationName:"Custom Logo"). A single global query + a
-   shared cap starved the long tail — popular golf balls filled the cap
-   and towels/hats/etc. came back nearly empty. So we query per category,
-   exactly as the live pages do, and tag each product with its category.
-   (Divot Tools / Ball Markers are split by itemType — the live pages
-   overlap them, but in a flat list they should land in one bucket.) */
-const CATEGORY_QUERIES = [
-  { cat: 'Logo Golf Balls', q: 'itemType_ss:(Consumer-Golf_Ball OR Consumer-Golf_Balls OR Corporate-Gift_Sets) AND modificationName_ss:("Custom Logo")' },
-  { cat: 'Golf Shirts', q: 'itemType_ss:Corporate-Apparel-Shirts AND modificationName_ss:("Custom Logo")' },
-  { cat: 'Golf Towels', q: 'itemType_ss:("Corporate-Towels" OR "Consumer-Accessories-Golf_Towels") AND modificationName_ss:("Custom Logo")' },
-  { cat: 'Golf Hats', q: 'itemType_ss:("Corporate-Apparel-Hats") AND modificationName_ss:("Custom Logo")' },
-  { cat: 'Divot Tools', q: 'itemType_ss:("Corporate-Divot_Tools") AND modificationName_ss:("Custom Logo")' },
-  { cat: 'Logo Tees', q: 'itemType_ss:("Corporate-Golf-Golf_Tees")' },
-  { cat: 'Logo Travel Bags', q: 'itemType_ss:("Corporate-Golf-Golf_Bags-Travel" OR "Corporate-Golf-Golf_Bags-Duffle" OR "Corporate-Golf-Golf_Bags-Shoe") AND modificationName_ss:("Custom Logo")' },
-  { cat: 'Promotional Products', q: 'itemType_ss:("Corporate-Promotional_Products") AND modificationName_ss:("Custom Logo") -itemType_ss:"Corporate-Promotional_Products-Drinkware"' },
-  { cat: 'Golf Umbrellas', q: 'itemType_ss:("Corporate-Umbrellas") AND modificationName_ss:("Custom Logo")' },
-  { cat: 'Golf Gloves', q: 'itemType_ss:("Corporate-Apparel-Gloves" OR "Consumer-Apparel-Gloves") AND modificationName_ss:("Custom Logo")' },
-  { cat: 'Custom Packaging', q: 'tag_ss:("CustomPackaging") AND modificationName_ss:("Custom Logo")' },
-  { cat: 'Drinkware', q: 'itemType_ss:("Corporate-Promotional_Products-Drinkware") AND modificationName_ss:("Custom Logo")' },
-  { cat: 'Golf Bags', q: 'itemType_ss:("Corporate-Golf-Golf_Bags-Cart" OR "Corporate-Golf-Golf_Bags-Staff" OR "Corporate-Golf-Golf_Bags-Stand" OR "Corporate-Golf-Golf_Bags-Headcovers") AND modificationName_ss:("Custom Logo")' },
-  { cat: 'Ball Markers', q: 'itemType_ss:("Corporate-Ball_Markers") AND modificationName_ss:("Custom Logo")' },
-  { cat: 'Outerwear', q: 'itemType_ss:Corporate-Apparel-Outerwear AND modificationName_ss:("Custom Logo")' },
-];
+/* The site's full custom-logo catalog query — the exact body the live
+   master.api.icustomize.com/user/solr-refinement calls send: every
+   product carrying the "Custom Logo" modification OR in ANY Corporate
+   itemType, minus excluded stock. That `OR itemType_ss:Corporate` is the
+   key fix — a modificationName-only filter dropped every Corporate item
+   that lacks that exact mod (towels, hats, bags, …). Products are
+   bucketed afterward by their itemType (see deriveCat). */
+const MAIN_QUERY = 'modificationName_ss:"Custom Logo" OR itemType_ss:Corporate';
 
 /* Canonical "Shop by Type" + "Shop by Brand" taxonomies from the live
    custom-logo section — the rail/chips render in this order. */
@@ -58,7 +42,7 @@ export const BRAND_ORDER = [
   'PXG', 'Pinnacle', 'Venture Golf', 'Vice Golf', 'Wilson',
 ];
 
-const CACHE_KEY = 'gbGiftCatalogCache_v2'; // bumped: per-category query change invalidates old cache
+const CACHE_KEY = 'gbGiftCatalogCache_v3'; // bumped: main-query change invalidates old cache
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // re-index daily
 
 const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
@@ -83,27 +67,47 @@ function parsePromo(tags) {
    to custom-logo product names — every catalog item is decorated. */
 const cleanTitle = (t) => String(t || '').replace(/\s*\((?:decorat(?:ion|ed)|custom logo)\)/ig, '').replace(/\s{2,}/g, ' ').trim();
 
-/* Map a Solr doc to one of the canonical "Shop by Type" categories.
-   itemType is coarse, so most signal is the title. Order matters —
-   earlier checks win, so the more specific lines come first. */
+/* Bucket a Solr doc into a canonical "Shop by Type" category by its
+   itemType_ss (the field the live category pages filter on), with a
+   title-keyword fallback for itemType-less docs (e.g. the seed). Order
+   matters — more specific itemTypes win. */
 function deriveCat(doc) {
-  const it = String(doc.itemType_s || (doc.itemType_ss || []).join(' ')).toLowerCase();
-  const t  = String(doc.title_s || doc.title_txt_en || '').toLowerCase();
+  const tags = Array.isArray(doc.tag_ss) ? doc.tag_ss : [];
+  if (tags.includes('CustomPackaging')) return 'Custom Packaging';
+  const it = String(doc.itemType_s || (Array.isArray(doc.itemType_ss) ? doc.itemType_ss.join(' ') : '')).toLowerCase();
+  if (it) {
+    const hi = (...ks) => ks.some((k) => it.includes(k));
+    if (hi('golf_ball', 'gift_sets'))         return 'Logo Golf Balls';
+    if (hi('apparel-shirts'))                 return 'Golf Shirts';
+    if (hi('apparel-outerwear'))              return 'Outerwear';
+    if (hi('apparel-hats'))                   return 'Golf Hats';
+    if (hi('apparel-gloves'))                 return 'Golf Gloves';
+    if (hi('towels'))                         return 'Golf Towels';
+    if (hi('golf_bags-travel', 'golf_bags-duffle', 'golf_bags-shoe')) return 'Logo Travel Bags';
+    if (hi('golf_bags'))                      return 'Golf Bags';
+    if (hi('golf_tees'))                      return 'Logo Tees';
+    if (hi('promotional_products-drinkware')) return 'Drinkware';
+    if (hi('umbrellas'))                      return 'Golf Umbrellas';
+    if (hi('divot_tools'))                    return 'Divot Tools';
+    if (hi('ball_markers'))                   return 'Ball Markers';
+    if (hi('promotional_products'))           return 'Promotional Products';
+  }
+  const t = String(doc.title_s || doc.title_txt_en || doc.title || '').toLowerCase();
   const has = (...ks) => ks.some((k) => t.includes(k));
-  if (it.includes('golf_balls') || has('golf ball')) return 'Logo Golf Balls';
-  if (has('towel'))                       return 'Golf Towels';
-  if (has('umbrella'))                    return 'Golf Umbrellas';
-  if (has('glove'))                       return 'Golf Gloves';
-  if (has('divot'))                       return 'Divot Tools';
-  if (has('ball marker') || has('hat clip') || has('marker')) return 'Ball Markers';
-  if (has('travel bag', 'travel cover', 'shoe bag', 'duffel')) return 'Logo Travel Bags';
-  if (has('cart bag', 'stand bag', 'golf bag', 'carry bag'))   return 'Golf Bags';
-  if (has(' tee', 'tees', 'golf tee'))    return 'Logo Tees';
-  if (has('jacket', 'pullover', 'vest', 'hoodie', 'quarter zip', '1/4 zip', 'outerwear')) return 'Outerwear';
-  if (has('polo', 'shirt'))               return 'Golf Shirts';
-  if (has('hat', 'cap', 'visor', 'beanie')) return 'Golf Hats';
-  if (has('tumbler', 'mug', 'bottle', 'drinkware', 'flask', 'koozie', 'can cooler')) return 'Drinkware';
-  if (has('tin', 'gift set', 'gift box', 'packaging', 'gift tube', 'sleeve') || it.includes('packaging')) return 'Custom Packaging';
+  if (has('golf ball'))                         return 'Logo Golf Balls';
+  if (has('towel'))                             return 'Golf Towels';
+  if (has('umbrella'))                          return 'Golf Umbrellas';
+  if (has('glove'))                             return 'Golf Gloves';
+  if (has('divot'))                             return 'Divot Tools';
+  if (has('ball marker', 'hat clip', 'marker')) return 'Ball Markers';
+  if (has('travel bag', 'duffel', 'shoe bag'))  return 'Logo Travel Bags';
+  if (has('cart bag', 'stand bag', 'golf bag')) return 'Golf Bags';
+  if (has(' tee', 'tees'))                      return 'Logo Tees';
+  if (has('jacket', 'pullover', 'vest', 'quarter zip', 'outerwear')) return 'Outerwear';
+  if (has('polo', 'shirt'))                     return 'Golf Shirts';
+  if (has('hat', 'cap', 'visor'))              return 'Golf Hats';
+  if (has('tumbler', 'mug', 'bottle', 'drinkware', 'flask')) return 'Drinkware';
+  if (has('tin', 'gift set', 'packaging'))     return 'Custom Packaging';
   return 'Promotional Products';
 }
 
@@ -156,25 +160,6 @@ function fetchPage(searchTerm, start, rows) {
   });
 }
 
-/* Pull one category's full set (paginated), tagging each product with
-   the category it came from rather than guessing via deriveCat. */
-async function fetchCategory(cat, q) {
-  const term = `${q} -tag_ss:DoNotIncludeinCatalog`;
-  const items = [];
-  let start = 0;
-  while (start < PER_CAT_MAX) {
-    const { docs, numFound } = await fetchPage(term, start, PAGE_ROWS);
-    if (!docs.length) break;
-    for (const d of docs) {
-      const p = normalizeDoc(d);
-      if (p && p.id) { p.cat = cat; items.push(p); }
-    }
-    start += PAGE_ROWS;
-    if (numFound && start >= numFound) break;
-  }
-  return items;
-}
-
 function getCache() {
   return new Promise((resolve) => {
     try { chrome.storage.local.get(CACHE_KEY, (d) => resolve((d && d[CACHE_KEY]) || null)); }
@@ -202,15 +187,19 @@ export async function loadCatalog({ force = false } = {}) {
     return cached.products;
   }
 
-  // Fetch every category in parallel; merge in CATEGORY_ORDER so a
-  // product shared by two categories keeps the earlier bucket.
-  const lists = await Promise.all(CATEGORY_QUERIES.map(({ cat, q }) => fetchCategory(cat, q)));
+  // One paginated pull of the full catalog query, to the live numFound.
   const out = [];
   const seenIds = new Set();
-  for (const list of lists) {
-    for (const p of list) {
-      if (!seenIds.has(p.id)) { seenIds.add(p.id); out.push(p); }
+  let start = 0;
+  while (start < MAX_PRODUCTS) {
+    const { docs, numFound } = await fetchPage(MAIN_QUERY, start, PAGE_ROWS);
+    if (!docs.length) break;
+    for (const d of docs) {
+      const p = normalizeDoc(d);
+      if (p && p.id && !seenIds.has(p.id)) { seenIds.add(p.id); out.push(p); }
     }
+    start += PAGE_ROWS;
+    if (numFound && start >= numFound) break;
   }
   if (out.length) { setCache({ ts: Date.now(), products: out }); return out; }
   return (cached && cached.products) || GIFT_CATALOG_SEED;

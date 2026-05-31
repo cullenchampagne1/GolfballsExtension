@@ -118,16 +118,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  // ── Corporate Gifting Catalog (PUT /api/solr-refinement, paginated) ──
+  // ── Corporate Gifting Catalog ──────────────────────────────────────
+  // The custom-logo catalog is served by icustomize's Solr refinement
+  // API (PUT, public `sitekey` header). Body mirrors the live
+  // Custom-Logo page calls: full-catalog searchTerm, default sort, and
+  // exclude out-of-stock via facetQueries.
   if (msg.action === 'fetchGiftCatalog' && msg.searchTerm) {
     const body = JSON.stringify({
-      solrQuery: { queryType: 'select', start: msg.start || 0, rows: String(msg.rows || 60), searchTerm: msg.searchTerm },
-      additionalFacets: { facetFields: [], facetQueries: [] },
+      solrQuery: {
+        queryType: 'select',
+        start: msg.start || 0,
+        rows: String(msg.rows || 60),
+        sort: 'sort_default_i desc',
+        searchTerm: msg.searchTerm,
+      },
+      additionalFacets: { facetFields: [], facetQueries: ['-tag_ss:ExcludeStock'] },
+      pageKey: 'custom-logo',
     });
-    fetch('https://www.golfballs.com/api/solr-refinement', {
+    fetch('https://master.api.icustomize.com/user/solr-refinement', {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'sitekey': 'golfballs' },
       body,
     })
       .then(async r => {
