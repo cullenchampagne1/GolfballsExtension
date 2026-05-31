@@ -41,15 +41,39 @@ const TagI  = (p) => <Icon {...p}><path d="M20.6 13.4L13 21a1.7 1.7 0 01-2.4 0L3
 
 const usd = (n) => (n == null ? '—' : '$' + Number(n).toFixed(2));
 
-const CAT_TONE = {
-  'Logo Golf Balls': 'brand', 'Golf Shirts': 'info', 'Golf Towels': 'success',
-  'Golf Hats': 'warning', 'Divot Tools': 'brand', 'Logo Tees': 'success',
-  'Logo Travel Bags': 'info', 'Promotional Products': 'warning', 'Golf Umbrellas': 'info',
-  'Golf Gloves': 'warning', 'Custom Packaging': 'brand', 'Drinkware': 'info',
-  'Golf Bags': 'success', 'Ball Markers': 'success', 'Outerwear': 'warning',
-};
-
 const onSale = (p) => p.orig != null && p.orig > p.price;
+
+/* Always-on magnification. The rep runs the Modals dev-scale below 1,
+   which was shrinking the catalog; this constant multiplies on top so
+   it reads large by default while the dev slider still adjusts it. */
+const CATALOG_SCALE = 2.5;
+const CARD_W = 1180;
+const CARD_H = 760;
+
+/* One representative glyph per "Shop by Type" category (sidebar + the
+   "/" command palette), replacing the generic colored dots. */
+const CAT_ICON = {
+  'Logo Golf Balls': (p) => <Icon {...p}><circle cx="12" cy="12" r="8.5"/><circle cx="9.5" cy="10" r="0.7" fill="currentColor" stroke="none"/><circle cx="13.2" cy="9.4" r="0.7" fill="currentColor" stroke="none"/><circle cx="11" cy="13" r="0.7" fill="currentColor" stroke="none"/><circle cx="14.5" cy="12.6" r="0.7" fill="currentColor" stroke="none"/></Icon>,
+  'Golf Shirts': (p) => <Icon {...p}><path d="M9 4L4.5 6.5 6.5 10 9 8.7V20h6V8.7l2.5 1.3 2-3.5L15 4l-3 2.2z"/></Icon>,
+  'Golf Towels': (p) => <Icon {...p}><rect x="5" y="4" width="14" height="16" rx="1.5"/><path d="M5 8.5h14M5 15.5h14"/></Icon>,
+  'Golf Hats': (p) => <Icon {...p}><path d="M3.5 14.5a8.5 8.5 0 0117 0"/><path d="M3.5 14.5h18.5l-3 3.2H3.5z"/></Icon>,
+  'Divot Tools': (p) => <Icon {...p}><path d="M9 3.5v5M15 3.5v5M9 8.5c0 2.4 1.3 3.6 3 3.6s3-1.2 3-3.6M12 12.1V20.5"/></Icon>,
+  'Logo Tees': (p) => <Icon {...p}><path d="M7 5h10l-2.3 4H9.3z"/><path d="M12 9v11"/></Icon>,
+  'Logo Travel Bags': (p) => <Icon {...p}><rect x="3" y="9" width="18" height="10" rx="3"/><path d="M8 9V7a2 2 0 012-2h4a2 2 0 012 2v2M3 13.5h18"/></Icon>,
+  'Promotional Products': (p) => <Icon {...p}><rect x="4" y="9.5" width="16" height="10.5" rx="1"/><path d="M4 13.5h16M12 9.5V20"/><path d="M12 9.5S10.6 5.8 8.6 6.4 8 9.5 10 9.5M12 9.5s1.4-3.7 3.4-3.1S16 9.5 14 9.5"/></Icon>,
+  'Golf Umbrellas': (p) => <Icon {...p}><path d="M3 12a9 9 0 0118 0z"/><path d="M12 12v6.5a2 2 0 003.2 0"/></Icon>,
+  'Golf Gloves': (p) => <Icon {...p}><path d="M8 11V5.6a1.5 1.5 0 013 0V10M11 9.6V4.6a1.5 1.5 0 013 0V10M14 10.6V6.6a1.5 1.5 0 013 0V13a5 5 0 01-10 0v-1l-1.5-1.5a1.4 1.4 0 012-2L8 11"/></Icon>,
+  'Custom Packaging': (p) => <Icon {...p}><path d="M12 3l8 4.2v9.6L12 21l-8-4.2V7.2z"/><path d="M4 7.2l8 4.2 8-4.2M12 11.4V21"/></Icon>,
+  'Drinkware': (p) => <Icon {...p}><path d="M7 4h10l-1.2 16.2a1 1 0 01-1 .8H9.2a1 1 0 01-1-.8z"/><path d="M7.3 9h9.4"/></Icon>,
+  'Golf Bags': (p) => <Icon {...p}><rect x="7" y="6" width="9" height="15" rx="3"/><path d="M10 6V3.8M13 6V3.4M16 9.5c2 0 3 1 3 3V16"/></Icon>,
+  'Ball Markers': (p) => <Icon {...p}><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/></Icon>,
+  'Outerwear': (p) => <Icon {...p}><path d="M6 4l6 3 6-3 2 4.5-3 1.8V21H7V10.3L4 8.5z"/><path d="M12 7v14"/></Icon>,
+};
+const AllItemsIcon = (p) => <Icon {...p}><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></Icon>;
+function CatGlyph({ id, size = 15, color = 'currentColor' }) {
+  const Ico = (id === 'all' ? AllItemsIcon : CAT_ICON[id]) || AllItemsIcon;
+  return <Ico size={size} style={{ color, flexShrink: 0 }} />;
+}
 
 /* The search box doubles as a command bar: typing "/" switches into
    filter mode (like Quick Notes) — type a category or brand, pick it,
@@ -117,7 +141,7 @@ function SearchBox({ value, onChange, commands, onPick }) {
             <div key={c.type + ':' + c.id} onMouseDown={(e) => { e.preventDefault(); onPick(c); }} onMouseEnter={() => setHi(i)}
               style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', background: i === hi ? 'var(--gb-brand-tint-soft)' : 'transparent' }}>
               {c.type === 'cat'
-                ? <Dot tone={CAT_TONE[c.id] || 'brand'} size={6} />
+                ? <CatGlyph id={c.id} size={14} color={i === hi ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)'} />
                 : <span style={{ width: 11, textAlign: 'center', fontSize: 11, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)' }}>@</span>}
               <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: i === hi ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>{c.label}</span>
               <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-text-ghost)' }}>{c.type === 'cat' ? 'Type' : 'Brand'}</span>
@@ -288,7 +312,7 @@ function DetailPanel({ p, onClose }) {
           <ProductImage src={p.img} alt={p.title} pad={26} radius="var(--gb-r-lg)" />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, marginBottom: 6, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-brand-label)', fontFamily: 'var(--gb-font-mono)' }}>{p.brand}</span>
-            <Tag tone="neutral" size="sm" icon={<Dot tone={CAT_TONE[p.cat] || 'brand'} size={5} />}>{p.cat}</Tag>
+            <Tag tone="neutral" size="sm" icon={<CatGlyph id={p.cat} size={12} />}>{p.cat}</Tag>
             {onSale(p) && <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 'var(--gb-r-pill)', fontSize: 9.5, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-danger, #e5484d)' }}>Sale −{usd(p.orig - p.price)}</span>}
           </div>
           <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--gb-text-primary)', lineHeight: 1.25, letterSpacing: -.2 }}>{p.title}</div>
@@ -339,23 +363,24 @@ function DetailPanel({ p, onClose }) {
 }
 
 function CategoryRail({ cats, value, onChange, counts, total }) {
-  const Row = ({ id, label, count, tone }) => {
+  const Row = ({ id, label, count }) => {
     const on = value === id;
     const [hover, setHover] = useState(false);
+    const col = on ? 'var(--gb-brand-label)' : hover ? 'var(--gb-text-secondary)' : 'var(--gb-text-tertiary)';
     return (
       <div onClick={() => onChange(id)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-        style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 10px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', transition: 'all var(--gb-anim)', background: on ? 'var(--gb-brand-tint-medium)' : hover ? 'var(--gb-fill-subtle)' : 'transparent', border: '1px solid ' + (on ? 'var(--gb-brand-tint-border)' : 'transparent') }}>
-        <Dot tone={tone} size={7} glow={on} />
-        <span style={{ flex: 1, fontSize: 12, fontWeight: on ? 700 : 500, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>{label}</span>
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 11px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', transition: 'all var(--gb-anim)', background: on ? 'var(--gb-brand-tint-medium)' : hover ? 'var(--gb-fill-subtle)' : 'transparent', border: '1px solid ' + (on ? 'var(--gb-brand-tint-border)' : 'transparent') }}>
+        <CatGlyph id={id} size={15} color={col} />
+        <span style={{ flex: 1, fontSize: 11.5, fontWeight: on ? 700 : 500, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
         <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }}>{count}</span>
       </div>
     );
   };
   return (
-    <div style={{ width: 186, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: 12, display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
+    <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: 12, display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px' }}>Categories</div>
-      <Row id="all" label="All Items" count={total} tone="muted" />
-      {cats.map((c) => <Row key={c} id={c} label={c} count={counts[c] || 0} tone={CAT_TONE[c] || 'brand'} />)}
+      <Row id="all" label="All Items" count={total} />
+      {cats.map((c) => <Row key={c} id={c} label={c} count={counts[c] || 0} />)}
     </div>
   );
 }
@@ -419,10 +444,12 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
       .map((b) => ({ type: 'brand', id: b, label: b, count: brandCounts[b] }));
     return [...catCmds, ...brandCmds];
   }, [cats, catCounts, brandCounts]);
+  // Stack filters: a category pick keeps the active brand and vice-versa,
+  // so "/titleist" then "/golf towels" narrows to both at once.
   const onPickCommand = (c) => {
     if (!c) return;
-    if (c.type === 'cat') { setCat(c.id); setBrand('all'); }
-    else { setCat('all'); setBrand(c.id); }
+    if (c.type === 'cat') setCat(c.id);
+    else setBrand(c.id);
     setQuery('');
   };
 
@@ -445,8 +472,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
 
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: 'fixed', inset: 0, zIndex: 999990, padding: 24, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div data-gb-scale="modals" style={{ width: 'min(1320px, 100%)', height: 'min(860px, 100%)', position: 'relative', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column', animation: 'gc-pop .3s cubic-bezier(.34,1.56,.64,1)' }}>
+      style={{ position: 'fixed', inset: 0, zIndex: 999990, padding: 24, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', overflow: 'auto' }}>
+      <div data-gb-scale="modals" style={{ margin: 'auto', flexShrink: 0 }}>
+        <div style={{ zoom: `${CATALOG_SCALE}`, width: CARD_W, height: CARD_H, position: 'relative', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column', animation: 'gc-pop .3s cubic-bezier(.34,1.56,.64,1)' }}>
         {/* Header */}
         <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
           <div style={{ width: 32, height: 32, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -511,6 +539,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         <AnimatePresence>
           {selected && <DetailPanel key="detail" p={selected} onClose={() => setSelected(null)} />}
         </AnimatePresence>
+        </div>
       </div>
     </div>
   );
