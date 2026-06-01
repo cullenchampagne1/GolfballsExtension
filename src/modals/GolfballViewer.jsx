@@ -805,24 +805,11 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             texLoader.load(decalDataUrl, res, undefined, rej);
           });
           if (disposed) return;
-          // sRGB so white reads as white; clamp to edge so edge pixels
-          // don't tile. The logo is almost always non-power-of-two, and an
-          // NPOT texture with mipmaps renders as solid BLACK on WebGL1 (no
-          // error thrown) — that's why the print vanishes on machines
-          // without WebGL2. So only enable mipmaps + anisotropy on WebGL2,
-          // where NPOT mipmaps are legal and keep the logo crisp as it
-          // curves over the ball; on WebGL1 fall back to a plain linear
-          // filter so the logo stays visible, just slightly softer.
+          // Texture flags: clamp to edge so edge pixels don't tile across
+          // the decal's edges; sRGB so white reads as white.
           decalTexture.colorSpace = THREE.SRGBColorSpace;
           decalTexture.wrapS = THREE.ClampToEdgeWrapping;
           decalTexture.wrapT = THREE.ClampToEdgeWrapping;
-          if (renderer.capabilities.isWebGL2) {
-            try { decalTexture.anisotropy = renderer.capabilities.getMaxAnisotropy(); } catch { /* ignore */ }
-          } else {
-            decalTexture.minFilter = THREE.LinearFilter;
-            decalTexture.generateMipmaps = false;
-          }
-          decalTexture.needsUpdate = true;
           objectsToDispose.push(decalTexture);
 
           // Camera is straight-on at +Z, so the decal projects from
@@ -837,51 +824,27 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           const printAreaScale = initialBallRef.current.printAreaScale ?? 0.7;
           const decalSize = new THREE.Vector3(targetRadius * printAreaScale, targetRadius * printAreaScale, targetRadius * 2);
 
-          ballGroup.updateMatrixWorld(true);
           const decalGeo = new DecalGeometry(ballMesh, decalPosition, decalOrientation, decalSize);
-          /* DecalGeometry emits WORLD-space verts. The ball is rotated
-             on load by the dev-settings default (ballGroup.rotation),
-             so a decal mesh with an identity transform parented under
-             ballGroup gets DOUBLE-rotated — the print lands off the
-             camera-facing pole (often on the far side, backface-culled
-             → invisible). Bake ballGroup.matrixWorld⁻¹ into the
-             geometry so its verts become ballGroup-LOCAL: then the
-             render-time ballGroup.matrixWorld puts them back exactly
-             where the projection found them, and the decal also tracks
-             the ball through drag / zoom / throw afterward. */
-          decalGeo.applyMatrix4(ballGroup.matrixWorld.clone().invert());
-          /* Push the decal shell ~2 units proud of the ball surface
-             (radius ~100 → ~102). This is the CROSS-PLATFORM-safe way
-             to beat z-fighting: depthTest stays ON (it behaves
-             identically on Mac GL and Windows ANGLE/D3D), and the
-             decal sits physically just in front of the surface so it
-             always wins the depth test. The previous depthTest:false
-             path worked on Mac but vanished on Windows — exactly the
-             render-state ANGLE treats differently — and polygonOffset
-             is likewise driver-dependent, so both are gone. */
-          decalGeo.scale(1.02, 1.02, 1.02);
-          /* MeshStandardMaterial (LIT) — same as the original working
-             build, so the print picks up the ball's lighting and reads
-             as printed-on rather than a flat sticker. (The unlit Basic
-             experiment showed the right shape but the wrong, washed-out
-             color because it bypassed the scene's lighting + tone
-             mapping.) DoubleSide guards against back-wound projected
-             faces; depthTest stays default-on and the proud geometry
-             handles z-fighting cross-platform. */
+          /* depthTest:true + polygonOffset is the exact render-state from
+             the 5/26 build that renders the print on Windows D3D11/ANGLE.
+             A later "proud 1.02 shell + DoubleSide" rewrite looked right on
+             Mac but left the logo invisible on Windows, so it's reverted to
+             this known-good material. */
           const decalMat = new THREE.MeshStandardMaterial({
             map: decalTexture,
             transparent: true,
-            side: THREE.DoubleSide,
+            depthTest: true,
             depthWrite: false,
+            polygonOffset: true,
+            polygonOffsetFactor: -4,
             roughness: 0.5,
             metalness: 0,
           });
           decalMesh = new THREE.Mesh(decalGeo, decalMat);
-          /* Identity transform — the geometry is already in
-             ballGroup-local space (inverse baked above), so
-             ballGroup's own matrix renders it back onto the ball. */
-          decalMesh.renderOrder = 10;
-          decalMesh.frustumCulled = false;
+          // Match the ball's transform so the decal's UV mapping aligns;
+          // same Group as the ball so throw / drag / zoom move them together.
+          decalMesh.position.copy(ballMesh.position);
+          decalMesh.scale.copy(ballMesh.scale);
           ballGroup.add(decalMesh);
           objectsToDispose.push(decalGeo, decalMat);
 
