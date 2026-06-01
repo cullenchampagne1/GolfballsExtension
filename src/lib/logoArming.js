@@ -303,99 +303,159 @@ function extractOriginalFilePath(text, cropGuid) {
   return m2 ? m2[1] : null;
 }
 
-function resolveExpressOriginal(rawSrc, deliver) {
+// Resolution tracing — content scripts log to the page's own console, so these
+// lines show up in DevTools. Silence with:  window.__gbLogoQuiet = true
+function LOG(...a) {
+  if (typeof window !== 'undefined' && window.__gbLogoQuiet) return;
+  try { console.log('%c[gb-logo]', 'color:#6e901d;font-weight:700', ...a); } catch { /* ignore */ }
+}
+
+// Resolve the express / custom-logo order's RAW upload from its design state.
+// Calls done(dataUrl, url) on success, or done(null) when there's no order
+// context or the lookup/fetch fails — so the caller can fall through to the
+// next resolution method.
+function resolveExpressOriginal(rawSrc, done) {
   const deep = decodeDeep(rawSrc);
   const om = deep.match(/UserUploads\/[A-Za-z0-9/_\-.]+?\.(?:png|jpe?g|webp|gif)/i);
   const cropGuid = om ? om[0].split('/').pop() : null;
   const messageId = findOrderMessageId();
-  // No order context / API → leave the composite the modal already shows.
-  if (!messageId || typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) return;
-  let done = false;
-  const timer = setTimeout(() => { done = true; }, 8000);
+  if (!messageId || typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) {
+    LOG('express: no order context (no messageID on page) -> skip');
+    return done(null);
+  }
+  LOG('express: editOrder lookup, messageID=' + messageId + (cropGuid ? ', cropGuid=' + cropGuid : ' (no cropGuid)'));
+  let settled = false;
+  const finish = (du, url) => { if (settled) return; settled = true; clearTimeout(timer); done(du || null, url || null); };
+  const timer = setTimeout(() => { LOG('express: editOrder timed out (6s)'); finish(null); }, 6000);
   try {
     chrome.runtime.sendMessage(
       { action: 'chargeApiProxy', url: 'https://master.api.icustomize.com/admin/editOrder', method: 'PUT', body: { messageID: messageId } },
       (resp) => {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        if (chrome.runtime.lastError || !resp || !resp.ok || !resp.text) return;
+        if (chrome.runtime.lastError || !resp || !resp.ok || !resp.text) {
+          LOG('express: editOrder request failed (' + (chrome.runtime.lastError?.message || ('status ' + (resp && resp.status))) + ')');
+          return finish(null);
+        }
         const filePath = extractOriginalFilePath(resp.text, cropGuid);
-        if (!filePath) return;
+        if (!filePath) { LOG('express: no Source/CustomerUploads path in order state'); return finish(null); }
         const rawUrl = 'https://static.golfballs.com/' + filePath.replace(/^\/+/, '');
-        // Background-fetch the raw upload (credentialed, same-origin dataURL)
-        // and stream it in. On failure, leave the composite already shown.
+        LOG('express: raw upload -> ' + rawUrl);
         try {
           chrome.runtime.sendMessage({ action: 'proxyFetchImage', url: rawUrl }, (r) => {
-            if (r && r.ok && r.dataUrl) deliver(r.dataUrl, rawUrl);
+            if (r && r.ok && r.dataUrl) finish(r.dataUrl, rawUrl);
+            else { LOG('express: raw upload fetch failed'); finish(null); }
           });
-        } catch { /* leave composite */ }
+        } catch (e) { LOG('express: raw upload fetch threw', e); finish(null); }
       },
     );
-  } catch { /* leave the composite already shown */ }
+  } catch (e) { LOG('express: sendMessage threw', e); finish(null); }
 }
 
 // ── Click → resolve logo → open the React Image Preview ───────
 
+// The modal opens immediately in a loading state, then we work an ORDERED chain
+// of resolution methods and stream the first hit in as a same-origin dataURL.
+// EXTRACTION runs first (express raw upload, then the overlay-token logo); the
+// linked anchor and the page's own composite render are shown ONLY if every
+// extraction misses. If even those miss, the modal is flipped to an explicit
+// error state — it never spins on "Resolving image…" forever.
 function extractAndShow(rawSrc, directUrl, itemLink) {
   if (typeof window.__gbOpenImagePreview !== 'function') {
-    console.error('[gb] __gbOpenImagePreview missing — image-preview.js not loaded?');
+    console.error('[gb-logo] __gbOpenImagePreview missing — image-preview.js not loaded?');
     return;
   }
+  LOG('---- resolve start ----');
+  LOG('  src    =', rawSrc);
+  LOG('  linked =', directUrl || '(none)');
 
-  // Pop the modal IMMEDIATELY in a pure loading state — never hand the modal's
-  // crossOrigin canvas <img> a cross-site URL (a render URL would CORS-error
-  // and flash the error state before the image resolves). Every image is
-  // streamed in as a background-fetched, same-origin dataURL via
-  // __gbImagePreviewReplace, so all loading happens INSIDE the modal with no
-  // delay and no error flash.
   window.__gbOpenImagePreview({ pending: true, itemLink });
 
   const isImageDataUrl = (du) => /^data:image\//i.test(du || '');
+  let delivered = false;
   const deliver = (dataUrl, url) => {
-    // Only ever stream in a real image dataURL; a bare cross-site URL would
-    // re-trigger the crossOrigin error in the modal's <img>.
-    if (typeof window.__gbImagePreviewReplace !== 'function' || !isImageDataUrl(dataUrl)) return;
-    window.__gbImagePreviewReplace({ url: url || '', dataUrl });
+    // Only ever stream in a real same-origin dataURL; a bare cross-site URL
+    // would re-trigger the crossOrigin error in the modal's <img>.
+    if (delivered || !isImageDataUrl(dataUrl)) return false;
+    delivered = true;
+    LOG('delivered ->', url || '(dataURL)');
+    if (typeof window.__gbImagePreviewReplace === 'function') {
+      window.__gbImagePreviewReplace({ url: url || '', dataUrl });
+    }
+    return true;
   };
 
-  // 3s cap per background fetch so an unreachable host can't stall the resolve.
+  // 3s cap per background fetch so an unreachable host can't stall the chain.
   const FETCH_CAP_MS = 3000;
   const bgFetch = (url, cb) => {
     let settled = false;
-    const settle = (du) => { if (settled) return; settled = true; cb(du); };
-    const timer = setTimeout(() => settle(null), FETCH_CAP_MS);
+    const settle = (du, why) => { if (settled) return; settled = true; if (why) LOG('  -', why + ':', url); cb(du); };
+    const timer = setTimeout(() => settle(null, 'miss (3s cap)'), FETCH_CAP_MS);
     loadImageViaBackground(url,
       (du) => { clearTimeout(timer); settle(du); },
-      () => { clearTimeout(timer); settle(null); },
+      (err) => { clearTimeout(timer); settle(null, 'miss (' + (err || 'fetch error') + ')'); },
     );
   };
 
-  if (directUrl) { bgFetch(directUrl, (du) => deliver(du, directUrl)); return; }
+  // Ordered resolution chain. Each step calls next() on a miss, or deliver()s a
+  // real same-origin dataURL and ends the chain.
+  const steps = [];
 
-  // Express render SKUs (e.g. sku=GolfBallPhotoExpress): show the composite
-  // immediately (bg-fetched render, loads with the session cookie), then
-  // upgrade to the RAW upload if the order's design state resolves it.
-  if (/[?&]sku=[^&]*express/i.test(rawSrc)) {
-    let rawShown = false;
-    bgFetch(rawSrc, (du) => { if (!rawShown) deliver(du, rawSrc); });
-    resolveExpressOriginal(rawSrc, (du, url) => { rawShown = true; deliver(du, url); });
-    return;
+  // Method B — express / custom-logo RAW upload from the order's design state.
+  // Self-skips instantly off order pages, so it's free there; on order pages
+  // it's the truest source (vs the cropped overlay or the composite render).
+  steps.push((next) => {
+    LOG('method B (express raw upload): start');
+    resolveExpressOriginal(rawSrc, (du, url) => {
+      if (deliver(du, url)) return;
+      LOG('method B: miss');
+      next();
+    });
+  });
+
+  // Method A — overlay-token / Render.aspx underlying logo on the CDN.
+  const tokenOrPath = findOverlayTokenOrPath(rawSrc);
+  if (tokenOrPath) {
+    const candidates = buildAbsoluteCandidates(tokenOrPath);
+    steps.push((next) => {
+      LOG('method A (overlay token):', candidates.length, 'candidate host(s)');
+      let i = 0;
+      const tryNext = () => {
+        if (i >= candidates.length) { LOG('method A: all candidates missed'); return next(); }
+        const url = candidates[i++];
+        bgFetch(url, (du) => { if (!deliver(du, url)) tryNext(); });
+      };
+      tryNext();
+    });
+  } else {
+    LOG('method A (overlay token): no token in src -> skipped');
   }
 
-  const tokenOrPath = findOverlayTokenOrPath(rawSrc);
-  if (!tokenOrPath) { bgFetch(rawSrc, (du) => deliver(du, rawSrc)); return; }
+  // Fallback — the LINKED image (an "Original file" anchor beside the thumb).
+  if (directUrl) {
+    steps.push((next) => {
+      LOG('fallback: linked image', directUrl);
+      bgFetch(directUrl, (du) => { if (!deliver(du, directUrl)) next(); });
+    });
+  }
 
-  // Render.aspx overlay — probe candidate hosts; deliver the first that returns
-  // real image bytes. On exhaustion fall back to the composite render.
-  const candidates = buildAbsoluteCandidates(tokenOrPath);
-  let idx = 0;
-  const tryNext = () => {
-    if (idx >= candidates.length) { bgFetch(rawSrc, (du) => deliver(du, rawSrc)); return; }
-    const url = candidates[idx++];
-    bgFetch(url, (du) => { if (isImageDataUrl(du)) deliver(du, url); else tryNext(); });
+  // Last resort — the page's own composite render (what the page already shows).
+  steps.push((next) => {
+    LOG('last resort: page composite', rawSrc);
+    bgFetch(rawSrc, (du) => { if (!deliver(du, rawSrc)) next(); });
+  });
+
+  // Drive the chain. If every step misses, flip the modal to a definite error
+  // state instead of spinning forever.
+  let s = 0;
+  const run = () => {
+    if (delivered) return;
+    if (s >= steps.length) {
+      LOG('FAILED: all methods + fallbacks missed -> showing error state');
+      if (typeof window.__gbImagePreviewReplace === 'function') window.__gbImagePreviewReplace({ failed: true });
+      return;
+    }
+    steps[s++](run);
   };
-  tryNext();
+  run();
 }
 
 // ── Floating hover affordance ─────────────────────────────────
@@ -526,7 +586,34 @@ function scanForRenderImages() {
 // Exposes the page globals that src/vanilla/main.js drives (initial scan,
 // MutationObserver, feature-flag toggle). Idempotent — safe to call once
 // per content-script load.
+// Icon-click entry: find the order page's primary render/logo image and run
+// the same resolve-and-show pipeline the hover affordance uses, so clicking
+// the toolbar icon on an order page surfaces the express/custom logo (raw
+// upload) instead of an empty drop-zone. Returns false when there's no
+// candidate on the page (the caller then opens the normal drop-zone).
+function extractBestRenderImage() {
+  if (typeof window.__gbOpenImagePreview !== 'function') return false;
+  try { scanForRenderImages(); } catch { /* ignore */ }
+  const imgs = Array.from(document.querySelectorAll('img'))
+    .filter((img) => isRenderAspxImg(img) || findDirectLink(img));
+  if (!imgs.length) return false;
+  // Largest on-screen candidate = the order's main render.
+  let best = null, bestArea = 0;
+  for (const img of imgs) {
+    const r = img.getBoundingClientRect();
+    const area = r.width * r.height;
+    if (area > bestArea) { bestArea = area; best = img; }
+  }
+  const src = best && best.getAttribute('src');
+  if (!src) return false;
+  const directLink = best.__gbDirectLink || findDirectLink(best) || null;
+  const itemLink = findItemLinkForImage(best);
+  extractAndShow(src, directLink, itemLink);
+  return true;
+}
+
 export function installLogoArming() {
   window.__gbScanForRenderImages = scanForRenderImages;
   window.__gbHideHoverBtn = hideHoverBtn;
+  window.__gbExtractBestRenderImage = extractBestRenderImage;
 }

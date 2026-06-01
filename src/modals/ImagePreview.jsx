@@ -113,6 +113,9 @@ export function ImagePreview({
   // __gbImagePreviewReplace. Avoids handing the crossOrigin <img> a cross-site
   // URL that would CORS-error and flash the error state before the real image.
   pending = false,
+  // Resolver exhausted every method (extraction + linked + composite all
+  // missed). Flip to the error view instead of spinning on "Resolving...".
+  failed = false,
   // When provided, the Submit Proof button routes through this
   // callback instead of firing the stub toast — lets a content-script
   // wrapper mount the real SubmitProof modal with the current image.
@@ -148,6 +151,9 @@ export function ImagePreview({
   // otherwise the spinner flashes for one paint before useEffect
   // re-classifies it as 'empty'.
   const [status, setStatus] = useState(() => (url || pending ? 'loading' : 'empty'));
+  // Resolver gave up (window.__gbImagePreviewReplace({ failed: true })) -> show
+  // the error view immediately instead of waiting out the loading watchdog.
+  useEffect(() => { if (failed) setStatus('error'); }, [failed]);
   const [copied, setCopied] = useState(false);
   // Natural image dimensions in px — captured at load time, displayed
   // in the top-left chip so the user has the source size at a glance

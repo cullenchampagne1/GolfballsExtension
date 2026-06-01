@@ -56,7 +56,7 @@ if (!window.__gbImagePreviewLoaded) {
     const [hidden, setHidden] = useState(false);
     // Hold the image in state so __gbImagePreviewReplace can swap it in after
     // the modal is already open (instant-open, then stream the result).
-    const [img, setImg] = useState({ url: opts.url || '', dataUrl: opts.dataUrl || '' });
+    const [img, setImg] = useState({ url: opts.url || '', dataUrl: opts.dataUrl || '', failed: false });
     useEffect(() => {
       _liveSetImg = setImg;
       return () => { if (_liveSetImg === setImg) _liveSetImg = null; };
@@ -85,6 +85,7 @@ if (!window.__gbImagePreviewLoaded) {
       <ImagePreview
         url={img.url}
         dataUrl={img.dataUrl}
+        failed={img.failed}
         pending={!!opts.pending}
         itemLink={opts.itemLink || null}
         visible={!hidden}
