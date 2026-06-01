@@ -300,6 +300,14 @@ function extractAndShow(rawSrc, directUrl, itemLink) {
 
   if (directUrl) { openWithBgFetch(directUrl); return; }
 
+  // Express / photo render SKUs (e.g. sku=GolfBallPhotoExpress) store the
+  // user upload OFF the standard CDN path, so probing for the raw overlay
+  // always 404s — and the old fallback then opened the modal on a dead
+  // guessed URL, hanging the spinner. Skip the probe and load the
+  // Render.aspx URL directly: the icustomize server renders the full
+  // composite (ball + photo), which always loads.
+  if (/[?&]sku=[^&]*express/i.test(rawSrc)) { openWithBgFetch(rawSrc); return; }
+
   const tokenOrPath = findOverlayTokenOrPath(rawSrc);
   if (!tokenOrPath) { openWithBgFetch(rawSrc); return; }
 
@@ -309,7 +317,11 @@ function extractAndShow(rawSrc, directUrl, itemLink) {
   let idx = 0;
   const tryNext = () => {
     if (idx >= candidates.length) {
-      window.__gbOpenImagePreview({ url: candidates[0] || rawSrc, itemLink });
+      // Every overlay candidate failed — fall back to the original
+      // Render.aspx URL (the server renders something that loads) rather
+      // than candidates[0], a guessed CDN path that 404s and freezes the
+      // modal spinner.
+      window.__gbOpenImagePreview({ url: rawSrc || candidates[0], itemLink });
       return;
     }
     const url = candidates[idx++];

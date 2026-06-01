@@ -378,6 +378,17 @@ export function ImagePreview({
   // http CDN URLs) > the public URL.
   const displayUrl = previewDataUrl || editedDataUrl || dataUrl || effectiveUrl;
 
+  // Safety net for a wedged source: some render endpoints (e.g. a slow or
+  // mis-stored express render) neither fire the <img>'s load NOR its error,
+  // so the spinner would otherwise spin forever and look broken. Cap the
+  // loading state — if it's still loading after the timeout, surface the
+  // error view (which offers retry / drop-replace) instead of freezing.
+  useEffect(() => {
+    if (status !== 'loading' || !displayUrl) return undefined;
+    const t = setTimeout(() => setStatus((s) => (s === 'loading' ? 'error' : s)), 20000);
+    return () => clearTimeout(t);
+  }, [status, displayUrl]);
+
   /* Sample a pixel color from the loaded <img>. Returns {r,g,b} from
      the natural-pixel space (intrinsic source resolution), regardless
      of zoom/pan. Coordinates are CSS pixels in the wrapRef space. */
