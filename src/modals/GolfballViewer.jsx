@@ -861,6 +861,13 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // same Group as the ball so throw / drag / zoom move them together.
           decalMesh.position.copy(ballMesh.position);
           decalMesh.scale.copy(ballMesh.scale);
+          // Lift the decal a hair off the surface along the camera-facing pole
+          // (+Z), so it wins the depth test by REAL depth separation rather than
+          // polygonOffset. Mac GL honors polygonOffset; ANGLE/D3D11 on Adreno
+          // (Windows-ARM) does not, leaving the coplanar print to lose the depth
+          // test and render invisible. ~1.5 units out of a ~100 radius is
+          // imperceptible but beats the z-fight on every driver.
+          decalMesh.position.z += targetRadius * 0.015;
           ballGroup.add(decalMesh);
           objectsToDispose.push(decalGeo, decalMat);
 
