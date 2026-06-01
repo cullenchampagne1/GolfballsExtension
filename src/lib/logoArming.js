@@ -266,6 +266,72 @@ function headlessDownload(rawSrc) {
   tryNext();
 }
 
+// ── Express / custom-logo: resolve the RAW upload via order state ──
+// The page <img> for an express order is the composite render; the raw
+// upload's path (Source/CustomerUploads/…) is NOT a static CDN file — it
+// lives only in the order's design state, fetched read-only via the
+// editOrder API (routed through chargeApiProxy, which carries the admin
+// JWT). We resolve it on the order page and fall back to the composite
+// render on any miss, so there's no regression off the order page.
+
+function findOrderMessageId() {
+  try {
+    for (const span of document.querySelectorAll('span')) {
+      const m = (span.textContent || '').match(/messageID\s*:\s*([0-9a-f-]{36})/i);
+      if (m) return m[1];
+    }
+    for (const a of document.querySelectorAll('a[href]')) {
+      const m = (a.getAttribute('href') || '').match(/(?:editOrderMessageID|messageID)=([0-9a-f-]{36})/i);
+      if (m) return m[1];
+    }
+    const m = (document.body.innerHTML || '').match(/messageID[^>]*>([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+    return m ? m[1] : '';
+  } catch { return ''; }
+}
+
+function extractOriginalFilePath(text, cropGuid) {
+  if (!text) return null;
+  // filePath + cropFilePath live in the SAME upload object (no braces between
+  // them), so matching by the clicked image's crop GUID ties the original to
+  // the exact item — important when an order has multiple uploads.
+  if (cropGuid) {
+    const g = cropGuid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const m = text.match(new RegExp('"filePath"\\s*:\\s*"(Source/CustomerUploads/[^"]+)"[^{}]*?"cropFilePath"\\s*:\\s*"[^"]*' + g, 'i'));
+    if (m) return m[1];
+  }
+  const m2 = text.match(/"filePath"\s*:\s*"(Source\/CustomerUploads\/[^"]+)"/i);
+  return m2 ? m2[1] : null;
+}
+
+function resolveExpressOriginal(rawSrc, itemLink, openWithBgFetch) {
+  const composite = () => openWithBgFetch(rawSrc);
+  const deep = decodeDeep(rawSrc);
+  const om = deep.match(/UserUploads\/[A-Za-z0-9/_\-.]+?\.(?:png|jpe?g|webp|gif)/i);
+  const cropGuid = om ? om[0].split('/').pop() : null;
+  const messageId = findOrderMessageId();
+  if (!messageId || typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) {
+    composite();
+    return;
+  }
+  let done = false;
+  const fall = () => { if (!done) { done = true; composite(); } };
+  const timer = setTimeout(fall, 6000);
+  try {
+    chrome.runtime.sendMessage(
+      { action: 'chargeApiProxy', url: 'https://master.api.icustomize.com/admin/editOrder', method: 'PUT', body: { messageID: messageId } },
+      (resp) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        if (chrome.runtime.lastError || !resp || !resp.ok || !resp.text) { composite(); return; }
+        const filePath = extractOriginalFilePath(resp.text, cropGuid);
+        if (filePath) openWithBgFetch('https://static.golfballs.com/' + filePath.replace(/^\/+/, ''));
+        else composite();
+      },
+    );
+  } catch { fall(); }
+}
+
 // ── Click → resolve logo → open the React Image Preview ───────
 
 function extractAndShow(rawSrc, directUrl, itemLink) {
@@ -300,13 +366,12 @@ function extractAndShow(rawSrc, directUrl, itemLink) {
 
   if (directUrl) { openWithBgFetch(directUrl); return; }
 
-  // Express / photo render SKUs (e.g. sku=GolfBallPhotoExpress) store the
-  // user upload OFF the standard CDN path, so probing for the raw overlay
-  // always 404s — and the old fallback then opened the modal on a dead
-  // guessed URL, hanging the spinner. Skip the probe and load the
-  // Render.aspx URL directly: the icustomize server renders the full
-  // composite (ball + photo), which always loads.
-  if (/[?&]sku=[^&]*express/i.test(rawSrc)) { openWithBgFetch(rawSrc); return; }
+  // Express render SKUs (e.g. sku=GolfBallPhotoExpress): the page <img> is the
+  // composite (ball + photo) and the raw upload isn't a CDN file, so probing
+  // for it 404s and hangs. Resolve the ORIGINAL upload from the order's design
+  // state (editOrder) and show that; resolveExpressOriginal falls back to the
+  // composite render whenever we're off an order page or anything misses.
+  if (/[?&]sku=[^&]*express/i.test(rawSrc)) { resolveExpressOriginal(rawSrc, itemLink, openWithBgFetch); return; }
 
   const tokenOrPath = findOverlayTokenOrPath(rawSrc);
   if (!tokenOrPath) { openWithBgFetch(rawSrc); return; }
