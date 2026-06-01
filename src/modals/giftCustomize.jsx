@@ -476,11 +476,18 @@ function MonogramDecoration() {
   );
 }
 
-/* one base-product input (Color, Size, Metal Finish, …) — driven entirely by data */
+/* one base-product input (Color, Size, Metal Finish, Imprint side, …) — from data */
 function PropertyInput({ label, options }) {
   const [v, setV] = useState(options[0]);
   const clean = (label || 'Option').replace(/^(Accessories|Apparel|Product)\s+/i, '');
   return <BaseColorPicker label={clean} colors={options} value={v} onChange={setV} />;
+}
+
+/* all of a product's base-product inputs (PropertyProduct / property_*_ss) —
+   shared by the golf-ball and accessory paths so e.g. Ball Color always shows. */
+function BaseProperties({ p, config }) {
+  const properties = (config && config.properties && config.properties.length) ? config.properties : (p.properties || []);
+  return <>{properties.map((prop, i) => <PropertyInput key={(prop.label || '') + i} label={prop.label} options={prop.options} />)}</>;
 }
 
 /* a tee imprint — text (up to 23 chars) + text color */
@@ -567,9 +574,6 @@ function BundleSections({ items, p, config, dualPole }) {
 /* the accessory customizer: every base-product input (from PropertyProduct /
    property_*_ss), then the decoration blocks from modificationName_ss. */
 function AccessoryCustomizer({ p, config, loading }) {
-  // Properties: prefer the full per-product set (PropertyProduct, incl. niche like
-  // Metal Finish) from the live config; fall back to the catalog's faceted colors/sizes.
-  const properties = (config && config.properties && config.properties.length) ? config.properties : (p.properties || []);
   // Modifications / second pole / bundle: the catalog doc's customData_s is the
   // authoritative source (richer than the product page), so prefer p.* here.
   const mods = (p.modNames && p.modNames.length) ? p.modNames : ((config && config.modifications) || []);
@@ -578,7 +582,7 @@ function AccessoryCustomizer({ p, config, loading }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {loading && <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontStyle: 'italic' }}>Loading live options…</div>}
-      {properties.map((prop, i) => <PropertyInput key={(prop.label || '') + i} label={prop.label} options={prop.options} />)}
+      <BaseProperties p={p} config={config} />
       {bundleItems && bundleItems.length
         ? <BundleSections items={bundleItems} p={p} config={config} dualPole={dualPole} />
         : <DecorationArea mods={mods} p={p} config={config} dualPole={dualPole} />}
@@ -712,6 +716,9 @@ export function CustomizeBlock({ p }) {
         <div style={{ border: '1px solid var(--gb-brand-tint-border)', borderTop: 'none', borderRadius: '0 0 var(--gb-r-md) var(--gb-r-md)', padding: 14 }}>
           {isBall ? (
             <>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 14 }}>
+                <BaseProperties p={p} config={config} />
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>Select a print type</span>
                 <Tag tone="neutral" size="sm">corporate: Custom Logo</Tag>

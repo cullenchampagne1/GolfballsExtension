@@ -6,7 +6,8 @@
   "description": "Build tooling for incrementally migrating the extension to React.",
   "scripts": {
     "build": "node build.js",
-    "watch": "node build.js --watch"
+    "watch": "node build.js --watch",
+    "audit": "node scripts/audit-mappings.mjs"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
