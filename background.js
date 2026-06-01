@@ -71,7 +71,21 @@ function gbStorageGet(key) {
 }
 function gbStorageSet(key, val) { try { chrome.storage.local.set({ [key]: val }); } catch { /* ignore */ } }
 
-async function gbGetProductConfig(url) {
+// Normalize to an absolute golfballs.com product URL. A bare path resolves
+// against the extension origin (chrome-extension://…/Golf-Balls/…) and 404s, so
+// strip any such prefix and rebuild the real URL.
+function gbProductUrl(url) {
+  if (!url) return '';
+  let u = String(url).replace(/^chrome-extension:\/\/[^/]+/i, '');
+  if (/^https?:\/\//i.test(u)) return u;
+  if (!u.startsWith('/')) u = '/' + u;
+  if (!/\.html?($|[?#])/i.test(u)) u += '.htm';
+  return 'https://www.golfballs.com' + u;
+}
+
+async function gbGetProductConfig(rawUrl) {
+  const url = gbProductUrl(rawUrl);
+  if (!url) throw new Error('No product URL');
   const cache = (await gbStorageGet(GB_CONFIG_CACHE_KEY)) || {};
   const hit = cache[url];
   if (hit && hit.config && (Date.now() - (hit.ts || 0)) < GB_CONFIG_TTL_MS) return hit.config;

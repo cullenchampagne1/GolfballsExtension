@@ -111,6 +111,16 @@ function deriveCat(doc) {
   return 'Promotional Products';
 }
 
+/** product_url_s is a site-relative path (e.g. "/Golf-Balls/…"); make it an
+    absolute golfballs.com URL so a background fetch doesn't resolve it against
+    the extension's own origin (chrome-extension://…). */
+function absoluteProductUrl(path) {
+  if (!path) return '';
+  if (/^https?:\/\//i.test(path)) return path;
+  const p = path.startsWith('/') ? path : '/' + path;
+  return 'https://www.golfballs.com' + p + (/\.html?$/i.test(p) ? '' : '.htm');
+}
+
 /** property_*_ss facet fields → [{ label, options }] (the common base options
     the catalog faceted, e.g. Accessories Color, Apparel Color, Apparel Size). */
 function extractProperties(doc) {
@@ -160,7 +170,7 @@ export function normalizeDoc(doc) {
     orig:    orig && orig > 0 ? round2(orig) : null,
     logo:    logo != null ? round2(logo) : null,
     img:     doc.image_s || '',
-    url:     doc.product_url_s || '',
+    url:     absoluteProductUrl(doc.product_url_s),
     rating:  doc.review_d ? Math.round(num(doc.review_d) * 10) / 10 : null,
     reviews: doc.reviewCount_i || 0,
     mods:    Array.isArray(doc.modificationName_ss) ? doc.modificationName_ss.length : 0,
