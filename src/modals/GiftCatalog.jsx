@@ -236,15 +236,21 @@ function SortSelect({ value, onChange }) {
 
 function ProductImage({ src, alt, pad = 16, radius = 'var(--gb-r-md)' }) {
   const [loaded, setLoaded] = useState(false);
+  // Square via padding-ratio (height derived from width), NOT `aspect-ratio`:
+  // Chromium miscomputes aspect-ratio box heights under a fractional `zoom`
+  // (the catalog's zoom-scale dev setting), so the card renders taller than
+  // its grid row and the row below overlaps it. padding-bottom:100% scales
+  // cleanly under zoom; children go absolute since the box height comes from
+  // the padding.
   return (
-    <div style={{ position: 'relative', width: '100%', aspectRatio: '1 / 1', background: '#f4f4f1', borderRadius: radius, overflow: 'hidden', border: '1px solid var(--gb-border-subtle)' }}>
+    <div style={{ position: 'relative', width: '100%', height: 0, paddingBottom: '100%', background: '#f4f4f1', borderRadius: radius, overflow: 'hidden', border: '1px solid var(--gb-border-subtle)' }}>
       {!loaded && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid #d8d8d2', borderTopColor: '#a8a89e', animation: 'gb-spin .8s linear infinite' }} />
         </div>
       )}
       <img src={src} alt={alt} onLoad={() => setLoaded(true)} onError={() => setLoaded(true)}
-        style={{ width: '100%', height: '100%', objectFit: 'contain', padding: pad, boxSizing: 'border-box', opacity: loaded ? 1 : 0, transition: 'opacity .3s ease' }} />
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', padding: pad, boxSizing: 'border-box', opacity: loaded ? 1 : 0, transition: 'opacity .3s ease' }} />
     </div>
   );
 }
