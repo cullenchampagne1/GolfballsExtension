@@ -172,22 +172,6 @@ export function modsForProduct(p) {
   return { ux: 'inline', mods };
 }
 
-/* Textiles (towels, apparel, gloves, hats) use the embroidery decoration tabs
-   (Stock/Personalized/Monogram/Custom); hard goods show inline logo upload. */
-const EMBROIDERABLE_RE = /towel|apparel|shirt|polo|hat|cap|glove|outerwear|sock|headwear|jacket|pullover|fleece/i;
-function isEmbroiderable(p, config) {
-  return EMBROIDERABLE_RE.test((p && p.cat) || '') || EMBROIDERABLE_RE.test((config && config.itemType) || '');
-}
-/* base-color fallback when the live config can't be fetched (offline / no URL) */
-const FALLBACK_COLORS = {
-  towel: ['Black', 'Royal Blue', 'Red', 'Grey', 'White', 'Navy'],
-  chip: ['Gray', 'Black', 'Blue', 'Green', 'Orange', 'Pink', 'Purple', 'Red', 'White', 'Yellow'],
-};
-function fallbackColors(cat) {
-  if (/towel/i.test(cat || '')) return FALLBACK_COLORS.towel;
-  if (/poker|chip|promotional|marker/i.test(cat || '')) return FALLBACK_COLORS.chip;
-  return [];
-}
 
 const UploadI = (props) => <Icon {...props}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" /></Icon>;
 const SparkI = (props) => <Icon {...props}><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></Icon>;
@@ -492,26 +476,6 @@ function MonogramDecoration() {
   );
 }
 
-/* embroiderable accessories (towels/apparel/gloves): Stock / Personalized / Monogram / Custom */
-function DecorationTabs({ p, config }) {
-  const [tab, setTab] = useState('custom');
-  const tabs = [['stock', 'Stock'], ['personalized', 'Personalized'], ['monogram', 'Monogram'], ['custom', 'Custom']];
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--gb-border-subtle)' }}>
-        {tabs.map(([v, label]) => {
-          const on = tab === v;
-          return <button key={v} onClick={() => setTab(v)} style={{ padding: '8px 13px', background: 'transparent', border: 'none', borderBottom: '2px solid ' + (on ? 'var(--gb-brand-label)' : 'transparent'), marginBottom: -1, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)' }}>{label}</button>;
-        })}
-      </div>
-      {tab === 'stock' && <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', padding: '8px 0' }}>Buy as-is — no decoration.</div>}
-      {tab === 'personalized' && <PersonalizedDecoration />}
-      {tab === 'monogram' && <MonogramDecoration />}
-      {tab === 'custom' && <CustomLogoFlow p={p} config={config} />}
-    </div>
-  );
-}
-
 /* one base-product input (Color, Size, Metal Finish, …) — driven entirely by data */
 function PropertyInput({ label, options }) {
   const [v, setV] = useState(options[0]);
@@ -531,31 +495,54 @@ function TeeDecoration() {
   );
 }
 
-/* one decoration block, keyed by modification name */
-function DecorationBlock({ name, p, config, dualPole }) {
-  if (name === 'Custom Logo') return <CustomLogoFlow p={p} config={config} dualPole={dualPole} />;
-  if (name === 'Tee') return <TeeDecoration />;
-  if (name === 'Personalized') return <PersonalizedDecoration />;
-  if (name === 'Monogram') return <MonogramDecoration />;
-  if (MODS[name]) return <ModControls name={name} p={p} config={config} />;
-  return null;
+/* The translation from modificationName_ss → decoration tabs (the "connection"):
+   Custom Logo → Custom; a Golf Towel/Hat embroidery mod → Personalized; Tee → Tee;
+   Photo → Photo; Monogram/Personalized map to themselves. Live-verified against the
+   Tri-Fold towel (["Golf Towel","Custom Logo"] → Stock / Personalized / Custom). */
+function decorationsFor(mods) {
+  const norm = [...new Set((mods || []).map((m) => MOD_ALIAS[m] || m))];
+  const decos = [];
+  const add = (tab, kind) => { if (!decos.some((d) => d.tab === tab)) decos.push({ tab, kind }); };
+  norm.forEach((m) => {
+    if (m === 'Custom Logo') add('Custom', 'custom');
+    else if (/^Golf (Towel|Hat)/i.test(m)) add('Personalized', 'personalized');
+    else if (m === 'Personalized') add('Personalized', 'personalized');
+    else if (m === 'Monogram') add('Monogram', 'monogram');
+    else if (m === 'Tee') add('Tee', 'tee');
+    else if (m === 'Photo') add('Photo', 'photo');
+  });
+  return decos;
+}
+const DECO_ORDER = ['Stock', 'Personalized', 'Monogram', 'Tee', 'Photo', 'Custom'];
+function renderDeco(kind, p, config, dualPole) {
+  switch (kind) {
+    case 'custom': return <CustomLogoFlow p={p} config={config} dualPole={dualPole} />;
+    case 'personalized': return <PersonalizedDecoration />;
+    case 'monogram': return <MonogramDecoration />;
+    case 'tee': return <TeeDecoration />;
+    case 'photo': return <ImageUpload ai label="Upload Image" />;
+    case 'stock': return <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', padding: '8px 0' }}>Buy as-is — no decoration.</div>;
+    default: return null;
+  }
 }
 
-/* the decoration blocks a product renders, straight from its modificationName_ss */
-function DecorationBlocks({ mods, p, config, dualPole }) {
-  const norm = [...new Set((mods || []).map((m) => MOD_ALIAS[m] || m))];
-  // second pole folds into Custom Logo; Golf Towel/Hat & Bundle are base/meta — no standalone block
-  const SKIP = /second pole|golf towel|golf hat|custom accessory bundle/i;
-  let blocks = norm.filter((m) => !SKIP.test(m));
-  if (!blocks.length) blocks = ['Custom Logo'];
+/* the decoration area: one inline block, or Stock / … / Custom tabs when the
+   product supports more than one decoration type (driven by modificationName_ss). */
+function DecorationArea({ p, config, mods, dualPole }) {
+  const decos = decorationsFor(mods);
+  const [active, setActive] = useState('Custom');
+  if (decos.length <= 1) return renderDeco(decos[0] ? decos[0].kind : 'custom', p, config, dualPole);
+  const tabs = [{ tab: 'Stock', kind: 'stock' }, ...decos].sort((a, b) => DECO_ORDER.indexOf(a.tab) - DECO_ORDER.indexOf(b.tab));
+  const cur = tabs.find((t) => t.tab === active) || tabs[tabs.length - 1];
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {blocks.map((name) => (
-        <div key={name}>
-          {blocks.length > 1 && <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-brand-label)', marginBottom: 8 }}>{name}</div>}
-          <DecorationBlock name={name} p={p} config={config} dualPole={dualPole} />
-        </div>
-      ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--gb-border-subtle)', flexWrap: 'wrap' }}>
+        {tabs.map((t) => {
+          const on = cur.tab === t.tab;
+          return <button key={t.tab} onClick={() => setActive(t.tab)} style={{ padding: '8px 13px', background: 'transparent', border: 'none', borderBottom: '2px solid ' + (on ? 'var(--gb-brand-label)' : 'transparent'), marginBottom: -1, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)' }}>{t.tab}</button>;
+        })}
+      </div>
+      {renderDeco(cur.kind, p, config, dualPole)}
     </div>
   );
 }
@@ -594,7 +581,7 @@ function AccessoryCustomizer({ p, config, loading }) {
       {properties.map((prop, i) => <PropertyInput key={(prop.label || '') + i} label={prop.label} options={prop.options} />)}
       {bundleItems && bundleItems.length
         ? <BundleSections items={bundleItems} p={p} config={config} dualPole={dualPole} />
-        : <DecorationBlocks mods={mods} p={p} config={config} dualPole={dualPole} />}
+        : <DecorationArea mods={mods} p={p} config={config} dualPole={dualPole} />}
     </div>
   );
 }
