@@ -1,0 +1,130 @@
+{
+  "_source": "live golfballs.com Titleist Pro V1 customizer popup, driven print-type by print-type, 2026-05-31",
+  "_note": "The site renders each style option as a real raster (PNG) thumbnail, NOT inline SVG. These are the authoritative asset URLs + the exact field layout per type. To match the site, the build should show these graphics (hotlink the PNGs, or recreate them as crisp SVGs using these as reference).",
+
+  "assetHosts": {
+    "monogramThumbs": "https://d1tp32r8b76g0z.cloudfront.net/images/productPage/dropdown-personalization/",
+    "alignmentGraphics": "https://d1tp32r8b76g0z.cloudfront.net/images/IDalign/",
+    "icons": "https://static.golfballs.com/A/icons/"
+  },
+
+  "printTypeValues": {
+    "_note": "data-value on each Print Type dropdown option (label -> value)",
+    "None": "Stock", "Personalized": "Personalized", "Custom Logo": "Custom Logo",
+    "Custom Player Number": "Custom Player Number", "Monogram": "Monogram", "AlignXL": "Align XL",
+    "Photo": "Photo", "Icons": "Icon", "IDAlign": "IDAlign", "Folds of Honor": "Folds of Honor"
+  },
+
+  "Monogram": {
+    "fields": [
+      { "control": "styleSelector", "label": "Monogram Styles", "grouped": true, "default": "circle (Circle Monograms)" },
+      { "control": "textInput", "label": "Line 1", "maxLength": 3, "note": "the initials" },
+      { "control": "colorBar", "label": "Color 1", "palette": "imprint81", "default": "Black" },
+      { "control": "colorBar", "label": "Color 2", "palette": "imprint81+Transparent", "default": "Transparent" }
+    ],
+    "footnote": "The design shown in the preview area to the left is what will be printed.",
+    "styles": [
+      { "group": "3 Initials", "name": "circle",     "value": "Circle Monograms",   "img": "thumb-monogram-circle.png", "default": true },
+      { "group": "3 Initials", "name": "hex",        "value": "HMHexagramsWhite",    "img": "thumb-monogram-hex.png" },
+      { "group": "3 Initials", "name": "gardenia",   "value": "Gardenia",            "img": "thumb-initials-gardenia.png" },
+      { "group": "2 Initials", "name": "vertical",   "value": "Initials Vertical",   "img": "thumb-initials-split-vertical.png" },
+      { "group": "2 Initials", "name": "horizontal", "value": "Initials Horizontal", "img": "thumb-initials-split-horizontal.png" },
+      { "group": "2 Initials", "name": "diagonal",   "value": "Initials Diagonal",   "img": "thumb-initials-split-diagonal.png" },
+      { "group": "1 Initial",  "name": "circle",     "value": "Simple Circle",       "img": "thumb-initials-circle.png" }
+    ]
+  },
+
+  "AlignXL": {
+    "fields": [
+      { "control": "graphicDropdown", "label": "Alignment Style", "default": "star" },
+      { "control": "textInput", "label": "Enter Text (Optional)", "maxLength": 17, "required": false },
+      { "control": "colorBar", "label": "Text Color", "palette": "imprint81", "default": "Black" },
+      { "control": "colorBar", "label": "Line Color", "palette": "imprint81" },
+      { "control": "checkbox", "label": "Use same Color", "note": "forces Line Color = Text Color" }
+    ],
+    "groupLabel": "Color Options",
+    "styles": [
+      { "alt": "star",     "img": "align-xl-icons-stars.png", "default": true },
+      { "alt": "Thin",     "img": "align-xl-thin.png" },
+      { "alt": "Medium",   "img": "align-xl-medium.png" },
+      { "alt": "Thick",    "img": "align-xl-thick.png" },
+      { "alt": "dot",      "img": "align-xl-icons-dots.png" },
+      { "alt": "skull",    "img": "align-xl-icons-skulls.png" },
+      { "alt": "martini",  "img": "align-xl-icons-martini.png" },
+      { "alt": "wineglass","img": "align-xl-icons-wine.png" }
+    ]
+  },
+
+  "IDAlign": {
+    "fields": [
+      { "control": "graphicDropdown", "label": "Alignment", "default": "quadArrow" },
+      { "control": "textInput", "label": "Initials", "maxLength": 3 },
+      { "control": "colorBar", "label": "Text Color", "palette": "imprint81", "default": "Black" },
+      { "control": "colorBar", "label": "Color", "palette": "imprint81", "default": "Black", "note": "line color" }
+    ],
+    "styles": [
+      { "alt": "quadArrow",      "img": "quadArrow.png", "default": true },
+      { "alt": "doubleRow",      "img": "doubleRow.png" },
+      { "alt": "chevron",        "img": "chevron.png" },
+      { "alt": "line",           "img": "line.png" },
+      { "alt": "skulls",         "img": "skulls.png" },
+      { "alt": "arrowStyled",    "img": "arrowStyled.png" },
+      { "alt": "solidArrow",     "img": "solidArrow.png" },
+      { "alt": "solidDots",      "img": "solidDots.png" },
+      { "alt": "solidLine",      "img": "solidLine.png" },
+      { "alt": "solidStars",     "img": "solidStars.png" },
+      { "alt": "martiniGlasses", "img": "martiniGlasses.png" },
+      { "alt": "wine",           "img": "wine.png" }
+    ]
+  },
+
+  "Icons": {
+    "count": 30,
+    "fields": [
+      { "control": "iconGrid", "label": "Icon", "columns": 4, "single": true },
+      { "control": "checkbox", "label": "Add Additional Personalization", "fee": "$5.00/dz" }
+    ],
+    "themes": {
+      "Dad / Father's Day": [
+        { "alt": "Dad Beer", "img": "dad-beer.png" },
+        { "alt": "No. 1 Dad", "img": "no-1-dad.png" },
+        { "alt": "Tie", "img": "tie.png" },
+        { "alt": "Dad Crown", "img": "dad-crown.png" },
+        { "alt": "Best Dad by Par", "img": "best-dad-by-par.png" }
+      ],
+      "Drinks": [
+        { "alt": "Martini", "img": "martini2.png" },
+        { "alt": "Old Fashioned", "img": "old-fashioned.png" },
+        { "alt": "Tom Collins", "img": "tom-collins.png" },
+        { "alt": "Bloody Mary", "img": "bloody-mary.png" },
+        { "alt": "Margarita", "img": "margarita.png" },
+        { "alt": "Cosmopolitan", "img": "cosmopolitan.png" },
+        { "alt": "Wine Glass", "img": "wine-glass.png" },
+        { "alt": "Beer Mug", "img": "beer-mug-colored.png" },
+        { "alt": "Cigar", "img": "cigar.png" }
+      ],
+      "USA / Patriotic": [
+        { "alt": "USA Sunglasses", "img": "usa-sunglasses.png" },
+        { "alt": "USA Wordmark", "img": "usa-wordmark.png" },
+        { "alt": "USA Flag", "img": "usa-flag.png" },
+        { "alt": "Merica", "img": "merica.png" }
+      ],
+      "Masters": [
+        { "alt": "Masters Azalea", "img": "masters-azalea.png" },
+        { "alt": "Masters Sweet Tea", "img": "masters-sweet-tea.png" },
+        { "alt": "Masters Pimento Cheese", "img": "masters-pimento-cheese.png" },
+        { "alt": "Masters Jumpsuit", "img": "masters-jumpsuit.png" }
+      ],
+      "Misc": [
+        { "alt": "Four-leaf Clover", "img": "fourleafclover-full-color.png" },
+        { "alt": "Flamingo", "img": "flamingo-colored.png" },
+        { "alt": "Sunglasses", "img": "sunglasses.png" },
+        { "alt": "Skull & Crossbones", "img": "skullandcrossbones.png" },
+        { "alt": "Ladybug", "img": "ladybug-color.png" },
+        { "alt": "Bomb", "img": "bomb.png" },
+        { "alt": "Taco", "img": "taco.png" },
+        { "alt": "Dots Green", "img": "dots-green.png" }
+      ]
+    }
+  }
+}

@@ -4,6 +4,7 @@ import { Btn, IconBtn, Tag, Dot } from '../ui/index.js';
 import { Icon, I } from '../ui/icons.jsx';
 import { loadCatalog, GIFT_CATALOG_SEED, CATEGORY_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
+import { CustomizeBlock } from './giftCustomize.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    GiftCatalog — Corporate Gifting Catalog modal.
@@ -381,14 +382,7 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
               <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 6, lineHeight: 1.4 }}>Per-unit price drops with order volume — quote the tier that matches the gift run.</div>
             </div>
           )}
-          {p.mods > 0 && (
-            <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)' }}>
-              <TagI size={14} style={{ color: 'var(--gb-text-tertiary)' }} />
-              <span style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', fontWeight: 500 }}>
-                <b style={{ color: 'var(--gb-text-primary)' }}>{p.mods}</b> personalization {p.mods === 1 ? 'option' : 'options'} available
-              </span>
-            </div>
-          )}
+          <CustomizeBlock p={p} />
         </div>
         <div style={{ padding: 12, borderTop: '1px solid var(--gb-border-subtle)', display: 'flex', gap: 8, flexShrink: 0, background: 'var(--gb-fill-inverse-strong)' }}>
           <Btn variant="secondary" size="md" icon={<I.eye />} style={{ flex: 1 }} onClick={openProduct}>View product</Btn>

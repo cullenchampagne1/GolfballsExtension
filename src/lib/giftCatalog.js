@@ -140,6 +140,7 @@ export function normalizeDoc(doc) {
     rating:  doc.review_d ? Math.round(num(doc.review_d) * 10) / 10 : null,
     reviews: doc.reviewCount_i || 0,
     mods:    Array.isArray(doc.modificationName_ss) ? doc.modificationName_ss.length : 0,
+    modNames: Array.isArray(doc.modificationName_ss) ? doc.modificationName_ss : [],
     minQty:  (breaks[0] && breaks[0].q) || 1,
     breaks,
     promo:   parsePromo(doc.tag_ss),
