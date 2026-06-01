@@ -324,7 +324,11 @@ function PriceStat({ label, value, accent, was }) {
 function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
   const openProduct = () => {
     if (!p.url) return;
-    try { window.open('https://www.golfballs.com' + p.url + '.htm', '_blank', 'noopener'); } catch { /* ignore */ }
+    // p.url is a complete URL now, but an older cached catalog may still hold a
+    // relative path — normalize either form to one absolute golfballs.com URL.
+    let u = p.url;
+    if (!/^https?:\/\//i.test(u)) u = 'https://www.golfballs.com' + (u.startsWith('/') ? u : '/' + u) + (/\.html?$/i.test(u) ? '' : '.htm');
+    try { window.open(u, '_blank', 'noopener'); } catch { /* ignore */ }
   };
   return (
     <>
