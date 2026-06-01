@@ -178,7 +178,10 @@ export function normalizeDoc(doc) {
     modNames: Array.isArray(doc.modificationName_ss) ? doc.modificationName_ss : [],
     properties: extractProperties(doc),     // common base inputs (color/size) from the catalog facets
     prices:  extractPrices(doc),            // per-modification price (price_CustomLogo_d, …)
-    dualPole: customData.variant === 'dualPole',                                   // → second-pole imprint
+    dualPole: customData.variant === 'dualPole',                                   // → second-pole imprint (opt-in, accessories)
+    // Balls offer a second-pole imprint by DEFAULT; this tag (on Triple Track
+    // lines, whose alignment art wraps the ball) removes it. Authoritative signal.
+    excludeDualPole: Array.isArray(doc.tag_ss) && doc.tag_ss.some((t) => /ExcludeDualPole/i.test(t)),
     bundleItems: customData.bundleItems ? customData.bundleItems.split(',').map((s) => s.trim()).filter(Boolean) : null,
     tags:    Array.isArray(doc.tag_ss) ? doc.tag_ss : [],
     productionTime,

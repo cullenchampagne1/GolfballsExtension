@@ -636,7 +636,8 @@ function AccessoryCustomizer({ p, config, loading }) {
   // Modifications / second pole / bundle: the catalog doc's customData_s is the
   // authoritative source (richer than the product page), so prefer p.* here.
   const mods = (p.modNames && p.modNames.length) ? p.modNames : ((config && config.modifications) || []);
-  const dualPole = p.dualPole || (config && config.dualPole) || false;
+  const excludeDualPole = (p && p.excludeDualPole) || (config && config.excludeDualPole) || false;
+  const dualPole = (p.dualPole || (config && config.dualPole) || false) && !excludeDualPole;
   const bundleItems = (p.bundleItems && p.bundleItems.length) ? p.bundleItems : ((config && config.bundleItems) || null);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -708,12 +709,16 @@ function Control({ k, p, config, serviceLevel }) {
 function ModControls({ name, p, config, serviceLevel }) {
   const meta = MODS[name];
   if (!meta) return null;
-  if (!meta.controls.length) {
+  // Second-pole imprint is offered by default but suppressed by the
+  // ExcludeDualPolePrinting tag (e.g. Triple Track lines) — drop it then.
+  const excludeDualPole = (p && p.excludeDualPole) || (config && config.excludeDualPole) || false;
+  const controls = excludeDualPole ? meta.controls.filter((c) => c !== 'secondImprint') : meta.controls;
+  if (!controls.length) {
     return <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', fontStyle: 'italic', padding: '4px 0' }}>{meta.note || 'Preset — no buyer-facing controls.'}</div>;
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {meta.controls.map((k, i) => <Control key={i} k={k} p={p} config={config} serviceLevel={serviceLevel} />)}
+      {controls.map((k, i) => <Control key={i} k={k} p={p} config={config} serviceLevel={serviceLevel} />)}
       {meta.extras && (
         <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', display: 'flex', alignItems: 'center', gap: 6 }}>
           <I.bolt size={11} style={{ color: 'var(--gb-brand-label)' }} /> {meta.extras}

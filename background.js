@@ -45,11 +45,14 @@ function gbNormalizeProductConfig(prod) {
   const customLogo = mods.find((m) => /custom/i.test(m.Name || '') || /custom logo/i.test(m.FriendlyName || ''));
   const secondPole = mods.find((m) => /second pole/i.test((m.FriendlyName || '') + ' ' + (m.Name || '')));
   let cd = {}; try { cd = JSON.parse(prod.customData_s || '{}'); } catch { /* none */ }
+  // Product-page authoritative second-pole suppression (Triple Track lines).
+  const excludeDualPole = (prod.ProductTagDetail || []).some((t) => /ExcludeDualPole/i.test(t.Name || ''));
   return {
     itemType: (prod.itemType_ss && prod.itemType_ss[0]) || prod.ItemType || prod.itemType_s || '',
     properties: gbExtractProperties(prod),                                       // base inputs: Color, Size, Metal Finish, …
     modifications: mods.map((m) => m.FriendlyName || m.Name).filter(Boolean),    // decoration blocks
-    dualPole: cd.variant === 'dualPole' || !!secondPole,                         // → second-pole imprint
+    dualPole: (cd.variant === 'dualPole' || !!secondPole) && !excludeDualPole,   // → second-pole imprint
+    excludeDualPole,                                                             // ExcludeDualPolePrinting tag → no second pole
     bundleItems: cd.bundleItems ? cd.bundleItems.split(',').map((s) => s.trim()).filter(Boolean) : null,
     shipping: customLogo ? gbModOptionValues(customLogo, 'Selected Shipping') : [],
     serviceLevel: customLogo ? gbModOptionValues(customLogo, 'Service Level')
