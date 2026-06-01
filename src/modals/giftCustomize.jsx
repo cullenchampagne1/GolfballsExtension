@@ -486,7 +486,11 @@ function PropertyInput({ label, options }) {
 /* all of a product's base-product inputs (PropertyProduct / property_*_ss) —
    shared by the golf-ball and accessory paths so e.g. Ball Color always shows. */
 function BaseProperties({ p, config }) {
-  const properties = (config && config.properties && config.properties.length) ? config.properties : (p.properties || []);
+  // The product page (PropertyProduct) is authoritative; the catalog facet is an
+  // incomplete fallback (some products, e.g. Devant towels, have no facet at all).
+  const all = (config && config.properties && config.properties.length) ? config.properties : (p.properties || []);
+  // Skip single-value properties (e.g. "Colors in Logo: [1 Color]") — not a real picker.
+  const properties = all.filter((prop) => (prop.options || []).length > 1);
   return <>{properties.map((prop, i) => <PropertyInput key={(prop.label || '') + i} label={prop.label} options={prop.options} />)}</>;
 }
 

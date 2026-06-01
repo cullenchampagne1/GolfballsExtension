@@ -91,7 +91,13 @@ async function main() {
 
   console.log(`Auditing ${sample.length} product${sample.length === 1 ? '' : 's'} (of ${docs.length} catalog docs)…\n`);
   const rows = [];
-  for (const d of sample) rows.push(auditOne(d, await fetchProduct(d.product_url_s)));
+  const CONCURRENCY = 12;
+  for (let i = 0; i < sample.length; i += CONCURRENCY) {
+    const batch = sample.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(batch.map(async (d) => auditOne(d, await fetchProduct(d.product_url_s))));
+    rows.push(...results);
+    if (sample.length > 90) process.stderr.write(`  …${rows.length}/${sample.length}\r`);
+  }
 
   const flagged = rows.filter((r) => r.flags.length);
   for (const r of rows.sort((a, b) => (b.flags.length - a.flags.length) || a.type.localeCompare(b.type))) {
