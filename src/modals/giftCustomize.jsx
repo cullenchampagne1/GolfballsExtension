@@ -17,10 +17,38 @@ import { Icon, I } from '../ui/icons.jsx';
 ─────────────────────────────────────────────────────────────── */
 
 /* ── Live data (option-schema.json + colors-live.json) ───────── */
-const COMMON_COLORS = [
+/* Imprint palette — 81 named colors scraped from the live ColorSelectorBar.
+   First 8 are the "common" quick row; the rest expand on demand. Used by every
+   golf-ball imprint color control (Personalized, Monogram ×2, AlignXL ×2, IDAlign ×2). */
+const COMMON_COUNT = 8;
+const IMPRINT_COLORS = [
   { name: 'Black', hex: '#000000' }, { name: 'Red', hex: '#d2232a' }, { name: 'Green', hex: '#1c4120' },
   { name: 'Blue', hex: '#0b48a0' }, { name: 'Pink', hex: '#ff60b2' }, { name: 'Orange', hex: '#ff6a13' },
-  { name: 'Purple', hex: '#582c83' }, { name: 'Gold', hex: '#b59f65' },
+  { name: 'Purple', hex: '#582c83' }, { name: 'Gold', hex: '#b59f65' }, { name: 'Chili Pepper Red', hex: '#b61c19' },
+  { name: 'Persian Red', hex: '#d32f2e' }, { name: 'Red Orange', hex: '#f24334' }, { name: 'Dark Peach', hex: '#e57373' },
+  { name: 'Mulberry', hex: '#880d52' }, { name: 'Burnt Pink', hex: '#c2175b' }, { name: 'Red Pink', hex: '#eb1d63' },
+  { name: 'Rosy Pink', hex: '#f06292' }, { name: 'Purple Iris', hex: '#49148d' }, { name: 'Purple Jam', hex: '#7a1fa2' },
+  { name: 'Dark Orchid', hex: '#9c28b1' }, { name: 'Rich Lilac', hex: '#b968c7' }, { name: 'Persian Indigo', hex: '#301b90' },
+  { name: 'Blueberry', hex: '#512da7' }, { name: 'Dark Lavender', hex: '#653bb7' }, { name: 'Lavender', hex: '#9675ce' },
+  { name: 'Denim Blue', hex: '#1c227f' }, { name: 'Cerulean Blue', hex: '#4050b5' }, { name: 'Moody Blue', hex: '#7986cc' },
+  { name: 'Royal Azure', hex: '#013088' }, { name: 'Water Blue', hex: '#1976d3' }, { name: 'Azure', hex: '#2196f3' },
+  { name: 'Crystal Blue', hex: '#64b5f6' }, { name: 'Venice Blue', hex: '#035697' }, { name: 'Bondi Blue', hex: '#0288d1' },
+  { name: 'Bright Cerulean', hex: '#02a9f5' }, { name: 'Picton Blue', hex: '#4fc2f8' }, { name: 'Deep Aqua', hex: '#035f60' },
+  { name: 'Teal Blue', hex: '#0098a7' }, { name: 'Topaz', hex: '#01bcd3' }, { name: 'Aquamarine Blue', hex: '#4dd0e2' },
+  { name: 'Aqua Deep', hex: '#014b3f' }, { name: 'Pine Green', hex: '#00796a' }, { name: 'Teal', hex: '#009788' },
+  { name: 'Light Sea Green', hex: '#4ab5a7' }, { name: 'Everglade', hex: '#184d33' }, { name: 'Fern Green', hex: '#3b8c40' },
+  { name: 'Green Apple', hex: '#4cb050' }, { name: 'Pistachio', hex: '#80c77f' }, { name: 'Green Leaf', hex: '#33681e' },
+  { name: 'Muted Green', hex: '#699d3a' }, { name: 'Mantis', hex: '#8bc24a' }, { name: 'Pale Olive', hex: '#acd683' },
+  { name: 'Hazel', hex: '#817716' }, { name: 'Mustard Green', hex: '#b0b42a' }, { name: 'Pear', hex: '#cddc39' },
+  { name: 'Golden Sand', hex: '#dde774' }, { name: 'Pumpkin', hex: '#f47f16' }, { name: 'Sunglow', hex: '#f9c031' },
+  { name: 'Banana Yellow', hex: '#ffeb3c' }, { name: 'Sandy Yellow', hex: '#fcf274' }, { name: 'Blaze Orange', hex: '#ff6f00' },
+  { name: 'Orange Peel', hex: '#ffa101' }, { name: 'Golden Yellow', hex: '#fec107' }, { name: 'Naples Yellow', hex: '#fdd450' },
+  { name: 'Deep Orange', hex: '#e65101' }, { name: 'Gold Drop', hex: '#f67b00' }, { name: 'Medium Orange', hex: '#ff9700' },
+  { name: 'Butterscotch', hex: '#ffb64d' }, { name: 'Rusty Red', hex: '#bf360c' }, { name: 'Reddish Orange', hex: '#e64a15' },
+  { name: 'Portland Orange', hex: '#fe5722' }, { name: 'Coral', hex: '#ff8964' }, { name: 'English Walnut', hex: '#3c2623' },
+  { name: 'Irish Coffee', hex: '#5d4038' }, { name: 'Ferra', hex: '#765647' }, { name: 'Pale Oyster', hex: '#a0887e' },
+  { name: 'Gunmetal', hex: '#273238' }, { name: 'River Bed', hex: '#465967' }, { name: 'Slate Blue', hex: '#5f7d8a' },
+  { name: 'Cadet Grey', hex: '#90a4ad' }, { name: 'Davy Grey', hex: '#525252' }, { name: 'Regent Grey', hex: '#969696' },
 ];
 const THREAD_COLORS = [
   { name: 'Black', hex: '#1c1c1c' }, { name: 'White', hex: '#f3f3f0' }, { name: 'Red', hex: '#c0392b' },
@@ -36,46 +64,111 @@ const BASE_COLORS = [
 ];
 const FONTS = ['Kabel Dm BT', 'Calibri', 'Lucida Handwriting', 'Bradley Hand']; // live-verified
 const SIZES = ['Standard', 'Large', 'Max'];
-const MONO_GROUPS = [
-  { label: '3 Initials', items: ['ABC', 'A B C', 'A·B·C'] },
-  { label: '2 Initials', items: ['A|B', 'A/B', 'A╱B'] },
-  { label: '1 Initial', items: ['Ⓐ'] },
+/* ── SVG art helpers — monochrome motifs (currentColor) built into the
+   style thumbnails so the selector shows what each option actually looks like.
+   viewBox 0 0 84 48; exact site art = the referenced cloudfront PNGs. ───── */
+const _C = 'currentColor';
+function _starPts(cx, cy, r) { let p = []; for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.4 : r; p.push((cx + rr * Math.cos(a)).toFixed(2) + ',' + (cy + rr * Math.sin(a)).toFixed(2)); } return p.join(' '); }
+const _star = (cx, cy, r) => `<polygon points="${_starPts(cx, cy, r)}" fill="${_C}"/>`;
+const _dot = (cx, cy, r = 3.5) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${_C}"/>`;
+const _skull = (cx, cy) => `<g stroke="${_C}" stroke-width="1.5" fill="none"><line x1="${cx - 5}" y1="${cy - 5}" x2="${cx + 5}" y2="${cy + 5}"/><line x1="${cx + 5}" y1="${cy - 5}" x2="${cx - 5}" y2="${cy + 5}"/></g><circle cx="${cx}" cy="${cy}" r="4" fill="${_C}"/>`;
+const _martini = (cx, cy) => `<g stroke="${_C}" stroke-width="1.5" fill="none"><path d="M${cx - 5},${cy - 7} L${cx + 5},${cy - 7} L${cx},${cy} Z"/><line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy + 7}"/><line x1="${cx - 4}" y1="${cy + 7}" x2="${cx + 4}" y2="${cy + 7}"/></g>`;
+const _wine = (cx, cy) => `<g stroke="${_C}" stroke-width="1.5" fill="none"><path d="M${cx - 4},${cy - 7} a4,5 0 0,0 8,0 Z"/><line x1="${cx}" y1="${cy - 2}" x2="${cx}" y2="${cy + 7}"/><line x1="${cx - 4}" y1="${cy + 7}" x2="${cx + 4}" y2="${cy + 7}"/></g>`;
+const _chev = (cx, cy, s = 6) => `<path d="M${cx - s / 2},${cy - s} L${cx + s / 2},${cy} L${cx - s / 2},${cy + s}" stroke="${_C}" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+const _hline = (w) => `<line x1="8" y1="24" x2="76" y2="24" stroke="${_C}" stroke-width="${w}" stroke-linecap="round"/>`;
+const _row = (fn, xs) => xs.map((x) => fn(x, 24)).join('');
+const _txt = (x, y, s, str, extra = '') => `<text x="${x}" y="${y}" text-anchor="middle" font-family="Georgia,serif" font-size="${s}" fill="${_C}" ${extra}>${str}</text>`;
+
+/* Monogram styles (7) grouped 3 / 2 / 1 Initials — cloudfront …/dropdown-personalization/ */
+const MONO_STYLES = [
+  { key: 'circle', group: '3 Initials', label: 'Circle', svg: `<circle cx="42" cy="24" r="19" fill="none" stroke="${_C}" stroke-width="1.4"/>${_txt(42, 30, 17, 'ABC', 'font-style="italic"')}` },
+  { key: 'hex', group: '3 Initials', label: 'Hexagram', svg: `<polygon points="42,6 60,15 60,33 42,42 24,33 24,15" fill="none" stroke="${_C}" stroke-width="1.4"/>${_txt(42, 29, 14, 'ABC')}` },
+  { key: 'gardenia', group: '3 Initials', label: 'Gardenia', svg: `<path d="M16,24q6,-7 12,0q-6,7 -12,0Z" fill="${_C}" opacity=".45"/><path d="M68,24q-6,-7 -12,0q6,7 12,0Z" fill="${_C}" opacity=".45"/><text x="42" y="31" text-anchor="middle" font-family="'Brush Script MT',cursive" font-style="italic" font-size="20" fill="${_C}">ABC</text>` },
+  { key: 'vertical', group: '2 Initials', label: 'Vertical', svg: `${_txt(30, 31, 20, 'M')}<line x1="42" y1="10" x2="42" y2="38" stroke="${_C}" stroke-width="1.4"/>${_txt(54, 31, 20, 'D')}` },
+  { key: 'horizontal', group: '2 Initials', label: 'Horizontal', svg: `${_txt(42, 20, 15, 'M')}<line x1="28" y1="24" x2="56" y2="24" stroke="${_C}" stroke-width="1.4"/>${_txt(42, 40, 15, 'D')}` },
+  { key: 'diagonal', group: '2 Initials', label: 'Diagonal', svg: `${_txt(28, 34, 20, 'M')}<line x1="58" y1="10" x2="26" y2="38" stroke="${_C}" stroke-width="1.4"/>${_txt(56, 24, 20, 'D')}` },
+  { key: 'simple-circle', group: '1 Initial', label: 'Simple Circle', svg: `<circle cx="42" cy="24" r="16" fill="none" stroke="${_C}" stroke-width="1.4"/>${_txt(42, 31, 20, 'A')}` },
 ];
-const ALIGN_GRAPHICS = ['★', '↕', '⊕', '◎', '⌖', '✛']; // sample art (live: AlignXL 'star', IDAlign 'quadArrow')
+
+/* AlignXL alignment styles (8) — cloudfront …/images/IDalign/align-xl-*.png */
+const ALIGNXL_STYLES = [
+  { key: 'star', label: 'Star', svg: _row((x) => _star(x, 24, 5), [12, 26.5, 41, 55.5, 70]) },
+  { key: 'thin', label: 'Thin', svg: _hline(2) },
+  { key: 'medium', label: 'Medium', svg: _hline(5) },
+  { key: 'thick', label: 'Thick', svg: _hline(9) },
+  { key: 'dot', label: 'Dot', svg: _row((x) => _dot(x, 24, 3), [12, 24, 36, 48, 60, 72]) },
+  { key: 'skull', label: 'Skull', svg: _hline(2) + _skull(42, 24) },
+  { key: 'martini', label: 'Martini', svg: _hline(2) + _martini(42, 23) },
+  { key: 'wineglass', label: 'Wine', svg: _hline(2) + _wine(42, 23) },
+];
+
+/* IDAlign alignment styles (12) — cloudfront …/images/IDalign/*.png */
+const IDALIGN_STYLES = [
+  { key: 'quadArrow', label: 'Quad Arrow', svg: _row((x) => _chev(x, 24, 5), [18, 33, 48, 63]) },
+  { key: 'doubleRow', label: 'Double Row', svg: `<g stroke="${_C}" stroke-width="3" stroke-linecap="round" stroke-dasharray="2 7"><line x1="11" y1="20" x2="73" y2="20"/><line x1="11" y1="28" x2="73" y2="28"/></g>` },
+  { key: 'chevron', label: 'Chevron', svg: _row((x) => _chev(x, 24, 6), [34, 46, 58]) },
+  { key: 'line', label: 'Line', svg: `<line x1="10" y1="24" x2="74" y2="24" stroke="${_C}" stroke-width="2"/>` },
+  { key: 'skulls', label: 'Skulls', svg: _row((x) => _skull(x, 24), [27, 42, 57]) },
+  { key: 'arrowStyled', label: 'Arrow', svg: `<line x1="20" y1="24" x2="58" y2="24" stroke="${_C}" stroke-width="2.2" stroke-linecap="round"/>${_chev(60, 24, 7)}` },
+  { key: 'solidArrow', label: 'Solid Arrow', svg: `<line x1="18" y1="24" x2="55" y2="24" stroke="${_C}" stroke-width="3" stroke-linecap="round"/><polygon points="53,17 68,24 53,31" fill="${_C}"/>` },
+  { key: 'solidDots', label: 'Solid Dots', svg: _row((x) => _dot(x, 24, 3.5), [20, 31, 42, 53, 64]) },
+  { key: 'solidLine', label: 'Solid Line', svg: `<line x1="10" y1="24" x2="74" y2="24" stroke="${_C}" stroke-width="6" stroke-linecap="round"/>` },
+  { key: 'solidStars', label: 'Solid Stars', svg: _row((x) => _star(x, 24, 6), [24, 42, 60]) },
+  { key: 'martiniGlasses', label: 'Martini', svg: _row((x) => _martini(x, 23), [27, 42, 57]) },
+  { key: 'wine', label: 'Wine', svg: _row((x) => _wine(x, 23), [27, 42, 57]) },
+];
+
+/* Icons (30) — real site PNGs, themed; static.golfballs.com/A/icons/ */
+const ICON_HOST = 'https://static.golfballs.com/A/icons/';
 const ICON_THEMES = {
-  'Dad / Father\'s Day': ['Dad Beer', 'No. 1 Dad', 'Tie', 'Dad Crown', 'Best Dad by Par'],
-  'Drinks': ['Martini', 'Old Fashioned', 'Tom Collins', 'Bloody Mary', 'Margarita', 'Cosmopolitan', 'Wine Glass', 'Beer Mug', 'Cigar'],
-  'USA / Patriotic': ['USA Sunglasses', 'USA Wordmark', 'USA Flag', 'Merica'],
-  'Masters': ['Masters Azalea', 'Masters Sweet Tea', 'Masters Pimento', 'Masters Jumpsuit'],
-  'Misc': ['Four-leaf Clover', 'Flamingo', 'Sunglasses', 'Skull & Crossbones', 'Ladybug', 'Bomb', 'Taco', 'Dots Green'],
+  'Dad / Father\'s Day': [['Dad Beer', 'dad-beer.png'], ['No. 1 Dad', 'no-1-dad.png'], ['Tie', 'tie.png'], ['Dad Crown', 'dad-crown.png'], ['Best Dad by Par', 'best-dad-by-par.png']],
+  'Drinks': [['Martini', 'martini2.png'], ['Old Fashioned', 'old-fashioned.png'], ['Tom Collins', 'tom-collins.png'], ['Bloody Mary', 'bloody-mary.png'], ['Margarita', 'margarita.png'], ['Cosmopolitan', 'cosmopolitan.png'], ['Wine Glass', 'wine-glass.png'], ['Beer Mug', 'beer-mug-colored.png'], ['Cigar', 'cigar.png']],
+  'USA / Patriotic': [['USA Sunglasses', 'usa-sunglasses.png'], ['USA Wordmark', 'usa-wordmark.png'], ['USA Flag', 'usa-flag.png'], ['Merica', 'merica.png']],
+  'Masters': [['Masters Azalea', 'masters-azalea.png'], ['Masters Sweet Tea', 'masters-sweet-tea.png'], ['Masters Pimento Cheese', 'masters-pimento-cheese.png'], ['Masters Jumpsuit', 'masters-jumpsuit.png']],
+  'Misc': [['Four-leaf Clover', 'fourleafclover-full-color.png'], ['Flamingo', 'flamingo-colored.png'], ['Sunglasses', 'sunglasses.png'], ['Skull & Crossbones', 'skullandcrossbones.png'], ['Ladybug', 'ladybug-color.png'], ['Bomb', 'bomb.png'], ['Taco', 'taco.png'], ['Dots Green', 'dots-green.png']],
 };
 
-/* modificationName_ss value → control schema (live-verified) */
+/* Solr modificationName_ss spellings → our schema keys (live uses a space / singular). */
+const MOD_ALIAS = { 'Align XL': 'AlignXL', 'Icon': 'Icons' };
+
+/* modificationName_ss value → control schema (live-verified). Folds of Honor
+   intentionally omitted (niche licensed art — excluded per product owner). */
 const MODS = {
   'Custom Logo': { controls: ['imageUpload', 'secondImprint', 'commercial'] },
   'Personalized': { controls: ['lines3', 'color', 'font', 'size'], extras: 'Add Additional Personalization · $5.00/dz', preview: true },
   'Monogram': { controls: ['monoStyle', 'initials', 'color', 'color2'], preview: true },
   'Photo': { controls: ['photoUpload'], extras: 'Add Additional Personalization · $5.00/dz', preview: true },
   'Custom Player Number': { controls: ['number'], extras: 'Add Additional Personalization · $5.00/dz', preview: true },
-  'AlignXL': { controls: ['alignGraphic', 'optText', 'textColor', 'lineColor', 'sameColor'], preview: true },
-  'IDAlign': { controls: ['alignGraphic', 'initials', 'textColor', 'lineColor'], preview: true },
+  'AlignXL': { controls: ['alignXL', 'optText', 'textColor', 'lineColor', 'sameColor'], preview: true },
+  'IDAlign': { controls: ['alignID', 'initials', 'textColor', 'lineColor'], preview: true },
   'Icons': { controls: ['iconGrid'], extras: 'Add Additional Personalization · $5.00/dz', preview: true },
-  'Folds of Honor': { controls: [], note: 'One-click — applies the licensed Folds of Honor flag artwork.' },
   'Tee': { controls: ['line1', 'textColorSingle'], preview: true },
   'Poker Chip Second Pole': { controls: ['secondImprint'] },
   'Custom Accessory Bundle': { controls: ['bundle'] },
   'Golf Towel': { controls: [], note: 'Matching towel add-on (verify in live UI before quoting).' },
   'Golf Hat': { controls: [], note: 'Matching hat add-on (verify in live UI before quoting).' },
 };
-const BALL_PRINT_TYPES = ['Custom Logo', 'Personalized', 'Monogram', 'Photo', 'Custom Player Number', 'AlignXL', 'IDAlign', 'Icons', 'Folds of Honor'];
+/* Canonical print-type order for the golf-ball grid (Folds removed). The grid
+   shows only the intersection of this with a product's real modNames. */
+const BALL_ORDER = ['Custom Logo', 'Personalized', 'Monogram', 'Photo', 'AlignXL', 'IDAlign', 'Icons', 'Custom Player Number'];
 
-/* Which modifications + which UX layout a product gets. Golf balls →
-   the full print-type grid; everything else → its feed mods (Custom
-   Logo + any extras), Custom Logo guaranteed. */
+/* Normalize a product's raw modificationName_ss → our supported keys,
+   aliasing Solr spellings and dropping Folds of Honor + anything unknown. */
+function supportedMods(p) {
+  const raw = Array.isArray(p.modNames) ? p.modNames : [];
+  return [...new Set(raw.map((m) => MOD_ALIAS[m] || m).filter((m) => MODS[m] && m !== 'Folds of Honor'))];
+}
+
+/* Which modifications + which UX layout a product gets. Golf balls → the
+   print-type grid, gated to the product's REAL modNames (so e.g. Custom Player
+   Number shows only on Pro V1/Pro V1x, and zero-customization balls show none).
+   Everything else → its feed mods, Custom Logo guaranteed when decoration exists. */
 export function modsForProduct(p) {
-  if (p.cat === 'Logo Golf Balls') return { ux: 'grid', mods: BALL_PRINT_TYPES };
-  const feed = Array.isArray(p.modNames) && p.modNames.length ? p.modNames.filter((m) => MODS[m]) : ['Custom Logo'];
-  const mods = feed.includes('Custom Logo') ? feed : ['Custom Logo', ...feed];
+  const norm = supportedMods(p);
+  if (p.cat === 'Logo Golf Balls') {
+    return { ux: 'grid', mods: BALL_ORDER.filter((m) => norm.includes(m)) };
+  }
+  const mods = norm.length ? (norm.includes('Custom Logo') ? norm : ['Custom Logo', ...norm]) : ['Custom Logo'];
   return { ux: 'inline', mods };
 }
 
@@ -123,10 +216,22 @@ function Swatch({ color, on, onClick, size = 24 }) {
   );
 }
 function ColorRow({ swatches, transparent, value, onChange }) {
-  const list = transparent ? [...swatches, { name: 'Transparent', hex: 'transparent' }] : swatches;
+  const [showAll, setShowAll] = useState(false);
+  // Transparent (Monogram Color 2 only) leads the list as its default option.
+  const base = transparent ? [{ name: 'Transparent', hex: 'transparent' }, ...swatches] : swatches;
+  const expandable = base.length > 16;
+  const commonCount = transparent ? COMMON_COUNT + 1 : COMMON_COUNT;
+  const list = (expandable && !showAll) ? base.slice(0, commonCount) : base;
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-      {list.map((c) => <Swatch key={c.name} color={c} on={value === c.name} onClick={() => onChange(c.name)} />)}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: showAll ? 172 : 'none', overflowY: showAll ? 'auto' : 'visible', paddingRight: showAll ? 4 : 0 }}>
+        {list.map((c) => <Swatch key={c.name} color={c} on={value === c.name} onClick={() => onChange(c.name)} />)}
+      </div>
+      {expandable && (
+        <button onClick={() => setShowAll((s) => !s)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10.5, fontWeight: 700, color: 'var(--gb-brand-label)' }}>
+          {showAll ? '− Show fewer' : `+ ${base.length - commonCount} more colors`}
+        </button>
+      )}
     </div>
   );
 }
@@ -140,15 +245,58 @@ function Checkbox({ checked, onClick, label, note }) {
     </div>
   );
 }
-function TileGrid({ items, value, onChange, cols = 6, big }) {
+
+/* renders an SVG-string thumbnail (currentColor) at tile size */
+function SvgArt({ inner, w = 56, h = 32 }) {
+  return <svg viewBox="0 0 84 48" width={w} height={h} dangerouslySetInnerHTML={{ __html: inner }} />;
+}
+/* selectable grid of SVG-art style tiles (alignment graphics) */
+function GraphicGrid({ items, value, onChange, cols = 4 }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 7 }}>
       {items.map((it) => {
-        const on = value === it;
+        const on = value === it.key;
         return (
-          <button key={it} onClick={() => onChange(it)} title={it} style={{ height: big ? 52 : 44, borderRadius: 'var(--gb-r-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 4, background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', fontFamily: 'inherit', fontSize: big ? 18 : 8.5, fontWeight: 700, lineHeight: 1.1, overflow: 'hidden' }}>{it}</button>
+          <button key={it.key} onClick={() => onChange(it.key)} title={it.label || it.key} style={{ height: 50, borderRadius: 'var(--gb-r-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4, background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>
+            <SvgArt inner={it.svg} />
+          </button>
         );
       })}
+    </div>
+  );
+}
+/* monogram style picker — grouped 3 / 2 / 1 Initials, real SVG layouts */
+function MonoGrid({ value, onChange }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {['3 Initials', '2 Initials', '1 Initial'].map((g) => (
+        <div key={g}>
+          <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .5, color: 'var(--gb-text-muted)', marginBottom: 6 }}>{g}</div>
+          <GraphicGrid items={MONO_STYLES.filter((s) => s.group === g)} value={value} onChange={onChange} cols={3} />
+        </div>
+      ))}
+    </div>
+  );
+}
+/* themed icon grid — the real site PNGs */
+function IconGrid({ value, onChange }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 250, overflowY: 'auto', paddingRight: 4 }}>
+      {Object.entries(ICON_THEMES).map(([theme, items]) => (
+        <div key={theme}>
+          <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .5, color: 'var(--gb-text-muted)', marginBottom: 6 }}>{theme}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 7 }}>
+            {items.map(([name, file]) => {
+              const on = value === name;
+              return (
+                <button key={name} onClick={() => onChange(name)} title={name} style={{ height: 46, borderRadius: 'var(--gb-r-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4, background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)') }}>
+                  <img src={ICON_HOST + file} alt={name} loading="lazy" style={{ maxWidth: 32, maxHeight: 32 }} />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -241,8 +389,10 @@ function Control({ k, p, serviceLevel }) {
   const [v, setV] = useState('');
   const [c1, setC1] = useState('Black'); const [c2, setC2] = useState('Transparent');
   const [font, setFont] = useState(FONTS[0]); const [size, setSize] = useState(SIZES[0]);
-  const [style, setStyle] = useState(MONO_GROUPS[0].items[0]);
-  const [icon, setIcon] = useState(''); const [align, setAlign] = useState(ALIGN_GRAPHICS[0]);
+  const [style, setStyle] = useState(MONO_STYLES[0].key);
+  const [icon, setIcon] = useState('');
+  const [align, setAlign] = useState(ALIGNXL_STYLES[0].key);
+  const [alignID, setAlignID] = useState(IDALIGN_STYLES[0].key);
   const [num, setNum] = useState(73); const [same, setSame] = useState(false);
   switch (k) {
     case 'imageUpload': return <ImageUpload />;
@@ -259,11 +409,11 @@ function Control({ k, p, serviceLevel }) {
     case 'line1': return <Field label="Line 1"><TextInput value={v} onChange={setV} placeholder="Imprint text" /></Field>;
     case 'initials': return <Field label="Initials"><TextInput value={v} onChange={setV} placeholder="ABC" maxLength={3} /></Field>;
     case 'optText': return <Field label="Enter Text (Optional)"><TextInput value={v} onChange={setV} maxLength={17} /></Field>;
-    case 'color': return <Field label="Color"><ColorRow swatches={COMMON_COLORS} value={c1} onChange={setC1} /></Field>;
-    case 'color2': return <Field label="Color 2"><ColorRow swatches={COMMON_COLORS} transparent value={c2} onChange={setC2} /></Field>;
-    case 'textColor': return <Field label="Text Color"><ColorRow swatches={COMMON_COLORS} value={c1} onChange={setC1} /></Field>;
-    case 'textColorSingle': return <Field label="Text Color"><ColorRow swatches={COMMON_COLORS} value={c1} onChange={setC1} /></Field>;
-    case 'lineColor': return <Field label="Line Color"><ColorRow swatches={COMMON_COLORS} value={c2} onChange={setC2} /></Field>;
+    case 'color': return <Field label="Color"><ColorRow swatches={IMPRINT_COLORS} value={c1} onChange={setC1} /></Field>;
+    case 'color2': return <Field label="Color 2"><ColorRow swatches={IMPRINT_COLORS} transparent value={c2} onChange={setC2} /></Field>;
+    case 'textColor': return <Field label="Text Color"><ColorRow swatches={IMPRINT_COLORS} value={c1} onChange={setC1} /></Field>;
+    case 'textColorSingle': return <Field label="Text Color"><ColorRow swatches={IMPRINT_COLORS} value={c1} onChange={setC1} /></Field>;
+    case 'lineColor': return <Field label="Line Color"><ColorRow swatches={IMPRINT_COLORS} value={c2} onChange={setC2} /></Field>;
     case 'sameColor': return <Checkbox checked={same} onClick={() => setSame(!same)} label="Use same Color" note="line = text color" />;
     case 'thread': return <Field label="Thread Color"><ColorRow swatches={THREAD_COLORS} value={c1} onChange={setC1} /></Field>;
     case 'font': return <Field label="Font"><Segmented options={FONTS} value={font} onChange={setFont} /></Field>;
@@ -277,31 +427,10 @@ function Control({ k, p, serviceLevel }) {
         </div>
       </Field>
     );
-    case 'monoStyle': return (
-      <Field label="Monogram Style">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {MONO_GROUPS.map((g) => (
-            <div key={g.label}>
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .5, color: 'var(--gb-text-muted)', marginBottom: 6 }}>{g.label}</div>
-              <TileGrid items={g.items} value={style} onChange={setStyle} cols={6} big />
-            </div>
-          ))}
-        </div>
-      </Field>
-    );
-    case 'alignGraphic': return <Field label="Alignment Style"><TileGrid items={ALIGN_GRAPHICS} value={align} onChange={setAlign} cols={6} big /></Field>;
-    case 'iconGrid': return (
-      <Field label="Icon">
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 240, overflowY: 'auto' }}>
-          {Object.entries(ICON_THEMES).map(([theme, names]) => (
-            <div key={theme}>
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .5, color: 'var(--gb-text-muted)', marginBottom: 6 }}>{theme}</div>
-              <TileGrid items={names} value={icon} onChange={setIcon} cols={3} />
-            </div>
-          ))}
-        </div>
-      </Field>
-    );
+    case 'monoStyle': return <Field label="Monogram Style"><MonoGrid value={style} onChange={setStyle} /></Field>;
+    case 'alignXL': return <Field label="Alignment Style"><GraphicGrid items={ALIGNXL_STYLES} value={align} onChange={setAlign} /></Field>;
+    case 'alignID': return <Field label="Alignment"><GraphicGrid items={IDALIGN_STYLES} value={alignID} onChange={setAlignID} /></Field>;
+    case 'iconGrid': return <Field label="Icon"><IconGrid value={icon} onChange={setIcon} /></Field>;
     case 'bundle': return (
       <Field label="Base product color"><ColorRow swatches={BASE_COLORS} value={c1} onChange={setC1} /></Field>
     );
@@ -329,12 +458,12 @@ function ModControls({ name, p, serviceLevel }) {
 }
 
 /* golf-ball print-type tile grid */
-function PrintTypeGrid({ p }) {
-  const [sel, setSel] = useState('Custom Logo');
+function PrintTypeGrid({ p, mods }) {
+  const [sel, setSel] = useState(mods[0]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 7 }}>
-        {BALL_PRINT_TYPES.map((t) => {
+        {mods.map((t) => {
           const on = sel === t;
           return (
             <button key={t} onClick={() => setSel(t)} style={{ position: 'relative', minHeight: 54, borderRadius: 'var(--gb-r-md)', cursor: 'pointer', padding: '8px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', fontFamily: 'inherit' }}>
@@ -357,6 +486,13 @@ export function CustomizeBlock({ p }) {
   const { ux, mods } = modsForProduct(p);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(mods[0]);
+  if (!mods.length) {
+    return (
+      <div style={{ marginTop: 16, padding: '11px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', fontSize: 11.5, color: 'var(--gb-text-muted)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <I.alert size={13} style={{ color: 'var(--gb-text-tertiary)' }} /> No customization available — this product ships as-is.
+      </div>
+    );
+  }
   return (
     <div style={{ marginTop: 16 }}>
       <div onClick={() => setOpen((o) => !o)} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '11px 12px', cursor: 'pointer', background: open ? 'var(--gb-brand-tint-soft)' : 'var(--gb-fill-subtle)', borderRadius: open ? 'var(--gb-r-md) var(--gb-r-md) 0 0' : 'var(--gb-r-md)', border: '1px solid ' + (open ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)') }}>
@@ -375,7 +511,7 @@ export function CustomizeBlock({ p }) {
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>Select a print type</span>
                 <Tag tone="neutral" size="sm">corporate: Custom Logo</Tag>
               </div>
-              <PrintTypeGrid p={p} />
+              <PrintTypeGrid p={p} mods={mods} />
             </>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

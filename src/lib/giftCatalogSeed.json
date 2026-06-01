@@ -29,11 +29,15 @@
         "q": 120,
         "p": 9.99
       }
+    ],
+    "modNames": [
+      "Custom Logo",
+      "Golf Towel"
     ]
   },
   {
     "id": "caa6f25f-9ceb-4002-80ba-51e4b46ef701",
-    "title": "Ball Markers \u2013 3 Pack",
+    "title": "Ball Markers – 3 Pack",
     "brand": "Golfballs.com",
     "cat": "Ball Markers",
     "price": 9.95,
@@ -49,6 +53,9 @@
         "q": 1,
         "p": 9.95
       }
+    ],
+    "modNames": [
+      "Custom Logo"
     ]
   },
   {
@@ -69,6 +76,9 @@
         "q": 1,
         "p": 14.95
       }
+    ],
+    "modNames": [
+      "Custom Logo"
     ]
   },
   {
@@ -82,7 +92,7 @@
     "img": "https://static.golfballs.com/C/465x465/assets/products/P01155/Titleist-Pro-V1-Golf-Balls-2025-Model-White.jpg",
     "rating": 4.8,
     "reviews": 69,
-    "mods": 9,
+    "mods": 8,
     "minQty": 1,
     "breaks": [
       {
@@ -117,7 +127,17 @@
     "promo": {
       "code": "EVERY12GETS6",
       "label": "Buy 12 get 6 free"
-    }
+    },
+    "modNames": [
+      "Custom Logo",
+      "Personalized",
+      "Monogram",
+      "Photo",
+      "AlignXL",
+      "IDAlign",
+      "Icons",
+      "Custom Player Number"
+    ]
   },
   {
     "id": "d7796dc8-3df9-4f5b-b083-012de0cf4f8f",
@@ -165,7 +185,16 @@
     "promo": {
       "code": "BUY12GET4FREE",
       "label": "Buy 12 get 4 free"
-    }
+    },
+    "modNames": [
+      "Custom Logo",
+      "Personalized",
+      "Monogram",
+      "Photo",
+      "AlignXL",
+      "IDAlign",
+      "Icons"
+    ]
   },
   {
     "id": "786ae3f5-c3e4-4d88-8336-99ef24f976d7",
@@ -185,6 +214,9 @@
         "q": 1,
         "p": 14.95
       }
+    ],
+    "modNames": [
+      "Custom Logo"
     ]
   },
   {
@@ -198,7 +230,7 @@
     "img": "https://static.golfballs.com/C/465x465/assets/products/P0115A/Titleist-Pro-V1x-Golf-Balls-2025-Model-White.jpg",
     "rating": 4.8,
     "reviews": 32,
-    "mods": 9,
+    "mods": 8,
     "minQty": 1,
     "breaks": [
       {
@@ -233,11 +265,21 @@
     "promo": {
       "code": "EVERY12GETS6",
       "label": "Buy 12 get 6 free"
-    }
+    },
+    "modNames": [
+      "Custom Logo",
+      "Personalized",
+      "Monogram",
+      "Photo",
+      "AlignXL",
+      "IDAlign",
+      "Icons",
+      "Custom Player Number"
+    ]
   },
   {
     "id": "e50da7d9-162e-4ff3-aaaa-1f129180a4d7",
-    "title": "Personalized Poker Chips \u2013 3 Pack",
+    "title": "Personalized Poker Chips – 3 Pack",
     "brand": "Classic",
     "cat": "Promotional Products",
     "price": 14.95,
@@ -253,6 +295,10 @@
         "q": 1,
         "p": 14.95
       }
+    ],
+    "modNames": [
+      "Custom Logo",
+      "Poker Chip Second Pole"
     ]
   },
   {
@@ -285,6 +331,10 @@
         "q": 120,
         "p": 10.99
       }
+    ],
+    "modNames": [
+      "Custom Logo",
+      "Golf Towel"
     ]
   },
   {
@@ -305,11 +355,14 @@
         "q": 1,
         "p": 13.95
       }
+    ],
+    "modNames": [
+      "Custom Logo"
     ]
   },
   {
     "id": "fd779511-5969-49dd-9de7-049ea05888da",
-    "title": "Soft Feel 14 Golf Balls \u2013 Buy 2 DZ Get 1 DZ Free",
+    "title": "Soft Feel 14 Golf Balls – Buy 2 DZ Get 1 DZ Free",
     "brand": "Srixon",
     "cat": "Logo Golf Balls",
     "price": 49.98,
@@ -337,11 +390,20 @@
         "q": 60,
         "p": 53.98
       }
+    ],
+    "modNames": [
+      "Custom Logo",
+      "Personalized",
+      "Monogram",
+      "Photo",
+      "AlignXL",
+      "IDAlign",
+      "Icons"
     ]
   },
   {
     "id": "03ecd9ae-7478-4228-89fd-5357419d99d2",
-    "title": "Tour B RX Golf Balls \u2013 Buy 3 DZ Get 1 DZ Free \u2013 2026 Model",
+    "title": "Tour B RX Golf Balls – Buy 3 DZ Get 1 DZ Free – 2026 Model",
     "brand": "Bridgestone",
     "cat": "Logo Golf Balls",
     "price": 164.97,
@@ -361,6 +423,15 @@
         "q": 12,
         "p": 179.97
       }
+    ],
+    "modNames": [
+      "Custom Logo",
+      "Personalized",
+      "Monogram",
+      "Photo",
+      "AlignXL",
+      "IDAlign",
+      "Icons"
     ]
   },
   {
@@ -381,6 +452,9 @@
         "q": 1,
         "p": 14.95
       }
+    ],
+    "modNames": [
+      "Custom Logo"
     ]
   },
   {
@@ -413,11 +487,15 @@
         "q": 120,
         "p": 17.99
       }
+    ],
+    "modNames": [
+      "Custom Logo",
+      "Golf Towel"
     ]
   },
   {
     "id": "b2c25aa4-59ce-49d4-8514-d250833b44d9",
-    "title": "Z-Star 9 Golf Balls \u2013 Buy 2 DZ Get 1 DZ Free",
+    "title": "Z-Star 9 Golf Balls – Buy 2 DZ Get 1 DZ Free",
     "brand": "Srixon",
     "cat": "Logo Golf Balls",
     "price": 109.98,
@@ -445,11 +523,20 @@
         "q": 60,
         "p": 109.98
       }
+    ],
+    "modNames": [
+      "Custom Logo",
+      "Personalized",
+      "Monogram",
+      "Photo",
+      "AlignXL",
+      "IDAlign",
+      "Icons"
     ]
   },
   {
     "id": "0811b395-3cdc-4441-bb0a-96bbe58239a8",
-    "title": "Chrome Tour Golf Balls \u2013 2026 Model",
+    "title": "Chrome Tour Golf Balls – 2026 Model",
     "brand": "Callaway Golf",
     "cat": "Logo Golf Balls",
     "price": 57.99,
@@ -489,6 +576,15 @@
         "q": 500,
         "p": 55.99
       }
+    ],
+    "modNames": [
+      "Custom Logo",
+      "Personalized",
+      "Monogram",
+      "Photo",
+      "AlignXL",
+      "IDAlign",
+      "Icons"
     ]
   },
   {
@@ -509,11 +605,14 @@
         "q": 1,
         "p": 14.95
       }
+    ],
+    "modNames": [
+      "Custom Logo"
     ]
   },
   {
     "id": "f4993fd2-8667-412a-abec-a9b4832a2c65",
-    "title": "TP5 Golf Balls \u2013 2026 Model",
+    "title": "TP5 Golf Balls – 2026 Model",
     "brand": "TaylorMade",
     "cat": "Logo Golf Balls",
     "price": 57.99,
@@ -522,13 +621,22 @@
     "img": "https://static.golfballs.com/C/465x465/assets/products/P012Y3/TaylorMade-TP5-Golf-Balls-2026-Model-White-1.jpg",
     "rating": 5,
     "reviews": 1,
-    "mods": 6,
+    "mods": 7,
     "minQty": 1,
     "breaks": [
       {
         "q": 1,
         "p": 57.99
       }
+    ],
+    "modNames": [
+      "Custom Logo",
+      "Personalized",
+      "Monogram",
+      "Photo",
+      "AlignXL",
+      "IDAlign",
+      "Icons"
     ]
   },
   {
@@ -549,11 +657,14 @@
         "q": 1,
         "p": 19.95
       }
+    ],
+    "modNames": [
+      "Custom Logo"
     ]
   },
   {
     "id": "aac69283-1c5d-4f0a-9a8f-c5dea73baa6b",
-    "title": "Tour B X Golf Balls \u2013 Buy 3 DZ Get 1 DZ Free \u2013 2026 Model",
+    "title": "Tour B X Golf Balls – Buy 3 DZ Get 1 DZ Free – 2026 Model",
     "brand": "Bridgestone",
     "cat": "Logo Golf Balls",
     "price": 164.97,
@@ -573,6 +684,15 @@
         "q": 12,
         "p": 179.97
       }
+    ],
+    "modNames": [
+      "Custom Logo",
+      "Personalized",
+      "Monogram",
+      "Photo",
+      "AlignXL",
+      "IDAlign",
+      "Icons"
     ]
   },
   {
@@ -593,11 +713,12 @@
         "q": 1,
         "p": 64.99
       }
-    ]
+    ],
+    "modNames": []
   },
   {
     "id": "20f60c53-6168-4d6b-ae60-ff0184c2b86d",
-    "title": "Chrome Soft 360 USA Stripe Golf Balls \u2013 2026 Model",
+    "title": "Chrome Soft 360 USA Stripe Golf Balls – 2026 Model",
     "brand": "Callaway Golf",
     "cat": "Logo Golf Balls",
     "price": 57.99,
@@ -613,11 +734,12 @@
         "q": 1,
         "p": 57.99
       }
-    ]
+    ],
+    "modNames": []
   },
   {
     "id": "70fa13f4-9de9-4f29-b7e5-fd2cbe4d3a58",
-    "title": "TP5x Golf Balls \u2013 2026 Model",
+    "title": "TP5x Golf Balls – 2026 Model",
     "brand": "TaylorMade",
     "cat": "Logo Golf Balls",
     "price": 57.99,
@@ -626,18 +748,27 @@
     "img": "https://static.golfballs.com/C/465x465/assets/products/P012Y7/TaylorMade-TP5x-Golf-Balls-2026-Model-White-1.jpg",
     "rating": null,
     "reviews": 0,
-    "mods": 6,
+    "mods": 7,
     "minQty": 1,
     "breaks": [
       {
         "q": 1,
         "p": 57.99
       }
+    ],
+    "modNames": [
+      "Custom Logo",
+      "Personalized",
+      "Monogram",
+      "Photo",
+      "AlignXL",
+      "IDAlign",
+      "Icons"
     ]
   },
   {
     "id": "fd39ebaa-ff97-43ee-b3a0-0e97cbff2075",
-    "title": "Trufeel Golf Balls \u2013 Double Dozen Box",
+    "title": "Trufeel Golf Balls – Double Dozen Box",
     "brand": "Titleist",
     "cat": "Logo Golf Balls",
     "price": 39.99,
@@ -653,7 +784,8 @@
         "q": 1,
         "p": 39.99
       }
-    ]
+    ],
+    "modNames": []
   },
   {
     "id": "0289b348-76ed-4ecd-bfd5-e307d60ace29",
@@ -673,7 +805,8 @@
         "q": 1,
         "p": 37.5
       }
-    ]
+    ],
+    "modNames": []
   },
   {
     "id": "2fd9c20b-820e-4704-ad35-7fc4ddc1305f",
@@ -693,11 +826,12 @@
         "q": 1,
         "p": 29.99
       }
-    ]
+    ],
+    "modNames": []
   },
   {
     "id": "8e743fce-c2fc-4d23-a66b-d24e54702237",
-    "title": "Chrome Tour X 360 USA Stripe Golf Balls \u2013 2026 Model",
+    "title": "Chrome Tour X 360 USA Stripe Golf Balls – 2026 Model",
     "brand": "Callaway Golf",
     "cat": "Logo Golf Balls",
     "price": 57.99,
@@ -713,11 +847,12 @@
         "q": 1,
         "p": 57.99
       }
-    ]
+    ],
+    "modNames": []
   },
   {
     "id": "72caac2d-afa4-41f4-a7bc-5073dfa88394",
-    "title": "Chrome Tour May Major TruVis Golf Balls \u2013 2026 Model",
+    "title": "Chrome Tour May Major TruVis Golf Balls – 2026 Model",
     "brand": "Callaway Golf",
     "cat": "Logo Golf Balls",
     "price": 59.99,
@@ -733,7 +868,8 @@
         "q": 1,
         "p": 59.99
       }
-    ]
+    ],
+    "modNames": []
   },
   {
     "id": "5f1b1a37-9d62-456f-b38a-c5d4aa7d13e3",
@@ -746,7 +882,7 @@
     "img": "https://static.golfballs.com/C/465x465/assets/products/P010PK/Vice-Golf-Pro-Drip-Red-Blue-Golf-Balls.jpg",
     "rating": null,
     "reviews": 0,
-    "mods": 2,
+    "mods": 1,
     "minQty": 1,
     "breaks": [
       {
@@ -777,6 +913,9 @@
         "q": 500,
         "p": 37.99
       }
+    ],
+    "modNames": [
+      "Custom Logo"
     ]
   },
   {
@@ -797,7 +936,8 @@
         "q": 1,
         "p": 47.99
       }
-    ]
+    ],
+    "modNames": []
   },
   {
     "id": "a056e664-c120-4f79-b4ab-93063a27caf6",
@@ -817,11 +957,12 @@
         "q": 1,
         "p": 47.99
       }
-    ]
+    ],
+    "modNames": []
   },
   {
     "id": "d6b08b09-df4b-43c5-afc2-150e503f252e",
-    "title": "Chrome Tour 360 USA Stripe Golf Balls \u2013 2026 Model",
+    "title": "Chrome Tour 360 USA Stripe Golf Balls – 2026 Model",
     "brand": "Callaway Golf",
     "cat": "Logo Golf Balls",
     "price": 57.99,
@@ -837,11 +978,12 @@
         "q": 1,
         "p": 57.99
       }
-    ]
+    ],
+    "modNames": []
   },
   {
     "id": "30695842-e9c4-4140-9e6f-71ab6c985aa8",
-    "title": "TP5x PIX USA Golf Balls \u2013 2026 Model",
+    "title": "TP5x PIX USA Golf Balls – 2026 Model",
     "brand": "TaylorMade",
     "cat": "Logo Golf Balls",
     "price": 57.99,
@@ -857,7 +999,8 @@
         "q": 1,
         "p": 57.99
       }
-    ]
+    ],
+    "modNames": []
   },
   {
     "id": "21df006a-79bf-4a98-9505-a35e6020fa52",
@@ -877,7 +1020,8 @@
         "q": 1,
         "p": 47.99
       }
-    ]
+    ],
+    "modNames": []
   },
   {
     "id": "32bc0b43-5e36-4e14-87b9-142bfe76ddd7",
@@ -897,11 +1041,12 @@
         "q": 1,
         "p": 49.99
       }
-    ]
+    ],
+    "modNames": []
   },
   {
     "id": "5e15c3b0-3c89-4586-a90a-2e4c6e51d52a",
-    "title": "Tour Response Stripe USA Golf Balls \u2013 2026 Model",
+    "title": "Tour Response Stripe USA Golf Balls – 2026 Model",
     "brand": "TaylorMade",
     "cat": "Logo Golf Balls",
     "price": 45.99,
@@ -917,11 +1062,12 @@
         "q": 1,
         "p": 45.99
       }
-    ]
+    ],
+    "modNames": []
   },
   {
     "id": "ad326e46-cc10-4eef-9bb2-60e965880fa4",
-    "title": "TP5 PIX USA Golf Balls \u2013 2026 Model",
+    "title": "TP5 PIX USA Golf Balls – 2026 Model",
     "brand": "TaylorMade",
     "cat": "Logo Golf Balls",
     "price": 57.99,
@@ -937,7 +1083,8 @@
         "q": 1,
         "p": 57.99
       }
-    ]
+    ],
+    "modNames": []
   },
   {
     "id": "2e747d84-e39d-4428-8e64-7a5d03eab72b",
@@ -981,11 +1128,20 @@
         "q": 500,
         "p": 52.99
       }
+    ],
+    "modNames": [
+      "Custom Logo",
+      "Personalized",
+      "Monogram",
+      "Photo",
+      "AlignXL",
+      "IDAlign",
+      "Icons"
     ]
   },
   {
     "id": "a114374d-17a9-4bde-8d7d-c58131c61ce1",
-    "title": "Z-Star Diamond 3 USA Limited Edition Golf Balls \u2013 Buy 2 DZ Get 1 DZ Free",
+    "title": "Z-Star Diamond 3 USA Limited Edition Golf Balls – Buy 2 DZ Get 1 DZ Free",
     "brand": "Srixon",
     "cat": "Logo Golf Balls",
     "price": 109.98,
@@ -1013,6 +1169,15 @@
         "q": 60,
         "p": 109.98
       }
+    ],
+    "modNames": [
+      "Custom Logo",
+      "Personalized",
+      "Monogram",
+      "Photo",
+      "AlignXL",
+      "IDAlign",
+      "Icons"
     ]
   },
   {
@@ -1033,6 +1198,9 @@
         "q": 1,
         "p": 10.95
       }
+    ],
+    "modNames": [
+      "Custom Logo"
     ]
   },
   {
@@ -1053,6 +1221,9 @@
         "q": 1,
         "p": 12.95
       }
+    ],
+    "modNames": [
+      "Custom Logo"
     ]
   },
   {
@@ -1073,11 +1244,14 @@
         "q": 1,
         "p": 29.99
       }
+    ],
+    "modNames": [
+      "Custom Logo"
     ]
   },
   {
     "id": "b918cc9f-91fc-4074-9489-cc003a6ff666",
-    "title": "Pro 3.15 Inch Tees \u2013 5 Pack",
+    "title": "Pro 3.15 Inch Tees – 5 Pack",
     "brand": "Tour Tee",
     "cat": "Logo Tees",
     "price": 12.95,
@@ -1093,6 +1267,9 @@
         "q": 1,
         "p": 12.95
       }
+    ],
+    "modNames": [
+      "Custom Logo"
     ]
   }
 ]
