@@ -841,16 +841,17 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           decalTexture.colorSpace = THREE.SRGBColorSpace;
           decalTexture.wrapS = THREE.ClampToEdgeWrapping;
           decalTexture.wrapT = THREE.ClampToEdgeWrapping;
-          // WebGL2 gets crisp mipmaps + anisotropy; WebGL1 (e.g. Chrome/Edge
-          // on Windows-ARM / Adreno, where hardware WebGL2 is blocklisted)
-          // renders an NPOT-mipmapped texture as solid black, so fall back to
-          // a plain linear filter there so the logo stays visible.
-          if (renderer.capabilities.isWebGL2) {
-            try { decalTexture.anisotropy = renderer.capabilities.getMaxAnisotropy(); } catch { /* ignore */ }
-          } else {
-            decalTexture.minFilter = THREE.LinearFilter;
-            decalTexture.generateMipmaps = false;
-          }
+          // No mipmaps for the decal. The logo is non-power-of-two (e.g.
+          // 891x891), and ANGLE/D3D11 on Adreno (Windows-ARM) generates BLACK
+          // mips for an NPOT sRGB texture — so once the print is minified it
+          // samples a black mip and renders black RGB + zero alpha (a black
+          // square when forced opaque, invisible when transparent). The
+          // geometry is fine; only the texels go black. A plain linear filter
+          // samples the base image (the real logo) and looks identical at the
+          // decal's on-screen size. (Mac GL builds the mips correctly, which
+          // is why it only broke on the Adreno machine — same code.)
+          decalTexture.minFilter = THREE.LinearFilter;
+          decalTexture.generateMipmaps = false;
           objectsToDispose.push(decalTexture);
 
           // Camera is straight-on at +Z, so the decal projects from
