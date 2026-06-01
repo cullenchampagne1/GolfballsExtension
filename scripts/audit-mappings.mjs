@@ -74,7 +74,12 @@ function auditOne(d, prod) {
   const sideSurfaced = props.some(isSideProp) /* PropertyInput renders it */ || dualPole /* second-pole imprint */;
   if (sideSignal && !sideSurfaced) flags.push('2-SIDE NOT SURFACED');
 
-  return { type: d.itemType_s || '?', title: (d.title_s || '').replace(/<[^>]+>/g, '').slice(0, 40), props, deco, variant: cd.variant || '', flags };
+  // config-dependent: the page has base inputs the catalog facet doesn't carry
+  // (e.g. Devant towels) — these render ONLY if the per-product config fetch runs.
+  const catalogPropFields = Object.keys(d).filter((k) => /^property_.+_ss$/.test(k));
+  const configOnly = !ball && prod && (prod.PropertyProduct || []).length > 0 && catalogPropFields.length === 0;
+
+  return { type: d.itemType_s || '?', title: (d.title_s || '').replace(/<[^>]+>/g, '').slice(0, 40), props, deco, variant: cd.variant || '', flags, configOnly };
 }
 
 /* ── run ──────────────────────────────────────────────────────────────────── */
@@ -104,7 +109,13 @@ async function main() {
     console.log(`${r.flags.length ? 'FLAG' : ' ok '}  ${r.type.padEnd(44)} inputs:[${r.props.join(', ')}] deco:[${r.deco.join('/')}]`
       + (r.flags.length ? `\n        ⚠ ${r.flags.join(' ; ')}` : ''));
   }
-  console.log(`\n${rows.length} audited · ${flagged.length} flagged`);
+  const cfgDep = rows.filter((r) => r.configOnly);
+  if (cfgDep.length) {
+    console.log(`\nℹ  ${cfgDep.length} item type(s) have base inputs ONLY on the product page (catalog facet empty)`);
+    console.log(`   — these render only when the per-product config fetch runs (e.g. Devant towel colors):`);
+    console.log('   ' + [...new Set(cfgDep.map((r) => r.type))].join(', '));
+  }
+  console.log(`\n${rows.length} audited · ${flagged.length} flagged · ${cfgDep.length} config-dependent`);
   process.exit(flagged.length ? 1 : 0);
 }
 main().catch((e) => { console.error('audit failed:', e); process.exit(2); });
