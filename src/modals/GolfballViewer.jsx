@@ -810,6 +810,16 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           decalTexture.colorSpace = THREE.SRGBColorSpace;
           decalTexture.wrapS = THREE.ClampToEdgeWrapping;
           decalTexture.wrapT = THREE.ClampToEdgeWrapping;
+          // WebGL2 gets crisp mipmaps + anisotropy; WebGL1 (e.g. Chrome/Edge
+          // on Windows-ARM / Adreno, where hardware WebGL2 is blocklisted)
+          // renders an NPOT-mipmapped texture as solid black, so fall back to
+          // a plain linear filter there so the logo stays visible.
+          if (renderer.capabilities.isWebGL2) {
+            try { decalTexture.anisotropy = renderer.capabilities.getMaxAnisotropy(); } catch { /* ignore */ }
+          } else {
+            decalTexture.minFilter = THREE.LinearFilter;
+            decalTexture.generateMipmaps = false;
+          }
           objectsToDispose.push(decalTexture);
 
           // Camera is straight-on at +Z, so the decal projects from
@@ -825,21 +835,27 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           const decalSize = new THREE.Vector3(targetRadius * printAreaScale, targetRadius * printAreaScale, targetRadius * 2);
 
           const decalGeo = new DecalGeometry(ballMesh, decalPosition, decalOrientation, decalSize);
-          /* depthTest:true + polygonOffset is the exact render-state from
-             the 5/26 build that renders the print on Windows D3D11/ANGLE.
-             A later "proud 1.02 shell + DoubleSide" rewrite looked right on
-             Mac but left the logo invisible on Windows, so it's reverted to
-             this known-good material. */
-          const decalMat = new THREE.MeshStandardMaterial({
+          /* Decal material is WebGL-tier-dependent:
+             - WebGL2 (e.g. Mac): MeshStandardMaterial, so the print is lit by
+               the scene and reads as printed-on rather than a flat sticker.
+             - WebGL1 (e.g. Chrome/Edge on Windows-ARM / Adreno, where hardware
+               WebGL2 is blocklisted): the textured+transparent PBR shader
+               variant fails to compile on ANGLE's D3D11/HLSL path for that
+               GPU, so the logo renders INVISIBLE. MeshBasicMaterial uses a
+               trivial shader that compiles fine — the print shows (a touch
+               washed-out since it's unlit, but visible). depthTest +
+               polygonOffset beat z-fighting identically on both tiers. */
+          const decalMatOpts = {
             map: decalTexture,
             transparent: true,
             depthTest: true,
             depthWrite: false,
             polygonOffset: true,
             polygonOffsetFactor: -4,
-            roughness: 0.5,
-            metalness: 0,
-          });
+          };
+          const decalMat = renderer.capabilities.isWebGL2
+            ? new THREE.MeshStandardMaterial({ ...decalMatOpts, roughness: 0.5, metalness: 0 })
+            : new THREE.MeshBasicMaterial(decalMatOpts);
           decalMesh = new THREE.Mesh(decalGeo, decalMat);
           // Match the ball's transform so the decal's UV mapping aligns;
           // same Group as the ball so throw / drag / zoom move them together.
