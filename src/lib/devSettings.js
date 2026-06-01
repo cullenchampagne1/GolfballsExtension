@@ -47,6 +47,13 @@ export const DEV_SETTINGS = [
     type:    'bool',
     default: false,
   },
+  {
+    key:     'golfballViewer.renderDebug',
+    label:   'Golfball viewer: render diagnostics',
+    desc:    'Overlay a live render-debug panel — WebGL tier, GPU/driver string, decal geometry + material flags, shader-compile errors, draw calls — with a copy button. Use it to capture exactly why the print is or is not rendering on a given machine.',
+    type:    'bool',
+    default: false,
+  },
 
   /* ── Outbound email account host ──────────────────────────────
      The local part (before @) used when constructing the `from`

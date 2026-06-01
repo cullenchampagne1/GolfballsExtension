@@ -179,8 +179,12 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   const debugEnabled = !!useDevSetting('golfballViewer.showDebugHud');
   const debugEnabledRef = useRef(debugEnabled);
   useEffect(() => { debugEnabledRef.current = debugEnabled; }, [debugEnabled]);
+  const renderDebug = !!useDevSetting('golfballViewer.renderDebug');
+  const renderDebugRef = useRef(renderDebug);
+  useEffect(() => { renderDebugRef.current = renderDebug; }, [renderDebug]);
   const [debug, setDebug] = useState(null);
   const [debugCopied, setDebugCopied] = useState(false);
+  const [rdCopied, setRdCopied] = useState(false);
   // Throw mode — toggled by the in-frame chip button. When on:
   //   • OrbitControls are disabled so drag = throw, not orbit
   //   • The render loop integrates ball velocity + angular velocity
@@ -210,7 +214,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   useEffect(() => { onSceneChange?.(sceneKey); }, [sceneKey, onSceneChange]);
   // Clear stale snapshot the moment the flag flips off so the HUD
   // doesn't linger with its last reading.
-  useEffect(() => { if (!debugEnabled) setDebug(null); }, [debugEnabled]);
+  useEffect(() => { if (!debugEnabled && !renderDebug) setDebug(null); }, [debugEnabled, renderDebug]);
 
   // Camera is fixed (straight-on, floor at the bottom edge). The
   // remaining tunables are the BALL — initial scale + Euler rotation —
@@ -318,6 +322,31 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         container.appendChild(renderer.domElement);
+
+        /* ── Render diagnostics (golfballViewer.renderDebug) ──────
+           Capture static GPU/WebGL facts once and trap shader-compile
+           failures, so the debug panel can show exactly why something
+           won't render (WebGL tier, the actual GPU/driver string, a
+           failed shader program) instead of us guessing remotely. */
+        const _glCtx = renderer.getContext();
+        const _glDbg = _glCtx.getExtension('WEBGL_debug_renderer_info');
+        const shaderErrors = [];
+        renderer.debug.checkShaderErrors = true;
+        renderer.debug.onShaderError = (gl2, program, vs, fs) => {
+          const log = (gl2.getShaderInfoLog(fs) || gl2.getShaderInfoLog(vs) || gl2.getProgramInfoLog(program) || 'shader error').trim();
+          if (log) shaderErrors.push(log.slice(0, 300));
+        };
+        const staticDiag = {
+          webgl2: renderer.capabilities.isWebGL2,
+          gl: _glCtx.getParameter(_glCtx.VERSION),
+          glsl: _glCtx.getParameter(_glCtx.SHADING_LANGUAGE_VERSION),
+          gpu: _glDbg ? _glCtx.getParameter(_glDbg.UNMASKED_RENDERER_WEBGL) : _glCtx.getParameter(_glCtx.RENDERER),
+          vendor: _glDbg ? _glCtx.getParameter(_glDbg.UNMASKED_VENDOR_WEBGL) : _glCtx.getParameter(_glCtx.VENDOR),
+          maxTexSize: _glCtx.getParameter(_glCtx.MAX_TEXTURE_SIZE),
+          maxAniso: (() => { try { return renderer.capabilities.getMaxAnisotropy(); } catch { return 0; } })(),
+          precision: renderer.capabilities.precision,
+          dpr: window.devicePixelRatio,
+        };
 
         // ── Lighting ───────────────────────────────────────────
         // Four-light rig sized for the ball:
@@ -2821,12 +2850,14 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           renderer.render(scene, camera);
 
           const now = performance.now();
-          if (debugEnabledRef.current && now - lastDebugTs > 100) {
+          if ((debugEnabledRef.current || renderDebugRef.current) && now - lastDebugTs > 100) {
             lastDebugTs = now;
             // Snapshot the ball's user-visible state — scale + Euler
             // rotation in degrees. These are the values the user will
             // copy into the dev settings to set new defaults.
             const rad2deg = (r) => (r * 180) / Math.PI;
+            const dMat = decalMesh && decalMesh.material;
+            const dMap = dMat && dMat.map;
             setDebug({
               scale: state.scale,
               rotDeg: [
@@ -2835,6 +2866,36 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 rad2deg(ballGroup.rotation.z),
               ],
               printAreaScale: initialBallRef.current.printAreaScale ?? 0.7,
+              // Live render diagnostics — surfaced + copyable when the
+              // golfballViewer.renderDebug dev setting is on, so we can see
+              // exactly why the print does / doesn't draw on a given GPU.
+              rd: {
+                ...staticDiag,
+                ballVisible: ballMesh ? ballMesh.visible : null,
+                sceneChildren: scene.children.length,
+                calls: renderer.info.render.calls,
+                triangles: renderer.info.render.triangles,
+                programs: renderer.info.programs ? renderer.info.programs.length : 0,
+                textures: renderer.info.memory.textures,
+                glError: _glCtx.getError(),
+                shaderErrors: shaderErrors.slice(0, 5),
+                decal: decalMesh ? {
+                  exists: true,
+                  meshVisible: decalMesh.visible,
+                  matVisible: dMat.visible,
+                  verts: decalMesh.geometry.getAttribute('position') ? decalMesh.geometry.getAttribute('position').count : 0,
+                  material: dMat.type,
+                  transparent: dMat.transparent,
+                  depthTest: dMat.depthTest,
+                  depthWrite: dMat.depthWrite,
+                  polygonOffset: dMat.polygonOffset,
+                  opacity: dMat.opacity,
+                  posZ: Number(decalMesh.position.z.toFixed(2)),
+                  scale: Number(decalMesh.scale.x.toFixed(3)),
+                  texLoaded: !!(dMap && dMap.image),
+                  texSize: (dMap && dMap.image) ? `${dMap.image.width}x${dMap.image.height}` : 'none',
+                } : { exists: false },
+              },
             });
           }
           animationId = requestAnimationFrame(render);
@@ -3186,7 +3247,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           and copy the exact values into Developer Settings → Golfball
           viewer defaults. Camera is now fixed; what matters is what
           the BALL is doing. */}
-      {debug && (
+      {debugEnabled && debug && (
         <div style={{
           position: 'absolute', top: 8, left: 8, zIndex: 5,
           padding: '6px 8px',
@@ -3239,6 +3300,118 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           <div>rot.z   {debug.rotDeg[2].toFixed(1)}°</div>
         </div>
       )}
+
+      {/* ── Render diagnostics panel (golfballViewer.renderDebug) ──
+          Live, copyable dump of WebGL tier, GPU/driver, the decal's
+          geometry + material, draw calls, and shader-compile errors —
+          so a remote machine can show exactly why the print won't
+          draw. Red values = the likely culprit. */}
+      {renderDebug && debug && debug.rd && (() => {
+        const rd = debug.rd;
+        const d = rd.decal || {};
+        const danger = 'var(--gb-danger, #e5484d)';
+        const full = [
+          '=== Golfball Render Debug ===',
+          `WebGL2: ${rd.webgl2}`,
+          `GPU: ${rd.gpu}`,
+          `Vendor: ${rd.vendor}`,
+          `GL: ${rd.gl}`,
+          `GLSL: ${rd.glsl}`,
+          `maxTexSize: ${rd.maxTexSize}  maxAniso: ${rd.maxAniso}  precision: ${rd.precision}  dpr: ${rd.dpr}`,
+          `glError: ${rd.glError}`,
+          '',
+          '-- Renderer --',
+          `drawCalls: ${rd.calls}  triangles: ${rd.triangles}  programs: ${rd.programs}  textures: ${rd.textures}`,
+          `ballVisible: ${rd.ballVisible}  sceneChildren: ${rd.sceneChildren}`,
+          '',
+          '-- Decal (the print) --',
+          d.exists
+            ? [
+                `verts: ${d.verts}   meshVisible: ${d.meshVisible}   matVisible: ${d.matVisible}`,
+                `material: ${d.material}   opacity: ${d.opacity}`,
+                `transparent: ${d.transparent}   depthTest: ${d.depthTest}   depthWrite: ${d.depthWrite}   polygonOffset: ${d.polygonOffset}`,
+                `posZ: ${d.posZ}   scale: ${d.scale}`,
+                `texLoaded: ${d.texLoaded}   texSize: ${d.texSize}`,
+              ].join('\n')
+            : 'decal mesh does NOT exist (never created — projection produced no geometry?)',
+          '',
+          '-- Shader errors --',
+          (rd.shaderErrors && rd.shaderErrors.length) ? rd.shaderErrors.join('\n----\n') : 'none',
+          '',
+          '-- Ball --',
+          `ballScale: ${debug.scale.toFixed(2)}   rot: ${debug.rotDeg.map((r) => r.toFixed(1)).join(' / ')}   printAreaScale: ${(debug.printAreaScale ?? 0.7).toFixed(2)}`,
+        ].join('\n');
+        const row = (k, v, warn) => (
+          <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+            <span style={{ color: warn ? danger : 'var(--gb-text-muted)' }}>{k}</span>
+            <span style={{ fontWeight: 700, textAlign: 'right', wordBreak: 'break-all', color: warn ? danger : undefined }}>{String(v)}</span>
+          </div>
+        );
+        const head = (t) => (
+          <span style={{ fontWeight: 700, fontSize: 8.5, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--gb-text-muted)', marginTop: 2 }}>{t}</span>
+        );
+        const sep = <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '3px 0' }} />;
+        return (
+          <div style={{
+            position: 'absolute', top: 8, right: 8, zIndex: 7,
+            width: 264, maxHeight: 'calc(100% - 16px)', overflowY: 'auto',
+            padding: '8px 10px',
+            background: 'var(--gb-surface-modal)',
+            border: '1px solid var(--gb-border-default)',
+            borderRadius: 'var(--gb-r-sm)',
+            fontFamily: 'var(--gb-font-mono)', fontSize: 9.5, lineHeight: 1.5,
+            color: 'var(--gb-text-secondary)', pointerEvents: 'auto',
+            display: 'flex', flexDirection: 'column', gap: 2,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+              <span style={{ fontWeight: 700, fontSize: 9, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Render debug</span>
+              <span style={{ flex: 1 }} />
+              <button type="button"
+                onClick={() => {
+                  navigator.clipboard?.writeText(full)
+                    .then(() => { setRdCopied(true); setTimeout(() => setRdCopied(false), 1500); })
+                    .catch(() => {});
+                }}
+                style={{
+                  fontFamily: 'var(--gb-font-mono)', fontSize: 9, fontWeight: 700,
+                  background: rdCopied ? 'var(--gb-success-tint-medium)' : 'var(--gb-fill-soft)',
+                  color: rdCopied ? 'var(--gb-success-fg)' : 'var(--gb-text-secondary)',
+                  border: '1px solid ' + (rdCopied ? 'var(--gb-success-tint-border)' : 'var(--gb-border-default)'),
+                  borderRadius: 'var(--gb-r-xs)', padding: '1px 6px', cursor: 'pointer',
+                  textTransform: 'uppercase', letterSpacing: 0.4,
+                }}
+              >{rdCopied ? 'copied' : 'copy all'}</button>
+            </div>
+            {row('WebGL2', rd.webgl2, !rd.webgl2)}
+            <div style={{ color: 'var(--gb-text-muted)', wordBreak: 'break-all' }}>{rd.gpu}</div>
+            {sep}
+            {head('Decal (print)')}
+            {d.exists ? [
+              row('verts', d.verts, d.verts === 0),
+              row('meshVisible', d.meshVisible, !d.meshVisible),
+              row('matVisible', d.matVisible, !d.matVisible),
+              row('material', d.material),
+              row('opacity', d.opacity, d.opacity === 0),
+              row('depthTest', d.depthTest),
+              row('depthWrite', d.depthWrite),
+              row('polyOffset', d.polygonOffset),
+              row('posZ', d.posZ),
+              row('texLoaded', d.texLoaded, !d.texLoaded),
+              row('texSize', d.texSize),
+            ] : (
+              <div style={{ color: danger, fontWeight: 700 }}>decal mesh missing</div>
+            )}
+            {sep}
+            {row('drawCalls', rd.calls)}
+            {row('triangles', rd.triangles)}
+            {row('glError', rd.glError, rd.glError !== 0)}
+            {row('shaderErrs', rd.shaderErrors ? rd.shaderErrors.length : 0, rd.shaderErrors && rd.shaderErrors.length > 0)}
+            {rd.shaderErrors && rd.shaderErrors.length > 0 && (
+              <div style={{ color: danger, whiteSpace: 'pre-wrap', wordBreak: 'break-all', fontSize: 9 }}>{rd.shaderErrors[0]}</div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* (CSS underwater tint removed — now rendered as a depth-
           attenuated fullscreen WebGL pass inside the Three.js scene.
