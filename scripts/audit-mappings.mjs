@@ -61,8 +61,13 @@ function auditOne(d, prod) {
   let cd = {}; try { cd = JSON.parse(d.customData_s || '{}'); } catch { /* */ }
   const mods = (d.modificationName_ss || []).map((m) => MOD_ALIAS[m] || m);
   const props = prod ? (prod.PropertyProduct || []).map((p) => p.Name) : ['(no page)'];
-  const ball = isBall(d.itemType_s);
-  const deco = ball ? ['<print-type grid>'] : [...new Set(mods.map(decoFor).filter(Boolean))];
+  // A "Custom Accessory Bundle" (Kit) renders bundle sections, not the ball grid,
+  // even when filed under Golf Balls — mirror CustomizeBlock's routing.
+  const bundleItems = cd.bundleItems ? cd.bundleItems.split(',').map((s) => s.trim()).filter(Boolean) : [];
+  const bundle = mods.includes('Custom Accessory Bundle') || bundleItems.length > 0;
+  const ball = isBall(d.itemType_s) && !bundle;
+  const deco = bundle ? ['<bundle:' + (bundleItems.join('+') || '?') + '>']
+    : (ball ? ['<print-type grid>'] : [...new Set(mods.map(decoFor).filter(Boolean))]);
   const dualPole = cd.variant === 'dualPole' || mods.some((m) => /second pole/i.test(m));
 
   const flags = [];
@@ -73,6 +78,7 @@ function auditOne(d, prod) {
   const sideSignal = props.some(isSideProp) || cd.variant === 'dualPole' || mods.some((m) => /second pole/i.test(m));
   const sideSurfaced = props.some(isSideProp) /* PropertyInput renders it */ || dualPole /* second-pole imprint */;
   if (sideSignal && !sideSurfaced) flags.push('2-SIDE NOT SURFACED');
+  if (bundle && !bundleItems.length) flags.push('BUNDLE DECLARED BUT NO COMPONENTS (bundleItems empty)');
 
   // config-dependent: the page has base inputs the catalog facet doesn't carry
   // (e.g. Devant towels) — these render ONLY if the per-product config fetch runs.

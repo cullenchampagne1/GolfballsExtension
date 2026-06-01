@@ -562,14 +562,19 @@ function DecorationArea({ p, config, mods, dualPole }) {
 function BundleSections({ items, p, config, dualPole }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {items.map((item, i) => (
-        <div key={i} style={{ border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden' }}>
-          <div style={{ padding: '9px 12px', background: 'var(--gb-fill-subtle)', fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-secondary)', textTransform: 'capitalize' }}>{item}</div>
-          <div style={{ padding: 14 }}>
-            {/tee/i.test(item) ? <TeeDecoration /> : <CustomLogoFlow p={p} config={config} dualPole={dualPole} />}
+      {items.map((item, i) => {
+        const isTee = /tee/i.test(item);
+        // bundleItems carry raw mod names like "Generic Inhouse Custom" — label them sensibly
+        const label = isTee ? 'Tee' : (/custom|logo/i.test(item) ? 'Custom Logo' : item);
+        return (
+          <div key={i} style={{ border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden' }}>
+            <div style={{ padding: '9px 12px', background: 'var(--gb-fill-subtle)', fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-secondary)', textTransform: 'capitalize' }}>{label}</div>
+            <div style={{ padding: 14 }}>
+              {isTee ? <TeeDecoration /> : <CustomLogoFlow p={p} config={config} dualPole={dualPole} />}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
       <Commercial p={p} config={config} />
     </div>
   );
@@ -693,7 +698,10 @@ function PrintTypeGrid({ p, mods, config }) {
 
 /* ── exported: the Customization accordion for the DetailPanel ── */
 export function CustomizeBlock({ p }) {
-  const isBall = p.cat === 'Logo Golf Balls';
+  // A "Custom Accessory Bundle" (e.g. a Sleeve/Chip/Tee Kit) is a bundle, not a
+  // plain ball — route it to the bundle path even though it's filed under Golf Balls.
+  const isBundle = (p.modNames || []).includes('Custom Accessory Bundle');
+  const isBall = p.cat === 'Logo Golf Balls' && !isBundle;
   const { mods } = modsForProduct(p);
   const { config, loading } = useProductConfig(p);
   const [open, setOpen] = useState(false);
