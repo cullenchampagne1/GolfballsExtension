@@ -120,9 +120,23 @@ export function buildCartData(itemsInCart, { proposalID = null } = {}) {
   };
 }
 
-/* The PUT /user/saveCart request body. Guest by default. */
-export function buildSaveCartBody(cartData, { customerID = 0, salesRepID = 0 } = {}) {
-  return { cartData, customerID, salesRepID };
+/* The combined `cartData` blob the app actually saves: the cart slice spread
+   at the top level, PLUS a nested `shoppingCart` copy, the `asCartContents`
+   mirror, and `updated:true`. (Verified against the real saveCart payload.) */
+export function buildSaveCartData(itemsInCart, { proposalID = null } = {}) {
+  const cart = buildCartData(itemsInCart, { proposalID });
+  return { ...cart, shoppingCart: cart, asCartContents: buildAsCartContents(itemsInCart), updated: true };
+}
+
+/* The PUT /user/saveCart request body. CRITICAL: `cartData` must be a JSON
+   STRING — the backend (Proposal.asmx/SaveCart) 500s if it's a nested object.
+   Guest IDs by default. */
+export function buildSaveCartBody(itemsInCart, { customerID = 0, salesRepID = 0, proposalID = null } = {}) {
+  return {
+    cartData: JSON.stringify(buildSaveCartData(itemsInCart, { proposalID })),
+    customerID,
+    salesRepID,
+  };
 }
 
 /* Parse a GET /user/getCart/<n> response → cartData (the `d` field is a JSON
