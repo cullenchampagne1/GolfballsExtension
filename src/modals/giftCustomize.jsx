@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Btn, Tag, Dot } from '../ui/index.js';
 import { Icon, I } from '../ui/icons.jsx';
 
@@ -172,6 +172,23 @@ export function modsForProduct(p) {
   return { ux: 'inline', mods };
 }
 
+/* Textiles (towels, apparel, gloves, hats) use the embroidery decoration tabs
+   (Stock/Personalized/Monogram/Custom); hard goods show inline logo upload. */
+const EMBROIDERABLE_RE = /towel|apparel|shirt|polo|hat|cap|glove|outerwear|sock|headwear|jacket|pullover|fleece/i;
+function isEmbroiderable(p, config) {
+  return EMBROIDERABLE_RE.test((p && p.cat) || '') || EMBROIDERABLE_RE.test((config && config.itemType) || '');
+}
+/* base-color fallback when the live config can't be fetched (offline / no URL) */
+const FALLBACK_COLORS = {
+  towel: ['Black', 'Royal Blue', 'Red', 'Grey', 'White', 'Navy'],
+  chip: ['Gray', 'Black', 'Blue', 'Green', 'Orange', 'Pink', 'Purple', 'Red', 'White', 'Yellow'],
+};
+function fallbackColors(cat) {
+  if (/towel/i.test(cat || '')) return FALLBACK_COLORS.towel;
+  if (/poker|chip|promotional|marker/i.test(cat || '')) return FALLBACK_COLORS.chip;
+  return [];
+}
+
 const UploadI = (props) => <Icon {...props}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" /></Icon>;
 const SparkI = (props) => <Icon {...props}><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></Icon>;
 const money = (n) => '$' + (n || 0).toFixed(2);
@@ -318,27 +335,40 @@ function ImageUpload({ ai, label = 'Upload Your Company Logo' }) {
     </div>
   );
 }
+/* Second-pole imprint — the live reveal: a choice row, then the matching control. */
+const SECOND_IMPRINT_CHOICES = ['Same as Front', 'Personalized', 'Monogram', 'Upload Image', 'Logo Library', 'Custom'];
 function SecondImprint() {
   const [on, setOn] = useState(false);
-  const [choice, setChoice] = useState('logo');
+  const [choice, setChoice] = useState('Same as Front');
+  const [txt, setTxt] = useState('');
+  const [mono, setMono] = useState(MONO_STYLES[0].key);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
       <Checkbox checked={on} onClick={() => setOn(!on)} label="Add Second Imprint (Optional)" />
       {on && (
-        <div style={{ paddingLeft: 26, display: 'flex', gap: 8 }}>
-          {[['logo', 'Add a Second Logo', <UploadI size={13} key="u" />], ['text', 'Add Personalization', <I.edit size={13} key="e" />]].map(([v, label, ic]) => {
-            const sel = choice === v;
-            return (
-              <button key={v} onClick={() => setChoice(v)} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 7, padding: '8px 10px', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', background: sel ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (sel ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: sel ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 }}>{ic}{label}</button>
-            );
-          })}
+        <div style={{ paddingLeft: 26, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {SECOND_IMPRINT_CHOICES.map((v) => {
+              const sel = choice === v;
+              return <button key={v} onClick={() => setChoice(v)} style={{ padding: '7px 11px', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, background: sel ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (sel ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: sel ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>{v}</button>;
+            })}
+          </div>
+          {choice === 'Personalized' && <Field label="Second pole text"><TextInput value={txt} onChange={setTxt} placeholder="Your text" maxLength={17} /></Field>}
+          {choice === 'Monogram' && <MonoGrid value={mono} onChange={setMono} />}
+          {(choice === 'Upload Image' || choice === 'Custom' || choice === 'Logo Library') && <ImageUpload label="Upload Second Imprint" />}
+          {choice === 'Same as Front' && <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontStyle: 'italic' }}>Reuses your front imprint on the second pole.</div>}
         </div>
       )}
     </div>
   );
 }
-function Commercial({ p, serviceLevel }) {
+function Commercial({ p, config, serviceLevel }) {
   const ladder = (p.breaks && p.breaks.length ? p.breaks : [{ q: p.minQty || 12, p: p.price || 0 }]);
+  // setup fee + service options come from the live config; balls (no config) keep the legacy defaults.
+  const showSetupFee = config ? config.setupFee : true;
+  const serviceOpts = config
+    ? (config.serviceLevel && config.serviceLevel.length ? config.serviceLevel : config.shipping)
+    : (serviceLevel ? ['8 Business Day Standard', '3-Day', '2-Day', 'Overnight'] : []);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
       <div style={{ display: 'flex', gap: 10 }}>
@@ -346,15 +376,7 @@ function Commercial({ p, serviceLevel }) {
           <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Min qty</div>
           <div style={{ fontSize: 17, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)' }}>{p.minQty || 12}</div>
         </div>
-        {serviceLevel ? (
-          <div style={{ flex: 1.4 }}>
-            <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)', marginBottom: 4 }}>Service level</div>
-            <div style={{ height: 30, display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', background: 'var(--gb-fill-inverse-medium)', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)' }}>
-              <span style={{ flex: 1, fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)' }}>8 Business Day Standard</span>
-              <I.chevd size={11} style={{ color: 'var(--gb-text-muted)' }} />
-            </div>
-          </div>
-        ) : (
+        {showSetupFee && (
           <div style={{ flex: 1, padding: '9px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)' }}>
             <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-brand-label)' }}>Setup fee</div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
@@ -364,6 +386,14 @@ function Commercial({ p, serviceLevel }) {
           </div>
         )}
       </div>
+      {serviceOpts.length > 0 && (
+        <div>
+          <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)', marginBottom: 4 }}>Service level</div>
+          <select defaultValue={serviceOpts[0]} style={{ width: '100%', height: 32, padding: '0 10px', background: 'var(--gb-fill-inverse-medium)', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 11.5, fontWeight: 600 }}>
+            {serviceOpts.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+      )}
       <div>
         <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)', marginBottom: 6 }}>Volume price ladder · per unit</div>
         <div style={{ border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden' }}>
@@ -384,8 +414,124 @@ function Commercial({ p, serviceLevel }) {
   );
 }
 
+/* ── config-driven accessory customizer ──────────────────────────────────────
+   The real per-product options come from the product page's ProductModification
+   + ProductChild (fetched via background.js fetchProductConfig). */
+function useProductConfig(p) {
+  const [state, setState] = useState({ loading: !!(p && p.url), config: null });
+  useEffect(() => {
+    const canMsg = typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage;
+    if (!p || !p.url || !canMsg) { setState({ loading: false, config: null }); return undefined; }
+    let alive = true;
+    setState({ loading: true, config: null });
+    try {
+      chrome.runtime.sendMessage({ action: 'fetchProductConfig', url: p.url }, (resp) => {
+        if (!alive) return;
+        setState({ loading: false, config: resp && resp.ok ? resp.config : null });
+      });
+    } catch (e) { setState({ loading: false, config: null }); }
+    return () => { alive = false; };
+  }, [p && p.url]);
+  return state;
+}
+
+/* base product color — labelled buttons, exactly like the live site */
+function BaseColorPicker({ colors, value, onChange }) {
+  if (!colors || colors.length < 1) return null;
+  return (
+    <Field label="Color">
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {colors.map((c) => {
+          const on = value === c;
+          return <button key={c} onClick={() => onChange(c)} style={{ padding: '6px 11px', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>{c}</button>;
+        })}
+      </div>
+    </Field>
+  );
+}
+
+/* Custom Logo decoration — logo upload + (second imprint only where the product
+   actually has a second pole) + commercial block. */
+function CustomLogoFlow({ p, config }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <ImageUpload />
+      {config && config.hasSecondPole && (
+        <div>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)', marginBottom: 7 }}>{config.secondPoleName || 'Second Pole'}</div>
+          <SecondImprint />
+        </div>
+      )}
+      <Commercial p={p} config={config} />
+    </div>
+  );
+}
+
+/* embroidery decoration: text + thread color */
+function PersonalizedDecoration() {
+  const [v, setV] = useState('');
+  const [c, setC] = useState('Black');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Field label="Line 1"><TextInput value={v} onChange={setV} placeholder="Your text" maxLength={17} /></Field>
+      <Field label="Thread Color"><ColorRow swatches={THREAD_COLORS} value={c} onChange={setC} /></Field>
+    </div>
+  );
+}
+
+/* embroidery decoration: monogram style + initials + two imprint colors */
+function MonogramDecoration() {
+  const [style, setStyle] = useState(MONO_STYLES[0].key);
+  const [v, setV] = useState('');
+  const [c1, setC1] = useState('Black');
+  const [c2, setC2] = useState('Transparent');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Field label="Monogram Style"><MonoGrid value={style} onChange={setStyle} /></Field>
+      <Field label="Initials"><TextInput value={v} onChange={setV} placeholder="ABC" maxLength={3} /></Field>
+      <Field label="Color 1"><ColorRow swatches={IMPRINT_COLORS} value={c1} onChange={setC1} /></Field>
+      <Field label="Color 2"><ColorRow swatches={IMPRINT_COLORS} transparent value={c2} onChange={setC2} /></Field>
+    </div>
+  );
+}
+
+/* embroiderable accessories (towels/apparel/gloves): Stock / Personalized / Monogram / Custom */
+function DecorationTabs({ p, config }) {
+  const [tab, setTab] = useState('custom');
+  const tabs = [['stock', 'Stock'], ['personalized', 'Personalized'], ['monogram', 'Monogram'], ['custom', 'Custom']];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--gb-border-subtle)' }}>
+        {tabs.map(([v, label]) => {
+          const on = tab === v;
+          return <button key={v} onClick={() => setTab(v)} style={{ padding: '8px 13px', background: 'transparent', border: 'none', borderBottom: '2px solid ' + (on ? 'var(--gb-brand-label)' : 'transparent'), marginBottom: -1, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)' }}>{label}</button>;
+        })}
+      </div>
+      {tab === 'stock' && <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', padding: '8px 0' }}>Buy as-is — no decoration.</div>}
+      {tab === 'personalized' && <PersonalizedDecoration />}
+      {tab === 'monogram' && <MonogramDecoration />}
+      {tab === 'custom' && <CustomLogoFlow p={p} config={config} />}
+    </div>
+  );
+}
+
+/* the accessory customizer: base color + the right decoration shell for the item type */
+function AccessoryCustomizer({ p, config, loading }) {
+  const colors = (config && config.colors && config.colors.length) ? config.colors : fallbackColors(p.cat);
+  const [color, setColor] = useState('');
+  useEffect(() => { if (colors.length) setColor((cur) => cur || colors[0]); }, [colors.join('|')]);
+  const embroiderable = isEmbroiderable(p, config);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {loading && <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontStyle: 'italic' }}>Loading live options…</div>}
+      {colors.length > 1 && <BaseColorPicker colors={colors} value={color || colors[0]} onChange={setColor} />}
+      {embroiderable ? <DecorationTabs p={p} config={config} /> : <CustomLogoFlow p={p} config={config} />}
+    </div>
+  );
+}
+
 /* one control unit, keyed by the schema's control id */
-function Control({ k, p, serviceLevel }) {
+function Control({ k, p, config, serviceLevel }) {
   const [v, setV] = useState('');
   const [c1, setC1] = useState('Black'); const [c2, setC2] = useState('Transparent');
   const [font, setFont] = useState(FONTS[0]); const [size, setSize] = useState(SIZES[0]);
@@ -398,7 +544,7 @@ function Control({ k, p, serviceLevel }) {
     case 'imageUpload': return <ImageUpload />;
     case 'photoUpload': return <ImageUpload ai label="Upload Image" />;
     case 'secondImprint': return <SecondImprint />;
-    case 'commercial': return <Commercial p={p} serviceLevel={serviceLevel} />;
+    case 'commercial': return <Commercial p={p} config={config} serviceLevel={serviceLevel} />;
     case 'lines3': return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
         <Field label="Line 1" required><TextInput value={v} onChange={setV} placeholder="Your text" maxLength={17} /></Field>
@@ -439,7 +585,7 @@ function Control({ k, p, serviceLevel }) {
 }
 
 /* the assembled controls for one modification */
-function ModControls({ name, p, serviceLevel }) {
+function ModControls({ name, p, config, serviceLevel }) {
   const meta = MODS[name];
   if (!meta) return null;
   if (!meta.controls.length) {
@@ -447,7 +593,7 @@ function ModControls({ name, p, serviceLevel }) {
   }
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {meta.controls.map((k, i) => <Control key={i} k={k} p={p} serviceLevel={serviceLevel} />)}
+      {meta.controls.map((k, i) => <Control key={i} k={k} p={p} config={config} serviceLevel={serviceLevel} />)}
       {meta.extras && (
         <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', display: 'flex', alignItems: 'center', gap: 6 }}>
           <I.bolt size={11} style={{ color: 'var(--gb-brand-label)' }} /> {meta.extras}
@@ -458,7 +604,7 @@ function ModControls({ name, p, serviceLevel }) {
 }
 
 /* golf-ball print-type tile grid */
-function PrintTypeGrid({ p, mods }) {
+function PrintTypeGrid({ p, mods, config }) {
   const [sel, setSel] = useState(mods[0]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -475,7 +621,7 @@ function PrintTypeGrid({ p, mods }) {
       </div>
       <div style={{ borderTop: '1px solid var(--gb-border-subtle)', paddingTop: 14 }}>
         <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-brand-label)', marginBottom: 12 }}>{sel}</div>
-        <ModControls name={sel} p={p} serviceLevel />
+        <ModControls name={sel} p={p} config={config} serviceLevel />
       </div>
     </div>
   );
@@ -483,50 +629,41 @@ function PrintTypeGrid({ p, mods }) {
 
 /* ── exported: the Customization accordion for the DetailPanel ── */
 export function CustomizeBlock({ p }) {
-  const { ux, mods } = modsForProduct(p);
+  const isBall = p.cat === 'Logo Golf Balls';
+  const { mods } = modsForProduct(p);
+  const { config, loading } = useProductConfig(p);
   const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(mods[0]);
-  if (!mods.length) {
+  // golf ball with no supported print types (USA / pre-decorated editions) → ships as-is
+  if (isBall && !mods.length) {
     return (
       <div style={{ marginTop: 16, padding: '11px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', fontSize: 11.5, color: 'var(--gb-text-muted)', display: 'flex', alignItems: 'center', gap: 8 }}>
         <I.alert size={13} style={{ color: 'var(--gb-text-tertiary)' }} /> No customization available — this product ships as-is.
       </div>
     );
   }
+  const subtitle = isBall ? `${mods.length} print ${mods.length === 1 ? 'type' : 'types'}` : 'Color & imprint options';
   return (
     <div style={{ marginTop: 16 }}>
       <div onClick={() => setOpen((o) => !o)} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '11px 12px', cursor: 'pointer', background: open ? 'var(--gb-brand-tint-soft)' : 'var(--gb-fill-subtle)', borderRadius: open ? 'var(--gb-r-md) var(--gb-r-md) 0 0' : 'var(--gb-r-md)', border: '1px solid ' + (open ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)') }}>
         <div style={{ width: 24, height: 24, borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><I.edit size={12} /></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Customization</div>
-          <div style={{ fontSize: 10, color: 'var(--gb-text-muted)' }}>{mods.length} imprint {mods.length === 1 ? 'option' : 'options'}</div>
+          <div style={{ fontSize: 10, color: 'var(--gb-text-muted)' }}>{subtitle}</div>
         </div>
         <I.chevd size={13} style={{ color: 'var(--gb-text-tertiary)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform var(--gb-anim)' }} />
       </div>
       {open && (
         <div style={{ border: '1px solid var(--gb-brand-tint-border)', borderTop: 'none', borderRadius: '0 0 var(--gb-r-md) var(--gb-r-md)', padding: 14 }}>
-          {ux === 'grid' ? (
+          {isBall ? (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>Select a print type</span>
                 <Tag tone="neutral" size="sm">corporate: Custom Logo</Tag>
               </div>
-              <PrintTypeGrid p={p} mods={mods} />
+              <PrintTypeGrid p={p} mods={mods} config={config} />
             </>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {mods.length > 1 && (
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {mods.map((m) => {
-                    const on = active === m;
-                    return (
-                      <button key={m} onClick={() => setActive(m)} style={{ flex: '1 0 auto', padding: '7px 10px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 10.5, fontWeight: 600, background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)' }}>{m}</button>
-                    );
-                  })}
-                </div>
-              )}
-              <ModControls name={mods.length > 1 ? active : mods[0]} p={p} />
-            </div>
+            <AccessoryCustomizer p={p} config={config} loading={loading} />
           )}
         </div>
       )}

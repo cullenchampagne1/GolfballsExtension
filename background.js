@@ -3,6 +3,60 @@ importScripts('defaults.js');
 
 let editorWindowId   = null;
 
+// ── Per-product customizer config helpers ────────────────────────────────────
+// The real per-product options are driven by the product page's __NEXT_DATA__
+// (product.ProductModification + product.ProductChild), NOT the corporate
+// modificationName_ss facet. We fetch the product page and normalize that into
+// a small config the modal renders from.
+const GB_SIZE_RE = /^(one size|os|xxs|xs|s|m|l|xl|2xl|3xl|4xl|5xl|xxl|xxxl|small|medium|large|x-?large|\d{1,2}(\.\d)?)$/i;
+
+function gbExtractColors(prod) {
+  const children = prod.ProductChild || [];
+  const byProp = {};
+  for (const c of children) {
+    for (const pv of (c.PropertyValueProduct || [])) {
+      const pid = pv.propertyProductID;
+      if (pid == null || !pv.Value) continue;
+      (byProp[pid] = byProp[pid] || []).push({ v: String(pv.Value).trim(), sort: pv.SortValue || 0 });
+    }
+  }
+  // The color property is the one whose values are mostly NOT sizes.
+  let best = null, bestScore = -1;
+  for (const pid of Object.keys(byProp)) {
+    const nonSize = byProp[pid].filter((x) => !GB_SIZE_RE.test(x.v)).length;
+    if (nonSize > bestScore) { bestScore = nonSize; best = pid; }
+  }
+  if (!best) return [];
+  const seen = new Set(); const out = [];
+  byProp[best].sort((a, b) => a.sort - b.sort).forEach((x) => { if (!seen.has(x.v)) { seen.add(x.v); out.push(x.v); } });
+  return out;
+}
+
+function gbModOptionValues(mod, name) {
+  const o = (mod.ModificationOption || []).find((o) => (o.Name || o.FriendlyName) === name);
+  if (!o) return [];
+  return (o.ModificationOptionValue || []).map((v) => v.FriendlyName || v.Name || v.Value).filter(Boolean);
+}
+
+function gbNormalizeProductConfig(prod) {
+  const mods = (prod.ProductModification || []).map((pm) => pm.Modification || {});
+  const customLogo = mods.find((m) => /custom/i.test(m.Name || '') || /custom logo/i.test(m.FriendlyName || ''));
+  const secondPole = mods.find((m) => /second pole/i.test((m.FriendlyName || '') + ' ' + (m.Name || '')));
+  return {
+    itemType: (prod.itemType_ss && prod.itemType_ss[0]) || prod.ItemType || prod.itemType_s || '',
+    colors: gbExtractColors(prod),
+    decorations: mods.map((m) => m.FriendlyName || m.Name).filter(Boolean),
+    hasCustomLogo: !!customLogo,
+    hasSecondPole: !!secondPole,
+    secondPoleName: secondPole ? (secondPole.FriendlyName || secondPole.Name) : null,
+    // Custom Logo carries a setup fee unless its description says otherwise.
+    setupFee: customLogo ? !/without setup fee/i.test(customLogo.Description || '') : false,
+    shipping: customLogo ? gbModOptionValues(customLogo, 'Selected Shipping') : [],
+    serviceLevel: customLogo ? gbModOptionValues(customLogo, 'Service Level')
+      : (mods.map((m) => gbModOptionValues(m, 'Service Level')).find((a) => a.length) || []),
+  };
+}
+
 // ── Seed default state on first install ──────────────────────────────────────
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   if (reason !== 'install') return; // skip updates and browser_update
@@ -156,6 +210,31 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch(err => {
         console.warn('[GB] fetchGiftCatalog error:', err.message);
         sendResponse({ ok: false, error: String(err), docs: [], numFound: 0 });
+      });
+    return true;
+  }
+
+  // ── Per-product customizer config ──────────────────────────────────
+  // Fetches a product page, extracts __NEXT_DATA__ product.ProductModification
+  // + ProductChild, and returns the normalized config the modal renders from
+  // (real base colors, second-pole availability, setup fee, shipping/service).
+  if (msg.action === 'fetchProductConfig' && msg.url) {
+    fetch(msg.url, {
+      headers: { 'Accept': 'text/html,*/*', 'Accept-Language': 'en-US,en;q=0.9' },
+      credentials: 'include',
+    })
+      .then(async r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const html = await r.text();
+        const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+        if (!m) throw new Error('__NEXT_DATA__ not found');
+        const prod = JSON.parse(m[1])?.props?.pageProps?.product;
+        if (!prod) throw new Error('No product in page data');
+        sendResponse({ ok: true, config: gbNormalizeProductConfig(prod) });
+      })
+      .catch(err => {
+        console.warn('[GB] fetchProductConfig error:', err.message);
+        sendResponse({ ok: false, error: String(err) });
       });
     return true;
   }
