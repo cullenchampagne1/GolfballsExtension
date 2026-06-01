@@ -135,7 +135,7 @@ const MOD_ALIAS = { 'Align XL': 'AlignXL', 'Icon': 'Icons' };
    intentionally omitted (niche licensed art — excluded per product owner). */
 const MODS = {
   'Custom Logo': { controls: ['imageUpload', 'secondImprint', 'commercial'] },
-  'Personalized': { controls: ['lines3', 'color', 'font', 'size'], extras: 'Add Additional Personalization · $5.00/dz', preview: true },
+  'Personalized': { controls: ['personalized'], extras: 'Add Additional Personalization · $5.00/dz', preview: true },
   'Monogram': { controls: ['monoStyle', 'initials', 'color', 'color2'], preview: true },
   'Photo': { controls: ['photoUpload'], extras: 'Add Additional Personalization · $5.00/dz', preview: true },
   'Custom Player Number': { controls: ['number'], extras: 'Add Additional Personalization · $5.00/dz', preview: true },
@@ -208,29 +208,59 @@ function Segmented({ options, value, onChange }) {
     </div>
   );
 }
-function Swatch({ color, on, onClick, size = 24 }) {
+/* hex → HSL, used to order the palette by hue then shade */
+function hexToHsl(hex) {
+  if (!hex || hex === 'transparent') return { h: 999, s: 0, l: 2 };
+  const m = hex.replace('#', '');
+  const r = parseInt(m.slice(0, 2), 16) / 255, g = parseInt(m.slice(2, 4), 16) / 255, b = parseInt(m.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+  let h = 0, s = 0;
+  if (d !== 0) {
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = (g - b) / d + (g < b ? 6 : 0);
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+  }
+  return { h, s, l };
+}
+/* group by hue family (near-grays last), shades adjacent (light → dark) within each */
+function sortByHueShade(colors) {
+  return colors.map((c) => ({ c, hsl: hexToHsl(c.hex) })).sort((a, b) => {
+    const ag = a.hsl.s < 0.12, bg = b.hsl.s < 0.12;
+    if (ag !== bg) return ag ? 1 : -1;
+    if (ag && bg) return b.hsl.l - a.hsl.l;
+    const ah = Math.floor(a.hsl.h / 30), bh = Math.floor(b.hsl.h / 30);
+    if (ah !== bh) return ah - bh;
+    return b.hsl.l - a.hsl.l;
+  }).map((x) => x.c);
+}
+function Swatch({ color, on, onClick, size = 20 }) {
   const trans = color.name === 'Transparent';
   return (
-    <button onClick={onClick} title={color.name} style={{ width: size, height: size, borderRadius: '50%', cursor: 'pointer', padding: 0, position: 'relative', background: trans ? 'var(--gb-fill-subtle)' : color.hex, border: '2px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'), boxShadow: on ? '0 0 0 2px var(--gb-surface-modal), 0 0 0 3px var(--gb-brand-label)' : 'none', transition: 'all var(--gb-anim)' }}>
-      {trans && <span style={{ position: 'absolute', inset: 3, borderTop: '1.5px solid var(--gb-danger, #e5484d)', transform: 'rotate(45deg)' }} />}
+    <button onClick={onClick} title={color.name} style={{ width: size, height: size, borderRadius: '50%', cursor: 'pointer', padding: 0, position: 'relative', flexShrink: 0, background: trans ? 'var(--gb-fill-subtle)' : color.hex, border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'), boxShadow: on ? '0 0 0 1.5px var(--gb-surface-modal), 0 0 0 3px var(--gb-brand-label)' : 'none', transition: 'all var(--gb-anim)' }}>
+      {trans && <span style={{ position: 'absolute', inset: 2, borderTop: '1.5px solid var(--gb-danger, #e5484d)', transform: 'rotate(45deg)' }} />}
     </button>
   );
 }
+/* Compact imprint-color picker: a common quick row, expandable to the full
+   palette organized by hue then shade. */
 function ColorRow({ swatches, transparent, value, onChange }) {
   const [showAll, setShowAll] = useState(false);
-  // Transparent (Monogram Color 2 only) leads the list as its default option.
-  const base = transparent ? [{ name: 'Transparent', hex: 'transparent' }, ...swatches] : swatches;
-  const expandable = base.length > 16;
-  const commonCount = transparent ? COMMON_COUNT + 1 : COMMON_COUNT;
-  const list = (expandable && !showAll) ? base.slice(0, commonCount) : base;
+  const transOpt = transparent ? [{ name: 'Transparent', hex: 'transparent' }] : [];
+  const expandable = swatches.length > 24;
+  const list = (!expandable || showAll)
+    ? [...transOpt, ...sortByHueShade(swatches)]
+    : [...transOpt, ...swatches.slice(0, COMMON_COUNT)];
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, maxHeight: showAll ? 172 : 'none', overflowY: showAll ? 'auto' : 'visible', paddingRight: showAll ? 4 : 0 }}>
-        {list.map((c) => <Swatch key={c.name} color={c} on={value === c.name} onClick={() => onChange(c.name)} />)}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {value && <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--gb-text-tertiary)' }}>{value}</div>}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: showAll ? 132 : 'none', overflowY: showAll ? 'auto' : 'visible', paddingRight: showAll ? 4 : 0 }}>
+        {list.map((c) => <Swatch key={c.name} color={c} on={value === c.name} onClick={() => onChange(c.name)} size={20} />)}
       </div>
       {expandable && (
         <button onClick={() => setShowAll((s) => !s)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10.5, fontWeight: 700, color: 'var(--gb-brand-label)' }}>
-          {showAll ? '− Show fewer' : `+ ${base.length - commonCount} more colors`}
+          {showAll ? '− Show fewer' : `+ ${swatches.length - COMMON_COUNT} more colors`}
         </button>
       )}
     </div>
@@ -321,10 +351,30 @@ function ImageUpload({ ai, label = 'Upload Your Company Logo' }) {
 }
 /* Second-pole imprint — the live reveal: a choice row, then the matching control. */
 const SECOND_IMPRINT_CHOICES = ['Same as Front', 'Personalized', 'Monogram', 'Upload Image', 'Logo Library', 'Custom'];
+/* full personalized imprint — 3 wired text lines + imprint color, font, size.
+   Shared by the Personalized print type and the second-pole Personalized choice. */
+function PersonalizedImprint() {
+  const [l1, setL1] = useState('');
+  const [l2, setL2] = useState('');
+  const [l3, setL3] = useState('');
+  const [color, setColor] = useState('Black');
+  const [font, setFont] = useState(FONTS[0]);
+  const [size, setSize] = useState(SIZES[0]);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+      <Field label="Line 1" required><TextInput value={l1} onChange={setL1} placeholder="Your text" maxLength={17} /></Field>
+      <Field label="Optional Line 2"><TextInput value={l2} onChange={setL2} placeholder="Optional" maxLength={17} /></Field>
+      <Field label="Optional Line 3"><TextInput value={l3} onChange={setL3} placeholder="Optional" maxLength={17} /></Field>
+      <Field label="Color"><ColorRow swatches={IMPRINT_COLORS} value={color} onChange={setColor} /></Field>
+      <Field label="Font"><Segmented options={FONTS} value={font} onChange={setFont} /></Field>
+      <Field label="Size"><Segmented options={SIZES} value={size} onChange={setSize} /></Field>
+    </div>
+  );
+}
+
 function SecondImprint() {
   const [on, setOn] = useState(false);
   const [choice, setChoice] = useState('Same as Front');
-  const [txt, setTxt] = useState('');
   const [mono, setMono] = useState(MONO_STYLES[0].key);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
@@ -337,7 +387,7 @@ function SecondImprint() {
               return <button key={v} onClick={() => setChoice(v)} style={{ padding: '7px 11px', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, background: sel ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (sel ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: sel ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>{v}</button>;
             })}
           </div>
-          {choice === 'Personalized' && <Field label="Second pole text"><TextInput value={txt} onChange={setTxt} placeholder="Your text" maxLength={17} /></Field>}
+          {choice === 'Personalized' && <PersonalizedImprint />}
           {choice === 'Monogram' && <MonoGrid value={mono} onChange={setMono} />}
           {(choice === 'Upload Image' || choice === 'Custom' || choice === 'Logo Library') && <ImageUpload label="Upload Second Imprint" />}
           {choice === 'Same as Front' && <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontStyle: 'italic' }}>Reuses your front imprint on the second pole.</div>}
@@ -614,6 +664,7 @@ function Control({ k, p, config, serviceLevel }) {
     case 'photoUpload': return <ImageUpload ai label="Upload Image" />;
     case 'secondImprint': return <SecondImprint />;
     case 'commercial': return <Commercial p={p} config={config} serviceLevel={serviceLevel} />;
+    case 'personalized': return <PersonalizedImprint />;
     case 'lines3': return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
         <Field label="Line 1" required><TextInput value={v} onChange={setV} placeholder="Your text" maxLength={17} /></Field>
