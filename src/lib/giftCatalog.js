@@ -63,9 +63,10 @@ function parsePromo(tags) {
   return null;
 }
 
-/* Strip the "(Decoration)" / "(Decorated)" qualifier the feed appends
-   to custom-logo product names — every catalog item is decorated. */
-const cleanTitle = (t) => String(t || '').replace(/\s*\((?:decorat(?:ion|ed)|custom logo)\)/ig, '').replace(/\s{2,}/g, ' ').trim();
+/* Strip the "(Decoration)" / "{Decoration}" / "(Custom Logo)" qualifier the feed
+   appends to custom-logo product names (in either parens or braces) — every
+   catalog item is decorated. */
+const cleanTitle = (t) => String(t || '').replace(/\s*[({](?:decorat(?:ion|ed)|custom logo)[)}]/ig, '').replace(/\s{2,}/g, ' ').trim();
 
 /* Bucket a Solr doc into a canonical "Shop by Type" category by its
    itemType_ss (the field the live category pages filter on), with a
