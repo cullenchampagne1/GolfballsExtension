@@ -86,6 +86,95 @@ export function buildBallDynamicImage({
   return img;
 }
 
+/* The decoration block (modificationHistory[] entry / active `modification`)
+   for a golf ball: the product's matching ProductModification + the chosen
+   imprint, the live preview dynamicImage, and the raw UI state. */
+function buildBallDecorationBlock(product, decoration) {
+  const wantedType = decoration.decorationType || 'Personalized';
+  const pm = (product.ProductModification || []).find(
+    (m) => (m.Modification && (m.Modification.FriendlyName === wantedType || m.Modification.Name === wantedType)),
+  ) || (product.ProductModification || [])[0] || null;
+  return {
+    ProductModification: pm,
+    interfaceState: {
+      firstPoleUserText: decoration.pole1 || { lines: [null, null, null], font: '', color: '' },
+      secondPoleUserText: decoration.pole2 || {},
+      maxTextArea: 1,
+    },
+    dynamicImage: [buildBallDynamicImage(decoration)],
+    isTemporary: false,
+  };
+}
+
+const emptyPole = () => ({ fileName: '', filePath: '', userImage: null, fileSupported: false });
+const canonicalUrl = (product) => {
+  const u = product.ProductUrl;
+  if (Array.isArray(u)) return (u.find((x) => !x.productChildID) || u[0] || {}).URL || '';
+  return product.url || product.URL || '';
+};
+
+/* Assemble one itemsInCart line for a golf ball from the product page object
+   (__NEXT_DATA__.props.pageProps.product), the catalog pricing ladder, the
+   buyer's property selection, the decoration, and quantity. Pricing comes
+   from the catalog (`pricing.breaks` = [{q,p}], `pricing.price`) — the page
+   carries only the parent fee header. itemGuid is generated if omitted. */
+export function assembleBallLine({ product, pricing = {}, selection = {}, decoration, qty = 1, itemGuid } = {}) {
+  const children = product.ProductChild || [];
+  const wantIds = new Set(selection.propertyValueIDs || []);
+  const child = children.find((c) =>
+    (c.PropertyValueProduct || []).some((pv) => wantIds.has(pv.propertyValueProductID)))
+    || children[0] || {};
+  const selectedIds = (child.PropertyValueProduct || []).map((pv) => pv.propertyValueProductID);
+  const breaks = (pricing.breaks && pricing.breaks.length) ? pricing.breaks : [{ q: 1, p: pricing.price || 0 }];
+  const unit = pricing.price != null ? pricing.price : (breaks[0] && breaks[0].p) || 0;
+  const decoBlock = buildBallDecorationBlock(product, decoration);
+
+  return {
+    nameFormat: product.NameFormat || product.Name || '',
+    productTitle: [product.Brand && product.Brand.Name, product.Name].filter(Boolean).join(' ').trim(),
+    qtyFields: [],
+    ShortCode: product.ShortCode,
+    brand: (product.Brand && product.Brand.Name) || '',
+    totalQty: qty,
+    childList: [child],
+    ModificationGroupDetail: product.ModificationGroupDetail || null,
+    ItemPriceBreak: { priceBreakHeaderID: 0, PriceBreak: breaks.map((b) => ({ Quantity: b.q, Price: b.p, Cost: 0 })), ProductionTime: 0, minimumQty: 1 },
+    SetupPriceBreak: { priceBreakHeaderID: 0, PriceBreak: [{ Quantity: 1, Price: 0, Cost: 0 }], ProductionTime: 0 },
+    ItemPrice: unit,
+    SetupPrice: 0,
+    originalPrice_priceBreakHeader: null,
+    originalPrice_priceBreakHeaderID: 0,
+    disableGiftWrap: false,
+    ignoreMinimumQty: false,
+    OriginalPriceLabel: '',
+    ProductParentSetupFee: product.setupFee_priceBreakHeader || null,
+    ProductParentItemFee: product.itemFee_priceBreakHeader || null,
+    SelectedItemPriceBreakQty: qty,
+    childFilters: [null],
+    widgetSelections: selectedIds.map((v) => ({ values: [v] })),
+    widgetApplicationOrder: [],
+    modificationHistory: [decoBlock],
+    modificationTemporaryHistory: [],
+    selectionWidgets: (product.PropertyProduct || []).map((_, i) => ({ WidgetType: 'TextButtonGroup', Configuration: { propertyIndex: i, maxValues: 1 } })),
+    modification: decoBlock,
+    subscription: { frequency: 1, isSubscribable: false, brand: '' },
+    itemTypeID: product.itemTypeID,
+    ProductTagDetail: product.ProductTagDetail || [],
+    inventory: product.inventory || [],
+    preorder: { show: false, date: null },
+    customUserImage: { firstPole: emptyPole(), secondPole: emptyPole() },
+    CustomData: product.CustomData || {},
+    bundle: null,
+    hasQtyParam: false,
+    itemType: (product.ItemType && product.ItemType.Name) || 'Golf Balls',
+    images: product.ProductImage || product.images || [],
+    itemGuid: itemGuid || (globalThis.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
+    url: canonicalUrl(product),
+    OrderQtyMultiple: null,
+    dropship: { active: false, dropshipTime: 0, dropshipDate: '' },
+  };
+}
+
 /* ── cart wrapper + totals ────────────────────────────────────────────────── */
 
 const round2 = (n) => Math.round(n * 100) / 100;
