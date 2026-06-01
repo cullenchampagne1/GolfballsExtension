@@ -185,6 +185,8 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   const [debug, setDebug] = useState(null);
   const [debugCopied, setDebugCopied] = useState(false);
   const [rdCopied, setRdCopied] = useState(false);
+  const [decalForceTop, setDecalForceTop] = useState(false);
+  const decalForceTopRef = useRef(false);
   // Throw mode — toggled by the in-frame chip button. When on:
   //   • OrbitControls are disabled so drag = throw, not orbit
   //   • The render loop integrates ball velocity + angular velocity
@@ -2898,6 +2900,23 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               },
             });
           }
+          // Render-debug: force the decal opaque + double-sided + drawn on
+          // top (depth test off). Lets us tell a depth/transparency problem
+          // (logo pops when forced) from a geometry/texture one (still
+          // nothing). Toggled live from the render-debug panel.
+          if (decalMesh && decalMesh.material) {
+            const m = decalMesh.material;
+            if (decalForceTopRef.current && !m.userData._forced) {
+              m.userData._forced = { depthTest: m.depthTest, transparent: m.transparent, side: m.side, ro: decalMesh.renderOrder };
+              m.depthTest = false; m.transparent = false; m.side = THREE.DoubleSide;
+              m.needsUpdate = true; decalMesh.renderOrder = 999;
+            } else if (!decalForceTopRef.current && m.userData._forced) {
+              const f = m.userData._forced;
+              m.depthTest = f.depthTest; m.transparent = f.transparent; m.side = f.side;
+              m.needsUpdate = true; decalMesh.renderOrder = f.ro;
+              delete m.userData._forced;
+            }
+          }
           animationId = requestAnimationFrame(render);
         };
         render();
@@ -3366,6 +3385,17 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
               <span style={{ fontWeight: 700, fontSize: 9, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Render debug</span>
               <span style={{ flex: 1 }} />
+              <button type="button"
+                onClick={() => { const v = !decalForceTop; setDecalForceTop(v); decalForceTopRef.current = v; }}
+                style={{
+                  fontFamily: 'var(--gb-font-mono)', fontSize: 9, fontWeight: 700,
+                  background: decalForceTop ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-soft)',
+                  color: decalForceTop ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+                  border: '1px solid ' + (decalForceTop ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'),
+                  borderRadius: 'var(--gb-r-xs)', padding: '1px 6px', cursor: 'pointer',
+                  textTransform: 'uppercase', letterSpacing: 0.4,
+                }}
+              >{decalForceTop ? 'forced' : 'force top'}</button>
               <button type="button"
                 onClick={() => {
                   navigator.clipboard?.writeText(full)
