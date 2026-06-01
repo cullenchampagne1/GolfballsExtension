@@ -330,7 +330,7 @@ function SecondImprint() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
       <Checkbox checked={on} onClick={() => setOn(!on)} label="Add Second Imprint (Optional)" />
       {on && (
-        <div style={{ paddingLeft: 26, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {SECOND_IMPRINT_CHOICES.map((v) => {
               const sel = choice === v;
