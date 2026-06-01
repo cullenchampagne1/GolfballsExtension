@@ -57,6 +57,50 @@ function gbNormalizeProductConfig(prod) {
   };
 }
 
+// ── Product-config cache ─────────────────────────────────────────────────────
+// ~1/3 of item types (towels, tees, bag tags, money clips, apparel, …) carry
+// their base inputs ONLY on the product page, so the config fetch is load-bearing.
+// Cache the normalized config per URL so reopens are instant and a flaky fetch
+// falls back to the last-known config instead of dropping the inputs.
+const GB_CONFIG_CACHE_KEY = 'gbProductConfigCache';
+const GB_CONFIG_TTL_MS = 24 * 60 * 60 * 1000;
+const GB_CONFIG_CACHE_MAX = 400;
+
+function gbStorageGet(key) {
+  return new Promise((resolve) => { try { chrome.storage.local.get(key, (d) => resolve((d && d[key]) || null)); } catch { resolve(null); } });
+}
+function gbStorageSet(key, val) { try { chrome.storage.local.set({ [key]: val }); } catch { /* ignore */ } }
+
+async function gbGetProductConfig(url) {
+  const cache = (await gbStorageGet(GB_CONFIG_CACHE_KEY)) || {};
+  const hit = cache[url];
+  if (hit && hit.config && (Date.now() - (hit.ts || 0)) < GB_CONFIG_TTL_MS) return hit.config;
+
+  let prod;
+  try {
+    const r = await fetch(url, { headers: { Accept: 'text/html,*/*', 'Accept-Language': 'en-US,en;q=0.9' }, credentials: 'include' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const html = await r.text();
+    const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+    if (!m) throw new Error('__NEXT_DATA__ not found');
+    prod = JSON.parse(m[1])?.props?.pageProps?.product;
+    if (!prod) throw new Error('No product in page data');
+  } catch (err) {
+    if (hit && hit.config) return hit.config;   // stale-on-error: keep the last-known inputs
+    throw err;
+  }
+
+  const config = gbNormalizeProductConfig(prod);
+  cache[url] = { ts: Date.now(), config };
+  const keys = Object.keys(cache);
+  if (keys.length > GB_CONFIG_CACHE_MAX) {
+    keys.sort((a, b) => (cache[a].ts || 0) - (cache[b].ts || 0));
+    for (let i = 0; i < keys.length - GB_CONFIG_CACHE_MAX; i++) delete cache[keys[i]];
+  }
+  gbStorageSet(GB_CONFIG_CACHE_KEY, cache);
+  return config;
+}
+
 // ── Seed default state on first install ──────────────────────────────────────
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   if (reason !== 'install') return; // skip updates and browser_update
@@ -219,20 +263,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // + ProductChild, and returns the normalized config the modal renders from
   // (real base colors, second-pole availability, setup fee, shipping/service).
   if (msg.action === 'fetchProductConfig' && msg.url) {
-    fetch(msg.url, {
-      headers: { 'Accept': 'text/html,*/*', 'Accept-Language': 'en-US,en;q=0.9' },
-      credentials: 'include',
-    })
-      .then(async r => {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const html = await r.text();
-        const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
-        if (!m) throw new Error('__NEXT_DATA__ not found');
-        const prod = JSON.parse(m[1])?.props?.pageProps?.product;
-        if (!prod) throw new Error('No product in page data');
-        sendResponse({ ok: true, config: gbNormalizeProductConfig(prod) });
-      })
-      .catch(err => {
+    gbGetProductConfig(msg.url)
+      .then((config) => sendResponse({ ok: true, config }))
+      .catch((err) => {
         console.warn('[GB] fetchProductConfig error:', err.message);
         sendResponse({ ok: false, error: String(err) });
       });
