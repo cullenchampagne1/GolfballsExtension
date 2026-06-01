@@ -275,6 +275,51 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // ── Save a cart / proposal (PUT /user/saveCart) ────────────────────
+  // The golfballs cart is server-side on the icustomize API (localStorage is
+  // only a mirror). saveCart is unauthenticated — sitekey only, guest IDs —
+  // and returns the human cart/proposal number. msg.body = { cartData,
+  // customerID, salesRepID } built by src/lib/cartSerializer.js.
+  if (msg.action === 'giftSaveCart' && msg.body) {
+    fetch('https://master.api.icustomize.com/user/saveCart', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'sitekey': 'golfballs' },
+      body: JSON.stringify(msg.body),
+    })
+      .then(async r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        const d = (j && j.d) || {};
+        sendResponse({ ok: true, cartNumber: d.cartNumber, cartID: d.cartID, message: d.success });
+      })
+      .catch(err => {
+        console.warn('[GB] giftSaveCart error:', err.message);
+        sendResponse({ ok: false, error: String(err) });
+      });
+    return true;
+  }
+
+  // ── Load a saved cart / proposal (GET /user/getCart/<number>) ───────
+  // Returns the stored cartData (the `d` field is a JSON string or object).
+  if (msg.action === 'giftLoadCart' && msg.cartNumber != null) {
+    fetch('https://master.api.icustomize.com/user/getCart/' + encodeURIComponent(msg.cartNumber), {
+      method: 'GET',
+      headers: { 'Accept': 'application/json', 'sitekey': 'golfballs' },
+    })
+      .then(async r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        const d = j && j.d !== undefined ? j.d : j;
+        const cartData = typeof d === 'string' ? JSON.parse(d) : d;
+        sendResponse({ ok: true, cartData });
+      })
+      .catch(err => {
+        console.warn('[GB] giftLoadCart error:', err.message);
+        sendResponse({ ok: false, error: String(err) });
+      });
+    return true;
+  }
+
   // ── Per-product customizer config ──────────────────────────────────
   // Fetches a product page, extracts __NEXT_DATA__ product.ProductModification
   // + ProductChild, and returns the normalized config the modal renders from
