@@ -806,14 +806,22 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           });
           if (disposed) return;
           // sRGB so white reads as white; clamp to edge so edge pixels
-          // don't tile. Mipmaps (default min filter) + max anisotropy
-          // keep the logo crisp instead of pixelated/aliased as it
-          // curves over the ball — NPOT mipmaps are fine on WebGL2,
-          // which the viewer runs (confirmed: webgl2=true).
+          // don't tile. The logo is almost always non-power-of-two, and an
+          // NPOT texture with mipmaps renders as solid BLACK on WebGL1 (no
+          // error thrown) — that's why the print vanishes on machines
+          // without WebGL2. So only enable mipmaps + anisotropy on WebGL2,
+          // where NPOT mipmaps are legal and keep the logo crisp as it
+          // curves over the ball; on WebGL1 fall back to a plain linear
+          // filter so the logo stays visible, just slightly softer.
           decalTexture.colorSpace = THREE.SRGBColorSpace;
           decalTexture.wrapS = THREE.ClampToEdgeWrapping;
           decalTexture.wrapT = THREE.ClampToEdgeWrapping;
-          try { decalTexture.anisotropy = renderer.capabilities.getMaxAnisotropy(); } catch { /* ignore */ }
+          if (renderer.capabilities.isWebGL2) {
+            try { decalTexture.anisotropy = renderer.capabilities.getMaxAnisotropy(); } catch { /* ignore */ }
+          } else {
+            decalTexture.minFilter = THREE.LinearFilter;
+            decalTexture.generateMipmaps = false;
+          }
           decalTexture.needsUpdate = true;
           objectsToDispose.push(decalTexture);
 
