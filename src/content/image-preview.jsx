@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { mountFloating } from '../lib/mountFloating.js';
 import { ensureTheme } from '../lib/theme.js';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
@@ -40,6 +40,10 @@ if (!window.__gbImagePreviewLoaded) {
   ensureTheme();
 
   const HOST_ID = '__gb-imp';
+  // Imperative setter for the live modal's image, so an opener can pop the
+  // modal instantly and stream the resolved image in afterwards (all loading
+  // happens inside the modal instead of before it appears).
+  let _liveSetImg = null;
 
   /* Stateful wrapper around <ImagePreview>. Owns the hide-pattern:
      when the user clicks Submit Proof we fade the preview out (via
@@ -50,6 +54,13 @@ if (!window.__gbImagePreviewLoaded) {
      submit-proof.jsx wrapper sets. */
   function ImagePreviewHost({ opts, mountOnClosed, mountBindClose }) {
     const [hidden, setHidden] = useState(false);
+    // Hold the image in state so __gbImagePreviewReplace can swap it in after
+    // the modal is already open (instant-open, then stream the result).
+    const [img, setImg] = useState({ url: opts.url || '', dataUrl: opts.dataUrl || '' });
+    useEffect(() => {
+      _liveSetImg = setImg;
+      return () => { if (_liveSetImg === setImg) _liveSetImg = null; };
+    }, []);
 
     const handleLaunchProof = (image) => {
       if (typeof window.__gbOpenSubmitProof !== 'function') return;
@@ -72,8 +83,8 @@ if (!window.__gbImagePreviewLoaded) {
 
     return (
       <ImagePreview
-        url={opts.url || ''}
-        dataUrl={opts.dataUrl || ''}
+        url={img.url}
+        dataUrl={img.dataUrl}
         itemLink={opts.itemLink || null}
         visible={!hidden}
         onClosed={mountOnClosed}
@@ -93,6 +104,14 @@ if (!window.__gbImagePreviewLoaded) {
         />
       </ToastHost>
     ));
+  };
+
+  // Stream a resolved image into the already-open modal. Pass { url, dataUrl }
+  // (dataUrl wins for display + CORS-clean pixels; url is the source of record).
+  // No-op if the modal isn't open. Lets openers pop the modal instantly and
+  // fill it once the background fetch / order lookup finishes.
+  window.__gbImagePreviewReplace = function (next = {}) {
+    if (typeof _liveSetImg === 'function') _liveSetImg((prev) => ({ ...prev, ...next }));
   };
 
   // Dev placeholder — keeps the global signature compatible with the

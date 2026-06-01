@@ -303,19 +303,15 @@ function extractOriginalFilePath(text, cropGuid) {
   return m2 ? m2[1] : null;
 }
 
-function resolveExpressOriginal(rawSrc, itemLink, openWithBgFetch) {
-  const composite = () => openWithBgFetch(rawSrc);
+function resolveExpressOriginal(rawSrc, deliver) {
   const deep = decodeDeep(rawSrc);
   const om = deep.match(/UserUploads\/[A-Za-z0-9/_\-.]+?\.(?:png|jpe?g|webp|gif)/i);
   const cropGuid = om ? om[0].split('/').pop() : null;
   const messageId = findOrderMessageId();
-  if (!messageId || typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) {
-    composite();
-    return;
-  }
+  // No order context / API → leave the composite the modal already shows.
+  if (!messageId || typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) return;
   let done = false;
-  const fall = () => { if (!done) { done = true; composite(); } };
-  const timer = setTimeout(fall, 6000);
+  const timer = setTimeout(() => { done = true; }, 8000);
   try {
     chrome.runtime.sendMessage(
       { action: 'chargeApiProxy', url: 'https://master.api.icustomize.com/admin/editOrder', method: 'PUT', body: { messageID: messageId } },
@@ -323,13 +319,20 @@ function resolveExpressOriginal(rawSrc, itemLink, openWithBgFetch) {
         if (done) return;
         done = true;
         clearTimeout(timer);
-        if (chrome.runtime.lastError || !resp || !resp.ok || !resp.text) { composite(); return; }
+        if (chrome.runtime.lastError || !resp || !resp.ok || !resp.text) return;
         const filePath = extractOriginalFilePath(resp.text, cropGuid);
-        if (filePath) openWithBgFetch('https://static.golfballs.com/' + filePath.replace(/^\/+/, ''));
-        else composite();
+        if (!filePath) return;
+        const rawUrl = 'https://static.golfballs.com/' + filePath.replace(/^\/+/, '');
+        // Fetch the raw upload (credentialed) for CORS-clean pixels; if that
+        // misses, hand the modal the URL so its <img> loads it directly.
+        try {
+          chrome.runtime.sendMessage({ action: 'proxyFetchImage', url: rawUrl }, (r) => {
+            deliver(rawUrl, (r && r.ok && r.dataUrl) ? r.dataUrl : null);
+          });
+        } catch { deliver(rawUrl, null); }
       },
     );
-  } catch { fall(); }
+  } catch { /* leave the composite already shown */ }
 }
 
 // ── Click → resolve logo → open the React Image Preview ───────
@@ -340,76 +343,68 @@ function extractAndShow(rawSrc, directUrl, itemLink) {
     return;
   }
 
-  // Each fetch carries a 3-second cap so an unreachable CDN (timeout,
-  // mixed-content block, slow proxy) can't freeze the flow waiting on the
-  // browser's ~90s default. On cap we fall through to opening the modal on
-  // just the URL — its <img> can still try to display it (or surface an
-  // error). MIME gate: octet-stream / HTML error pages aren't rendered as
-  // images — we drop the dataUrl and let the modal load from the URL.
-  const FETCH_CAP_MS = 3000;
-  const isImageDataUrl = (du) => /^data:image\//i.test(du || '');
+  // Pop the modal IMMEDIATELY in its loading state, seeded with the best
+  // instantly-known URL (the page <img> src or the adjacent direct link), so
+  // there's no delay between the click and the popup. Everything below then
+  // resolves in the background and is streamed into the already-open modal via
+  // __gbImagePreviewReplace — all loading happens INSIDE the modal.
+  const initialUrl = directUrl || rawSrc;
+  window.__gbOpenImagePreview({ url: initialUrl, itemLink });
 
-  const openWithBgFetch = (url) => {
+  const isImageDataUrl = (du) => /^data:image\//i.test(du || '');
+  const deliver = (url, dataUrl) => {
+    if (typeof window.__gbImagePreviewReplace !== 'function') return;
+    window.__gbImagePreviewReplace({ url: url || initialUrl, dataUrl: isImageDataUrl(dataUrl) ? dataUrl : '' });
+  };
+
+  // Each background fetch carries a 3s cap so an unreachable CDN can't stall
+  // the resolve. On cap / non-image we just leave the modal on the URL it
+  // already has (the composite still displays).
+  const FETCH_CAP_MS = 3000;
+  const fetchAndDeliver = (url) => {
     let settled = false;
-    const settle = (dataUrl) => {
-      if (settled) return;
-      settled = true;
-      const safe = isImageDataUrl(dataUrl) ? dataUrl : '';
-      window.__gbOpenImagePreview({ url, dataUrl: safe, itemLink });
-    };
+    const settle = (dataUrl) => { if (settled) return; settled = true; deliver(url, dataUrl); };
     const timer = setTimeout(() => settle(null), FETCH_CAP_MS);
     loadImageViaBackground(url,
       (dataUrl) => { clearTimeout(timer); settle(dataUrl); },
-      () => { clearTimeout(timer); settle(null); }
+      () => { clearTimeout(timer); settle(null); },
     );
   };
 
-  if (directUrl) { openWithBgFetch(directUrl); return; }
+  if (directUrl) { fetchAndDeliver(directUrl); return; }
 
   // Express render SKUs (e.g. sku=GolfBallPhotoExpress): the page <img> is the
-  // composite (ball + photo) and the raw upload isn't a CDN file, so probing
-  // for it 404s and hangs. Resolve the ORIGINAL upload from the order's design
-  // state (editOrder) and show that; resolveExpressOriginal falls back to the
-  // composite render whenever we're off an order page or anything misses.
-  if (/[?&]sku=[^&]*express/i.test(rawSrc)) { resolveExpressOriginal(rawSrc, itemLink, openWithBgFetch); return; }
+  // composite, and the raw upload isn't a CDN file — resolve the ORIGINAL
+  // upload from the order's design state (editOrder) and stream it in. Falls
+  // back to the already-shown composite off an order page or on any miss.
+  if (/[?&]sku=[^&]*express/i.test(rawSrc)) { resolveExpressOriginal(rawSrc, deliver); return; }
 
   const tokenOrPath = findOverlayTokenOrPath(rawSrc);
-  if (!tokenOrPath) { openWithBgFetch(rawSrc); return; }
+  if (!tokenOrPath) { fetchAndDeliver(rawSrc); return; }
 
-  // Render.aspx case — multiple candidate hosts / casings. Probe each via
-  // the background script until one returns image bytes, same per-candidate cap.
+  // Render.aspx overlay — probe candidate hosts; deliver the first that returns
+  // real image bytes. On exhaustion leave the composite the modal already shows.
   const candidates = buildAbsoluteCandidates(tokenOrPath);
   let idx = 0;
   const tryNext = () => {
-    if (idx >= candidates.length) {
-      // Every overlay candidate failed — fall back to the original
-      // Render.aspx URL (the server renders something that loads) rather
-      // than candidates[0], a guessed CDN path that 404s and freezes the
-      // modal spinner.
-      window.__gbOpenImagePreview({ url: rawSrc || candidates[0], itemLink });
-      return;
-    }
+    if (idx >= candidates.length) return;
     const url = candidates[idx++];
     let resolved = false;
-    const timer = setTimeout(() => {
-      if (resolved) return;
-      resolved = true;
-      tryNext();
-    }, FETCH_CAP_MS);
+    const timer = setTimeout(() => { if (resolved) return; resolved = true; tryNext(); }, FETCH_CAP_MS);
     loadImageViaBackground(url,
       (dataUrl) => {
         if (resolved) return;
         resolved = true;
         clearTimeout(timer);
-        const safe = isImageDataUrl(dataUrl) ? dataUrl : '';
-        window.__gbOpenImagePreview({ url, dataUrl: safe, itemLink });
+        if (isImageDataUrl(dataUrl)) deliver(url, dataUrl);
+        else tryNext();
       },
       () => {
         if (resolved) return;
         resolved = true;
         clearTimeout(timer);
         tryNext();
-      }
+      },
     );
   };
   tryNext();
