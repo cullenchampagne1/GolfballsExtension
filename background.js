@@ -160,7 +160,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   
   // ── 1. Image Proxy ─────────────────────────────────────────
   if (msg.action === 'proxyFetchImage' && msg.url) {
-    fetch(msg.url)
+    // credentials:'include' so session-gated render endpoints succeed: the
+    // express Render.aspx (icustomize / customizationapplications) only
+    // returns the composited image when the logged-in cookie is sent —
+    // without it the fetch gets a non-image auth response and the preview
+    // hangs. Harmless for public images (cookies just ignored).
+    fetch(msg.url, { credentials: 'include' })
       .then(async r => {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const buf = await r.arrayBuffer();
