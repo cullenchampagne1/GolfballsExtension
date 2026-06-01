@@ -1,1 +1,6 @@
 src/.DS_Store
+
+# Browser HTTP-archive captures — large, never belong in the repo.
+# (A 355 MB www.golfballs.com.har once got swept in by the auto-push
+#  hook's `git add -A` and blocked every push.)
+*.har
