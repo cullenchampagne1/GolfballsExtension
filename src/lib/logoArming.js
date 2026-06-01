@@ -323,13 +323,13 @@ function resolveExpressOriginal(rawSrc, deliver) {
         const filePath = extractOriginalFilePath(resp.text, cropGuid);
         if (!filePath) return;
         const rawUrl = 'https://static.golfballs.com/' + filePath.replace(/^\/+/, '');
-        // Fetch the raw upload (credentialed) for CORS-clean pixels; if that
-        // misses, hand the modal the URL so its <img> loads it directly.
+        // Background-fetch the raw upload (credentialed, same-origin dataURL)
+        // and stream it in. On failure, leave the composite already shown.
         try {
           chrome.runtime.sendMessage({ action: 'proxyFetchImage', url: rawUrl }, (r) => {
-            deliver(rawUrl, (r && r.ok && r.dataUrl) ? r.dataUrl : null);
+            if (r && r.ok && r.dataUrl) deliver(r.dataUrl, rawUrl);
           });
-        } catch { deliver(rawUrl, null); }
+        } catch { /* leave composite */ }
       },
     );
   } catch { /* leave the composite already shown */ }
@@ -343,69 +343,57 @@ function extractAndShow(rawSrc, directUrl, itemLink) {
     return;
   }
 
-  // Pop the modal IMMEDIATELY in its loading state, seeded with the best
-  // instantly-known URL (the page <img> src or the adjacent direct link), so
-  // there's no delay between the click and the popup. Everything below then
-  // resolves in the background and is streamed into the already-open modal via
-  // __gbImagePreviewReplace — all loading happens INSIDE the modal.
-  const initialUrl = directUrl || rawSrc;
-  window.__gbOpenImagePreview({ url: initialUrl, itemLink });
+  // Pop the modal IMMEDIATELY in a pure loading state — never hand the modal's
+  // crossOrigin canvas <img> a cross-site URL (a render URL would CORS-error
+  // and flash the error state before the image resolves). Every image is
+  // streamed in as a background-fetched, same-origin dataURL via
+  // __gbImagePreviewReplace, so all loading happens INSIDE the modal with no
+  // delay and no error flash.
+  window.__gbOpenImagePreview({ pending: true, itemLink });
 
   const isImageDataUrl = (du) => /^data:image\//i.test(du || '');
-  const deliver = (url, dataUrl) => {
-    if (typeof window.__gbImagePreviewReplace !== 'function') return;
-    window.__gbImagePreviewReplace({ url: url || initialUrl, dataUrl: isImageDataUrl(dataUrl) ? dataUrl : '' });
+  const deliver = (dataUrl, url) => {
+    // Only ever stream in a real image dataURL; a bare cross-site URL would
+    // re-trigger the crossOrigin error in the modal's <img>.
+    if (typeof window.__gbImagePreviewReplace !== 'function' || !isImageDataUrl(dataUrl)) return;
+    window.__gbImagePreviewReplace({ url: url || '', dataUrl });
   };
 
-  // Each background fetch carries a 3s cap so an unreachable CDN can't stall
-  // the resolve. On cap / non-image we just leave the modal on the URL it
-  // already has (the composite still displays).
+  // 3s cap per background fetch so an unreachable host can't stall the resolve.
   const FETCH_CAP_MS = 3000;
-  const fetchAndDeliver = (url) => {
+  const bgFetch = (url, cb) => {
     let settled = false;
-    const settle = (dataUrl) => { if (settled) return; settled = true; deliver(url, dataUrl); };
+    const settle = (du) => { if (settled) return; settled = true; cb(du); };
     const timer = setTimeout(() => settle(null), FETCH_CAP_MS);
     loadImageViaBackground(url,
-      (dataUrl) => { clearTimeout(timer); settle(dataUrl); },
+      (du) => { clearTimeout(timer); settle(du); },
       () => { clearTimeout(timer); settle(null); },
     );
   };
 
-  if (directUrl) { fetchAndDeliver(directUrl); return; }
+  if (directUrl) { bgFetch(directUrl, (du) => deliver(du, directUrl)); return; }
 
-  // Express render SKUs (e.g. sku=GolfBallPhotoExpress): the page <img> is the
-  // composite, and the raw upload isn't a CDN file — resolve the ORIGINAL
-  // upload from the order's design state (editOrder) and stream it in. Falls
-  // back to the already-shown composite off an order page or on any miss.
-  if (/[?&]sku=[^&]*express/i.test(rawSrc)) { resolveExpressOriginal(rawSrc, deliver); return; }
+  // Express render SKUs (e.g. sku=GolfBallPhotoExpress): show the composite
+  // immediately (bg-fetched render, loads with the session cookie), then
+  // upgrade to the RAW upload if the order's design state resolves it.
+  if (/[?&]sku=[^&]*express/i.test(rawSrc)) {
+    let rawShown = false;
+    bgFetch(rawSrc, (du) => { if (!rawShown) deliver(du, rawSrc); });
+    resolveExpressOriginal(rawSrc, (du, url) => { rawShown = true; deliver(du, url); });
+    return;
+  }
 
   const tokenOrPath = findOverlayTokenOrPath(rawSrc);
-  if (!tokenOrPath) { fetchAndDeliver(rawSrc); return; }
+  if (!tokenOrPath) { bgFetch(rawSrc, (du) => deliver(du, rawSrc)); return; }
 
   // Render.aspx overlay — probe candidate hosts; deliver the first that returns
-  // real image bytes. On exhaustion leave the composite the modal already shows.
+  // real image bytes. On exhaustion fall back to the composite render.
   const candidates = buildAbsoluteCandidates(tokenOrPath);
   let idx = 0;
   const tryNext = () => {
-    if (idx >= candidates.length) return;
+    if (idx >= candidates.length) { bgFetch(rawSrc, (du) => deliver(du, rawSrc)); return; }
     const url = candidates[idx++];
-    let resolved = false;
-    const timer = setTimeout(() => { if (resolved) return; resolved = true; tryNext(); }, FETCH_CAP_MS);
-    loadImageViaBackground(url,
-      (dataUrl) => {
-        if (resolved) return;
-        resolved = true;
-        clearTimeout(timer);
-        if (isImageDataUrl(dataUrl)) deliver(url, dataUrl);
-        else tryNext();
-      },
-      () => {
-        if (resolved) return;
-        resolved = true;
-        clearTimeout(timer);
-        tryNext();
-      },
-    );
+    bgFetch(url, (du) => { if (isImageDataUrl(du)) deliver(du, url); else tryNext(); });
   };
   tryNext();
 }

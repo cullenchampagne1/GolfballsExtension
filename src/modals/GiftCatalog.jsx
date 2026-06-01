@@ -784,7 +784,13 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 999990, padding: 24, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', overflow: 'auto' }}>
-      <div style={{ margin: 'auto', flexShrink: 0, zoom: `${scale}` }}>
+      {/* Scale via transform, NOT zoom: Chrome accumulates sub-pixel rounding
+          on grid ROW positions under a fractional `zoom`, so the product rows
+          creep into each other below 1x (columns recompute per row, so they
+          stay fine). transform lays the grid out at natural size and only
+          scales the paint; transform-origin center + margin auto keep it
+          centered. */}
+      <div style={{ margin: 'auto', flexShrink: 0, transform: `scale(${scale})`, transformOrigin: 'center center' }}>
         <div style={{ width: CARD_W, height: CARD_H, position: 'relative', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column', animation: 'gc-pop .3s cubic-bezier(.34,1.56,.64,1)' }}>
         {/* Header */}
         <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>

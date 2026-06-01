@@ -85,6 +85,7 @@ if (!window.__gbImagePreviewLoaded) {
       <ImagePreview
         url={img.url}
         dataUrl={img.dataUrl}
+        pending={!!opts.pending}
         itemLink={opts.itemLink || null}
         visible={!hidden}
         onClosed={mountOnClosed}

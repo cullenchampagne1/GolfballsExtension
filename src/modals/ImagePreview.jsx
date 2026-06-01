@@ -108,6 +108,11 @@ const ImageIcon = (p) => (
 
 export function ImagePreview({
   url, dataUrl, itemLink, onClosed, bindClose,
+  // Open straight into the loading state with no image yet — the opener pops
+  // the modal instantly and streams a (bg-fetched, same-origin) dataURL in via
+  // __gbImagePreviewReplace. Avoids handing the crossOrigin <img> a cross-site
+  // URL that would CORS-error and flash the error state before the real image.
+  pending = false,
   // When provided, the Submit Proof button routes through this
   // callback instead of firing the stub toast — lets a content-script
   // wrapper mount the real SubmitProof modal with the current image.
@@ -142,7 +147,7 @@ export function ImagePreview({
   // Submit-Proof entry) renders straight into the drop-zone view —
   // otherwise the spinner flashes for one paint before useEffect
   // re-classifies it as 'empty'.
-  const [status, setStatus] = useState(() => (url ? 'loading' : 'empty'));
+  const [status, setStatus] = useState(() => (url || pending ? 'loading' : 'empty'));
   const [copied, setCopied] = useState(false);
   // Natural image dimensions in px — captured at load time, displayed
   // in the top-left chip so the user has the source size at a glance
@@ -354,7 +359,7 @@ export function ImagePreview({
   useEffect(() => {
     // Empty URL = "empty" status → render the drop-zone view; otherwise
     // load the image normally.
-    setStatus(effectiveUrl ? 'loading' : 'empty');
+    setStatus((effectiveUrl || pending) ? 'loading' : 'empty');
     setImageSize(null);
     setDecalDataUrl(null);
     setOriginalDecalDataUrl(null);
@@ -384,7 +389,7 @@ export function ImagePreview({
   // loading state — if it's still loading after the timeout, surface the
   // error view (which offers retry / drop-replace) instead of freezing.
   useEffect(() => {
-    if (status !== 'loading' || !displayUrl) return undefined;
+    if (status !== 'loading') return undefined;
     const t = setTimeout(() => setStatus((s) => (s === 'loading' ? 'error' : s)), 20000);
     return () => clearTimeout(t);
   }, [status, displayUrl]);
