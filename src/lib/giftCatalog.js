@@ -111,16 +111,39 @@ function deriveCat(doc) {
   return 'Promotional Products';
 }
 
-/** Solr product doc → catalog product. */
+/** property_*_ss facet fields → [{ label, options }] (the common base options
+    the catalog faceted, e.g. Accessories Color, Apparel Color, Apparel Size). */
+function extractProperties(doc) {
+  return Object.keys(doc)
+    .filter((k) => /^property_.+_ss$/.test(k) && Array.isArray(doc[k]) && doc[k].length)
+    .map((k) => ({ label: k.replace(/^property_/, '').replace(/_ss$/, '').replace(/_/g, ' ').trim(), options: doc[k] }));
+}
+/** price_<Mod>_d fields → { Mod: price } (per-modification price). */
+function extractPrices(doc) {
+  const out = {};
+  Object.keys(doc).filter((k) => /^price_.+_d$/.test(k)).forEach((k) => {
+    out[k.replace(/^price_/, '').replace(/_d$/, '')] = round2(num(doc[k]));
+  });
+  return out;
+}
+
+/** Solr product doc → catalog product. Carries the rich fields that drive the
+    customizer UI (modifications, base properties, second-pole/bundle variant,
+    pricing) instead of discarding them. */
 export function normalizeDoc(doc) {
   if (!doc) return null;
   let breaks = [];
+  let productionTime = null;
   try {
     const pb = JSON.parse(doc.customLogoPriceBreak_s || '{}');
     breaks = (pb.PriceBreak || [])
       .filter((b) => b && b.Quantity != null)
       .map((b) => ({ q: b.Quantity, p: round2(b.Price) }));
+    if (pb.ProductionTime != null) productionTime = pb.ProductionTime;
   } catch { /* no break ladder */ }
+
+  let customData = {};
+  try { customData = JSON.parse(doc.customData_s || '{}'); } catch { /* none */ }
 
   const price = num(doc.price_d);
   const logo  = num(doc.price_CustomLogo_d);
@@ -132,6 +155,7 @@ export function normalizeDoc(doc) {
     title:   cleanTitle(doc.title_s || doc.title_txt_en || ''),
     brand:   doc.brand_s || '',
     cat:     deriveCat(doc),
+    itemType: doc.itemType_s || (Array.isArray(doc.itemType_ss) && doc.itemType_ss[0]) || '',
     price:   round2(price),
     orig:    orig && orig > 0 ? round2(orig) : null,
     logo:    logo != null ? round2(logo) : null,
@@ -141,6 +165,12 @@ export function normalizeDoc(doc) {
     reviews: doc.reviewCount_i || 0,
     mods:    Array.isArray(doc.modificationName_ss) ? doc.modificationName_ss.length : 0,
     modNames: Array.isArray(doc.modificationName_ss) ? doc.modificationName_ss : [],
+    properties: extractProperties(doc),     // common base inputs (color/size) from the catalog facets
+    prices:  extractPrices(doc),            // per-modification price (price_CustomLogo_d, …)
+    dualPole: customData.variant === 'dualPole',                                   // → second-pole imprint
+    bundleItems: customData.bundleItems ? customData.bundleItems.split(',').map((s) => s.trim()).filter(Boolean) : null,
+    tags:    Array.isArray(doc.tag_ss) ? doc.tag_ss : [],
+    productionTime,
     minQty:  (breaks[0] && breaks[0].q) || 1,
     breaks,
     promo:   parsePromo(doc.tag_ss),

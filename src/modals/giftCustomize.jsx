@@ -365,10 +365,10 @@ function SecondImprint() {
 function Commercial({ p, config, serviceLevel }) {
   const ladder = (p.breaks && p.breaks.length ? p.breaks : [{ q: p.minQty || 12, p: p.price || 0 }]);
   // setup fee + service options come from the live config; balls (no config) keep the legacy defaults.
-  const showSetupFee = config ? config.setupFee : true;
   const serviceOpts = config
     ? (config.serviceLevel && config.serviceLevel.length ? config.serviceLevel : config.shipping)
     : (serviceLevel ? ['8 Business Day Standard', '3-Day', '2-Day', 'Overnight'] : []);
+  const prodTime = p.productionTime;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
       <div style={{ display: 'flex', gap: 10 }}>
@@ -376,13 +376,10 @@ function Commercial({ p, config, serviceLevel }) {
           <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Min qty</div>
           <div style={{ fontSize: 17, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)' }}>{p.minQty || 12}</div>
         </div>
-        {showSetupFee && (
-          <div style={{ flex: 1, padding: '9px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)' }}>
-            <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-brand-label)' }}>Setup fee</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-              <span style={{ fontSize: 17, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)' }}>$50</span>
-              <span style={{ fontSize: 9.5, color: 'var(--gb-text-muted)' }}>one-time</span>
-            </div>
+        {prodTime != null && prodTime > 0 && (
+          <div style={{ flex: 1, padding: '9px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)' }}>
+            <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Production</div>
+            <div style={{ fontSize: 17, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)' }}>{prodTime}<span style={{ fontSize: 10, fontWeight: 600 }}> day{prodTime === 1 ? '' : 's'}</span></div>
           </div>
         )}
       </div>
@@ -436,10 +433,10 @@ function useProductConfig(p) {
 }
 
 /* base product color — labelled buttons, exactly like the live site */
-function BaseColorPicker({ colors, value, onChange }) {
+function BaseColorPicker({ label = 'Color', colors, value, onChange }) {
   if (!colors || colors.length < 1) return null;
   return (
-    <Field label="Color">
+    <Field label={label}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {colors.map((c) => {
           const on = value === c;
@@ -452,13 +449,13 @@ function BaseColorPicker({ colors, value, onChange }) {
 
 /* Custom Logo decoration — logo upload + (second imprint only where the product
    actually has a second pole) + commercial block. */
-function CustomLogoFlow({ p, config }) {
+function CustomLogoFlow({ p, config, dualPole }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <ImageUpload />
-      {config && config.hasSecondPole && (
+      {dualPole && (
         <div>
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)', marginBottom: 7 }}>{config.secondPoleName || 'Second Pole'}</div>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)', marginBottom: 7 }}>Second Pole Imprint</div>
           <SecondImprint />
         </div>
       )}
@@ -515,17 +512,89 @@ function DecorationTabs({ p, config }) {
   );
 }
 
-/* the accessory customizer: base color + the right decoration shell for the item type */
-function AccessoryCustomizer({ p, config, loading }) {
-  const colors = (config && config.colors && config.colors.length) ? config.colors : fallbackColors(p.cat);
-  const [color, setColor] = useState('');
-  useEffect(() => { if (colors.length) setColor((cur) => cur || colors[0]); }, [colors.join('|')]);
-  const embroiderable = isEmbroiderable(p, config);
+/* one base-product input (Color, Size, Metal Finish, …) — driven entirely by data */
+function PropertyInput({ label, options }) {
+  const [v, setV] = useState(options[0]);
+  const clean = (label || 'Option').replace(/^(Accessories|Apparel|Product)\s+/i, '');
+  return <BaseColorPicker label={clean} colors={options} value={v} onChange={setV} />;
+}
+
+/* a tee imprint — text (up to 23 chars) + text color */
+function TeeDecoration() {
+  const [v, setV] = useState('');
+  const [c, setC] = useState('Black');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Field label="Imprint Text"><TextInput value={v} onChange={setV} placeholder="Up to 23 characters" maxLength={23} /></Field>
+      <Field label="Text Color"><ColorRow swatches={IMPRINT_COLORS} value={c} onChange={setC} /></Field>
+    </div>
+  );
+}
+
+/* one decoration block, keyed by modification name */
+function DecorationBlock({ name, p, config, dualPole }) {
+  if (name === 'Custom Logo') return <CustomLogoFlow p={p} config={config} dualPole={dualPole} />;
+  if (name === 'Tee') return <TeeDecoration />;
+  if (name === 'Personalized') return <PersonalizedDecoration />;
+  if (name === 'Monogram') return <MonogramDecoration />;
+  if (MODS[name]) return <ModControls name={name} p={p} config={config} />;
+  return null;
+}
+
+/* the decoration blocks a product renders, straight from its modificationName_ss */
+function DecorationBlocks({ mods, p, config, dualPole }) {
+  const norm = [...new Set((mods || []).map((m) => MOD_ALIAS[m] || m))];
+  // second pole folds into Custom Logo; Golf Towel/Hat & Bundle are base/meta — no standalone block
+  const SKIP = /second pole|golf towel|golf hat|custom accessory bundle/i;
+  let blocks = norm.filter((m) => !SKIP.test(m));
+  if (!blocks.length) blocks = ['Custom Logo'];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {blocks.map((name) => (
+        <div key={name}>
+          {blocks.length > 1 && <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-brand-label)', marginBottom: 8 }}>{name}</div>}
+          <DecorationBlock name={name} p={p} config={config} dualPole={dualPole} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* a bundle (customData.bundleItems) — one decoration section per component */
+function BundleSections({ items, p, config, dualPole }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {items.map((item, i) => (
+        <div key={i} style={{ border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden' }}>
+          <div style={{ padding: '9px 12px', background: 'var(--gb-fill-subtle)', fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-secondary)', textTransform: 'capitalize' }}>{item}</div>
+          <div style={{ padding: 14 }}>
+            {/tee/i.test(item) ? <TeeDecoration /> : <CustomLogoFlow p={p} config={config} dualPole={dualPole} />}
+          </div>
+        </div>
+      ))}
+      <Commercial p={p} config={config} />
+    </div>
+  );
+}
+
+/* the accessory customizer: every base-product input (from PropertyProduct /
+   property_*_ss), then the decoration blocks from modificationName_ss. */
+function AccessoryCustomizer({ p, config, loading }) {
+  // Properties: prefer the full per-product set (PropertyProduct, incl. niche like
+  // Metal Finish) from the live config; fall back to the catalog's faceted colors/sizes.
+  const properties = (config && config.properties && config.properties.length) ? config.properties : (p.properties || []);
+  // Modifications / second pole / bundle: the catalog doc's customData_s is the
+  // authoritative source (richer than the product page), so prefer p.* here.
+  const mods = (p.modNames && p.modNames.length) ? p.modNames : ((config && config.modifications) || []);
+  const dualPole = p.dualPole || (config && config.dualPole) || false;
+  const bundleItems = (p.bundleItems && p.bundleItems.length) ? p.bundleItems : ((config && config.bundleItems) || null);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {loading && <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontStyle: 'italic' }}>Loading live options…</div>}
-      {colors.length > 1 && <BaseColorPicker colors={colors} value={color || colors[0]} onChange={setColor} />}
-      {embroiderable ? <DecorationTabs p={p} config={config} /> : <CustomLogoFlow p={p} config={config} />}
+      {properties.map((prop, i) => <PropertyInput key={(prop.label || '') + i} label={prop.label} options={prop.options} />)}
+      {bundleItems && bundleItems.length
+        ? <BundleSections items={bundleItems} p={p} config={config} dualPole={dualPole} />
+        : <DecorationBlocks mods={mods} p={p} config={config} dualPole={dualPole} />}
     </div>
   );
 }

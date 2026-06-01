@@ -10,26 +10,28 @@ let editorWindowId   = null;
 // a small config the modal renders from.
 const GB_SIZE_RE = /^(one size|os|xxs|xs|s|m|l|xl|2xl|3xl|4xl|5xl|xxl|xxxl|small|medium|large|x-?large|\d{1,2}(\.\d)?)$/i;
 
-function gbExtractColors(prod) {
-  const children = prod.ProductChild || [];
-  const byProp = {};
-  for (const c of children) {
-    for (const pv of (c.PropertyValueProduct || [])) {
-      const pid = pv.propertyProductID;
-      if (pid == null || !pv.Value) continue;
-      (byProp[pid] = byProp[pid] || []).push({ v: String(pv.Value).trim(), sort: pv.SortValue || 0 });
-    }
+// Every base-product input comes from product.PropertyProduct (each entry is a
+// labelled property: Color, Size, Metal Finish, …). Falls back to grouping
+// ProductChild variants if PropertyProduct is absent.
+function gbExtractProperties(prod) {
+  const props = prod.PropertyProduct || [];
+  if (props.length) {
+    return props.map((p) => ({
+      label: p.Name || p.FriendlyName || 'Option',
+      order: p.PropertyOrder || 0,
+      options: (p.PropertyValueProduct || [])
+        .slice()
+        .sort((a, b) => (a.SortValue || a.PropertyOrder || 0) - (b.SortValue || b.PropertyOrder || 0))
+        .map((v) => String(v.Value || '').trim())
+        .filter(Boolean),
+    })).filter((p) => p.options.length).sort((a, b) => a.order - b.order);
   }
-  // The color property is the one whose values are mostly NOT sizes.
-  let best = null, bestScore = -1;
-  for (const pid of Object.keys(byProp)) {
-    const nonSize = byProp[pid].filter((x) => !GB_SIZE_RE.test(x.v)).length;
-    if (nonSize > bestScore) { bestScore = nonSize; best = pid; }
-  }
-  if (!best) return [];
-  const seen = new Set(); const out = [];
-  byProp[best].sort((a, b) => a.sort - b.sort).forEach((x) => { if (!seen.has(x.v)) { seen.add(x.v); out.push(x.v); } });
-  return out;
+  const byId = {};
+  (prod.ProductChild || []).forEach((c) => (c.PropertyValueProduct || []).forEach((pv) => {
+    if (pv.propertyProductID == null || !pv.Value) return;
+    (byId[pv.propertyProductID] = byId[pv.propertyProductID] || []).push(String(pv.Value).trim());
+  }));
+  return Object.keys(byId).map((id) => ({ label: 'Option', order: 0, options: [...new Set(byId[id])] }));
 }
 
 function gbModOptionValues(mod, name) {
@@ -42,15 +44,13 @@ function gbNormalizeProductConfig(prod) {
   const mods = (prod.ProductModification || []).map((pm) => pm.Modification || {});
   const customLogo = mods.find((m) => /custom/i.test(m.Name || '') || /custom logo/i.test(m.FriendlyName || ''));
   const secondPole = mods.find((m) => /second pole/i.test((m.FriendlyName || '') + ' ' + (m.Name || '')));
+  let cd = {}; try { cd = JSON.parse(prod.customData_s || '{}'); } catch { /* none */ }
   return {
     itemType: (prod.itemType_ss && prod.itemType_ss[0]) || prod.ItemType || prod.itemType_s || '',
-    colors: gbExtractColors(prod),
-    decorations: mods.map((m) => m.FriendlyName || m.Name).filter(Boolean),
-    hasCustomLogo: !!customLogo,
-    hasSecondPole: !!secondPole,
-    secondPoleName: secondPole ? (secondPole.FriendlyName || secondPole.Name) : null,
-    // Custom Logo carries a setup fee unless its description says otherwise.
-    setupFee: customLogo ? !/without setup fee/i.test(customLogo.Description || '') : false,
+    properties: gbExtractProperties(prod),                                       // base inputs: Color, Size, Metal Finish, …
+    modifications: mods.map((m) => m.FriendlyName || m.Name).filter(Boolean),    // decoration blocks
+    dualPole: cd.variant === 'dualPole' || !!secondPole,                         // → second-pole imprint
+    bundleItems: cd.bundleItems ? cd.bundleItems.split(',').map((s) => s.trim()).filter(Boolean) : null,
     shipping: customLogo ? gbModOptionValues(customLogo, 'Selected Shipping') : [],
     serviceLevel: customLogo ? gbModOptionValues(customLogo, 'Service Level')
       : (mods.map((m) => gbModOptionValues(m, 'Service Level')).find((a) => a.length) || []),
