@@ -354,9 +354,9 @@ function resolveExpressOriginal(rawSrc, done) {
 
 // The modal opens immediately in a loading state, then we work an ORDERED chain
 // of resolution methods and stream the first hit in as a same-origin dataURL.
-// EXTRACTION runs first (express raw upload, then the overlay-token logo); the
-// linked anchor and the page's own composite render are shown ONLY if every
-// extraction misses. If even those miss, the modal is flipped to an explicit
+// Order: the linked "Original file" anchor (if present) → express raw upload →
+// overlay-token logo (candidates probed in parallel) → the page's own composite
+// render as a last resort. If every step misses, the modal flips to an explicit
 // error state — it never spins on "Resolving image…" forever.
 function extractAndShow(rawSrc, directUrl, itemLink) {
   if (typeof window.__gbOpenImagePreview !== 'function') {
@@ -399,9 +399,23 @@ function extractAndShow(rawSrc, directUrl, itemLink) {
   // real same-origin dataURL and ends the chain.
   const steps = [];
 
+  // PRIMARY — the raw file linked directly under the thumbnail (the "Original
+  // file" anchor findDirectLink picked up). When the CRM links the original
+  // upload beside the render, that link IS the file we want, so prefer it over
+  // everything else: truest source, a single fetch, no API round-trip. (Restores
+  // the old "if a file is linked below the image, extract that instead of the
+  // render" behaviour that the ordered-resolver rewrite dropped.)
+  if (directUrl) {
+    steps.push((next) => {
+      LOG('primary: linked original file', directUrl);
+      bgFetch(directUrl, (du) => { if (!deliver(du, directUrl)) { LOG('primary: miss'); next(); } });
+    });
+  }
+
   // Method B — express / custom-logo RAW upload from the order's design state.
-  // Self-skips instantly off order pages, so it's free there; on order pages
-  // it's the truest source (vs the cropped overlay or the composite render).
+  // Self-skips instantly off order pages. Needs the order's icustomize admin
+  // iframe loaded so chargeApiProxy can scavenge the JWT (see
+  // resolveExpressOriginal) — without it this misses and we fall through.
   steps.push((next) => {
     LOG('method B (express raw upload): start');
     resolveExpressOriginal(rawSrc, (du, url) => {
@@ -411,30 +425,29 @@ function extractAndShow(rawSrc, directUrl, itemLink) {
     });
   });
 
-  // Method A — overlay-token / Render.aspx underlying logo on the CDN.
+  // Method A — overlay-token / Render.aspx underlying logo on the CDN. Probe the
+  // candidate hosts IN PARALLEL (first real image wins, the rest are ignored) so
+  // a long candidate list can't stall the chain for N × the per-fetch cap and
+  // trip the modal's 20s loading watchdog. Capped so an icon-token candidate
+  // explosion (bases × exts × hosts) stays sane.
   const tokenOrPath = findOverlayTokenOrPath(rawSrc);
   if (tokenOrPath) {
-    const candidates = buildAbsoluteCandidates(tokenOrPath);
+    const candidates = buildAbsoluteCandidates(tokenOrPath).slice(0, 32);
     steps.push((next) => {
-      LOG('method A (overlay token):', candidates.length, 'candidate host(s)');
-      let i = 0;
-      const tryNext = () => {
-        if (i >= candidates.length) { LOG('method A: all candidates missed'); return next(); }
-        const url = candidates[i++];
-        bgFetch(url, (du) => { if (!deliver(du, url)) tryNext(); });
-      };
-      tryNext();
+      LOG('method A (overlay token):', candidates.length, 'candidate host(s), parallel');
+      if (!candidates.length) return next();
+      let settled = false;
+      let remaining = candidates.length;
+      candidates.forEach((url) => {
+        bgFetch(url, (du) => {
+          if (settled) return;
+          if (isImageDataUrl(du)) { settled = true; deliver(du, url); }
+          else if (--remaining === 0) { settled = true; LOG('method A: all candidates missed'); next(); }
+        });
+      });
     });
   } else {
     LOG('method A (overlay token): no token in src -> skipped');
-  }
-
-  // Fallback — the LINKED image (an "Original file" anchor beside the thumb).
-  if (directUrl) {
-    steps.push((next) => {
-      LOG('fallback: linked image', directUrl);
-      bgFetch(directUrl, (du) => { if (!deliver(du, directUrl)) next(); });
-    });
   }
 
   // Last resort — the page's own composite render (what the page already shows).
