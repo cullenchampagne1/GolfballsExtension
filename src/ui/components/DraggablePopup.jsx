@@ -1,8 +1,17 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { createContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { IconBtn } from './IconBtn.jsx';
 import { I } from '../icons.jsx';
+
+/* True while the popup is being dragged. The popup moves by mutating its
+   CSS left/top, which shifts every descendant's viewport position. Any
+   child using Motion's `layout` would re-measure that shift on each drag
+   frame and animate toward it — so the child visibly LAGS behind the
+   popup instead of moving rigidly with it. Descendants read this and turn
+   `layout` off while dragging. Defaults false (e.g. rendered standalone in
+   the playground), so layout animations stay on outside a drag. */
+export const PopupDragContext = createContext(false);
 
 /* ───────────────────────────────────────────────────────────────
    DraggablePopup — shared chrome for the secondary draggable popups
@@ -217,11 +226,13 @@ export function DraggablePopup({
      couldn't be dragged to the bottom because the clamp assumed the
      unscaled height. */
   const dragRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
   const onDragStart = (e) => {
     if (e.button !== 0) return;
     e.preventDefault();
     const start = { px: e.clientX, py: e.clientY, left: pos.left, top: pos.top };
     dragRef.current = start;
+    setDragging(true);
     const onMove = (ev) => {
       const dx = ev.clientX - start.px;
       const dy = ev.clientY - start.py;
@@ -248,6 +259,7 @@ export function DraggablePopup({
     };
     const onUp = () => {
       dragRef.current = null;
+      setDragging(false);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
@@ -316,7 +328,7 @@ export function DraggablePopup({
               borderBottom: '1px solid var(--gb-border-subtle)',
               display: 'flex', alignItems: 'center', gap: 8,
               background: 'var(--gb-surface-1)',
-              cursor: dragRef.current ? 'grabbing' : 'grab',
+              cursor: dragging ? 'grabbing' : 'grab',
               touchAction: 'none',
               flexShrink: 0,
             }}
@@ -366,7 +378,9 @@ export function DraggablePopup({
             display: 'flex', flexDirection: 'column',
             overflow: 'hidden',
           }}>
-            {children}
+            <PopupDragContext.Provider value={dragging}>
+              {children}
+            </PopupDragContext.Provider>
           </div>
         </motion.div>
       )}

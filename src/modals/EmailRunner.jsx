@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Btn, DraggablePopup, Dot, Field, RangeSlider, Tag, TemplatePicker, I, Spinner } from '../ui/index.js';
+import { Btn, DraggablePopup, PopupDragContext, Dot, Field, RangeSlider, Tag, TemplatePicker, I, Spinner } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { pickFromAddress } from '../lib/sender.js';
 import { useDevSetting } from '../lib/devSettings.js';
@@ -241,6 +241,19 @@ export function EmailRunner({
      the parent list (CRMSearch / TaskList) via the row callbacks. */
   const [trail, setTrail] = useState([]); // [{ name, status, email? }]
   const [paUrl, setPaUrl] = useState('');
+  /* `height:'auto'` on the body's entrance blocks makes Motion run a
+     measurement pass that paints them at full natural height for a frame —
+     a visible "tall flash" the instant the panel opens. Gate it: on the
+     first frame of each open render the blocks at their natural height with
+     NO height in `animate` (nothing to measure → no flash); one frame later
+     flip `entered` true so later height transitions (weights growing in,
+     the form collapsing when a run starts) still animate. */
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    if (!open) { setEntered(false); return undefined; }
+    const id = requestAnimationFrame(() => setEntered(true));
+    return () => cancelAnimationFrame(id);
+  }, [open]);
   /* Per-variation weights used by the Random-mode picker. Keys are
      variation ids; values sum to 100. Initialized to equal split
      when a template is picked and reset whenever the variation set
@@ -686,7 +699,7 @@ export function EmailRunner({
             <motion.div
               key="form-fields"
               initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
+              animate={{ opacity: 1, ...(entered ? { height: 'auto' } : {}) }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
               style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 14 }}
@@ -741,7 +754,7 @@ export function EmailRunner({
                 <motion.div
                   key="variation-weights"
                   initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
+                  animate={{ opacity: 1, ...(entered ? { height: 'auto' } : {}) }}
                   exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
                   style={{ overflow: 'hidden' }}
@@ -970,6 +983,12 @@ function weightStripeColor(idx) {
        through the post-send glance before the rep closes the panel
 ─────────────────────────────────────────────────────────────── */
 function RunStatusCard({ status, progress, sentCount, failedCount, trail }) {
+  /* While the popup is being dragged it moves by mutating left/top, which
+     shifts these rows' viewport position every frame. Motion `layout` would
+     chase that shift and lag behind the popup, so freeze it during a drag —
+     the rows then move rigidly with the panel. The reorder animation resumes
+     the moment the drag ends. */
+  const dragging = useContext(PopupDragContext);
   const total = progress.total || 0;
   const settled = sentCount + failedCount;
   const pct = total > 0 ? Math.min(1, settled / total) : (status === 'done' ? 1 : 0);
@@ -1077,7 +1096,7 @@ function RunStatusCard({ status, progress, sentCount, failedCount, trail }) {
             {trail.slice(-2).map((r, i, arr) => (
               <motion.div
                 key={r.seq}
-                layout
+                layout={!dragging}
                 initial={{ opacity: 0, y: 36 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -36 }}

@@ -190,6 +190,14 @@ export function TemplatePicker({
     });
   };
 
+  /* Picking a template OR a variation commits the choice and closes the menu —
+     standard dropdown behaviour. Previously no pick closed the list, so
+     selecting a parent that has variations left it hanging open (a variation
+     pick only appeared to close because of where the click landed). The
+     chevron's onToggleExpand stays separate, so drilling into variations still
+     works; only an actual selection collapses the menu. */
+  const handlePick = (val) => { onChange(val); setOpen(false); };
+
   /* Sub-line on the collapsed bar reads differently per mode +
      selection state. Kept compact so the 320–380px form factor
      doesn't wrap. The variation count we show is N+1 because the
@@ -338,7 +346,7 @@ export function TemplatePicker({
               valueTplId={valueTplId}
               valueVarId={valueVarId}
               mode={mode}
-              onChange={onChange}
+              onChange={handlePick}
               resolvingSet={resolvingSet}
             />
             </div>
@@ -375,7 +383,7 @@ export function TemplatePicker({
                 valueTplId={valueTplId}
                 valueVarId={valueVarId}
                 mode={mode}
-                onChange={onChange}
+                onChange={handlePick}
                 resolvingSet={resolvingSet}
               />
             </div>
