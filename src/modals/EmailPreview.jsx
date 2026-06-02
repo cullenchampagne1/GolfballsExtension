@@ -337,6 +337,31 @@ function ReplyComposer({ replyTo, subject }) {
   const hasText = body.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim().length > 0;
   const discard = () => { setBody(''); setExpanded(false); setNonce((n) => n + 1); };
 
+  /* Reply seed: the saved signature with two blank lines of room above it,
+     and the caret dropped at the very top so the rep types straight away. */
+  const [sig, setSig] = useState(null); // signature HTML; null while loading
+  const editorWrapRef = useRef(null);
+  useEffect(() => {
+    try { chrome.storage.local.get('emailSignature', ({ emailSignature }) => setSig(emailSignature || '')); }
+    catch { setSig(''); }
+  }, []);
+  const replyInitialHtml = sig != null ? `<div><br></div><div><br></div>${sig}` : '';
+  /* On open, focus the editor and collapse the caret to the start — a
+     contentEditable seeded with HTML otherwise lands the caret at the end. */
+  useEffect(() => {
+    if (!expanded) return undefined;
+    const t = setTimeout(() => {
+      const el = editorWrapRef.current?.querySelector('[contenteditable]');
+      if (!el) return;
+      el.focus();
+      try {
+        const r = document.createRange(); r.selectNodeContents(el); r.collapse(true);
+        const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      } catch { /* ignore */ }
+    }, 70);
+    return () => clearTimeout(t);
+  }, [expanded, nonce]);
+
   return (
     <div style={{
       position: 'sticky', bottom: 0,
@@ -407,14 +432,16 @@ function ReplyComposer({ replyTo, subject }) {
               <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>SUBJECT</span>
               <span style={{ color: 'var(--gb-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{subject}</span>
             </div>
-            <div style={{ padding: '4px 6px' }}>
-              <RichTextEditor
-                key={nonce}
-                initialHtml=""
-                onChange={setBody}
-                placeholder="Write your reply…"
-                minHeight={120}
-              />
+            <div ref={editorWrapRef} style={{ padding: '4px 6px' }}>
+              {sig != null && (
+                <RichTextEditor
+                  key={nonce}
+                  initialHtml={replyInitialHtml}
+                  onChange={setBody}
+                  placeholder="Write your reply…"
+                  minHeight={120}
+                />
+              )}
             </div>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 6,

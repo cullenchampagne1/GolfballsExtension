@@ -128,12 +128,14 @@ function normaliseEmailDom(container, isDark) {
 function emailProvidesSidePadding(content) {
   const kids = Array.from(content.children).filter((n) => n.nodeType === 1);
   for (const k of kids) {
-    if (k.tagName === 'TABLE') return true;
     try {
       const cs = getComputedStyle(k);
+      // Only count content that's ACTUALLY inset (a padded / centered marketing
+      // layout). A bare <table> no longer qualifies — Outlook wraps sent mail and
+      // quoted reply chains in full-width flush tables with no side gutter, which
+      // left our sent emails running edge-to-edge under the old "any table" check.
       if ((parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.marginLeft) || 0) >= 12) return true;
     } catch { /* ignore */ }
-    if (k.querySelector && k.querySelector('table')) return true;
   }
   return false;
 }
