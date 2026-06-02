@@ -164,23 +164,9 @@ export const DEV_SETTINGS = [
     default: false,
   },
   {
-    key:     'crmSearch.useMock',
-    label:   'CRM Search: force mock mode',
-    desc:    'Bypass the live Solr endpoint and use canned results. Useful for playground previews or when the API is down. Auto-mocks when not in an extension context.',
-    type:    'bool',
-    default: false,
-  },
-  {
     key:     'taskList.draggable',
     label:   'Task List: draggable mode',
     desc:    'When on, the Task List modal is a draggable tool window. When off, it sits centered with a solid backdrop that closes on outside-click.',
-    type:    'bool',
-    default: false,
-  },
-  {
-    key:     'taskList.useMock',
-    label:   'Task List: force mock mode',
-    desc:    'Bypass the live Page=349 task scrape and use canned tasks. Useful for playground previews or when the API is down. Auto-mocks when not in an extension context.',
     type:    'bool',
     default: false,
   },
@@ -190,13 +176,6 @@ export const DEV_SETTINGS = [
     desc:    'When on, the Submit Proof modal is a draggable tool window. When off, it sits centered with a solid backdrop that closes on outside-click.',
     type:    'bool',
     default: true,
-  },
-  {
-    key:     'submitProof.useMock',
-    label:   'Submit Proof: force mock mode',
-    desc:    'Use canned reps/artists/gallery + fake submit responses. Useful for playground previews or when the CRM is down. Auto-mocks when not in an extension context.',
-    type:    'bool',
-    default: false,
   },
   {
     key:     'crmCreateContact.requireAccount',

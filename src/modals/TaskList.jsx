@@ -6,6 +6,7 @@ import {
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
+import { callSource, defineSource, hasExtensionContext } from '../lib/dataSource.js';
 import { loadTaskTemplates } from '../lib/quickTask.js';
 import { submitQuickTask } from '../lib/submitQuickTask.js';
 import { EmailRunner } from './EmailRunner.jsx';
@@ -68,11 +69,6 @@ const SORT_COLS = {
   priority: { key: 'priority',    label: 'Priority' },
   subject:  { key: 'subject',     label: 'Subject' },
 };
-
-function hasExtensionContext() {
-  try { return typeof chrome !== 'undefined' && !!chrome.runtime?.id; }
-  catch { return false; }
-}
 
 /* Mock tasks — generated relative to "today" so the modal demo doesn't
    age (overdue / due-today / future categories all populate naturally).
@@ -144,6 +140,45 @@ function parseTasksFromHtml(html) {
   });
   return tasks;
 }
+
+/* Auth-redirect guard. When the session has expired the admin server
+   returns the login shell instead of Page=349, which parses to zero task
+   rows — indistinguishable from a legitimately empty task list unless we
+   look at the markup. Mirrors background.js's existing check (id="login" /
+   a password field / a "log in" title); a real, authenticated-but-empty
+   tasks page carries none of these. Living here lets the source's fetch()
+   THROW on a redirect (→ degrade to template data + one toast) while an
+   honestly-empty page returns [] AS DATA (→ silent empty table). */
+function looksLikeLoginShell(html) {
+  return (
+    /id=["']login["']/i.test(html) ||
+    /type=["']password["']/i.test(html) ||
+    /<title>[^<]*\blog\s?in\b/i.test(html)
+  );
+}
+
+/* The CRM task list as a declared data source. fetch() THROWS on a real
+   failure (HTTP error or an auth redirect); a parsed-but-empty page is
+   returned as [] so callSource reports state:'empty' and the table shows
+   a silent empty state rather than template data. */
+const tasksSource = defineSource({
+  id: 'crm-tasks',
+  schema: { type: 'array' },
+  fetch: async () => {
+    const res = await fetch(TASKS_ENDPOINT, { credentials: 'include' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    if (looksLikeLoginShell(html)) {
+      throw new Error('Session expired — the tasks page redirected to login.');
+    }
+    return parseTasksFromHtml(html);
+  },
+  mock: () => buildMockTasks(),
+  errorToast: (err) => ({
+    kind: 'warning',
+    message: `${err?.message || 'Couldn’t reach the CRM tasks page.'} Showing sample tasks.`,
+  }),
+});
 
 const PRIORITY_TONE = { 1: 'error', 2: 'warning', 3: 'info' };
 
@@ -241,10 +276,13 @@ async function apiGetTaskContactId(id) {
 export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
   const toast      = useToast();
   const draggable  = useDevSetting('taskList.draggable') ?? false;
-  const forceMock  = useDevSetting('taskList.useMock')   ?? false;
-  /* Playground passes useMock={true} explicitly so the rep can drive
-     the email-blast animation without an extension context. Falls
-     back to the dev flag / no-ext-context check otherwise. */
+  /* One global force-mock switch now (playground.forceMock) instead of a
+     per-modal flag. Playground passes useMock={true} explicitly so the rep
+     can drive the email-blast animation without an extension context; that
+     prop still wins. Otherwise: the global switch, or no extension context
+     at all (standalone tab). Drives both the fetch (passed to callSource)
+     and the offline/mock UI affordances below. */
+  const forceMock  = useDevSetting('playground.forceMock') ?? false;
   const useMock    = useMockProp ?? (forceMock || !hasExtensionContext());
 
   const [tasks, setTasks]         = useState([]);
@@ -323,67 +361,25 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
   // search guard so a fast Refresh-then-Refresh doesn't fire two toasts.
   const loadGenRef = useRef(0);
 
-  // Fallback prompt — same surface for "fetch threw" and "fetch returned
-  // nothing". Both end up looking the same to the user (empty list with
-  // no way to demo the layout), so they should get the same offer to
-  // drop in template data.
-  const fireFallbackToast = useCallback((message) => {
-    setStatus('error');
-    setTasks([]);
-    toast?.action?.({
-      tone: 'warning',
-      title: 'Tasks unavailable',
-      message: message || 'Couldn’t reach the CRM tasks page.',
-      primary: 'Use template data',
-      secondary: 'Dismiss',
-      icon: <I.alert />,
-      duration: null,
-      placement: 'top-center',
-      onPrimary: () => {
-        loadGenRef.current++;
-        setTasks(buildMockTasks());
-        setStatus('ready');
-      },
-    });
-  }, [toast]);
-
   const loadTasks = useCallback(async () => {
     const gen = ++loadGenRef.current;
     setStatus('loading');
-    try {
-      let rows;
-      if (useMock) {
-        await new Promise((r) => setTimeout(r, 280));
-        rows = buildMockTasks();
-      } else {
-        const html = await fetch(TASKS_ENDPOINT, { credentials: 'include' }).then((r) => r.text());
-        rows = parseTasksFromHtml(html);
-      }
-      if (gen !== loadGenRef.current) return;
-
-      // Live mode but parser found no task rows — the most common
-      // reason is an auth redirect (the page came back as the login
-      // shell, not the tasks shell). Treat as the same failure mode as
-      // a thrown fetch so the user can drop in template data and keep
-      // working instead of staring at an empty table.
-      if (!useMock && rows.length === 0) {
-        fireFallbackToast('The tasks page returned no rows — likely a session timeout. Want to see what the layout would look like?');
-        return;
-      }
-
-      setTasks(rows);
-      setStatus('ready');
-      // Drop selections that aren't in the new result set.
-      setSelected((sel) => {
-        const next = new Set();
-        for (const r of rows) if (sel.has(r.id)) next.add(r.id);
-        return next;
-      });
-    } catch (err) {
-      if (gen !== loadGenRef.current) return;
-      fireFallbackToast(err?.message);
-    }
-  }, [useMock, fireFallbackToast]);
+    /* callSource owns the three-outcome contract: live rows (incl. an
+       honestly-empty []) come back silent; a thrown fetch (HTTP error or
+       auth redirect, detected inside the source) degrades to buildMockTasks
+       and fires exactly one warning toast. Either way we always get data,
+       so there's no separate error state to manage here anymore. */
+    const { data } = await callSource(tasksSource, undefined, { toast, forceMock: useMock });
+    if (gen !== loadGenRef.current) return;
+    setTasks(data);
+    setStatus('ready');
+    // Drop selections that aren't in the new result set.
+    setSelected((sel) => {
+      const next = new Set();
+      for (const r of data) if (sel.has(r.id)) next.add(r.id);
+      return next;
+    });
+  }, [useMock, toast]);
 
   // Initial load. No second effect this time — TaskList doesn't auto-
   // refire on filter changes (filtering is client-side over the loaded

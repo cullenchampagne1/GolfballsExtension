@@ -5,6 +5,7 @@ import {
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
+import { callSource, defineSource, hasExtensionContext } from '../lib/dataSource.js';
 import { QueryBuilder, describeCondition, compileToSolr, compileToLabel } from './QueryBuilder.jsx';
 import { EmailRunner } from './EmailRunner.jsx';
 import {
@@ -53,13 +54,6 @@ const TYPE_OPTS = [
   { id: 'account', label: 'Accounts'  },
 ];
 
-/* Extension-context detection — auto-mock when not inside the live
-   extension (e.g. the playground). */
-function hasExtensionContext() {
-  try { return typeof chrome !== 'undefined' && !!chrome.runtime?.id; }
-  catch { return false; }
-}
-
 // Mock rows — fields kept in sync with content/crm-query-builder.js's
 // QB_FIELDS list so the table columns and the Query Builder match.
 // Fields present here = fields the QB will let you filter on. If you
@@ -95,12 +89,12 @@ const contactUrl = (id) => {
 export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
   const toast = useToast();
   const draggable = useDevSetting('crmSearch.draggable') ?? true;
-  const forceMock = useDevSetting('crmSearch.useMock') ?? false;
-  /* useMock prop wins when explicitly set — playground passes
-     useMock={true} so the demo loop doesn't need the rep to flip a
-     dev setting first. Falls back to the dev flag, then to a runtime
-     check (no extension context = automatic mock so the modal still
-     works as a standalone preview e.g. on the design playground). */
+  /* One global force-mock switch now (playground.forceMock) instead of a
+     per-modal flag. The useMock prop still wins when set — playground
+     passes useMock={true} so the demo loop doesn't need a dev setting
+     flipped first. Otherwise: the global switch, or no extension context
+     at all (standalone preview). */
+  const forceMock = useDevSetting('playground.forceMock') ?? false;
   const useMock   = useMockProp ?? (forceMock || !hasExtensionContext());
 
   const [query, setQuery]       = useState('');
@@ -235,6 +229,39 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
     return { docs, numFound };
   }, [sortKey, sortDir]);
 
+  /* The first page of a CRM search as a declared source. Built in-component
+     because fetch() closes over fetchSolrPage (sort-dependent). The source's
+     job is page 0 only — loadMoreResults / indexAllMatches still call
+     fetchSolrPage directly. A real fetch throw (HTTP / bad-JSON / auth)
+     degrades to the same MOCK_RESULTS the playground uses + one toast; a
+     live search that finds nothing returns docs:[] AS DATA → silent empty,
+     and the table's existing "no results" UI shows (never template data). */
+  const crmSearchSource = useMemo(() => defineSource({
+    id: 'crm-search',
+    schema: { type: 'object' },
+    isEmpty: (d) => !d?.docs?.length,
+    fetch: ({ q, qb, typeF }) => fetchSolrPage(q, qb, typeF, 0),
+    mock: ({ q, qb, typeF }) => {
+      const lower = (q || '').trim().toLowerCase();
+      let docs = MOCK_RESULTS.filter((r) => {
+        if (typeF !== 'all' && r.recordType_s.toLowerCase() !== typeF) return false;
+        if (lower) {
+          const hay = `${r.contactName_t} ${r.accountName_t} ${r.emails_tps?.[0] || ''} ${r.salesRep_s} ${r.phones_ss?.[0] || ''}`.toLowerCase();
+          if (!hay.includes(lower)) return false;
+        }
+        return true;
+      });
+      // QB filter is opaque in mock mode — narrow to the first 3 rows so the
+      // bar visibly changes the result set.
+      if (qb) docs = docs.slice(0, 3);
+      return { docs, numFound: docs.length };
+    },
+    errorToast: (err) => ({
+      kind: 'warning',
+      message: `${err?.message || 'The CRM index didn’t respond.'} Showing sample rows.`,
+    }),
+  }), [fetchSolrPage]);
+
   const runSearch = useCallback(async (q, qb = qbFilter, typeF = typeFilter) => {
     const gen = ++searchGenRef.current;
     const term = q.trim();
@@ -250,70 +277,20 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
       } catch {}
     }
     setStatus('loading');
-    try {
-      let docs;
-      if (useMock) {
-        await new Promise((r) => setTimeout(r, 320));
-        const lower = term.toLowerCase();
-        docs = MOCK_RESULTS.filter((r) => {
-          if (typeF !== 'all' && r.recordType_s.toLowerCase() !== typeF) return false;
-          if (lower) {
-            const hay = `${r.contactName_t} ${r.accountName_t} ${r.emails_tps?.[0] || ''} ${r.salesRep_s} ${r.phones_ss?.[0] || ''}`.toLowerCase();
-            if (!hay.includes(lower)) return false;
-          }
-          // QB filter is opaque in mock mode — when present we just
-          // narrow to the first 3 mock rows so the bar visibly changes
-          // the result set.
-          if (qb) docs = docs?.slice(0, 3);
-          return true;
-        });
-        if (qb) docs = docs.slice(0, 3);
-      } else {
-        const { docs: pageDocs, numFound } = await fetchSolrPage(q, qb, typeF, 0);
-        if (gen !== searchGenRef.current) return;
-        setResults(pageDocs);
-        setTotal(numFound);
-        setStatus('ready');
-        setSelected((sel) => {
-          const next = new Set();
-          for (const r of pageDocs) if (sel.has(r.id)) next.add(r.id);
-          return next;
-        });
-        return;
-      }
-      if (gen !== searchGenRef.current) return;     // stale — newer search in flight
-      setResults(docs);
-      setTotal(docs.length);
-      setStatus('ready');
-      setSelected((sel) => {
-        const next = new Set();
-        for (const d of docs) if (sel.has(d.id)) next.add(d.id);
-        return next;
-      });
-    } catch (err) {
-      if (gen !== searchGenRef.current) return;     // stale — don't fire toast
-      setStatus('error');
-      setResults([]);
-      setTotal(0);
-      toast?.action?.({
-        tone: 'warning',
-        title: 'CRM search unavailable',
-        message: err?.message || 'The CRM index didn\'t respond. Want to see what the table would look like?',
-        primary: 'Use template data',
-        secondary: 'Dismiss',
-        icon: <I.alert />,
-        duration: null,
-        placement: 'top-center',
-        onPrimary: () => {
-          // Bump the gen too so any pending stale searches don't clobber.
-          searchGenRef.current++;
-          setResults(MOCK_RESULTS);
-          setTotal(MOCK_RESULTS.length);
-          setStatus('ready');
-        },
-      });
-    }
-  }, [useMock, qbFilter, typeFilter, toast, fetchSolrPage]);
+    /* callSource owns the three-outcome contract; the stale-generation
+       guard stays here in the caller so a fast re-search discards an older
+       in-flight result (and its toast already fired at most once). */
+    const { data } = await callSource(crmSearchSource, { q, qb, typeF }, { toast, forceMock: useMock });
+    if (gen !== searchGenRef.current) return;     // stale — newer search in flight
+    setResults(data.docs);
+    setTotal(data.numFound);
+    setStatus('ready');
+    setSelected((sel) => {
+      const next = new Set();
+      for (const d of data.docs) if (sel.has(d.id)) next.add(d.id);
+      return next;
+    });
+  }, [crmSearchSource, useMock, qbFilter, typeFilter, toast]);
 
   /* Append the next page when the user scrolls near the bottom of the
      results table. Skips when there's nothing more to load, when we're

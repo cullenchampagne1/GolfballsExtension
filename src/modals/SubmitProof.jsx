@@ -6,6 +6,7 @@ import {
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
+import { callSource, defineSource, hasExtensionContext } from '../lib/dataSource.js';
 
 /* ───────────────────────────────────────────────────────────────
    SubmitProof — React port of the proof-submission flow that used
@@ -133,12 +134,6 @@ const STATUS_OPTS = [
   { id: '10', label: 'Approved' },
 ];
 
-/* ── Extension-context detection (same trick as CRMCreateContact) */
-function hasExtensionContext() {
-  try { return typeof chrome !== 'undefined' && !!chrome.runtime?.id; }
-  catch { return false; }
-}
-
 /* Mock scrape — used when there's no live server context. */
 const MOCK_REPS = [
   { val: '101', txt: 'Alice Johnson' },
@@ -164,13 +159,39 @@ const MOCK_GALLERY = [
   { id: 'm_4', name: 'Pre-prod sample', proofLink: null, thumbUrl: '', status: 'Pending',  label: 'pre', hue: 60, addedDays: 6, account: MOCK_ACCOUNT, contacts: [] },
 ];
 
+/* The customer's existing-proofs gallery as a declared source. fetch()
+   THROWS only on a real transport failure (HTTP/network); a page that
+   parses to zero proofs returns [] AS DATA → callSource reports
+   state:'empty' and the gallery section simply stays hidden (silent). A
+   thrown fetch degrades to MOCK_GALLERY + one toast. Dropdowns are NOT a
+   source: their failure must fall back to plain text inputs, never to mock
+   rep/artist IDs that could be submitted against a real order. */
+const gallerySource = defineSource({
+  id: 'proof-gallery',
+  schema: { type: 'array' },
+  fetch: async (custId) => {
+    const res = await fetch(ENDPOINT_CRM240(custId), { credentials: 'include' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    return parseGalleryFromDoc(doc);
+  },
+  mock: () => MOCK_GALLERY,
+  errorToast: () => ({
+    kind: 'warning',
+    message: 'Couldn’t load previous proofs — showing sample data.',
+  }),
+});
+
 /* ───────────────────────────────────────────────────────────────
    Public component
 ─────────────────────────────────────────────────────────────── */
 export function SubmitProof({ image, orderId: orderIdProp, customerId: customerIdProp, onClosed, bindClose, onSubmitted }) {
   const toast = useToast();
   const draggable = useDevSetting('submitProof.draggable') ?? true;
-  const forceMock = useDevSetting('submitProof.useMock') ?? false;
+  /* One global force-mock switch now (playground.forceMock) in place of the
+     per-modal flag; auto-mock outside an extension context still applies. */
+  const forceMock = useDevSetting('playground.forceMock') ?? false;
   const useMock   = forceMock || !hasExtensionContext();
 
   // Stage drives the footer button + results panel. We open straight
@@ -266,7 +287,6 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
   const [reps, setReps]       = useState(null); // null = loading, [] = failed → fallback, [...] = ok
   const [artists, setArtists] = useState(null);
   const [gallery, setGallery] = useState(null); // null = unknown, [] = loaded none / failed, [...] = ok
-  const [galleryFailed, setGalleryFailed] = useState(false);
   const [dropdownsFailed, setDropdownsFailed] = useState(false);
 
   // Submit loop state.
@@ -317,55 +337,18 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
         toast?.warning?.('Sales rep / artist lookup unavailable — switched to text input', { duration: 4500 });
       }
       // ── Gallery (existing proofs for this customer) ──
-      // Three failure modes all surface the same action toast so the
-      // user can drop in template data and keep working:
-      //   1. No customer ID on the page → nothing to query
-      //   2. Live fetch HTTP error / network error
-      //   3. Live fetch returned 0 parseable proofs
+      // Legitimately-empty results stay SILENT (the gallery section just
+      // doesn't render): no customer to query, or a live page that parses
+      // to zero proofs. Only a thrown fetch (HTTP/network) degrades to
+      // MOCK_GALLERY + one toast — callSource owns that contract. Mock mode
+      // always shows the sample set so the demo reads live.
       const cust = (customerIdProp || customerId || '').trim();
-      const fireGalleryFallback = (reason) => {
+      if (!useMock && !cust) {
+        if (alive) setGallery([]);
+      } else {
+        const { data } = await callSource(gallerySource, cust, { toast, forceMock: useMock });
         if (!alive) return;
-        setGallery([]);
-        setGalleryFailed(true);
-        toast?.action?.({
-          tone: 'warning',
-          title: 'Couldn’t load previous proofs',
-          message: reason,
-          primary: 'Use template data',
-          secondary: 'Skip gallery',
-          icon: <I.alert />,
-          duration: null,
-          // Center this template-data prompt so it reads as a modal-
-          // adjacent decision instead of a peripheral system notice.
-          placement: 'top-center',
-          onPrimary: () => setGallery(MOCK_GALLERY),
-        });
-      };
-
-      if (!cust) {
-        fireGalleryFallback('No customer ID is set on this page — type one above or drop in template data to preview.');
-        return;
-      }
-      try {
-        if (useMock) {
-          await new Promise((r) => setTimeout(r, 380));
-          if (!alive) return;
-          setGallery(MOCK_GALLERY);
-        } else {
-          const res = await fetch(ENDPOINT_CRM240(cust), { credentials: 'include' });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const html = await res.text();
-          const doc = new DOMParser().parseFromString(html, 'text/html');
-          const parsed = parseGalleryFromDoc(doc);
-          if (!alive) return;
-          if (parsed.length === 0) {
-            fireGalleryFallback('No previous proofs found for this customer.');
-            return;
-          }
-          setGallery(parsed);
-        }
-      } catch {
-        fireGalleryFallback('The customer’s proof history didn’t respond.');
+        setGallery(data);
       }
     })();
     return () => { alive = false; };
