@@ -54,6 +54,19 @@ export function ensureComposerStyles() {
   const el = document.createElement('style');
   el.setAttribute('data-gb-composer', '');
   el.textContent = `
+    /* The composer mounts into the host page's DOM (no shadow root), so the
+       page's framework (Bootstrap-era admin CSS) + Chrome UA defaults paint a
+       blue focus glow / default appearance onto our inputs. Neutralise it — the
+       .clr-bar owns our focus styling. Inline outline:none can't stop a box-shadow. */
+    .gb-kbd-composer input,
+    .gb-kbd-composer textarea {
+      -webkit-appearance: none; appearance: none;
+      outline: none !important; box-shadow: none !important;
+    }
+    .gb-kbd-composer input:focus, .gb-kbd-composer input:focus-visible,
+    .gb-kbd-composer textarea:focus, .gb-kbd-composer textarea:focus-visible {
+      outline: none !important; box-shadow: none !important;
+    }
     .gb-kbd-composer .clr-focusable { position: relative; outline: none !important; transition: transform .2s cubic-bezier(.34,1.4,.64,1); }
     .gb-kbd-composer .clr-focusable::after {
       content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0;
@@ -386,7 +399,7 @@ export const KeyboardComposer = React.forwardRef(function KeyboardComposer({
                   onChange={(e) => { if (menuOpen) { setMenuF(e.target.value); setMenuA(0); } else setSubject(e.target.value); }}
                   onKeyDown={onSubjectKey}
                   placeholder={menuOpen ? 'Filter tags…' : (schema.subjectPlaceholder || 'What was this about?')}
-                  name="gb-kc-subject" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} data-1p-ignore="true" data-lpignore="true" data-form-type="other"
+                  name="gb-kc-subject" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
                   style={{ flex: 1, minWidth: 0, height: 24, background: 'transparent', border: 'none', outline: 'none', color: 'var(--gb-text-primary)', fontSize: 14, fontWeight: 600, fontFamily: 'var(--gb-font-sans)' }} />
               </div>
 
@@ -394,7 +407,7 @@ export const KeyboardComposer = React.forwardRef(function KeyboardComposer({
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9, borderTop: '1px solid var(--gb-border-subtle)', paddingTop: 9 }}>
                 <label htmlFor="gb-kc-note" style={{ ...FIELD_TAG, paddingTop: 3 }}>{noteLabel}</label>
                 <textarea id="gb-kc-note" ref={bodyRef} value={body} onChange={(e) => setBody(e.target.value)} onKeyDown={onBodyKey}
-                  rows={2} placeholder={notePlaceholder} name="gb-kc-note" autoComplete="off" spellCheck={false} data-1p-ignore="true" data-lpignore="true" data-form-type="other"
+                  rows={2} placeholder={notePlaceholder} name="gb-kc-note" autoComplete="off" spellCheck={false}
                   style={{ flex: 1, minWidth: 0, resize: 'none', background: 'transparent', border: 'none', outline: 'none', color: 'var(--gb-text-secondary)', fontSize: 13, fontWeight: 500, lineHeight: 1.5, fontFamily: 'var(--gb-font-sans)', padding: 0 }} />
               </div>
 
@@ -413,7 +426,7 @@ export const KeyboardComposer = React.forwardRef(function KeyboardComposer({
               <I.search size={15} style={{ color: 'var(--gb-text-muted)', flexShrink: 0 }} />
               <input ref={filterRef} type="text" value={filter} onChange={(e) => setFilter(e.target.value)} onKeyDown={onFilterKey}
                 onFocus={() => f && f.setActive(-1)} placeholder={schema.filterPlaceholder || 'Filter…   or / to compose'}
-                name="gb-kc-filter" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} data-1p-ignore="true" data-lpignore="true" data-form-type="other"
+                name="gb-kc-filter" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
                 style={{ flex: 1, minWidth: 0, height: '100%', background: 'transparent', border: 'none', outline: 'none', color: 'var(--gb-text-primary)', fontSize: 13, fontWeight: 500, fontFamily: 'var(--gb-font-sans)' }} />
               {filter ? <button type="button" onClick={() => setFilter('')} aria-label="Clear" style={BAR_ICON_BTN}><I.close size={13} /></button> : <Kbd>/</Kbd>}
             </div>
