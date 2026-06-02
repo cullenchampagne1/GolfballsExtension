@@ -255,6 +255,13 @@ export const DEV_SETTINGS = [
      value. `runner` fires on click and gets `{ notify }` so it can
      surface success/failure inline via the notification system. */
   {
+    key:     'playground.forceMock',
+    label:   'Playground: force mock data (all sources)',
+    desc:    'One switch: every data source returns canned data and email sends become a dry-run (nothing is actually sent). Replaces the old per-modal mock flags. The extension also auto-mocks when running outside an extension context (e.g. the playground tab), so this is mainly for previewing mock data on a live page.',
+    type:    'bool',
+    default: false,
+  },
+  {
     key:     'playground.open',
     label:   'Modal playground',
     desc:    'Blank in-extension surface for previewing modals.',
