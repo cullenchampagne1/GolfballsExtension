@@ -44,6 +44,12 @@ if (!window.__gbImagePreviewLoaded) {
   // modal instantly and stream the resolved image in afterwards (all loading
   // happens inside the modal instead of before it appears).
   let _liveSetImg = null;
+  // A resolved image can arrive (via __gbImagePreviewReplace) BEFORE the modal's
+  // mount effect registers _liveSetImg — on a cold first open the background
+  // fetch can beat React's first commit. Buffer it here and flush on mount so the
+  // deliver is never silently dropped (which left the modal stuck on the loading
+  // screen until a close+reopen warmed the mount and won the race).
+  let _pendingReplace = null;
 
   /* Stateful wrapper around <ImagePreview>. Owns the hide-pattern:
      when the user clicks Submit Proof we fade the preview out (via
@@ -59,6 +65,7 @@ if (!window.__gbImagePreviewLoaded) {
     const [img, setImg] = useState({ url: opts.url || '', dataUrl: opts.dataUrl || '', failed: false });
     useEffect(() => {
       _liveSetImg = setImg;
+      if (_pendingReplace) { const p = _pendingReplace; _pendingReplace = null; setImg((prev) => ({ ...prev, ...p })); }
       return () => { if (_liveSetImg === setImg) _liveSetImg = null; };
     }, []);
 
@@ -114,6 +121,7 @@ if (!window.__gbImagePreviewLoaded) {
   // fill it once the background fetch / order lookup finishes.
   window.__gbImagePreviewReplace = function (next = {}) {
     if (typeof _liveSetImg === 'function') _liveSetImg((prev) => ({ ...prev, ...next }));
+    else _pendingReplace = { ...(_pendingReplace || {}), ...next };  // pre-mount → flush on mount
   };
 
   // Dev placeholder — keeps the global signature compatible with the
