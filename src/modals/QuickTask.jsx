@@ -134,7 +134,7 @@ export function QuickTask({
      (the "add a task" entry), else land in the filter bar. */
   useEffect(() => {
     const id = setTimeout(() => {
-      if (autoCompose) composerRef.current?.openMenu();
+      if (autoCompose) composerRef.current?.startCompose();
       else composerRef.current?.focus();
     }, 60);
     return () => clearTimeout(id);
