@@ -1,0 +1,147 @@
+import { pickFromAddress, DEFAULT_LOCAL_PART } from './sender.js';
+
+/* ───────────────────────────────────────────────────────────────
+   emailSender.js — one place that builds, classifies, and dispatches
+   an outbound email. Collapses the duplicated send logic that lived
+   inline in email-preview (reply) and EmailRunner (bulk blast).
+
+   Transport rule (see memory "email-pa-off-fallback"):
+     • PA READY (powerAutomateEnabled === true AND a non-empty URL)
+         → send through Power Automate: full HTML body + signature +
+           replyMode. Dispatches the background `paAutomate` action
+           (which owns the CID image inlining + the fetch).
+     • PA OFF
+         → hand the email to the user's mail client instead: a mailto
+           window with formatting STRIPPED to plain text and NO
+           signature (mailto can't carry HTML). One window per send —
+           so a bulk run opens one Outlook window per contact.
+
+   This module BUILDS + CLASSIFIES + DISPATCHES a background action; it
+   never fetches itself (PA plumbing stays in background.js). The popup's
+   own path (popup → vanilla/main.js `sendViaPA`) is intentionally left
+   untouched — that content script can't import ESM and shows its result
+   toast on the page after the popup window has closed.
+─────────────────────────────────────────────────────────────── */
+
+/* Read the four email-related storage keys in one shot → a frozen config.
+   Replaces the three scattered `chrome.storage.local.get` reads. */
+export function readEmailConfig() {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get(['emailSignature', 'devSettings', 'featureFlags', 'templates'], (cfg) => {
+        resolve(freezeConfig(cfg || {}));
+      });
+    } catch { resolve(freezeConfig({})); }
+  });
+}
+
+function freezeConfig(cfg) {
+  const flags = cfg.featureFlags || {};
+  const paOn  = flags.powerAutomateEnabled === true;
+  const paUrl = (typeof flags.powerAutomateUrl === 'string' && flags.powerAutomateUrl.trim().length > 0)
+    ? flags.powerAutomateUrl
+    : '';
+  return Object.freeze({
+    signature: cfg.emailSignature || '',
+    localPart: (cfg.devSettings && cfg.devSettings['email.localPart']) || DEFAULT_LOCAL_PART,
+    templates: Array.isArray(cfg.templates) ? cfg.templates : [],
+    powerAutomateEnabled: paOn,
+    powerAutomateUrl: paUrl,
+    paReady: paOn && !!paUrl,
+  });
+}
+
+/* Canonical signature glue — byte-identical to every legacy send site
+   (`body + '<br><div>' + sig + '</div>'`, only when a signature exists). */
+export function withSignature(html, signature) {
+  return signature ? `${html}<br><div>${signature}</div>` : (html || '');
+}
+
+/* HTML → Outlook-friendly plain text for the mailto fallback. Mirrors the
+   converter that lived in content/email-preview.jsx so that path's output
+   is unchanged. */
+export function htmlToPlainText(html) {
+  return String(html || '')
+    .replace(/<br\s*\/?>(?=)/gi, '\n')
+    .replace(/<\/(p|div|h[1-6]|li)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/\n{3,}/g, '\n\n').trim();
+}
+
+export function buildMailtoUrl(to, subject, plainBody) {
+  return `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(plainBody)}`;
+}
+
+/* The canonical Power Automate payload for ONE email. When `signature` is
+   provided it's glued onto htmlBody here, so callers pass the rendered body
+   raw — keeps the resulting payload identical to the inline builders. */
+export function buildPaPayload({ from, to, subject, htmlBody, signature, replyMode }) {
+  return {
+    emails: [{
+      from,
+      to,
+      subject,
+      htmlBody: signature != null ? withSignature(htmlBody, signature) : htmlBody,
+      replyMode,
+    }],
+  };
+}
+
+/* Default dispatcher — a Promise-wrapped chrome.runtime.sendMessage. Callers
+   (EmailRunner) can inject their own to route through a mock or to keep their
+   cancel handling. */
+function defaultDispatch(msg) {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage(msg, (r) => {
+        if (chrome.runtime.lastError) resolve({ ok: false, error: chrome.runtime.lastError.message });
+        else resolve(r);
+      });
+    } catch (e) { resolve({ ok: false, error: String(e?.message || e) }); }
+  });
+}
+
+/* Normalize the background paAutomate reply (which carries both `ok` and a
+   `results[0].status`) to one shape. */
+function classifyPaResult(r) {
+  const ok = r?.ok === true || r?.results?.[0]?.status === 'sent';
+  if (ok) return { state: 'sent', transport: 'pa', error: null };
+  return { state: 'failed', transport: 'pa', error: r?.results?.[0]?.error || r?.error || 'Power Automate error' };
+}
+
+/**
+ * Send ONE email through the active transport.
+ *
+ * @param {object} msg
+ * @param {string} msg.from        resolved From: address (use pickFromAddress)
+ * @param {string} msg.to          recipient
+ * @param {string} msg.subject
+ * @param {string} msg.htmlBody    rendered body, WITHOUT signature
+ * @param {string} [msg.replyMode] 'reply' | 'standalone'
+ * @param {string} [msg.signature] appended on the PA path, dropped on mailto
+ * @param {object} [msg.config]    a readEmailConfig() result; pass it to skip
+ *                                 a storage read and/or to force the transport
+ *                                 (EmailRunner passes { paReady, powerAutomateUrl }
+ *                                 so mock mode stays on the PA path).
+ * @param {object} [opts]
+ * @param {Function} [opts.dispatch]  custom dispatcher (mock / cancel-aware)
+ * @returns {{ state:'sent'|'opened'|'failed', transport:'pa'|'mailto'|'none', error:?string }}
+ */
+export async function sendEmail({ from, to, subject, htmlBody, replyMode = 'standalone', signature = '', config }, opts = {}) {
+  const dispatch = opts.dispatch || defaultDispatch;
+  if (!to) return { state: 'failed', transport: 'none', error: 'No recipient email' };
+  const cfg = config || await readEmailConfig();
+
+  if (cfg.paReady) {
+    const payload = buildPaPayload({ from, to, subject, htmlBody, signature, replyMode });
+    const r = await dispatch({ action: 'paAutomate', paUrl: cfg.powerAutomateUrl, payload });
+    return classifyPaResult(r);
+  }
+
+  // PA OFF → open the mail client, stripped to plain text + no signature.
+  const url = buildMailtoUrl(to, subject, htmlToPlainText(htmlBody));
+  const r = await dispatch({ action: 'openMailto', url });
+  if (r && r.ok === false) return { state: 'failed', transport: 'mailto', error: r.error || 'Could not open mail window' };
+  return { state: 'opened', transport: 'mailto', error: null };
+}

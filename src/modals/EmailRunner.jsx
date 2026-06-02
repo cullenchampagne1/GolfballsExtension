@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Btn, DraggablePopup, PopupDragContext, Dot, Field, RangeSlider, Tag, TemplatePicker, I, Spinner } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { pickFromAddress } from '../lib/sender.js';
+import { sendEmail } from '../lib/emailSender.js';
 import { useDevSetting } from '../lib/devSettings.js';
 import { renderTemplate } from '../lib/variableResolution.js';
 
@@ -241,6 +242,11 @@ export function EmailRunner({
      the parent list (CRMSearch / TaskList) via the row callbacks. */
   const [trail, setTrail] = useState([]); // [{ name, status, email? }]
   const [paUrl, setPaUrl] = useState('');
+  /* PA is "ready" only when the rep both enabled it AND saved a URL —
+     matches the popup / email-preview predicate. When it's NOT ready the
+     run still proceeds, but each send opens an Outlook window instead of
+     hitting PA (see the send step + emailSender). */
+  const [paEnabled, setPaEnabled] = useState(false);
   /* `height:'auto'` on the body's entrance blocks makes Motion run a
      measurement pass that paints them at full natural height for a frame —
      a visible "tall flash" the instant the panel opens. Gate it: on the
@@ -277,6 +283,7 @@ export function EmailRunner({
     if (useMock) {
       setTemplates(MOCK_TEMPLATES);
       setPaUrl('mock://power-automate');
+      setPaEnabled(true);
       return;
     }
     try {
@@ -288,6 +295,7 @@ export function EmailRunner({
           && (!t.type || t.type === 'email' || t.type === 'account'));
         setTemplates(eligible);
         setPaUrl(out?.featureFlags?.powerAutomateUrl || '');
+        setPaEnabled(out?.featureFlags?.powerAutomateEnabled === true);
       });
     } catch {}
   }, [open, useMock]);
@@ -430,10 +438,10 @@ export function EmailRunner({
 
   const onRun = async () => {
     if (!canRun) return;
-    if (!paUrl) {
-      toast?.error?.('Power Automate URL not set in Settings — enable PA to send.');
-      return;
-    }
+    /* PA-ready → send through Power Automate; otherwise the run still goes,
+       opening one Outlook window per contact (mailto, stripped, no sig).
+       Mock mode forces the PA path so the playground drives the animation. */
+    const paReady = useMock ? true : (paEnabled && !!paUrl);
     /* Reset row UI on the parent list, mark every contact in the
        blast as queued so the row badges flip from new → queued
        immediately, then bump the run token and kick off the loop.
@@ -555,55 +563,35 @@ export function EmailRunner({
         } else if (!toEmail) {
           outcome = { status: 'error', error: 'No recipient email resolved', name: pageName };
         } else {
-          // 3. Render template strings.
+          // 3. Render template strings. The signature is applied by
+          //    emailSender on the PA path (and dropped on the mailto
+          //    fallback), so render the body WITHOUT it here.
           const subject  = renderStr(rawSubject, resolvedVars);
-          // Signature is appended by the existing paAutomate path in
-          // vanilla/main.js's sendViaPA handler — we go direct to
-          // paAutomate here, so append it ourselves to match.
           const signature = await readSignature();
-          const htmlBody  = renderStr(rawBody, resolvedVars)
-                          + (signature ? '<br><div>' + signature + '</div>' : '');
+          const htmlBody  = renderStr(rawBody, resolvedVars);
 
-          /* 4. Send via Power Automate.
-             `from` resolves per-row: when the template has
-             senderRandomize=true, pickFromAddress fires a fresh
-             random pick for each contact so a 50-row blast varies
-             between the configured senders. The local part comes
-             from the rep's devSetting so the rest of the address
-             ends up like cullen@golfballs.com. */
+          /* 4. Send. `from` resolves per-row: senderRandomize=true makes
+             pickFromAddress fire a fresh random pick per contact so a
+             50-row blast varies between senders; the local part comes
+             from the rep's devSetting (→ cullen@golfballs.com). emailSender
+             picks the transport — PA-ready → paAutomate (HTML + sig);
+             PA-off → open one Outlook window for this contact (stripped,
+             no sig). We inject dispatchBg so mock mode + cancel routing
+             survive, and pass an explicit config so mock mode (paReady
+             forced true above) stays on the PA animation path. */
           const from = pickFromAddress(selectedTpl, emailLocalPart);
-          const paPayload = {
-            emails: [{ from, to: toEmail, subject, htmlBody, replyMode }],
-          };
-          /* Eyes-on log so the rep can copy the EXACT payload going
-             to PA and compare against the popup's network call.
-             Helps diagnose flow-side rejections like "Failed to
-             send standalone email" — usually a from/to/replyMode
-             mismatch the flow validates against. Remove once the
-             bulk path matches the popup path 1:1. */
-          // eslint-disable-next-line no-console
-          console.log('[gb] EmailRunner → paAutomate payload:', paPayload);
-          /* Last-chance cancel guard before the actual send. The
-             between-iteration check at line ~454 catches a cancel
-             that arrives before this iteration starts; the post-
-             await check at line ~579 catches one that arrives
-             AFTER this send completes. Without this third check,
-             a cancel that arrives DURING the variable-resolution
-             await above would still fire one more PA send — the
-             reason a closed panel kept blasting in the
-             background. */
+          /* Last-chance cancel guard before the actual send — catches a
+             cancel that arrived DURING the variable-resolution await
+             above, which would otherwise fire one more send. */
           if (runTokenRef.current !== token) return;
-          const send = await dispatchBg({
-            action: 'paAutomate',
-            paUrl,
-            payload: paPayload,
-          });
-          // eslint-disable-next-line no-console
-          console.log('[gb] EmailRunner ← paAutomate response:', send);
-          if (send?.ok) {
+          const res = await sendEmail(
+            { from, to: toEmail, subject, htmlBody, replyMode, signature, config: { paReady, powerAutomateUrl: paUrl } },
+            { dispatch: dispatchBg },
+          );
+          if (res.state === 'sent' || res.state === 'opened') {
             outcome = { status: 'sent', email: toEmail, name: pageName };
           } else {
-            outcome = { status: 'error', error: send?.error || 'PA send failed', email: toEmail, name: pageName };
+            outcome = { status: 'error', error: res.error || 'Send failed', email: toEmail, name: pageName };
           }
         }
       } catch (e) {

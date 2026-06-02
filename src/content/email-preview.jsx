@@ -5,7 +5,8 @@ import { ToastHost, useToast } from '../ui/components/ToastHost.jsx';
 import { EmailPreview } from '../modals/EmailPreview.jsx';
 import { parseEml, isFullHtmlPage, stripPageChrome, plainTextBody } from '../lib/emailParse.js';
 import { filterCaseTemplates, pickBestCaseTemplate, recommendedFromTemplate, matchesCaseTpl } from '../lib/caseMatch.js';
-import { pickFromAddress, DEFAULT_LOCAL_PART } from '../lib/sender.js';
+import { pickFromAddress } from '../lib/sender.js';
+import { sendEmail, readEmailConfig } from '../lib/emailSender.js';
 
 /* The party on the thread that ISN'T us — the reply target. */
 const OUR_DOMAINS = /(golfballs\.com|loyaltylogo\.com|gbcadmin)/i;
@@ -19,15 +20,6 @@ function customerEmail(email, meta) {
   if (from && !OUR_DOMAINS.test(from)) return from;
   if (to && !OUR_DOMAINS.test(to)) return to;
   return from || to || '';
-}
-/* HTML → mailto-friendly plain text (breaks preserved). */
-function htmlToPlain(html) {
-  return String(html || '')
-    .replace(/<br\s*\/?>(?=)/gi, '\n')
-    .replace(/<\/(p|div|h[1-6]|li)>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/\n{3,}/g, '\n\n').trim();
 }
 
 /* ───────────────────────────────────────────────────────────────
@@ -198,29 +190,25 @@ if (!window.__gbEmailPreviewLoaded) {
       const rawBody = tpl.body || '';
 
       setSendingTemplate(true);
-      const cfg = await new Promise((res) => chrome.storage.local.get(['featureFlags', 'emailSignature', 'devSettings'], res));
-      const flags = cfg.featureFlags || {};
-      const paOn = flags.powerAutomateEnabled === true;
-      const paUrl = typeof flags.powerAutomateUrl === 'string' && flags.powerAutomateUrl.trim().length > 0;
-      const localPart = (cfg.devSettings && cfg.devSettings['email.localPart']) || DEFAULT_LOCAL_PART;
-      const from = pickFromAddress(tpl, localPart);
-
-      if (paOn && paUrl) {
-        const sig = cfg.emailSignature ? `<br><div>${cfg.emailSignature}</div>` : '';
-        const payload = { emails: [{ from, to, subject, htmlBody: rawBody + sig, replyMode: 'reply' }] };
-        chrome.runtime.sendMessage({ action: 'paAutomate', paUrl: flags.powerAutomateUrl, payload }, (result) => {
-          setSendingTemplate(false);
-          if (result?.results?.[0]?.status === 'sent') {
-            toast?.success?.(`Reply sent to ${to}`, { duration: 4000 });
-          } else {
-            toast?.error?.(`Send failed: ${result?.results?.[0]?.error || result?.error || 'Power Automate error'}`, { duration: 6000 });
-          }
-        });
-      } else {
-        const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(htmlToPlain(rawBody))}`;
-        try { window.open(mailto, '_blank'); } catch { /* popup blocked */ }
-        setSendingTemplate(false);
+      /* Build + transport handled by emailSender: PA-ready → send the
+         reply through PA (HTML + signature); PA-off → open an Outlook
+         reply (mailto, stripped to plain text, no signature). */
+      const cfg = await readEmailConfig();
+      const from = pickFromAddress(tpl, cfg.localPart);
+      const res = await sendEmail({
+        from, to, subject,
+        htmlBody: rawBody,
+        replyMode: 'reply',
+        signature: cfg.signature,
+        config: cfg,
+      });
+      setSendingTemplate(false);
+      if (res.state === 'sent') {
+        toast?.success?.(`Reply sent to ${to}`, { duration: 4000 });
+      } else if (res.state === 'opened') {
         toast?.info?.(`Opening Outlook reply to ${to}`, { duration: 2500 });
+      } else {
+        toast?.error?.(`Send failed: ${res.error || 'Power Automate error'}`, { duration: 6000 });
       }
     };
 

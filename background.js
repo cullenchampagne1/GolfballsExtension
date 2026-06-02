@@ -832,6 +832,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  /* Open a mailto: URL in a background tab. Used by lib/emailSender.js as
+     the PA-off fallback (hand the email to the user's mail client). Goes
+     through the background because content scripts (email-preview,
+     EmailRunner) have no chrome.tabs access, and chrome.tabs.create on a
+     mailto: URL is not popup-blocked — unlike a loop of window.open()
+     calls, which matters for a bulk run opening one window per contact.
+     active:false so a bulk run doesn't yank focus on every send. The
+     popup's own path already does the same chrome.tabs.create. */
+  if (msg.action === 'openMailto') {
+    try { chrome.tabs.create({ url: msg.url, active: false }); sendResponse({ ok: true }); }
+    catch (e) { sendResponse({ ok: false, error: String(e?.message || e) }); }
+    return true;
+  }
+
 
   /* ── Email blast orchestrator ────────────────────────────────────
      Pre-flight for the campaign engine. Iterates a list of contacts,
