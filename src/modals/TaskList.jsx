@@ -932,53 +932,6 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
         <span hidden>{busyVersion}</span>
       </div>
 
-      {/* Selection summary — slides in just ABOVE the footer when rows are
-          checked. Placed AFTER the table (not above it) on purpose: the
-          table is flex:1, so a bar here shrinks the table from the bottom
-          and the visible rows stay anchored — selecting/deselecting no
-          longer shifts the rows up and down. */}
-      <AnimatePresence initial={false}>
-        {hasSelection && (
-          <motion.div
-            key="sel-bar"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.18 }}
-            style={{ overflow: 'hidden', flexShrink: 0 }}
-          >
-            <div style={{
-              padding: '8px 14px',
-              borderTop: '1px solid var(--gb-border-subtle)',
-              background: 'var(--gb-brand-tint-soft)',
-              display: 'flex', alignItems: 'center', gap: 10,
-            }}>
-              <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)' }}>
-                <span style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{selCount} selected</span>
-                {' '}of {visibleTasks.length} task{visibleTasks.length === 1 ? '' : 's'}
-              </div>
-              <div style={{ flex: 1 }} />
-              <Btn
-                size="sm"
-                variant="ghost"
-                icon={<MegaphoneIcon />}
-                onClick={onRunCampaign}
-              >Run campaign</Btn>
-              <Btn
-                size="sm"
-                variant="ghost"
-                icon={<I.mail size={11} />}
-                onClick={(e) => {
-                  setEmailRunnerCursor({ x: e.clientX, y: e.clientY });
-                  setEmailRunnerOpen(true);
-                }}
-              >Email selected</Btn>
-              <Btn size="sm" variant="ghost" icon={<I.copy size={11} />} onClick={exportSelectedCSV}>Export CSV</Btn>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Footer — always-on row-level bulk actions. Quick Task creates
           a templated task on each selected row; Open Tabs opens every
           selected contact in a new tab. Both gated on selection. */}

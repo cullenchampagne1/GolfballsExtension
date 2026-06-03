@@ -258,11 +258,21 @@ function UserPresetsManager({ onPresetLoad }) {
   const [selectedId, setSelectedId] = useState(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [presetName, setPresetName] = useState('');
-  // Default: full state — every scope checked.
+  // Default: full state — every scope checked (save dialog).
   const [chosenScopes, setChosenScopes] = useState(() => new Set(PRESET_SCOPES.map((s) => s.id)));
+  // Which scopes to APPLY when loading the selected preset (defaults to all it
+  // carries; the recipient can untick any before loading).
+  const [loadScopes, setLoadScopes] = useState(new Set());
   const fileInputRef = useRef(null);
 
   useEffect(() => { loadUserPresets(); }, []);
+
+  // When the selected preset changes, default to applying ALL the scopes it
+  // carries (the user can then untick the ones they don't want).
+  useEffect(() => {
+    const p = presets.find((x) => x.id === selectedId);
+    setLoadScopes(new Set(p ? presetScopeIds(p) : []));
+  }, [selectedId, presets]);
 
   async function loadUserPresets() {
     try {
@@ -312,7 +322,10 @@ function UserPresetsManager({ onPresetLoad }) {
     const raw = presets.find((p) => p.id === selectedId);
     if (!raw) return;
     const preset = normalizePreset(raw);
-    const { applied } = await applyScopes(preset.scopes);
+    // Apply only the scopes the user left ticked.
+    const chosen = {};
+    for (const id of loadScopes) if (preset.scopes && preset.scopes[id]) chosen[id] = preset.scopes[id];
+    const { applied } = await applyScopes(chosen);
     onPresetLoad?.();
     const labels = applied
       .map((id) => PRESET_SCOPES.find((s) => s.id === id)?.label)
@@ -449,20 +462,45 @@ function UserPresetsManager({ onPresetLoad }) {
       </AnimatePresence>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <Dropdown size="sm" value={selectedId} placeholder={hasPresets ? 'Select a preset…' : 'No saved presets'} options={dropdownOptions} onChange={setSelectedId} disabled={!hasPresets} style={{ flex: 1 }} />
-        <Btn variant="primary" size="sm" onClick={handleLoad} disabled={!selectedId}>Load</Btn>
+        <Btn variant="primary" size="sm" onClick={handleLoad} disabled={!selectedId || loadScopes.size === 0}>Load</Btn>
         <Btn variant="secondary" size="sm" onClick={openSaveDialog}>Save</Btn>
         <Btn variant="secondary" size="sm" onClick={handleExport} disabled={!selectedId}>Export</Btn>
         <Btn variant="secondary" size="sm" onClick={handleDelete} disabled={!selectedId}><I.trash size={12} /></Btn>
         <input ref={fileInputRef} type="file" accept=".json" onChange={handleImport} style={{ display: 'none' }} />
         <Btn variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>Import</Btn>
       </div>
-      {/* Tag row — at a glance, what's in the selected preset. */}
+      {/* Scope chips — what's in the selected preset AND which to load. Tap a
+          chip to include/exclude it; only ticked scopes are applied on Load. */}
       {selectedScopeIds.length > 0 && (
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 8 }}>
-          {selectedScopeIds.map((id) => {
-            const def = PRESET_SCOPES.find((s) => s.id === id);
-            return def ? <Tag key={id} tone="brand" size="xs">{def.label}</Tag> : null;
-          })}
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', marginBottom: 5 }}>
+            Tap to choose what to load · {loadScopes.size} of {selectedScopeIds.length}
+          </div>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            {selectedScopeIds.map((id) => {
+              const def = PRESET_SCOPES.find((s) => s.id === id);
+              if (!def) return null;
+              const on = loadScopes.has(id);
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  title={def.desc}
+                  onClick={() => setLoadScopes((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; })}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', padding: '3px 9px',
+                    borderRadius: 'var(--gb-r-pill)', cursor: 'pointer', fontSize: 10.5, fontWeight: 600, fontFamily: 'inherit',
+                    background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)',
+                    border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
+                    color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
+                    textDecoration: on ? 'none' : 'line-through',
+                  }}
+                >
+                  {def.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

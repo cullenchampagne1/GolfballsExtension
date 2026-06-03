@@ -51,19 +51,45 @@ export const PRESET_SCOPES = [
     keys:  ['secret_settings'],
     merge: 'overwrite',
   },
+  // Email templates, split by `type` so a shared preset can carry just the
+  // kinds the recipient wants. `filter` captures only matching items on save;
+  // mergeById on load merges them into the recipient's array, leaving other
+  // types untouched. Folders ride along (whole) so categories survive.
   {
-    id:    'templates',
-    label: 'Email Templates',
-    desc:  'All email templates (order, case, account) + folders',
-    keys:  ['templates', 'templateFolders'],
-    merge: 'mergeById',
+    id: 'tpl-order',   label: 'Order Templates',   desc: 'Email templates for order pages',
+    keys: ['templates', 'templateFolders'], merge: 'mergeById',
+    filter: { templates: (t) => (t.type || 'order') === 'order' },
   },
   {
-    id:    'notes',
-    label: 'Note Templates',
-    desc:  'Quick notes, tasks, call logs + folders',
-    keys:  ['noteTemplates', 'noteFolders'],
-    merge: 'mergeById',
+    id: 'tpl-case',    label: 'Case Templates',    desc: 'Email templates for case pages',
+    keys: ['templates', 'templateFolders'], merge: 'mergeById',
+    filter: { templates: (t) => t.type === 'case' },
+  },
+  {
+    id: 'tpl-account', label: 'Account Templates', desc: 'Email templates for account pages',
+    keys: ['templates', 'templateFolders'], merge: 'mergeById',
+    filter: { templates: (t) => t.type === 'account' },
+  },
+  {
+    id: 'tpl-contact', label: 'Contact Templates', desc: 'Email templates for contact pages',
+    keys: ['templates', 'templateFolders'], merge: 'mergeById',
+    filter: { templates: (t) => t.type === 'contact' },
+  },
+  // Note templates, split by `subType`.
+  {
+    id: 'note-quick', label: 'Quick Notes',         desc: 'Quick note templates',
+    keys: ['noteTemplates', 'noteFolders'], merge: 'mergeById',
+    filter: { noteTemplates: (n) => (n.subType || 'note') === 'note' },
+  },
+  {
+    id: 'note-task',  label: 'Task Templates',      desc: 'Task templates',
+    keys: ['noteTemplates', 'noteFolders'], merge: 'mergeById',
+    filter: { noteTemplates: (n) => n.subType === 'task' },
+  },
+  {
+    id: 'note-call',  label: 'Call Log Templates',  desc: 'Call-log templates',
+    keys: ['noteTemplates', 'noteFolders'], merge: 'mergeById',
+    filter: { noteTemplates: (n) => n.subType === 'call_log' },
   },
 ];
 
@@ -96,12 +122,23 @@ export async function gatherScopes(scopeIds) {
   const scopes = {};
   for (const s of wanted) {
     const bag = {};
+    let filteredCount = null; // null = no filter on this scope
     for (const k of s.keys) {
-      // Only include keys that actually exist — skips empty defaults so
-      // the saved JSON stays compact.
-      if (data[k] !== undefined) bag[k] = data[k];
+      if (data[k] === undefined) continue;
+      const pred = s.filter && s.filter[k];
+      if (pred && Array.isArray(data[k])) {
+        const subset = data[k].filter(pred);
+        filteredCount = subset.length;
+        bag[k] = subset;
+      } else {
+        bag[k] = data[k];   // unfiltered key (e.g. folders) — captured whole
+      }
     }
-    if (Object.keys(bag).length > 0) scopes[s.id] = bag;
+    // For a filtered scope, only include it when its primary array has items
+    // (don't ship an empty "Account Templates" scope). Unfiltered scopes
+    // include if anything was captured.
+    const include = filteredCount === null ? Object.keys(bag).length > 0 : filteredCount > 0;
+    if (include) scopes[s.id] = bag;
   }
   return scopes;
 }
@@ -167,21 +204,44 @@ export async function applyScopes(scopes) {
  */
 export function normalizePreset(p) {
   if (!p || typeof p !== 'object') return null;
-  if (p.scopes) return p;
 
-  // Legacy shape — fold into the settings scope.
-  const settings = {};
-  if (p.colors || p.variant) {
-    settings.gbTheme = { variant: p.variant || 'dark', colors: p.colors || {} };
-    settings.themeColors = p.colors || {};
+  let scopes;
+  if (p.scopes) {
+    scopes = { ...p.scopes };
+  } else {
+    // Legacy ROOT shape — bare colors/variant/featureFlags/templates at top level.
+    scopes = {};
+    const settings = {};
+    if (p.colors || p.variant) {
+      settings.gbTheme = { variant: p.variant || 'dark', colors: p.colors || {} };
+      settings.themeColors = p.colors || {};
+    }
+    if (p.featureFlags)      settings.featureFlags      = p.featureFlags;
+    if (p.keyboardShortcuts) settings.keyboardShortcuts = p.keyboardShortcuts;
+    if (Object.keys(settings).length > 0) scopes.settings = settings;
+    if (Array.isArray(p.templates))     scopes.templates = { templates: p.templates, templateFolders: p.templateFolders || [] };
+    if (Array.isArray(p.noteTemplates)) scopes.notes     = { noteTemplates: p.noteTemplates, noteFolders: p.noteFolders || [] };
   }
-  if (p.featureFlags)       settings.featureFlags     = p.featureFlags;
-  if (p.keyboardShortcuts)  settings.keyboardShortcuts = p.keyboardShortcuts;
 
-  const scopes = {};
-  if (Object.keys(settings).length > 0) scopes.settings = settings;
-  if (Array.isArray(p.templates))     scopes.templates = { templates: p.templates, templateFolders: p.templateFolders || [] };
-  if (Array.isArray(p.noteTemplates)) scopes.notes     = { noteTemplates: p.noteTemplates, noteFolders: p.noteFolders || [] };
+  // Migrate the old coarse `templates` / `notes` scopes into the per-type
+  // scopes so presets saved before the split still load.
+  if (scopes.templates) {
+    const { templates = [], templateFolders = [] } = scopes.templates;
+    for (const [id, type] of [['tpl-order', 'order'], ['tpl-case', 'case'], ['tpl-account', 'account'], ['tpl-contact', 'contact']]) {
+      const items = templates.filter((t) => (t.type || 'order') === type);
+      if (items.length) scopes[id] = { templates: items, templateFolders };
+    }
+    delete scopes.templates;
+  }
+  if (scopes.notes) {
+    const { noteTemplates = [], noteFolders = [] } = scopes.notes;
+    for (const [id, sub] of [['note-quick', 'note'], ['note-task', 'task'], ['note-call', 'call_log']]) {
+      const items = noteTemplates.filter((n) => (n.subType || 'note') === sub);
+      if (items.length) scopes[id] = { noteTemplates: items, noteFolders };
+    }
+    delete scopes.notes;
+  }
+
   return { ...p, scopes };
 }
 
