@@ -306,6 +306,11 @@ export function DraggablePopup({
             left: pos.left, top: pos.top,
             width: W,
             maxHeight: H,
+            /* Smoothly tween width when a caller grows the panel between
+               states (e.g. EmailRunner 384→424 idle→running). Motion owns
+               transform/opacity; this CSS transition only touches width, so
+               they don't fight. */
+            transition: 'width .42s cubic-bezier(.34,1.15,.64,1)',
             background: 'var(--gb-surface-modal)',
             border: '1px solid var(--gb-border-default)',
             borderRadius: 'var(--gb-r-md)',

@@ -262,19 +262,6 @@ export function EmailRunner({
   const [current, setCurrent] = useState(null);       // { contactId, name, email } | null
   const [delayState, setDelayState] = useState(null); // { remaining, total } | null
   const [meta, setMeta] = useState({ startedAt: 0, finishedAt: 0 });
-  /* `height:'auto'` on the body's entrance blocks makes Motion run a
-     measurement pass that paints them at full natural height for a frame —
-     a visible "tall flash" the instant the panel opens. Gate it: on the
-     first frame of each open render the blocks at their natural height with
-     NO height in `animate` (nothing to measure → no flash); one frame later
-     flip `entered` true so later height transitions (weights growing in,
-     the form collapsing when a run starts) still animate. */
-  const [entered, setEntered] = useState(false);
-  useEffect(() => {
-    if (!open) { setEntered(false); return undefined; }
-    const id = requestAnimationFrame(() => setEntered(true));
-    return () => cancelAnimationFrame(id);
-  }, [open]);
   /* Per-variation weights used by the Random-mode picker. Keys are
      variation ids; values sum to 100. Initialized to equal split
      when a template is picked and reset whenever the variation set
@@ -689,249 +676,124 @@ export function EmailRunner({
   const failedCount = counts.failed;
   const variationCount = selectedTpl?.variations?.length || 0;
 
+  const settled = counts.sent + counts.failed;
+  const running = status === 'running';
+  const panelW = status === 'idle' ? 384 : 424;
+  const subtitle = status === 'idle'
+    ? `${contacts.length} contact${contacts.length === 1 ? '' : 's'} selected`
+    : running
+      ? `Sending… · ${settled} of ${contacts.length}`
+      : counts.failed > 0 ? `${counts.sent} sent · ${counts.failed} failed` : `All ${counts.sent} delivered`;
+
   return (
     <DraggablePopup
       open={open}
       onClose={onClose}
       anchorHostId={anchorHostId}
       cursorAnchor={cursor}
-      width={PANEL_W}
-      maxHeight={PANEL_H}
-      icon={<I.mail size={13} />}
-      title="Email selected"
-      subtitle={`${contacts.length} contact${contacts.length === 1 ? '' : 's'} queued`}
+      width={panelW}
+      maxHeight={760}
+      icon={<I.send size={13} />}
+      title="Quick Send"
+      subtitle={subtitle}
       closeDisabled={status === 'running'}
       enterFrom="right"
     >
-      {/* Body */}
-          <div
-            className="gb-email-runner-body"
-            style={{
-              padding: '14px',
-              display: 'flex', flexDirection: 'column', gap: 14,
-              overflow: 'auto', flex: 1, minHeight: 0,
-              userSelect: 'auto',
-              WebkitUserSelect: 'auto',
-              // Hide the scrollbar visually — the body needs to scroll
-              // when progress + trail expand beyond the panel cap, but
-              // a visible bar inside this small panel reads as
-              // clutter. ::-webkit-scrollbar rule is injected on mount
-              // below.
-              scrollbarWidth: 'none',
-            }}
-          >
-            {/* Template + variation weights are only meaningful while
-                composing the run. Once the run starts (or completes),
-                collapse them out so the RunStatusCard + trail panel
-                can grow into the freed vertical space — without this
-                the body's natural height exceeded the panel's 480 cap
-                and the trail rows lived below the scroll edge of the
-                popup, in the DOM but off-screen ("invisible"). */}
-            <AnimatePresence initial={false}>
-            {status === 'idle' && (
-            <motion.div
-              key="form-fields"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, ...(entered ? { height: 'auto' } : {}) }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-              style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 14 }}
-            >
-            <Field
-              label="Template"
-              hint={(() => {
-                if (!templates.length) return 'No email templates saved yet';
-                if (variationCount === 0) return null;
-                /* Variation pinning moved to the weights panel below
-                   (set a variation to 100% to lock it). The hint here
-                   nudges that there's a meaningful pool to balance. */
-                return `Each contact gets a weighted random pick (1 of ${variationCount + 1} variations)`;
-              })()}
-            >
-              {/* TemplatePicker (shared with popup.jsx). mode='random'
-                  flags the parent click as "weighted random across the
-                  pool" so the right-edge state badge shows a shuffle
-                  glyph when variations exist. Picking a sub-row pins
-                  that variation (`${tplId}::${varId}`) and the
-                  orchestrator's pinnedV branch short-circuits the
-                  weighted pick. */}
-              <TemplatePicker
-                mode="random"
-                templates={templates}
-                value={dropdownValue}
-                onChange={onTemplatePickerChange}
-                placeholder={templates.length ? 'Pick a template' : 'No templates'}
-                disabled={status === 'running'}
-                /* Inside the EmailRunner's short scrolling panel an
-                   absolute-positioned overlay either gets clipped by
-                   the body's overflow or floats past the panel edge
-                   — push siblings down instead. */
-                floating={false}
-                /* Bound the open list to ~240 so the picker can
-                   stretch with the template count but the inline
-                   expansion never pushes the form below the panel
-                   floor. The body's overflow:auto kicks in past
-                   240 list rows so users can still scroll the
-                   list with a wheel. */
-                listMaxHeight={240}
-              />
-            </Field>
+      {/* Hero — the persistent shared ring; only its centre cross-dissolves
+          (count → live % → check) and its accent tweens brand→success. */}
+      <div style={{ flexShrink: 0, display: 'grid', placeItems: 'center', padding: '22px 0 16px', background: 'linear-gradient(180deg, var(--gb-surface-1) 0%, transparent 100%)' }}>
+        <HeroRing status={status} settled={settled} total={contacts.length} count={contacts.length} />
+      </div>
 
-            {/* Variation weights — only renders in Random mode.
-                Sliders animate in one-by-one; dragging one redistributes
-                the remainder across the others so the total stays at
-                100%. The orchestrator's per-row pick uses these
-                weights via pickWeighted(). */}
-            <AnimatePresence initial={false}>
-              {isRandomMode && (
-                <motion.div
-                  key="variation-weights"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, ...(entered ? { height: 'auto' } : {}) }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-                  style={{ overflow: 'hidden' }}
-                >
-                  <Field
-                    label="Variation weights"
-                    hint="Sliders always sum to 100% — each contact gets a roll weighted by these."
-                  >
-                    <div style={{
-                      display: 'flex', flexDirection: 'column', gap: 10,
-                      padding: 12,
-                      background: 'var(--gb-surface-1)',
-                      border: '1px solid var(--gb-border-subtle)',
-                      borderRadius: 'var(--gb-r-md)',
-                    }}>
-                      {/* Stacked proportion bar — the visual fold-up of
-                          every slider. Tints step down per item so the
-                          eye can read which slot owns which segment.
-                          Widths tween on weight change so the bar
-                          breathes with the user's edits. */}
-                      <div style={{
-                        display: 'flex',
-                        height: 10, borderRadius: 999, overflow: 'hidden',
-                        border: '1px solid var(--gb-border-subtle)',
-                      }}>
+      {/* Body — keyed cross-fade; the surface + hero persist, the content
+          slides in (qs-state-in) on every state change. */}
+      <div className="gb-email-runner-body" style={{ flex: 1, minHeight: 0, overflow: 'auto', scrollbarWidth: 'none' }}>
+        <div key={status} style={{ padding: '2px 14px 14px', animation: 'qs-state-in .36s cubic-bezier(.34,1.2,.64,1) both' }}>
+          {status === 'idle' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <Field
+                label="Template"
+                hint={(() => {
+                  if (!templates.length) return 'No email templates saved yet';
+                  if (variationCount === 0) return 'Pick the email these contacts receive';
+                  return `Each contact gets a weighted random pick · 1 of ${variationCount + 1} variations`;
+                })()}
+              >
+                <TemplatePicker
+                  mode="random"
+                  templates={templates}
+                  value={dropdownValue}
+                  onChange={onTemplatePickerChange}
+                  placeholder={templates.length ? 'Pick a template' : 'No templates'}
+                  disabled={status === 'running'}
+                  floating={false}
+                  listMaxHeight={240}
+                />
+              </Field>
+
+              {/* Variation weights — revealed via a max-height tween when the
+                  picked template has variations (matches the design). */}
+              <div style={{ overflow: 'hidden', maxHeight: isRandomMode ? 360 : 0, opacity: isRandomMode ? 1 : 0, transition: 'max-height .3s cubic-bezier(.4,0,.2,1), opacity .22s ease' }}>
+                {isRandomMode && (
+                  <Field label="Variation weights" hint="Sliders always sum to 100% — each contact rolls weighted by these.">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 11, padding: 12, background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)' }}>
+                      <div style={{ display: 'flex', height: 10, borderRadius: 999, overflow: 'hidden', border: '1px solid var(--gb-border-subtle)' }}>
                         {weightableItems.map((it, idx) => (
-                          <motion.div
-                            key={it.id}
-                            animate={{ flex: variationWeights[it.id] || 0.0001 }}
-                            transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-                            style={{
-                              background: weightStripeColor(idx),
-                              minWidth: 0,
-                            }}
-                            title={`${it.label}: ${Math.round(variationWeights[it.id] || 0)}%`}
-                          />
+                          <div key={it.id} style={{ flex: variationWeights[it.id] || 0.0001, background: weightStripeColor(idx), minWidth: 0, transition: 'flex .35s cubic-bezier(.4,0,.2,1)' }} title={`${it.label}: ${Math.round(variationWeights[it.id] || 0)}%`} />
                         ))}
                       </div>
                       {weightableItems.map((it, idx) => (
-                        <motion.div
-                          key={it.id}
-                          initial={{ opacity: 0, x: -8 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: idx * 0.05, duration: 0.2 }}
-                        >
-                          <VariationWeightRow
-                            colorIndex={idx}
-                            label={it.label}
-                            value={variationWeights[it.id] || 0}
-                            onChange={(val) => onWeightChange(it.id, val)}
-                            disabled={status === 'running'}
-                          />
-                        </motion.div>
+                        <VariationWeightRow key={it.id} colorIndex={idx} label={it.label} value={variationWeights[it.id] || 0} onChange={(val) => onWeightChange(it.id, val)} disabled={status === 'running'} />
                       ))}
                     </div>
                   </Field>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                )}
+              </div>
 
-            <Field label="Delay between sends" hint={`${fmtSeconds(delay[0])}–${fmtSeconds(delay[1])} (random per contact)`}>
-              <RangeSlider
-                values={delay}
-                min={5}
-                max={80}
-                step={5}
-                unit="s"
-                onChange={(next) => setDelay(next)}
-                disabled={status === 'running'}
-              />
-            </Field>
-            </motion.div>
-            )}
-            </AnimatePresence>
+              <Field label="Delay between sends" hint={`${fmtSeconds(delay[0])}–${fmtSeconds(delay[1])}, random per contact — keeps the blast looking human.`}>
+                <RangeSlider values={delay} min={5} max={80} step={5} unit="s" onChange={(next) => setDelay(next)} disabled={status === 'running'} />
+              </Field>
+            </div>
+          )}
+          {running && <RunningView current={current} delay={delayState} counts={counts} progress={progress} trail={trail} />}
+          {status === 'done' && <DoneView counts={counts} trail={trail} meta={meta} />}
+        </div>
+      </div>
 
-            {/* Run progress card. While running, the rep sees a radial
-                progress, the current recipient, a sweeping scan light,
-                and live count chips. The trail collapses to status-
-                tagged rows. When the run finishes, the card swaps to a
-                "Done" state with the final counts. */}
-            {status !== 'idle' && (
-              <RunStatusCard
-                status={status}
-                progress={progress}
-                sentCount={sentCount}
-                failedCount={failedCount}
-                trail={trail}
-              />
-            )}
-          </div>
-
-          {/* Footer */}
-          <div style={{
-            padding: '10px 14px',
-            borderTop: '1px solid var(--gb-border-subtle)',
-            background: 'var(--gb-surface-1)',
-            display: 'flex', alignItems: 'center', gap: 8,
-            flexShrink: 0,
-          }}>
-            <Btn
-              size="sm"
-              variant={status === 'running' ? 'tinted' : 'secondary'}
-              status={status === 'running' ? 'error' : undefined}
-              icon={status === 'running' ? <StopIcon size={11} /> : undefined}
-              onClick={() => {
-                if (status === 'running') {
-                  /* Mid-run cancel — bumping the token short-circuits
-                     the orchestrator's between-iteration guard so it
-                     returns out of the for-loop without sending the
-                     remaining contacts. Reset status back to 'idle'
-                     and clear the run-only state (counts / progress
-                     / trail) so the form fades back in and the rep
-                     can edit + re-run without closing the panel.
-                     Signals run-state false so the parent list's
-                     scan beam fades out. */
-                  runTokenRef.current += 1;
-                  setStatus('idle');
-                  setCounts({ sent: 0, failed: 0 });
-                  setProgress({ current: 0, total: 0 });
-                  setTrail([]);
-                  onRunStateChange?.(false);
-                  return;
-                }
-                onClose?.();
-              }}
-            >
-              {status === 'running' ? 'Cancel run' : status === 'done' ? 'Close' : 'Cancel'}
-            </Btn>
+      {/* Footer — morphs role per state. */}
+      <div style={{ padding: '10px 14px', borderTop: '1px solid var(--gb-border-subtle)', background: 'var(--gb-surface-1)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        {status === 'idle' && (
+          <>
+            <Btn size="sm" variant="secondary" onClick={onClose}>Cancel</Btn>
             <div style={{ flex: 1 }} />
-            <Btn
-              size="sm"
-              variant="tinted"
-              status="brand"
-              icon={status === 'running' ? <Spinner size={11} /> : <I.send size={11} />}
-              onClick={onRun}
-              disabled={!canRun}
-            >
-              {status === 'running'
-                ? 'Sending…'
-                : status === 'done'
-                  ? 'Send again'
-                  : `Run · ${contacts.length}`}
-            </Btn>
-          </div>
+            <Btn size="sm" variant="tinted" status="brand" icon={<I.send size={11} />} onClick={onRun} disabled={!canRun}>Run · {contacts.length}</Btn>
+          </>
+        )}
+        {running && (
+          <>
+            <Btn size="sm" variant="tinted" status="error" icon={<StopIcon size={11} />} onClick={() => {
+              runTokenRef.current += 1;
+              setStatus('idle');
+              setCounts({ sent: 0, failed: 0 });
+              setProgress({ current: 0, total: 0 });
+              setTrail([]);
+              setCurrent(null);
+              setDelayState(null);
+              setMeta({ startedAt: 0, finishedAt: 0 });
+              onRunStateChange?.(false);
+            }}>Cancel run</Btn>
+            <div style={{ flex: 1 }} />
+            <Btn size="sm" variant="tinted" status="brand" icon={<Spinner size={11} />} disabled>Sending…</Btn>
+          </>
+        )}
+        {status === 'done' && (
+          <>
+            <Btn size="sm" variant="secondary" onClick={onClose}>Close</Btn>
+            <div style={{ flex: 1 }} />
+            <Btn size="sm" variant="tinted" status="brand" icon={<I.refresh size={11} />} onClick={onRun} disabled={!canRun}>Send again</Btn>
+          </>
+        )}
+      </div>
     </DraggablePopup>
   );
 }
@@ -1000,262 +862,6 @@ function weightStripeColor(idx) {
     : `color-mix(in srgb, var(--gb-brand-label) ${pct}%, transparent)`;
 }
 
-/* ────────────────────────────────────────────────────────────
-   RunStatusCard — running / done state UI
-
-   While `status === 'running'`:
-     • Radial progress (stroke-dashoffset tween) — central glance
-     • "Now sending" — name + email of the most recent trail entry
-     • Count chips: sent · queued · fail
-     • Sweeping scan-light overlay so the card reads as alive
-     • Trail list — each row a status-tagged entry (sent / fail)
-
-   When `status === 'done'`:
-     • Radial fills to 100% in success tone
-     • Header switches to "Done — N sent" so the card stays useful
-       through the post-send glance before the rep closes the panel
-─────────────────────────────────────────────────────────────── */
-function RunStatusCard({ status, progress, sentCount, failedCount, trail }) {
-  /* While the popup is being dragged it moves by mutating left/top, which
-     shifts these rows' viewport position every frame. Motion `layout` would
-     chase that shift and lag behind the popup, so freeze it during a drag —
-     the rows then move rigidly with the panel. The reorder animation resumes
-     the moment the drag ends. */
-  const dragging = useContext(PopupDragContext);
-  const total = progress.total || 0;
-  const settled = sentCount + failedCount;
-  const pct = total > 0 ? Math.min(1, settled / total) : (status === 'done' ? 1 : 0);
-  const queued = Math.max(0, total - settled);
-  const isRunning = status === 'running';
-  const current = trail[trail.length - 1] || null;
-
-  return (
-    <div style={{
-      position: 'relative', overflow: 'hidden',
-      padding: 14, borderRadius: 'var(--gb-r-md)',
-      background: 'linear-gradient(180deg, var(--gb-surface-1) 0%, var(--gb-surface-modal, var(--gb-surface-2)) 100%)',
-      border: '1px solid ' + (isRunning ? 'var(--gb-brand-tint-border)' : 'var(--gb-success-tint-border)'),
-      display: 'flex', flexDirection: 'column', gap: 12,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, position: 'relative', zIndex: 1 }}>
-        <RadialProgress pct={pct} tone={isRunning ? 'brand' : 'success'} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontSize: 9.5, fontWeight: 700, letterSpacing: 0.8,
-            textTransform: 'uppercase',
-            color: isRunning ? 'var(--gb-brand-label)' : 'var(--gb-success-fg)',
-          }}>{isRunning ? 'Now sending' : `Done · ${sentCount} sent`}</div>
-          {isRunning && current ? (
-            <motion.div
-              key={current.name + (current.email || '')}
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-            >
-              <div style={{
-                fontSize: 13, fontWeight: 700,
-                color: 'var(--gb-text-primary)',
-                marginTop: 3,
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>{current.name || '(resolving…)'}</div>
-              {current.email && (
-                <div style={{
-                  fontSize: 10.5, color: 'var(--gb-text-muted)',
-                  fontFamily: 'var(--gb-font-mono)',
-                  marginTop: 1,
-                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                }}>{current.email}</div>
-              )}
-            </motion.div>
-          ) : !isRunning ? (
-            <div style={{
-              fontSize: 11.5, color: 'var(--gb-text-tertiary)', marginTop: 3,
-            }}>
-              {failedCount > 0
-                ? `${sentCount} sent · ${failedCount} failed`
-                : `${sentCount} of ${total} delivered`}
-            </div>
-          ) : (
-            <div style={{
-              fontSize: 11.5, color: 'var(--gb-text-tertiary)', marginTop: 3,
-              fontStyle: 'italic',
-            }}>preparing first contact…</div>
-          )}
-          <div style={{ display: 'flex', gap: 5, marginTop: 7 }}>
-            <CountChip tone="success" value={sentCount} label="sent" />
-            <CountChip tone="neutral" value={queued} label="queued" />
-            {failedCount > 0 && (
-              <CountChip tone="error" value={failedCount} label="fail" />
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Sweeping scan light — only while running. Pure decorative;
-          pointer-events disabled so it never eats a click. */}
-      {isRunning && (
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute', inset: 0,
-            background: 'linear-gradient(90deg, transparent 0%, var(--gb-brand-tint-soft) 50%, transparent 100%)',
-            mixBlendMode: 'plus-lighter',
-            pointerEvents: 'none',
-            animation: 'gb-er-scan 2.4s linear infinite',
-          }}
-        />
-      )}
-
-      {/* Trail — shows the latest two completed sends. Each row
-          slides UP into place: the newest enters from below the
-          card (y: +rowHeight → 0), the previous one layout-shifts
-          up to make room, and the oldest exits by sliding up
-          above the card (y: 0 → -rowHeight, fades out). The
-          card's overflow:hidden clips entering + exiting rows so
-          the animation reads as a single continuous scroll
-          rather than items popping in/out. mode="popLayout"
-          removes exiting items from layout flow immediately so
-          the remaining row's layout shift starts at the same
-          frame as the new row's enter. */}
-      {trail.length > 0 && (
-        <div style={{
-          background: 'var(--gb-surface-2)',
-          border: '1px solid var(--gb-border-subtle)',
-          borderRadius: 'var(--gb-r-sm)',
-          overflow: 'hidden',
-          position: 'relative', zIndex: 1,
-        }}>
-          <AnimatePresence initial={false} mode="popLayout">
-            {trail.slice(-2).map((r, i, arr) => (
-              <motion.div
-                key={r.seq}
-                layout={!dragging}
-                initial={{ opacity: 0, y: 36 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -36 }}
-                transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
-                style={{
-                  display: 'grid', gridTemplateColumns: '18px minmax(0,1fr) auto',
-                  gap: 10, alignItems: 'center',
-                  padding: '8px 12px',
-                  borderBottom: i < arr.length - 1 ? '1px solid var(--gb-border-subtle)' : 'none',
-                }}
-              >
-                <TrailIcon status={r.status} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{
-                    fontSize: 11, fontWeight: 600,
-                    color: 'var(--gb-text-primary)',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>{r.name || '(unknown)'}</div>
-                  {r.email && (
-                    <div style={{
-                      fontSize: 9.5, color: 'var(--gb-text-muted)',
-                      fontFamily: 'var(--gb-font-mono)',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>{r.email}</div>
-                  )}
-                </div>
-                <Tag size="xs" tone={r.status === 'sent' ? 'success' : 'error'} mono>
-                  {r.status === 'sent' ? 'sent' : 'fail'}
-                </Tag>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* SVG radial progress with stroke-dashoffset tween. Centered % readout.
-   Tone switches the stroke + glow color so done states feel resolved. */
-function RadialProgress({ pct, tone = 'brand' }) {
-  const r = 22;
-  const circ = 2 * Math.PI * r;
-  const offset = circ * (1 - pct);
-  const stroke = tone === 'success' ? 'var(--gb-success-fg)' : 'var(--gb-brand-label)';
-  return (
-    <div style={{ position: 'relative', width: 56, height: 56, flexShrink: 0 }}>
-      <svg width={56} height={56} viewBox="0 0 56 56" style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={28} cy={28} r={r} fill="none"
-          stroke="var(--gb-surface-2)" strokeWidth={4} />
-        <motion.circle
-          cx={28} cy={28} r={r} fill="none"
-          stroke={stroke}
-          strokeWidth={4}
-          strokeLinecap="round"
-          strokeDasharray={circ}
-          initial={false}
-          animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
-        />
-      </svg>
-      <div style={{
-        position: 'absolute', inset: 0, display: 'flex',
-        alignItems: 'center', justifyContent: 'center',
-        fontSize: 12, fontWeight: 800,
-        fontFamily: 'var(--gb-font-mono)',
-        color: 'var(--gb-text-primary)',
-      }}>{Math.round(pct * 100)}%</div>
-    </div>
-  );
-}
-
-function CountChip({ tone, value, label }) {
-  const tones = {
-    success: { bg: 'var(--gb-success-tint-medium)', fg: 'var(--gb-success-fg)' },
-    neutral: { bg: 'var(--gb-fill-subtle)',         fg: 'var(--gb-text-tertiary)' },
-    error:   { bg: 'var(--gb-error-tint-medium)',   fg: 'var(--gb-error-fg)' },
-  }[tone] || { bg: 'var(--gb-fill-subtle)', fg: 'var(--gb-text-tertiary)' };
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 4,
-      padding: '1px 6px', borderRadius: 4,
-      background: tones.bg, color: tones.fg,
-      fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4,
-      textTransform: 'uppercase',
-      fontFamily: 'var(--gb-font-mono)',
-    }}>
-      <span style={{ fontVariantNumeric: 'tabular-nums' }}>{value}</span>
-      {label}
-    </span>
-  );
-}
-
-
-/* Status icon for a single trail row: filled success disc with a
-   check for sent, error disc with X for fail. Mirrors the design's
-   gb-bounce-in entrance. */
-function TrailIcon({ status }) {
-  const isSent = status === 'sent';
-  return (
-    <motion.div
-      initial={{ scale: 0.6, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{ duration: 0.35, ease: [0.34, 1.3, 0.64, 1] }}
-      style={{
-        width: 16, height: 16, borderRadius: '50%',
-        background: isSent ? 'var(--gb-success-tint-medium)' : 'var(--gb-error-tint-medium)',
-        color: isSent ? 'var(--gb-success-fg)' : 'var(--gb-error-fg)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
-    >
-      {isSent ? (
-        <svg width={9} height={9} viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
-      ) : (
-        <svg width={9} height={9} viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
-      )}
-    </motion.div>
-  );
-}
-
 /* Stop square glyph used by the mid-run Cancel button. Filled
    instead of stroked so the "this terminates the run" affordance
    reads at the 11px size where a stroked square loses fidelity. */
@@ -1265,5 +871,255 @@ function StopIcon({ size = 11 }) {
       style={{ display: 'block' }}>
       <rect x="6" y="6" width="12" height="12" rx="2" />
     </svg>
+  );
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Quick Send redesign — the persistent HeroRing + the three
+   cross-dissolving content views (idle handled inline in the render).
+   Ported faithfully from the design bundle (hero.jsx + states.jsx);
+   CSS keyframes injected by ensureNoScrollStyle().
+─────────────────────────────────────────────────────────────── */
+
+function qsInitials(name) {
+  return (name || '?').split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+}
+
+const QS_CLOCK = (
+  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+  </svg>
+);
+
+const RING_BOX = 132, RING_R = 56, RING_SW = 7, RING_CIRC = 2 * Math.PI * RING_R;
+
+function HeroRing({ status, settled, total, count }) {
+  const running = status === 'running';
+  const done = status === 'done';
+  const pct = total > 0 ? Math.min(1, settled / total) : (done ? 1 : 0);
+  const accent = done ? 'var(--gb-success)' : 'var(--gb-brand-label)';
+  const offset = RING_CIRC * (1 - (done ? 1 : pct));
+  return (
+    <div style={{ position: 'relative', width: RING_BOX, height: RING_BOX, flexShrink: 0 }}>
+      <div aria-hidden style={{
+        position: 'absolute', inset: -10, borderRadius: '50%',
+        background: `radial-gradient(circle, ${done ? 'var(--gb-success-tint-strong)' : 'var(--gb-brand-tint-strong)'} 0%, transparent 68%)`,
+        opacity: running ? 0.9 : done ? 1 : 0.32, filter: 'blur(6px)',
+        transition: 'opacity .5s ease, background .6s ease',
+        animation: running ? 'qs-breathe 2.4s ease-in-out infinite' : 'none',
+      }} />
+      {running && (
+        <div aria-hidden style={{
+          position: 'absolute', inset: 0, borderRadius: '50%',
+          background: 'conic-gradient(from 0deg, transparent 0deg, transparent 250deg, var(--gb-brand-label) 340deg, transparent 360deg)',
+          WebkitMask: 'radial-gradient(farthest-side, transparent 0 80%, #000 80.5% 92%, transparent 92.5%)',
+          mask: 'radial-gradient(farthest-side, transparent 0 80%, #000 80.5% 92%, transparent 92.5%)',
+          mixBlendMode: 'plus-lighter', opacity: 0.85, animation: 'qs-rotate 1.5s linear infinite',
+        }} />
+      )}
+      <svg width={RING_BOX} height={RING_BOX} viewBox={`0 0 ${RING_BOX} ${RING_BOX}`} style={{ transform: 'rotate(-90deg)', position: 'relative', zIndex: 1 }}>
+        <circle cx={RING_BOX / 2} cy={RING_BOX / 2} r={RING_R} fill="none" stroke="var(--gb-surface-3)" strokeWidth={RING_SW} />
+        <circle cx={RING_BOX / 2} cy={RING_BOX / 2} r={RING_R} fill="none" stroke={accent} strokeWidth={RING_SW} strokeLinecap="round"
+          strokeDasharray={RING_CIRC} strokeDashoffset={status === 'idle' ? RING_CIRC : offset}
+          style={{ transition: 'stroke-dashoffset .55s cubic-bezier(.34,1.4,.64,1), stroke .6s ease', filter: (running || done) ? `drop-shadow(0 0 5px ${accent})` : 'none', opacity: status === 'idle' ? 0 : 1 }} />
+      </svg>
+      {status === 'idle' && (
+        <div aria-hidden style={{
+          position: 'absolute', inset: 0, borderRadius: '50%',
+          background: 'conic-gradient(from 0deg, transparent 0 78%, var(--gb-brand-tint-strong) 90%, transparent 100%)',
+          WebkitMask: 'radial-gradient(farthest-side, transparent 0 80%, #000 80.5% 92%, transparent 92.5%)',
+          mask: 'radial-gradient(farthest-side, transparent 0 80%, #000 80.5% 92%, transparent 92.5%)',
+          opacity: 0.5, animation: 'qs-rotate 6s linear infinite',
+        }} />
+      )}
+      {running && settled > 0 && (
+        <span key={settled} aria-hidden style={{ position: 'absolute', inset: 6, borderRadius: '50%', border: '2px solid var(--gb-brand-label)', animation: 'qs-ripple .7s cubic-bezier(.2,.7,.3,1) forwards', pointerEvents: 'none' }} />
+      )}
+      {done && <QsBurst />}
+      <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', zIndex: 2 }}>
+        <div key={status} style={{ display: 'grid', placeItems: 'center', animation: 'qs-center-in .4s cubic-bezier(.34,1.4,.64,1) both' }}>
+          {status === 'idle' && (
+            <div style={{ textAlign: 'center', lineHeight: 1 }}>
+              <div style={{ fontSize: 40, fontWeight: 800, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', letterSpacing: -1 }}>{count}</div>
+              <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', marginTop: 5 }}>queued</div>
+            </div>
+          )}
+          {running && (
+            <div style={{ textAlign: 'center', lineHeight: 1 }}>
+              <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontVariantNumeric: 'tabular-nums' }}>
+                {Math.round(pct * 100)}<span style={{ fontSize: 15, color: 'var(--gb-text-tertiary)' }}>%</span>
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-brand-label)', fontFamily: 'var(--gb-font-mono)', marginTop: 4, fontVariantNumeric: 'tabular-nums' }}>{settled} / {total}</div>
+            </div>
+          )}
+          {done && (
+            <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'var(--gb-success-tint-medium)', color: 'var(--gb-success)', display: 'grid', placeItems: 'center', animation: 'qs-pop .5s cubic-bezier(.34,1.5,.64,1) both' }}>
+              <I.check size={28} />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QsBurst() {
+  const N = 10;
+  return (
+    <div aria-hidden style={{ position: 'absolute', inset: 0, zIndex: 3, pointerEvents: 'none' }}>
+      {Array.from({ length: N }).map((_, i) => {
+        const ang = (i / N) * Math.PI * 2, dist = 52 + (i % 3) * 8;
+        const x = Math.cos(ang) * dist, y = Math.sin(ang) * dist;
+        const c = i % 2 === 0 ? 'var(--gb-success)' : 'var(--gb-brand-label)';
+        return <span key={i} style={{ position: 'absolute', left: '50%', top: '50%', width: 5, height: 5, borderRadius: '50%', background: c, '--qs-x': `${x}px`, '--qs-y': `${y}px`, animation: `qs-burst .72s cubic-bezier(.2,.7,.3,1) ${0.04 * i}s both` }} />;
+      })}
+    </div>
+  );
+}
+
+function NowSending({ current, delay }) {
+  if (!current && delay) {
+    const frac = delay.total > 0 ? delay.remaining / delay.total : 0;
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 13px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)' }}>
+        <div style={{ width: 34, height: 34, borderRadius: '50%', display: 'grid', placeItems: 'center', color: 'var(--gb-text-tertiary)', background: 'var(--gb-fill-subtle)', flexShrink: 0 }}>{QS_CLOCK}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Pacing</div>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-secondary)', marginTop: 2 }}>Next send in {(delay.remaining / 1000).toFixed(1)}s</div>
+          <div style={{ height: 3, borderRadius: 999, background: 'var(--gb-surface-3)', marginTop: 7, overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${(1 - frac) * 100}%`, background: 'var(--gb-text-muted)', borderRadius: 999 }} />
+          </div>
+        </div>
+      </div>
+    );
+  }
+  const c = current || {};
+  return (
+    <div key={c.contactId || 'idle'} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 13px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', animation: 'qs-now-in .35s cubic-bezier(.34,1.3,.64,1) both' }}>
+      <div style={{ width: 34, height: 34, borderRadius: '50%', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 800, color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-medium)', flexShrink: 0, fontFamily: 'var(--gb-font-sans)' }}>{qsInitials(c.name)}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ whiteSpace: 'nowrap' }}>Now sending</span> <span style={{ display: 'inline-flex', color: 'var(--gb-brand-label)' }}><Spinner size={10} /></span>
+        </div>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name || 'resolving…'}</div>
+        <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.email || ''}</div>
+      </div>
+    </div>
+  );
+}
+
+function CountChip({ tone, value, label }) {
+  const tones = {
+    success: { bg: 'var(--gb-success-tint-medium)', fg: 'var(--gb-success-fg)' },
+    neutral: { bg: 'var(--gb-fill-subtle)', fg: 'var(--gb-text-tertiary)' },
+    error: { bg: 'var(--gb-error-tint-medium)', fg: 'var(--gb-error-fg)' },
+  }[tone] || { bg: 'var(--gb-fill-subtle)', fg: 'var(--gb-text-tertiary)' };
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 999, background: tones.bg, color: tones.fg, fontSize: 10, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase', fontFamily: 'var(--gb-font-mono)' }}>
+      <span key={value} style={{ fontVariantNumeric: 'tabular-nums', display: 'inline-block', animation: 'qs-bump .3s cubic-bezier(.34,1.5,.64,1)' }}>{value}</span>
+      {label}
+    </span>
+  );
+}
+
+const QS_ROW_H = 46;
+
+function Trail({ trail }) {
+  const rows = trail.slice().reverse().slice(0, 4);
+  const innerRef = useRef(null);
+  const lastLen = useRef(trail.length);
+  React.useLayoutEffect(() => {
+    if (trail.length > lastLen.current && innerRef.current) {
+      const el = innerRef.current;
+      el.style.transition = 'none';
+      el.style.transform = `translateY(-${QS_ROW_H}px)`;
+      void el.offsetHeight;
+      el.style.transition = 'transform .36s cubic-bezier(.22,1,.36,1)';
+      el.style.transform = 'translateY(0)';
+    }
+    lastLen.current = trail.length;
+  }, [trail.length]);
+  if (rows.length === 0) return null;
+  return (
+    <div style={{ background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden' }}>
+      <div ref={innerRef}>
+        {rows.map((r, i) => <TrailRow key={r.seq} r={r} dim={i / rows.length} last={i === rows.length - 1} fresh={i === 0} />)}
+      </div>
+    </div>
+  );
+}
+
+function TrailRow({ r, dim, last, fresh }) {
+  const sent = r.status === 'sent';
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '20px minmax(0,1fr) auto', gap: 10, alignItems: 'center', height: QS_ROW_H, padding: '0 13px', borderBottom: last ? 'none' : '1px solid var(--gb-border-subtle)', opacity: 1 - dim * 0.5, animation: fresh ? 'qs-fade-in .4s ease both' : 'none' }}>
+      <span style={{ width: 18, height: 18, borderRadius: '50%', display: 'grid', placeItems: 'center', background: sent ? 'var(--gb-success-tint-medium)' : 'var(--gb-error-tint-medium)', color: sent ? 'var(--gb-success)' : 'var(--gb-error)', animation: fresh ? 'qs-pop .42s cubic-bezier(.34,1.5,.64,1) both' : 'none' }}>
+        {sent ? <I.check size={10} /> : <I.close size={10} />}
+      </span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+        <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.email}</div>
+      </div>
+      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', fontFamily: 'var(--gb-font-mono)', padding: '2px 7px', borderRadius: 4, background: sent ? 'var(--gb-success-tint-soft)' : 'var(--gb-error-tint-soft)', color: sent ? 'var(--gb-success-fg)' : 'var(--gb-error-fg)' }}>
+        {sent ? 'sent' : 'fail'}
+      </span>
+    </div>
+  );
+}
+
+function RunningView({ current, delay, counts, progress, trail }) {
+  const queued = Math.max(0, progress.total - counts.sent - counts.failed);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <NowSending current={current} delay={delay} />
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <CountChip tone="success" value={counts.sent} label="sent" />
+        <CountChip tone="neutral" value={queued} label="queued" />
+        {counts.failed > 0 && <CountChip tone="error" value={counts.failed} label="fail" />}
+      </div>
+      <Trail trail={trail} />
+    </div>
+  );
+}
+
+function StatTile({ value, label, tone = 'neutral' }) {
+  const fg = { success: 'var(--gb-success)', error: 'var(--gb-error)', brand: 'var(--gb-brand-label)', neutral: 'var(--gb-text-primary)' }[tone];
+  return (
+    <div style={{ flex: 1, minWidth: 0, padding: '12px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)' }}>
+      <div style={{ fontSize: 24, fontWeight: 800, color: fg, fontFamily: 'var(--gb-font-mono)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--gb-text-muted)', marginTop: 6 }}>{label}</div>
+    </div>
+  );
+}
+
+function DoneView({ counts, trail, meta }) {
+  const total = counts.sent + counts.failed;
+  const secs = meta.finishedAt && meta.startedAt ? (meta.finishedAt - meta.startedAt) / 1000 : 0;
+  const rate = total > 0 ? Math.round((counts.sent / total) * 100) : 100;
+  const mm = Math.floor(secs / 60), ss = Math.round(secs % 60);
+  const timeStr = mm > 0 ? `${mm}:${String(ss).padStart(2, '0')}` : `${ss}s`;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
+      <div style={{ textAlign: 'center', animation: 'qs-fade-in .45s ease both' }}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -0.3 }}>{counts.failed === 0 ? 'All sent' : 'Run complete'}</div>
+        <div style={{ fontSize: 12, color: 'var(--gb-text-tertiary)', marginTop: 3 }}>
+          {counts.sent} message{counts.sent === 1 ? '' : 's'} delivered{counts.failed > 0 ? ` · ${counts.failed} need a retry` : ''}
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <StatTile value={counts.sent} label="Sent" tone="success" />
+        {counts.failed > 0 && <StatTile value={counts.failed} label="Failed" tone="error" />}
+        <StatTile value={`${rate}%`} label="Success" tone={counts.failed === 0 ? 'success' : 'neutral'} />
+        <StatTile value={timeStr} label="Elapsed" tone="brand" />
+      </div>
+      <div style={{ padding: 12, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)' }}>
+        <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--gb-text-muted)', marginBottom: 9 }}>Send timeline</div>
+        <div style={{ display: 'flex', gap: 3, alignItems: 'flex-end', height: 30 }}>
+          {trail.map((r, i) => (
+            <div key={r.seq} style={{ flex: 1, minWidth: 0, borderRadius: 2, height: r.status === 'sent' ? '100%' : '46%', background: r.status === 'sent' ? 'var(--gb-success)' : 'var(--gb-error)', opacity: 0.85, animation: `qs-grow-up .4s cubic-bezier(.34,1.3,.64,1) ${i * 0.02}s both`, transformOrigin: 'bottom' }} title={`${r.name} · ${r.status}`} />
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
