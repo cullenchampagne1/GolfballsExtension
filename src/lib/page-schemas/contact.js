@@ -296,6 +296,20 @@ const FIELDS = {
         label: 'Sales territory',
         extract: { sel: '#TerritoryID', attr: 'selectedText' },
       },
+      /* Sales rep + user type — the account/contact form dropdowns that
+         smart-detection used to read inline (ddlSalesRepId / ddlUserTypeId).
+         Added to the spec so code/schema variables can grab them directly
+         (account.salesRep / account.userType) instead of the legacy builtin. */
+      salesRep: {
+        type: 'string',
+        label: 'Sales rep',
+        extract: { sel: '#ddlSalesRepId', attr: 'selectedText' },
+      },
+      userType: {
+        type: 'string',
+        label: 'User type',
+        extract: { sel: '#ddlUserTypeId', attr: 'selectedText' },
+      },
       createdBy: {
         type: 'string',
         label: 'Created by',
