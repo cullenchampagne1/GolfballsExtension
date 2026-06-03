@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Btn, Tag, Dot } from '../ui/index.js';
+import { Btn, Tag, Dot, DraggablePopup } from '../ui/index.js';
 import { Icon, I } from '../ui/icons.jsx';
 
 /* ───────────────────────────────────────────────────────────────
@@ -20,7 +20,7 @@ import { Icon, I } from '../ui/icons.jsx';
 /* Imprint palette — 81 named colors scraped from the live ColorSelectorBar.
    First 8 are the "common" quick row; the rest expand on demand. Used by every
    golf-ball imprint color control (Personalized, Monogram ×2, AlignXL ×2, IDAlign ×2). */
-const COMMON_COUNT = 8;
+const COMMON_COUNT = 6;
 const IMPRINT_COLORS = [
   { name: 'Black', hex: '#000000' }, { name: 'Red', hex: '#d2232a' }, { name: 'Green', hex: '#1c4120' },
   { name: 'Blue', hex: '#0b48a0' }, { name: 'Pink', hex: '#ff60b2' }, { name: 'Orange', hex: '#ff6a13' },
@@ -236,33 +236,75 @@ function sortByHueShade(colors) {
     return b.hsl.l - a.hsl.l;
   }).map((x) => x.c);
 }
-function Swatch({ color, on, onClick, size = 20 }) {
-  const trans = color.name === 'Transparent';
+function Swatch({ color, on, onClick, size = 22 }) {
+  const trans = color.name === 'Transparent' || color.hex === 'transparent';
   return (
-    <button onClick={onClick} title={color.name} style={{ width: size, height: size, borderRadius: '50%', cursor: 'pointer', padding: 0, position: 'relative', flexShrink: 0, background: trans ? 'var(--gb-fill-subtle)' : color.hex, border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'), boxShadow: on ? '0 0 0 1.5px var(--gb-surface-modal), 0 0 0 3px var(--gb-brand-label)' : 'none', transition: 'all var(--gb-anim)' }}>
-      {trans && <span style={{ position: 'absolute', inset: 2, borderTop: '1.5px solid var(--gb-danger, #e5484d)', transform: 'rotate(45deg)' }} />}
+    <button onClick={onClick} title={color.name} style={{ width: size, height: size, borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', padding: 0, position: 'relative', flexShrink: 0, background: trans ? 'var(--gb-fill-subtle)' : color.hex, border: '1.5px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'), boxShadow: on ? '0 0 0 1.5px var(--gb-surface-modal), 0 0 0 3px var(--gb-brand-label)' : 'none', transition: 'all var(--gb-anim)' }}>
+      {trans && <span style={{ position: 'absolute', inset: 3, borderTop: '1.5px solid var(--gb-danger, #e5484d)', transform: 'rotate(45deg)' }} />}
     </button>
   );
 }
-/* Compact imprint-color picker: a common quick row, expandable to the full
-   palette organized by hue then shade. */
+/* Imprint-color picker — 6 quick swatches + rainbow "more" button that opens a
+   draggable, searchable popover with the full palette (hue→shade sorted).
+   Thread/base palettes (≤24 colors) skip the popover and just render inline. */
 function ColorRow({ swatches, transparent, value, onChange }) {
-  const [showAll, setShowAll] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [cursor, setCursor] = useState(null);
+  const [q, setQ] = useState('');
   const transOpt = transparent ? [{ name: 'Transparent', hex: 'transparent' }] : [];
-  const expandable = swatches.length > 24;
-  const list = (!expandable || showAll)
-    ? [...transOpt, ...sortByHueShade(swatches)]
-    : [...transOpt, ...swatches.slice(0, COMMON_COUNT)];
+  const fullList = [...transOpt, ...sortByHueShade(swatches)];
+  const compact = swatches.length <= 24;
+  const common = compact ? fullList : [...transOpt, ...swatches.slice(0, COMMON_COUNT)];
+  const selColor = fullList.find((c) => c.name === value);
+  const selIsCommon = common.some((c) => c.name === value);
+  const filtered = q ? fullList.filter((c) => c.name.toLowerCase().includes(q.toLowerCase())) : fullList;
+  const openAt = (e) => { setCursor({ x: e.clientX, y: e.clientY }); setOpen(true); };
+  const close = () => { setOpen(false); setQ(''); };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {value && <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--gb-text-tertiary)' }}>{value}</div>}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: showAll ? 132 : 'none', overflowY: showAll ? 'auto' : 'visible', paddingRight: showAll ? 4 : 0 }}>
-        {list.map((c) => <Swatch key={c.name} color={c} on={value === c.name} onClick={() => onChange(c.name)} size={20} />)}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+        {common.map((c) => <Swatch key={c.name} color={c} on={value === c.name} onClick={() => onChange(c.name)} />)}
+        {!compact && (
+          <button onClick={openAt} title={`All ${fullList.length} colors`} style={{
+            width: 22, height: 22, borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', padding: 0, flexShrink: 0, position: 'relative',
+            background: 'conic-gradient(from 90deg, #d2232a, #ff6a13, #fec107, #4cb050, #2196f3, #582c83, #ff60b2, #d2232a)',
+            border: '1.5px solid ' + ((open || !selIsCommon) ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'),
+            boxShadow: (open || !selIsCommon) ? '0 0 0 1.5px var(--gb-surface-modal), 0 0 0 3px var(--gb-brand-label)' : 'none',
+            transition: 'all var(--gb-anim)',
+          }}>
+            {!selIsCommon && selColor && (
+              <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: selColor.hex, border: '1px solid rgba(255,255,255,.7)' }} />
+              </span>
+            )}
+          </button>
+        )}
       </div>
-      {expandable && (
-        <button onClick={() => setShowAll((s) => !s)} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10.5, fontWeight: 700, color: 'var(--gb-brand-label)' }}>
-          {showAll ? '− Show fewer' : `+ ${swatches.length - COMMON_COUNT} more colors`}
-        </button>
+      {!compact && (
+        <DraggablePopup
+          open={open}
+          onClose={close}
+          cursorAnchor={cursor}
+          width={272}
+          maxHeight={320}
+          icon={<I.eye size={13} />}
+          title="Imprint colors"
+          subtitle={value ? `Selected · ${value}` : `${fullList.length} total`}
+          closeOnOutside
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, height: 30, padding: '0 10px', background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)' }}>
+              <I.search size={12} style={{ color: 'var(--gb-text-muted)', flexShrink: 0 }} />
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${fullList.length} colors…`} autoFocus
+                style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 11.5 }} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, maxHeight: 200, overflowY: 'auto', paddingRight: 4 }}>
+              {filtered.map((c) => <Swatch key={c.name} color={c} on={value === c.name} size={26} onClick={() => { onChange(c.name); close(); }} />)}
+              {filtered.length === 0 && <div style={{ gridColumn: '1 / -1', fontSize: 11, color: 'var(--gb-text-muted)', textAlign: 'center', padding: '14px 0' }}>No match</div>}
+            </div>
+          </div>
+        </DraggablePopup>
       )}
     </div>
   );
@@ -297,18 +339,9 @@ function GraphicGrid({ items, value, onChange, cols = 4, tileH = 50, artW = 56, 
     </div>
   );
 }
-/* monogram style picker — grouped 3 / 2 / 1 Initials, real SVG layouts */
+/* monogram style picker — single flat gallery, 4 across, compact thumbnails */
 function MonoGrid({ value, onChange }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {['3 Initials', '2 Initials', '1 Initial'].map((g) => (
-        <div key={g}>
-          <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .5, color: 'var(--gb-text-muted)', marginBottom: 6 }}>{g}</div>
-          <GraphicGrid items={MONO_STYLES.filter((s) => s.group === g)} value={value} onChange={onChange} cols={3} tileH={64} artW={54} artH={52} />
-        </div>
-      ))}
-    </div>
-  );
+  return <GraphicGrid items={MONO_STYLES} value={value} onChange={onChange} cols={4} tileH={48} artW={40} artH={28} />;
 }
 /* themed icon grid — the real site PNGs */
 function IconGrid({ value, onChange }) {
