@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Btn, Tag, Dot, DraggablePopup } from '../ui/index.js';
+import { Btn, Tag, Dot, DraggablePopup, Segmented } from '../ui/index.js';
 import { Icon, I } from '../ui/icons.jsx';
 
 /* ───────────────────────────────────────────────────────────────
@@ -204,18 +204,16 @@ function TextInput({ value, onChange, placeholder, maxLength }) {
     </div>
   );
 }
-function Segmented({ options, value, onChange }) {
-  return (
-    <div style={{ display: 'inline-flex', padding: 3, gap: 2, background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>
-      {options.map((o) => {
-        const on = o === value;
-        return (
-          <button key={o} onClick={() => onChange(o)} style={{ padding: '5px 12px', borderRadius: 'var(--gb-r-sm)', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, transition: 'all var(--gb-anim)', background: on ? 'var(--gb-brand-tint-medium)' : 'transparent', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)', boxShadow: on ? 'inset 0 0 0 1px var(--gb-brand-tint-border)' : 'none' }}>{o}</button>
-        );
-      })}
-    </div>
-  );
-}
+/* Font dropdown is the live customizer's four imprint fonts. Display names are
+   shortened so 4 buttons fit one line inside the Personalized panel — full
+   foundry/weight tags ("Kabel Dm BT", "Lucida Handwriting") wrap otherwise. */
+const FONT_OPTS = [
+  { id: 'Kabel Dm BT',        label: 'Kabel' },
+  { id: 'Calibri',            label: 'Calibri' },
+  { id: 'Lucida Handwriting', label: 'Lucida' },
+  { id: 'Bradley Hand',       label: 'Bradley' },
+];
+const SIZE_OPTS = SIZES.map((s) => ({ id: s, label: s }));
 /* hex → HSL, used to order the palette by hue then shade */
 function hexToHsl(hex) {
   if (!hex || hex === 'transparent') return { h: 999, s: 0, l: 2 };
@@ -401,8 +399,8 @@ function PersonalizedImprint() {
       <Field label="Optional Line 2"><TextInput value={l2} onChange={setL2} placeholder="Optional" maxLength={17} /></Field>
       <Field label="Optional Line 3"><TextInput value={l3} onChange={setL3} placeholder="Optional" maxLength={17} /></Field>
       <Field label="Color"><ColorRow swatches={IMPRINT_COLORS} value={color} onChange={setColor} /></Field>
-      <Field label="Font"><Segmented options={FONTS} value={font} onChange={setFont} /></Field>
-      <Field label="Size"><Segmented options={SIZES} value={size} onChange={setSize} /></Field>
+      <Field label="Font"><Segmented options={FONT_OPTS} value={font} onChange={setFont} size="sm" full /></Field>
+      <Field label="Size"><Segmented options={SIZE_OPTS} value={size} onChange={setSize} size="sm" full /></Field>
     </div>
   );
 }
@@ -747,8 +745,8 @@ function Control({ k, p, config, serviceLevel }) {
     case 'lineColor': return <Field label="Line Color"><ColorRow swatches={IMPRINT_COLORS} value={c2} onChange={setC2} /></Field>;
     case 'sameColor': return <Checkbox checked={same} onClick={() => setSame(!same)} label="Use same Color" note="line = text color" />;
     case 'thread': return <Field label="Thread Color"><ColorRow swatches={THREAD_COLORS} value={c1} onChange={setC1} /></Field>;
-    case 'font': return <Field label="Font"><Segmented options={FONTS} value={font} onChange={setFont} /></Field>;
-    case 'size': return <Field label="Size"><Segmented options={SIZES} value={size} onChange={setSize} /></Field>;
+    case 'font': return <Field label="Font"><Segmented options={FONT_OPTS} value={font} onChange={setFont} size="sm" full /></Field>;
+    case 'size': return <Field label="Size"><Segmented options={SIZE_OPTS} value={size} onChange={setSize} size="sm" full /></Field>;
     case 'number': return (
       <Field label="Number">
         <div style={{ display: 'inline-flex', alignItems: 'center', height: 32, background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden' }}>

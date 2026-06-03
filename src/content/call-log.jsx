@@ -39,6 +39,7 @@ if (!window.__gbCallLogModalLoaded) {
   const HOST_ID = '__gb-cl-modal';
 
   window.__gbShowCallLogModal = async function (overrides = {}) {
+    if ((window.__gbFeatureFlags || {}).callLogEnabled === false) return;
     // Read context BEFORE mounting so the modal can put the right
     // phone in the subtitle from the first frame. readCallContext is
     // safe to call anywhere (returns mostly-empty outside a contact

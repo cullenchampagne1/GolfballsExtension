@@ -985,6 +985,7 @@ function _ceDDHtml(baseId, opts, selVal, placeholder) {
 
 // ── Open ──────────────────────────────────────────────────────────────────────
 window.__gbShowCampaignEditor = async function(onUpdateCallback, onCloseCallback) {
+  if ((window.__gbFeatureFlags || {}).campaignEditorEnabled === false) return;
   if (document.getElementById('__gb-ce-overlay')) return;
 
   const { campaigns: saved, templates, noteTemplates } = await _ceLoadData();

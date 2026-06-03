@@ -35,6 +35,7 @@ if (!window.__gbQuickTaskModalLoaded) {
   const HOST_ID = '__gb-qt-modal';
 
   window.__gbShowQuickTaskModal = async function (opts = {}) {
+    if ((window.__gbFeatureFlags || {}).quickTaskEnabled === false) return;
     const { autoCompose = false, returnData = false, onComposed, ...overrides } = opts;
     const pageCtx = await readTaskContext();
     const ctx = { ...pageCtx, ...overrides };

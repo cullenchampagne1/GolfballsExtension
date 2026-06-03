@@ -219,6 +219,17 @@ export const DEV_SETTINGS = [
     unit:    '×',
   },
   {
+    key:     'giftCatalog.cacheHours',
+    label:   'Gifting Catalog: re-index interval (hours)',
+    desc:    'How long the catalog (products + pricing) is cached before a fresh live pull. Lower it if prices change often; 0 = always pull fresh on open.',
+    type:    'number',
+    default: 24,
+    min:     0,
+    max:     168,
+    step:    1,
+    unit:    'h',
+  },
+  {
     key:     'popup.forceMatchedCount',
     label:   'Popup: force matched count',
     desc:    'Force the first N templates in the popup dropdown to render with the matched-template styling (brand dot + Matched group). 0 = off.',

@@ -15,8 +15,19 @@
 ─────────────────────────────────────────────────────────────── */
 
 import seed from './giftCatalogSeed.json';
+import { loadDevSettings } from './devSettings.js';
 
 export const GIFT_CATALOG_SEED = seed;
+
+/** Cache lifetime, from the `giftCatalog.cacheHours` dev setting (default 24h;
+ *  0 = always pull fresh). Falls back to 24h if settings are unavailable. */
+async function cacheTtlMs() {
+  try {
+    const d = await loadDevSettings();
+    const h = Number(d && d['giftCatalog.cacheHours']);
+    return Number.isFinite(h) && h >= 0 ? h * 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+  } catch { return 24 * 60 * 60 * 1000; }
+}
 
 const PAGE_ROWS = 60;
 const MAX_PRODUCTS = 1500; // safety bound; we paginate to the live numFound

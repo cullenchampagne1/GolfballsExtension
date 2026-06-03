@@ -285,13 +285,9 @@ window.__gbContentReady = true;
 
     if (msg.action === 'GB_FEATURE_FLAGS') {
       window.__gbFeatureFlags = { ...(window.__gbFeatureFlags || {}), ...msg.flags };
-      // Enable/disable email/text preview
-      if ('emailPreviewEnabled' in msg.flags) {
-        if (msg.flags.emailPreviewEnabled) {
-            if (window.__gbEmailPreviewScan) __gbEmailPreviewScan();
-            if (window.__gbTextPreviewScan) __gbTextPreviewScan(); // <-- ADDED THIS
-        }
-      }
+      // Re-arm email + text preview independently (each has its own flag now).
+      if (window.__gbFeatureFlags.emailPreviewEnabled !== false && window.__gbEmailPreviewScan) __gbEmailPreviewScan();
+      if (window.__gbFeatureFlags.textPreviewEnabled  !== false && window.__gbTextPreviewScan)  __gbTextPreviewScan();
       if ('imagePreviewEnabled' in msg.flags) {
         if (msg.flags.imagePreviewEnabled) {
           if (window.__gbScanForRenderImages) window.__gbScanForRenderImages();
@@ -481,14 +477,12 @@ window.__gbContentReady = true;
 
   // Load feature flags then conditionally add the copy button and email preview
   chrome.storage.local.get('featureFlags', (data) => {
-    window.__gbFeatureFlags = { copyIdsEnabled: true, emailPreviewEnabled: true, imagePreviewEnabled: true, calendarEnabled: true, watchListEnabled: true, autoPushEnabled: true, signifydGlowEnabled: true, ...(data.featureFlags || {}) };
+    window.__gbFeatureFlags = { copyIdsEnabled: true, emailPreviewEnabled: true, textPreviewEnabled: true, imagePreviewEnabled: true, calendarEnabled: true, watchListEnabled: true, autoPushEnabled: true, signifydGlowEnabled: true, actionsShelfEnabled: true, giftCatalogEnabled: true, callLogEnabled: true, quickTaskEnabled: true, crmNewContactEnabled: true, ...(data.featureFlags || {}) };
     // copyIdsEnabled now powers the actions-shelf "Copy order IDs"
     // action on the Orders index page — the legacy page-injected
     // button (__gbAddCopyIdsButton) was removed in favor of that path.
-    if (window.__gbFeatureFlags.emailPreviewEnabled) {
-        if (window.__gbEmailPreviewScan) __gbEmailPreviewScan();
-        if (window.__gbTextPreviewScan) __gbTextPreviewScan(); // <-- ADDED THIS
-    }
+    if (window.__gbFeatureFlags.emailPreviewEnabled !== false && window.__gbEmailPreviewScan) __gbEmailPreviewScan();
+    if (window.__gbFeatureFlags.textPreviewEnabled  !== false && window.__gbTextPreviewScan)  __gbTextPreviewScan();
     if (window.__gbFeatureFlags.imagePreviewEnabled !== false && window.__gbScanForRenderImages) window.__gbScanForRenderImages();
     if (window.__gbFeatureFlags.signifydGlowEnabled !== false) __gbApplySignifydGlow();
   });
@@ -514,10 +508,8 @@ window.__gbContentReady = true;
 
   const __gbObserver = new MutationObserver(() => {
     __gbApplySignifydGlow();
-    if (window.__gbFeatureFlags?.emailPreviewEnabled !== false) {
-        if (window.__gbEmailPreviewScan) __gbEmailPreviewScan();
-        if (window.__gbTextPreviewScan) __gbTextPreviewScan(); // <-- ADDED THIS
-    }
+    if (window.__gbFeatureFlags?.emailPreviewEnabled !== false && window.__gbEmailPreviewScan) __gbEmailPreviewScan();
+    if (window.__gbFeatureFlags?.textPreviewEnabled  !== false && window.__gbTextPreviewScan)  __gbTextPreviewScan();
     if (window.__gbFeatureFlags?.imagePreviewEnabled  !== false && window.__gbScanForRenderImages) window.__gbScanForRenderImages();
     if (window.__gbFeatureFlags?.signifydGlowEnabled  !== false) __gbApplySignifydGlow();
   });

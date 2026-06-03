@@ -23,6 +23,7 @@ if (!window.__gbGiftCatalogLoaded) {
   const HOST_ID = '__gb-gift-catalog';
 
   window.__gbOpenGiftCatalog = function () {
+    if ((window.__gbFeatureFlags || {}).giftCatalogEnabled === false) return;
     mountFloating(HOST_ID, ({ onClosed }) => (
       <ToastHost installGlobal={false}>
         <GiftCatalog onClose={onClosed} />
