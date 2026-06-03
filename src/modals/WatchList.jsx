@@ -6,6 +6,7 @@ import {
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
+import { getPageContext } from '../lib/pageContext.js';
 
 /* ───────────────────────────────────────────────────────────────
    WatchList — "My Watch List" modal. Visual structure mirrors
@@ -175,18 +176,27 @@ function inferContextFromPage() {
        edit-mode page variants. */
     return ((el.value || el.textContent || '').trim()) || '';
   };
+  /* Engine-first: the page-context schema resolves the contact/account
+     name (and on account pages, the related contact) directly. Falls back
+     to the robust three-mode label lookup above when the engine doesn't
+     recognise the page. */
+  let edata = null;
+  try { edata = getPageContext(document).data; } catch { edata = null; }
+  const ec = edata && edata.contact;
+
   const contactM = href.match(/[?&]customerID=(\d+)/i);
   if (contactM) {
-    const first = text('lblContactFirstName') || text('tbContactFirstName');
-    const last  = text('lblContactLastName')  || text('tbContactLastName');
-    const name  = [first, last].filter(Boolean).join(' ').trim();
+    const name = (ec ? `${(ec.firstName || '').trim()} ${(ec.lastName || '').trim()}`.trim() : '')
+      || [text('lblContactFirstName') || text('tbContactFirstName'),
+          text('lblContactLastName')  || text('tbContactLastName')].filter(Boolean).join(' ').trim();
     return { type: 'contact', id: contactM[1], name };
   }
   const accountM = href.match(/[?&]accountID=(\d+)/i);
   if (accountM) {
     /* Account display page uses the bare 'Name' input. Fall back
        to the company-name label that contact pages also expose. */
-    const name = text('Name') || text('lblContactCompanyName') || '';
+    const name = (edata && edata.account && edata.account.name)
+      || text('Name') || text('lblContactCompanyName') || '';
     return { type: 'account', id: accountM[1], name };
   }
   return null;

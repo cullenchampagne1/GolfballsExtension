@@ -28,6 +28,8 @@
    toast, so the rep sees what went wrong without needing devtools.
 ─────────────────────────────────────────────────────────────── */
 
+import { getPageContext } from './pageContext.js';
+
 const BASE = 'https://api.golfballs.com';
 
 const hasChromeRuntime = () => {
@@ -53,24 +55,33 @@ export async function readCallContext() {
   const out = { contactId: '', phone: '', contactName: '', employeeId: '', contactType: 'contact' };
   if (typeof document === 'undefined') return out;
 
-  // contactId — try URL first, fallback to the hidden form input.
-  const hrefMatch = (typeof location !== 'undefined' ? location.href : '').match(/[?&]customerID=(\d+)/i);
-  if (hrefMatch) {
-    out.contactId = hrefMatch[1];
-  } else {
-    out.contactId = document.getElementById('tbContactId')?.value?.trim() || '';
+  /* Engine-first: the page-context schema gives the canonical contact id /
+     name / phone (and resolves them on account pages too, via the related-
+     contact extractor). Each field falls back to the original selector so a
+     page the engine doesn't recognise behaves exactly as before. */
+  const ctx = (() => { try { return getPageContext(document); } catch { return null; } })();
+  const c = (ctx && ctx.data && ctx.data.contact) || null;
+
+  // contactId — engine ids (data id or customerID URL param) → hidden input.
+  out.contactId = (ctx && ctx.ids && ctx.ids.contact)
+    || document.getElementById('tbContactId')?.value?.trim()
+    || '';
+
+  // phone — engine contact.phone → label; bare digits for the CRM query.
+  let rawPhone = (c && c.phone) || '';
+  if (!rawPhone) {
+    const phoneEl = document.getElementById('lblContactPhoneNumber');
+    rawPhone = (phoneEl?.querySelector?.('a')?.textContent || phoneEl?.textContent || '').trim();
   }
+  out.phone = String(rawPhone).replace(/\D/g, '');
 
-  // phone — strip non-digits the way the legacy panel does, since
-  // the CRM URL expects bare digits in the query string.
-  const phoneEl = document.getElementById('lblContactPhoneNumber');
-  const rawPhone = (phoneEl?.querySelector?.('a')?.textContent || phoneEl?.textContent || '').trim();
-  out.phone = rawPhone.replace(/\D/g, '');
-
-  // contactName — split across two labels on the contact page.
-  const first = (document.getElementById('lblContactFirstName')?.textContent || '').trim();
-  const last  = (document.getElementById('lblContactLastName')?.textContent  || '').trim();
-  out.contactName = `${first} ${last}`.trim();
+  // contactName — engine first/last → the two contact-page labels.
+  out.contactName = (c ? `${(c.firstName || '').trim()} ${(c.lastName || '').trim()}`.trim() : '')
+    || (() => {
+      const first = (document.getElementById('lblContactFirstName')?.textContent || '').trim();
+      const last  = (document.getElementById('lblContactLastName')?.textContent  || '').trim();
+      return `${first} ${last}`.trim();
+    })();
 
   // employeeId — comes from chrome.storage.local, set by the auth flow.
   if (hasChromeStorage()) {

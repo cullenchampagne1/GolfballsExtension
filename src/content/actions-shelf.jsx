@@ -7,7 +7,7 @@ import { actionRegistry } from '../lib/actionRegistry.js';
 import { I, Icon } from '../ui/index.js';
 import { loadDevSettings, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { findPhone } from '../lib/findPhone.js';
-import { detectPageType as sharedDetectPageType } from '../lib/pageContext.js';
+import { detectPageType as sharedDetectPageType, getPageContext } from '../lib/pageContext.js';
 
 /* ───────────────────────────────────────────────────────────────
    actions-shelf.jsx — the persistent smart-actions shelf overlay.
