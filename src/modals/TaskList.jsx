@@ -1303,18 +1303,15 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle 
       data-row-id={task.id}
       style={{
         position: 'relative',
+        /* isolate so the z-index:-1 highlight underlay stays behind THIS
+           row's content instead of escaping behind the table. */
+        isolation: 'isolate',
         display: 'grid', gridTemplateColumns: COLS,
         padding: '10px 16px', gap: 12,
         alignItems: 'center',
-        /* Rows are separated by a real gap (margin) so adjacent selected
-           rows never merge into one growing band. The selection accent is
-           a STRAIGHT absolute bar (below) — not an inset box-shadow, which
-           was both rounded by the radius and nudged the text on toggle. */
         marginBottom: 4,
-        background: isSelected ? 'var(--gb-brand-tint-soft)' : 'transparent',
         fontSize: 12,
         cursor: 'pointer',
-        transition: 'background-color .15s',
         opacity: complete ? 0.65 : 1,
       }}
       onClick={(e) => {
@@ -1322,8 +1319,17 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle 
         onToggle(e);
       }}
     >
+      {/* Selection highlight as a separate underlay BEHIND the content
+          (z-index:-1). Keeping the changing/transitioning background OFF
+          the element that holds the text stops the browser from
+          re-rasterising the text on toggle — which was the per-row jolt. */}
+      <div aria-hidden style={{
+        position: 'absolute', inset: 0, zIndex: -1,
+        background: isSelected ? 'var(--gb-brand-tint-soft)' : 'transparent',
+        transition: 'background-color .15s',
+      }} />
       {/* Straight left accent bar — absolute so it never affects the grid
-          layout (no text shift) and stays square regardless of the row. */}
+          layout and stays square regardless of the row. */}
       {isSelected && (
         <span aria-hidden style={{
           position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
