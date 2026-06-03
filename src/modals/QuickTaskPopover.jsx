@@ -1,7 +1,86 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Btn, IconBtn, Tag, I } from '../ui/index.js';
+import { Btn, IconBtn, Tag, I, Spinner } from '../ui/index.js';
 import { DraggablePopup } from '../ui/components/DraggablePopup.jsx';
+
+/* qs-* keyframes for the in-popover run lifecycle (the popover can open
+   without the EmailRunner mounted, so inject our own copy; redefining the
+   global keyframes is harmless). */
+const QT_STYLE_ID = 'gb-quicktask-anim';
+function ensureQuickTaskStyles() {
+  if (typeof document === 'undefined' || document.getElementById(QT_STYLE_ID)) return;
+  const el = document.createElement('style');
+  el.id = QT_STYLE_ID;
+  el.textContent = `
+    @keyframes qs-state-in { from { transform: translateY(9px); } to { transform: none; } }
+    @keyframes qs-breathe { 0%,100% { opacity: .75; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } }
+    @keyframes qs-pop { from { transform: scale(.4); } to { transform: scale(1); } }
+    @keyframes qs-bump { 0% { transform: scale(1); } 32% { transform: scale(1.38); } 100% { transform: scale(1); } }
+    @keyframes qs-shake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-4px); } 40% { transform: translateX(4px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+    @keyframes gb-tpl-in { from { transform: translateX(-8px); } to { transform: translateX(0); } }
+  `;
+  document.head.appendChild(el);
+}
+
+/* Action → verb + done icon/tone for the RunPanel headline. */
+const QT_VERB = {
+  complete: { ing: 'Completing', ed: 'Completed', icon: 'check', tone: 'success' },
+  'bulk-complete': { ing: 'Completing', ed: 'Completed', icon: 'check', tone: 'success' },
+  reopen: { ing: 'Reopening', ed: 'Reopened', icon: 'refresh', tone: 'warning' },
+  push: { ing: 'Pushing', ed: 'Pushed', icon: 'check', tone: 'success' },
+  'bulk-push': { ing: 'Pushing', ed: 'Pushed', icon: 'check', tone: 'success' },
+  'set-date': { ing: 'Updating', ed: 'Date set', icon: 'check', tone: 'success' },
+  'bulk-set-date': { ing: 'Updating', ed: 'Dates set', icon: 'check', tone: 'success' },
+  'create-task': { ing: 'Adding', ed: 'Task added', icon: 'plus', tone: 'success' },
+  'bulk-create-task': { ing: 'Adding', ed: 'Tasks added', icon: 'plus', tone: 'success' },
+};
+
+/* RunPanel — the loading → done / error lifecycle the popover cross-fades
+   to when an action fires (ported from the design). */
+function RunPanel({ run, onClose, onRetry }) {
+  const v = QT_VERB[run.action] || QT_VERB.complete;
+  const isBulk = run.action.startsWith('bulk-');
+  const total = run.total || 1;
+  const loading = run.phase === 'loading';
+  const done = run.phase === 'done';
+  const error = run.phase === 'error';
+  const tone = error ? 'error' : done ? v.tone : 'brand';
+  const T = { brand: 'var(--gb-brand-label)', success: 'var(--gb-success)', warning: 'var(--gb-warning-fg)', error: 'var(--gb-error)' }[tone];
+  const TBG = { brand: 'var(--gb-brand-tint-medium)', success: 'var(--gb-success-tint-medium)', warning: 'var(--gb-warning-tint-medium)', error: 'var(--gb-error-tint-medium)' }[tone];
+  const pct = isBulk ? Math.round((run.done / total) * 100) : (loading ? null : 100);
+  const plural = (n) => `${n} task${n === 1 ? '' : 's'}`;
+  const headline = error
+    ? (isBulk && run.failed ? `${run.failed} of ${total} failed` : 'Something went wrong')
+    : loading ? `${v.ing}${isBulk ? ` ${plural(total)}…` : '…'}`
+      : (isBulk ? `${v.ed} ${plural(run.done)}` : v.ed);
+  return (
+    <div style={{ padding: '20px 16px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, animation: error ? 'qs-shake .34s ease' : 'none' }}>
+      <div style={{ position: 'relative', width: 64, height: 64, display: 'grid', placeItems: 'center' }}>
+        <div aria-hidden style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `radial-gradient(circle, ${TBG} 0%, transparent 70%)`, opacity: loading ? 0.9 : 1, animation: loading ? 'qs-breathe 2s ease-in-out infinite' : 'none' }} />
+        <div style={{ position: 'relative', width: 52, height: 52, borderRadius: '50%', background: TBG, color: T, display: 'grid', placeItems: 'center', animation: !loading ? 'qs-pop .5s cubic-bezier(.34,1.5,.64,1) both' : 'none' }}>
+          {loading ? <Spinner size={24} /> : error ? <I.alert size={26} /> : React.createElement(I[v.icon] || I.check, { size: 26 })}
+        </div>
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -0.2 }}>{headline}</div>
+        {loading && isBulk && <div style={{ fontSize: 11.5, color: 'var(--gb-brand-label)', fontFamily: 'var(--gb-font-mono)', fontWeight: 700, marginTop: 3 }}>{run.done} / {total}</div>}
+        {loading && !isBulk && <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', marginTop: 3 }}>Talking to the CRM…</div>}
+        {done && <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', marginTop: 3 }}>{run.failed > 0 ? `${run.failed} skipped · closing…` : 'Closing…'}</div>}
+      </div>
+      {isBulk && (loading || done) && (
+        <div style={{ width: '100%', height: 5, borderRadius: 999, background: 'var(--gb-surface-3)', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${pct}%`, background: 'var(--gb-brand-label)', borderRadius: 999, transition: 'width .25s ease' }} />
+        </div>
+      )}
+      {error && (
+        <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+          <Btn size="sm" variant="ghost" full onClick={onClose}>Close</Btn>
+          <Btn size="sm" variant="tinted" status="brand" full icon={<I.refresh size={12} />} onClick={onRetry}>Try again</Btn>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ───────────────────────────────────────────────────────────────
    QuickTaskPopover — moveable popover replacing the legacy
@@ -152,6 +231,33 @@ export function QuickTaskPopover({
     setPushIdx(2);
   }, [open, qt?.taskId, qt?.mode]);
 
+  /* In-popover run lifecycle. `fire` flips the body to the RunPanel, drives
+     the parent dispatcher (onAction returns { done, failed } + reports
+     progress), then settles to done (auto-close after a beat) or error
+     (with a retry). Replaces the old "close the instant it's clicked". */
+  const [run, setRun] = useState(null);
+  useEffect(() => { ensureQuickTaskStyles(); }, []);
+  useEffect(() => { setRun(null); }, [open, qt?.taskId, qt?.mode]);
+
+  const bodyRef = useRef(null);
+  const [bodyH, setBodyH] = useState('auto');
+  React.useLayoutEffect(() => {
+    if (bodyRef.current) { const h = bodyRef.current.offsetHeight; setBodyH((p) => (p === h ? p : h)); }
+  });
+
+  const fire = (action, payload) => {
+    const runTotal = action.startsWith('bulk-') ? selectedCount : 1;
+    setRun({ action, payload, phase: 'loading', done: 0, failed: 0, total: runTotal });
+    Promise.resolve(onAction(action, payload, (d, f) => setRun((r) => (r ? { ...r, done: d, failed: f } : r))))
+      .then((res) => {
+        const failed = res?.failed || 0;
+        const allFailed = failed > 0 && failed === runTotal;
+        setRun((r) => (r ? { ...r, phase: allFailed ? 'error' : 'done', done: res?.done ?? r.done, failed } : r));
+        if (!allFailed) setTimeout(() => onClose?.(), 1100);
+      })
+      .catch(() => setRun((r) => (r ? { ...r, phase: 'error' } : r)));
+  };
+
   const isBulk = qt?.mode === 'bulk';
   const task = !isBulk && getTask && qt?.taskId ? getTask(qt.taskId) : null;
   const showOther = pushIdx === PUSH_PRESETS.length;
@@ -201,7 +307,16 @@ export function QuickTaskPopover({
       subtitle={popSubtitle}
       icon={<I.check size={12} />}
       enterFrom="bottom"
+      closeDisabled={!!run && run.phase === 'loading'}
     >
+      {/* Height-morphing body: panes ↔ RunPanel cross-fade (keyed) while the
+          measured wrapper height glides instead of snapping. */}
+      <div style={{ height: bodyH, overflow: 'hidden', transition: run ? 'height .3s cubic-bezier(.34,1.12,.64,1)' : 'none' }}>
+       <div ref={bodyRef}>
+        <div key={run ? 'run' : 'panes'} style={{ animation: 'qs-state-in .28s cubic-bezier(.34,1.2,.64,1) both' }}>
+        {run ? (
+          <RunPanel run={run} onClose={onClose} onRetry={() => fire(run.action, run.payload)} />
+        ) : (
       <div style={{
         position: 'relative',
         overflow: 'hidden',
@@ -231,13 +346,13 @@ export function QuickTaskPopover({
               <Btn
                 size="md" variant="tinted" full
                 icon={<RefreshIcon size={12} />}
-                onClick={() => onAction('reopen', { taskId: qt.taskId })}
+                onClick={() => fire('reopen', { taskId: qt.taskId })}
               >Reopen task</Btn>
             ) : (
               <Btn
                 size="md" variant="tinted" status="success" full
                 icon={<I.check size={13} />}
-                onClick={() => onAction(isBulk ? 'bulk-complete' : 'complete', isBulk ? undefined : { taskId: qt.taskId })}
+                onClick={() => fire(isBulk ? 'bulk-complete' : 'complete', isBulk ? {} : { taskId: qt.taskId })}
               >{isBulk ? 'Complete all' : 'Mark complete'}</Btn>
             )}
 
@@ -299,7 +414,7 @@ export function QuickTaskPopover({
               <Btn
                 size="sm" variant="tinted" full
                 icon={<CalIcon size={11} />}
-                onClick={() => onAction(isBulk ? 'bulk-push' : 'push', isBulk
+                onClick={() => fire(isBulk ? 'bulk-push' : 'push', isBulk
                   ? { days: effectiveDays }
                   : { taskId: qt.taskId, days: effectiveDays })}
               >Apply push</Btn>
@@ -315,7 +430,7 @@ export function QuickTaskPopover({
               <Btn
                 size="sm" variant="secondary"
                 icon={<I.plus size={11} />}
-                onClick={() => (isBulk ? onAction('bulk-compose') : setPane('templates'))}
+                onClick={() => setPane('templates')}
               >{isBulk ? 'Add to all' : 'Add task'}</Btn>
             </div>
           </div>
@@ -338,7 +453,7 @@ export function QuickTaskPopover({
               onClick={() => {
                 const api = apiDateFromIso(pickedIso);
                 if (!api) return;
-                onAction(isBulk ? 'bulk-set-date' : 'set-date', isBulk
+                fire(isBulk ? 'bulk-set-date' : 'set-date', isBulk
                   ? { date: api }
                   : { taskId: qt.taskId, date: api });
               }}
@@ -372,13 +487,17 @@ export function QuickTaskPopover({
                   index={i}
                   name={tpl.name || tpl.subject || 'Untitled'}
                   meta={describeTemplate(tpl)}
-                  onClick={() => onAction(isBulk ? 'bulk-create-task' : 'create-task',
+                  onClick={() => fire(isBulk ? 'bulk-create-task' : 'create-task',
                     isBulk ? { template: tpl } : { taskId: qt.taskId, template: tpl })}
                 />
               ))
             )}
           </div>
         </Pane>
+      </div>
+        )}
+        </div>
+       </div>
       </div>
     </DraggablePopup>
   );

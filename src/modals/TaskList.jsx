@@ -596,16 +596,18 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
      rep can read the bulk loop's progress without watching a
      separate spinner. The verb-ed state lingers for ~1.8s then
      clears so the row falls back to its natural CRM status. */
-  const runQuickAction = useCallback(async (action, payload = {}) => {
+  const runQuickAction = useCallback(async (action, payload = {}, onProgress) => {
     /* "Add to all" opens the full QuickTask composer instead of the
        popover's preset list — the composed task is then broadcast to
        every selected row through the normal bulk-create-task path. */
     if (action === 'bulk-compose') { setQt(null); setBulkCompose(true); return; }
     const isBulk = action.startsWith('bulk-');
     const ids = isBulk ? Array.from(selected) : [payload.taskId];
-    if (!ids.length) { setQt(null); return; }
+    if (!ids.length) { setQt(null); return { done: 0, failed: 0 }; }
 
-    setQt(null);
+    /* The popover stays open and runs its own loading→done/error lifecycle
+       (RunPanel), closing itself when settled — so we do NOT setQt(null)
+       here anymore. */
     for (const id of ids) markBusy(id);
 
     /* Action → status lifecycle. Mirrors what the rep actually
@@ -671,8 +673,14 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
             try { chrome.storage.local.get('gbEmployeeId', (d) => resolve(d?.gbEmployeeId || '')); }
             catch { resolve(''); }
           });
+          /* Either a saved template OR an inline custom task (the
+             redesigned popover's "Add task" pane types a title + a
+             due-in-N-days; build the same shape submitQuickTask speaks). */
+          const template = payload.template || (payload.custom
+            ? { name: payload.custom.title, subject: payload.custom.title, body: '', daysOut: payload.custom.days }
+            : null);
           const res = await submitQuickTask({
-            template: payload.template,
+            template,
             context:  { contactId, employeeId },
           });
           if (!res?.ok) throw new Error(res?.error || 'Create task failed');
@@ -688,6 +696,7 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
             return next;
           });
         }, 1800);
+        return true;
       } catch (err) {
         toast?.error?.(`Task ${id}: ${err?.message || err}`, { duration: 4000 });
         /* On error, clear the state immediately so the row stops
@@ -697,26 +706,23 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
           delete next[id];
           return next;
         });
+        return false;
       } finally {
         clearBusy(id);
       }
     };
 
-    if (isBulk) {
-      // Run bulk actions sequentially — the CRM rate-limits concurrent
-      // Update.ajax hits, and serialising keeps row spinners predictable.
-      for (const id of ids) await runOne(id);
-      const n = ids.length;
-      if (action === 'bulk-complete')      toast?.success?.(`Completed ${n} task${n === 1 ? '' : 's'}`, { duration: 2400 });
-      else if (action === 'bulk-push')      toast?.success?.(`Pushed ${n} task${n === 1 ? '' : 's'} ${payload.days}d out`, { duration: 2400 });
-      else if (action === 'bulk-set-date')  toast?.success?.(`Set ${n} task${n === 1 ? '' : 's'} due ${payload.date}`, { duration: 2400 });
-      else if (action === 'bulk-create-task') toast?.success?.(`Created ${n} task${n === 1 ? '' : 's'} from “${payload.template?.name || 'template'}”`, { duration: 2800 });
-    } else {
-      await runOne(ids[0]);
-      if (action === 'create-task') {
-        toast?.success?.(`Task “${payload.template?.name || 'template'}” created`, { duration: 2800 });
-      }
+    /* Run sequentially — the CRM rate-limits concurrent Update.ajax hits,
+       and serialising keeps the row spinners + the popover's progress bar
+       predictable. Success feedback now lives in the popover's RunPanel
+       (errors-only toasts), so we just tally + report progress as we go. */
+    let done = 0, failed = 0;
+    for (const id of ids) {
+      const ok = await runOne(id);
+      if (ok) done += 1; else failed += 1;
+      onProgress?.(done, failed);
     }
+    return { done, failed };
   }, [selected, patchTaskLocal, toast]);
 
   const onRunCampaign = () => {

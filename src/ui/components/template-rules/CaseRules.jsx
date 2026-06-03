@@ -540,6 +540,11 @@ function NativeSelect({ value, options, onChange, width }) {
 function baseControlStyle({ width, minWidth, maxWidth, flex }) {
   return {
     height: 26,
+    // border-box so an explicit `width` (e.g. the 150px op dropdown) is the
+    // ACTUAL rendered width — under a host page that leaves us content-box,
+    // padding+border would add ~18px, making the dropdown overrun the value
+    // input + delete button.
+    boxSizing: 'border-box',
     width:    width,
     minWidth: minWidth,
     maxWidth: maxWidth,
