@@ -286,22 +286,22 @@ function ColorRow({ swatches, transparent, value, onChange }) {
           open={open}
           onClose={close}
           cursorAnchor={cursor}
-          width={272}
-          maxHeight={320}
-          icon={<I.eye size={13} />}
+          width={208}
+          maxHeight={252}
+          icon={<I.eye size={11} />}
           title="Imprint colors"
           subtitle={value ? `Selected · ${value}` : `${fullList.length} total`}
           closeOnOutside
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, height: 30, padding: '0 10px', background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)' }}>
-              <I.search size={12} style={{ color: 'var(--gb-text-muted)', flexShrink: 0 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 9 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: 24, padding: '0 8px', background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)' }}>
+              <I.search size={10} style={{ color: 'var(--gb-text-muted)', flexShrink: 0 }} />
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Search ${fullList.length} colors…`} autoFocus
-                style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 11.5 }} />
+                style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 10.5 }} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, maxHeight: 200, overflowY: 'auto', paddingRight: 4 }}>
-              {filtered.map((c) => <Swatch key={c.name} color={c} on={value === c.name} size={26} onClick={() => { onChange(c.name); close(); }} />)}
-              {filtered.length === 0 && <div style={{ gridColumn: '1 / -1', fontSize: 11, color: 'var(--gb-text-muted)', textAlign: 'center', padding: '14px 0' }}>No match</div>}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, maxHeight: 156, overflowY: 'auto', paddingRight: 3 }}>
+              {filtered.map((c) => <Swatch key={c.name} color={c} on={value === c.name} size={20} onClick={() => { onChange(c.name); close(); }} />)}
+              {filtered.length === 0 && <div style={{ gridColumn: '1 / -1', fontSize: 10.5, color: 'var(--gb-text-muted)', textAlign: 'center', padding: '10px 0' }}>No match</div>}
             </div>
           </div>
         </DraggablePopup>
