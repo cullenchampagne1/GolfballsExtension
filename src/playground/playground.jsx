@@ -473,7 +473,7 @@ function DraggablePanel({ title, initial = { top: 14, left: 14 }, width = 200, c
 
 function PlaygroundSurface() {
   // Single mounted modal at a time. Value is the registry id, or null.
-  const [mounted, setMounted] = useState('giftCatalog'); /*TEMPMOUNT*/
+  const [mounted, setMounted] = useState(null);
   // Carries the image (if any) the user loaded in ImagePreview when
   // they click Submit Proof — handed to SubmitProof on the swap.
   const [proofImage, setProofImage] = useState(null);
@@ -831,12 +831,10 @@ function PlaygroundSurface() {
           />
         )}
         {mounted === 'giftCatalog' && (
-          <div style={{ zoom: 0.75 }} /*TEMPZOOM*/>
           <GiftCatalog
             key="giftCatalog"
             onClose={() => setMounted(null)}
           />
-          </div>
         )}
         {mounted === 'imageViewer' && (
           /* No `url` passed → ImagePreview falls back to assets/photo_ball.jpg
