@@ -124,6 +124,14 @@ const PUSH_PRESETS = [
   { label: '+1mo', days: 30 },
 ];
 
+/* Quick due-date choices for the inline custom-task form (design). */
+const DUE_OPTS = [
+  { k: 'today', label: 'Today',     days: 0 },
+  { k: '+1d',   label: 'Tomorrow',  days: 1 },
+  { k: '+3d',   label: 'In 3 days', days: 3 },
+  { k: '+1w',   label: 'Next week', days: 7 },
+];
+
 const PANE_TRANSITION = { duration: 0.25, ease: [0.4, 0, 0.2, 1] };
 
 function isComplete(task) {
@@ -236,8 +244,12 @@ export function QuickTaskPopover({
      progress), then settles to done (auto-close after a beat) or error
      (with a retry). Replaces the old "close the instant it's clicked". */
   const [run, setRun] = useState(null);
+  /* Inline custom-task form (the "Add task" pane types a title + a
+     due-in-N-days instead of only offering saved templates). */
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDue, setTaskDue] = useState('+3d');
   useEffect(() => { ensureQuickTaskStyles(); }, []);
-  useEffect(() => { setRun(null); }, [open, qt?.taskId, qt?.mode]);
+  useEffect(() => { setRun(null); setTaskTitle(''); }, [open, qt?.taskId, qt?.mode]);
 
   const bodyRef = useRef(null);
   const [bodyH, setBodyH] = useState('auto');
@@ -256,6 +268,17 @@ export function QuickTaskPopover({
         if (!allFailed) setTimeout(() => onClose?.(), 1100);
       })
       .catch(() => setRun((r) => (r ? { ...r, phase: 'error' } : r)));
+  };
+
+  /* Fire an inline custom task — same { custom: { title, days } } shape
+     TaskList's create-task branch already speaks. */
+  const fireCustom = () => {
+    const title = taskTitle.trim();
+    if (!title) return;
+    const opt = DUE_OPTS.find((o) => o.k === taskDue) || DUE_OPTS[2];
+    fire(isBulk ? 'bulk-create-task' : 'create-task',
+      isBulk ? { custom: { title, days: opt.days } }
+             : { taskId: qt.taskId, custom: { title, days: opt.days } });
   };
 
   const isBulk = qt?.mode === 'bulk';
@@ -307,7 +330,7 @@ export function QuickTaskPopover({
       open={open}
       onClose={onClose}
       cursorAnchor={qt.anchor || null}
-      width={296}
+      width={360}
       maxHeight={520}
       title={popTitle}
       subtitle={popSubtitle}
@@ -474,31 +497,74 @@ export function QuickTaskPopover({
             title={isBulk ? 'Add to all selected' : 'Add follow-up task'}
             onBack={() => setPane('main')}
           />
-          <div style={{
-            padding: 12,
-            display: 'flex', flexDirection: 'column', gap: 4,
-            maxHeight: 360, overflowY: 'auto',
-          }}>
-            {taskTpls.length === 0 ? (
-              <div style={{
-                padding: 14, textAlign: 'center',
-                fontSize: 11.5, color: 'var(--gb-text-muted)',
-                fontStyle: 'italic',
-              }}>
-                No task templates found.<br />Add some in the Notes editor.
+          <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 11 }}>
+            {/* Custom task — type a title + pick a due, no template needed. */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Caption>{isBulk ? 'Custom task · all selected' : 'Custom task'}</Caption>
+              <input
+                value={taskTitle}
+                onChange={(e) => setTaskTitle(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && taskTitle.trim()) fireCustom(); }}
+                placeholder="What needs doing?"
+                autoFocus
+                onFocus={(e) => { e.target.style.borderColor = 'var(--gb-brand-label)'; e.target.style.boxShadow = 'var(--gb-focus-ring)'; }}
+                onBlur={(e) => { e.target.style.borderColor = 'var(--gb-border-default)'; e.target.style.boxShadow = 'none'; }}
+                style={{
+                  height: 32, padding: '0 10px',
+                  background: 'var(--gb-surface-1)',
+                  border: '1px solid var(--gb-border-default)',
+                  borderRadius: 'var(--gb-r-sm)',
+                  color: 'var(--gb-text-primary)',
+                  fontFamily: 'var(--gb-font-sans)', fontSize: 12.5,
+                  outline: 'none', transition: 'border-color .15s, box-shadow .15s',
+                }}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', marginRight: 2 }}>Due</span>
+                {DUE_OPTS.map((o) => (
+                  <ChipBtn key={o.k} active={taskDue === o.k} onClick={() => setTaskDue(o.k)}>{o.label}</ChipBtn>
+                ))}
               </div>
-            ) : (
-              taskTpls.map((tpl, i) => (
-                <TemplateRow
-                  key={tpl.id}
-                  index={i}
-                  name={tpl.name || tpl.subject || 'Untitled'}
-                  meta={describeTemplate(tpl)}
-                  onClick={() => fire(isBulk ? 'bulk-create-task' : 'create-task',
-                    isBulk ? { template: tpl } : { taskId: qt.taskId, template: tpl })}
-                />
-              ))
-            )}
+              <Btn
+                size="sm" variant="tinted" full
+                icon={<I.plus size={12} />}
+                disabled={!taskTitle.trim()}
+                onClick={fireCustom}
+              >{isBulk ? `Add to all ${selectedCount}` : 'Add task'}</Btn>
+            </div>
+
+            {/* Divider into the saved templates. */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>or start from a template</span>
+              <span style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
+            </div>
+
+            <div style={{
+              display: 'flex', flexDirection: 'column', gap: 4,
+              maxHeight: 176, overflowY: 'auto',
+            }}>
+              {taskTpls.length === 0 ? (
+                <div style={{
+                  padding: 14, textAlign: 'center',
+                  fontSize: 11.5, color: 'var(--gb-text-muted)',
+                  fontStyle: 'italic',
+                }}>
+                  No task templates found.<br />Add some in the Notes editor.
+                </div>
+              ) : (
+                taskTpls.map((tpl, i) => (
+                  <TemplateRow
+                    key={tpl.id}
+                    index={i}
+                    name={tpl.name || tpl.subject || 'Untitled'}
+                    meta={describeTemplate(tpl)}
+                    onClick={() => fire(isBulk ? 'bulk-create-task' : 'create-task',
+                      isBulk ? { template: tpl } : { taskId: qt.taskId, template: tpl })}
+                  />
+                ))
+              )}
+            </div>
           </div>
         </Pane>
       </div>
