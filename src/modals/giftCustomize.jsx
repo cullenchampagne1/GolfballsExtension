@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, createContext, useContext, useMemo, useCallback, useRef } from 'react';
 import { Btn, Tag, Dot, DraggablePopup, Segmented } from '../ui/index.js';
 import { Icon, I } from '../ui/icons.jsx';
+import { GolfballViewer } from './GolfballViewer.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    giftCustomize.jsx — the real per-product personalization UI for
@@ -360,14 +361,64 @@ function IconGrid({ value, onChange }) {
   );
 }
 
-function ImageUpload({ ai, label = 'Upload Your Company Logo' }) {
+/* Drag-drop / click-to-browse image picker. Reads the picked file via
+   FileReader, writes the data URL into the matching PrintTypeContext slot
+   (Custom Logo vs Photo) so the BallPreview can decal it immediately.
+   Mock-only previously — the data URL pipeline is the smallest wire-up
+   needed for the live preview, not a real upload to the server. */
+function ImageUpload({ ai, label = 'Upload Your Company Logo', slot = 'Custom Logo' }) {
   const [hover, setHover] = useState(false);
+  const [dataUrl, setDataUrl] = usePTField(slot, 'imageDataUrl');
+  const [fileName, setFileName] = usePTField(slot, 'fileName');
+  const inputRef = useRef(null);
+  const ingest = (file) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    const r = new FileReader();
+    r.onload = () => {
+      setDataUrl(r.result);
+      setFileName(file.name);
+    };
+    r.readAsDataURL(file);
+  };
+  const onDrop = (e) => {
+    e.preventDefault();
+    setHover(false);
+    ingest(e.dataTransfer.files && e.dataTransfer.files[0]);
+  };
+  const onChange = (e) => ingest(e.target.files && e.target.files[0]);
+  const clear = (e) => {
+    e.stopPropagation();
+    setDataUrl(null);
+    setFileName(null);
+    if (inputRef.current) inputRef.current.value = '';
+  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={{ padding: '20px 16px', borderRadius: 'var(--gb-r-lg)', textAlign: 'center', cursor: 'pointer', background: hover ? 'var(--gb-brand-tint-soft)' : 'var(--gb-fill-inverse-medium)', border: '1.5px dashed ' + (hover ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'), transition: 'all var(--gb-anim)' }}>
-        <div style={{ width: 36, height: 36, borderRadius: '50%', margin: '0 auto 9px', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><UploadI size={17} /></div>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{label}</div>
-        <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 3 }}>Drag files here or <span style={{ color: 'var(--gb-brand-label)', fontWeight: 600 }}>click to browse</span></div>
+      <div
+        onClick={() => inputRef.current && inputRef.current.click()}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        onDragOver={(e) => { e.preventDefault(); setHover(true); }}
+        onDragLeave={() => setHover(false)}
+        onDrop={onDrop}
+        style={{ padding: '20px 16px', borderRadius: 'var(--gb-r-lg)', textAlign: 'center', cursor: 'pointer', background: hover ? 'var(--gb-brand-tint-soft)' : 'var(--gb-fill-inverse-medium)', border: '1.5px dashed ' + (hover ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'), transition: 'all var(--gb-anim)' }}
+      >
+        <input ref={inputRef} type="file" accept="image/*" onChange={onChange} style={{ display: 'none' }} />
+        {dataUrl ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
+            <img src={dataUrl} alt="" style={{ width: 40, height: 40, objectFit: 'contain', borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-surface-modal)' }} />
+            <div style={{ textAlign: 'left', minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fileName || 'Uploaded image'}</div>
+              <button onClick={clear} style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-brand-label)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Replace</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div style={{ width: 36, height: 36, borderRadius: '50%', margin: '0 auto 9px', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><UploadI size={17} /></div>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{label}</div>
+            <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 3 }}>Drag files here or <span style={{ color: 'var(--gb-brand-label)', fontWeight: 600 }}>click to browse</span></div>
+          </>
+        )}
       </div>
       {ai && <Btn variant="secondary" size="sm" icon={<SparkI />} style={{ alignSelf: 'flex-start' }}>AI Image Generator</Btn>}
       <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', lineHeight: 1.5 }}>
@@ -377,17 +428,117 @@ function ImageUpload({ ai, label = 'Upload Your Company Logo' }) {
     </div>
   );
 }
+/* ── Print-type personalization state ─────────────────────────────
+   Single source of truth for everything the live ball preview needs to
+   render. Each Control + composite reads/writes through context instead
+   of owning its own useState, so PrintTypeGrid can hand the snapshot to
+   <BallPreview /> without prop-drilling through every wrapper.
+   Slots are scoped per print-type so switching between types doesn't
+   wipe the buyer's other work in progress. */
+const PrintTypeContext = createContext(null);
+const usePT = () => useContext(PrintTypeContext) || { sel: null, setSel: () => {}, data: {}, update: () => {} };
+const DEFAULT_PT_DATA = {
+  Monogram:      { style: 'circle',     initials: '', c1: 'Black', c2: 'Transparent' },
+  Personalized:  { l1: '', l2: '', l3: '', color: 'Black', font: 'Kabel Dm BT', size: 'Standard' },
+  Icons:         { icon: '' },
+  'Custom Logo': { imageDataUrl: null, fileName: null },
+  Photo:         { imageDataUrl: null, fileName: null },
+};
+/* Read a single field for the given print-type slot, with a fallback.
+   Returns [value, setValue] so consumers feel like useState. */
+function usePTField(type, key) {
+  const ctx = usePT();
+  const slot = ctx.data[type] || DEFAULT_PT_DATA[type] || {};
+  const value = slot[key] !== undefined ? slot[key] : (DEFAULT_PT_DATA[type] && DEFAULT_PT_DATA[type][key]);
+  const setValue = useCallback((v) => ctx.update(type, { [key]: typeof v === 'function' ? v(value) : v }), [ctx, type, key, value]);
+  return [value, setValue];
+}
+
+/* Build a decal URL the GolfballViewer can load, given the current snapshot
+   for one print type. Returns null when the type isn't supported yet or the
+   buyer hasn't filled the minimum required input. Callers must memoize on
+   the snapshot fields they care about. */
+const _hexOf = (name) => {
+  if (!name || name === 'Transparent') return '#000000';
+  const m = IMPRINT_COLORS.find((c) => c.name === name);
+  return (m && m.hex) || '#000000';
+};
+function buildMonogramSvgUrl(style, c1) {
+  const def = MONO_STYLES.find((s) => s.key === style) || MONO_STYLES[0];
+  const hex = _hexOf(c1);
+  // The path data was authored with fill="currentColor" (via the _C constant).
+  // Recolor by string-substituting; cheap, no DOM parse needed.
+  const recolored = def.svg.split('currentColor').join(hex);
+  const doc = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${def.viewBox || '0 0 256 256'}">${recolored}</svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(doc);
+}
+function buildIconUrl(iconName) {
+  if (!iconName) return null;
+  // ICON_THEMES values are arrays of [displayName, fileName] — find the matching one.
+  for (const items of Object.values(ICON_THEMES)) {
+    const hit = items.find(([n]) => n === iconName);
+    if (hit) return ICON_HOST + hit[1];
+  }
+  return null;
+}
+function buildPersonalizedUrl(line1, font, color, sku) {
+  if (!line1) return null;
+  const enc = encodeURIComponent;
+  const hex = _hexOf(color).replace('#', '');
+  // Mirrors the production customizer call (verified in the icustomize.golfballs.com
+  // page bundles): type=clublabel + font name + hex color + sku.
+  return `https://api.golfballs.com/dynamic/images/${enc(line1)}.jpeg?type=clublabel&font=${enc(font)}&color=${hex}&sku=${enc(sku || 'M3743-P1')}`;
+}
+/* Hook: given a print-type snapshot + sku, return the URL the viewer should
+   render. Debounces Personalized text changes so we don't fire an HTTP
+   request per keystroke. */
+function useDecalUrl(p) {
+  const ctx = usePT();
+  const sel = ctx.sel;
+  const data = ctx.data || {};
+  const [debouncedText, setDebouncedText] = useState(null);
+  // Debounce just the Personalized line/font/color/size — other types update
+  // synchronously because their input lands as a discrete pick, not typing.
+  useEffect(() => {
+    if (sel !== 'Personalized') return undefined;
+    const t = setTimeout(() => setDebouncedText({ ...(data.Personalized || {}) }), 250);
+    return () => clearTimeout(t);
+  }, [sel, data.Personalized && data.Personalized.l1, data.Personalized && data.Personalized.font, data.Personalized && data.Personalized.color]);
+
+  return useMemo(() => {
+    if (sel === 'Monogram') {
+      const { style, c1 } = data.Monogram || {};
+      return buildMonogramSvgUrl(style, c1);
+    }
+    if (sel === 'Icons') {
+      const { icon } = data.Icons || {};
+      return buildIconUrl(icon);
+    }
+    if (sel === 'Personalized') {
+      const snap = debouncedText || data.Personalized || {};
+      return buildPersonalizedUrl(snap.l1, snap.font, snap.color, p && p.sku);
+    }
+    if (sel === 'Custom Logo') {
+      return (data['Custom Logo'] && data['Custom Logo'].imageDataUrl) || null;
+    }
+    if (sel === 'Photo') {
+      return (data.Photo && data.Photo.imageDataUrl) || null;
+    }
+    return null;
+  }, [sel, data, debouncedText, p && p.sku]);
+}
+
 /* Second-pole imprint — the live reveal: a choice row, then the matching control. */
 const SECOND_IMPRINT_CHOICES = ['Same as Front', 'Personalized', 'Monogram', 'Upload Image', 'Logo Library', 'Custom'];
 /* full personalized imprint — 3 wired text lines + imprint color, font, size.
    Shared by the Personalized print type and the second-pole Personalized choice. */
 function PersonalizedImprint() {
-  const [l1, setL1] = useState('');
-  const [l2, setL2] = useState('');
-  const [l3, setL3] = useState('');
-  const [color, setColor] = useState('Black');
-  const [font, setFont] = useState(FONTS[0]);
-  const [size, setSize] = useState(SIZES[0]);
+  const [l1, setL1] = usePTField('Personalized', 'l1');
+  const [l2, setL2] = usePTField('Personalized', 'l2');
+  const [l3, setL3] = usePTField('Personalized', 'l3');
+  const [color, setColor] = usePTField('Personalized', 'color');
+  const [font, setFont] = usePTField('Personalized', 'font');
+  const [size, setSize] = usePTField('Personalized', 'size');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
       <Field label="Line 1" required><TextInput value={l1} onChange={setL1} placeholder="Your text" maxLength={17} /></Field>
@@ -565,12 +716,19 @@ function MonogramDecoration() {
    so the Initials field can rescale to match the chosen style (1 / 2 / 3 letters).
    Renders in place of the default control loop in ModControls. */
 function MonogramFlow() {
-  const [style, setStyle] = useState(MONO_STYLES[0].key);
-  const [v, setV] = useState('');
-  const [c1, setC1] = useState('Black');
-  const [c2, setC2] = useState('Transparent');
+  const ctx = usePT();
+  const [style, setStyle] = usePTField('Monogram', 'style');
+  const [v, setV] = usePTField('Monogram', 'initials');
+  const [c1, setC1] = usePTField('Monogram', 'c1');
+  const [c2, setC2] = usePTField('Monogram', 'c2');
   const n = _monoCount(style);
-  const pickStyle = (k) => { setStyle(k); const m = _monoCount(k); if (v.length > m) setV(v.slice(0, m)); };
+  // Switching to a smaller-count style truncates initials so leftover
+  // letters don't survive invisibly. Single context update so both fields
+  // change in one render, no flash of out-of-range initials.
+  const pickStyle = (k) => {
+    const m = _monoCount(k);
+    ctx.update('Monogram', { style: k, ...(v.length > m ? { initials: v.slice(0, m) } : {}) });
+  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <Field label="Monogram Style"><MonoGrid value={style} onChange={pickStyle} /></Field>
@@ -713,13 +871,14 @@ function Control({ k, p, config, serviceLevel }) {
   const [c1, setC1] = useState('Black'); const [c2, setC2] = useState('Transparent');
   const [font, setFont] = useState(FONTS[0]); const [size, setSize] = useState(SIZES[0]);
   const [style, setStyle] = useState(MONO_STYLES[0].key);
-  const [icon, setIcon] = useState('');
+  // Icon picker reads/writes through context so <BallPreview /> sees it live.
+  const [icon, setIcon] = usePTField('Icons', 'icon');
   const [align, setAlign] = useState(ALIGNXL_STYLES[0].key);
   const [alignID, setAlignID] = useState(IDALIGN_STYLES[0].key);
   const [num, setNum] = useState(73); const [same, setSame] = useState(false);
   switch (k) {
-    case 'imageUpload': return <ImageUpload />;
-    case 'photoUpload': return <ImageUpload ai label="Upload Image" />;
+    case 'imageUpload': return <ImageUpload slot="Custom Logo" />;
+    case 'photoUpload': return <ImageUpload ai label="Upload Image" slot="Photo" />;
     case 'secondImprint': return <SecondImprint />;
     case 'commercial': return <Commercial p={p} config={config} serviceLevel={serviceLevel} />;
     case 'personalized': return <PersonalizedImprint />;
@@ -812,9 +971,12 @@ function splitTileRows(n) {
   return rows;
 }
 
-/* golf-ball print-type tile grid */
-function PrintTypeGrid({ p, mods, config }) {
-  const [sel, setSel] = useState(mods[0]);
+/* Inner grid + control area. Reads `sel` from PrintTypeContext so the parent
+   provider owns the snapshot the BallPreview also reads from. */
+function PrintTypeGridInner({ p, mods, config }) {
+  const ctx = usePT();
+  const sel = ctx.sel;
+  const setSel = ctx.setSel;
   const rows = splitTileRows(mods.length);
   let cursor = 0;
   return (
@@ -881,6 +1043,66 @@ function PrintTypeGrid({ p, mods, config }) {
           <ModControls name={sel} p={p} config={config} serviceLevel />
         </div>
       </div>
+    </div>
+  );
+}
+
+/* Provider that owns the personalization snapshot the print-type controls
+   read/write through, plus the selected print-type itself. Wraps the inner
+   grid AND any sibling preview pane the parent (CustomizeBlock) renders. */
+function PrintTypeProvider({ mods, children }) {
+  const [sel, setSel] = useState(mods[0]);
+  const [data, setData] = useState(DEFAULT_PT_DATA);
+  const update = useCallback((type, partial) => {
+    setData((d) => ({ ...d, [type]: { ...(d[type] || {}), ...partial } }));
+  }, []);
+  const value = useMemo(() => ({ sel, setSel, data, update }), [sel, data, update]);
+  return <PrintTypeContext.Provider value={value}>{children}</PrintTypeContext.Provider>;
+}
+
+/* Public PrintTypeGrid — kept for backward compatibility with any caller
+   that hasn't been migrated to the side-by-side layout. CustomizeBlock uses
+   PrintTypeProvider + PrintTypeGridInner directly so it can also mount the
+   preview pane as a sibling that sees the same context. */
+function PrintTypeGrid({ p, mods, config }) {
+  return (
+    <PrintTypeProvider mods={mods}>
+      <PrintTypeGridInner p={p} mods={mods} config={config} />
+    </PrintTypeProvider>
+  );
+}
+
+/* Live 3D ball preview pane. Mounts the minimal GolfballViewer (no gravity,
+   no scene picker, no light chip) and feeds it whatever decal the current
+   print-type snapshot resolves to. When the user has nothing to preview yet
+   (unsupported type, or an upload-based type with no image) we show a soft
+   empty-state on a placeholder card the same shape as the canvas. */
+function BallPreview({ p }) {
+  const ctx = usePT();
+  const decalUrl = useDecalUrl(p);
+  const supported = ['Monogram', 'Personalized', 'Icons', 'Custom Logo', 'Photo'].includes(ctx.sel);
+  const emptyMsg = !supported
+    ? 'Preview not yet available for this print type'
+    : ctx.sel === 'Personalized'
+      ? 'Type your text to preview'
+      : (ctx.sel === 'Custom Logo' || ctx.sel === 'Photo')
+        ? 'Upload an image to preview'
+        : ctx.sel === 'Icons'
+          ? 'Pick an icon to preview'
+          : 'Pick a style to preview';
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Live preview</div>
+      <div style={{ position: 'relative', width: '100%', aspectRatio: '1 / 1.1', borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)' }}>
+        {decalUrl ? (
+          <GolfballViewer minimal decalDataUrl={decalUrl} />
+        ) : (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, textAlign: 'center' }}>
+            <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', lineHeight: 1.4 }}>{emptyMsg}</div>
+          </div>
+        )}
+      </div>
+      <div style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)', textAlign: 'center', lineHeight: 1.3 }}>Drag to rotate · scroll to zoom</div>
     </div>
   );
 }

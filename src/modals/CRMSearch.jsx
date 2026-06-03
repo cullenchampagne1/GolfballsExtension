@@ -972,48 +972,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
         )}
       </AnimatePresence>
 
-      {/* Table */}
-      <div
-        style={{ flex: 1, minHeight: 0, overflow: 'auto' }}
-        onScroll={(e) => {
-          // Infinite scroll: fire the next page when the user is within
-          // ~200px of the bottom. loadMoreResults is a no-op when there
-          // are no more matches or a load is already in flight.
-          const el = e.currentTarget;
-          if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
-            loadMoreResults();
-          }
-        }}
-      >
-        <ResultsTable
-          rows={displayedRows}
-          loadingMore={loadingMore}
-          status={displayedStatus}
-          query={query}
-          total={mode === 'indexed' ? indexed.length : total}
-          selected={selected}
-          activeIdx={activeIdx}
-          allChecked={allVisibleSelected}
-          emailStatusByRow={emailStatusByRow}
-          emailRunRunning={emailRunRunning}
-          onToggle={toggleSel}
-          onToggleAll={toggleAll}
-          sortKey={sortKey}
-          sortDir={sortDir}
-          onSort={(k) => {
-            if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-            else { setSortKey(k); setSortDir('asc'); }
-          }}
-          mode={mode}
-          onDeleteIndexed={onDeleteIndexed}
-          onSubmitServer={submitSearch}
-        />
-      </div>
-
-      {/* Selection summary — slides in BELOW the table (not above it) so
-          appearing/disappearing shrinks the flex:1 table from the bottom
-          and the visible rows stay anchored — selecting/deselecting no
-          longer shifts the rows. */}
+      {/* Selection summary */}
       <AnimatePresence initial={false}>
         {selCount > 0 && (
           <motion.div
@@ -1026,7 +985,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
           >
             <div style={{
               padding: '8px 14px',
-              borderTop: '1px solid var(--gb-border-subtle)',
+              borderBottom: '1px solid var(--gb-border-subtle)',
               background: 'var(--gb-brand-tint-soft)',
               display: 'flex', alignItems: 'center', gap: 10,
             }}>
@@ -1064,6 +1023,44 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Table */}
+      <div
+        style={{ flex: 1, minHeight: 0, overflow: 'auto' }}
+        onScroll={(e) => {
+          // Infinite scroll: fire the next page when the user is within
+          // ~200px of the bottom. loadMoreResults is a no-op when there
+          // are no more matches or a load is already in flight.
+          const el = e.currentTarget;
+          if (el.scrollHeight - el.scrollTop - el.clientHeight < 200) {
+            loadMoreResults();
+          }
+        }}
+      >
+        <ResultsTable
+          rows={displayedRows}
+          loadingMore={loadingMore}
+          status={displayedStatus}
+          query={query}
+          total={mode === 'indexed' ? indexed.length : total}
+          selected={selected}
+          activeIdx={activeIdx}
+          allChecked={allVisibleSelected}
+          emailStatusByRow={emailStatusByRow}
+          emailRunRunning={emailRunRunning}
+          onToggle={toggleSel}
+          onToggleAll={toggleAll}
+          sortKey={sortKey}
+          sortDir={sortDir}
+          onSort={(k) => {
+            if (k === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+            else { setSortKey(k); setSortDir('asc'); }
+          }}
+          mode={mode}
+          onDeleteIndexed={onDeleteIndexed}
+          onSubmitServer={submitSearch}
+        />
+      </div>
 
     </FloatingPanel>
 

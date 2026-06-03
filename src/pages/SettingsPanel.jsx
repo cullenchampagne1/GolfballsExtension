@@ -445,16 +445,17 @@ function UserPresetsManager({ onPresetLoad }) {
                   </span>
                 </div>
                 <div style={{ height: 1, background: 'var(--gb-border-subtle)' }} />
-                {PRESET_SCOPES.map((s) => (
-                  <Checkbox
-                    key={s.id}
-                    size="sm"
-                    checked={chosenScopes.has(s.id)}
-                    label={s.label}
-                    hint={s.desc}
-                    onChange={() => toggleScope(s.id)}
-                  />
-                ))}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 14, rowGap: 7 }}>
+                  {PRESET_SCOPES.map((s) => (
+                    <Checkbox
+                      key={s.id}
+                      size="sm"
+                      checked={chosenScopes.has(s.id)}
+                      label={s.label}
+                      onChange={() => toggleScope(s.id)}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           </motion.div>

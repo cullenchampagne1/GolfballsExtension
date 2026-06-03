@@ -94,7 +94,7 @@ export const SCENES = [
   { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'assets/moonlit_golf_4k.exr',     icon: 'moon' },
 ];
 
-export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, onError, onSceneChange, onThrowChange }, ref) {
+export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, onError, onSceneChange, onThrowChange, minimal = false }, ref) {
   const containerRef = useRef(null);
   // Imperative snapshot handle — set by the WebGL effect once the
   // scene is ready. Parent calls snapshotRef.current() to capture a
@@ -3192,8 +3192,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
       {/* Top-right chip — gravity toggle. Hidden while a scene is
           active (no room to fall in). Lives ABOVE the canvas; the
           bomb listener excludes any element marked
-          data-viewer-ui="true" so this can't trigger a drop. */}
-      {status === 'ready' && !sceneKey && (
+          data-viewer-ui="true" so this can't trigger a drop.
+          Suppressed in `minimal` mode (e.g. the Customize sidebar). */}
+      {status === 'ready' && !sceneKey && !minimal && (
         <button
           type="button"
           data-viewer-ui="true"
@@ -3235,7 +3236,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           (mutually exclusive). The drawer lives ABOVE the canvas
           and is tagged data-viewer-ui so the bomb listener doesn't
           spawn a bomb when the user closes the drawer. */}
-      {status === 'ready' && !throwMode && (
+      {status === 'ready' && !throwMode && !minimal && (
         <SceneDrawer
           active={sceneKey}
           onPick={(k) => setSceneKey((cur) => (cur === k ? null : k))}
@@ -3248,7 +3249,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           lights would do nothing visible). The chip's swatch shows the
           active override or a neutral white when on theme default;
           shift-click resets back to the theme. */}
-      {status === 'ready' && !sceneKey && (
+      {status === 'ready' && !sceneKey && !minimal && (
         <LightColorChip
           color={lightColor}
           onChange={setLightColor}

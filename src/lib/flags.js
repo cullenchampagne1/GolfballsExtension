@@ -16,7 +16,6 @@ export const FEATURE_DEFAULTS = {
   watchListEnabled:         true,
   autoPushEnabled:          true,
   signifydGlowEnabled:      true,
-  crmQueryBuilderEnabled:   true,
   submitProofEnabled:       true,
   taskListEnabled:          true,
   marginCalcEnabled:        true,
@@ -68,7 +67,6 @@ export const FEATURE_FLAGS = [
   { key: 'campaignEditorEnabled', section: 'Email & Templates', name: 'Campaign Editor',   desc: 'Edit template campaigns (from CRM Search / Tasks).',                   icon: 'edit' },
   // ── CRM & Contacts ──
   { key: 'crmSearchEnabled',       section: 'CRM & Contacts', name: 'CRM Search',        desc: 'Quick search for customers and orders (Ctrl+K).',  icon: 'search' },
-  { key: 'crmQueryBuilderEnabled', section: 'CRM & Contacts', name: 'CRM Query Builder', desc: 'Advanced multi-condition CRM filtering.',          icon: 'filter' },
   { key: 'crmNewContactEnabled',   section: 'CRM & Contacts', name: 'New Contact',       desc: 'Quick-create a CRM contact (Ctrl+Q).',             icon: 'user' },
   { key: 'callLogEnabled',         section: 'CRM & Contacts', name: 'Call Log',          desc: 'Log calls from contact / account pages.',          icon: 'phone' },
   { key: 'quickTaskEnabled',       section: 'CRM & Contacts', name: 'Quick Task',        desc: 'Create a quick task for a contact.',               icon: 'check' },
@@ -104,6 +102,7 @@ export function loadFlags() {
         delete saved.replyWithTemplateEnabled;
         delete saved.directSendEnabled;
         delete saved.developerMode;
+        delete saved.crmQueryBuilderEnabled;   // retired — was for an old DOM-injected button
         resolve({ ...FEATURE_DEFAULTS, ...saved });
       });
     } catch {
