@@ -25,7 +25,6 @@
 ─────────────────────────────────────────────────────────────── */
 
 import { DEFAULT_PRIORITY } from './quickTask.js';
-import { getPageContext } from './pageContext.js';
 
 const BASE = 'https://api.golfballs.com';
 
@@ -67,31 +66,36 @@ export async function readTaskContext() {
   const out = { contactId: '', accountId: '', contactName: '', employeeId: '' };
   if (typeof document === 'undefined') return out;
 
-  /* Engine-first: the page-context schema gives the canonical contact +
-     account ids and the contact name (and resolves them on account pages
-     too). Each field falls back to the original selector/URL read so an
-     unrecognised page behaves exactly as before. */
-  const ctx = (() => { try { return getPageContext(document); } catch { return null; } })();
-  const c = (ctx && ctx.data && ctx.data.contact) || null;
+  /* These read the CURRENT contact/account you're viewing (URL params +
+     the page's own labels). Intentionally NOT the page-engine schema: on
+     an account page the engine resolves a *representative* contact, which
+     would wrongly attach an account-level task to that contact. */
+  // contactId — URL first, hidden form input as fallback.
+  const hrefMatch = (typeof location !== 'undefined' ? location.href : '').match(/[?&]customerID=(\d+)/i);
+  if (hrefMatch) {
+    out.contactId = hrefMatch[1];
+  } else {
+    out.contactId = document.getElementById('tbContactId')?.value?.trim() || '';
+  }
 
-  // contactId — engine ids (data id or customerID URL param) → hidden input.
-  out.contactId = (ctx && ctx.ids && ctx.ids.contact)
-    || document.getElementById('tbContactId')?.value?.trim()
-    || '';
+  // accountId — separate URL param + Name input on account pages.
+  const acctMatch = (typeof location !== 'undefined' ? location.href : '').match(/[?&]accountID=(\d+)/i);
+  if (acctMatch) {
+    out.accountId = acctMatch[1];
+  } else {
+    out.accountId = (document.getElementById('AccountID')?.value || '').trim();
+    if (out.accountId === '0') out.accountId = '';
+  }
 
-  // accountId — engine ids (data id or accountID URL param) → #AccountID.
-  out.accountId = (ctx && ctx.ids && ctx.ids.account)
-    || (document.getElementById('AccountID')?.value || '').trim();
-  if (out.accountId === '0') out.accountId = '';
-
-  // contactName for the modal subtitle — engine first/last → labels → #Name.
-  out.contactName = (c ? `${(c.firstName || '').trim()} ${(c.lastName || '').trim()}`.trim() : '')
-    || (() => {
-      const first = (document.getElementById('lblContactFirstName')?.textContent || '').trim();
-      const last  = (document.getElementById('lblContactLastName')?.textContent  || '').trim();
-      return `${first} ${last}`.trim();
-    })()
-    || (document.getElementById('Name')?.value || '').trim();
+  // contactName for the modal subtitle.
+  const first = (document.getElementById('lblContactFirstName')?.textContent || '').trim();
+  const last  = (document.getElementById('lblContactLastName')?.textContent  || '').trim();
+  const full = `${first} ${last}`.trim();
+  if (full) {
+    out.contactName = full;
+  } else {
+    out.contactName = (document.getElementById('Name')?.value || '').trim();
+  }
 
   // employeeId — same gbEmployeeId in storage that calls use.
   if (hasChromeStorage()) {

@@ -39,6 +39,17 @@ function param(url, re) {
   return m ? m[1] : null;
 }
 
+/* Normalize an id that may come back as a bare number OR a detail URL (the
+   account page's contact id is extracted from the related-contact link, so
+   it arrives as a full Page=240&customerID=… href). Returns the numeric id. */
+function numericId(v, re) {
+  if (v == null) return null;
+  const s = String(v);
+  if (/^\d+$/.test(s)) return s;
+  const m = s.match(re);
+  return m ? m[1] : null;
+}
+
 /* The superset detector — actions-shelf's version (the only one with the
    `order-index` branch) made canonical. URL checks first, then the
    #tbContactId DOM marker, then the looser id-param fallbacks. */
@@ -69,8 +80,8 @@ export function getPageContext(doc = (typeof document !== 'undefined' ? document
     order:   param(url, /[?&]orderID=(\d+)/i),
     /* Prefer the engine-extracted ids; fall back to the URL params the
        old detectors keyed off. */
-    contact: (data && data.ids && data.ids.contact) || param(url, /[?&]customerID=(\d+)/i) || null,
-    account: (data && data.ids && data.ids.account) || param(url, /[?&]accountID=(\d+)/i) || null,
+    contact: numericId(data && data.ids && data.ids.contact, /[?&]customerID=(\d+)/i) || param(url, /[?&]customerID=(\d+)/i) || null,
+    account: numericId(data && data.ids && data.ids.account, /[?&]accountID=(\d+)/i) || param(url, /[?&]accountID=(\d+)/i) || null,
     item:    null,
   };
 

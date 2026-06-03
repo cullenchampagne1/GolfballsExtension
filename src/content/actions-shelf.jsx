@@ -50,23 +50,31 @@ if (!window.__gbActionsShelfLoaded) {
     return sharedDetectPageType(document);
   }
 
-  /* ── DOM helpers for the page-header labels ─────────────────
-     Each returns a trimmed string or '' — they're safe to call on
-     pages where the element doesn't exist. */
+  /* ── Page-header label readers ──────────────────────────────
+     Engine-first (the page-context schema, cached per-doc), each with
+     the original label selector as fallback so an unrecognised page
+     behaves exactly as before. Safe to call on any page. */
+  const engineData = () => { try { return getPageContext(document).data; } catch { return null; } };
   function readContactName() {
+    const c = engineData()?.contact;
+    const fromEngine = c ? `${(c.firstName || '').trim()} ${(c.lastName || '').trim()}`.trim() : '';
+    if (fromEngine) return fromEngine;
     const first = (document.getElementById('lblContactFirstName')?.textContent || '').trim();
     const last  = (document.getElementById('lblContactLastName')?.textContent  || '').trim();
-    const full = `${first} ${last}`.trim();
-    return full;
+    return `${first} ${last}`.trim();
   }
   function readContactCompany() {
-    return (document.getElementById('lblContactCompanyName')?.textContent || '').trim();
+    return (engineData()?.contact?.companyName || '').trim()
+        || (document.getElementById('lblContactCompanyName')?.textContent || '').trim();
   }
   function readAccountName() {
-    return (document.getElementById('Name')?.value || '').trim()
+    return (engineData()?.account?.name || '').trim()
+        || (document.getElementById('Name')?.value || '').trim()
         || (document.getElementById('lblAccountName')?.textContent || '').trim();
   }
   function readContactPhoneRaw() {
+    const c = engineData()?.contact;
+    if (c && c.phone) return String(c.phone).trim();
     const el = document.getElementById('lblContactPhoneNumber');
     return (el?.querySelector?.('a')?.textContent || el?.textContent || '').trim();
   }
