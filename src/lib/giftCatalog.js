@@ -197,11 +197,14 @@ function fetchPage(searchTerm, start, rows) {
       chrome.runtime.sendMessage(
         { action: 'fetchGiftCatalog', searchTerm, start, rows },
         (resp) => {
-          if (chrome.runtime.lastError || !resp || !resp.ok) { resolve({ docs: [], numFound: 0 }); return; }
+          if (chrome.runtime.lastError || !resp || !resp.ok) {
+            resolve({ docs: [], numFound: 0, error: chrome.runtime.lastError?.message || (resp && resp.error) || 'request failed' });
+            return;
+          }
           resolve({ docs: resp.docs || [], numFound: resp.numFound || 0 });
         },
       );
-    } catch { resolve({ docs: [], numFound: 0 }); }
+    } catch (e) { resolve({ docs: [], numFound: 0, error: String(e) }); }
   });
 }
 
@@ -246,8 +249,10 @@ export async function loadCatalog({ force = false } = {}) {
   const out = [];
   const seenIds = new Set();
   let start = 0;
+  let lastError = null;
   while (start < MAX_PRODUCTS) {
-    const { docs, numFound } = await fetchPage(MAIN_QUERY, start, PAGE_ROWS);
+    const { docs, numFound, error } = await fetchPage(MAIN_QUERY, start, PAGE_ROWS);
+    if (error) lastError = error;
     if (!docs.length) break;
     for (const d of docs) {
       const p = normalizeDoc(d);
@@ -257,5 +262,10 @@ export async function loadCatalog({ force = false } = {}) {
     if (numFound && start >= numFound) break;
   }
   if (out.length) { setCache({ ts: Date.now(), products: out }); return out; }
+  // A MANUAL refresh (force) that pulls nothing must NOT silently fall back to
+  // the old cache / bundled seed — that's exactly the "I refreshed but still see
+  // old pricing" trap. Surface it so the caller can tell the user. First open
+  // (no force) still degrades gracefully to cache/seed.
+  if (force) throw new Error(lastError || 'No products returned from the catalog service');
   return (cached && cached.products) || GIFT_CATALOG_SEED;
 }

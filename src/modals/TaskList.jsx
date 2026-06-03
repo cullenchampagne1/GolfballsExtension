@@ -1073,7 +1073,10 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
    Quick Task is now opened via the footer button against the
    selected row(s). Status becomes the unified state column that
    animates through queued → in-flight → settled per row. */
-const COLS = '30px 1.3fr 1.1fr 100px 1.0fr 70px 1.5fr 120px';
+/* Category folds under the account name (design), so there is no
+   standalone category column: checkbox · account+category · contact ·
+   due · priority · subject · status. */
+const COLS = '30px 1.3fr 1fr 104px 64px 1.55fr 116px';
 
 /* Scan beam — same three-layer overlay CRMSearch uses (gradient body
    + two glowing hairlines) absolutely positioned over the active
@@ -1199,7 +1202,6 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
         <SortHeader col={SORT_COLS.account}  sortChain={sortChain} onSort={onSort} />
         <SortHeader col={SORT_COLS.contact}  sortChain={sortChain} onSort={onSort} />
         <SortHeader col={SORT_COLS.dueDate}  sortChain={sortChain} onSort={onSort} />
-        <SortHeader col={SORT_COLS.category} sortChain={sortChain} onSort={onSort} />
         <SortHeader col={SORT_COLS.priority} sortChain={sortChain} onSort={onSort} />
         <SortHeader col={SORT_COLS.subject}  sortChain={sortChain} onSort={onSort} />
         <div style={{ textAlign: 'right', paddingRight: 4 }}>Status</div>
@@ -1340,25 +1342,39 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle 
           />
         )}
       </div>
-      {task.accountUrl ? (
-        <a
-          href={task.accountUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            color: 'var(--gb-text-primary)',
-            fontWeight: 600, textDecoration: 'none',
+      {/* Account name with the category folded underneath it — the
+          design drops the standalone category column and stacks it
+          here as a small mono sub-line, freeing horizontal room. */}
+      <div style={{ minWidth: 0 }}>
+        {task.accountUrl ? (
+          <a
+            href={task.accountUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'block',
+              color: 'var(--gb-text-primary)',
+              fontSize: 12.5, fontWeight: 600, textDecoration: 'none',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--gb-brand-label)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--gb-text-primary)'; }}
+          >{task.account}</a>
+        ) : (
+          <span style={{
+            display: 'block',
+            color: 'var(--gb-text-primary)', fontSize: 12.5, fontWeight: 600,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--gb-brand-label)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--gb-text-primary)'; }}
-        >{task.account}</a>
-      ) : (
-        <span style={{
-          color: 'var(--gb-text-primary)', fontWeight: 600,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        }}>{task.account}</span>
-      )}
+          }}>{task.account}</span>
+        )}
+        {task.category && (
+          <div style={{
+            fontSize: 10, color: 'var(--gb-text-muted)',
+            fontFamily: 'var(--gb-font-mono)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}>{task.category}</div>
+        )}
+      </div>
       {task.contactUrl ? (
         <a
           href={task.contactUrl}
@@ -1384,10 +1400,6 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle 
         fontWeight: (overdue || dueToday) ? 600 : 500,
         fontVariantNumeric: 'tabular-nums',
       }}>{fmtDate(task.dueDate)}</div>
-      <div style={{
-        color: 'var(--gb-text-muted)',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>{task.category || '—'}</div>
       <div>
         <Tag tone={PRIORITY_TONE[task.priority] || 'neutral'} size="xs">
           {task.priorityLabel || (task.priority === 1 ? 'High' : task.priority === 3 ? 'Low' : 'Med')}
@@ -1403,7 +1415,7 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle 
           via AnimatePresence so the per-row morph reads as one
           motion (queued → updating → completed, etc.). */}
       <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <StatusBadge state={resolveRowState({ task, emailStatus, actionState })} />
+        <StatusBadge state={resolveRowState({ task, emailStatus, actionState })} task={task} />
       </div>
     </div>
   );
@@ -1465,12 +1477,30 @@ function resolveRowState({ task, emailStatus, actionState }) {
   return 'new';
 }
 
-function StatusBadge({ state }) {
+/* The natural (non-lifecycle) status is data-driven off the due date —
+   reps never need a flat "New" tag (every open task is New by default);
+   what they want to see is the urgency. Complete tasks are handled by
+   the 'complete' state upstream. */
+function dueMeta(task) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.round((task.dueDate - today) / 86400000);
+  if (diff < 0)  return { label: diff === -1 ? 'Overdue 1d' : `Overdue ${-diff}d`, tone: 'error' };
+  if (diff === 0) return { label: 'Due today', tone: 'warning' };
+  if (diff === 1) return { label: 'Tomorrow', tone: 'neutral' };
+  return { label: `in ${diff}d`, tone: 'neutral' };
+}
+
+function StatusBadge({ state, task }) {
   const meta = STATE_META[state] || STATE_META.new;
+  /* Base 'new' state defers to the task's due-urgency instead of a
+     flat "New" badge. Lifecycle/complete states keep their own meta. */
+  const due = state === 'new' && task ? dueMeta(task) : null;
+  const tone = due ? due.tone : meta.tone;
+  const label = due ? due.label : meta.label;
   return (
     <AnimatePresence mode="wait" initial={false}>
       <motion.div
-        key={state}
+        key={state + label}
         initial={{ opacity: 0, y: -4 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 4 }}
@@ -1478,10 +1508,10 @@ function StatusBadge({ state }) {
         style={{
           height: 22, padding: '0 8px',
           display: 'inline-flex', alignItems: 'center', gap: 5,
-          background: tintBg(meta.tone),
-          border: '1px solid ' + tintBorder(meta.tone),
+          background: tintBg(tone),
+          border: '1px solid ' + tintBorder(tone),
           borderRadius: 'var(--gb-r-sm)',
-          color: tintFg(meta.tone),
+          color: tintFg(tone),
           fontSize: 10, fontWeight: 700,
           letterSpacing: 0.5, textTransform: 'uppercase',
           userSelect: 'none',
@@ -1489,7 +1519,7 @@ function StatusBadge({ state }) {
         }}
       >
         {meta.spinner && <Spinner size={9} />}
-        {meta.label}
+        {label}
       </motion.div>
     </AnimatePresence>
   );

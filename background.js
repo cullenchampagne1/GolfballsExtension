@@ -266,6 +266,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'sitekey': 'golfballs' },
       body,
+      cache: 'no-store',   // never serve a CDN/proxy-cached price list on a manual refresh
     })
       .then(async r => {
         if (!r.ok) throw new Error('HTTP ' + r.status);

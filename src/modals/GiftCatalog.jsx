@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Btn, IconBtn, Tag, Dot } from '../ui/index.js';
 import { Icon, I } from '../ui/icons.jsx';
+import { useToast } from '../ui/components/ToastHost.jsx';
 import { loadCatalog, clearCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock } from './giftCustomize.jsx';
@@ -673,6 +674,7 @@ function useCatalogScale() {
 export function GiftCatalog({ onClose, density = 'comfortable', showRating = true, priceFocus = 'retail' }) {
   ensureCatalogKeyframes();
   const scale = useCatalogScale(); // loaded before first paint to avoid a resize snap
+  const toast = useToast();
   const [catalog, setCatalog] = useState(GIFT_CATALOG_SEED);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
@@ -718,7 +720,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     if (loading) return;
     setLoading(true);
     clearCatalogCache().then(() => loadCatalog({ force: true }))
-      .then((c) => { if (c && c.length) setCatalog(c); setLoading(false); });
+      .then((c) => { if (c && c.length) setCatalog(c); })
+      .catch((e) => toast?.error?.('Catalog rebuild failed — ' + (e?.message || 'couldn’t reach the pricing service') + '. Showing previous data.'))
+      .finally(() => setLoading(false));
   };
 
   const catCounts = useMemo(() => { const m = {}; catalog.forEach((p) => { m[p.cat] = (m[p.cat] || 0) + 1; }); return m; }, [catalog]);
