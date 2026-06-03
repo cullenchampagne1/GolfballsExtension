@@ -728,25 +728,94 @@ function ModControls({ name, p, config, serviceLevel }) {
   );
 }
 
+/* Per-mod glyphs rendered inside the selector circle. 24x24 viewBox, currentColor. */
+const PRINT_TYPE_ICON = {
+  'Custom Logo':          (p) => <Icon {...p}><rect x="3.2" y="5.2" width="17.6" height="13.6" rx="2"/><circle cx="8.5" cy="10" r="1.4"/><path d="M20 17l-5-5-8.5 8.5"/></Icon>,
+  'Personalized':         (p) => <Icon {...p} strokeWidth={2.2}><path d="M4 20h16"/><path d="M7.5 17L12 6l4.5 11"/><path d="M9 13.5h6"/></Icon>,
+  'Monogram':             (p) => <Icon {...p} strokeWidth={2.2}><path d="M5 18V6l3.5 7L12 6"/><path d="M12 18V6l3.5 7L19 6v12"/></Icon>,
+  'Photo':                (p) => <Icon {...p}><path d="M4 7h3l1.5-2h7L17 7h3a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V8a1 1 0 011-1z"/><circle cx="12" cy="13" r="3.4"/></Icon>,
+  'AlignXL':              (p) => <Icon {...p} strokeWidth={2}><line x1="3.5" y1="12" x2="20.5" y2="12"/><circle cx="6.5" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="17.5" cy="12" r="1.3" fill="currentColor" stroke="none"/></Icon>,
+  'IDAlign':              (p) => <Icon {...p} strokeWidth={2.2}><path d="M5 8l3 4-3 4"/><path d="M11 8l3 4-3 4"/><path d="M17 8l3 4-3 4"/></Icon>,
+  'Icons':                (p) => <Icon {...p}><polygon points="12 3.5 14.3 9.2 20.5 9.7 15.8 13.8 17.3 19.8 12 16.6 6.7 19.8 8.2 13.8 3.5 9.7 9.7 9.2" fill="currentColor" stroke="none"/></Icon>,
+  'Custom Player Number': (p) => <Icon {...p} strokeWidth={2.2}><path d="M4 9.5h16M4 14.5h16M10 4.5l-2 15M16 4.5l-2 15"/></Icon>,
+};
+
+/* Split N tiles into rows that always fill the row (no empty cells).
+   ≤4 → single row; odd 5/7 → smaller wider row on top; even → equal halves. */
+function splitTileRows(n) {
+  if (n <= 4) return [n];
+  const top = Math.floor(n / 2);
+  return [top, n - top]; // 5→[2,3] 6→[3,3] 7→[3,4] 8→[4,4]
+}
+
 /* golf-ball print-type tile grid */
 function PrintTypeGrid({ p, mods, config }) {
   const [sel, setSel] = useState(mods[0]);
+  const rows = splitTileRows(mods.length);
+  let cursor = 0;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 7 }}>
-        {mods.map((t) => {
-          const on = sel === t;
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {rows.map((cols, ri) => {
+          const items = mods.slice(cursor, cursor + cols);
+          cursor += cols;
+          const wide = cols <= 2;
           return (
-            <button key={t} onClick={() => setSel(t)} style={{ position: 'relative', minHeight: 54, borderRadius: 'var(--gb-r-md)', cursor: 'pointer', padding: '8px 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', fontFamily: 'inherit' }}>
-              <span style={{ width: 18, height: 18, borderRadius: '50%', background: on ? 'var(--gb-brand-label)' : 'var(--gb-fill-strong)', border: '1px solid var(--gb-border-strong)' }} />
-              <span style={{ fontSize: 9, fontWeight: 700, textAlign: 'center', lineHeight: 1.1 }}>{t}</span>
-            </button>
+            <div key={ri} style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 7 }}>
+              {items.map((t) => {
+                const on = sel === t;
+                const IconC = PRINT_TYPE_ICON[t];
+                return (
+                  <button
+                    key={t}
+                    onClick={() => setSel(t)}
+                    style={{
+                      position: 'relative',
+                      minHeight: wide ? 40 : 58,
+                      borderRadius: 'var(--gb-r-md)',
+                      cursor: 'pointer',
+                      padding: wide ? '6px 12px' : '8px 6px',
+                      display: 'flex',
+                      flexDirection: wide ? 'row' : 'column',
+                      alignItems: 'center',
+                      justifyContent: wide ? 'center' : 'center',
+                      gap: wide ? 10 : 6,
+                      background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)',
+                      border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
+                      color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+                      fontFamily: 'inherit',
+                      transition: 'background var(--gb-anim), border-color var(--gb-anim), color var(--gb-anim)',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: wide ? 22 : 26,
+                        height: wide ? 22 : 26,
+                        borderRadius: '50%',
+                        background: on ? 'var(--gb-surface-modal, var(--gb-fill-strong))' : 'var(--gb-fill-strong)',
+                        border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'),
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        color: 'inherit',
+                      }}
+                    >
+                      {IconC && <IconC size={wide ? 12 : 14} />}
+                    </span>
+                    <span style={{ fontSize: wide ? 11 : 9, fontWeight: 700, textAlign: wide ? 'left' : 'center', lineHeight: 1.15 }}>{t}</span>
+                  </button>
+                );
+              })}
+            </div>
           );
         })}
       </div>
       <div style={{ borderTop: '1px solid var(--gb-border-subtle)', paddingTop: 14 }}>
-        <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-brand-label)', marginBottom: 12 }}>{sel}</div>
-        <ModControls name={sel} p={p} config={config} serviceLevel />
+        <div key={sel} style={{ animation: 'gb-fade-slide var(--gb-anim) both' }}>
+          <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-brand-label)', marginBottom: 12 }}>{sel}</div>
+          <ModControls name={sel} p={p} config={config} serviceLevel />
+        </div>
       </div>
     </div>
   );

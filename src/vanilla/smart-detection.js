@@ -344,6 +344,13 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
   }
 
   function smartPageType(doc = document) {
+    /* Delegate to the shared detector on the engine bridge (loaded right
+       after this file, so it's present by the time this runs at send/
+       resolve time) — keeps the shelf + smart-detection from drifting and
+       picks up the 'order-index' branch they used to disagree on. The
+       inline fallback covers the rare case the bridge isn't installed. */
+    const eng = (typeof window !== 'undefined') ? window.__gbPageEngine : null;
+    if (eng && typeof eng.detectPageType === 'function') return eng.detectPageType(doc);
     const url = (doc === document ? window.location.href : '');
     if (/[?&]page=ViewOrder/i.test(url) && /[?&]orderID=/i.test(url)) return 'order';
     if (/[?&]Page=240\b/i.test(url)) return 'contact';

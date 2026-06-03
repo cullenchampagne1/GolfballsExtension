@@ -34,6 +34,8 @@ import {
 import { contactSchema, accountSchema } from '../lib/page-schemas/contact.js';
 import { listSchemas, getSchemaById } from '../lib/page-schemas/registry.js';
 import { evalTree, treeUsesVars, varsReferenced, isGroupedTree, applyOp, arrayQuantifier } from '../lib/matchEngine.js';
+import { getPageContext, detectPageType } from '../lib/pageContext.js';
+import { PAGE_TYPE } from '../lib/constants.js';
 
 /* Single namespace so we can grow the API without sprawling
    globals. Frozen so accidental writes from other content scripts
@@ -47,6 +49,14 @@ const api = Object.freeze({
   resolvePath,
   evaluateCode,
   evaluateCodeSync,
+
+  /* "Which page am I on + what's on it" — the single page-type
+     detector (superset of the old shelf/smart-detection copies) plus
+     the engine-extracted data, and the frozen PAGE_TYPE enum. Exposed
+     here so the vanilla content scripts share one source of truth. */
+  getPageContext,
+  detectPageType,
+  PAGE_TYPE,
 
   /* Lower-level — exposed for the editor UI's picker + the
      debug panel. */

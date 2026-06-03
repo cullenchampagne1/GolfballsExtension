@@ -7,6 +7,7 @@ import { actionRegistry } from '../lib/actionRegistry.js';
 import { I, Icon } from '../ui/index.js';
 import { loadDevSettings, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { findPhone } from '../lib/findPhone.js';
+import { detectPageType as sharedDetectPageType } from '../lib/pageContext.js';
 
 /* ───────────────────────────────────────────────────────────────
    actions-shelf.jsx — the persistent smart-actions shelf overlay.
@@ -42,24 +43,11 @@ if (!window.__gbActionsShelfLoaded) {
   ensureTheme();
 
   /* ── Page-type detection ─────────────────────────────────────
-     Mirrors the heuristics in src/vanilla/smart-detection.js
-     (smartPageType) so the two surfaces agree on what page the
-     rep is looking at. Order matters — order pages can ALSO have
-     a customerID query param, so check the more-specific case
-     first. */
+     Delegates to the shared detector (src/lib/pageContext.js) so the
+     shelf and smart-detection can't drift. Returns PAGE_TYPE.* string
+     values, identical to the literals this used to return inline. */
   function detectPageType() {
-    const url = window.location.href;
-    if (/[?&]page=ViewOrder/i.test(url) && /[?&]orderID=/i.test(url)) return 'order';
-    if (/[?&]Page=240\b/i.test(url)) return 'contact';
-    if (/[?&]Page=271\b/i.test(url)) return 'account';
-    if (document.getElementById('tbContactId')) return 'contact';
-    if (/[?&]accountID=\d+/i.test(url)) return 'account';
-    if (/[?&]customerID=\d+/i.test(url)) return 'contact';
-    // Orders index — Folder=Orders WITHOUT a ViewOrder page param. The
-    // ViewOrder check above already returns 'order' for the detail page,
-    // so by the time we get here we know it's the listing.
-    if (/[?&]Folder=Orders\b/i.test(url)) return 'order-index';
-    return 'other';
+    return sharedDetectPageType(document);
   }
 
   /* ── DOM helpers for the page-header labels ─────────────────
