@@ -182,9 +182,14 @@ Error generating stack: `+j.message+`
       min-height: 0 !important;
       vertical-align: middle !important;
     }
-    /* Single-line inputs center their text intrinsically once line-height
-       isn't a leftover host value (the textarea keeps its own 1.5). */
+    /* Vertically centre the single-line bar inputs by matching line-height
+       to their box height \u2014 the browser's intrinsic input centring (plus the
+       leftover host line-height) left the collapsed filter text sitting a
+       touch high. Targeted by name so the note textarea keeps its inline 1.5
+       and the rule beats the generic input reset. */
     .gb-kbd-composer input { line-height: normal !important; }
+    .gb-kbd-composer input[name="gb-kc-filter"]  { line-height: 38px !important; }
+    .gb-kbd-composer input[name="gb-kc-subject"] { line-height: 24px !important; }
     .gb-kbd-composer input:focus, .gb-kbd-composer input:focus-visible,
     .gb-kbd-composer textarea:focus, .gb-kbd-composer textarea:focus-visible {
       outline: none !important; box-shadow: none !important;
