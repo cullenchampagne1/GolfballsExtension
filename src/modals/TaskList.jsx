@@ -1186,7 +1186,7 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
           actual row item. */}
       <div style={{
         display: 'grid', gridTemplateColumns: COLS,
-        padding: '8px 14px', gap: 12,
+        padding: '8px 16px', gap: 12,
         background: 'color-mix(in srgb, var(--gb-surface-1) 75%, transparent)',
         backdropFilter: 'blur(4px)',
         WebkitBackdropFilter: 'blur(4px)',
@@ -1290,9 +1290,6 @@ function SortHeader({ col, sortChain = [], onSort }) {
 }
 
 function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle }) {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const overdue  = task.dueDate < today && task.status !== 'Complete';
-  const dueToday = task.dueDate.toDateString() === today.toDateString();
   const complete = task.status === 'Complete';
 
   return (
@@ -1300,7 +1297,7 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle 
       data-row-id={task.id}
       style={{
         display: 'grid', gridTemplateColumns: COLS,
-        padding: '10px 14px', gap: 12,
+        padding: '12px 16px', gap: 12,
         alignItems: 'center',
         background: isSelected ? 'var(--gb-brand-tint-soft)' : 'transparent',
         /* Left accent bar on selected rows (design) — a clear marker
@@ -1317,33 +1314,8 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle 
         onToggle(e);
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
         <Checkbox checked={isSelected} onChange={(e) => onToggle(e)} />
-        {/* Tiny status dot — red for overdue, amber for due today.
-            Only shown on incomplete tasks; the row's date column is
-            also color-coded but the dot is a faster visual scan. */}
-        {overdue && (
-          <span
-            title="Overdue"
-            style={{
-              width: 6, height: 6, borderRadius: '50%',
-              background: 'var(--gb-error)',
-              boxShadow: '0 0 4px color-mix(in srgb, var(--gb-error) 60%, transparent)',
-              flexShrink: 0,
-            }}
-          />
-        )}
-        {!overdue && dueToday && (
-          <span
-            title="Due today"
-            style={{
-              width: 6, height: 6, borderRadius: '50%',
-              background: 'var(--gb-warning)',
-              boxShadow: '0 0 4px color-mix(in srgb, var(--gb-warning) 60%, transparent)',
-              flexShrink: 0,
-            }}
-          />
-        )}
       </div>
       {/* Account name with the category folded underneath it — the
           design drops the standalone category column and stacks it
@@ -1397,10 +1369,12 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle 
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>{task.contact}</span>
       )}
+      {/* Always grey — the Status badge carries the urgency (Overdue /
+          Due today / in Nd), so the raw date stays neutral. */}
       <div style={{
         fontFamily: 'var(--gb-font-mono)', fontSize: 11,
-        color: overdue ? 'var(--gb-error-fg)' : dueToday ? 'var(--gb-warning-fg)' : 'var(--gb-text-tertiary)',
-        fontWeight: (overdue || dueToday) ? 600 : 500,
+        color: 'var(--gb-text-tertiary)',
+        fontWeight: 500,
         fontVariantNumeric: 'tabular-nums',
       }}>{fmtDate(task.dueDate)}</div>
       <div>
@@ -1572,15 +1546,18 @@ function Checkbox({ checked, onChange }) {
       data-checkbox
       onClick={(e) => { e.stopPropagation(); onChange?.(e); }}
       style={{
-        width: 16, height: 16, padding: 0,
-        background: checked ? 'var(--gb-brand-tint-medium)' : 'transparent',
-        border: '1.5px solid ' + (checked ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'),
-        borderRadius: 4,
+        /* Filled square (design): solid brand fill + canvas-coloured
+           check when on; a quiet surface tile when off. Reads cleaner
+           than the previous hollow outline. */
+        width: 17, height: 17, padding: 0,
+        background: checked ? 'var(--gb-brand-label)' : 'var(--gb-surface-2)',
+        border: '1px solid ' + (checked ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
+        borderRadius: 5,
         cursor: 'pointer',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        color: 'var(--gb-brand-label)',
+        color: checked ? 'var(--gb-surface-canvas)' : 'transparent',
         outline: 'none',
-        transition: 'background-color .12s, border-color .12s',
+        transition: 'background-color .15s, border-color .15s',
       }}
     >
       <AnimatePresence initial={false}>
@@ -1593,7 +1570,7 @@ function Checkbox({ checked, onChange }) {
             transition={{ duration: 0.12 }}
             style={{ display: 'flex' }}
           >
-            <I.check size={10} />
+            <I.check size={11} />
           </motion.span>
         )}
       </AnimatePresence>

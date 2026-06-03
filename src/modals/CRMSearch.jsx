@@ -1639,15 +1639,18 @@ function Checkbox({ checked, onChange }) {
       data-checkbox
       onClick={(e) => { e.stopPropagation(); onChange?.(e); }}
       style={{
-        width: 16, height: 16, padding: 0,
-        background: checked ? 'var(--gb-brand-tint-medium)' : 'transparent',
-        border: '1.5px solid ' + (checked ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'),
-        borderRadius: 4,
+        /* Filled square (design): solid brand fill + canvas-coloured
+           check when on; a quiet surface tile when off. Matches the
+           TaskList checkbox so the two tables read consistently. */
+        width: 17, height: 17, padding: 0,
+        background: checked ? 'var(--gb-brand-label)' : 'var(--gb-surface-2)',
+        border: '1px solid ' + (checked ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
+        borderRadius: 5,
         cursor: 'pointer',
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        color: 'var(--gb-brand-label)',
+        color: checked ? 'var(--gb-surface-canvas)' : 'transparent',
         outline: 'none',
-        transition: 'background-color .12s, border-color .12s',
+        transition: 'background-color .15s, border-color .15s',
       }}
     >
       <AnimatePresence initial={false}>
@@ -1660,7 +1663,7 @@ function Checkbox({ checked, onChange }) {
             transition={{ duration: 0.12 }}
             style={{ display: 'flex' }}
           >
-            <I.check size={10} />
+            <I.check size={11} />
           </motion.span>
         )}
       </AnimatePresence>
