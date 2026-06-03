@@ -1,56 +1,53 @@
 import React from 'react';
-import { Dropdown } from '../Dropdown.jsx';
-import { Btn } from '../Btn.jsx';
+import { VariableSchemaPicker } from '../VariableSchemaPicker.jsx';
 import { RuleGroups } from './RuleGroups.jsx';
 import { OPS_BY_TYPE } from '../../../lib/matchEngine.js';
 import { listPaths } from '../../../lib/page-engine/resolve.js';
 import { orderSchema } from '../../../lib/page-schemas/order.js';
 
 /* ───────────────────────────────────────────────────────────────
-   OrderRules — auto-match rules for order templates, a thin wrapper
-   over the shared grouped RuleGroups.
+   OrderRules — auto-match rules for order templates. Mirrors
+   AccountConditions exactly (same grouped RuleGroups + the shared
+   VariableSchemaPicker tree picker) but pointed at the ORDER schema,
+   so conditions test order.status / order.totals.total / order.number
+   / order.items[…] etc. alongside the template's own variables.
 
-   Now that the order page has a schema (src/lib/page-schemas/order.js)
-   conditions test ORDER SCHEMA fields directly — order.status,
-   order.totals.total, order.number, … — picked from one dropdown
-   alongside the template's own variables. The runtime matcher already
-   resolves source:'schema' conditions via the page engine (see
-   vanilla/main.js getValue), so a schema rule "just works" on a
-   ViewOrder page.
-
-   Legacy selector rules (source:'dom') still render as a read-only
-   chip with a "Use field" swap — but the one-version migration
-   scratches old order rules so they get re-authored against the
-   schema.
+   The runtime matcher already resolves source:'schema' conditions via
+   the page engine (vanilla/main.js getValue), so an order schema rule
+   matches on a ViewOrder page with no extra wiring.
 
    Props: initial (saved rules — legacy flat array or grouped tree),
    onChange (emits the grouped tree), varNames (this template's vars).
 ─────────────────────────────────────────────────────────────── */
 
+/* schema type → the matchEngine operator family. */
 function mapType(t) {
   if (t === 'number' || t === 'currency') return 'number';
   if (t === 'date') return 'date';
   return 'string';
 }
 
-/* Selectable order-schema fields (leaves + array-item leaves; object
-   containers aren't selectable values). Built once. */
+/* Selectable order-schema fields → type lookup (for op family + the
+   condition's declared type). */
 const SCHEMA_OPTIONS = (() => {
   try {
     return listPaths(orderSchema, {})
       .filter((n) => n.type !== 'object')
-      .map((n) => ({ id: `schema:${n.path}`, label: n.path, _type: mapType(n.type) }));
+      .map((n) => ({ path: n.path, type: mapType(n.type) }));
   } catch { return []; }
 })();
-const TYPE_BY_PATH = Object.fromEntries(SCHEMA_OPTIONS.map((o) => [o.label, o._type]));
+const TYPE_BY_PATH = Object.fromEntries(SCHEMA_OPTIONS.map((o) => [o.path, o.type]));
 const canonPath = (p) => (p || '').replace(/\[(?:-?\d+|any|none)\]/g, '[0]');
-const typeForRef = (ref) => TYPE_BY_PATH[canonPath(ref)] || 'string';
+function engineTypeForRef(ref) {
+  return TYPE_BY_PATH[canonPath(ref)] || 'string';
+}
 
-/* Legacy flat order rule { left/selector, op, right/value } → a grouped
-   condition. A selector carries over as source:'dom' (read-only chip);
-   most legacy rules are cleared by the migration, so this is a safety net. */
+/* Legacy flat order rule → grouped condition. Old order rules were
+   selector/var based; a selector carries over as source:'dom' (still
+   resolves through the engine's DOM resolver). The one-version migration
+   scratches these so they get re-authored against the schema. */
 function fromLegacy(r) {
-  if (r && (r.source === 'var' || r.source === 'schema')) {
+  if (r && (r.source === 'schema' || r.source === 'var' || r.source === 'dom')) {
     return { source: r.source, ref: r.ref ?? '', type: r.type ?? 'string', op: r.op ?? 'is', value: r.value ?? '', not: !!r.not };
   }
   return {
@@ -63,47 +60,35 @@ function fromLegacy(r) {
   };
 }
 
+function OrderSubjectPicker({ condition, patch, varNames }) {
+  /* Same combined tree picker the account conditions use — schema field
+     tree (order.*) + a Variables section. A variable selection comes back
+     as a `vars.<name>` pseudo-path; everything else is a schema path. */
+  const value = condition.source === 'var' ? `vars.${condition.ref}` : (condition.ref || '');
+  return (
+    <VariableSchemaPicker
+      value={value}
+      varNames={varNames}
+      schema={orderSchema}
+      allowQuantifiers
+      overlay
+      embedArrayRow={false}
+      placeholder="Pick a field or variable…"
+      onChange={(val) => {
+        if (val && val.startsWith('vars.')) {
+          patch({ source: 'var', ref: val.slice('vars.'.length), type: 'string' });
+        } else {
+          patch({ source: 'schema', ref: val, type: engineTypeForRef(val) });
+        }
+      }}
+    />
+  );
+}
+
 export function OrderRules({ initial, onChange, varNames = [] }) {
-  const options = [
-    ...SCHEMA_OPTIONS.map((o) => ({ id: o.id, label: o.label })),
-    ...varNames.map((n) => ({ id: `var:${n}`, label: n })),
-  ];
-
-  const renderSubject = (condition, patch) => {
-    // Legacy selector condition — show it, offer to swap to a schema field.
-    if (condition.source === 'dom') {
-      return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
-          <span style={{
-            flex: 1, minWidth: 0, padding: '0 8px', height: 26, display: 'flex', alignItems: 'center',
-            background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', borderRadius: 4,
-            fontFamily: 'var(--gb-font-mono)', fontSize: 10.5, color: 'var(--gb-text-tertiary)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>{condition.ref || '(selector)'}</span>
-          <Btn size="xs" variant="ghost" onClick={() => patch({ source: 'schema', ref: '', type: 'string' })}>Use field</Btn>
-        </div>
-      );
-    }
-    const value = condition.source === 'var' ? `var:${condition.ref}` : (condition.ref ? `schema:${condition.ref}` : '');
-    return (
-      <Dropdown
-        size="sm"
-        searchable
-        value={value}
-        placeholder={options.length ? 'Pick a field or variable…' : 'No fields yet'}
-        options={options}
-        onChange={(val) => {
-          if (val && val.startsWith('schema:')) {
-            const ref = val.slice('schema:'.length);
-            patch({ source: 'schema', ref, type: typeForRef(ref) });
-          } else if (val && val.startsWith('var:')) {
-            patch({ source: 'var', ref: val.slice('var:'.length), type: 'string' });
-          }
-        }}
-      />
-    );
-  };
-
+  const renderSubject = (condition, patch) => (
+    <OrderSubjectPicker condition={condition} patch={patch} varNames={varNames} />
+  );
   return (
     <RuleGroups
       initial={initial}
@@ -113,7 +98,7 @@ export function OrderRules({ initial, onChange, varNames = [] }) {
       opsFor={(c) => OPS_BY_TYPE[c.type || 'string'] || OPS_BY_TYPE.string}
       onChange={onChange}
       label="Auto-match rules"
-      emptyHint="No match rules yet. Add a group of conditions that test the order schema fields (order.status, order.totals.total, …) or this template's variables — combine them with AND/OR — to auto-trigger this template on a ViewOrder page."
+      emptyHint="No match rules yet. Add a group that tests the order schema fields (order.status, order.totals.total, …) or this template's variables — combine them with AND/OR — to auto-trigger this template on a ViewOrder page."
     />
   );
 }

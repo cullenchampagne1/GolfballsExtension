@@ -107,6 +107,7 @@ export function VariableSchemaPicker({ value, onChange, placeholder = '— pick 
             currentPath={canonicalPath(value)}
             varNames={varNames}
             overlay={overlay}
+            nodes={NODES}
             onClose={() => setOpen(false)}
             onSelect={(node) => {
               onChange(typeof node === 'string' ? node : node.path);
@@ -278,7 +279,7 @@ function PathButton({ path, type, open, onClick, placeholder }) {
 
 /* ── Inline tree — opens in flow, not absolute. The parent
    modal/form body's overflow handles scroll. ────────────────── */
-function InlineSchemaTree({ currentPath, varNames = [], overlay = false, onClose, onSelect }) {
+function InlineSchemaTree({ currentPath, varNames = [], overlay = false, onClose, onSelect, nodes = SCHEMA_NODES }) {
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(() => initialExpansion(currentPath));
   const [focusedIdx, setFocusedIdx] = useState(0);
@@ -289,7 +290,7 @@ function InlineSchemaTree({ currentPath, varNames = [], overlay = false, onClose
     return () => cancelAnimationFrame(r);
   }, []);
 
-  const schemaRows = useMemo(() => filterAndProject(NODES, search, expanded), [NODES, search, expanded]);
+  const schemaRows = useMemo(() => filterAndProject(nodes, search, expanded), [nodes, search, expanded]);
   const varRows = useMemo(() => {
     if (!varNames.length) return [];
     const q = search.trim().toLowerCase();
