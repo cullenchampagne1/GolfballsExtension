@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
@@ -6,6 +6,7 @@ import { ActionsShelf } from '../ui/components/ActionsShelf.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { I, Icon } from '../ui/index.js';
 import { loadDevSettings, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
+import { loadFlags } from '../lib/flags.js';
 import { findPhone } from '../lib/findPhone.js';
 import { detectPageType as sharedDetectPageType, getPageContext } from '../lib/pageContext.js';
 
@@ -138,6 +139,7 @@ if (!window.__gbActionsShelfLoaded) {
 
   function registerCallAction(pageType, displayName) {
     if (_callActionUnsub) { _callActionUnsub(); _callActionUnsub = null; }
+    if ((window.__gbFeatureFlags || {}).callLogEnabled === false) return;
     if (pageType !== 'contact' && pageType !== 'account') return;
     /* Gate on a real phone existing on the page. When the contact has
        no phone, Call would dial nothing — surface Find phone instead
@@ -191,6 +193,7 @@ if (!window.__gbActionsShelfLoaded) {
      subtitle reflects whatever's currently on screen. */
   function registerLogCallAction(pageType, displayName) {
     if (_logCallActionUnsub) { _logCallActionUnsub(); _logCallActionUnsub = null; }
+    if ((window.__gbFeatureFlags || {}).callLogEnabled === false) return;
     if (pageType !== 'contact' && pageType !== 'account') return;
 
     const labelName = displayName || (pageType === 'account' ? 'account' : 'contact');
@@ -419,6 +422,7 @@ if (!window.__gbActionsShelfLoaded) {
 
   function registerTaskAction(pageType, displayName) {
     if (_taskActionUnsub) { _taskActionUnsub(); _taskActionUnsub = null; }
+    if ((window.__gbFeatureFlags || {}).quickTaskEnabled === false) return;
     if (pageType !== 'contact' && pageType !== 'account') return;
 
     const labelName = displayName || (pageType === 'account' ? 'account' : 'contact');
@@ -499,15 +503,37 @@ if (!window.__gbActionsShelfLoaded) {
      non-modal handler that needs a toast surface) a stable
      globally-available API instead of bailing when no modal
      happens to be open. */
+  /* Renders the shelf UI only while the `actionsShelfEnabled` feature flag is
+     on. Lives inside the always-mounted ToastHost so toasts keep working even
+     when the shelf is hidden. Reacts live to flag changes (storage + the
+     GB_FEATURE_FLAGS broadcast both write featureFlags to storage). */
+  function ShelfGate() {
+    const [on, setOn] = useState(true);
+    useEffect(() => {
+      let alive = true;
+      const apply = (f) => { if (alive) setOn((f || {}).actionsShelfEnabled !== false); };
+      loadFlags().then(apply);
+      const onCh = (changes, area) => {
+        if (area === 'local' && changes.featureFlags) apply(changes.featureFlags.newValue || {});
+      };
+      try { chrome.storage.onChanged.addListener(onCh); } catch { /* */ }
+      return () => { alive = false; try { chrome.storage.onChanged.removeListener(onCh); } catch { /* */ } };
+    }, []);
+    return on ? <ActionsShelf /> : null;
+  }
+
   const HOST_ID = '__gb-actions-shelf';
   if (!document.getElementById(HOST_ID)) {
     const host = document.createElement('div');
     host.id = HOST_ID;
     host.setAttribute('data-gb-scale', 'shelf');
     document.body.appendChild(host);
+    // ToastHost ALWAYS mounts (it installs window.__gbToast, which non-modal
+    // handlers like find-phone depend on even when the shelf UI is hidden).
+    // The shelf UI itself only renders when `actionsShelfEnabled` is on.
     createRoot(host).render(
       <ToastHost installGlobal={true}>
-        <ActionsShelf />
+        <ShelfGate />
       </ToastHost>,
     );
   }
@@ -540,7 +566,7 @@ if (!window.__gbActionsShelfLoaded) {
      devSettings changes in chrome.storage. */
   const ALWAYS_ACTIONS = [
     {
-      key: 'actionsShelf.showImageViewer',
+      flag: 'imagePreviewEnabled',
       def: {
         id: 'gb-open-image-viewer',
         label: 'Open Image Viewer',
@@ -556,7 +582,7 @@ if (!window.__gbActionsShelfLoaded) {
       },
     },
     {
-      key: 'actionsShelf.showOpenContacts',
+      flag: 'crmSearchEnabled',
       def: {
         id: 'gb-open-contacts',
         label: 'Open Contacts',
@@ -572,7 +598,7 @@ if (!window.__gbActionsShelfLoaded) {
       },
     },
     {
-      key: 'actionsShelf.showOpenTasks',
+      flag: 'taskListEnabled',
       def: {
         id: 'gb-open-tasks',
         label: 'Open Tasks',
@@ -588,7 +614,7 @@ if (!window.__gbActionsShelfLoaded) {
       },
     },
     {
-      key: 'actionsShelf.showGiftCatalog',
+      flag: 'giftCatalogEnabled',
       def: {
         id: 'gb-open-gift-catalog',
         label: 'Gifting Catalog',
@@ -605,26 +631,28 @@ if (!window.__gbActionsShelfLoaded) {
     },
   ];
   const _alwaysUnsubs = new Map(); // key → unsub fn
-  function applyAlwaysActions(devSettings) {
+  function applyAlwaysActions(flags) {
     for (const entry of ALWAYS_ACTIONS) {
-      // `true` is the default; only an explicit `false` hides the action.
-      const enabled = devSettings?.[entry.key] !== false;
-      const existing = _alwaysUnsubs.get(entry.key);
+      // Each always-action follows the FEATURE FLAG of the modal it opens, so
+      // turning a feature off removes it from the shelf too. Default ON; only
+      // an explicit `false` hides it.
+      const enabled = flags?.[entry.flag] !== false;
+      const existing = _alwaysUnsubs.get(entry.flag);
       if (enabled && !existing) {
-        _alwaysUnsubs.set(entry.key, actionRegistry.register(entry.def));
+        _alwaysUnsubs.set(entry.flag, actionRegistry.register(entry.def));
       } else if (!enabled && existing) {
         existing();
-        _alwaysUnsubs.delete(entry.key);
+        _alwaysUnsubs.delete(entry.flag);
       }
     }
   }
-  // Initial registration — read settings asynchronously, then react
-  // to any in-session changes via storage.onChanged.
-  loadDevSettings().then(applyAlwaysActions);
+  // Initial registration — read flags asynchronously, then react to any
+  // in-session feature-flag changes via storage.onChanged.
+  loadFlags().then(applyAlwaysActions);
   if (chrome?.storage?.onChanged) {
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'local' || !changes[DEV_STORAGE_KEY]) return;
-      applyAlwaysActions(changes[DEV_STORAGE_KEY].newValue || {});
+      if (area !== 'local' || !changes.featureFlags) return;
+      applyAlwaysActions(changes.featureFlags.newValue || {});
     });
   }
 

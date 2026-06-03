@@ -534,21 +534,25 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
        - Shift+click: extend the chain. Toggle if the column is in it
          already; otherwise append `asc`. Lets the user combine sorts
          like "due soonest, then subject alphabetised". */
-  const onSortClick = (key, e) => {
-    const shift = e?.shiftKey;
+  /* Multi-column sort by plain clicks. Each header accumulates into the
+     chain and cycles through three states on repeated clicks:
+       1st click → add, ascending
+       2nd click → descending
+       3rd click → removed from the chain (undone)
+     So clicking Due then Category sorts by both (Due primary, Category
+     secondary); clicking Due a third time drops it. Clearing the whole
+     chain falls back to the natural (unsorted) order. */
+  const onSortClick = (key) => {
     setSortChain((cur) => {
-      if (shift) {
-        const idx = cur.findIndex((c) => c.key === key);
-        if (idx === -1) return [...cur, { key, dir: 'asc' }];
-        const next = cur.slice();
-        next[idx] = { key, dir: next[idx].dir === 'asc' ? 'desc' : 'asc' };
+      const idx = cur.findIndex((c) => c.key === key);
+      if (idx === -1) return [...cur, { key, dir: 'asc' }];
+      const next = cur.slice();
+      if (next[idx].dir === 'asc') {
+        next[idx] = { key, dir: 'desc' };
         return next;
       }
-      // Plain click: single-column sort.
-      if (cur.length === 1 && cur[0].key === key) {
-        return [{ key, dir: cur[0].dir === 'asc' ? 'desc' : 'asc' }];
-      }
-      return [{ key, dir: 'asc' }];
+      next.splice(idx, 1); // was 'desc' → third click removes it
+      return next;
     });
   };
 
@@ -1199,7 +1203,13 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
         <div>
           <Checkbox checked={allChecked} onChange={onToggleAll} />
         </div>
-        <SortHeader col={SORT_COLS.account}  sortChain={sortChain} onSort={onSort} />
+        {/* Account + Category stacked, mirroring the row layout — both
+            are independently sortable so Category stays reachable even
+            though it no longer has its own column. */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+          <SortHeader col={SORT_COLS.account}  sortChain={sortChain} onSort={onSort} />
+          <SortHeader col={SORT_COLS.category} sortChain={sortChain} onSort={onSort} muted />
+        </div>
         <SortHeader col={SORT_COLS.contact}  sortChain={sortChain} onSort={onSort} />
         <SortHeader col={SORT_COLS.dueDate}  sortChain={sortChain} onSort={onSort} />
         <SortHeader col={SORT_COLS.priority} sortChain={sortChain} onSort={onSort} />
@@ -1245,7 +1255,7 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
   );
 }
 
-function SortHeader({ col, sortChain = [], onSort }) {
+function SortHeader({ col, sortChain = [], onSort, muted = false }) {
   /* Where does this column sit in the active sort chain? -1 = not in
      the chain. When chain length is 1 we only show the direction
      arrow; with 2+ entries we also show a small "1"/"2"/"3" rank
@@ -1257,15 +1267,15 @@ function SortHeader({ col, sortChain = [], onSort }) {
   return (
     <button
       type="button"
-      onClick={(e) => onSort(col.key, e)}
-      title={`Click to sort by ${col.label}. Shift-click to add as a secondary sort.`}
+      onClick={() => onSort(col.key)}
+      title={`Sort by ${col.label}. Click again for descending, a third time to remove. Click other columns to sort by several at once.`}
       style={{
         background: 'transparent', border: 'none', padding: 0,
         cursor: 'pointer',
         display: 'inline-flex', alignItems: 'center', gap: 4,
-        fontSize: 'inherit', fontWeight: 'inherit', letterSpacing: 'inherit',
+        fontSize: muted ? 8.5 : 'inherit', fontWeight: 'inherit', letterSpacing: 'inherit',
         textTransform: 'inherit',
-        color: active ? 'var(--gb-brand-label)' : 'inherit',
+        color: active ? 'var(--gb-brand-label)' : (muted ? 'var(--gb-text-ghost)' : 'inherit'),
         fontFamily: 'inherit',
       }}
     >
@@ -1297,13 +1307,17 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle 
       data-row-id={task.id}
       style={{
         display: 'grid', gridTemplateColumns: COLS,
-        padding: '12px 16px', gap: 12,
+        padding: '10px 16px', gap: 12,
         alignItems: 'center',
+        /* Each row is a separated, rounded block with a real gap beneath
+           it. The selection highlight is INSET inside that block (rounded
+           + bar), so selecting/deselecting only repaints the block — it
+           never merges with neighbours or changes the row's size, which
+           is what produced the press/unpress jump before. */
+        marginBottom: 4,
+        borderRadius: 'var(--gb-r-md)',
         background: isSelected ? 'var(--gb-brand-tint-soft)' : 'transparent',
-        /* Left accent bar on selected rows (design) — a clear marker
-           beyond the soft highlight alone. */
         boxShadow: isSelected ? 'inset 3px 0 0 0 var(--gb-brand-label)' : 'inset 3px 0 0 0 transparent',
-        borderBottom: '1px solid var(--gb-border-subtle)',
         fontSize: 12,
         cursor: 'pointer',
         transition: 'background-color .15s, box-shadow .15s',

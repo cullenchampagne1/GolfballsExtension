@@ -25,6 +25,15 @@ export const FEATURE_DEFAULTS = {
   emailTemplatesEnabled:    true,
   powerAutomateEnabled:     false,
   powerAutomateUrl:         '',
+  // ── Features that previously had no flag (now toggleable) ──
+  actionsShelfEnabled:      true,   // the bottom-right quick-actions shelf itself
+  giftCatalogEnabled:       true,   // Gifting Catalog (+ Customize + Monogram)
+  callLogEnabled:           true,   // Call Log modal + Call/Log-call shelf actions
+  quickTaskEnabled:         true,   // Quick Task modal + shelf action
+  crmNewContactEnabled:     true,   // CRM Create Contact modal + Ctrl+Q keybind
+  textPreviewEnabled:       true,   // Text/chat transcript row preview (was sharing emailPreviewEnabled)
+  golfballViewerEnabled:    true,   // 3D golfball viewer
+  campaignEditorEnabled:    true,   // campaign editor
 };
 
 /** Default keyboard shortcuts. */
@@ -143,6 +152,54 @@ export const FEATURE_FLAGS = [
     name: 'Signifyd Glow',
     desc: 'Adds a subtle glow effect to orders based on their Signifyd score status.',
     icon: 'alert',
+  },
+  {
+    key: 'actionsShelfEnabled',
+    name: 'Quick Actions Shelf',
+    desc: 'The floating bottom-right shelf of page-aware quick actions (Shift×2 to open). Disable to remove it entirely. Individual actions also follow their own feature flags.',
+    icon: 'bolt',
+  },
+  {
+    key: 'giftCatalogEnabled',
+    name: 'Gifting Catalog',
+    desc: 'The corporate gifting catalog, product customization, and monogram tools. Also controls the catalog action in the quick-actions shelf.',
+    icon: 'card',
+  },
+  {
+    key: 'callLogEnabled',
+    name: 'Call Log',
+    desc: 'Log calls from contact/account pages — both the modal and the Call / Log-incoming-call shelf actions.',
+    icon: 'phone',
+  },
+  {
+    key: 'quickTaskEnabled',
+    name: 'Quick Task',
+    desc: 'Create a quick task for a contact — the modal and the shelf action.',
+    icon: 'check',
+  },
+  {
+    key: 'crmNewContactEnabled',
+    name: 'CRM New Contact',
+    desc: 'Create a new CRM contact (modal + Ctrl+Q shortcut).',
+    icon: 'user',
+  },
+  {
+    key: 'textPreviewEnabled',
+    name: 'Text Preview',
+    desc: 'Hover preview of case notes / chat transcripts. (Separate from Email Preview.)',
+    icon: 'mail',
+  },
+  {
+    key: 'golfballViewerEnabled',
+    name: 'Golfball 3D Viewer',
+    desc: 'Interactive 3D golfball viewer for logo placement previews.',
+    icon: 'eye',
+  },
+  {
+    key: 'campaignEditorEnabled',
+    name: 'Campaign Editor',
+    desc: 'The campaign / template campaign editor.',
+    icon: 'edit',
   },
 ];
 

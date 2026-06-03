@@ -26,6 +26,7 @@ import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { Tag } from '../ui/components/Tag.jsx';
 import { CollapsibleSection } from '../ui/components/CollapsibleSection.jsx';
 import { DEV_SETTINGS, defaultDevSettings, loadDevSettings, saveDevSettings } from '../lib/devSettings.js';
+import { useSecretSettings, isSecret } from '../lib/secretSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    SettingsPanel — the fully-featured Manage → Settings page.
@@ -608,6 +609,13 @@ export function SettingsPanel() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [paStatus, setPaStatus] = useState(null);
   const [scales, setScales] = useState(DEFAULT_SCALES);
+  // Per-setting "hidden from UI" flags (own storage object, importable on its
+  // own). A secret key isn't rendered unless `manageHidden` is on. Hidden
+  // settings keep their value — this only controls visibility, so an admin can
+  // lock a feature on/off and remove its switch.
+  const [secret, setSecret] = useSecretSettings();
+  const [manageHidden, setManageHidden] = useState(false);
+  const visible = (key) => manageHidden || !isSecret(secret, key);
 
   /* Sort registry alphabetically once; filter on the user's query
      case-insensitively against label / desc / key so they can find a
@@ -615,7 +623,7 @@ export function SettingsPanel() {
      DEV_SETTINGS is tiny. */
   const filteredDevSettings = (() => {
     const q = devSearch.trim().toLowerCase();
-    const sorted = [...DEV_SETTINGS].sort((a, b) => a.label.localeCompare(b.label));
+    const sorted = [...DEV_SETTINGS].sort((a, b) => a.label.localeCompare(b.label)).filter((d) => visible(d.key));
     if (!q) return sorted;
     return sorted.filter((d) =>
       d.label.toLowerCase().includes(q)
@@ -686,7 +694,8 @@ export function SettingsPanel() {
   const setFlagValue = (key, value) => { const next = { ...flags, [key]: value }; setFlags(next); saveFlags(next); };
   const setShortcut = (key, value) => { const next = { ...shortcuts, [key]: value.toLowerCase() }; setShortcuts(next); saveKeyboardShortcuts(next); };
 
-  const regularFeatures = FEATURE_FLAGS.filter(f => !f.experimental && !f.dev);
+  const regularFeatures = FEATURE_FLAGS.filter(f => !f.experimental && !f.dev && visible(f.key));
+  const hiddenCount = [...FEATURE_FLAGS, ...DEV_SETTINGS].filter(x => isSecret(secret, x.key)).length;
 
   // Non-destructive check of the Power Automate flow URL format.
   // Accepts both Logic Apps (logic.azure.com) and Power Platform direct

@@ -31,16 +31,24 @@ export const PRESET_SCOPES = [
   {
     id:    'settings',
     label: 'Settings',
-    desc:  'Theme · feature flags · keyboard shortcuts · custom pages · signature',
+    desc:  'Theme · feature flags · dev settings · keyboard shortcuts · custom pages · signature',
     /* Each storage key in this scope is captured + restored. */
     keys: [
       'themeColors',
       'gbTheme',
       'featureFlags',
+      'devSettings',
       'keyboardShortcuts',
       'customPages',
       'emailSignature',
     ],
+    merge: 'overwrite',
+  },
+  {
+    id:    'secret',
+    label: 'Hidden-setting config',
+    desc:  'Which toggles are hidden from the settings UI (lock a feature on/off and hide its switch)',
+    keys:  ['secret_settings'],
     merge: 'overwrite',
   },
   {

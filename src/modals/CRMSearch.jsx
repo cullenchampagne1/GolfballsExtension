@@ -1480,8 +1480,12 @@ function ResultRow({ row, isSelected, isActive, emailStatus, showStatusCol, onTo
         padding: '10px 14px', gap: 12,
         alignItems: 'center',
         background: rowBg,
-        borderBottom: isActive ? '1px solid transparent' : '1px solid var(--gb-border-subtle)',
-        borderRadius: isActive ? 'var(--gb-r-md)' : 0,
+        /* Rows are separated, rounded blocks with a real gap beneath each
+           (no bottom border). The selection highlight is INSET in that
+           block, so toggling a row only repaints it — adjacent selected
+           rows never merge into one growing band. */
+        marginBottom: 4,
+        borderRadius: 'var(--gb-r-md)',
         boxShadow: isActive
           ? 'inset 0 0 0 1px var(--gb-brand-fg), 0 0 0 3px var(--gb-brand-tint-medium)'
           /* Left accent bar on checkbox-selected rows (design) — a clear
