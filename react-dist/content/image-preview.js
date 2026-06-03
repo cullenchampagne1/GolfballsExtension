@@ -68,7 +68,20 @@ Error generating stack: `+I.message+`
     .gb-kbd-composer textarea {
       -webkit-appearance: none; appearance: none;
       outline: none !important; box-shadow: none !important;
+      /* The host admin CSS (Bootstrap-era) sets padding / min-height /
+         line-height on inputs; mounted un-shadowed, that leaks in and
+         pushes our bar text off-centre vertically. Zero the box model so
+         the inline height + the bar's flex centring are the only things
+         positioning the text. */
+      margin: 0 !important;
+      padding: 0 !important;
+      box-sizing: border-box !important;
+      min-height: 0 !important;
+      vertical-align: middle !important;
     }
+    /* Single-line inputs center their text intrinsically once line-height
+       isn't a leftover host value (the textarea keeps its own 1.5). */
+    .gb-kbd-composer input { line-height: normal !important; }
     .gb-kbd-composer input:focus, .gb-kbd-composer input:focus-visible,
     .gb-kbd-composer textarea:focus, .gb-kbd-composer textarea:focus-visible {
       outline: none !important; box-shadow: none !important;

@@ -252,12 +252,10 @@ export function CallLog({
         background: 'var(--gb-surface-2)',
         display: 'flex', alignItems: 'center', gap: 10,
       }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
-          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {phone ? `Dialed ${phone} via tel:` : 'Log a call'}
-          </span>
-          <Kbd>/</Kbd>
+        <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {phone ? `Dialed ${phone} via tel:` : 'Log a call'}
         </span>
+        <Kbd>/</Kbd>
         <span style={{ fontSize: 10.5, color: 'var(--gb-text-ghost)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <Kbd>↑↓</Kbd> move · <Kbd>↵</Kbd> log
         </span>
