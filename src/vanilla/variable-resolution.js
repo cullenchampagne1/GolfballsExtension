@@ -115,6 +115,17 @@
    * @returns {Promise<{resolved:Object.<string,string>, toEmail:string}>}
    */
   async function resolveAllVarsAsync(vars, toField, doc = document) {
+    /* Backwards-compat guard. A template still carrying a flagged-
+       deprecated variable (one the one-version migration couldn't lift
+       onto the page engine) must not be sent silently — refuse so the rep
+       fixes the template. Deprecated vars still RESOLVE in the editor
+       preview (resolveVar); only this send path throws. */
+    const deprecated = Object.entries(vars || {})
+      .filter(([, d]) => d && d.deprecated)
+      .map(([n]) => n);
+    if (deprecated.length) {
+      throw new Error(`Template uses deprecated variable${deprecated.length > 1 ? 's' : ''}: ${deprecated.join(', ')}. Open the template editor to fix.`);
+    }
     const resolved = {};
     for (const [name, def] of Object.entries(vars || {})) {
       let raw;

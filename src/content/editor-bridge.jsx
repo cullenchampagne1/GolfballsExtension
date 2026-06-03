@@ -21,6 +21,8 @@
    Vite build script (build.js) picks up *.jsx in src/content/.
 ─────────────────────────────────────────────────────────────── */
 
+import { migrateTemplates } from '../lib/templateMigration.js';
+
 // ── State ──────────────────────────────────────────────────────
 let templates     = [];
 let noteTemplates = [];
@@ -459,6 +461,11 @@ async function init() {
   templates     = data.templates     || [];
   noteTemplates = data.noteTemplates || [];
   orderTabId    = data.orderTabId    || null;
+  /* One-version backwards-compat pass: lift legacy contact/account
+     variables onto the page engine. DRY-RUN for now — it only LOGS the
+     planned conversions/deprecations so they can be eyeballed on real
+     templates before we flip { dryRun:false } to persist. */
+  try { migrateTemplates(templates, { dryRun: true }); } catch (e) { console.warn('[gb] templateMigration dry-run failed', e); }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', wireGearButton);
   } else {
