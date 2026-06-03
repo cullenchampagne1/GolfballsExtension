@@ -74,10 +74,19 @@ const PATH_ALIASES = {
   creationdate:     'stats.creationDate',
 };
 
+/* Order/case builtins that now DO have an engine path (the order schema
+   exists). Keyed by builtin id → order path. */
+const ORDER_ALIASES = {
+  order_number: 'order.number',
+  payment_link: 'order.paymentLink',
+};
+
 /* Builtins that have NO engine path and must be left alone (not converted,
-   not deprecated). Order/case builtins + computed values. */
+   not deprecated): computed values + the order builtins that are derived /
+   async rather than page fields. `email` is handled separately (it's the
+   contact email on account templates, the order recipient elsewhere). */
 const KEEP_BUILTINS = new Set([
-  'order_number', 'payment_link', 'oos_item', 'recommended_replacement',
+  'oos_item', 'recommended_replacement',
   'fullName', 'today', 'todayLong', 'daysSinceLastOrder',
 ]);
 
@@ -109,7 +118,11 @@ function classifyVar(name, def, templateType) {
   if (type === 'builtin') {
     if (KEEP_BUILTINS.has(def.builtin)) return { action: 'keep' };
     if (isOrderEmailBuiltin(def, templateType)) return { action: 'keep' };
-    const path = PATH_ALIASES[normalize(def.builtin)] || PATH_ALIASES[normalize(name)];
+    // Order builtins map onto the order schema; contact/account builtins
+    // onto contact/account; fall back to a name match for either.
+    const path = ORDER_ALIASES[def.builtin]
+      || PATH_ALIASES[normalize(def.builtin)]
+      || PATH_ALIASES[normalize(name)];
     if (path) return { action: 'convert', path };
     return { action: 'deprecate', reason: `Unknown builtin "${def.builtin}" with no engine field` };
   }

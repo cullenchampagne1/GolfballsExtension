@@ -86,6 +86,10 @@ function convertVars(tpl) {
       ...(v.group ? { group: v.group } : {}),
       ...(v.scope ? { scope: v.scope } : {}),
       ...(v.async ? { async: true } : {}),
+      /* Carry the one-version migration's deprecation flag through so the
+         variable row can warn (templateMigration.js sets it on legacy vars
+         it couldn't lift onto the engine). */
+      ...(v.deprecated ? { deprecated: true, deprecatedReason: v.deprecatedReason || '' } : {}),
       resolved: null, status: 'miss', smart: v.smart || {},
     };
   });

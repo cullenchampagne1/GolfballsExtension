@@ -465,6 +465,19 @@ export function orderItemField(rowEl, which) {
   return null;
 }
 
+/** The order's "Add Payment" link, if the order carries one. Mirrors the
+ *  legacy smartPaymentLink builtin: the anchor whose text mentions adding/
+ *  updating payment. Null when there's no payment link on the order. */
+export function orderPaymentLink(doc) {
+  for (const a of doc.querySelectorAll('a[href]')) {
+    const t = (a.textContent || '').toLowerCase();
+    if (t.includes('add payment') || t.includes('payment to order') || t.includes('update payment')) {
+      return a.getAttribute('href') || a.href || null;
+    }
+  }
+  return null;
+}
+
 /** Build a ViewOrder action URL from the order's ids. Templates verified
  *  across the sample orders. Returns null when the ids can't be resolved. */
 export function orderActionUrl(doc, name) {
@@ -520,6 +533,7 @@ export const FN_REGISTRY = {
   addressBlock,
   orderLineItemRows,
   orderItemField,
+  orderPaymentLink,
   orderActionUrl,
 };
 

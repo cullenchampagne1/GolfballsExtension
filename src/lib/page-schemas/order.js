@@ -37,6 +37,7 @@ export const orderSchema = {
     status:        { type: 'string',  label: 'Order status',   extract: { fn: 'orderStatusText' } },
     orderDate:     { type: 'string',  label: 'Order date',     extract: { fn: 'orderDateText' } },
     customerEmail: { type: 'string',  label: 'Customer email', extract: { sel: 'td.date a[href^="mailto:"]', attr: 'innerText' } },
+    paymentLink:   { type: 'string',  label: 'Payment link',   extract: { fn: 'orderPaymentLink' } },
     salesRep:      { type: 'string',  label: 'Sales rep',      extract: { sel: '#ctl00_customSalesReps', attr: 'selectedText' } },
     requiresApproval: { type: 'string', label: 'Requires approval', extract: { sel: '#ctl00_ddlRequiresApproval', attr: 'selectedText' } },
 

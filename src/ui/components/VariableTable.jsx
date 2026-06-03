@@ -111,6 +111,16 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
             </Tag>
           );
         })()}
+        {/* Deprecated-variable count — the one-version migration flags
+            legacy vars it couldn't lift onto the engine. Sending a template
+            with any of these throws until they're fixed. */}
+        {vars.some((v) => v.deprecated) && (
+          <span title="These variables are deprecated — fix them or sending this template will fail">
+            <Tag tone="error" size="xs">
+              {vars.filter((v) => v.deprecated).length} deprecated
+            </Tag>
+          </span>
+        )}
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 9.5, color: 'var(--gb-text-muted)' }}>
           Live
@@ -159,7 +169,9 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
               gap: 7, padding: '6px 10px', alignItems: 'center',
               borderBottom: i < vars.length - 1 ? '1px solid var(--gb-border-subtle)' : 'none',
               fontSize: 10,
-              background: isMissNoFallback ? 'var(--gb-warning-tint-soft)' : 'transparent',
+              background: v.deprecated
+                ? 'var(--gb-error-tint-soft, var(--gb-warning-tint-soft))'
+                : (isMissNoFallback ? 'var(--gb-warning-tint-soft)' : 'transparent'),
             }}
           >
             {/* Name — the canonical BodyVar chip at table density.
@@ -168,8 +180,15 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
               <BodyVar v={v} size="sm" onOpenSmart={onOpenSmart} />
             </div>
 
-            {/* Kind */}
-            <div><KindPill kind={v.kind} /></div>
+            {/* Kind (+ deprecation badge from the one-version migration) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+              <KindPill kind={v.kind} />
+              {v.deprecated && (
+                <span title={v.deprecatedReason || 'Uses a deprecated variable — fix it to keep sending this template'}>
+                  <Tag tone="error" size="xs">deprecated</Tag>
+                </span>
+              )}
+            </div>
 
             {/* Source config */}
             <div style={{
