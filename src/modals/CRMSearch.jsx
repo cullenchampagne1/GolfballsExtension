@@ -1484,7 +1484,10 @@ function ResultRow({ row, isSelected, isActive, emailStatus, showStatusCol, onTo
         borderRadius: isActive ? 'var(--gb-r-md)' : 0,
         boxShadow: isActive
           ? 'inset 0 0 0 1px var(--gb-brand-fg), 0 0 0 3px var(--gb-brand-tint-medium)'
-          : 'none',
+          /* Left accent bar on checkbox-selected rows (design) — a clear
+             marker beyond the soft highlight; the keyboard-active ring
+             above takes precedence when both apply. */
+          : isSelected ? 'inset 3px 0 0 0 var(--gb-brand-label)' : 'none',
         fontSize: 12,
         cursor: 'pointer',
         // grid-template-columns transitions smoothly in modern Chrome

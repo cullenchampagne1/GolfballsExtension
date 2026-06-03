@@ -1303,10 +1303,13 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle 
         padding: '10px 14px', gap: 12,
         alignItems: 'center',
         background: isSelected ? 'var(--gb-brand-tint-soft)' : 'transparent',
+        /* Left accent bar on selected rows (design) — a clear marker
+           beyond the soft highlight alone. */
+        boxShadow: isSelected ? 'inset 3px 0 0 0 var(--gb-brand-label)' : 'inset 3px 0 0 0 transparent',
         borderBottom: '1px solid var(--gb-border-subtle)',
         fontSize: 12,
         cursor: 'pointer',
-        transition: 'background-color .15s',
+        transition: 'background-color .15s, box-shadow .15s',
         opacity: complete ? 0.65 : 1,
       }}
       onClick={(e) => {

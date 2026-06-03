@@ -278,11 +278,18 @@ export function QuickTaskPopover({
     const opt = DUE_OPTS.find((o) => o.k === taskDue) || DUE_OPTS[2];
     fire(isBulk ? 'bulk-create-task' : 'create-task',
       isBulk ? { custom: { title, days: opt.days } }
-             : { taskId: qt.taskId, custom: { title, days: opt.days } });
+             : { taskId: qtv.taskId, custom: { title, days: opt.days } });
   };
 
-  const isBulk = qt?.mode === 'bulk';
-  const task = !isBulk && getTask && qt?.taskId ? getTask(qt.taskId) : null;
+  /* Retain the last qt so the close animation can play: the parent nulls
+     qt on close (open→false), but DraggablePopup must stay mounted through
+     its exit. Render the retained content while open is false; the popup's
+     AnimatePresence fades it out. */
+  const lastQtRef = useRef(qt);
+  if (qt) lastQtRef.current = qt;
+  const qtv = qt || lastQtRef.current;
+  const isBulk = qtv?.mode === 'bulk';
+  const task = !isBulk && getTask && qtv?.taskId ? getTask(qtv.taskId) : null;
   const showOther = pushIdx === PUSH_PRESETS.length;
   const customDays = Number(pushDays) || 7;
   const effectiveDays = showOther ? customDays : PUSH_PRESETS[pushIdx].days;
@@ -323,13 +330,13 @@ export function QuickTaskPopover({
     ? 'Bulk action across all selected tasks'
     : task ? `${task.account || '—'} · ${task.contact || '—'}` : 'Quick Task';
 
-  if (!open || !qt) return null;
+  if (!qtv) return null;
 
   return (
     <DraggablePopup
       open={open}
       onClose={onClose}
-      cursorAnchor={qt.anchor || null}
+      cursorAnchor={qtv.anchor || null}
       width={360}
       maxHeight={520}
       title={popTitle}
@@ -376,13 +383,13 @@ export function QuickTaskPopover({
               <Btn
                 size="md" variant="tinted" full
                 icon={<RefreshIcon size={12} />}
-                onClick={() => fire('reopen', { taskId: qt.taskId })}
+                onClick={() => fire('reopen', { taskId: qtv.taskId })}
               >Reopen task</Btn>
             ) : (
               <Btn
                 size="md" variant="tinted" status="success" full
                 icon={<I.check size={13} />}
-                onClick={() => fire(isBulk ? 'bulk-complete' : 'complete', isBulk ? {} : { taskId: qt.taskId })}
+                onClick={() => fire(isBulk ? 'bulk-complete' : 'complete', isBulk ? {} : { taskId: qtv.taskId })}
               >{isBulk ? 'Complete all' : 'Mark complete'}</Btn>
             )}
 
@@ -446,7 +453,7 @@ export function QuickTaskPopover({
                 icon={<CalIcon size={11} />}
                 onClick={() => fire(isBulk ? 'bulk-push' : 'push', isBulk
                   ? { days: effectiveDays }
-                  : { taskId: qt.taskId, days: effectiveDays })}
+                  : { taskId: qtv.taskId, days: effectiveDays })}
               >Apply push</Btn>
             </div>
 
@@ -485,7 +492,7 @@ export function QuickTaskPopover({
                 if (!api) return;
                 fire(isBulk ? 'bulk-set-date' : 'set-date', isBulk
                   ? { date: api }
-                  : { taskId: qt.taskId, date: api });
+                  : { taskId: qtv.taskId, date: api });
               }}
             >Save · {apiDateLabel(pickedIso)}</Btn>
           </div>
@@ -560,7 +567,7 @@ export function QuickTaskPopover({
                     name={tpl.name || tpl.subject || 'Untitled'}
                     meta={describeTemplate(tpl)}
                     onClick={() => fire(isBulk ? 'bulk-create-task' : 'create-task',
-                      isBulk ? { template: tpl } : { taskId: qt.taskId, template: tpl })}
+                      isBulk ? { template: tpl } : { taskId: qtv.taskId, template: tpl })}
                   />
                 ))
               )}

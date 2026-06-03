@@ -278,9 +278,15 @@ export function DraggablePopup({
     return () => document.removeEventListener('mousedown', onDown);
   }, [open, closeOnOutside, onClose]);
 
+  /* Exit: shrink + fade (and drift back toward the entrance edge) so the
+     close reads as a deliberate "put away" rather than an instant cut.
+     `scale` here is Motion's transform-scale, which composes with the
+     CSS `scale` property the popovers surface uses (see scales.js) instead
+     of clobbering it. */
+  const exitTransition = { duration: 0.2, ease: [0.4, 0, 1, 1] };
   const animProps = enterFrom === 'right'
-    ? { initial: { x: 20, opacity: 0 }, animate: { x: 0, opacity: 1 }, exit: { x: 20, opacity: 0, transition: { duration: 0.15 } } }
-    : { initial: { y: 30, opacity: 0 }, animate: { y: 0, opacity: 1 }, exit: { y: 30, opacity: 0, transition: { duration: 0.15 } } };
+    ? { initial: { x: 20, opacity: 0, scale: 0.96 }, animate: { x: 0, opacity: 1, scale: 1 }, exit: { x: 16, opacity: 0, scale: 0.94, transition: exitTransition } }
+    : { initial: { y: 30, opacity: 0, scale: 0.96 }, animate: { y: 0, opacity: 1, scale: 1 }, exit: { y: 18, opacity: 0, scale: 0.94, transition: exitTransition } };
 
   return createPortal(
     <AnimatePresence>
