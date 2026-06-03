@@ -556,14 +556,35 @@ function StringCell({ def, value, onChange }) {
   );
 }
 
+/* Select cell — a styled native <select> for `type: 'select'` dev settings.
+   `def.options` is an array of strings or { value, label } objects. */
+function SelectCell({ def, value, onChange }) {
+  const opts = (def.options || []).map((o) => (typeof o === 'string' ? { value: o, label: o } : o));
+  return (
+    <select
+      value={value ?? def.default ?? ''}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        height: 28, padding: '0 8px', minWidth: 150, boxSizing: 'border-box',
+        background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)',
+        borderRadius: 6, color: 'var(--gb-text-primary)', fontSize: 11.5,
+        fontFamily: 'var(--gb-font-sans)', cursor: 'pointer',
+      }}
+    >
+      {opts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  );
+}
+
 /* ── Developer-settings row — bool toggles to a Switch, number to a
-       narrow Input with a unit suffix, string to a text Input, action
-       to a button that fires the row's `runner`. Add new control
-       types here as the registry grows. */
+       narrow Input with a unit suffix, string to a text Input, select to a
+       dropdown, action to a button that fires the row's `runner`. Add new
+       control types here as the registry grows. */
 function DevSettingRow({ def, value, onChange }) {
   const isBool   = def.type === 'bool';
   const isNum    = def.type === 'number';
   const isString = def.type === 'string';
+  const isSelect = def.type === 'select';
   const isAction = def.type === 'action';
   return (
     <div style={{

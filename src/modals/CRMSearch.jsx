@@ -972,58 +972,6 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
         )}
       </AnimatePresence>
 
-      {/* Selection summary */}
-      <AnimatePresence initial={false}>
-        {selCount > 0 && (
-          <motion.div
-            key="sel-bar"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.18 }}
-            style={{ overflow: 'hidden', flexShrink: 0 }}
-          >
-            <div style={{
-              padding: '8px 14px',
-              borderBottom: '1px solid var(--gb-border-subtle)',
-              background: 'var(--gb-brand-tint-soft)',
-              display: 'flex', alignItems: 'center', gap: 10,
-            }}>
-              <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)' }}>
-                <span style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{selCount} selected</span>
-                {' '}of {results.length} result{results.length === 1 ? '' : 's'}
-              </div>
-              <div style={{ flex: 1 }} />
-              {/* Run Campaign opens the Campaign Manager submodal. The
-                  manager owns the picker, engine, and CRM-UI control —
-                  CRMSearch just hands off the current selection. */}
-              <Btn
-                size="sm"
-                variant="ghost"
-                icon={<MegaphoneIcon />}
-                onClick={() => {
-                  if (typeof window.__gbShowCampaignEditor === 'function') {
-                    window.__gbShowCampaignEditor();
-                  } else {
-                    toast?.info?.('Campaign manager — coming later', { duration: 2400, placement: 'top-center' });
-                  }
-                }}
-              >Run campaign</Btn>
-              <Btn
-                size="sm"
-                variant="ghost"
-                icon={<I.mail size={11} />}
-                onClick={(e) => {
-                  setEmailRunnerCursor({ x: e.clientX, y: e.clientY });
-                  setEmailRunnerOpen(true);
-                }}
-              >Email selected</Btn>
-              <Btn size="sm" variant="ghost" icon={<I.copy size={11} />} onClick={exportSelectedCSV}>Export CSV</Btn>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Table */}
       <div
         style={{ flex: 1, minHeight: 0, overflow: 'auto' }}
@@ -1061,6 +1009,61 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
           onSubmitServer={submitSearch}
         />
       </div>
+
+      {/* Selection summary — slides in BELOW the table (not above it) so
+          appearing/disappearing shrinks the flex:1 table from the bottom
+          and the visible rows stay anchored — selecting/deselecting no
+          longer shifts the rows. */}
+      <AnimatePresence initial={false}>
+        {selCount > 0 && (
+          <motion.div
+            key="sel-bar"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18 }}
+            style={{ overflow: 'hidden', flexShrink: 0 }}
+          >
+            <div style={{
+              padding: '8px 14px',
+              borderTop: '1px solid var(--gb-border-subtle)',
+              background: 'var(--gb-brand-tint-soft)',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)' }}>
+                <span style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{selCount} selected</span>
+                {' '}of {results.length} result{results.length === 1 ? '' : 's'}
+              </div>
+              <div style={{ flex: 1 }} />
+              {/* Run Campaign opens the Campaign Manager submodal. The
+                  manager owns the picker, engine, and CRM-UI control —
+                  CRMSearch just hands off the current selection. */}
+              <Btn
+                size="sm"
+                variant="ghost"
+                icon={<MegaphoneIcon />}
+                onClick={() => {
+                  if (typeof window.__gbShowCampaignEditor === 'function') {
+                    window.__gbShowCampaignEditor();
+                  } else {
+                    toast?.info?.('Campaign manager — coming later', { duration: 2400, placement: 'top-center' });
+                  }
+                }}
+              >Run campaign</Btn>
+              <Btn
+                size="sm"
+                variant="ghost"
+                icon={<I.mail size={11} />}
+                onClick={(e) => {
+                  setEmailRunnerCursor({ x: e.clientX, y: e.clientY });
+                  setEmailRunnerOpen(true);
+                }}
+              >Email selected</Btn>
+              <Btn size="sm" variant="ghost" icon={<I.copy size={11} />} onClick={exportSelectedCSV}>Export CSV</Btn>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </FloatingPanel>
 
