@@ -90,6 +90,13 @@ const MONO_STYLES = [
   { key: 'diagonal', group: '2 Initials', label: 'Diagonal', viewBox: '0 0 232 256', svg: `<path fill="${_C}" fill-rule="evenodd" d="M158.4,253.6C156.6,252.2 156.5,250.4 156.2,205.7C156.0,161.0 156.0,159.2 157.9,156.9L159.8,154.5L183.2,154.5C203.4,154.5 207.1,154.7 211.0,156.3C228.3,163.3 231.1,187.4 215.9,198.6L212.8,200.8L216.6,202.6C226.3,207.2 231.8,217.7 230.6,229.2C229.2,242.5 222.7,250.1 209.5,253.6C202.2,255.6 161.1,255.5 158.4,253.6ZM209.1,241.8C216.6,238.5 220.2,230.1 217.9,221.1C215.2,210.4 207.5,207.7 182.0,208.2L168.5,208.5L168.2,225.0C168.1,234.0 168.2,242.1 168.5,242.8C169.3,244.9 204.0,244.0 209.1,241.8ZM37.1,205.1C32.1,200.1 29.6,202.9 109.8,122.7C150.9,81.6 186.0,47.0 187.7,45.9C189.7,44.6 191.7,44.1 193.0,44.5C196.0,45.4 198.3,49.5 197.6,52.4C196.7,55.9 44.6,206.4 41.5,206.8C40.1,207.0 38.3,206.3 37.1,205.1ZM204.8,195.6C213.6,191.0 216.2,179.4 210.4,171.1C207.3,166.8 203.4,166.0 185.0,166.0L168.0,166.0L168.0,180.8C168.0,189.0 168.3,196.0 168.7,196.3C170.1,197.7 202.0,197.1 204.8,195.6ZM1.9,99.6C0.5,96.6 -1.3,101.7 20.9,47.5C30.9,23.3 39.8,2.9 40.7,2.2C42.8,0.7 45.2,0.7 47.3,2.3C49.6,3.9 87.0,93.4 87.0,97.2C87.0,99.5 84.3,102.0 81.8,102.0C78.2,102.0 76.5,99.4 71.4,87.0L66.6,75.0L43.9,75.0L21.1,75.0L17.8,83.2C11.6,98.8 9.9,101.5 6.3,101.8C3.6,102.1 2.8,101.7 1.9,99.6ZM57.4,53.2C54.9,47.3 51.0,38.0 48.8,32.5C46.5,27.0 44.4,22.1 44.0,21.7C43.5,21.1 26.0,61.6 26.0,63.5C26.0,63.8 34.1,64.0 44.0,64.0L61.9,64.0L57.4,53.2Z"/>` },
   { key: 'simple-circle', group: '1 Initial', label: 'Simple Circle', viewBox: '0 0 256 256', svg: `<path fill="${_C}" fill-rule="evenodd" d="M107.5,253.5C15.0,236.5 -28.7,133.9 23.3,56.0C29.7,46.4 47.4,28.8 57.0,22.5C80.5,7.1 105.9,0.1 133.4,1.3C167.2,2.8 193.6,14.5 217.6,38.4C241.5,62.4 253.2,88.8 254.7,122.6C256.3,159.2 243.7,191.4 217.5,217.5C199.0,236.1 179.4,246.8 153.5,252.6C143.4,254.8 117.6,255.3 107.5,253.5ZM145.5,246.5C159.1,244.3 168.5,241.4 179.5,236.1C253.7,200.0 271.1,104.0 214.1,44.6C167.8,-3.5 90.8,-4.1 43.5,43.4C-2.7,89.6 -3.6,162.6 41.3,210.6C67.2,238.3 108.5,252.6 145.5,246.5ZM85.2,184.0C81.9,182.6 82.4,177.9 87.1,166.4C89.3,161.0 92.7,152.9 94.5,148.5C96.3,144.1 103.0,127.8 109.3,112.3C124.4,75.5 123.1,77.8 128.3,78.2L132.5,78.5L141.6,100.5C177.1,186.0 175.5,181.1 169.7,183.8C165.0,186.0 163.1,183.8 157.1,169.1L151.8,156.0L127.6,156.0L103.4,156.0L98.1,169.0C95.0,176.7 91.9,182.6 90.7,183.5C88.3,185.2 88.3,185.2 85.2,184.0ZM146.0,143.1C146.0,142.3 128.1,98.9 127.5,98.2C127.2,97.9 109.0,142.4 109.0,143.4C109.0,143.7 117.3,144.0 127.5,144.0C137.7,144.0 146.0,143.6 146.0,143.1Z"/>` },
 ];
+/* How many letters the selected monogram style accepts.
+   Drives both the maxLength of the Initials input and its placeholder/label. */
+const _monoCount = (key) => {
+  const s = MONO_STYLES.find((x) => x.key === key);
+  return s ? (parseInt(s.group, 10) || 3) : 3;
+};
+const _monoPlaceholder = (n) => (n === 1 ? 'A' : n === 2 ? 'MD' : 'ABC');
 
 /* AlignXL alignment styles (8) — cloudfront …/images/IDalign/align-xl-*.png */
 const ALIGNXL_STYLES = [
@@ -343,25 +350,19 @@ function GraphicGrid({ items, value, onChange, cols = 4, tileH = 50, artW = 56, 
 function MonoGrid({ value, onChange }) {
   return <GraphicGrid items={MONO_STYLES} value={value} onChange={onChange} cols={4} tileH={48} artW={40} artH={28} />;
 }
-/* themed icon grid — the real site PNGs */
+/* themed icon grid — the real site PNGs, flat gallery (5 across, scrolls). */
 function IconGrid({ value, onChange }) {
+  const items = Object.values(ICON_THEMES).flat();
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 250, overflowY: 'auto', paddingRight: 4 }}>
-      {Object.entries(ICON_THEMES).map(([theme, items]) => (
-        <div key={theme}>
-          <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .5, color: 'var(--gb-text-muted)', marginBottom: 6 }}>{theme}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 7 }}>
-            {items.map(([name, file]) => {
-              const on = value === name;
-              return (
-                <button key={name} onClick={() => onChange(name)} title={name} style={{ height: 46, borderRadius: 'var(--gb-r-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4, background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)') }}>
-                  <img src={ICON_HOST + file} alt={name} loading="lazy" style={{ maxWidth: 32, maxHeight: 32 }} />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, maxHeight: 250, overflowY: 'auto', paddingRight: 4 }}>
+      {items.map(([name, file]) => {
+        const on = value === name;
+        return (
+          <button key={name} onClick={() => onChange(name)} title={name} style={{ height: 40, borderRadius: 'var(--gb-r-md)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4, background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)') }}>
+            <img src={ICON_HOST + file} alt={name} loading="lazy" style={{ maxWidth: 26, maxHeight: 26 }} />
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -544,17 +545,46 @@ function PersonalizedDecoration() {
   );
 }
 
-/* embroidery decoration: monogram style + initials + two imprint colors */
+/* embroidery decoration: monogram style + initials + two imprint colors.
+   The Initials field rescales (label, placeholder, maxLength) to match the
+   chosen style — switching to a 1-initial style after typing 3 letters
+   truncates the value so the user never has leftover letters that can't fit. */
 function MonogramDecoration() {
   const [style, setStyle] = useState(MONO_STYLES[0].key);
   const [v, setV] = useState('');
   const [c1, setC1] = useState('Black');
   const [c2, setC2] = useState('Transparent');
+  const n = _monoCount(style);
+  const pickStyle = (k) => { setStyle(k); const m = _monoCount(k); if (v.length > m) setV(v.slice(0, m)); };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <Field label="Monogram Style"><MonoGrid value={style} onChange={setStyle} /></Field>
-      <Field label="Initials"><TextInput value={v} onChange={setV} placeholder="ABC" maxLength={3} /></Field>
+      <Field label="Monogram Style"><MonoGrid value={style} onChange={pickStyle} /></Field>
+      <Field label={n === 1 ? 'Initial' : 'Initials'}>
+        <TextInput value={v} onChange={(s) => setV(s.slice(0, n))} placeholder={_monoPlaceholder(n)} maxLength={n} />
+      </Field>
       <Field label="Color 1"><ColorRow swatches={IMPRINT_COLORS} value={c1} onChange={setC1} /></Field>
+      <Field label="Color 2"><ColorRow swatches={IMPRINT_COLORS} transparent value={c2} onChange={setC2} /></Field>
+    </div>
+  );
+}
+
+/* Golf-ball Monogram print type — composite that owns style + initials together
+   so the Initials field can rescale to match the chosen style (1 / 2 / 3 letters).
+   Renders in place of the default control loop in ModControls. */
+function MonogramFlow() {
+  const [style, setStyle] = useState(MONO_STYLES[0].key);
+  const [v, setV] = useState('');
+  const [c1, setC1] = useState('Black');
+  const [c2, setC2] = useState('Transparent');
+  const n = _monoCount(style);
+  const pickStyle = (k) => { setStyle(k); const m = _monoCount(k); if (v.length > m) setV(v.slice(0, m)); };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <Field label="Monogram Style"><MonoGrid value={style} onChange={pickStyle} /></Field>
+      <Field label={n === 1 ? 'Initial' : 'Initials'}>
+        <TextInput value={v} onChange={(s) => setV(s.slice(0, n))} placeholder={_monoPlaceholder(n)} maxLength={n} />
+      </Field>
+      <Field label="Color"><ColorRow swatches={IMPRINT_COLORS} value={c1} onChange={setC1} /></Field>
       <Field label="Color 2"><ColorRow swatches={IMPRINT_COLORS} transparent value={c2} onChange={setC2} /></Field>
     </div>
   );
@@ -743,6 +773,9 @@ function Control({ k, p, config, serviceLevel }) {
 function ModControls({ name, p, config, serviceLevel }) {
   const meta = MODS[name];
   if (!meta) return null;
+  // Monogram needs style ↔ initials to share state so the input can rescale
+  // to the chosen layout's letter count — route through the composite.
+  if (name === 'Monogram') return <MonogramFlow />;
   // Second-pole imprint is offered by default but suppressed by the
   // ExcludeDualPolePrinting tag (e.g. Triple Track lines) — drop it then.
   const excludeDualPole = (p && p.excludeDualPole) || (config && config.excludeDualPole) || false;
