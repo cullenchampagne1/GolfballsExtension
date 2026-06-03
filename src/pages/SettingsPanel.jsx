@@ -26,7 +26,7 @@ import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { Tag } from '../ui/components/Tag.jsx';
 import { CollapsibleSection } from '../ui/components/CollapsibleSection.jsx';
 import { DEV_SETTINGS, defaultDevSettings, loadDevSettings, saveDevSettings } from '../lib/devSettings.js';
-import { useSecretSettings, isSecret } from '../lib/secretSettings.js';
+import { useSecretSettings, isSecret, installSecretConsole } from '../lib/secretSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    SettingsPanel — the fully-featured Manage → Settings page.
@@ -147,9 +147,10 @@ function UiScaleRow({ label, hint, value, onChange }) {
   );
 }
 
-function KeyboardShortcutRow({ label, desc, value, onChange }) {
+function KeyboardShortcutRow({ label, desc, value, onChange, featureOff }) {
   const enabled = !!value;
   const handleInput = (e) => {
+    if (featureOff) return;
     const v = e.target.value.replace(/[^a-zA-Z]/g, '');
     onChange(v ? v.slice(-1).toUpperCase() : '');
   };
@@ -160,11 +161,18 @@ function KeyboardShortcutRow({ label, desc, value, onChange }) {
       background: 'var(--gb-surface-1)',
       border: '1px solid var(--gb-border-default)',
       borderRadius: 'var(--gb-r-md)',
+      // Greyed + non-interactive when the feature itself is turned off — the
+      // keybind can't fire while the feature is disabled, so the row shouldn't
+      // look editable.
+      opacity: featureOff ? 0.45 : 1,
+      pointerEvents: featureOff ? 'none' : 'auto',
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gb-text-primary)' }}>{label}</div>
         <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 2 }}>
-          {enabled ? desc : <span style={{ color: 'var(--gb-text-ghost)', fontStyle: 'italic' }}>Disabled — clear left empty</span>}
+          {featureOff
+            ? <span style={{ color: 'var(--gb-text-ghost)', fontStyle: 'italic' }}>Feature turned off — enable it above to use this shortcut</span>
+            : enabled ? desc : <span style={{ color: 'var(--gb-text-ghost)', fontStyle: 'italic' }}>Disabled — clear left empty</span>}
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -610,12 +618,12 @@ export function SettingsPanel() {
   const [paStatus, setPaStatus] = useState(null);
   const [scales, setScales] = useState(DEFAULT_SCALES);
   // Per-setting "hidden from UI" flags (own storage object, importable on its
-  // own). A secret key isn't rendered unless `manageHidden` is on. Hidden
-  // settings keep their value — this only controls visibility, so an admin can
-  // lock a feature on/off and remove its switch.
-  const [secret, setSecret] = useSecretSettings();
-  const [manageHidden, setManageHidden] = useState(false);
-  const visible = (key) => manageHidden || !isSecret(secret, key);
+  // own). A secret key is NEVER rendered here — there is intentionally no UI to
+  // set/unset it; that's done only via the `__gbSecret` console command (see
+  // src/lib/secretSettings.js). Hiding keeps the value, so an admin can lock a
+  // feature on/off and remove its switch so reps can't see or change it.
+  const [secret] = useSecretSettings();
+  const visible = (key) => !isSecret(secret, key);
 
   /* Sort registry alphabetically once; filter on the user's query
      case-insensitively against label / desc / key so they can find a
@@ -631,6 +639,10 @@ export function SettingsPanel() {
       || d.key.toLowerCase().includes(q),
     );
   })();
+
+  // Expose the admin-only console command in this (extension settings) page so
+  // an admin can hide/show settings from the console. No UI surface by design.
+  useEffect(() => { installSecretConsole(window); }, []);
 
   useEffect(() => {
     loadTheme().then((t) => { setTheme(t); applyTheme(t); });
@@ -695,7 +707,6 @@ export function SettingsPanel() {
   const setShortcut = (key, value) => { const next = { ...shortcuts, [key]: value.toLowerCase() }; setShortcuts(next); saveKeyboardShortcuts(next); };
 
   const regularFeatures = FEATURE_FLAGS.filter(f => !f.experimental && !f.dev && visible(f.key));
-  const hiddenCount = [...FEATURE_FLAGS, ...DEV_SETTINGS].filter(x => isSecret(secret, x.key)).length;
 
   // Non-destructive check of the Power Automate flow URL format.
   // Accepts both Logic Apps (logic.azure.com) and Power Platform direct
@@ -755,10 +766,10 @@ export function SettingsPanel() {
       <section>
         <SectionLabel>Keyboard Shortcuts</SectionLabel>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <KeyboardShortcutRow label="My Tasks" desc="Opens the full-screen task list from any page." value={shortcuts.taskList?.toUpperCase() || ''} onChange={(v) => setShortcut('taskList', v)} />
-          <KeyboardShortcutRow label="Margin Calculator" desc="Opens the floating margin calculator from any page." value={shortcuts.marginCalc?.toUpperCase() || ''} onChange={(v) => setShortcut('marginCalc', v)} />
-          <KeyboardShortcutRow label="CRM Search" desc="Opens the full-screen CRM search modal from any page." value={shortcuts.crmSearch?.toUpperCase() || ''} onChange={(v) => setShortcut('crmSearch', v)} />
-          <KeyboardShortcutRow label="New Contact" desc="Opens the quick-create contact modal from any page." value={shortcuts.crmNewContact?.toUpperCase() || ''} onChange={(v) => setShortcut('crmNewContact', v)} />
+          <KeyboardShortcutRow label="My Tasks" desc="Opens the full-screen task list from any page." value={shortcuts.taskList?.toUpperCase() || ''} onChange={(v) => setShortcut('taskList', v)} featureOff={flags.taskListEnabled === false} />
+          <KeyboardShortcutRow label="Margin Calculator" desc="Opens the floating margin calculator from any page." value={shortcuts.marginCalc?.toUpperCase() || ''} onChange={(v) => setShortcut('marginCalc', v)} featureOff={flags.marginCalcEnabled === false} />
+          <KeyboardShortcutRow label="CRM Search" desc="Opens the full-screen CRM search modal from any page." value={shortcuts.crmSearch?.toUpperCase() || ''} onChange={(v) => setShortcut('crmSearch', v)} featureOff={flags.crmSearchEnabled === false} />
+          <KeyboardShortcutRow label="New Contact" desc="Opens the quick-create contact modal from any page." value={shortcuts.crmNewContact?.toUpperCase() || ''} onChange={(v) => setShortcut('crmNewContact', v)} featureOff={flags.crmNewContactEnabled === false} />
         </div>
       </section>
 

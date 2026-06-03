@@ -45,6 +45,41 @@ export function isSecret(map, key) {
 }
 
 /**
+ * Install the admin-only `__gbSecret` console command on `target`
+ * (defaults to the current global). This is the ONLY way to hide/show a
+ * setting — there is intentionally no UI affordance, so reps can't discover
+ * or change it. Run from an extension console (the Settings/editor page, or
+ * the service-worker console):
+ *
+ *   __gbSecret.help()
+ *   __gbSecret.hide('taskListEnabled', 'giftCatalog.scale')   // hide settings
+ *   __gbSecret.show('taskListEnabled')                        // bring back
+ *   __gbSecret.list()                                         // what's hidden
+ *   __gbSecret.clear()                                        // show everything
+ *
+ * Keys are feature-flag keys (e.g. `taskListEnabled`) or dev-setting keys
+ * (e.g. `giftCatalog.scale`). Hiding never changes a setting's value.
+ */
+export function installSecretConsole(target) {
+  const t = target || (typeof globalThis !== 'undefined' ? globalThis : window);
+  const norm = (keys) => keys.flat().filter((k) => typeof k === 'string');
+  const api = {
+    async list() { const m = await loadSecretSettings(); const k = Object.keys(m); console.log('[gb] hidden settings:', k); return k; },
+    async hide(...keys) { const m = await loadSecretSettings(); for (const k of norm(keys)) m[k] = true; saveSecretSettings(m); console.log('[gb] now hidden:', Object.keys(m)); return Object.keys(m); },
+    async show(...keys) { const m = await loadSecretSettings(); for (const k of norm(keys)) delete m[k]; saveSecretSettings(m); console.log('[gb] still hidden:', Object.keys(m)); return Object.keys(m); },
+    async clear() { saveSecretSettings({}); console.log('[gb] all settings visible again'); return []; },
+    help() { console.log('%c__gbSecret','font-weight:bold',
+      '\n  .hide("key", …)   hide setting(s) from the settings UI (value kept)' +
+      '\n  .show("key", …)   un-hide' +
+      '\n  .list()           list hidden keys' +
+      '\n  .clear()          show everything' +
+      '\n  keys = feature-flag keys (taskListEnabled, giftCatalogEnabled, …) or dev-setting keys (giftCatalog.scale, …)'); },
+  };
+  try { Object.defineProperty(t, '__gbSecret', { value: api, configurable: true }); } catch { t.__gbSecret = api; }
+  return api;
+}
+
+/**
  * React hook. Returns `[secret, setSecret, ready]`:
  *   secret           — the current { [key]: true } map
  *   setSecret(k, on) — mark/unmark a key as hidden (persists immediately)

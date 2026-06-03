@@ -769,6 +769,9 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
       width={1000}
       height={640}
       backdrop
+      /* No text selection in this modal — accidental drag-selection while
+         range-selecting rows was interfering with clicks. */
+      cardStyle={{ userSelect: 'none', WebkitUserSelect: 'none' }}
       draggable={draggable}
       // Submodal pattern: hide CRMSearch while the Query Builder is up.
       // Both panels stay mounted; CRMSearch fades out so the QB sits
@@ -1480,18 +1483,16 @@ function ResultRow({ row, isSelected, isActive, emailStatus, showStatusCol, onTo
         padding: '10px 14px', gap: 12,
         alignItems: 'center',
         background: rowBg,
-        /* Rows are separated, rounded blocks with a real gap beneath each
-           (no bottom border). The selection highlight is INSET in that
-           block, so toggling a row only repaints it — adjacent selected
-           rows never merge into one growing band. */
+        /* Rows are separated by a real gap (margin), no bottom border, so
+           adjacent selected rows never merge into one growing band. The
+           selection accent is a STRAIGHT absolute bar (below) rather than
+           an inset box-shadow, which read rounded and nudged the text on
+           toggle. The keyboard-active ring keeps its own rounded box. */
         marginBottom: 4,
-        borderRadius: 'var(--gb-r-md)',
+        borderRadius: isActive ? 'var(--gb-r-md)' : 0,
         boxShadow: isActive
           ? 'inset 0 0 0 1px var(--gb-brand-fg), 0 0 0 3px var(--gb-brand-tint-medium)'
-          /* Left accent bar on checkbox-selected rows (design) — a clear
-             marker beyond the soft highlight; the keyboard-active ring
-             above takes precedence when both apply. */
-          : isSelected ? 'inset 3px 0 0 0 var(--gb-brand-label)' : 'none',
+          : 'none',
         fontSize: 12,
         cursor: 'pointer',
         // grid-template-columns transitions smoothly in modern Chrome
@@ -1507,6 +1508,15 @@ function ResultRow({ row, isSelected, isActive, emailStatus, showStatusCol, onTo
         onToggle(e);
       }}
     >
+      {/* Straight left accent bar for checkbox-selected rows — absolute so
+          it never shifts the grid layout and stays square. Hidden while the
+          keyboard-active ring owns the row. */}
+      {isSelected && !isActive && (
+        <span aria-hidden style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
+          background: 'var(--gb-brand-label)',
+        }} />
+      )}
       <div>
         <Checkbox checked={isSelected} onChange={(e) => onToggle(e)} />
       </div>

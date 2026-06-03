@@ -69,7 +69,7 @@ function injectScrollbarStyles() {
   document.head.appendChild(el);
 }
 
-function ModalCard({ cssWidth, cssMaxHeight, cssHeight, children }) {
+function ModalCard({ cssWidth, cssMaxHeight, cssHeight, cardStyle, children }) {
   // Inject the themed-scrollbar stylesheet on first mount. Safe to
   // call multiple times — the guard in injectScrollbarStyles dedupes.
   useEffect(injectScrollbarStyles, []);
@@ -108,6 +108,7 @@ function ModalCard({ cssWidth, cssMaxHeight, cssHeight, children }) {
         // open instead of snapping. The mount/unmount opacity+scale
         // animation above is unaffected — it uses transform.
         transition: 'width 0.28s cubic-bezier(.4, 0, .2, 1)',
+        ...cardStyle,
       }}
     >
       {children}
@@ -136,6 +137,10 @@ export function FloatingPanel({
   // Default true preserves existing behavior for the dozen callers that
   // don't know about this prop.
   visible = true,
+  // Optional extra inline styles merged onto the modal card (after the
+  // card's own styles, so the caller wins). Used e.g. to set
+  // `userSelect: 'none'` on a specific modal without touching the rest.
+  cardStyle,
 }) {
   const [open, setOpen] = useState(true);
   // dragHandleRef is published via context so ModalHeader (or any inner
@@ -253,7 +258,7 @@ export function FloatingPanel({
                 throwScale={phys.throwScale}
                 style={{ zIndex: 999999, pointerEvents: 'auto' }}
               >
-                <ModalCard cssWidth={cssWidth} cssMaxHeight={cssMaxHeight} cssHeight={cssHeight}>{children}</ModalCard>
+                <ModalCard cssWidth={cssWidth} cssMaxHeight={cssMaxHeight} cssHeight={cssHeight} cardStyle={cardStyle}>{children}</ModalCard>
               </Throwable>
             ) : (
               /* Centered, non-draggable. Pointer events:none on the
@@ -268,7 +273,7 @@ export function FloatingPanel({
                 }}
               >
                 <div style={{ pointerEvents: 'auto' }}>
-                  <ModalCard cssWidth={cssWidth} cssMaxHeight={cssMaxHeight} cssHeight={cssHeight}>{children}</ModalCard>
+                  <ModalCard cssWidth={cssWidth} cssMaxHeight={cssMaxHeight} cssHeight={cssHeight} cardStyle={cardStyle}>{children}</ModalCard>
                 </div>
               </div>
             )}

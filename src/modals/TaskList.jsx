@@ -820,6 +820,9 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
       width={1000}
       height={640}
       backdrop
+      /* No text selection in this modal — accidental drag-selection while
+         range-selecting rows was interfering with clicks. */
+      cardStyle={{ userSelect: 'none', WebkitUserSelect: 'none' }}
       draggable={draggable}
       onClose={onClosed}
       bindClose={handleBindClose}
@@ -1306,21 +1309,19 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle 
     <div
       data-row-id={task.id}
       style={{
+        position: 'relative',
         display: 'grid', gridTemplateColumns: COLS,
         padding: '10px 16px', gap: 12,
         alignItems: 'center',
-        /* Each row is a separated, rounded block with a real gap beneath
-           it. The selection highlight is INSET inside that block (rounded
-           + bar), so selecting/deselecting only repaints the block — it
-           never merges with neighbours or changes the row's size, which
-           is what produced the press/unpress jump before. */
+        /* Rows are separated by a real gap (margin) so adjacent selected
+           rows never merge into one growing band. The selection accent is
+           a STRAIGHT absolute bar (below) — not an inset box-shadow, which
+           was both rounded by the radius and nudged the text on toggle. */
         marginBottom: 4,
-        borderRadius: 'var(--gb-r-md)',
         background: isSelected ? 'var(--gb-brand-tint-soft)' : 'transparent',
-        boxShadow: isSelected ? 'inset 3px 0 0 0 var(--gb-brand-label)' : 'inset 3px 0 0 0 transparent',
         fontSize: 12,
         cursor: 'pointer',
-        transition: 'background-color .15s, box-shadow .15s',
+        transition: 'background-color .15s',
         opacity: complete ? 0.65 : 1,
       }}
       onClick={(e) => {
@@ -1328,6 +1329,14 @@ function TaskRow({ task, isSelected, isBusy, emailStatus, actionState, onToggle 
         onToggle(e);
       }}
     >
+      {/* Straight left accent bar — absolute so it never affects the grid
+          layout (no text shift) and stays square regardless of the row. */}
+      {isSelected && (
+        <span aria-hidden style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
+          background: 'var(--gb-brand-label)',
+        }} />
+      )}
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <Checkbox checked={isSelected} onChange={(e) => onToggle(e)} />
       </div>

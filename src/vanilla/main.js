@@ -500,6 +500,7 @@ window.__gbContentReady = true;
     const tag = document.activeElement?.tagName?.toLowerCase();
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
+    if ((window.__gbFeatureFlags || {}).crmNewContactEnabled === false) return;
     chrome.storage.local.get('keyboardShortcuts', ({ keyboardShortcuts }) => {
       const raw = keyboardShortcuts?.crmNewContact;
       const key = (raw === undefined ? 'q' : raw).toLowerCase();
