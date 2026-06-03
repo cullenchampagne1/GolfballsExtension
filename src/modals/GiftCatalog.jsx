@@ -69,6 +69,13 @@ const isTierPrice = (p, qty, price) => Math.abs(priceAtQty(p, qty) - price) < 0.
    on the card by default ("from" pricing), before volume discounts. */
 const topPrice = (p) => (p.breaks && p.breaks.length ? Math.max(...p.breaks.map((b) => b.p)) : (p.logo ?? p.price ?? 0));
 const lowPrice = (p) => (p.breaks && p.breaks.length ? Math.min(...p.breaks.map((b) => b.p)) : (p.logo ?? p.price ?? 0));
+// Per-ball sale amount (MSRP − sale price). The custom-logo break prices ALREADY
+// include this discount (at top volume the break equals the sale price), so the
+// "was" / strike-through price for the shown custom-logo unit price is shown + cut.
+// Striking against the raw ball MSRP (p.orig) instead understates the deal — e.g.
+// $54.99 next to the $51.99 logo price reads as −$3 when the real deal is −$10.
+const saleCut = (p) => (onSale(p) ? Math.max(0, p.orig - p.price) : 0);
+const wasUnit = (p) => topPrice(p) + saleCut(p);
 
 /* "/" quick-filters beyond category + brand. */
 const SPECIAL_CMDS = [
@@ -305,7 +312,7 @@ function ProductCard({ p, compact, showRating, active, inProposal, onClick }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
             <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
               <span style={{ fontSize: compact ? 16 : 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.5, fontFamily: 'var(--gb-font-mono)' }}>{usd(topPrice(p))}</span>
-              {onSale(p) && p.orig && <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-ghost)', textDecoration: 'line-through', fontFamily: 'var(--gb-font-mono)' }}>{usd(p.orig)}</span>}
+              {onSale(p) && <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-ghost)', textDecoration: 'line-through', fontFamily: 'var(--gb-font-mono)' }}>{usd(wasUnit(p))}</span>}
             </span>
             <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>each</span>
           </div>
@@ -364,7 +371,7 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
           <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--gb-text-primary)', lineHeight: 1.25, letterSpacing: -.2 }}>{p.title}</div>
           <div style={{ marginTop: 8 }}><Rating value={p.rating} count={p.reviews} size={12} /></div>
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-            <PriceStat label="Per unit" value={usd(topPrice(p))} accent was={onSale(p) ? usd(p.orig) : null} />
+            <PriceStat label="Per unit" value={usd(topPrice(p))} accent was={onSale(p) ? usd(wasUnit(p)) : null} />
             {lowPrice(p) < topPrice(p) && <PriceStat label="Volume price" value={usd(lowPrice(p))} />}
           </div>
           {hasPromo(p) && (
