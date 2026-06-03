@@ -69,13 +69,15 @@ const isTierPrice = (p, qty, price) => Math.abs(priceAtQty(p, qty) - price) < 0.
    on the card by default ("from" pricing), before volume discounts. */
 const topPrice = (p) => (p.breaks && p.breaks.length ? Math.max(...p.breaks.map((b) => b.p)) : (p.logo ?? p.price ?? 0));
 const lowPrice = (p) => (p.breaks && p.breaks.length ? Math.min(...p.breaks.map((b) => b.p)) : (p.logo ?? p.price ?? 0));
-// Per-ball sale amount (MSRP − sale price). The custom-logo break prices ALREADY
-// include this discount (at top volume the break equals the sale price), so the
-// "was" / strike-through price for the shown custom-logo unit price is shown + cut.
-// Striking against the raw ball MSRP (p.orig) instead understates the deal — e.g.
-// $54.99 next to the $51.99 logo price reads as −$3 when the real deal is −$10.
+// On-sale markdown (MSRP − sale price). The custom-logo break ladder is stored
+// PRE-markdown; this discount comes off ON TOP (it can be a second, stacked sale).
+// So the real per-unit price = break − saleCut, and the raw break is the "was"
+// (strike-through). e.g. a $51.99 1+ break with a −$10 markdown actually costs
+// $41.99.
 const saleCut = (p) => (onSale(p) ? Math.max(0, p.orig - p.price) : 0);
-const wasUnit = (p) => topPrice(p) + saleCut(p);
+const netP    = (p, raw) => Math.max(0, raw - saleCut(p));   // a raw break/unit price after the markdown
+const netTop  = (p) => netP(p, topPrice(p));                  // actual per-unit (1+) price
+const netLow  = (p) => netP(p, lowPrice(p));                  // actual top-volume price
 
 /* "/" quick-filters beyond category + brand. */
 const SPECIAL_CMDS = [
@@ -311,8 +313,8 @@ function ProductCard({ p, compact, showRating, active, inProposal, onClick }) {
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
             <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-              <span style={{ fontSize: compact ? 16 : 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.5, fontFamily: 'var(--gb-font-mono)' }}>{usd(topPrice(p))}</span>
-              {onSale(p) && <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-ghost)', textDecoration: 'line-through', fontFamily: 'var(--gb-font-mono)' }}>{usd(wasUnit(p))}</span>}
+              <span style={{ fontSize: compact ? 16 : 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.5, fontFamily: 'var(--gb-font-mono)' }}>{usd(netTop(p))}</span>
+              {onSale(p) && <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-ghost)', textDecoration: 'line-through', fontFamily: 'var(--gb-font-mono)' }}>{usd(topPrice(p))}</span>}
             </span>
             <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>each</span>
           </div>
@@ -371,8 +373,8 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
           <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--gb-text-primary)', lineHeight: 1.25, letterSpacing: -.2 }}>{p.title}</div>
           <div style={{ marginTop: 8 }}><Rating value={p.rating} count={p.reviews} size={12} /></div>
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-            <PriceStat label="Per unit" value={usd(topPrice(p))} accent was={onSale(p) ? usd(wasUnit(p)) : null} />
-            {lowPrice(p) < topPrice(p) && <PriceStat label="Volume price" value={usd(lowPrice(p))} />}
+            <PriceStat label="Per unit" value={usd(netTop(p))} accent was={onSale(p) ? usd(topPrice(p)) : null} />
+            {lowPrice(p) < topPrice(p) && <PriceStat label="Volume price" value={usd(netLow(p))} />}
           </div>
           {hasPromo(p) && (
             <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint, rgba(46,158,91,.12))', border: '1px solid var(--gb-success-border, rgba(46,158,91,.3))' }}>
@@ -397,7 +399,7 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
                       <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-secondary)', fontFamily: 'var(--gb-font-mono)', minWidth: 64 }}>{b.q}+ qty</span>
                       <div style={{ flex: 1 }} />
                       {save > 0 && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--gb-success-fg)' }}>−{usd(save)}</span>}
-                      <span style={{ fontSize: 13, fontWeight: 800, color: best ? 'var(--gb-brand-label)' : 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', minWidth: 58, textAlign: 'right' }}>{usd(b.p)}</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: best ? 'var(--gb-brand-label)' : 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', minWidth: 58, textAlign: 'right' }}>{usd(netP(p, b.p))}</span>
                     </div>
                   );
                 })}
