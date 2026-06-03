@@ -1482,12 +1482,10 @@ function ResultRow({ row, isSelected, isActive, emailStatus, showStatusCol, onTo
         display: 'grid', gridTemplateColumns: showStatusCol ? COLS_WITH_STATUS : COLS_BASE,
         padding: '10px 14px', gap: 12,
         alignItems: 'center',
-        background: rowBg,
-        /* Rows are separated by a real gap (margin), no bottom border, so
-           adjacent selected rows never merge into one growing band. The
-           selection accent is a STRAIGHT absolute bar (below) rather than
-           an inset box-shadow, which read rounded and nudged the text on
-           toggle. The keyboard-active ring keeps its own rounded box. */
+        /* Selection fill lives on a separate underlay below (z-index:-1),
+           NOT on this element, so toggling it never re-rasterises the row's
+           text — that was the per-row jolt. The keyboard-active ring (a
+           box-shadow + rounded box) stays here. */
         marginBottom: 4,
         borderRadius: isActive ? 'var(--gb-r-md)' : 0,
         boxShadow: isActive
@@ -1498,7 +1496,7 @@ function ResultRow({ row, isSelected, isActive, emailStatus, showStatusCol, onTo
         // grid-template-columns transitions smoothly in modern Chrome
         // — the new status column slides open as it grows. Falls back
         // to an instant snap on browsers without support.
-        transition: 'background-color .15s, box-shadow .15s, grid-template-columns .35s cubic-bezier(0.4, 0, 0.2, 1)',
+        transition: 'box-shadow .15s, grid-template-columns .35s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -1508,6 +1506,13 @@ function ResultRow({ row, isSelected, isActive, emailStatus, showStatusCol, onTo
         onToggle(e);
       }}
     >
+      {/* Selection highlight underlay — behind the content so its toggle
+          doesn't jolt the row text (see the style note above). */}
+      <div aria-hidden style={{
+        position: 'absolute', inset: 0, zIndex: -1,
+        background: rowBg,
+        transition: 'background-color .15s',
+      }} />
       {/* Straight left accent bar for checkbox-selected rows — absolute so
           it never shifts the grid layout and stays square. Hidden while the
           keyboard-active ring owns the row. */}

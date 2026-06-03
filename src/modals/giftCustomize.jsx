@@ -1098,9 +1098,9 @@ function BallPreview() {
           ? 'Pick an icon to preview'
           : 'Pick a style to preview';
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Live preview</div>
-      <div style={{ position: 'relative', width: '100%', aspectRatio: '1 / 1.1', borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
+      <div style={{ alignSelf: 'flex-start', fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Live preview</div>
+      <div style={{ position: 'relative', width: '100%', maxWidth: 240, aspectRatio: '1 / 1', borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)' }}>
         {decalUrl ? (
           <GolfballViewer minimal decalDataUrl={decalUrl} />
         ) : (
@@ -1146,18 +1146,14 @@ export function CustomizeBlock({ p }) {
         <div style={{ border: '1px solid var(--gb-brand-tint-border)', borderTop: 'none', borderRadius: '0 0 var(--gb-r-md) var(--gb-r-md)', padding: 14 }}>
           {isBall ? (
             <PrintTypeProvider mods={mods}>
-              <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  <BaseProperties p={p} config={config} />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>Select a print type</span>
-                    <Tag tone="neutral" size="sm">corporate: Custom Logo</Tag>
-                  </div>
-                  <PrintTypeGridInner p={p} mods={mods} config={config} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <BallPreview />
+                <BaseProperties p={p} config={config} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>Select a print type</span>
+                  <Tag tone="neutral" size="sm">corporate: Custom Logo</Tag>
                 </div>
-                <div style={{ width: 220, flexShrink: 0, position: 'sticky', top: 8 }}>
-                  <BallPreview />
-                </div>
+                <PrintTypeGridInner p={p} mods={mods} config={config} />
               </div>
             </PrintTypeProvider>
           ) : (
