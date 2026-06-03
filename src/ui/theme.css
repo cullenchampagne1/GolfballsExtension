@@ -309,6 +309,22 @@
 }
 
 /* ════════════════════════════════════════════════════════════
+   Host-page CSS isolation. The extension UI is authored against the
+   playground's reset (border-box + a unitless line-height). A host CRM
+   page (Bootstrap/Metronic) that does NOT reset these leaves our
+   elements at the UA default content-box and lets a fixed px
+   line-height inherit in — which makes cards with height:100% + padding
+   overflow their grid track (rows overlap) and inflates text. Pin both
+   on extension mount roots so the UI renders identically on any host.
+   Scoped to [data-gb-scale] (modal hosts, popup, editor, shelf) so the
+   host page's own elements are never touched.
+════════════════════════════════════════════════════════════ */
+[data-gb-scale], [data-gb-scale] *, [data-gb-scale] *::before, [data-gb-scale] *::after {
+  box-sizing: border-box;
+}
+[data-gb-scale] { line-height: normal; }
+
+/* ════════════════════════════════════════════════════════════
    Toast entry keyframes — needed by the notification_handoff
    toast family (PillToast / ActionToast / StepToast / etc.).
 ════════════════════════════════════════════════════════════ */

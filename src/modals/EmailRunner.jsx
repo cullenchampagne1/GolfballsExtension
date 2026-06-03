@@ -58,14 +58,22 @@ function ensureNoScrollStyle() {
   el.id = SCROLLBAR_STYLE_ID;
   el.textContent = `
     .gb-email-runner-body::-webkit-scrollbar { width: 0; height: 0; display: none; }
-    /* Sweeping scan light on the run-status card while a blast is
-       in flight. The animation is global because a CSS animation
-       can't be expressed inline via Motion without a child component
-       eating every frame. */
-    @keyframes gb-er-scan {
-      0%   { transform: translateX(-100%); }
-      100% { transform: translateX(100%); }
+    @keyframes gb-er-scan { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+    /* Quick Send redesign keyframes (verbatim from the design bundle). */
+    @keyframes qs-rotate { to { transform: rotate(360deg); } }
+    @keyframes qs-breathe { 0%,100% { opacity: .75; transform: scale(1); } 50% { opacity: 1; transform: scale(1.05); } }
+    @keyframes qs-ripple { from { transform: scale(.62); opacity: .85; } to { transform: scale(1.55); opacity: 0; } }
+    @keyframes qs-pop { from { transform: scale(.4); } to { transform: scale(1); } }
+    @keyframes qs-burst {
+      from { transform: translate(-50%,-50%) translate(0,0) scale(1); opacity: 1; }
+      to   { transform: translate(-50%,-50%) translate(var(--qs-x), var(--qs-y)) scale(.4); opacity: 0; }
     }
+    @keyframes qs-now-in { from { transform: translateY(7px); } to { transform: none; } }
+    @keyframes qs-bump { 0% { transform: scale(1); } 32% { transform: scale(1.38); } 100% { transform: scale(1); } }
+    @keyframes qs-fade-in { from { transform: translateY(4px); } to { transform: none; } }
+    @keyframes qs-state-in { from { transform: translateY(9px); } to { transform: none; } }
+    @keyframes qs-center-in { from { transform: scale(.86); } to { transform: scale(1); } }
+    @keyframes qs-grow-up { from { transform: scaleY(.05); opacity: .3; } to { transform: scaleY(1); opacity: .85; } }
   `;
   document.head.appendChild(el);
 }
@@ -247,6 +255,13 @@ export function EmailRunner({
      run still proceeds, but each send opens an Outlook window instead of
      hitting PA (see the send step + emailSender). */
   const [paEnabled, setPaEnabled] = useState(false);
+  /* Live run telemetry the redesigned panel reads. `current` is the
+     in-flight contact (drives the "Now sending" card); `delayState` is the
+     between-sends countdown (drives the pacing bar); `meta` stamps the
+     run's start/finish for the done-state elapsed readout. */
+  const [current, setCurrent] = useState(null);       // { contactId, name, email } | null
+  const [delayState, setDelayState] = useState(null); // { remaining, total } | null
+  const [meta, setMeta] = useState({ startedAt: 0, finishedAt: 0 });
   /* `height:'auto'` on the body's entrance blocks makes Motion run a
      measurement pass that paints them at full natural height for a frame —
      a visible "tall flash" the instant the panel opens. Gate it: on the
@@ -318,6 +333,9 @@ export function EmailRunner({
       setCounts({ sent: 0, failed: 0 });
       setProgress({ current: 0, total: 0 });
       setTrail([]);
+      setCurrent(null);
+      setDelayState(null);
+      setMeta({ startedAt: 0, finishedAt: 0 });
       onRunStateChange?.(false);
     }
   }, [open, onRunStateChange]);
@@ -454,6 +472,9 @@ export function EmailRunner({
     setCounts({ sent: 0, failed: 0 });
     setProgress({ current: 0, total: contacts.length });
     setTrail([]);
+    setCurrent(null);
+    setDelayState(null);
+    setMeta({ startedAt: Date.now(), finishedAt: 0 });
     setStatus('running');
     onRunStateChange?.(true);
 
@@ -486,6 +507,8 @@ export function EmailRunner({
       if (runTokenRef.current !== token) return; // cancelled
       const c = contacts[i];
       setProgress({ current: i + 1, total: contacts.length });
+      setDelayState(null);
+      setCurrent({ contactId: c.contactId, name: c.contactName || c.name || '', email: '' });
       onRowStart?.(c.contactId);
 
       let outcome = { status: 'error', error: 'unknown' };
@@ -556,6 +579,12 @@ export function EmailRunner({
            the row came from an account-page list with no contact
            text, this still produces a real name for the trail. */
         const pageName = (resolved?.displayName || '').trim();
+        /* Enrich the "Now sending" card with the resolved name + recipient
+           as soon as they're known (the row started with just the task-row
+           text). */
+        setCurrent((cur) => (cur && cur.contactId === c.contactId)
+          ? { ...cur, name: pageName || cur.name, email: toEmail || cur.email }
+          : cur);
         if (resolved?.error) {
           /* Bubble the resolver's own message up so a parse / engine
              failure shows the cause instead of "No recipient email". */
@@ -628,15 +657,31 @@ export function EmailRunner({
         return next.length > 8 ? next.slice(next.length - 8) : next;
       });
 
-      // 5. Random delay between sends — skip after the last one.
+      // 5. Random delay between sends — skip after the last one. Drive a
+      //    live countdown so the panel's pacing bar animates (clearing the
+      //    in-flight contact so the card flips to the "next send in …" view).
       if (i < contacts.length - 1) {
+        setCurrent(null);
         const ms = (lo + Math.random() * (hi - lo)) * 1000;
-        const wait = await new Promise((res) => setTimeout(() => res(true), ms));
+        const waitStart = Date.now();
+        setDelayState({ remaining: ms, total: ms });
+        await new Promise((res) => {
+          const tick = setInterval(() => {
+            if (runTokenRef.current !== token) { clearInterval(tick); res(true); return; }
+            const remaining = Math.max(0, ms - (Date.now() - waitStart));
+            setDelayState({ remaining, total: ms });
+            if (remaining <= 0) { clearInterval(tick); res(true); }
+          }, 80);
+        });
+        setDelayState(null);
         if (runTokenRef.current !== token) return;
       }
     }
 
     setStatus('done');
+    setCurrent(null);
+    setDelayState(null);
+    setMeta((m) => ({ ...m, finishedAt: Date.now() }));
     onRunStateChange?.(false);
   };
 
