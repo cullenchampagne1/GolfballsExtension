@@ -215,6 +215,16 @@ function setCache(payload) {
   try { chrome.storage.local.set({ [CACHE_KEY]: payload }); } catch { /* ignore */ }
 }
 
+/** Wipe the cached catalog (current + any legacy-version keys) so the next
+ *  load starts from a clean slate. Used by the modal's "Rebuild index" so a
+ *  rebuild truly clears stale data instead of falling back to the old cache. */
+export function clearCatalogCache() {
+  return new Promise((resolve) => {
+    try { chrome.storage.local.remove([CACHE_KEY, 'gbGiftCatalogCache_v1', 'gbGiftCatalogCache_v2'], resolve); }
+    catch { resolve(); }
+  });
+}
+
 /**
  * loadCatalog({ force }) — returns the gifting catalog. Served from a
  * 24-hour chrome.storage cache (re-indexed daily) so reopening the

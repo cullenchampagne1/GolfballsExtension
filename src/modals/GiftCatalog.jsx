@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Btn, IconBtn, Tag, Dot } from '../ui/index.js';
 import { Icon, I } from '../ui/icons.jsx';
-import { loadCatalog, GIFT_CATALOG_SEED, CATEGORY_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
+import { loadCatalog, clearCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock } from './giftCustomize.jsx';
 
@@ -275,6 +275,9 @@ function ProductCard({ p, compact, showRating, active, inProposal, onClick }) {
         display: 'flex', flexDirection: 'column', cursor: 'pointer', background: 'var(--gb-surface-1)', height: '100%',
         border: '1px solid ' + (active ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'),
         borderRadius: 'var(--gb-r-lg)', padding: compact ? 9 : 11,
+        // Clip any sub-pixel content overflow inside the card so it can't bleed
+        // into the row below under fractional zoom (browser/OS scale).
+        overflow: 'hidden',
         boxShadow: ring || 'none',
         transform: hover && !active ? 'translateY(-1px)' : 'none',
         transition: 'transform var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)',
@@ -574,7 +577,7 @@ function ProposalDock({ count, total, active, onOpen }) {
   return (
     <div onClick={onOpen} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
       style={{
-        width: '100%', cursor: 'pointer',
+        width: '100%', boxSizing: 'border-box', cursor: 'pointer',
         display: 'flex', alignItems: 'center', gap: 13, padding: '7px 9px',
         background: (h || active) ? 'var(--gb-brand-tint-strong)' : 'var(--gb-brand-tint-medium)',
         border: '1px solid var(--gb-brand-tint-border)', borderRadius: 'var(--gb-r-md)',
@@ -679,6 +682,11 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const [special, setSpecial] = useState(null); // 'sale' | 'logo' | null
   const [proposal, setProposal] = useState([]);
   const [proposalOpen, setProposalOpen] = useState(false);
+  // Animated open/close: doClose plays the exit, AnimatePresence's
+  // onExitComplete then runs the real onClose (unmount) — matches the
+  // slide-over panels so the whole modal fades/scales out, not snaps.
+  const [open, setOpen] = useState(true);
+  const doClose = () => setOpen(false);
 
   const compact = density === 'compact';
 
@@ -702,12 +710,13 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     return () => { live = false; };
   }, []);
 
-  // Manual re-index: force a fresh crawl past the 24h cache for new
-  // prices/deals, then re-cache.
+  // Manual re-index: wipe the cache first (so stale items/sales can't survive
+  // as a fallback), then force a fresh crawl and re-cache.
   const refresh = () => {
     if (loading) return;
     setLoading(true);
-    loadCatalog({ force: true }).then((c) => { if (c && c.length) setCatalog(c); setLoading(false); });
+    clearCatalogCache().then(() => loadCatalog({ force: true }))
+      .then((c) => { if (c && c.length) setCatalog(c); setLoading(false); });
   };
 
   const catCounts = useMemo(() => { const m = {}; catalog.forEach((p) => { m[p.cat] = (m[p.cat] || 0) + 1; }); return m; }, [catalog]);
@@ -782,8 +791,11 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   if (scale == null) return null;
 
   return (
-    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: 'fixed', inset: 0, zIndex: 999990, padding: 24, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', overflow: 'auto' }}>
+    <AnimatePresence onExitComplete={onClose}>
+      {open && (
+      <motion.div key="gc-overlay" onClick={(e) => { if (e.target === e.currentTarget) doClose(); }}
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .2 }}
+        style={{ position: 'fixed', inset: 0, zIndex: 999990, padding: 24, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', overflow: 'auto' }}>
       {/* Scale via transform, NOT zoom: Chrome accumulates sub-pixel rounding
           on grid ROW positions under a fractional `zoom`, so the product rows
           creep into each other below 1x (columns recompute per row, so they
@@ -791,7 +803,10 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           scales the paint; transform-origin center + margin auto keep it
           centered. */}
       <div style={{ margin: 'auto', flexShrink: 0, transform: `scale(${scale})`, transformOrigin: 'center center' }}>
-        <div style={{ width: CARD_W, height: CARD_H, position: 'relative', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column', animation: 'gc-pop .3s cubic-bezier(.34,1.56,.64,1)' }}>
+        <motion.div
+          initial={{ opacity: 0, scale: .96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97, y: 6 }}
+          transition={{ type: 'spring', stiffness: 380, damping: 32 }}
+          style={{ width: CARD_W, height: CARD_H, position: 'relative', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
         <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
           <div style={{ width: 32, height: 32, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -807,7 +822,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           <SearchBox value={query} onChange={setQuery} commands={commands} onPick={onPickCommand} filtersActive={filtersActive} onClearAll={clearAll} />
           <SortSelect value={sort} onChange={setSort} />
           <IconBtn size="md" title="Rebuild catalog index" icon={<I.refresh style={{ animation: loading ? 'gb-spin .8s linear infinite' : 'none' }} />} onClick={refresh} />
-          <IconBtn size="md" icon={<I.close />} onClick={onClose} />
+          <IconBtn size="md" icon={<I.close />} onClick={doClose} />
         </div>
 
         {/* Body — also the positioning context for the slide-over panels,
@@ -882,8 +897,10 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           </span>
         </div>
 
-        </div>
+        </motion.div>
       </div>
-    </div>
+      </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
