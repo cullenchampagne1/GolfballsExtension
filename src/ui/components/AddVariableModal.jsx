@@ -27,16 +27,16 @@ export const SOURCE_KINDS = {
   /* The durable trio is schema / code / literal. `code` runs JS over
      the page json block (ctx), the other resolved variables (vars),
      and helpers (h.*, including async server calls). Schema leads on
-     account/contact pages (they have an extractor today); order/case
-     have no schema yet, so code leads there.
+     account/contact AND order pages (they all have an extractor now —
+     the order schema landed); case has no schema yet, so code leads there.
 
      `builtin` and `dom` are intentionally NOT offered here — we're
-     switching to code and the longer list read as cluttered. Their
+     switching to schema/code and the longer list read as cluttered. Their
      RESOLUTION logic stays (resolveVar still handles them) so existing
      templates keep working until the migration sweep converts them;
      you just can't author new ones. Regex remains for case templates
      (matching the inbound email body/subject). */
-  order:   ['code', 'literal'],
+  order:   ['schema', 'code', 'literal'],
   case:    ['code', 'regex', 'literal'],
   account: ['schema', 'code', 'literal'],
 };

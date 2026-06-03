@@ -10,6 +10,7 @@ import { Segmented } from './Segmented.jsx';
 import { SOURCE_KINDS, BUILTIN_PATHS, REGEX_FIELDS } from './AddVariableModal.jsx';
 import { VariableSchemaPicker } from './VariableSchemaPicker.jsx';
 import { CodeVarEditor, isAsyncBody } from './CodeVarEditor.jsx';
+import { orderSchema } from '../../lib/page-schemas/order.js';
 
 /* ────────────────────────────────────────────────────────────────
    InlineVariableForm — compact, in-table replacement for
@@ -282,15 +283,18 @@ export function InlineVariableForm({ typeId, onAdd, onCancel, varNames = [] }) {
             {kind === 'schema' && (
               <Field
                 label="Schema path"
-                hint="Tree of the unified contact + account schema · ↓↑ ↵"
+                hint={typeId === 'order'
+                  ? 'Tree of the order page schema · ↓↑ ↵'
+                  : 'Tree of the unified contact + account schema · ↓↑ ↵'}
               >
                 {/* Inline tree picker — opens in flow so the form
-                    row grows to contain it. Width matches the
-                    input column. */}
+                    row grows to contain it. Order templates pick from the
+                    order schema; account/contact from the unified schema. */}
                 <VariableSchemaPicker
                   value={config}
                   onChange={setConfig}
                   placeholder="Pick a field…"
+                  schema={typeId === 'order' ? orderSchema : undefined}
                 />
               </Field>
             )}

@@ -42,10 +42,12 @@ const TYPE_DOT = {
   variable: 'var(--gb-brand-label)',
 };
 
-const SCHEMA_NODES = (() => {
+/* Build the flat node list for a schema. Default is the unified
+   contact/account schema; callers can pass a different schema (e.g. the
+   order schema for order templates) via the `schema` prop. */
+function buildSchemaNodes(schema) {
   try {
-    const list = listPaths(contactSchema, /* sample */ {});
-    return list.map((n) => ({
+    return listPaths(schema, /* sample */ {}).map((n) => ({
       path:     n.path,
       label:    n.label || n.path,
       type:     n.type,
@@ -53,13 +55,18 @@ const SCHEMA_NODES = (() => {
       depth:    n.path.split(/[.[]/).filter(Boolean).length - 1,
     }));
   } catch { return []; }
-})();
-const TYPE_BY_PATH = Object.fromEntries(SCHEMA_NODES.map((n) => [n.path, n.type]));
+}
+const SCHEMA_NODES = buildSchemaNodes(contactSchema);
 const canonicalPath = (p) => (p || '').replace(/\[(?:-?\d+|any|none)\]/g, '[0]');
-const typeForPath = (p) => TYPE_BY_PATH[canonicalPath(p)] || 'string';
 
-export function VariableSchemaPicker({ value, onChange, placeholder = '— pick a field —', varNames = [], allowQuantifiers = false, overlay = false, embedArrayRow = true }) {
+export function VariableSchemaPicker({ value, onChange, placeholder = '— pick a field —', varNames = [], allowQuantifiers = false, overlay = false, embedArrayRow = true, schema = null }) {
   const [open, setOpen] = useState(false);
+  /* Node set + type lookup for the active schema (default contact/account). */
+  const NODES = useMemo(() => (schema ? buildSchemaNodes(schema) : SCHEMA_NODES), [schema]);
+  const typeForPath = useMemo(() => {
+    const byPath = Object.fromEntries(NODES.map((n) => [n.path, n.type]));
+    return (p) => byPath[canonicalPath(p)] || 'string';
+  }, [NODES]);
   const type = typeForPath(value);
   /* Surface array selector only when the active path actually
      contains an array segment. Variables resolve to a single
@@ -282,7 +289,7 @@ function InlineSchemaTree({ currentPath, varNames = [], overlay = false, onClose
     return () => cancelAnimationFrame(r);
   }, []);
 
-  const schemaRows = useMemo(() => filterAndProject(SCHEMA_NODES, search, expanded), [search, expanded]);
+  const schemaRows = useMemo(() => filterAndProject(NODES, search, expanded), [NODES, search, expanded]);
   const varRows = useMemo(() => {
     if (!varNames.length) return [];
     const q = search.trim().toLowerCase();
