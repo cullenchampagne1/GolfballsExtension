@@ -740,12 +740,16 @@ const PRINT_TYPE_ICON = {
   'Custom Player Number': (p) => <Icon {...p} strokeWidth={2.2}><path d="M4 9.5h16M4 14.5h16M10 4.5l-2 15M16 4.5l-2 15"/></Icon>,
 };
 
-/* Split N tiles into rows that always fill the row (no empty cells).
-   ≤4 → single row; odd 5/7 → smaller wider row on top; even → equal halves. */
+/* Split N tiles into rows of up to 3, with the remainder (1 or 2) on the last row.
+   The last row renders wide (icon left of text) whenever it has ≤2 items, so a
+   leftover singleton becomes a thin full-width button at the bottom.
+   4→[3,1] 5→[3,2] 6→[3,3] 7→[3,3,1] 8→[3,3,2]. */
 function splitTileRows(n) {
-  if (n <= 4) return [n];
-  const top = Math.floor(n / 2);
-  return [top, n - top]; // 5→[2,3] 6→[3,3] 7→[3,4] 8→[4,4]
+  const rows = [];
+  let r = n;
+  while (r > 3) { rows.push(3); r -= 3; }
+  if (r > 0) rows.push(r);
+  return rows;
 }
 
 /* golf-ball print-type tile grid */
