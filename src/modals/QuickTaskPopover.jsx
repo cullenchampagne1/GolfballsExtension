@@ -283,6 +283,12 @@ export function QuickTaskPopover({
     : 'warning';
   const priorityLabel = task?.priorityLabel
     || (task?.priority === 1 ? 'High' : task?.priority === 3 ? 'Low' : 'Med');
+  /* Soft-tinted priority chip colours (matches the design's small chip). */
+  const pTone = {
+    error:   { fg: 'var(--gb-error-fg)',   bg: 'var(--gb-error-tint-soft)' },
+    warning: { fg: 'var(--gb-warning-fg)', bg: 'var(--gb-warning-tint-soft)' },
+    info:    { fg: 'var(--gb-info-fg)',    bg: 'var(--gb-info-tint-soft)' },
+  }[priorityTone] || { fg: 'var(--gb-text-secondary)', bg: 'var(--gb-fill-subtle)' };
 
   /* Titles for the popover chrome. Bulk mode says "{n} selected"
      instead of the subject; single mode shows the subject + the
@@ -330,13 +336,14 @@ export function QuickTaskPopover({
                 bulk mode where each task may have a different
                 priority. */}
             {!isBulk && task && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Tag tone={priorityTone} size="xs">{priorityLabel}</Tag>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{ padding: '2px 8px', borderRadius: 5, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase', background: pTone.bg, color: pTone.fg }}>{priorityLabel}</span>
                 {task.category && (
-                  <span style={{
-                    fontSize: 10.5, color: 'var(--gb-text-muted)',
-                    fontFamily: 'var(--gb-font-mono)',
-                  }}>{task.category}</span>
+                  <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{task.category}</span>
+                )}
+                <div style={{ flex: 1 }} />
+                {task.due && (
+                  <span style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', fontFamily: 'var(--gb-font-mono)' }}>due {task.due}</span>
                 )}
               </div>
             )}

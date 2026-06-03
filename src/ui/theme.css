@@ -356,3 +356,17 @@
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ════════════════════════════════════════════════════════════
+   Default font for ALL extension UI.
+   The design font (Geist / --gb-font-sans) becomes the inherited
+   default on every extension mount root. [data-gb-scale] wraps every
+   content-script overlay (modals, popovers, editor, playground,
+   toasts) — it is the extension's OWN container, never the host
+   <html> (data-theme lives there), so this never restyles
+   golfballs.com. Components that set their own fontFamily still win;
+   everything else now inherits Geist instead of the host page font.
+════════════════════════════════════════════════════════════ */
+[data-gb-scale] {
+  font-family: var(--gb-font-sans);
+}
