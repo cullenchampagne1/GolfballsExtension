@@ -251,8 +251,9 @@ export async function loadCatalog({ force = false } = {}) {
   if (!hasChrome) return GIFT_CATALOG_SEED;
 
   const cached = await getCache();
-  if (!force && cached && Array.isArray(cached.products) && cached.products.length
-      && (Date.now() - (cached.ts || 0)) < CACHE_TTL_MS) {
+  const ttl = await cacheTtlMs();
+  if (!force && ttl > 0 && cached && Array.isArray(cached.products) && cached.products.length
+      && (Date.now() - (cached.ts || 0)) < ttl) {
     return cached.products;
   }
 

@@ -204,15 +204,10 @@ function TextInput({ value, onChange, placeholder, maxLength }) {
     </div>
   );
 }
-/* Font dropdown is the live customizer's four imprint fonts. Display names are
-   shortened so 4 buttons fit one line inside the Personalized panel — full
-   foundry/weight tags ("Kabel Dm BT", "Lucida Handwriting") wrap otherwise. */
-const FONT_OPTS = [
-  { id: 'Kabel Dm BT',        label: 'Kabel' },
-  { id: 'Calibri',            label: 'Calibri' },
-  { id: 'Lucida Handwriting', label: 'Lucida' },
-  { id: 'Bradley Hand',       label: 'Bradley' },
-];
+/* Font dropdown is the live customizer's four imprint fonts. The id is the full
+   font name (what the renderer needs); the label is just the first word so the
+   four buttons fit one row — full names ("Lucida Handwriting") would wrap. */
+const FONT_OPTS = FONTS.map((f) => ({ id: f, label: f.split(' ')[0] }));
 const SIZE_OPTS = SIZES.map((s) => ({ id: s, label: s }));
 /* hex → HSL, used to order the palette by hue then shade */
 function hexToHsl(hex) {

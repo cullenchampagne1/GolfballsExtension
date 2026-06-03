@@ -1,6 +1,25 @@
 // background.js
 importScripts('defaults.js');
 
+/* Admin-only secret-settings console command, mirrored from
+   src/lib/secretSettings.js so it's also reachable from the service-worker
+   console (chrome://extensions → this extension → "service worker"):
+     __gbSecret.hide('taskListEnabled','giftCatalog.scale') · .show(…) · .list() · .clear() · .help()
+   A hidden key is removed from the Settings UI (its value is kept). */
+(function () {
+  const KEY = 'secret_settings';
+  const load = () => new Promise((r) => chrome.storage.local.get(KEY, (d) => r((d && d[KEY]) || {})));
+  const save = (m) => chrome.storage.local.set({ [KEY]: m || {} });
+  const norm = (keys) => keys.flat().filter((k) => typeof k === 'string');
+  globalThis.__gbSecret = {
+    async list() { const m = await load(); const k = Object.keys(m); console.log('[gb] hidden settings:', k); return k; },
+    async hide(...keys) { const m = await load(); for (const k of norm(keys)) m[k] = true; save(m); console.log('[gb] now hidden:', Object.keys(m)); return Object.keys(m); },
+    async show(...keys) { const m = await load(); for (const k of norm(keys)) delete m[k]; save(m); console.log('[gb] still hidden:', Object.keys(m)); return Object.keys(m); },
+    async clear() { save({}); console.log('[gb] all settings visible again'); return []; },
+    help() { console.log('__gbSecret.hide("key", …) · .show("key", …) · .list() · .clear()  — keys: feature-flag keys (taskListEnabled, giftCatalogEnabled, …) or dev-setting keys (giftCatalog.scale, …)'); },
+  };
+})();
+
 let editorWindowId   = null;
 
 // ── Per-product customizer config helpers ────────────────────────────────────
