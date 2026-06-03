@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  SectionLabel, Card, Callout, Btn, Input, Dropdown, Field,
+  SectionLabel, Card, Callout, Btn, IconBtn, Input, Dropdown, Field,
   FeatureSpotlight, ExpandableFeature, ColorSpotlight, Switch, Dot, I,
   CollapsibleChecklist, Slider,
 } from '../ui/index.js';
@@ -461,14 +461,23 @@ function UserPresetsManager({ onPresetLoad }) {
           </motion.div>
         )}
       </AnimatePresence>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <Dropdown size="sm" value={selectedId} placeholder={hasPresets ? 'Select a preset…' : 'No saved presets'} options={dropdownOptions} onChange={setSelectedId} disabled={!hasPresets} style={{ flex: 1 }} />
-        <Btn variant="primary" size="sm" onClick={handleLoad} disabled={!selectedId || loadScopes.size === 0}>Load</Btn>
-        <Btn variant="secondary" size="sm" onClick={openSaveDialog}>Save</Btn>
-        <Btn variant="secondary" size="sm" onClick={handleExport} disabled={!selectedId}>Export</Btn>
-        <Btn variant="secondary" size="sm" onClick={handleDelete} disabled={!selectedId}><I.trash size={12} /></Btn>
-        <input ref={fileInputRef} type="file" accept=".json" onChange={handleImport} style={{ display: 'none' }} />
-        <Btn variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>Import</Btn>
+      {/* Two-row toolbar so the section has real height + room to scale:
+          row 1 = preset picker + the primary Load action, row 2 = a
+          file/management toolbar (Save · Export · Import · Delete) as
+          square icon buttons that stay proportional at any zoom. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <Dropdown size="md" value={selectedId} placeholder={hasPresets ? 'Select a preset…' : 'No saved presets'} options={dropdownOptions} onChange={setSelectedId} disabled={!hasPresets} style={{ flex: 1 }} />
+          <Btn variant="primary" size="md" icon={<I.check />} onClick={handleLoad} disabled={!selectedId || loadScopes.size === 0}>Load</Btn>
+        </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <IconBtn size="md" icon={<I.save />}     onClick={openSaveDialog}                          title="Save current state as a preset" />
+          <IconBtn size="md" icon={<I.download />} onClick={handleExport} disabled={!selectedId}     title="Export selected preset to a file" />
+          <IconBtn size="md" icon={<I.upload />}   onClick={() => fileInputRef.current?.click()}     title="Import a preset from a file" />
+          <div style={{ flex: 1 }} />
+          <IconBtn size="md" icon={<I.trash />} danger onClick={handleDelete} disabled={!selectedId} title="Delete selected preset" />
+          <input ref={fileInputRef} type="file" accept=".json" onChange={handleImport} style={{ display: 'none' }} />
+        </div>
       </div>
       {/* Scope chips — what's in the selected preset AND which to load. Tap a
           chip to include/exclude it; only ticked scopes are applied on Load. */}
