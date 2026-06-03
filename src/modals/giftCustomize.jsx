@@ -481,30 +481,37 @@ function buildIconUrl(iconName) {
   }
   return null;
 }
-function buildPersonalizedUrl(line1, font, color, sku) {
-  if (!line1) return null;
-  const enc = encodeURIComponent;
-  const hex = _hexOf(color).replace('#', '');
-  // Mirrors the production customizer call (verified in the icustomize.golfballs.com
-  // page bundles): type=clublabel + font name + hex color + sku.
-  return `https://api.golfballs.com/dynamic/images/${enc(line1)}.jpeg?type=clublabel&font=${enc(font)}&color=${hex}&sku=${enc(sku || 'M3743-P1')}`;
+/* XML-escape user text before it lands inside an SVG <text>. Just the chars
+   that would otherwise break the document. */
+const _escXml = (s) => String(s || '').replace(/[&<>"']/g, (c) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]
+));
+function buildPersonalizedUrl(line1, line2, line3, font, color) {
+  const lines = [line1, line2, line3].map((l) => String(l || '').trim()).filter(Boolean);
+  if (!lines.length) return null;
+  const hex = _hexOf(color);
+  // Vector text → fully crisp at any zoom, recolor is instant. Approximating
+  // the live customizer's clublabel render; exact production fonts aren't
+  // available in the bucket (confirmed earlier), so we use the family name
+  // and let the browser pick its closest substitute.
+  const VB_W = 400, VB_H = 200;
+  const fontSize = lines.length === 1 ? 64 : lines.length === 2 ? 48 : 36;
+  const lineHeight = fontSize * 1.1;
+  const totalH = lines.length * lineHeight;
+  const startY = (VB_H - totalH) / 2 + fontSize * 0.85;
+  const textEls = lines.map((line, i) =>
+    `<text x="${VB_W / 2}" y="${startY + i * lineHeight}" text-anchor="middle" font-family="${_escXml(font)}, Georgia, serif" font-size="${fontSize}" font-weight="700" fill="${hex}">${_escXml(line)}</text>`
+  ).join('');
+  const doc = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VB_W} ${VB_H}">${textEls}</svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(doc);
 }
-/* Hook: given a print-type snapshot + sku, return the URL the viewer should
-   render. Debounces Personalized text changes so we don't fire an HTTP
-   request per keystroke. */
-function useDecalUrl(p) {
+/* Hook: given the active print-type snapshot, return the URL the viewer
+   should render. Monogram + Personalized are local SVGs so their color
+   updates land in the next frame — no debounce, no network. */
+function useDecalUrl() {
   const ctx = usePT();
   const sel = ctx.sel;
   const data = ctx.data || {};
-  const [debouncedText, setDebouncedText] = useState(null);
-  // Debounce just the Personalized line/font/color/size — other types update
-  // synchronously because their input lands as a discrete pick, not typing.
-  useEffect(() => {
-    if (sel !== 'Personalized') return undefined;
-    const t = setTimeout(() => setDebouncedText({ ...(data.Personalized || {}) }), 250);
-    return () => clearTimeout(t);
-  }, [sel, data.Personalized && data.Personalized.l1, data.Personalized && data.Personalized.font, data.Personalized && data.Personalized.color]);
-
   return useMemo(() => {
     if (sel === 'Monogram') {
       const { style, c1 } = data.Monogram || {};
@@ -515,8 +522,8 @@ function useDecalUrl(p) {
       return buildIconUrl(icon);
     }
     if (sel === 'Personalized') {
-      const snap = debouncedText || data.Personalized || {};
-      return buildPersonalizedUrl(snap.l1, snap.font, snap.color, p && p.sku);
+      const snap = data.Personalized || {};
+      return buildPersonalizedUrl(snap.l1, snap.l2, snap.l3, snap.font, snap.color);
     }
     if (sel === 'Custom Logo') {
       return (data['Custom Logo'] && data['Custom Logo'].imageDataUrl) || null;
@@ -525,7 +532,7 @@ function useDecalUrl(p) {
       return (data.Photo && data.Photo.imageDataUrl) || null;
     }
     return null;
-  }, [sel, data, debouncedText, p && p.sku]);
+  }, [sel, data]);
 }
 
 /* Second-pole imprint — the live reveal: a choice row, then the matching control. */
@@ -1077,9 +1084,9 @@ function PrintTypeGrid({ p, mods, config }) {
    print-type snapshot resolves to. When the user has nothing to preview yet
    (unsupported type, or an upload-based type with no image) we show a soft
    empty-state on a placeholder card the same shape as the canvas. */
-function BallPreview({ p }) {
+function BallPreview() {
   const ctx = usePT();
-  const decalUrl = useDecalUrl(p);
+  const decalUrl = useDecalUrl();
   const supported = ['Monogram', 'Personalized', 'Icons', 'Custom Logo', 'Photo'].includes(ctx.sel);
   const emptyMsg = !supported
     ? 'Preview not yet available for this print type'
@@ -1138,16 +1145,21 @@ export function CustomizeBlock({ p }) {
       {open && (
         <div style={{ border: '1px solid var(--gb-brand-tint-border)', borderTop: 'none', borderRadius: '0 0 var(--gb-r-md) var(--gb-r-md)', padding: 14 }}>
           {isBall ? (
-            <>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 14 }}>
-                <BaseProperties p={p} config={config} />
+            <PrintTypeProvider mods={mods}>
+              <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <BaseProperties p={p} config={config} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>Select a print type</span>
+                    <Tag tone="neutral" size="sm">corporate: Custom Logo</Tag>
+                  </div>
+                  <PrintTypeGridInner p={p} mods={mods} config={config} />
+                </div>
+                <div style={{ width: 220, flexShrink: 0, position: 'sticky', top: 8 }}>
+                  <BallPreview />
+                </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>Select a print type</span>
-                <Tag tone="neutral" size="sm">corporate: Custom Logo</Tag>
-              </div>
-              <PrintTypeGrid p={p} mods={mods} config={config} />
-            </>
+            </PrintTypeProvider>
           ) : (
             <AccessoryCustomizer p={p} config={config} loading={loading} />
           )}
