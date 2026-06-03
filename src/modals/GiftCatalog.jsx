@@ -234,16 +234,18 @@ function SortSelect({ value, onChange }) {
   );
 }
 
-function ProductImage({ src, alt, pad = 16, radius = 'var(--gb-r-md)' }) {
+function ProductImage({ src, alt, pad = 16, radius = 'var(--gb-r-md)', h }) {
   const [loaded, setLoaded] = useState(false);
-  // Square via padding-ratio (height derived from width), NOT `aspect-ratio`:
-  // Chromium miscomputes aspect-ratio box heights under a fractional `zoom`
-  // (the catalog's zoom-scale dev setting), so the card renders taller than
-  // its grid row and the row below overlaps it. padding-bottom:100% scales
-  // cleanly under zoom; children go absolute since the box height comes from
-  // the padding.
+  // Image-box height. The product grid passes a FIXED pixel height (`h`):
+  // under the modals CSS `zoom` (scales.js applies real `zoom` to the mount
+  // root), a percentage/aspect-derived height mis-rounds, so cards render
+  // taller than their grid track and the next row overlaps. A fixed px height
+  // scales predictably under `zoom`, keeping every card — and every row — the
+  // same height. (No `h` → square via padding-ratio, for the detail panel's
+  // single image where there's no grid to creep.)
+  const box = h ? { height: h } : { height: 0, paddingBottom: '100%' };
   return (
-    <div style={{ position: 'relative', width: '100%', height: 0, paddingBottom: '100%', background: '#f4f4f1', borderRadius: radius, overflow: 'hidden', border: '1px solid var(--gb-border-subtle)' }}>
+    <div style={{ position: 'relative', width: '100%', ...box, background: '#f4f4f1', borderRadius: radius, overflow: 'hidden', border: '1px solid var(--gb-border-subtle)' }}>
       {!loaded && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid #d8d8d2', borderTopColor: '#a8a89e', animation: 'gb-spin .8s linear infinite' }} />
@@ -283,7 +285,7 @@ function ProductCard({ p, compact, showRating, active, inProposal, onClick }) {
         transition: 'transform var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)',
       }}>
       <div style={{ position: 'relative' }}>
-        <ProductImage src={p.img} alt={p.title} pad={compact ? 12 : 16} />
+        <ProductImage src={p.img} alt={p.title} pad={compact ? 12 : 16} h={compact ? 132 : 156} />
         {hasPromo(p) && (
           <span style={{ position: 'absolute', top: 7, left: 7, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .3, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-success-solid, #2e9e5b)', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>{p.promo.label}</span>
         )}

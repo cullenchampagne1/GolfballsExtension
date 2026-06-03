@@ -462,7 +462,89 @@ export function orderItemField(rowEl, which) {
   if (which === 'unitPrice') { const s = price ? price.querySelectorAll('span') : null; return s && s[0] ? txt(s[0]) : null; }
   if (which === 'lineTotal') { const s = price ? price.querySelectorAll('span') : null; return s && s[1] ? txt(s[1]) : null; }
   if (which === 'itemId') { const b = rowEl.querySelector('[id^="btnItemException"]'); return b ? b.id.replace('btnItemException', '') : null; }
+  if (which === 'checkPrint') { const el = rowEl.querySelector('[id^="txtCheckPrint"]'); return el ? (el.value || '') : null; }
+  if (which === 'packerNote') { const el = rowEl.querySelector('[id^="txtPackerNote"]'); return el ? (el.value || '') : null; }
   return null;
+}
+
+/** The "Shipped To:" address block's rows (the most reliable customer
+ *  name/phone on a ViewOrder page). Returns the row texts. */
+function shipToRows(doc) {
+  const block = addressBlock(doc, 'Shipped To:');
+  return block ? block.split('\n').map((s) => s.trim()).filter(Boolean) : [];
+}
+
+/** Customer name off the order (the Shipped-To recipient). `which`:
+ *  'first' | 'last' | 'full'. Collapses the double-spaces the CRM emits. */
+export function orderCustomerName(doc, which) {
+  const rows = shipToRows(doc);
+  const full = (rows[0] || '').replace(/\s+/g, ' ').trim();
+  if (!full) return null;
+  if (which === 'full') return full;
+  const parts = full.split(' ');
+  if (which === 'first') return parts[0] || null;
+  if (which === 'last')  return parts.length > 1 ? parts.slice(1).join(' ') : '';
+  return full;
+}
+
+/** Customer phone off the order — the Shipped-To block's phone row. */
+export function orderCustomerPhone(doc) {
+  const rows = shipToRows(doc);
+  for (const r of rows) {
+    if (/\(?\d{3}\)?[\s.-]*\d{3}[\s.-]*\d{4}/.test(r)) return r;
+  }
+  return null;
+}
+
+/** Applied order tags — the active chips in #CurrentTag (NOT the full
+ *  checkbox modal, which renders everything unchecked). Returns a
+ *  comma-joined string ("HoldShipment, DoNotShipUSPS, …") so templates can
+ *  print it and match rules can `contains` a tag name. */
+export function orderTags(doc) {
+  const out = [];
+  for (const s of doc.querySelectorAll('#CurrentTag span[id^="CurrentTag-"]')) {
+    const t = (s.textContent || '').trim();
+    if (t) out.push(t);
+  }
+  return out.join(', ');
+}
+
+/** The order's credit-card "Total Charge" (in the yellow Order Charges
+ *  portlet). Null when the order has no charges table. */
+export function orderChargeTotal(doc) {
+  const scope = doc.querySelector('.portlet.box.yellow') || doc;
+  for (const b of scope.querySelectorAll('b')) {
+    if ((b.textContent || '').trim().toLowerCase() === 'total charge') {
+      const td = b.closest('td');
+      const next = td && td.nextElementSibling;
+      if (!next) return null;
+      const vb = next.querySelector('b') || next;
+      return (vb.textContent || '').trim() || null;
+    }
+  }
+  return null;
+}
+
+/** Whether the order has credit-card charges (vs the "No credit cards on
+ *  order to charge." placeholder). Returns 'true'/'false' for the bool type. */
+export function orderHasCharges(doc) {
+  const yellow = doc.querySelector('.portlet.box.yellow');
+  if (!yellow) return 'false';
+  return /no credit cards on order/i.test(yellow.textContent || '') ? 'false' : 'true';
+}
+
+/** The Order Assembly / fulfillment status URL (the iframe target the
+ *  portlet's tools onclick points at), built from the orderID as a
+ *  fallback. The live status itself renders inside that iframe, so the URL
+ *  is the actionable thing we can surface. */
+export function orderFulfillmentUrl(doc) {
+  const tools = doc.querySelector('[onclick*="OrderStatus.html"]');
+  if (tools) {
+    const m = (tools.getAttribute('onclick') || '').match(/(https?:\/\/[^'"]*OrderStatus\.html[^'"]*)/i);
+    if (m) return m[1];
+  }
+  const orderID = orderHeaderField(doc, 'order');
+  return orderID ? `https://operations.gbcadmin.com/fulfillment/OrderStatus.html?orderID=${orderID}` : null;
 }
 
 /** The order's "Add Payment" link, if the order carries one. Mirrors the
@@ -533,6 +615,12 @@ export const FN_REGISTRY = {
   addressBlock,
   orderLineItemRows,
   orderItemField,
+  orderCustomerName,
+  orderCustomerPhone,
+  orderTags,
+  orderChargeTotal,
+  orderHasCharges,
+  orderFulfillmentUrl,
   orderPaymentLink,
   orderActionUrl,
 };
