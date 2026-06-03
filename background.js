@@ -16,7 +16,9 @@ importScripts('defaults.js');
     async hide(...keys) { const m = await load(); for (const k of norm(keys)) m[k] = true; save(m); console.log('[gb] now hidden:', Object.keys(m)); return Object.keys(m); },
     async show(...keys) { const m = await load(); for (const k of norm(keys)) delete m[k]; save(m); console.log('[gb] still hidden:', Object.keys(m)); return Object.keys(m); },
     async clear() { save({}); console.log('[gb] all settings visible again'); return []; },
-    help() { console.log('__gbSecret.hide("key", …) · .show("key", …) · .list() · .clear()  — keys: feature-flag keys (taskListEnabled, giftCatalogEnabled, …) or dev-setting keys (giftCatalog.scale, …)'); },
+    async hideDev() { const m = await load(); m['__devSection'] = true; save(m); chrome.storage.local.remove('devSettings'); console.log('[gb] Developer section hidden + dev fields reset to defaults'); return true; },
+    async showDev() { const m = await load(); delete m['__devSection']; save(m); console.log('[gb] Developer section visible again'); return false; },
+    help() { console.log('__gbSecret.hide("key", …) · .show(…) · .list() · .clear() · .hideDev() · .showDev()  — keys: feature-flag keys (taskListEnabled, …) or dev-setting keys (giftCatalog.scale, …)'); },
   };
 })();
 

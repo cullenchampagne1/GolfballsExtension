@@ -20,6 +20,10 @@ import { useEffect, useState } from 'react';
 
 export const STORAGE_KEY = 'secret_settings';
 
+/** Reserved secret key: when present, the ENTIRE Developer Settings section is
+ *  hidden from the UI (set via `__gbSecret.hideDev()`). Not a real setting. */
+export const DEV_SECTION_KEY = '__devSection';
+
 const hasChromeStorage = () =>
   typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local;
 
@@ -68,11 +72,28 @@ export function installSecretConsole(target) {
     async hide(...keys) { const m = await loadSecretSettings(); for (const k of norm(keys)) m[k] = true; saveSecretSettings(m); console.log('[gb] now hidden:', Object.keys(m)); return Object.keys(m); },
     async show(...keys) { const m = await loadSecretSettings(); for (const k of norm(keys)) delete m[k]; saveSecretSettings(m); console.log('[gb] still hidden:', Object.keys(m)); return Object.keys(m); },
     async clear() { saveSecretSettings({}); console.log('[gb] all settings visible again'); return []; },
+    // Ship a non-dev build: hide the entire Developer Settings section AND
+    // reset every dev field to its default (we remove the devSettings storage
+    // key, so loadDevSettings falls back to defaults). Reversible with showDev()
+    // (the section comes back; previously-tweaked dev values stay at defaults).
+    async hideDev() {
+      const m = await loadSecretSettings(); m[DEV_SECTION_KEY] = true; saveSecretSettings(m);
+      try { if (hasChromeStorage()) chrome.storage.local.remove('devSettings'); } catch { /* */ }
+      console.log('[gb] Developer section hidden + all dev fields reset to defaults');
+      return true;
+    },
+    async showDev() {
+      const m = await loadSecretSettings(); delete m[DEV_SECTION_KEY]; saveSecretSettings(m);
+      console.log('[gb] Developer section visible again');
+      return false;
+    },
     help() { console.log('%c__gbSecret','font-weight:bold',
       '\n  .hide("key", …)   hide setting(s) from the settings UI (value kept)' +
       '\n  .show("key", …)   un-hide' +
       '\n  .list()           list hidden keys' +
       '\n  .clear()          show everything' +
+      '\n  .hideDev()        hide the whole Developer Settings section + reset dev fields (for non-dev builds)' +
+      '\n  .showDev()        bring the Developer section back' +
       '\n  keys = feature-flag keys (taskListEnabled, giftCatalogEnabled, …) or dev-setting keys (giftCatalog.scale, …)'); },
   };
   try { Object.defineProperty(t, '__gbSecret', { value: api, configurable: true }); } catch { t.__gbSecret = api; }

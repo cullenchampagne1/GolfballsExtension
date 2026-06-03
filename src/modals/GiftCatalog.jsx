@@ -4,7 +4,7 @@ import { Btn, IconBtn, Tag, Dot } from '../ui/index.js';
 import { Icon, I } from '../ui/icons.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { loadCatalog, clearCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
-import { loadDevSettings, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
+import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock } from './giftCustomize.jsx';
 
 /* ───────────────────────────────────────────────────────────────
@@ -691,6 +691,12 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const toggleBrand = (b) => setSelBrands((s) => { const n = new Set(s); n.has(b) ? n.delete(b) : n.add(b); return n; });
   const [cat, setCat] = useState('all');
   const [sort, setSort] = useState('popular');
+  // Seed sort/density from dev settings (giftCatalog.defaultSort / .density);
+  // re-applies only when the setting itself changes, so a user's in-session
+  // sort choice isn't clobbered.
+  const dsSort = useDevSetting('giftCatalog.defaultSort');
+  useEffect(() => { if (dsSort) setSort(dsSort); }, [dsSort]);
+  const dsDensity = useDevSetting('giftCatalog.density');
   const [selected, setSelected] = useState(null);
   const [special, setSpecial] = useState(null); // 'sale' | 'logo' | null
   const [proposal, setProposal] = useState([]);
@@ -701,7 +707,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const [open, setOpen] = useState(true);
   const doClose = () => setOpen(false);
 
-  const compact = density === 'compact';
+  const compact = (dsDensity || density) === 'compact';
 
   const inProposal = (id) => proposal.some((l) => l.id === id);
   const propTotal = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);

@@ -230,6 +230,42 @@ export const DEV_SETTINGS = [
     unit:    'h',
   },
   {
+    key:     'giftCatalog.defaultSort',
+    label:   'Gifting Catalog: default sort',
+    desc:    'Which sort the catalog opens on.',
+    type:    'select',
+    default: 'popular',
+    options: [
+      { value: 'popular',   label: 'Most reviewed' },
+      { value: 'priceLow',  label: 'Price: low → high' },
+      { value: 'priceHigh', label: 'Price: high → low' },
+      { value: 'name',      label: 'Name A–Z' },
+    ],
+  },
+  {
+    key:     'giftCatalog.density',
+    label:   'Gifting Catalog: card density',
+    desc:    'Comfortable shows larger product cards; compact fits more per row.',
+    type:    'select',
+    default: 'comfortable',
+    options: [
+      { value: 'comfortable', label: 'Comfortable' },
+      { value: 'compact',     label: 'Compact' },
+    ],
+  },
+  {
+    key:     'submitProof.defaultOrderType',
+    label:   'Submit Proof: default order type',
+    desc:    'Which order type the Submit Proof modal pre-selects.',
+    type:    'select',
+    default: 'Live Order',
+    options: [
+      { value: 'Live Order',      label: 'Live' },
+      { value: 'Potential Order', label: 'Potential' },
+      { value: 'Jardine Order',   label: 'Jardine' },
+    ],
+  },
+  {
     key:     'popup.forceMatchedCount',
     label:   'Popup: force matched count',
     desc:    'Force the first N templates in the popup dropdown to render with the matched-template styling (brand dot + Matched group). 0 = off.',

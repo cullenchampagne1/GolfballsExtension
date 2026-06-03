@@ -32,9 +32,10 @@ export const FEATURE_DEFAULTS = {
   quickTaskEnabled:         true,   // Quick Task modal + shelf action
   crmNewContactEnabled:     true,   // CRM Create Contact modal + Ctrl+Q keybind
   textPreviewEnabled:       true,   // Text/chat transcript row preview (was sharing emailPreviewEnabled)
-  golfballViewerEnabled:    true,   // 3D golfball viewer
-  campaignEditorEnabled:    true,   // campaign editor
+  campaignEditorEnabled:    true,   // campaign editor (opened from CRM Search / Tasks)
 };
+// NOTE: the 3D golfball viewer is part of the Image Viewer (it renders inside
+// ImagePreview.jsx), so it has no separate flag — `imagePreviewEnabled` covers it.
 
 /** Default keyboard shortcuts. */
 export const KEYBOARD_SHORTCUTS_DEFAULTS = {
@@ -57,150 +58,33 @@ export async function saveKeyboardShortcuts(shortcuts) {
 
 /** Display metadata + render order for the settings toggles. */
 export const FEATURE_FLAGS = [
-  {
-    key: 'emailTemplatesEnabled',
-    name: 'Email Templates',
-    desc: 'Shows the template dropdown, resolved-variables readout, and Send button in the popup.',
-    icon: 'mail',
-  },
-  {
-    key: 'chargeEnabled',
-    name: 'Charge Card',
-    desc: 'Shows the Charge Card / Refund button in the email template popup. Disable if you don\'t process payments through the extension.',
-    icon: 'card',
-  },
-  {
-    key: 'orderEditEnabled',
-    name: 'Order Edit',
-    desc: 'Shows the Order Edit button in the email template popup. Disable if you don\'t use the order edit modal.',
-    icon: 'edit',
-  },
-  {
-    key: 'submitProofEnabled',
-    name: 'Submit Proof',
-    desc: 'Shows the Submit Proof button for sending art proofs directly from the order page.',
-    icon: 'send',
-  },
-  {
-    key: 'marginCalcEnabled',
-    name: 'Margin Calculator',
-    desc: 'Displays margin calculations and profit metrics on order pages.',
-    icon: 'bolt',
-  },
-  {
-    key: 'watchListEnabled',
-    name: 'Watchlist',
-    desc: 'Enables the watchlist feature to track orders across sessions.',
-    icon: 'eye',
-  },
-  {
-    key: 'taskListEnabled',
-    name: 'Task List',
-    desc: 'Shows an integrated task list for tracking order-related todos.',
-    icon: 'check',
-  },
-  {
-    key: 'crmSearchEnabled',
-    name: 'CRM Search',
-    desc: 'Quick search bar for looking up customers and orders in the CRM.',
-    icon: 'search',
-  },
-  {
-    key: 'crmQueryBuilderEnabled',
-    name: 'CRM Query Builder',
-    desc: 'Advanced query builder for filtering CRM data with complex conditions.',
-    icon: 'filter',
-  },
-  {
-    key: 'emailPreviewEnabled',
-    name: 'Email Preview',
-    desc: 'Hover over any email row in the Case Email History portlet to see a popup preview of the email content - no download required.',
-    icon: 'mail',
-  },
-  {
-    key: 'imagePreviewEnabled',
-    name: 'Image Viewer',
-    desc: 'Shows a View Logo hover button over product logo images on order pages - preview, download, or submit proof links without leaving the page.',
-    icon: 'eye',
-  },
-  {
-    key: 'calendarEnabled',
-    name: 'Calendar',
-    desc: 'Shows order ship dates and production timeline on a visual calendar.',
-    icon: 'cog',
-  },
-  {
-    key: 'autoPushEnabled',
-    name: 'Auto Push',
-    desc: 'Automatically pushes order updates to external systems when status changes.',
-    icon: 'send',
-  },
-  {
-    key: 'phoneFinderEnabled',
-    name: 'Phone Finder',
-    desc: 'Extracts and formats phone numbers from order data for quick copying.',
-    icon: 'search',
-  },
-  {
-    key: 'copyIdsEnabled',
-    name: 'Copy IDs',
-    desc: 'Shows a Copy button in the Order List portlet title bar on index pages, writing all order IDs as clickable links to the clipboard.',
-    icon: 'copy',
-  },
-  {
-    key: 'signifydGlowEnabled',
-    name: 'Signifyd Glow',
-    desc: 'Adds a subtle glow effect to orders based on their Signifyd score status.',
-    icon: 'alert',
-  },
-  {
-    key: 'actionsShelfEnabled',
-    name: 'Quick Actions Shelf',
-    desc: 'The floating bottom-right shelf of page-aware quick actions (Shift×2 to open). Disable to remove it entirely. Individual actions also follow their own feature flags.',
-    icon: 'bolt',
-  },
-  {
-    key: 'giftCatalogEnabled',
-    name: 'Gifting Catalog',
-    desc: 'The corporate gifting catalog, product customization, and monogram tools. Also controls the catalog action in the quick-actions shelf.',
-    icon: 'card',
-  },
-  {
-    key: 'callLogEnabled',
-    name: 'Call Log',
-    desc: 'Log calls from contact/account pages — both the modal and the Call / Log-incoming-call shelf actions.',
-    icon: 'phone',
-  },
-  {
-    key: 'quickTaskEnabled',
-    name: 'Quick Task',
-    desc: 'Create a quick task for a contact — the modal and the shelf action.',
-    icon: 'check',
-  },
-  {
-    key: 'crmNewContactEnabled',
-    name: 'CRM New Contact',
-    desc: 'Create a new CRM contact (modal + Ctrl+Q shortcut).',
-    icon: 'user',
-  },
-  {
-    key: 'textPreviewEnabled',
-    name: 'Text Preview',
-    desc: 'Hover preview of case notes / chat transcripts. (Separate from Email Preview.)',
-    icon: 'mail',
-  },
-  {
-    key: 'golfballViewerEnabled',
-    name: 'Golfball 3D Viewer',
-    desc: 'Interactive 3D golfball viewer for logo placement previews.',
-    icon: 'eye',
-  },
-  {
-    key: 'campaignEditorEnabled',
-    name: 'Campaign Editor',
-    desc: 'The campaign / template campaign editor.',
-    icon: 'edit',
-  },
+  // ── Email & Templates ──
+  { key: 'emailTemplatesEnabled', section: 'Email & Templates', name: 'Email Templates',  desc: 'Template dropdown, resolved variables, and Send button in the popup.', icon: 'mail' },
+  { key: 'chargeEnabled',         section: 'Email & Templates', name: 'Charge Card',       desc: 'Charge / Refund button in the email popup.',                          icon: 'card' },
+  { key: 'orderEditEnabled',      section: 'Email & Templates', name: 'Order Edit',        desc: 'Order Edit button in the email popup.',                               icon: 'edit' },
+  { key: 'submitProofEnabled',    section: 'Email & Templates', name: 'Submit Proof',      desc: 'Send art proofs from the order page.',                                icon: 'send' },
+  { key: 'emailPreviewEnabled',   section: 'Email & Templates', name: 'Email Preview',     desc: 'Hover preview of emails in Case Email History.',                      icon: 'mail' },
+  { key: 'textPreviewEnabled',    section: 'Email & Templates', name: 'Text Preview',      desc: 'Hover preview of case notes / chat transcripts.',                     icon: 'mail' },
+  { key: 'campaignEditorEnabled', section: 'Email & Templates', name: 'Campaign Editor',   desc: 'Edit template campaigns (from CRM Search / Tasks).',                   icon: 'edit' },
+  // ── CRM & Contacts ──
+  { key: 'crmSearchEnabled',       section: 'CRM & Contacts', name: 'CRM Search',        desc: 'Quick search for customers and orders (Ctrl+K).',  icon: 'search' },
+  { key: 'crmQueryBuilderEnabled', section: 'CRM & Contacts', name: 'CRM Query Builder', desc: 'Advanced multi-condition CRM filtering.',          icon: 'filter' },
+  { key: 'crmNewContactEnabled',   section: 'CRM & Contacts', name: 'New Contact',       desc: 'Quick-create a CRM contact (Ctrl+Q).',             icon: 'user' },
+  { key: 'callLogEnabled',         section: 'CRM & Contacts', name: 'Call Log',          desc: 'Log calls from contact / account pages.',          icon: 'phone' },
+  { key: 'quickTaskEnabled',       section: 'CRM & Contacts', name: 'Quick Task',        desc: 'Create a quick task for a contact.',               icon: 'check' },
+  { key: 'taskListEnabled',        section: 'CRM & Contacts', name: 'Task List',         desc: 'Full task list for order todos (Ctrl+X).',         icon: 'check' },
+  // ── Orders & Pricing ──
+  { key: 'marginCalcEnabled',   section: 'Orders & Pricing', name: 'Margin Calculator', desc: 'Margin + profit metrics on order pages (Ctrl+M).', icon: 'bolt' },
+  { key: 'watchListEnabled',    section: 'Orders & Pricing', name: 'Watchlist',         desc: 'Track orders across sessions.',                    icon: 'eye' },
+  { key: 'calendarEnabled',     section: 'Orders & Pricing', name: 'Order Dates',       desc: 'Ship dates + production timeline calendar.',       icon: 'cog' },
+  { key: 'autoPushEnabled',     section: 'Orders & Pricing', name: 'Auto Push',         desc: 'Auto-push order date/note updates to the order.',  icon: 'send' },
+  { key: 'copyIdsEnabled',      section: 'Orders & Pricing', name: 'Copy IDs',          desc: 'Copy all order IDs on the index page.',            icon: 'copy' },
+  { key: 'signifydGlowEnabled', section: 'Orders & Pricing', name: 'Signifyd Glow',     desc: 'Glow orders by Signifyd score.',                   icon: 'alert' },
+  { key: 'phoneFinderEnabled',  section: 'Orders & Pricing', name: 'Phone Finder',      desc: 'Scan a contact’s orders for a phone number.',      icon: 'search' },
+  // ── Tools ──
+  { key: 'imagePreviewEnabled', section: 'Tools', name: 'Image Viewer',         desc: 'View / extract logo images + the 3D ball preview.', icon: 'eye' },
+  { key: 'giftCatalogEnabled',  section: 'Tools', name: 'Gifting Catalog',      desc: 'Gifting catalog, customization, and monograms.',    icon: 'card' },
+  { key: 'actionsShelfEnabled', section: 'Tools', name: 'Quick Actions Shelf',  desc: 'Floating bottom-right quick-actions shelf (Shift×2).', icon: 'bolt' },
 ];
 
 /** Read saved flags merged over the defaults. Migrates legacy key names. */

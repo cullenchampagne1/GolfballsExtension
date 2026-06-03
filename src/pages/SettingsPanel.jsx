@@ -26,7 +26,7 @@ import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { Tag } from '../ui/components/Tag.jsx';
 import { CollapsibleSection } from '../ui/components/CollapsibleSection.jsx';
 import { DEV_SETTINGS, defaultDevSettings, loadDevSettings, saveDevSettings } from '../lib/devSettings.js';
-import { useSecretSettings, isSecret, installSecretConsole } from '../lib/secretSettings.js';
+import { useSecretSettings, isSecret, installSecretConsole, DEV_SECTION_KEY } from '../lib/secretSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    SettingsPanel — the fully-featured Manage → Settings page.
@@ -613,6 +613,9 @@ function DevSettingRow({ def, value, onChange }) {
         {isString && (
           <StringCell def={def} value={value} onChange={onChange} />
         )}
+        {isSelect && (
+          <SelectCell def={def} value={value} onChange={onChange} />
+        )}
         {isAction && (
           <Btn
             size="sm"
@@ -645,6 +648,9 @@ export function SettingsPanel() {
   // feature on/off and remove its switch so reps can't see or change it.
   const [secret] = useSecretSettings();
   const visible = (key) => !isSecret(secret, key);
+  // `__gbSecret.hideDev()` sets this — hides the whole Developer Settings
+  // section for non-dev builds.
+  const devSectionHidden = isSecret(secret, DEV_SECTION_KEY);
 
   /* Sort registry alphabetically once; filter on the user's query
      case-insensitively against label / desc / key so they can find a
@@ -753,12 +759,20 @@ export function SettingsPanel() {
         </div>
       </section>
 
-      {/* Features */}
+      {/* Features — grouped into sections (the `section` field on each flag),
+          rendered in first-seen order so flags.js controls grouping + order. */}
       <section>
         <SectionLabel>Features</SectionLabel>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {regularFeatures.map((f) => (
-            <FeatureSpotlight key={f.key} on={!!flags[f.key]} icon={getIcon(f.icon)} name={f.name} desc={f.desc} onChange={() => toggleFlag(f.key)} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {[...new Set(regularFeatures.map(f => f.section || 'Other'))].map((sec) => (
+            <div key={sec}>
+              <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)', marginBottom: 8 }}>{sec}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {regularFeatures.filter(f => (f.section || 'Other') === sec).map((f) => (
+                  <FeatureSpotlight key={f.key} on={!!flags[f.key]} icon={getIcon(f.icon)} name={f.name} desc={f.desc} onChange={() => toggleFlag(f.key)} />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       </section>
@@ -912,6 +926,7 @@ export function SettingsPanel() {
           and scrolls internally (native scrollbar hidden via the
           CollapsibleSection's `hideScrollbar` flag) so the page doesn't
           grow as the registry fills up. */}
+      {!devSectionHidden && (
       <section>
         <CollapsibleSection
           icon={<I.bolt />}
@@ -974,6 +989,7 @@ export function SettingsPanel() {
           )}
         </CollapsibleSection>
       </section>
+      )}
     </div>
   );
 }

@@ -248,6 +248,10 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
   // (e.g. "cullen") — used to auto-select their name in the rep dropdown.
   const emailLocalPart = useDevSetting('email.localPart');
   const [orderType, setOrderType]     = useState('Live Order');
+  // Seed from the submitProof.defaultOrderType dev setting (re-applies only on
+  // setting change, so a manual pick this session isn't overwritten).
+  const dsOrderType = useDevSetting('submitProof.defaultOrderType');
+  useEffect(() => { if (dsOrderType) setOrderType(dsOrderType); }, [dsOrderType]);
   const [orderValue, setOrderValue]   = useState('Under $2k');
   const [flags, setFlags] = useState({ rush: false, canada: false, dropship: false });
   const [itemLink, setItemLink] = useState('');

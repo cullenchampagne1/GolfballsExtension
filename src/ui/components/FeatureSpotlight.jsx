@@ -69,7 +69,7 @@ export function FeatureSpotlight({ on, icon, name, desc, onChange, tone, experim
           {experimental && <Tag tone="warning" size="xs">EXPERIMENTAL</Tag>}
         </div>
         {desc && (
-          <div style={{ fontSize: s.desc, color: 'var(--gb-text-tertiary)', marginTop: 3, lineHeight: 1.5 }}>
+          <div title={desc} style={{ fontSize: s.desc, color: 'var(--gb-text-tertiary)', marginTop: 3, lineHeight: 1.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {desc}
           </div>
         )}
