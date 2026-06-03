@@ -70,7 +70,7 @@
   --gb-brand:           #6e901d;
   --gb-brand-dark:      #5f7d18;
   --gb-brand-border:    #4a6b14;
-  --gb-text-on-brand:   #d8eeaa;
+  --gb-text-on-brand:   #ffffff;
 
   /* ─── Backdrop ─────────────────────────── */
   --gb-backdrop:        rgba(0, 0, 0, 0.6);
@@ -143,7 +143,7 @@
   --gb-success:         #5cd99a;
   --gb-info:            #6ab0f3;
 
-  --gb-text-on-brand:   #ecf3df;   /* off-white reads better on the deeper midnight brand than near-black did */
+  --gb-text-on-brand:   #ffffff;   /* white text on the brand fill (Send / Import / primary buttons) */
   --gb-backdrop:        rgba(0, 0, 0, 0.75);
 }
 
