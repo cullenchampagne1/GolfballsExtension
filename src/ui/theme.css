@@ -292,6 +292,23 @@
 .gb-thin-scroll::-webkit-scrollbar-thumb:hover { background: var(--gb-border-strong); }
 
 /* ════════════════════════════════════════════════════════════
+   Focus outline — kill the browser's default blue focus ring on
+   extension form controls. We render our own ring via box-shadow
+   (--gb-focus-ring) on the styled wrappers, so the native outline is
+   redundant + off-brand. Scoped to extension mount roots
+   ([data-gb-scale] — set on every modal host, popup, editor, shelf)
+   so the host CRM page's own inputs are never touched. Buttons keep
+   their outline for keyboard accessibility.
+════════════════════════════════════════════════════════════ */
+[data-gb-scale] input:focus,        [data-gb-scale] input:focus-visible,
+[data-gb-scale] textarea:focus,     [data-gb-scale] textarea:focus-visible,
+[data-gb-scale] select:focus,       [data-gb-scale] select:focus-visible,
+[data-gb-scale] [contenteditable]:focus,
+[data-gb-scale] [contenteditable]:focus-visible {
+  outline: none;
+}
+
+/* ════════════════════════════════════════════════════════════
    Toast entry keyframes — needed by the notification_handoff
    toast family (PillToast / ActionToast / StepToast / etc.).
 ════════════════════════════════════════════════════════════ */
