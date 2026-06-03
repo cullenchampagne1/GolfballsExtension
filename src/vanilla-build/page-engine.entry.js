@@ -32,6 +32,7 @@ import {
 } from '../lib/page-engine/index.js';
 
 import { contactSchema, accountSchema } from '../lib/page-schemas/contact.js';
+import { orderSchema } from '../lib/page-schemas/order.js';
 import { listSchemas, getSchemaById } from '../lib/page-schemas/registry.js';
 import { evalTree, treeUsesVars, varsReferenced, isGroupedTree, applyOp, arrayQuantifier } from '../lib/matchEngine.js';
 import { getPageContext, detectPageType } from '../lib/pageContext.js';
@@ -90,6 +91,7 @@ const api = Object.freeze({
   schemas: Object.freeze({
     contact: contactSchema,
     account: accountSchema,
+    order: orderSchema,
   }),
 });
 

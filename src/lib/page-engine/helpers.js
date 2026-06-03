@@ -312,6 +312,187 @@ function _taskRowsForPortlet(doc, caption) {
   return rows.map((el) => ({ el, key: el.id.slice('taskrow_'.length) }));
 }
 
+/* ── Order page (ViewOrder) helpers ───────────────────────────────
+   The ViewOrder summary is a rendered confirmation email — most of it
+   has no ids, so these read by text-landmark / structural position. */
+
+/** First anchor on the page carrying ?<param>=<value> → the value. The
+ *  ViewOrder page has no reliable id for orderID/customerID, but both ride
+ *  in dozens of action hrefs, so this is the robust source. */
+export function anyHrefParam(doc, paramName) {
+  if (!paramName) return null;
+  let re;
+  try { re = new RegExp('[?&]' + paramName + '=([^&#"]+)', 'i'); }
+  catch { return null; }
+  const anchors = doc.querySelectorAll('a[href]');
+  for (const a of anchors) {
+    const m = (a.getAttribute('href') || '').match(re);
+    if (m) { try { return decodeURIComponent(m[1]); } catch { return m[1]; } }
+  }
+  return null;
+}
+
+/** Parse the "Order #{orderID}-{customerID}" header text. `which`:
+ *    'order'       → orderID (digits before the dash)
+ *    'orderString' → "{orderID}-{customerID}" incl. a revision letter
+ *    'customer'    → customerID (digits after dash, trailing letter dropped) */
+export function orderHeaderField(doc, which) {
+  const text = (doc && doc.body ? doc.body.textContent : '') || '';
+  const m = text.match(/Order #(\d+)-(\d+[A-Za-z]?)/);
+  if (!m) {
+    // Fall back to the URL params carried in action hrefs.
+    if (which === 'order') return anyHrefParam(doc, 'orderID');
+    if (which === 'customer') return anyHrefParam(doc, 'customerID');
+    return null;
+  }
+  if (which === 'order') return m[1];
+  if (which === 'orderString') return orderStringField(doc);
+  if (which === 'customer') return m[2].replace(/[A-Za-z]+$/, '');
+  return null;
+}
+
+/** The canonical order string ("{orderID}-{customerID}", possibly with a
+ *  revision letter). Read from the print/tracking links — the header text
+ *  can't be used directly because textContent glues the following
+ *  "Customer #…" onto the number (a spurious trailing "C"). Falls back to
+ *  rebuilding from the (letter-stripped) order + customer ids. */
+export function orderStringField(doc) {
+  const a = doc.querySelector('a[href*="printOrder.aspx"], a[href*="page=orderTracking"]');
+  if (a) {
+    const href = a.getAttribute('href') || '';
+    let m = href.match(/[?&]orderString=(\d+-\d+[A-Za-z]?)/i);
+    if (m) return m[1];
+    m = href.match(/printOrder\.aspx\?orderID=(\d+-\d+[A-Za-z]?)/i);
+    if (m) return m[1];
+  }
+  const order = orderHeaderField(doc, 'order');
+  const customer = orderHeaderField(doc, 'customer');
+  return (order && customer) ? `${order}-${customer}` : null;
+}
+
+/** The order status — prefer the change-status dropdown's selected option,
+ *  fall back to the "Order Status: <b>X</b>" header in the red portlet. */
+export function orderStatusText(doc) {
+  const sel = doc.querySelector('#ctl00_allowedOrderStatuses');
+  if (sel && sel.tagName === 'SELECT' && sel.selectedIndex >= 0) {
+    const opt = sel.options[sel.selectedIndex];
+    const t = opt ? (opt.textContent || '').trim() : '';
+    if (t) return t;
+  }
+  for (const th of doc.querySelectorAll('th')) {
+    const t = (th.textContent || '').trim();
+    if (/^Order Status:/i.test(t)) {
+      const b = th.querySelector('b');
+      return b ? (b.textContent || '').trim() : t.replace(/^Order Status:\s*/i, '');
+    }
+  }
+  return null;
+}
+
+/** The order date — the first text node of the header `td.date` (before the
+ *  customer-email <a>). textContent alone would glue the email on. */
+export function orderDateText(doc) {
+  const td = doc.querySelector('td.date');
+  if (!td) return null;
+  for (const n of td.childNodes) {
+    if (n.nodeType === 3) { const t = (n.textContent || '').trim(); if (t) return t; }
+  }
+  return (td.textContent || '').trim() || null;
+}
+
+/** A row of `table.totals` whose label matches → its value cell text
+ *  ($amount). Generic so the variable label set (Sales Tax / Promotion /
+ *  Standard|Economy Shipping) all read off one helper. */
+export function totalsRow(doc, labelPattern) {
+  const table = doc.querySelector('table.totals');
+  if (!table || !labelPattern) return null;
+  let re; try { re = new RegExp(labelPattern, 'i'); } catch { return null; }
+  for (const tr of table.querySelectorAll('tr')) {
+    const cells = tr.children;
+    if (cells.length < 2) continue;
+    if (re.test((cells[0].textContent || '').trim())) {
+      return (cells[cells.length - 1].textContent || '').trim() || null;
+    }
+  }
+  return null;
+}
+
+/** A labelled address block inside #customerInfo ("Shipped To:" /
+ *  "Billed To:" / "Billing Address:") → its lines joined by newlines. */
+export function addressBlock(doc, headerText) {
+  const info = doc.querySelector('#customerInfo');
+  if (!info || !headerText) return null;
+  const target = String(headerText).trim().toLowerCase();
+  for (const h of info.querySelectorAll('.header')) {
+    if ((h.textContent || '').trim().toLowerCase().includes(target)) {
+      let tbl = h.nextElementSibling;
+      while (tbl && tbl.tagName !== 'TABLE') tbl = tbl.nextElementSibling;
+      if (!tbl) return null;
+      const lines = Array.from(tbl.querySelectorAll('td'))
+        .map((td) => (td.textContent || '').trim()).filter(Boolean);
+      return lines.join('\n') || null;
+    }
+  }
+  return null;
+}
+
+/** Per-product rows of the line-items table — one <tr> per product (the row
+ *  carrying the product's <a class="nodes"> name link). */
+export function orderLineItemRows(doc) {
+  const table = doc.querySelector('#ctl00_ctl02_cartTable');
+  if (!table) return [];
+  return Array.from(table.querySelectorAll('tr')).filter((tr) => tr.querySelector('a.nodes'));
+}
+
+/** Read one field off a line-item <tr> (rowFn). */
+export function orderItemField(rowEl, which) {
+  if (!rowEl) return null;
+  const txt = (el) => (el ? (el.textContent || '').trim() : null);
+  if (which === 'name') return txt(rowEl.querySelector('a.nodes'));
+  if (which === 'url') { const a = rowEl.querySelector('a.nodes'); return a ? (a.href || a.getAttribute('href')) : null; }
+  if (which === 'sku') {
+    const span = rowEl.querySelector('span[style*="font-size:10pt"]');
+    if (!span) return null;
+    const parts = (span.innerHTML || '').split(/<br\s*\/?>/i)
+      .map((s) => s.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : null;
+  }
+  const price = rowEl.querySelector('table.itemPriceTable');
+  if (which === 'qty') { const c = price && price.querySelector('tr') ? price.querySelector('tr').children[0] : null; return txt(c); }
+  if (which === 'unitPrice') { const s = price ? price.querySelectorAll('span') : null; return s && s[0] ? txt(s[0]) : null; }
+  if (which === 'lineTotal') { const s = price ? price.querySelectorAll('span') : null; return s && s[1] ? txt(s[1]) : null; }
+  if (which === 'itemId') { const b = rowEl.querySelector('[id^="btnItemException"]'); return b ? b.id.replace('btnItemException', '') : null; }
+  return null;
+}
+
+/** Build a ViewOrder action URL from the order's ids. Templates verified
+ *  across the sample orders. Returns null when the ids can't be resolved. */
+export function orderActionUrl(doc, name) {
+  const orderID = orderHeaderField(doc, 'order');
+  const orderString = orderStringField(doc);
+  const customerID = orderHeaderField(doc, 'customer');
+  if (!orderID) return null;
+  const ADMIN = 'https://api.golfballs.com/golfballs/adminnew/';
+  const ROOT = 'https://api.golfballs.com/golfballs/';
+  switch (name) {
+    case 'tracking':            return orderString ? `${ROOT}account.aspx?page=orderTracking&orderString=${orderString}` : null;
+    case 'printInvoice':        return orderString ? `${ROOT}printOrder.aspx?orderID=${orderString}&invoice=true` : null;
+    case 'emailCustomer':       return `${ADMIN}default.aspx?Page=37&orderID=${orderID}&emailCustomer=true`;
+    case 'addTracking':         return `${ADMIN}default.aspx?popup=1&folder=Orders&page=AddTracking&orderID=${orderID}`;
+    case 'createInvoice':       return `${ADMIN}Default.aspx?Folder=GreatPlains&Page=CreateInvoice&order=${orderID}`;
+    case 'updateShipping':      return `${ADMIN}default.aspx?Folder=orders%5Cviewordercontrols&Page=UpdateSelectedShipping&orderID=${orderID}`;
+    case 'addressValidation':   return `${ADMIN}default.aspx?Folder=orders&Page=AddressValidation&orderID=${orderID}`;
+    case 'editShippingAddress': return `${ADMIN}UpdateShippingAddress.aspx?orderID=${orderID}`;
+    case 'dropShip':            return `${ADMIN}default.aspx?page=DropShipOrder&folder=DropShip&orderID=${orderID}`;
+    case 'returnDoc':           return `${ADMIN}default.aspx?sop=${orderID}&Page=37&return=1`;
+    case 'reorder':             return `${ADMIN}default.aspx?orderID=${orderID}&Page=37&incorder=true`;
+    case 'econnectLog':         return `${ADMIN}default.aspx?Page=304&orderID=${orderID}`;
+    case 'itemPriority':        return `${ADMIN}Default.aspx?Page=200&orderID=${orderID}`;
+    case 'contactPage':         return customerID ? `${ADMIN}Default.aspx?Page=240&customerID=${customerID}` : null;
+    default: return null;
+  }
+}
+
 /** Registry — extract.js looks up by name when a schema field uses
  *  `extract: { fn: 'name', args: [...] }`. Order of params is
  *  always (doc, ...args). For row-scoped fns, extract.js routes via
@@ -329,6 +510,17 @@ export const FN_REGISTRY = {
   firstCellHref,
   openTaskRows,
   completedTaskRows,
+  // order page
+  anyHrefParam,
+  orderHeaderField,
+  orderStringField,
+  orderStatusText,
+  orderDateText,
+  totalsRow,
+  addressBlock,
+  orderLineItemRows,
+  orderItemField,
+  orderActionUrl,
 };
 
 /** Look up a named extractor. Returns null if not registered so

@@ -15,6 +15,7 @@
 ─────────────────────────────────────────────────────────────── */
 
 import { contactSchema, accountSchema } from './contact.js';
+import { orderSchema } from './order.js';
 
 /** All registered schemas, in detection priority order. Contact is
  *  more specific (it confirms via #tbContactId which is unique to
@@ -22,6 +23,10 @@ import { contactSchema, accountSchema } from './contact.js';
  *  page that ALSO carries an #AccountID hidden input still match
  *  contactSchema instead of accountSchema. */
 const SCHEMAS = [
+  /* Order first: its detect (page=ViewOrder OR #cartTable) is specific and
+     can't collide with the contact/account pages, so an early match avoids
+     any ambiguity. */
+  orderSchema,
   contactSchema,
   accountSchema,
 ];
