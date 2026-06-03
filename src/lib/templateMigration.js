@@ -137,8 +137,7 @@ function classifyVar(name, def, templateType) {
    ONE template. Pure — never mutates the input. */
 export function planTemplateMigration(template) {
   const out = { id: template.id, name: template.name, type: template.type, changes: [], result: template };
-  const vars = template && template.vars;
-  if (!vars || typeof vars !== 'object') return out;
+  const vars = (template && typeof template.vars === 'object' && template.vars) || {};
 
   const nextVars = {};
   let touched = false;
@@ -160,8 +159,23 @@ export function planTemplateMigration(template) {
     }
   }
 
-  if (touched) {
-    out.result = { ...template, vars: nextVars, varsMigratedVersion: MIGRATION_VERSION };
+  /* Scratch legacy order auto-match rules. They predate the order schema and
+     test classic DOM selectors / variables; now that order.* fields exist the
+     rep re-authors them as schema rules. Order templates only — account uses
+     accountConditions (already schema-capable), case uses caseRules. */
+  let clearRules = false;
+  if (template.type === 'order' && Array.isArray(template.rules) && template.rules.length > 0) {
+    clearRules = true;
+    out.changes.push({ name: '(auto-match rules)', action: 'clear-rules', from: `${template.rules.length} legacy rule(s)` });
+  }
+
+  if (touched || clearRules) {
+    out.result = {
+      ...template,
+      ...(touched ? { vars: nextVars } : {}),
+      ...(clearRules ? { rules: [] } : {}),
+      varsMigratedVersion: MIGRATION_VERSION,
+    };
   } else if (template.varsMigratedVersion !== MIGRATION_VERSION) {
     // Nothing to change, but stamp it so we don't re-scan next load.
     out.result = { ...template, varsMigratedVersion: MIGRATION_VERSION };
@@ -225,6 +239,7 @@ export function migrateTemplates(templates, opts = {}) {
       log(`  • "${p.name}" (${p.type || '—'})`);
       for (const c of p.changes) {
         if (c.action === 'convert') log(`      convert  ${c.name}: ${c.from} → ${c.to}`);
+        else if (c.action === 'clear-rules') log(`      CLEAR RULES ${c.name}: ${c.from} — re-author as schema rules`);
         else log(`      DEPRECATE ${c.name}: ${c.from} — ${c.reason}`);
       }
     }

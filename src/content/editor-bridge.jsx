@@ -461,11 +461,15 @@ async function init() {
   templates     = data.templates     || [];
   noteTemplates = data.noteTemplates || [];
   orderTabId    = data.orderTabId    || null;
-  /* One-version backwards-compat pass: lift legacy contact/account
-     variables onto the page engine. DRY-RUN for now — it only LOGS the
-     planned conversions/deprecations so they can be eyeballed on real
-     templates before we flip { dryRun:false } to persist. */
-  try { migrateTemplates(templates, { dryRun: true }); } catch (e) { console.warn('[gb] templateMigration dry-run failed', e); }
+  /* One-version backwards-compat pass: lift legacy contact/account/order
+     variables onto the page engine, and scratch legacy order auto-match
+     rules so they're re-authored against the order schema. Persists +
+     stamps each template (varsMigratedVersion) so it runs ONCE. The
+     console still logs everything it changed for the record. */
+  try {
+    const mig = migrateTemplates(templates, { dryRun: false });
+    if (mig.changed) { templates = mig.migrated; await saveTemplates(); }
+  } catch (e) { console.warn('[gb] templateMigration failed', e); }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', wireGearButton);
   } else {
