@@ -244,6 +244,9 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
   const [status, setStatus]   = useState('1');
   const [salesRepId, setSalesRepId]   = useState('');
   const [artistId, setArtistId]       = useState('');
+  // The rep's own name maps from their dev-setting sender local-part
+  // (e.g. "cullen") — used to auto-select their name in the rep dropdown.
+  const emailLocalPart = useDevSetting('email.localPart');
   const [orderType, setOrderType]     = useState('Live Order');
   const [orderValue, setOrderValue]   = useState('Under $2k');
   const [flags, setFlags] = useState({ rush: false, canada: false, dropship: false });
@@ -288,6 +291,28 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
   const [artists, setArtists] = useState(null);
   const [gallery, setGallery] = useState(null); // null = unknown, [] = loaded none / failed, [...] = ok
   const [dropdownsFailed, setDropdownsFailed] = useState(false);
+
+  // Auto-select the logged-in rep once the dropdown loads: match a rep whose
+  // name corresponds to the dev-setting email local-part (lowercased), so the
+  // rep doesn't have to hand-pick their own name. Only fires while no rep is
+  // chosen yet, so it never overrides a manual selection.
+  useEffect(() => {
+    if (salesRepId || !Array.isArray(reps) || reps.length === 0) return;
+    const lp = String(emailLocalPart || '').trim().toLowerCase();
+    if (!lp) return;
+    const norm = (s) => String(s || '').toLowerCase();
+    const match =
+      reps.find((r) => norm(r.txt).split(/\s+/).includes(lp)) ||            // "cullen" ∈ "Cullen Champagne"
+      reps.find((r) => norm(r.txt).replace(/\s+/g, '') === lp) ||           // "cullenchampagne"
+      (lp.length >= 4 && reps.find((r) => norm(r.txt).replace(/\s+/g, '').startsWith(lp)));
+    if (match) {
+      setSalesRepId(match.val);
+      setInvalid((i) => ({ ...i, salesRep: false }));
+      setTouched((t) => ({ ...t, salesRep: false }));
+    }
+    // salesRepId intentionally omitted: auto-pick once on load, never re-pick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reps, emailLocalPart]);
 
   // Submit loop state.
   const [submitting, setSubmitting] = useState(false);
@@ -832,7 +857,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
           {/* Logo status + reps + artists */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
             <Field label="Logo status">
-              <Dropdown size="xs" value={status} onChange={setStatus} options={STATUS_OPTS} />
+              <Dropdown size="sm" value={status} onChange={setStatus} options={STATUS_OPTS} />
             </Field>
             <Field
               label="Sales rep"
@@ -842,7 +867,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             >
               {dropdownsFailed ? (
                 <Input
-                  size="xs"
+                  size="sm"
                   value={salesRepId}
                   onChange={(v) => {
                     setSalesRepId(v);
@@ -857,7 +882,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
                 <SkeletonBox />
               ) : (
                 <Dropdown
-                  size="xs"
+                  size="sm"
                   value={salesRepId}
                   onChange={(v) => {
                     setSalesRepId(v);
@@ -879,7 +904,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
             >
               {dropdownsFailed ? (
                 <Input
-                  size="xs"
+                  size="sm"
                   value={artistId}
                   onChange={(v) => {
                     setArtistId(v);
@@ -894,7 +919,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
                 <SkeletonBox />
               ) : (
                 <Dropdown
-                  size="xs"
+                  size="sm"
                   value={artistId}
                   onChange={(v) => {
                     setArtistId(v);

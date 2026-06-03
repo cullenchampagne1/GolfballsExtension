@@ -306,7 +306,9 @@ export function QuickTask({
         background: 'var(--gb-surface-2)',
         display: 'flex', alignItems: 'center', gap: 10,
       }}>
-        <span style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>Build a task</span><Kbd>/</Kbd>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--gb-text-muted)' }}>
+          Build a task <Kbd>/</Kbd>
+        </span>
         <span style={{ fontSize: 10.5, color: 'var(--gb-text-ghost)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
           <Kbd>↑↓</Kbd> move · <Kbd>↵</Kbd> add
         </span>
