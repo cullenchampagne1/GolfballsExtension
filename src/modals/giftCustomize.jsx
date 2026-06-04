@@ -678,16 +678,29 @@ const _escXml = (s) => String(s || '').replace(/[&<>"']/g, (c) => (
    MFS (icustomize's font-size knob) is held high+constant for a crisp source;
    the on-ball size comes from our own per-Size fill. */
 const PERSONALIZED_ENDPOINT = 'https://www.icustomize.com/Item/GolfBall/r';
-const PERSONALIZED_MFS = 372;                                   // crisp source render
-const PERSONALIZED_FILL = { Standard: 0.5, Large: 0.65, Max: 0.8 };
+/* Size → MFS (icustomize's font-size knob). These are the real values the site
+   uses; the renderer auto-CAPS them to fit (e.g. 3 lines render identically at
+   279 vs 372 — which is why "Large" and "Max" look the same with 3 lines). So
+   we just pass MFS through and let the server size the text exactly as the
+   customer's order will. */
+const SIZE_TO_MFS = { Standard: 201, Large: 279, Max: 372 };
+/* Source render is 564px wide and the ball fills that width, so 1 source pixel
+   ≈ 1/564 of the ball diameter. To land the text on our 3D ball at the SAME
+   proportion the website shows, map source px → decal-texture px by a fixed
+   factor (NOT fit-to-fill, which would erase the size differences). Calibrated
+   off the known-good monogram mapping (0.52 of the 1024 texture ≈ 0.35 of the
+   ball): texture_px = source_px · 1024 / (0.673 · 564) ≈ source_px · 2.70.
+   Tune this one number if text reads big/small vs the live order preview. */
+const PERSONALIZED_SRC_SCALE = 2.70;
 /* Build the composited Item/GolfBall/r render URL. The Print value is itself a
    query string, so userText/configOverrides get encoded twice (matches the
    site's own URLs). */
-function personalizedRenderUrl(lines, font, color) {
+function personalizedRenderUrl(lines, font, color, mfs) {
+  const m = String(mfs || 372);
   const ut = encodeURIComponent(JSON.stringify([{ lines, font, color }]));
-  const icfg = encodeURIComponent(JSON.stringify({ MFS: String(PERSONALIZED_MFS), SecondMFS: String(PERSONALIZED_MFS) }));
+  const icfg = encodeURIComponent(JSON.stringify({ MFS: m, SecondMFS: m }));
   const print = encodeURIComponent(`Personalized?userText=${ut}&configOverrides=${icfg}`);
-  const outer = encodeURIComponent(JSON.stringify({ BC: '#FFFFFF', MFS: String(PERSONALIZED_MFS), SecondMFS: String(PERSONALIZED_MFS) }));
+  const outer = encodeURIComponent(JSON.stringify({ BC: '#FFFFFF', MFS: m, SecondMFS: m }));
   return `${PERSONALIZED_ENDPOINT}?configOverrides=${outer}&view=&Print=${print}`;
 }
 /* Draw a render URL onto a canvas and return its raw pixel data. */
@@ -698,15 +711,18 @@ async function _renderPixels(url) {
   const cx = c.getContext('2d'); cx.drawImage(img, 0, 0);
   return { data: cx.getImageData(0, 0, W, H).data, W, H };
 }
-/* The blank ball (empty text) is identical for every render, so fetch it once. */
+/* The blank ball (empty text) is identical for every render — MFS only sizes
+   the (absent) text, the ball itself never changes — so fetch it once. */
 let _blankBallPromise = null;
-const getBlankBall = () => (_blankBallPromise ||= _renderPixels(personalizedRenderUrl([], 'Kabel Dm BT', '#000000')));
+const getBlankBall = () => (_blankBallPromise ||= _renderPixels(personalizedRenderUrl([], 'Kabel Dm BT', '#000000', 372)));
 
 const _personalizedCache = new Map();
-/* Render the text on the ball, diff vs the blank ball, tint to `color`, trim +
-   center into a 1024 square at `fill`. Returns a flat decal data URL (or null). */
-async function extractTextDecal(lines, font, color, fill) {
-  const [blank, txt] = await Promise.all([getBlankBall(), _renderPixels(personalizedRenderUrl(lines, font, color))]);
+/* Render the text on the ball (at `mfs`), diff vs the blank ball, tint to
+   `color`, then place it into the 1024 decal texture at the SAME proportion it
+   has on the source ball (fixed source→texture scale — NOT fit-to-fill, so the
+   Size/MFS differences survive). Returns a flat decal data URL (or null). */
+async function extractTextDecal(lines, font, color, mfs) {
+  const [blank, txt] = await Promise.all([getBlankBall(), _renderPixels(personalizedRenderUrl(lines, font, color, mfs))]);
   const { W, H } = blank; const bd = blank.data, td = txt.data;
   if (txt.W !== W || txt.H !== H) return null;
   const r = parseInt(color.slice(1, 3), 16), g = parseInt(color.slice(3, 5), 16), b = parseInt(color.slice(5, 7), 16);
@@ -727,7 +743,10 @@ async function extractTextDecal(lines, font, color, fill) {
     id.data[di] = r; id.data[di + 1] = g; id.data[di + 2] = b; id.data[di + 3] = alpha[(y + y0) * W + (x + x0)];
   }
   cctx.putImageData(id, 0, 0);
-  const SIZE = 1024, s = (SIZE * fill) / Math.max(tw, th);
+  // Fixed scale preserves the source proportions; clamp so very large text can't
+  // overrun the texture.
+  const SIZE = 1024;
+  const s = Math.min(PERSONALIZED_SRC_SCALE, (SIZE * 0.95) / Math.max(tw, th));
   const dw = tw * s, dh = th * s;
   const out = document.createElement('canvas'); out.width = SIZE; out.height = SIZE;
   out.getContext('2d').drawImage(crop, (SIZE - dw) / 2, (SIZE - dh) / 2, dw, dh);
@@ -770,12 +789,12 @@ function useDecalUrl() {
       if (!lines.length) { setUrl(null); return; }
       const font = pFont || 'Kabel Dm BT';
       const color = _hexOf(pColor);
-      const fill = PERSONALIZED_FILL[pSize] || PERSONALIZED_FILL.Standard;
-      const key = JSON.stringify([lines, font, color, fill]);
+      const mfs = SIZE_TO_MFS[pSize] || SIZE_TO_MFS.Standard;
+      const key = JSON.stringify([lines, font, color, mfs]);
       if (_personalizedCache.has(key)) { setUrl(_personalizedCache.get(key)); return; }
       let cancelled = false;
       const timer = setTimeout(() => {
-        extractTextDecal(lines, font, color, fill)
+        extractTextDecal(lines, font, color, mfs)
           .then((u) => { if (u) _personalizedCache.set(key, u); if (!cancelled) setUrl(u); })
           .catch(() => { if (!cancelled) setUrl(null); });
       }, 300);
