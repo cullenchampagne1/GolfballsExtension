@@ -356,16 +356,14 @@ function PopupApp() {
       return;
     }
 
-    /* Progressive resolution. The cheap vars (schema/selector/literal) and
-       the To recipient resolve in a fast first pass so name + To paint
-       instantly; the slow code chain (order fetch → match) resolves in a
-       second pass and only those rows keep their spinner. With no code
-       vars the fast pass IS the whole resolution (no second round-trip). */
-    const allVars  = tpl.vars || {};
-    const toField  = tpl.toField || { type: 'auto' };
-    const codeNames = Object.keys(allVars).filter((n) => allVars[n]?.type === 'code');
-    const fastVars  = Object.fromEntries(
-      Object.entries(allVars).filter(([, def]) => def?.type !== 'code'));
+    /* Streaming resolution. Open a port to the page's resolver; it sends
+       one message per variable AS IT RESOLVES (in dependency order, so the
+       simple/fast blocks land first), plus the recipient up front. Each row
+       clears its own spinner the moment its value arrives — no waiting for
+       the whole batch. Falls back to a one-shot message if the port can't
+       open (e.g. the content script isn't injected). */
+    const allVars = tpl.vars || {};
+    const toField = tpl.toField || { type: 'auto' };
 
     setResolving(true);
     setResolvedVars({});
@@ -374,32 +372,40 @@ function PopupApp() {
     setPendingVars(Object.keys(allVars));
 
     let cancelled = false;
+    let port = null;
+    try { port = chrome.tabs.connect(tab.id, { name: 'gbResolveStream' }); } catch { port = null; }
 
-    // Fast pass — sync vars + recipient.
-    sendMessage(tab.id, { action: 'resolveVars', vars: fastVars, toField })
-      .then((r) => {
+    if (!port) {
+      sendMessage(tab.id, { action: 'resolveVars', vars: allVars, toField }).then((r) => {
         if (cancelled) return;
-        setResolvedVars((prev) => ({ ...prev, ...(r?.resolved || {}) }));
+        setResolvedVars(r?.resolved || {});
         setResolvedTo(r?.toEmail || '');
-        setToPending(false);
-        // Fast vars are done; only the code chain stays pending.
-        setPendingVars(codeNames.slice());
-        if (codeNames.length === 0) setResolving(false);
+        setToPending(false); setPendingVars([]); setResolving(false);
       });
-
-    // Slow pass — the full set (code chain). Skipped when there's nothing slow.
-    if (codeNames.length) {
-      sendMessage(tab.id, { action: 'resolveVars', vars: allVars, toField })
-        .then((r) => {
-          if (cancelled) return;
-          setResolvedVars(r?.resolved || {});
-          setResolvedTo(r?.toEmail || '');
-          setPendingVars([]);
-          setResolving(false);
-        });
+      return () => { cancelled = true; };
     }
 
-    return () => { cancelled = true; };
+    port.onMessage.addListener((msg) => {
+      if (cancelled || !msg) return;
+      if (msg.kind === 'to') {
+        setResolvedTo(msg.value || '');
+        setToPending(false);
+      } else if (msg.kind === 'var') {
+        setResolvedVars((prev) => ({ ...prev, [msg.name]: msg.value }));
+        setPendingVars((prev) => prev.filter((n) => n !== msg.name));
+      } else if (msg.kind === 'done') {
+        setResolvedVars(msg.resolved || {});
+        setResolvedTo(msg.toEmail || '');
+        setToPending(false); setPendingVars([]); setResolving(false);
+        try { port.disconnect(); } catch {}
+      } else if (msg.kind === 'error') {
+        setToPending(false); setPendingVars([]); setResolving(false);
+        try { port.disconnect(); } catch {}
+      }
+    });
+    try { port.postMessage({ action: 'resolveVarsStream', vars: allVars, toField }); } catch {}
+
+    return () => { cancelled = true; try { port && port.disconnect(); } catch {} };
   }, [selectedId, tab, visibleTemplates, ignorePageContext]);
 
   /* ── live-sync feature flags + watchList + templates from storage ──

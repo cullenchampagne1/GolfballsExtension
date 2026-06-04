@@ -178,7 +178,7 @@
    * @param {Document} doc - The document to scan (defaults to global document).
    * @returns {Promise<{resolved:Object.<string,string>, toEmail:string}>}
    */
-  async function resolveAllVarsAsync(vars, toField, doc = document) {
+  async function resolveAllVarsAsync(vars, toField, doc = document, onProgress = null) {
     /* Backwards-compat guard. A template still carrying a flagged-
        deprecated variable (one the one-version migration couldn't lift
        onto the page engine) must not be sent silently — refuse so the rep
@@ -190,6 +190,26 @@
     if (deprecated.length) {
       throw new Error(`Template uses deprecated variable${deprecated.length > 1 ? 's' : ''}: ${deprecated.join(', ')}. Open the template editor to fix.`);
     }
+
+    /* Resolve the recipient FIRST and stream it out, so the popup paints To
+       immediately (it's cheap — smart email off the page) while the code
+       chain is still running. onProgress (when provided) lets callers show
+       each variable the instant it resolves instead of one final batch. */
+    let toEmail = '';
+    try {
+      if (!toField || toField.type === 'auto') {
+        toEmail = typeof smartEmail === 'function' ? smartEmail(doc) : '';
+        if (!toEmail && typeof smartPageVariables === 'function') toEmail = smartPageVariables(doc).contactEmail || '';
+      } else if (toField.type === 'literal') {
+        toEmail = toField.value || '';
+      } else if (toField.type === 'selector') {
+        const el  = doc.querySelector(toField.selector);
+        const raw = el ? ((doc === document && typeof getTextOf === 'function') ? getTextOf(el) : (el.innerText || el.textContent || '')) : '';
+        const m   = raw.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
+        toEmail = m ? m[0] : raw;
+      }
+    } catch {}
+    if (typeof onProgress === 'function') { try { onProgress({ kind: 'to', value: toEmail }); } catch {} }
     const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
     const resolved = {};      // name → display string (template substitution)
     const rawValues = {};     // name → raw value (objects intact; fed to later code blocks as `vars`)
@@ -237,6 +257,11 @@
          (warnings carried on the ctx); the AUTHORITATIVE value the
          renderer sees is the one returned here — post-smart. */
       resolved[name] = applySmart(display, def);
+      /* Stream this variable the instant it's done — the popup clears its
+         spinner and shows the value without waiting for the rest. */
+      if (typeof onProgress === 'function') {
+        try { onProgress({ kind: 'var', name, value: resolved[name] }); } catch {}
+      }
     }
 
     /* ── TEMP DEBUG — persist the whole resolved set so __gbDownloadDebug()
@@ -246,24 +271,6 @@
       if (typeof window !== 'undefined') window.__gbVarDebug = rawValues;
       if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
         chrome.storage.local.set({ gbVarsDebug: { ts: Date.now(), url: (typeof location !== 'undefined' ? location.href : ''), vars: rawValues } });
-      }
-    } catch {}
-
-    let toEmail = '';
-    try {
-      if (!toField || toField.type === 'auto') {
-        toEmail = typeof smartEmail === 'function' ? smartEmail(doc) : '';
-        // Failover to contact Email if basic regex fails
-        if (!toEmail && typeof smartPageVariables === 'function') {
-            toEmail = smartPageVariables(doc).contactEmail || '';
-        }
-      } else if (toField.type === 'literal') {
-        toEmail = toField.value || '';
-      } else if (toField.type === 'selector') {
-        const el  = doc.querySelector(toField.selector);
-        const raw = el ? ((doc === document && typeof getTextOf === 'function') ? getTextOf(el) : (el.innerText || el.textContent || '')) : '';
-        const m   = raw.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
-        toEmail = m ? m[0] : raw;
       }
     } catch {}
 

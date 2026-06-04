@@ -108,6 +108,24 @@ window.__gbContentReady = true;
     window.addEventListener('message', handler);
   }
 
+  /* Streaming variable resolution. The popup opens this port and gets a
+     message per variable AS IT RESOLVES (the chain runs in dependency
+     order, so simple vars land first), instead of one final batch — that's
+     what lets each row clear its spinner independently. Falls back to the
+     one-shot `resolveVars` message above when a port isn't used. */
+  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onConnect) {
+    chrome.runtime.onConnect.addListener((port) => {
+      if (!port || port.name !== 'gbResolveStream') return;
+      port.onMessage.addListener((msg) => {
+        if (!msg || msg.action !== 'resolveVarsStream') return;
+        const post = (m) => { try { port.postMessage(m); } catch {} };
+        resolveAllVarsAsync(msg.vars, msg.toField, document, (ev) => post(ev))
+          .then((res) => post({ kind: 'done', resolved: res.resolved, toEmail: res.toEmail }))
+          .catch((err) => post({ kind: 'error', error: (err && err.message) || 'resolve failed' }));
+      });
+    });
+  }
+
 // ── chrome.runtime messages from popup / background ─────────────────────────
   // MESSAGE LISTENER
   // ═══════════════════════════════════════════════════════
