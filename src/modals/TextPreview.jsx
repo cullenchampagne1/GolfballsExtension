@@ -3,6 +3,7 @@ import { FloatingPanel, IconBtn, Tag, I, Icon } from '../ui/index.js';
 import { CategorizeRail } from '../ui/components/CategorizeRail.jsx';
 import { categorySections } from '../lib/caseMatch.js';
 import { useModalTopState } from '../lib/actionRegistry.js';
+import { useDevSetting } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    TextPreview — read-only chat-transcript viewer (React port of the
@@ -201,6 +202,7 @@ export function TextPreview({
 }) {
   const [viewMode, setViewMode] = useState(defaultCase ? 'case' : 'notes');
   const isCase = viewMode === 'case';
+  const draggable = useDevSetting('textPreview.draggable') ?? false;
   const [focused, setFocused] = useState(null);
   const sections = useMemo(() => categorySections(), []);
   const applied = applyState && applyState.category ? applyState : null;
@@ -215,7 +217,7 @@ export function TextPreview({
 
   return (
     <FloatingPanel
-      draggable={false}
+      draggable={draggable}
       backdrop
       width={isCase ? 1280 : 880}
       maxHeight={900}

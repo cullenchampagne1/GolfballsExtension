@@ -14,6 +14,7 @@ import {
   buildCustomTemplate,
 } from '../lib/callLog.js';
 import { useModalTopState } from '../lib/actionRegistry.js';
+import { useDevSetting } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    CallLog — the redesigned, keyboard-first call logger.
@@ -107,6 +108,7 @@ export function CallLog({
 }) {
   void contactType;
   const toast = useToast();
+  const draggable = useDevSetting('callLog.draggable') ?? false;
   const schema = React.useMemo(() => buildCallSchema(), []);
 
   const [templates, setTemplates] = useState([]);
@@ -205,7 +207,7 @@ export function CallLog({
     <FloatingPanel
       width={480}
       backdrop
-      draggable
+      draggable={draggable}
       visible={modalVisible}
       onClose={onClosed}
       bindClose={handleBindClose}

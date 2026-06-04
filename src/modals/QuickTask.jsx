@@ -6,6 +6,7 @@ import {
   Icon, I, useToast,
 } from '../ui/index.js';
 import { useModalTopState } from '../lib/actionRegistry.js';
+import { useDevSetting } from '../lib/devSettings.js';
 import {
   PRIORITY_OPTIONS,
   DEFAULT_PRIORITY,
@@ -105,6 +106,7 @@ export function QuickTask({
 }) {
   void contactType;
   const toast = useToast();
+  const draggable = useDevSetting('quickTask.draggable') ?? false;
   const schema = React.useMemo(() => buildTaskSchema(), []);
 
   const [templates, setTemplates] = useState([]);
@@ -260,7 +262,7 @@ export function QuickTask({
     <FloatingPanel
       width={480}
       backdrop
-      draggable
+      draggable={draggable}
       visible={modalVisible}
       onClose={onClosed}
       bindClose={handleBindClose}

@@ -5,6 +5,7 @@ import { EmailHtmlView } from '../ui/components/EmailHtmlView.jsx';
 import { CategorizeRail } from '../ui/components/CategorizeRail.jsx';
 import { categorySections, recommendedFromTemplate } from '../lib/caseMatch.js';
 import { splitThreadHtml } from '../lib/emailParse.js';
+import { useDevSetting } from '../lib/devSettings.js';
 
 const OUR_DOMAINS = /(golfballs\.com|loyaltylogo\.com|gbcadmin)/i;
 function plainPreview(html, n = 120) {
@@ -513,6 +514,7 @@ export function EmailPreview({
   applyState,
   onClosed, bindClose,
 }) {
+  const draggable = useDevSetting('emailPreview.draggable') ?? false;
   const [viewMode, setViewMode] = useState(defaultCase ? 'case' : 'inbox');
   /* Selected case template drives both the rail's ✦ Recommended chips
      and what Send fires. Defaults to the first match (the list arrives
@@ -555,7 +557,7 @@ export function EmailPreview({
 
   return (
     <FloatingPanel
-      draggable={false}
+      draggable={draggable}
       backdrop
       width={isCase ? 1320 : 920}
       maxHeight={900}

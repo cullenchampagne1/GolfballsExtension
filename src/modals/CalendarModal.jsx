@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { FloatingPanel, ModalHeader, Btn, Icon, I } from '../ui/index.js';
 import { useModalTopState } from '../lib/actionRegistry.js';
+import { useDevSetting } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    CalendarModal — Order Date Manager (React port of the design
@@ -165,6 +166,7 @@ export function CalendarModal({
   const [commitment, setCommitment] = useState(() => toDate(defaultCommitment) || addDays(new Date(), 7));
   const stacked = layout === 'stacked';
   const canSave = !!(approval && commitment);
+  const draggable = useDevSetting('calendar.draggable') ?? false;
 
   const bindCloseRef = useRef(null);
   const handleBindClose = (fn) => { bindCloseRef.current = fn; bindClose?.(fn); };
@@ -182,7 +184,7 @@ export function CalendarModal({
     <FloatingPanel
       width={stacked ? 420 : 620}
       backdrop
-      draggable={false}
+      draggable={draggable}
       visible={modalVisible}
       onClose={onClosed}
       bindClose={handleBindClose}
