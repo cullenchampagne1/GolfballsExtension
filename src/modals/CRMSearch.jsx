@@ -1582,7 +1582,11 @@ function ResultRow({ row, isSelected, isActive, emailStatus, showStatusCol, onTo
         boxShadow: isSelected && !isActive ? 'inset 3px 0 0 0 var(--gb-brand-label)' : 'none',
         transition: 'background-color .15s, box-shadow .15s',
       }} />
-      <div>
+      {/* Flex wrapper (matches TaskList): keeps the inline-flex Checkbox
+          off a text line box. In a plain block, the line box's baseline
+          shifts ~1px when the check mark appears on select, nudging the
+          whole row's text up — that was the jolt. */}
+      <div style={{ display: 'flex', alignItems: 'center' }}>
         <Checkbox checked={isSelected} onChange={(e) => onToggle(e)} />
       </div>
       {url ? (
