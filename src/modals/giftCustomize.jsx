@@ -359,80 +359,135 @@ function IconGrid({ value, onChange }) {
   );
 }
 
-/* Minimal alignment popup — drag to move, scroll/slider to size the uploaded
-   image inside the (square) print area, over an alignment grid. Apply composites
-   the transform onto a transparent 1024² decal; Cancel discards. Re-openable to
-   tweak (the raw image + transform are kept so re-aligning never compounds). */
+/* Alignment popup — same zoom + pan feel as the logo image viewer
+   (ImagePreview): wheel/buttons zoom around the cursor, drag to pan, a clean
+   centered ring (dim outside + crosshair) marks the round ball print area, and
+   Apply crops to a CIRCLE (arc-clip) so the decal matches the ball — not a
+   square that fills the pole. Transform is kept so re-aligning never compounds. */
 const ALIGN_OUT = 1024;       // output decal resolution
-const ALIGN_STAGE = 280;      // on-screen stage size
+const ALIGN_STAGE = 300;      // on-screen stage size
+const ALIGN_RING = 0.8;       // ring diameter as a fraction of the stage
+const AZ_MIN = 0.5, AZ_MAX = 8, AZ_STEP_BTN = 0.15, AZ_STEP_WHEEL = 0.06;
 function ImageAlignModal({ image, initial, onCancel, onApply }) {
-  const [nat, setNat] = useState({ w: 0, h: 0 });
-  const [scale, setScale] = useState(initial?.scale ?? 1);
-  const [pos, setPos] = useState({ x: initial?.x ?? 0, y: initial?.y ?? 0 });  // stage px offset
+  const [nat, setNat] = useState(null);
+  const [zoomPct, setZoomPct] = useState(Math.round((initial?.scale ?? 1) * 100));
+  // Transform tracked in refs (no re-render per wheel/drag) — mirrors ImagePreview.
+  const scaleRef = useRef(initial?.scale ?? 1);
+  const txRef = useRef(initial?.x ?? 0);
+  const tyRef = useRef(initial?.y ?? 0);
+  const wrapRef = useRef(null);
+  const vpRef = useRef(null);
+
   useEffect(() => { _loadImage(image).then((im) => setNat({ w: im.naturalWidth || im.width, h: im.naturalHeight || im.height })).catch(() => {}); }, [image]);
 
-  const baseFit = nat.w && nat.h ? Math.min(ALIGN_STAGE / nat.w, ALIGN_STAGE / nat.h) : 1;
-  const dispW = nat.w * baseFit * scale, dispH = nat.h * baseFit * scale;
+  // Image fits the stage at scale 1 (contain). Used by both the live <img> and
+  // the capture canvas so display and output stay in lockstep.
+  const fit = nat ? Math.min(0.85 * ALIGN_STAGE / nat.w, 0.85 * ALIGN_STAGE / nat.h) : 1;
+
+  const applyTransform = (animate) => {
+    const el = vpRef.current; if (!el) return;
+    el.style.transition = animate ? 'transform .18s cubic-bezier(.25,.8,.25,1)' : 'none';
+    el.style.transform = `translate(${txRef.current}px, ${tyRef.current}px) scale(${scaleRef.current})`;
+  };
+  useEffect(() => { if (nat) applyTransform(false); /* eslint-disable-next-line */ }, [nat]);
+
+  const clampPan = () => {
+    const c = wrapRef.current; if (!c) return;
+    const cw = c.clientWidth, ch = c.clientHeight;
+    const img = c.querySelector('img');
+    const iw = img?.clientWidth || cw, ih = img?.clientHeight || ch, s = scaleRef.current;
+    const KEEP = 28;   // keep a sliver on-screen so the image can't be lost
+    const mx = Math.max(0, (cw + iw * s) / 2 - KEEP), my = Math.max(0, (ch + ih * s) / 2 - KEEP);
+    txRef.current = Math.max(-mx, Math.min(mx, txRef.current));
+    tyRef.current = Math.max(-my, Math.min(my, tyRef.current));
+  };
+  const zoom = (delta, ox, oy) => {
+    const prev = scaleRef.current;
+    const next = Math.max(AZ_MIN, Math.min(AZ_MAX, prev * (1 + delta)));
+    if (next === prev) return;
+    const c = wrapRef.current;
+    if (c && ox != null) {   // pivot around the cursor so its focal point stays put
+      const r = next / prev - 1;
+      txRef.current -= (ox - c.clientWidth / 2 - txRef.current) * r;
+      tyRef.current -= (oy - c.clientHeight / 2 - tyRef.current) * r;
+    }
+    scaleRef.current = next; clampPan(); applyTransform(false); setZoomPct(Math.round(next * 100));
+  };
+  const reset = () => { scaleRef.current = 1; txRef.current = 0; tyRef.current = 0; applyTransform(true); setZoomPct(100); };
+
+  // Wheel zoom (passive:false so we can preventDefault the page scroll).
+  useEffect(() => {
+    const c = wrapRef.current; if (!c) return undefined;
+    const onWheel = (e) => {
+      e.preventDefault();
+      const r = c.getBoundingClientRect();
+      zoom(e.deltaY < 0 ? AZ_STEP_WHEEL : -AZ_STEP_WHEEL, e.clientX - r.left, e.clientY - r.top);
+    };
+    c.addEventListener('wheel', onWheel, { passive: false });
+    return () => c.removeEventListener('wheel', onWheel);
+    // eslint-disable-next-line
+  }, [nat]);
 
   const onPointerDown = (e) => {
+    if (e.button !== 0 || e.target?.closest?.('button')) return;
     e.preventDefault();
-    const sx = e.clientX, sy = e.clientY, px = pos.x, py = pos.y;
-    const move = (ev) => setPos({ x: px + (ev.clientX - sx), y: py + (ev.clientY - sy) });
+    const sx = e.clientX, sy = e.clientY, px = txRef.current, py = tyRef.current;
+    const move = (ev) => { txRef.current = px + (ev.clientX - sx); tyRef.current = py + (ev.clientY - sy); clampPan(); applyTransform(false); };
     const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
-  const onWheel = (e) => { e.preventDefault(); setScale((s) => Math.max(0.2, Math.min(3, s - e.deltaY * 0.0015))); };
-  const reset = () => { setScale(1); setPos({ x: 0, y: 0 }); };
 
-  const apply = async () => {
-    const R = ALIGN_OUT / ALIGN_STAGE;
-    const im = await _loadImage(image);
+  // Apply — replicate the viewport transform onto a circular-clipped canvas, so
+  // the decal is round (the ball print area), not a square.
+  const apply = () => {
+    const wrap = wrapRef.current; if (!wrap || !nat) return;
+    const ringD = ALIGN_STAGE * ALIGN_RING;
     const c = document.createElement('canvas'); c.width = ALIGN_OUT; c.height = ALIGN_OUT;
     const ctx = c.getContext('2d');
-    const w = dispW * R, h = dispH * R;
-    const cx = ALIGN_OUT / 2 + pos.x * R, cy = ALIGN_OUT / 2 + pos.y * R;
-    ctx.drawImage(im, cx - w / 2, cy - h / 2, w, h);
-    onApply(c.toDataURL('image/png'), { scale, x: pos.x, y: pos.y });
+    const k = ALIGN_OUT / ringD;        // wrapper px → canvas px (ring → full canvas)
+    ctx.save();
+    ctx.beginPath(); ctx.arc(ALIGN_OUT / 2, ALIGN_OUT / 2, ALIGN_OUT / 2, 0, Math.PI * 2); ctx.clip();
+    ctx.translate(ALIGN_OUT / 2, ALIGN_OUT / 2);
+    ctx.scale(k, k);
+    ctx.translate(txRef.current, tyRef.current);
+    ctx.scale(scaleRef.current, scaleRef.current);
+    const im = wrap.querySelector('img');
+    ctx.drawImage(im, -(nat.w * fit) / 2, -(nat.h * fit) / 2, nat.w * fit, nat.h * fit);
+    ctx.restore();
+    onApply(c.toDataURL('image/png'), { scale: scaleRef.current, x: txRef.current, y: tyRef.current });
   };
 
-  // alignment grid: fine lines + a stronger center cross, behind the image.
-  const gridBg = [
-    'linear-gradient(var(--gb-border-subtle) 1px, transparent 1px)',
-    'linear-gradient(90deg, var(--gb-border-subtle) 1px, transparent 1px)',
-  ].join(', ');
+  const chipBtn = { width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--gb-r-sm)', background: 'transparent', border: 'none', color: 'var(--gb-text-on-glass, #fff)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 15, fontWeight: 700, lineHeight: 1 };
   return (
     <CompactModal size="compact" stacked onClose={onCancel}>
-      <ModalHeader icon={<I.eye />} title="Align Image" subtitle="Drag to move · scroll or slider to size" onClose={onCancel} />
-      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
+      <ModalHeader icon={<I.eye />} title="Align Image" subtitle="Scroll or +/− to zoom · drag to move" onClose={onCancel} />
+      <div style={{ padding: 16, display: 'flex', justifyContent: 'center' }}>
         <div
+          ref={wrapRef}
           onPointerDown={onPointerDown}
-          onWheel={onWheel}
           style={{
             position: 'relative', width: ALIGN_STAGE, height: ALIGN_STAGE, flexShrink: 0,
             borderRadius: 'var(--gb-r-md)', overflow: 'hidden', cursor: 'grab', touchAction: 'none',
-            background: 'var(--gb-surface-modal)', backgroundImage: gridBg, backgroundSize: '20px 20px',
-            border: '1px solid var(--gb-border-default)', userSelect: 'none',
+            background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', userSelect: 'none',
           }}
         >
-          {/* print-area boundary + center crosshair */}
-          <div style={{ position: 'absolute', inset: '7%', borderRadius: '50%', border: '1.5px dashed var(--gb-brand-tint-border)', pointerEvents: 'none' }} />
-          <div style={{ position: 'absolute', left: 0, right: 0, top: '50%', height: 1, background: 'var(--gb-brand-tint-border)', opacity: .6, pointerEvents: 'none' }} />
-          <div style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', width: 1, background: 'var(--gb-brand-tint-border)', opacity: .6, pointerEvents: 'none' }} />
-          {nat.w > 0 && (
-            <img
-              src={image} alt="" draggable={false}
-              style={{
-                position: 'absolute', left: '50%', top: '50%', width: dispW, height: dispH,
-                transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px))`,
-                pointerEvents: 'none',
-              }}
-            />
-          )}
-        </div>
-        <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--gb-text-muted)', minWidth: 30 }}>Size</span>
-          <Slider value={Math.round(scale * 100)} min={20} max={300} step={5} unit="%" onChange={(v) => setScale(v / 100)} style={{ flex: 1 }} />
-          <IconBtn size="sm" icon={<I.refresh />} onClick={reset} title="Reset position & size" />
+          {/* transform layer — centered img sized to fit */}
+          <div ref={vpRef} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+            {nat && <img src={image} alt="" draggable={false} style={{ width: nat.w * fit, height: nat.h * fit, display: 'block' }} />}
+          </div>
+          {/* clean alignment ring: circle border + dim outside + crosshair */}
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+            <div style={{ height: `${ALIGN_RING * 100}%`, aspectRatio: '1 / 1', borderRadius: '50%', border: '2px solid var(--gb-brand-label)', boxShadow: '0 0 0 9999px rgba(0,0,0,.5)' }} />
+          </div>
+          <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: 'var(--gb-brand-label)', opacity: .35, pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'var(--gb-brand-label)', opacity: .35, pointerEvents: 'none' }} />
+          {/* zoom chips — bottom-right, like the image viewer */}
+          <div style={{ position: 'absolute', right: 8, bottom: 8, display: 'flex', alignItems: 'center', gap: 2, padding: '2px 4px', borderRadius: 'var(--gb-r-pill)', background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)' }}>
+            <button type="button" style={chipBtn} onClick={() => zoom(-AZ_STEP_BTN * 2.2)} title="Zoom out">−</button>
+            <span style={{ minWidth: 38, textAlign: 'center', fontSize: 10.5, fontWeight: 700, color: '#fff', fontFamily: 'var(--gb-font-mono)' }}>{zoomPct}%</span>
+            <button type="button" style={chipBtn} onClick={() => zoom(AZ_STEP_BTN * 2.2)} title="Zoom in">+</button>
+            <button type="button" style={{ ...chipBtn, fontSize: 12 }} onClick={reset} title="Reset"><I.refresh size={12} /></button>
+          </div>
         </div>
       </div>
       <ModalFooter>
