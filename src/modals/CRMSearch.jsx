@@ -1293,6 +1293,7 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
         textTransform: 'uppercase',
         color: 'var(--gb-text-muted)',
         position: 'sticky', top: 0, zIndex: 4,
+        transition: 'grid-template-columns .35s cubic-bezier(0.4, 0, 0.2, 1)',
       }}>
         <div>
           <Checkbox checked={allChecked} onChange={onToggleAll} />
@@ -1556,14 +1557,10 @@ function ResultRow({ row, isSelected, isActive, emailStatus, showStatusCol, onTo
           : 'none',
         fontSize: 12,
         cursor: 'pointer',
-        /* NO grid-template-columns transition. The fr-based tracks
-           recompute when the table's vertical scrollbar toggles (which
-           happens as the selection bar appears/disappears), and animating
-           that width change made the row TEXT visibly shrink/expand on
-           select — TaskList has no such transition, which is exactly why
-           its rows stay still. The status column now snaps instead of
-           sliding (only visible during an email blast). */
-        transition: 'box-shadow .15s',
+        // grid-template-columns transitions smoothly in modern Chrome
+        // — the new status column slides open as it grows. Falls back
+        // to an instant snap on browsers without support.
+        transition: 'box-shadow .15s, grid-template-columns .35s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}

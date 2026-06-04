@@ -821,7 +821,12 @@ function TemplateRow({ index, name, meta, onClick }) {
       initial={{ opacity: 0, x: -8 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.22, delay: index * 0.04, ease: [0.4, 0, 0.2, 1] }}
-      whileHover={{ background: 'var(--gb-brand-tint-soft)', borderColor: 'var(--gb-brand-tint-border)' }}
+      /* Hover via plain CSS (onMouseEnter/Leave + a transition) rather than
+         Motion's whileHover: whileHover tries to interpolate the brand-tint
+         CSS variables, which it can't do cleanly, so on mouse-leave it
+         flashed the resolved primary colour before settling. */
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--gb-brand-tint-soft)'; e.currentTarget.style.borderColor = 'var(--gb-brand-tint-border)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--gb-surface-2)'; e.currentTarget.style.borderColor = 'var(--gb-border-default)'; }}
       style={{
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '8px 10px',
@@ -830,6 +835,7 @@ function TemplateRow({ index, name, meta, onClick }) {
         borderRadius: 'var(--gb-r-sm)',
         cursor: 'pointer', textAlign: 'left',
         fontFamily: 'inherit',
+        transition: 'background-color .15s, border-color .15s',
       }}
     >
       <span style={{
