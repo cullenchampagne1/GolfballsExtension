@@ -754,6 +754,47 @@ function MainView({
     window.close();
   };
 
+  /* Resolve the subject/body for this send. Picks the variation (a pinned
+     saved one, a uniform random roll across [original, …saved] when the
+     template has variations and nothing is pinned, or the parent) and
+     renders each field with the resolved vars + smart options. Shared by
+     Send and Copy so both produce identical content. */
+  const buildSendContent = () => {
+    const variations = Array.isArray(tpl?.variations) ? tpl.variations : [];
+    const pinnedSaved = variations.find((v) => v.id === selectedVariationId);
+    let variation = pinnedSaved || null;
+    if (!pinnedSaved && !selectedVariationId && variations.length > 0) {
+      const idx = Math.floor(Math.random() * (variations.length + 1));
+      variation = idx === 0 ? null : variations[idx - 1];
+    }
+    const subject = renderStr(variation?.subject || tpl.subject, resolvedVars, tpl.vars);
+    const rawBody = renderStr(variation?.body    || tpl.body,    resolvedVars, tpl.vars);
+    return { subject, rawBody, plainBody: toPlainText(rawBody) };
+  };
+
+  /* Copy the formatted email to the clipboard as BOTH rich HTML and plain
+     text, so pasting into Outlook / Gmail / a doc keeps the formatting.
+     Only offered in Outlook mode (PA off) — see the footer. */
+  const onCopy = async () => {
+    if (!tpl || !canSend) return;
+    const { rawBody, plainBody } = buildSendContent();
+    try {
+      if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/html':  new Blob([rawBody],   { type: 'text/html'  }),
+            'text/plain': new Blob([plainBody], { type: 'text/plain' }),
+          }),
+        ]);
+      } else {
+        await navigator.clipboard.writeText(plainBody);
+      }
+      window.__gbToast?.success?.('Copied — paste keeps formatting', { duration: 1800 });
+    } catch (e) {
+      window.__gbToast?.error?.(`Couldn't copy: ${e?.message || 'clipboard blocked'}`, { duration: 3000 });
+    }
+  };
+
   const onSend = async () => {
     if (!tpl || !canSend || !tab) return;
     /* Three selection paths land here:
@@ -770,22 +811,7 @@ function MainView({
          3. No variations on the template  →  always parent body.
        The random roll is uniform — the popup is a single-send
        surface so there's no slider UX for weighting. */
-    const variations = Array.isArray(tpl.variations) ? tpl.variations : [];
-    const pinnedSaved = variations.find((v) => v.id === selectedVariationId);
-    let variation = pinnedSaved || null;
-    /* Parent click with no pin AND the template has variations →
-       roll uniformly across [original, …saved]. ORIGINAL_VARIATION_ID
-       is handled by the default branch above (pinnedSaved is null,
-       variation stays null, renderStr falls through to tpl.subject /
-       tpl.body) — that's the "pinned Variation 1" path, distinct
-       from this "no pin → random" path. */
-    if (!pinnedSaved && !selectedVariationId && variations.length > 0) {
-      const idx = Math.floor(Math.random() * (variations.length + 1));
-      variation = idx === 0 ? null : variations[idx - 1];
-    }
-    const subject  = renderStr(variation?.subject || tpl.subject, resolvedVars, tpl.vars);
-    const rawBody  = renderStr(variation?.body    || tpl.body,    resolvedVars, tpl.vars);
-    const plainBody = toPlainText(rawBody);
+    const { subject, rawBody, plainBody } = buildSendContent();
 
     // tpl.replyMode drives behavior for ALL template types:
     // 'reply'      → find prior email, thread the reply (file or PA)
@@ -1042,15 +1068,40 @@ function MainView({
 
               <hr style={{ border: 0, borderTop: '1px solid var(--gb-border-subtle)', margin: '10px 0' }} />
 
-              <Btn
-                full
-                variant="primary"
-                size="md"
-                disabled={!hasTemplates || !canSend || resolving}
-                icon={sendMode?.icon || <I.send />}
-                onClick={onSend}>
-                {sendMode?.label || 'Open in Outlook'}
-              </Btn>
+              {(() => {
+                /* Direct-send (PA on + URL) shows just Send. In Outlook
+                   mode we pair "Open in Outlook" with a Copy button that
+                   puts the formatted email on the clipboard. */
+                const paReady = !!flags.powerAutomateEnabled
+                  && !!(flags.powerAutomateUrl && String(flags.powerAutomateUrl).trim());
+                const sendBtn = (
+                  <Btn
+                    full={paReady}
+                    style={paReady ? undefined : { flex: 1 }}
+                    variant="primary"
+                    size="md"
+                    disabled={!hasTemplates || !canSend || resolving}
+                    icon={sendMode?.icon || <I.send />}
+                    onClick={onSend}>
+                    {sendMode?.label || 'Open in Outlook'}
+                  </Btn>
+                );
+                if (paReady) return sendBtn;
+                return (
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {sendBtn}
+                    <Btn
+                      variant="secondary"
+                      size="md"
+                      disabled={!hasTemplates || !canSend || resolving}
+                      icon={<I.copy />}
+                      onClick={onCopy}
+                      title="Copy the formatted email — paste keeps formatting">
+                      Copy
+                    </Btn>
+                  </div>
+                );
+              })()}
             </Reveal>
           )}
         </AnimatePresence>
