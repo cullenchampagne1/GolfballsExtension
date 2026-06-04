@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AnimatePresence, motion, useDragControls } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
@@ -52,23 +52,23 @@ import { useFeatureFlag } from '../lib/useFeatureFlag.js';
 // at the bottom and keep their plain secondary style, so the filled
 // buttons read as one consistent set instead of being interspersed.
 const MODAL_REGISTRY = [
-  { id: 'margin',       label: 'Margin',          icon: 'calc',    wired: true  },
-  { id: 'watchList',    label: 'Watch List',      icon: 'eye',     wired: true  },
-  { id: 'emailPreview', label: 'Email Preview',   icon: 'mail',    wired: true  },
-  { id: 'textPreview',  label: 'Text Preview',    icon: 'mail',    wired: true  },
-  { id: 'imageViewer',  label: 'Image Viewer',    icon: 'eye',     wired: true  },
-  { id: 'submitProof',  label: 'Submit Proof',    icon: 'send',    wired: true  },
-  { id: 'crmSearch',    label: 'CRM Search',      icon: 'search',  wired: true  },
-  { id: 'crmQuery',     label: 'CRM Query',       icon: 'filter',  wired: true  },
-  { id: 'crmContact',   label: 'New Contact',     icon: 'user',    wired: true  },
-  { id: 'taskList',     label: 'Tasks',           icon: 'check',   wired: true  },
-  { id: 'callLog',      label: 'Call Log',        icon: 'phone',   wired: true  },
-  { id: 'quickTask',    label: 'Quick Task',      icon: 'check',   wired: true  },
-  { id: 'calendar',     label: 'Order Dates',     icon: 'cog',     wired: true  },
-  { id: 'giftCatalog',  label: 'Gift Catalog',    icon: 'card',    wired: true  },
+  { id: 'margin',       label: 'Margin',          icon: 'calc',    wired: true,  flag: 'marginCalcEnabled'   },
+  { id: 'watchList',    label: 'Watch List',      icon: 'eye',     wired: true,  flag: 'watchListEnabled'    },
+  { id: 'emailPreview', label: 'Email Preview',   icon: 'mail',    wired: true,  flag: 'emailPreviewEnabled' },
+  { id: 'textPreview',  label: 'Text Preview',    icon: 'mail',    wired: true,  flag: 'textPreviewEnabled'  },
+  { id: 'imageViewer',  label: 'Image Viewer',    icon: 'eye',     wired: true,  flag: 'imagePreviewEnabled' },
+  { id: 'submitProof',  label: 'Submit Proof',    icon: 'send',    wired: true,  flag: 'submitProofEnabled'  },
+  { id: 'crmSearch',    label: 'CRM Search',      icon: 'search',  wired: true,  flag: 'crmSearchEnabled'    },
+  { id: 'crmQuery',     label: 'CRM Query',       icon: 'filter',  wired: true,  flag: 'crmSearchEnabled'    },
+  { id: 'crmContact',   label: 'New Contact',     icon: 'user',    wired: true,  flag: 'crmNewContactEnabled'},
+  { id: 'taskList',     label: 'Tasks',           icon: 'check',   wired: true,  flag: 'taskListEnabled'     },
+  { id: 'callLog',      label: 'Call Log',        icon: 'phone',   wired: true,  flag: 'callLogEnabled'      },
+  { id: 'quickTask',    label: 'Quick Task',      icon: 'check',   wired: true,  flag: 'quickTaskEnabled'    },
+  { id: 'calendar',     label: 'Order Dates',     icon: 'cog',     wired: true,  flag: 'calendarEnabled'     },
+  { id: 'giftCatalog',  label: 'Gift Catalog',    icon: 'card',    wired: true,  flag: 'giftCatalogEnabled'  },
   // ── Not yet migrated — kept as-is (plain secondary buttons) ──
-  { id: 'charge',       label: 'Charge',          icon: 'card',    wired: false },
-  { id: 'orderEdit',    label: 'Order Edit',      icon: 'edit',    wired: false },
+  { id: 'charge',       label: 'Charge',          icon: 'card',    wired: false, flag: 'chargeEnabled'       },
+  { id: 'orderEdit',    label: 'Order Edit',      icon: 'edit',    wired: false, flag: 'orderEditEnabled'    },
 ];
 
 /* ── Email Preview fixtures ───────────────────────────────────
@@ -428,7 +428,7 @@ const gridBackground = {
  *   width    Panel width (default 200).
  *   bounds   "viewport" → drag clamped to the visible viewport (default).
  */
-function DraggablePanel({ title, initial = { top: 14, left: 14 }, width = 200, children }) {
+function DraggablePanel({ title, initial = { top: 14, left: 14 }, width = 200, dim = false, children }) {
   const dragControls = useDragControls();
   return (
     <motion.div
@@ -448,6 +448,15 @@ function DraggablePanel({ title, initial = { top: 14, left: 14 }, width = 200, c
         boxShadow: 'var(--gb-shadow-popover)',
         overflow: 'hidden',
         userSelect: 'none',
+        /* These dev panels live OUTSIDE the scaled wrapper, so a modal's
+           own backdrop (trapped inside that transformed wrapper) can't
+           reach them. Blur + fade them directly while a modal is open so
+           the modal reads as the focus, and make them non-interactive so
+           clicks go to the modal rather than launching another. */
+        filter: dim ? 'blur(3px)' : 'none',
+        opacity: dim ? 0.45 : 1,
+        pointerEvents: dim ? 'none' : 'auto',
+        transition: 'filter .2s ease, opacity .2s ease',
       }}
     >
       {/* Drag handle — title bar. onPointerDown forwards to the dragControls
@@ -477,6 +486,20 @@ function PlaygroundSurface() {
   // Carries the image (if any) the user loaded in ImagePreview when
   // they click Submit Proof — handed to SubmitProof on the swap.
   const [proofImage, setProofImage] = useState(null);
+  // Live feature flags — the Modals toolbar only offers buttons for
+  // enabled features, matching the real extension's gating.
+  const [featureFlags, setFeatureFlags] = useState({});
+  useEffect(() => {
+    const hasChrome = typeof chrome !== 'undefined' && chrome?.storage?.local?.get;
+    if (!hasChrome) return undefined;
+    chrome.storage.local.get('featureFlags', (d) => setFeatureFlags(d?.featureFlags || {}));
+    const onChanged = (changes, area) => { if (area === 'local' && changes.featureFlags) setFeatureFlags(changes.featureFlags.newValue || {}); };
+    chrome.storage.onChanged.addListener(onChanged);
+    return () => chrome.storage.onChanged.removeListener(onChanged);
+  }, []);
+  const flagOn = (key) => !key || featureFlags[key] !== false;
+  // Bottom-left toggle to hide/show the dev toolbars entirely.
+  const [panelsHidden, setPanelsHidden] = useState(false);
   // Carries the contact context (name + phone) that the CallLog modal
   // should log against. Set by the "Call {name}" smart action handler
   // before mounting the modal; cleared on close.
@@ -1025,10 +1048,11 @@ function PlaygroundSurface() {
         child of a transformed ancestor anchors to that ancestor, not the
         viewport). Both draggable by their title bars. */}
 
+    {!panelsHidden && (<>
     {/* ── Modals pane (top-left default) ── */}
-    <DraggablePanel title="Modals" width={200} initial={{ top: 14, left: 14 }}>
+    <DraggablePanel title="Modals" width={200} initial={{ top: 14, left: 14 }} dim={!!mounted}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {MODAL_REGISTRY.map((entry) => {
+        {MODAL_REGISTRY.filter((entry) => flagOn(entry.flag)).map((entry) => {
           const Icon = I[entry.icon] || I.bolt;
           return (
             <Btn
@@ -1049,7 +1073,7 @@ function PlaygroundSurface() {
     </DraggablePanel>
 
     {/* ── Notifications pane (top-right default) ── */}
-    <DraggablePanel title="Notifications" width={220} initial={{ top: 14, right: 14 }}>
+    <DraggablePanel title="Notifications" width={220} initial={{ top: 14, right: 14 }} dim={!!mounted}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {/* Placement switcher — applies to the next fire of any non-edge
             toast. Edge toasts override (they have their own ambient
@@ -1143,6 +1167,27 @@ function PlaygroundSurface() {
         </Btn>
       </div>
     </DraggablePanel>
+    </>)}
+
+    {/* Bottom-left toggle — hide / show the two dev toolbars entirely. */}
+    <button
+      type="button"
+      onClick={() => setPanelsHidden((h) => !h)}
+      title={panelsHidden ? 'Show toolbars' : 'Hide toolbars'}
+      style={{
+        position: 'fixed', bottom: 14, left: 14, zIndex: 12,
+        width: 30, height: 30, padding: 0,
+        display: 'grid', placeItems: 'center',
+        background: panelsHidden ? 'var(--gb-brand-tint-medium)' : 'var(--gb-surface-modal)',
+        border: '1px solid ' + (panelsHidden ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'),
+        borderRadius: 'var(--gb-r-md)',
+        boxShadow: 'var(--gb-shadow-popover)',
+        color: panelsHidden ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+        cursor: 'pointer',
+      }}
+    >
+      <I.eye size={14} />
+    </button>
 
     {/* ── Actions Shelf (bottom-right) ──────────────────────────
         Floating shelf that reads the live actionRegistry. The
