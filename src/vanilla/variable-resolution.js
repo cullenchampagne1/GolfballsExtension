@@ -223,6 +223,11 @@
         display = raw;
       }
       rawValues[name] = raw;
+      /* ── TEMP DEBUG (catalog-match diagnosis) — remove when fixed ── */
+      try {
+        const preview = (raw && typeof raw === 'object') ? raw : String(raw).slice(0, 200);
+        console.log(`[GB var-debug] ${name} (${def.type}) =`, preview);
+      } catch {}
       /* Smart options run BEFORE any per-variable validation that
          consumers downstream might apply. Order is load-bearing:
          a path field marked `validate.required` would otherwise
@@ -233,6 +238,12 @@
          renderer sees is the one returned here — post-smart. */
       resolved[name] = applySmart(display, def);
     }
+
+    /* ── TEMP DEBUG — dump the whole resolved set as JSON for inspection ── */
+    try {
+      console.log('[GB var-debug] ALL =', JSON.stringify(rawValues, null, 2));
+      if (typeof window !== 'undefined') window.__gbVarDebug = rawValues;
+    } catch (e) { console.log('[GB var-debug] (unserializable)', rawValues); }
 
     let toEmail = '';
     try {

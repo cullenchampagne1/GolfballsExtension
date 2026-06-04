@@ -245,6 +245,18 @@ function buildHelpers() {
     if (!key) return null;
     const all = await loadCatalog();
     const hit = all.find((p) => p.url && normUrl(p.url) === key);
+    /* ── TEMP DEBUG (catalog-match diagnosis) — remove when fixed ── */
+    try {
+      const tail = key.split('/').pop();
+      console.log('[GB byUrl-debug]', JSON.stringify({
+        input: url,
+        key,
+        catalogCount: all.length,
+        hit: hit ? hit.title : null,
+        nearByTail: all.filter((p) => p.url && normUrl(p.url).split('/').pop() === tail)
+          .slice(0, 5).map((p) => ({ title: p.title, url: normUrl(p.url) })),
+      }, null, 2));
+    } catch {}
     return hit ? slimProduct(hit) : null;
   };
   /* Generic primitive: take an HTML string, run it through the SAME page
