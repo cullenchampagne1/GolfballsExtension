@@ -91,12 +91,9 @@ const MONO_STYLES = [
   { key: 'diagonal', group: '2 Initials', label: 'Diagonal', viewBox: '0 0 232 256', svg: `<path fill="${_C}" fill-rule="evenodd" d="M158.4,253.6C156.6,252.2 156.5,250.4 156.2,205.7C156.0,161.0 156.0,159.2 157.9,156.9L159.8,154.5L183.2,154.5C203.4,154.5 207.1,154.7 211.0,156.3C228.3,163.3 231.1,187.4 215.9,198.6L212.8,200.8L216.6,202.6C226.3,207.2 231.8,217.7 230.6,229.2C229.2,242.5 222.7,250.1 209.5,253.6C202.2,255.6 161.1,255.5 158.4,253.6ZM209.1,241.8C216.6,238.5 220.2,230.1 217.9,221.1C215.2,210.4 207.5,207.7 182.0,208.2L168.5,208.5L168.2,225.0C168.1,234.0 168.2,242.1 168.5,242.8C169.3,244.9 204.0,244.0 209.1,241.8ZM37.1,205.1C32.1,200.1 29.6,202.9 109.8,122.7C150.9,81.6 186.0,47.0 187.7,45.9C189.7,44.6 191.7,44.1 193.0,44.5C196.0,45.4 198.3,49.5 197.6,52.4C196.7,55.9 44.6,206.4 41.5,206.8C40.1,207.0 38.3,206.3 37.1,205.1ZM204.8,195.6C213.6,191.0 216.2,179.4 210.4,171.1C207.3,166.8 203.4,166.0 185.0,166.0L168.0,166.0L168.0,180.8C168.0,189.0 168.3,196.0 168.7,196.3C170.1,197.7 202.0,197.1 204.8,195.6ZM1.9,99.6C0.5,96.6 -1.3,101.7 20.9,47.5C30.9,23.3 39.8,2.9 40.7,2.2C42.8,0.7 45.2,0.7 47.3,2.3C49.6,3.9 87.0,93.4 87.0,97.2C87.0,99.5 84.3,102.0 81.8,102.0C78.2,102.0 76.5,99.4 71.4,87.0L66.6,75.0L43.9,75.0L21.1,75.0L17.8,83.2C11.6,98.8 9.9,101.5 6.3,101.8C3.6,102.1 2.8,101.7 1.9,99.6ZM57.4,53.2C54.9,47.3 51.0,38.0 48.8,32.5C46.5,27.0 44.4,22.1 44.0,21.7C43.5,21.1 26.0,61.6 26.0,63.5C26.0,63.8 34.1,64.0 44.0,64.0L61.9,64.0L57.4,53.2Z"/>` },
   { key: 'simple-circle', group: '1 Initial', label: 'Simple Circle', viewBox: '0 0 256 256', svg: `<path fill="${_C}" fill-rule="evenodd" d="M107.5,253.5C15.0,236.5 -28.7,133.9 23.3,56.0C29.7,46.4 47.4,28.8 57.0,22.5C80.5,7.1 105.9,0.1 133.4,1.3C167.2,2.8 193.6,14.5 217.6,38.4C241.5,62.4 253.2,88.8 254.7,122.6C256.3,159.2 243.7,191.4 217.5,217.5C199.0,236.1 179.4,246.8 153.5,252.6C143.4,254.8 117.6,255.3 107.5,253.5ZM145.5,246.5C159.1,244.3 168.5,241.4 179.5,236.1C253.7,200.0 271.1,104.0 214.1,44.6C167.8,-3.5 90.8,-4.1 43.5,43.4C-2.7,89.6 -3.6,162.6 41.3,210.6C67.2,238.3 108.5,252.6 145.5,246.5ZM85.2,184.0C81.9,182.6 82.4,177.9 87.1,166.4C89.3,161.0 92.7,152.9 94.5,148.5C96.3,144.1 103.0,127.8 109.3,112.3C124.4,75.5 123.1,77.8 128.3,78.2L132.5,78.5L141.6,100.5C177.1,186.0 175.5,181.1 169.7,183.8C165.0,186.0 163.1,183.8 157.1,169.1L151.8,156.0L127.6,156.0L103.4,156.0L98.1,169.0C95.0,176.7 91.9,182.6 90.7,183.5C88.3,185.2 88.3,185.2 85.2,184.0ZM146.0,143.1C146.0,142.3 128.1,98.9 127.5,98.2C127.2,97.9 109.0,142.4 109.0,143.4C109.0,143.7 117.3,144.0 127.5,144.0C137.7,144.0 146.0,143.6 146.0,143.1Z"/>` },
 ];
-/* How many letters the selected monogram style accepts.
-   Drives both the maxLength of the Initials input and its placeholder/label. */
-const _monoCount = (key) => {
-  const s = MONO_STYLES.find((x) => x.key === key);
-  return s ? (parseInt(s.group, 10) || 3) : 3;
-};
+/* How many letters the selected monogram style renders (its max).
+   Drives the placeholder/label. */
+const _monoCount = (key) => _monoSpec(key).max;
 const _monoPlaceholder = (n) => (n === 1 ? 'A' : n === 2 ? 'MD' : 'ABC');
 
 /* AlignXL alignment styles (8) — cloudfront …/images/IDalign/align-xl-*.png */
@@ -501,16 +498,29 @@ const MONOGRAM_ENDPOINT = 'https://www.icustomize.com/GBC/Monogram/r';
    icustomize preview (it otherwise renders ~1.7× too large vs image/logo
    decals, which fill the print area directly). */
 const MONO_DECAL_FILL = 0.52;
-/* MONO_STYLES key → icustomize `view` param. */
-const _MONO_VIEW = {
-  'circle': 'circle3', 'hex': 'hex3', 'gardenia': 'gardenia',
-  'vertical': 'vertical', 'horizontal': 'horizontal', 'diagonal': 'diagonal',
-  'simple-circle': 'circle',
+/* Per-style letter-count range + how icustomize's `view` name is built from the
+   ACTUAL number of letters. The ring/badge styles carry a count suffix —
+   circle2/circle3, hex2/hex3 — so passing 2 letters to a 3-slot ring (which
+   leaves an empty wedge) is the "cuts off" bug. The rest are fixed-count. */
+const _MONO_SPEC = {
+  'circle':        { min: 2, max: 3, view: (n) => 'circle' + n },   // circle2 / circle3
+  'hex':           { min: 2, max: 3, view: (n) => 'hex' + n },      // hex2 / hex3
+  'gardenia':      { min: 3, max: 3, view: () => 'gardenia' },
+  'vertical':      { min: 2, max: 2, view: () => 'vertical' },
+  'horizontal':    { min: 2, max: 2, view: () => 'horizontal' },
+  'diagonal':      { min: 2, max: 2, view: () => 'diagonal' },
+  'simple-circle': { min: 1, max: 1, view: () => 'circle' },        // single initial
 };
-const _monoView = (styleKey) => _MONO_VIEW[styleKey] || 'circle3';
-/* Uppercase, A–Z only, capped to the style's letter count. */
+const _monoSpec = (styleKey) => _MONO_SPEC[styleKey] || _MONO_SPEC['circle'];
+/* Largest letter count any style takes — the Initials input caps to this, so a
+   switch between styles never loses letters (each style just renders its
+   first N). */
+const GLOBAL_MONO_MAX = 3;
+/* Letters a style actually renders: the typed initials (A–Z only) capped to the
+   style's max. The full typed value stays in state untouched on a style switch
+   — we only take the first N here. */
 const _monoLetters = (initials, styleKey) =>
-  String(initials || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, _monoCount(styleKey));
+  String(initials || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, _monoSpec(styleKey).max);
 
 /* Cache of split black/white layers, keyed by `view|letters` — survives
    color changes so re-tinting is instant. */
@@ -611,21 +621,17 @@ function composeMonoDecal(masks, c1, c2) {
   if (c2) oc.drawImage(_tintMask(mC2, c2), dx, dy, dw, dh);     // Color 2 (on top)
   return out.toDataURL('image/png');
 }
-function buildIconUrl(iconName) {
+/* Resolve an icon's raw host URL. We CANNOT wrap this in an <svg><image href>
+   data URL: an SVG loaded as a texture is sandboxed and can't fetch an external
+   href, so the decal rendered the browser's broken-image glyph. Instead the
+   raw URL is fetched through the background proxy → same-origin data URL (see
+   useDecalUrl), which the viewer can load directly. */
+const _iconCache = new Map();   // host URL → data URL
+function iconSrc(iconName) {
   if (!iconName) return null;
-  // ICON_THEMES values are arrays of [displayName, fileName] — find the matching one.
   for (const items of Object.values(ICON_THEMES)) {
     const hit = items.find(([n]) => n === iconName);
-    if (hit) {
-      const src = ICON_HOST + hit[1];
-      // The site icons are cropped tight to their content, so handing the raw
-      // URL to the decal projector covers most of the pole. Wrap in a padded
-      // SVG so the bitmap rasterizes with transparent margins around it —
-      // gives roughly the same visual scale on the ball as an uploaded photo
-      // (the only decal type the buyer confirmed looks right).
-      const doc = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="-30 -30 160 160"><image href="${src}" x="0" y="0" width="100" height="100" preserveAspectRatio="xMidYMid meet"/></svg>`;
-      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(doc);
-    }
+    if (hit) return ICON_HOST + hit[1];
   }
   return null;
 }
@@ -677,11 +683,14 @@ function buildPersonalizedUrl(line1, line2, line3, font, color, size) {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(doc);
 }
 /* Hook: given the active print-type snapshot, return the decal URL the viewer
-   should render. Icons / Personalized / uploads are local and resolve
-   synchronously. Monogram is fetched from icustomize (the real letter art):
-   the black/white layers are fetched once per (style, letters) and cached, so
-   a COLOR change just re-tints them in place — only a TEXT/STYLE change hits
-   the network (debounced). Returns null while the first fetch is in flight. */
+   should render. Personalized / uploads are local and resolve synchronously.
+   Monogram + Icons are fetched cross-origin (via the background proxy):
+   - Monogram art is fetched once per (view, letters) and cached, so a COLOR
+     change just re-tints the layers in place — only a TEXT/STYLE change hits
+     the network (debounced). The icustomize `view` is built from the actual
+     letter count (circle2 vs circle3) so 2 letters don't land in a 3-slot ring.
+   - Icons are fetched to a same-origin data URL and cached by name.
+   Returns null while a first fetch is in flight. */
 function useDecalUrl() {
   const ctx = usePT();
   const sel = ctx.sel;
@@ -689,7 +698,6 @@ function useDecalUrl() {
 
   // Non-network decal types — computed directly.
   const syncUrl = useMemo(() => {
-    if (sel === 'Icons') return buildIconUrl((data.Icons || {}).icon);
     if (sel === 'Personalized') {
       const s = data.Personalized || {};
       return buildPersonalizedUrl(s.l1, s.l2, s.l3, s.font, s.color, s.size);
@@ -702,28 +710,44 @@ function useDecalUrl() {
   const mono = sel === 'Monogram' ? (data.Monogram || {}) : null;
   const mStyle = mono && mono.style, mInit = mono && mono.initials;
   const mC1 = mono && mono.c1, mC2 = mono && mono.c2;
+  const iconName = sel === 'Icons' ? (data.Icons || {}).icon : null;
 
   const [url, setUrl] = useState(null);
   useEffect(() => {
-    if (sel !== 'Monogram') { setUrl(syncUrl); return; }
-    const letters = _monoLetters(mInit, mStyle);
-    if (!letters) { setUrl(null); return; }
-    const view = _monoView(mStyle);
-    const c1 = _hexOf(mC1);
-    const c2 = (mC2 && mC2 !== 'Transparent') ? _hexOf(mC2) : null;  // null → monochrome
-    // Layers already cached (e.g. a color-only change) → re-tint instantly.
-    const cached = peekMonoMasks(view, letters);
-    if (cached) { setUrl(composeMonoDecal(cached, c1, c2)); return; }
-    // First time for these letters → debounce the network fetch so typing
-    // doesn't fire a request per keystroke.
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      getMonoMasks(view, letters)
-        .then((masks) => { if (!cancelled) setUrl(composeMonoDecal(masks, c1, c2)); })
+    // ── Icons — fetch the real PNG to a data URL (cached). ──
+    if (sel === 'Icons') {
+      const src = iconSrc(iconName);
+      if (!src) { setUrl(null); return; }
+      if (_iconCache.has(src)) { setUrl(_iconCache.get(src)); return; }
+      let cancelled = false;
+      proxyImageDataUrl(src)
+        .then((du) => { _iconCache.set(src, du); if (!cancelled) setUrl(du); })
         .catch(() => { if (!cancelled) setUrl(null); });
-    }, 240);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [sel, syncUrl, mStyle, mInit, mC1, mC2]);
+      return () => { cancelled = true; };
+    }
+    // ── Monogram — fetch real letter art, split + recolor. ──
+    if (sel === 'Monogram') {
+      const letters = _monoLetters(mInit, mStyle);
+      const spec = _monoSpec(mStyle);
+      if (letters.length < spec.min) { setUrl(null); return; }   // not enough initials yet
+      const view = spec.view(letters.length);                    // circle2 / circle3 / …
+      const c1 = _hexOf(mC1);
+      const c2 = (mC2 && mC2 !== 'Transparent') ? _hexOf(mC2) : null;  // null → monochrome
+      // Layers already cached (e.g. a color-only change) → re-tint instantly.
+      const cached = peekMonoMasks(view, letters);
+      if (cached) { setUrl(composeMonoDecal(cached, c1, c2)); return; }
+      // First time for these letters → debounce the network fetch.
+      let cancelled = false;
+      const timer = setTimeout(() => {
+        getMonoMasks(view, letters)
+          .then((masks) => { if (!cancelled) setUrl(composeMonoDecal(masks, c1, c2)); })
+          .catch(() => { if (!cancelled) setUrl(null); });
+      }, 240);
+      return () => { cancelled = true; clearTimeout(timer); };
+    }
+    // ── Everything else — synchronous. ──
+    setUrl(syncUrl);
+  }, [sel, syncUrl, iconName, mStyle, mInit, mC1, mC2]);
 
   return url;
 }
@@ -916,25 +940,32 @@ function MonogramDecoration() {
    so the Initials field can rescale to match the chosen style (1 / 2 / 3 letters).
    Renders in place of the default control loop in ModControls. */
 function MonogramFlow() {
-  const ctx = usePT();
   const [style, setStyle] = usePTField('Monogram', 'style');
   const [v, setV] = usePTField('Monogram', 'initials');
   const [c1, setC1] = usePTField('Monogram', 'c1');
   const [c2, setC2] = usePTField('Monogram', 'c2');
   const n = _monoCount(style);
-  // Switching to a smaller-count style truncates initials so leftover
-  // letters don't survive invisibly. Single context update so both fields
-  // change in one render, no flash of out-of-range initials.
-  const pickStyle = (k) => {
-    const m = _monoCount(k);
-    ctx.update('Monogram', { style: k, ...(v.length > m ? { initials: v.slice(0, m) } : {}) });
-  };
+  // Switching styles must NOT clobber the typed text — each style just renders
+  // its first N letters. So pickStyle only changes the style; the stored
+  // initials (up to the global max) are left intact.
+  const pickStyle = (k) => setStyle(k);
+  const typed = String(v || '').toUpperCase().replace(/[^A-Z]/g, '');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <Field label="Monogram Style"><MonoGrid value={style} onChange={pickStyle} /></Field>
       <Field label={n === 1 ? 'Initial' : 'Initials'}>
-        <TextInput value={v} onChange={(s) => setV(s.slice(0, n))} placeholder={_monoPlaceholder(n)} maxLength={n} />
+        <TextInput
+          value={v}
+          onChange={(s) => setV(s.toUpperCase().replace(/[^A-Z]/g, '').slice(0, GLOBAL_MONO_MAX))}
+          placeholder={_monoPlaceholder(n)}
+          maxLength={GLOBAL_MONO_MAX}
+        />
       </Field>
+      {typed.length > n && (
+        <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: -8 }}>
+          This style uses the first {n} letter{n === 1 ? '' : 's'} — “{typed.slice(0, n)}”.
+        </div>
+      )}
       <Field label="Color"><ColorRow swatches={IMPRINT_COLORS} value={c1} onChange={setC1} /></Field>
       <Field label="Color 2"><ColorRow swatches={IMPRINT_COLORS} transparent value={c2} onChange={setC2} /></Field>
     </div>
@@ -1281,9 +1312,11 @@ function BallPreview() {
   const ctx = usePT();
   const decalUrl = useDecalUrl();
   const supported = ['Monogram', 'Personalized', 'Icons', 'Custom Logo', 'Photo'].includes(ctx.sel);
-  // Monogram fetches its art — distinguish "nothing typed yet" from "fetching".
-  const monoHasLetters = ctx.sel === 'Monogram'
-    && _monoLetters((ctx.data.Monogram || {}).initials, (ctx.data.Monogram || {}).style).length > 0;
+  // Monogram fetches its art — distinguish "needs more initials" from "fetching".
+  const monoStyle = (ctx.data.Monogram || {}).style;
+  const monoMin = ctx.sel === 'Monogram' ? _monoSpec(monoStyle).min : 0;
+  const monoEnough = ctx.sel === 'Monogram'
+    && _monoLetters((ctx.data.Monogram || {}).initials, monoStyle).length >= monoMin;
   const emptyMsg = !supported
     ? 'Preview not yet available for this print type'
     : ctx.sel === 'Personalized'
@@ -1293,7 +1326,7 @@ function BallPreview() {
         : ctx.sel === 'Icons'
           ? 'Pick an icon to preview'
           : ctx.sel === 'Monogram'
-            ? (monoHasLetters ? 'Rendering monogram…' : 'Type initials to preview')
+            ? (monoEnough ? 'Rendering monogram…' : `Type ${monoMin} initial${monoMin === 1 ? '' : 's'} to preview`)
             : 'Pick a style to preview';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
