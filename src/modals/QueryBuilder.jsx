@@ -648,8 +648,29 @@ export function QueryBuilder({ onClosed, bindClose, initialConditions = [], init
   };
 
   /* Load a quick preset — built-ins build fresh state, promoted ones
-     carry a stored state (like a saved query). */
-  const handleLoadPreset = (p) => loadFromState(p.build ? p.build() : (p.state || { outerJoiner: 'AND', groups: [newGroup()] }));
+     carry a stored state (like a saved query). A preset is a one-click
+     filter, so clicking it APPLIES immediately (and closes the builder to
+     reveal the results) rather than only loading it for further editing. */
+  const handleLoadPreset = (p) => {
+    const st = p.build ? p.build() : (p.state || { outerJoiner: 'AND', groups: [newGroup()] });
+    loadFromState(st); // reflect in the builder (and the fallback when not embedded)
+    if (typeof onApply !== 'function') return;
+    const grps = st.groups || [];
+    const oj = st.outerJoiner || 'AND';
+    onApply({
+      label:  compileGroupsToLabel(grps, oj),
+      solrFq: compileGroupsToSolr(grps, oj),
+      conditions: flattenGroups(grps),
+      state: {
+        outerJoiner: oj,
+        groups: grps.map((g) => ({
+          joiner: g.joiner,
+          conditions: (g.conditions || []).map(({ id: _id, ...rest }) => rest),
+        })),
+      },
+    });
+    bindCloseRef.current?.();
+  };
 
   /* Promote a saved query into the quick presets. */
   const handlePromotePreset = async (q) => {

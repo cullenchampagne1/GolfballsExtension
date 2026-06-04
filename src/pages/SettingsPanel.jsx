@@ -27,6 +27,7 @@ import { Tag } from '../ui/components/Tag.jsx';
 import { CollapsibleSection } from '../ui/components/CollapsibleSection.jsx';
 import { DEV_SETTINGS, defaultDevSettings, loadDevSettings, saveDevSettings } from '../lib/devSettings.js';
 import { useSecretSettings, isSecret, installSecretConsole, DEV_SECTION_KEY } from '../lib/secretSettings.js';
+import { installScanConsole } from '../lib/recentOrdersScan.js';
 
 /* ───────────────────────────────────────────────────────────────
    SettingsPanel — the fully-featured Manage → Settings page.
@@ -711,6 +712,8 @@ export function SettingsPanel() {
   // Expose the admin-only console command in this (extension settings) page so
   // an admin can hide/show settings from the console. No UI surface by design.
   useEffect(() => { installSecretConsole(window); }, []);
+  // `__gbScan.reset()` / `.status()` for the recent-orders scan clock.
+  useEffect(() => { installScanConsole(window); }, []);
 
   useEffect(() => {
     loadTheme().then((t) => { setTheme(t); applyTheme(t); });

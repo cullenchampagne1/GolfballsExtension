@@ -7,6 +7,7 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { callSource, defineSource, hasExtensionContext } from '../lib/dataSource.js';
 import { QueryBuilder, describeCondition, compileToSolr, compileToLabel, loadSavedQueries, compileGroupsToSolr } from './QueryBuilder.jsx';
+import { SCAN_LAST_RUN_KEY } from '../lib/recentOrdersScan.js';
 import { EmailRunner } from './EmailRunner.jsx';
 import {
   indexRecords, getAllIndexed, deleteIndexed, clearIndex, searchIndexed,
@@ -768,8 +769,8 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
      last time this was run" (first run = the last 7 days), so the result
      set is exactly the clients who've ordered since the previous scan.
      The clock advances on every run so tomorrow's scan starts where this
-     one ended. Requires a saved filter literally named "My Clients". */
-  const SCAN_LAST_RUN_KEY = 'gbScanRecentOrders_lastRun';
+     one ended. Requires a saved filter literally named "My Clients".
+     The clock can be reset from the Settings page console: __gbScan.reset(). */
   useEffect(() => {
     const unsub = actionRegistry.register({
       id: 'gb-crm-scan-recent-orders',
@@ -802,12 +803,20 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
         const niceSince = sinceDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
         // 3. Combine: (My Clients filter) AND lastOrderDate on/after since.
-        const mineFq = compileGroupsToSolr(mine.groups || [], mine.outerJoiner || 'AND');
+        //    Saved filters store the COMPILED query under `query` and the
+        //    grouped state under `state` (NOT top-level groups), so read
+        //    those. Fall back to compiling state.groups if `query` is absent.
+        const mineFq = (mine.query && mine.query.trim())
+          || compileGroupsToSolr(mine.state?.groups || [], mine.state?.outerJoiner || 'AND');
+        if (!mineFq) {
+          toast?.error?.('Your “My Clients” filter has no conditions. Open Query Builder and add at least one (e.g. Sales Rep = you), then re-save it.', { duration: 6000, placement: 'top-center' });
+          return;
+        }
         const dateFq = `lastOrderDate_dt:[${sinceStr}T00:00:00Z TO *]`;
-        const solrFq = mineFq ? `(${mineFq}) AND ${dateFq}` : dateFq;
+        const solrFq = `(${mineFq}) AND ${dateFq}`;
         // Flattened conditions drive the filter-bar tags (informational).
         const conditions = [
-          ...(mine.groups || []).flatMap((g) => g.conditions || []),
+          ...(mine.conditions || []),
           { id: `scan_${Date.now()}`, fieldKey: 'lastOrderDate_dt', op: 'after', val: sinceStr },
         ];
         const filter = { label: `My Clients · ordered since ${niceSince}`, solrFq, conditions };
