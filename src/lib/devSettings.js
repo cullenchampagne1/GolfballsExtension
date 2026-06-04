@@ -254,6 +254,17 @@ export const DEV_SETTINGS = [
     unit:    '×',
   },
   {
+    key:     'giftCatalog.previewScale',
+    label:   'Gifting Catalog: live preview ball scale',
+    desc:    'Initial zoom of the ball in the catalog customization preview (separate from the Image Viewer). Wheel zoom still overrides during use.',
+    type:    'number',
+    default: 2,
+    min:     0.5,
+    max:     5,
+    step:    0.25,
+    unit:    '×',
+  },
+  {
     key:     'giftCatalog.cacheHours',
     label:   'Gifting Catalog: re-index interval (hours)',
     desc:    'How long the catalog (products + pricing) is cached before a fresh live pull. Lower it if prices change often; 0 = always pull fresh on open.',

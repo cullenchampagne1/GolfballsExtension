@@ -1,8 +1,9 @@
 import React, { useState, useEffect, createContext, useContext, useMemo, useCallback, useRef } from 'react';
 import { Btn, Tag, Dot, DraggablePopup, Segmented, CompactModal, ModalHeader, ModalFooter, Slider, IconBtn, Dropdown } from '../ui/index.js';
-import { AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Icon, I } from '../ui/icons.jsx';
 import { GolfballViewer } from './GolfballViewer.jsx';
+import { useDevSetting } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    giftCustomize.jsx — the real per-product personalization UI for
@@ -1649,6 +1650,11 @@ function BallPreview() {
   const ctx = usePT();
   const decalUrl = useDecalUrl();
   const secondUrl = useSecondDecalUrl(decalUrl);
+  // Catalog preview ball scale — its own dev setting (separate from the Image
+  // Viewer's golfballViewer.ballScale).
+  const previewScale = Number(useDevSetting('giftCatalog.previewScale') ?? 2) || 2;
+  // Slow auto-spin so both poles (dual-pole imprints) are visible hands-free.
+  const [spin, setSpin] = useState(false);
   const supported = ['Monogram', 'Personalized', 'Icons', 'Custom Logo', 'Photo'].includes(ctx.sel);
   // Monogram fetches its art — distinguish "needs more initials" from "fetching".
   const monoStyle = (ctx.data.Monogram || {}).style;
@@ -1671,15 +1677,33 @@ function BallPreview() {
       <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Live preview</div>
       <div style={{ position: 'relative', width: '100%', height: 200, borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)' }}>
         {(decalUrl || secondUrl) ? (
-          <GolfballViewer minimal initialScale={3} decalDataUrl={decalUrl} secondDecalDataUrl={secondUrl} />
+          <GolfballViewer minimal initialScale={previewScale} autoRotate={spin} decalDataUrl={decalUrl} secondDecalDataUrl={secondUrl} />
         ) : (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, textAlign: 'center' }}>
             <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', lineHeight: 1.4 }}>{emptyMsg}</div>
           </div>
         )}
+        {(decalUrl || secondUrl) && (
+          <button
+            type="button"
+            onClick={() => setSpin((s) => !s)}
+            title={spin ? 'Stop rotating' : 'Auto-rotate to see both poles'}
+            style={{
+              position: 'absolute', right: 8, bottom: 8, width: 30, height: 30,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              borderRadius: '50%', cursor: 'pointer', fontFamily: 'inherit',
+              background: spin ? 'var(--gb-brand-label)' : 'rgba(0,0,0,.5)',
+              color: spin ? 'var(--gb-surface-deep)' : '#fff',
+              border: '1px solid ' + (spin ? 'var(--gb-brand-label)' : 'rgba(255,255,255,.25)'),
+              backdropFilter: 'blur(4px)',
+            }}
+          >
+            <I.refresh size={14} />
+          </button>
+        )}
       </div>
       <div style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)', textAlign: 'center', lineHeight: 1.3 }}>
-        Drag to rotate · scroll to zoom{secondUrl ? ' · rotate to see the 2nd imprint' : ''}
+        Drag to rotate · scroll to zoom{secondUrl ? ' · ↻ spins to show both poles' : ''}
       </div>
     </div>
   );

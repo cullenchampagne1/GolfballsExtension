@@ -94,7 +94,7 @@ export const SCENES = [
   { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'assets/moonlit_golf_4k.exr',     icon: 'moon' },
 ];
 
-export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, secondDecalDataUrl, onError, onSceneChange, onThrowChange, minimal = false, initialScale }, ref) {
+export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, secondDecalDataUrl, onError, onSceneChange, onThrowChange, minimal = false, initialScale, autoRotate = false }, ref) {
   const containerRef = useRef(null);
   // Imperative snapshot handle — set by the WebGL effect once the
   // scene is ready. Parent calls snapshotRef.current() to capture a
@@ -187,6 +187,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   const [rdCopied, setRdCopied] = useState(false);
   const [decalForceTop, setDecalForceTop] = useState(false);
   const decalForceTopRef = useRef(false);
+  // Auto-rotate (slow Y spin) — lets the catalog preview show both poles
+  // hands-free. Mirrored into a ref so the render loop reads the live value.
+  const autoRotateRef = useRef(false);
+  useEffect(() => { autoRotateRef.current = autoRotate; }, [autoRotate]);
   // Throw mode — toggled by the in-frame chip button. When on:
   //   • OrbitControls are disabled so drag = throw, not orbit
   //   • The render loop integrates ball velocity + angular velocity
@@ -2846,6 +2850,12 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
 
           // Scale is independent of mode — wheel-driven only.
           ballGroup.scale.setScalar(state.scale);
+
+          // Slow auto-spin around Y so both poles come into view (dual-pole
+          // preview). Disabled during throw/explode so it doesn't fight physics.
+          if (autoRotateRef.current && !throwModeRef.current && !ballExploded) {
+            ballGroup.rotation.y += 0.01;
+          }
 
           /* ── Two-pass render for refraction ────────────────────
              When water is present we need the scene WITHOUT water
