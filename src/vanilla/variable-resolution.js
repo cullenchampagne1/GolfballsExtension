@@ -239,11 +239,15 @@
       resolved[name] = applySmart(display, def);
     }
 
-    /* ── TEMP DEBUG — dump the whole resolved set as JSON for inspection ── */
+    /* ── TEMP DEBUG — persist the whole resolved set so __gbDownloadDebug()
+       can export it as a JSON file (resolution runs on the CRM page, not the
+       popup, so a file is easier to collect than cross-page console). ── */
     try {
-      console.log('[GB var-debug] ALL =', JSON.stringify(rawValues, null, 2));
       if (typeof window !== 'undefined') window.__gbVarDebug = rawValues;
-    } catch (e) { console.log('[GB var-debug] (unserializable)', rawValues); }
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ gbVarsDebug: { ts: Date.now(), url: (typeof location !== 'undefined' ? location.href : ''), vars: rawValues } });
+      }
+    } catch {}
 
     let toEmail = '';
     try {

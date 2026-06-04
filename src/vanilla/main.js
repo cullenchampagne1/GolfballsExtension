@@ -482,6 +482,25 @@ window.__gbContentReady = true;
     }
   };
 
+  /* ── TEMP DEBUG — export the last resolution + catalog-match trace as a
+     JSON file. Run `__gbDownloadDebug()` in the CRM page console after a
+     resolution. Remove with the other gb*-debug blocks once matching is
+     fixed. ── */
+  window.__gbDownloadDebug = () => {
+    try {
+      chrome.storage.local.get(['gbVarsDebug', 'gbByUrlDebug'], (d) => {
+        const payload = { exportedAt: new Date().toISOString(), vars: d.gbVarsDebug || null, byUrl: d.gbByUrlDebug || [] };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `gb-var-debug-${Date.now()}.json`;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      });
+      return 'downloading gb-var-debug…';
+    } catch (e) { return 'debug export failed: ' + (e && e.message); }
+  };
+
 // ── Initial scans + DOM mutation observer ───────────────────────────────────
   // ── Scan on load + watch for dynamic rows ─────────────
 

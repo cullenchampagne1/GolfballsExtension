@@ -245,17 +245,24 @@ function buildHelpers() {
     if (!key) return null;
     const all = await loadCatalog();
     const hit = all.find((p) => p.url && normUrl(p.url) === key);
-    /* ── TEMP DEBUG (catalog-match diagnosis) — remove when fixed ── */
+    /* ── TEMP DEBUG (catalog-match diagnosis) — persist to storage so
+       __gbDownloadDebug() can export it. Remove when fixed. ── */
     try {
-      const tail = key.split('/').pop();
-      console.log('[GB byUrl-debug]', JSON.stringify({
-        input: url,
-        key,
-        catalogCount: all.length,
-        hit: hit ? hit.title : null,
-        nearByTail: all.filter((p) => p.url && normUrl(p.url).split('/').pop() === tail)
-          .slice(0, 5).map((p) => ({ title: p.title, url: normUrl(p.url) })),
-      }, null, 2));
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        const tail = key.split('/').pop();
+        const entry = {
+          ts: Date.now(), input: url, key, catalogCount: all.length, hit: hit ? hit.title : null,
+          nearByTail: all.filter((p) => p.url && normUrl(p.url).split('/').pop() === tail)
+            .slice(0, 8).map((p) => ({ title: p.title, url: normUrl(p.url), id: p.id })),
+          ballUrlSample: all.filter((p) => /golf ball/i.test(p.title || ''))
+            .slice(0, 100).map((p) => normUrl(p.url)),
+        };
+        chrome.storage.local.get('gbByUrlDebug', (d) => {
+          const arr = Array.isArray(d && d.gbByUrlDebug) ? d.gbByUrlDebug : [];
+          arr.push(entry); while (arr.length > 10) arr.shift();
+          chrome.storage.local.set({ gbByUrlDebug: arr });
+        });
+      }
     } catch {}
     return hit ? slimProduct(hit) : null;
   };
