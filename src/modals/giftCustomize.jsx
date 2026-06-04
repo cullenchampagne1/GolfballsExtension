@@ -440,6 +440,12 @@ const DEFAULT_PT_DATA = {
   Icons:         { icon: '' },
   'Custom Logo': { imageDataUrl: null, fileName: null },
   Photo:         { imageDataUrl: null, fileName: null },
+  // Dual-pole second imprint — its own slot so it never collides with the
+  // front print's fields. Holds whichever sub-type the buyer picks.
+  __second:      { enabled: false, choice: 'Same as Front',
+                   l1: '', l2: '', l3: '', color: 'Black', font: 'Kabel Dm BT', size: 'Standard',
+                   style: 'circle', initials: '', c1: 'Black', c2: 'Transparent',
+                   imageDataUrl: null, fileName: null },
 };
 /* Read a single field for the given print-type slot, with a fallback.
    Returns [value, setValue] so consumers feel like useState. */
@@ -842,17 +848,70 @@ function useDecalUrl() {
   return url;
 }
 
+/* Dual-pole: resolve the SECOND imprint (opposite pole) to a decal URL. Reads
+   the __second context slot and reuses the same renderers as the front
+   (Personalized text / Monogram / uploaded image). `frontUrl` is handed in for
+   the "Same as Front" choice. Returns null when no second imprint is active. */
+function useSecondDecalUrl(frontUrl) {
+  const ctx = usePT();
+  const s = ctx.data.__second || {};
+  const { enabled, choice } = s;
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    if (!enabled) { setUrl(null); return; }
+    if (choice === 'Same as Front') { setUrl(frontUrl || null); return; }
+    if (choice === 'Upload Image' || choice === 'Custom' || choice === 'Logo Library') {
+      setUrl(s.imageDataUrl || null); return;
+    }
+    if (choice === 'Personalized') {
+      const lines = [s.l1, s.l2, s.l3].map((l) => String(l || '').trim()).filter(Boolean);
+      if (!lines.length) { setUrl(null); return; }
+      const font = s.font || 'Kabel Dm BT';
+      const color = _hexOf(s.color);
+      const mfs = SIZE_TO_MFS[s.size] || SIZE_TO_MFS.Standard;
+      const key = JSON.stringify([lines, font, color, mfs]);
+      if (_personalizedCache.has(key)) { setUrl(_personalizedCache.get(key)); return; }
+      let cancelled = false;
+      const t = setTimeout(() => {
+        extractTextDecal(lines, font, color, mfs)
+          .then((u) => { if (u) _personalizedCache.set(key, u); if (!cancelled) setUrl(u); })
+          .catch(() => { if (!cancelled) setUrl(null); });
+      }, 300);
+      return () => { cancelled = true; clearTimeout(t); };
+    }
+    if (choice === 'Monogram') {
+      const letters = _monoLetters(s.initials, s.style);
+      const spec = _monoSpec(s.style);
+      if (letters.length < spec.min) { setUrl(null); return; }
+      const view = spec.view(letters.length);
+      const c1 = _hexOf(s.c1);
+      const c2 = (s.c2 && s.c2 !== 'Transparent') ? _hexOf(s.c2) : (spec.knockout ? null : c1);
+      const cached = peekMonoMasks(view, letters);
+      if (cached) { setUrl(composeMonoDecal(cached, c1, c2)); return; }
+      let cancelled = false;
+      const t = setTimeout(() => {
+        getMonoMasks(view, letters)
+          .then((masks) => { if (!cancelled) setUrl(composeMonoDecal(masks, c1, c2)); })
+          .catch(() => { if (!cancelled) setUrl(null); });
+      }, 240);
+      return () => { cancelled = true; clearTimeout(t); };
+    }
+    setUrl(null);
+  }, [enabled, choice, frontUrl, s.l1, s.l2, s.l3, s.color, s.font, s.size, s.style, s.initials, s.c1, s.c2, s.imageDataUrl]);
+  return url;
+}
+
 /* Second-pole imprint — the live reveal: a choice row, then the matching control. */
 const SECOND_IMPRINT_CHOICES = ['Same as Front', 'Personalized', 'Monogram', 'Upload Image', 'Logo Library', 'Custom'];
 /* full personalized imprint — 3 wired text lines + imprint color, font, size.
    Shared by the Personalized print type and the second-pole Personalized choice. */
-function PersonalizedImprint() {
-  const [l1, setL1] = usePTField('Personalized', 'l1');
-  const [l2, setL2] = usePTField('Personalized', 'l2');
-  const [l3, setL3] = usePTField('Personalized', 'l3');
-  const [color, setColor] = usePTField('Personalized', 'color');
-  const [font, setFont] = usePTField('Personalized', 'font');
-  const [size, setSize] = usePTField('Personalized', 'size');
+function PersonalizedImprint({ slot = 'Personalized' }) {
+  const [l1, setL1] = usePTField(slot, 'l1');
+  const [l2, setL2] = usePTField(slot, 'l2');
+  const [l3, setL3] = usePTField(slot, 'l3');
+  const [color, setColor] = usePTField(slot, 'color');
+  const [font, setFont] = usePTField(slot, 'font');
+  const [size, setSize] = usePTField(slot, 'size');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
       <Field label="Line 1" required><TextInput value={l1} onChange={setL1} placeholder="Your text" maxLength={17} /></Field>
@@ -865,25 +924,49 @@ function PersonalizedImprint() {
   );
 }
 
+/* Second-pole monogram sub-control — writes into the __second slot so it's
+   independent of the front Monogram print. Same style/initials/2-color inputs
+   as MonogramFlow; the decal is rendered by useSecondDecalUrl. */
+function SecondMonogram() {
+  const [style, setStyle] = usePTField('__second', 'style');
+  const [v, setV] = usePTField('__second', 'initials');
+  const [c1, setC1] = usePTField('__second', 'c1');
+  const [c2, setC2] = usePTField('__second', 'c2');
+  const n = _monoCount(style);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Field label="Monogram Style"><MonoGrid value={style} onChange={setStyle} /></Field>
+      <Field label={n === 1 ? 'Initial' : 'Initials'}>
+        <TextInput value={v} onChange={(s) => setV(s.toUpperCase().replace(/[^A-Z]/g, '').slice(0, GLOBAL_MONO_MAX))} placeholder={_monoPlaceholder(n)} maxLength={GLOBAL_MONO_MAX} />
+      </Field>
+      <Field label="Color"><ColorRow swatches={IMPRINT_COLORS} value={c1} onChange={setC1} /></Field>
+      <Field label="Color 2"><ColorRow swatches={IMPRINT_COLORS} transparent value={c2} onChange={setC2} /></Field>
+    </div>
+  );
+}
+
+/* Dual-pole second imprint. The buyer's front print goes on the camera-facing
+   pole; this puts a second, independent imprint on the opposite pole (e.g. a
+   Custom Logo on one side + Personalization/Monogram on the other). All state
+   lives in the __second context slot so it survives + drives the back decal. */
 function SecondImprint() {
-  const [on, setOn] = useState(false);
-  const [choice, setChoice] = useState('Same as Front');
-  const [mono, setMono] = useState(MONO_STYLES[0].key);
+  const [on, setOn] = usePTField('__second', 'enabled');
+  const [choice, setChoice] = usePTField('__second', 'choice');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-      <Checkbox checked={on} onClick={() => setOn(!on)} label="Add Second Imprint (Optional)" />
+      <Checkbox checked={!!on} onClick={() => setOn(!on)} label="Add Second Imprint (opposite pole)" />
       {on && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {SECOND_IMPRINT_CHOICES.map((v) => {
-              const sel = choice === v;
-              return <button key={v} onClick={() => setChoice(v)} style={{ padding: '7px 11px', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, background: sel ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (sel ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: sel ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>{v}</button>;
+            {SECOND_IMPRINT_CHOICES.map((vv) => {
+              const sel = choice === vv;
+              return <button key={vv} onClick={() => setChoice(vv)} style={{ padding: '7px 11px', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, background: sel ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)', border: '1px solid ' + (sel ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: sel ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>{vv}</button>;
             })}
           </div>
-          {choice === 'Personalized' && <PersonalizedImprint />}
-          {choice === 'Monogram' && <MonoGrid value={mono} onChange={setMono} />}
-          {(choice === 'Upload Image' || choice === 'Custom' || choice === 'Logo Library') && <ImageUpload label="Upload Second Imprint" />}
-          {choice === 'Same as Front' && <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontStyle: 'italic' }}>Reuses your front imprint on the second pole.</div>}
+          {choice === 'Personalized' && <PersonalizedImprint slot="__second" />}
+          {choice === 'Monogram' && <SecondMonogram />}
+          {(choice === 'Upload Image' || choice === 'Custom' || choice === 'Logo Library') && <ImageUpload slot="__second" label="Upload Second Imprint" />}
+          {choice === 'Same as Front' && <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontStyle: 'italic' }}>Reuses your front imprint on the opposite pole — rotate the ball to see it.</div>}
         </div>
       )}
     </div>
@@ -1401,6 +1484,7 @@ function PrintTypeGrid({ p, mods, config }) {
 function BallPreview() {
   const ctx = usePT();
   const decalUrl = useDecalUrl();
+  const secondUrl = useSecondDecalUrl(decalUrl);
   const supported = ['Monogram', 'Personalized', 'Icons', 'Custom Logo', 'Photo'].includes(ctx.sel);
   // Monogram fetches its art — distinguish "needs more initials" from "fetching".
   const monoStyle = (ctx.data.Monogram || {}).style;
@@ -1422,15 +1506,17 @@ function BallPreview() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Live preview</div>
       <div style={{ position: 'relative', width: '100%', height: 200, borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)' }}>
-        {decalUrl ? (
-          <GolfballViewer minimal decalDataUrl={decalUrl} />
+        {(decalUrl || secondUrl) ? (
+          <GolfballViewer minimal decalDataUrl={decalUrl} secondDecalDataUrl={secondUrl} />
         ) : (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, textAlign: 'center' }}>
             <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', lineHeight: 1.4 }}>{emptyMsg}</div>
           </div>
         )}
       </div>
-      <div style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)', textAlign: 'center', lineHeight: 1.3 }}>Drag to rotate · scroll to zoom</div>
+      <div style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)', textAlign: 'center', lineHeight: 1.3 }}>
+        Drag to rotate · scroll to zoom{secondUrl ? ' · rotate to see the 2nd imprint' : ''}
+      </div>
     </div>
   );
 }

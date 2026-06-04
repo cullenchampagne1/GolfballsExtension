@@ -94,7 +94,7 @@ export const SCENES = [
   { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'assets/moonlit_golf_4k.exr',     icon: 'moon' },
 ];
 
-export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, onError, onSceneChange, onThrowChange, minimal = false }, ref) {
+export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, secondDecalDataUrl, onError, onSceneChange, onThrowChange, minimal = false }, ref) {
   const containerRef = useRef(null);
   // Imperative snapshot handle — set by the WebGL effect once the
   // scene is ready. Parent calls snapshotRef.current() to capture a
@@ -238,7 +238,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
 
   useEffect(() => {
     let disposed = false;
-    let renderer, scene, camera, ballMesh, decalMesh, ballGroup, animationId;
+    let renderer, scene, camera, ballMesh, decalMesh, decalMesh2, ballGroup, animationId;
     let world, ballBody;  // cannon-es physics world + sphere body
     const wallMeshes = []; // populated after wall construction; used by snapshot() to hide chrome
     const objectsToDispose = [];
@@ -829,13 +829,18 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // individually (the logo physically tears apart along shard
         // seams instead of riding on one piece).
         let decalProjectionParams = null;  // { position, orientation, size, texture }
-        // ── Decal — projected onto the top pole ────────────────
-        if (decalDataUrl) {
+        // Print-area extent (x/y) is dev-tunable; z is the projection depth
+        // through the ball and stays fixed. Shared by both poles.
+        const printAreaScale = initialBallRef.current.printAreaScale ?? 0.7;
+        /* Build one projected decal. `back=false` is the camera-facing +Z pole
+           (front print); `back=true` is the opposite -Z pole (dual-pole second
+           imprint — visible when the ball is rotated 180°). Returns the mesh +
+           its projection params, or null. */
+        async function buildDecal(url, back) {
+          if (!url) return null;
           const texLoader = new THREE.TextureLoader();
-          const decalTexture = await new Promise((res, rej) => {
-            texLoader.load(decalDataUrl, res, undefined, rej);
-          });
-          if (disposed) return;
+          const decalTexture = await new Promise((res, rej) => texLoader.load(url, res, undefined, rej));
+          if (disposed) return null;
           // Texture flags: clamp to edge so edge pixels don't tile across
           // the decal's edges; sRGB so white reads as white.
           decalTexture.colorSpace = THREE.SRGBColorSpace;
@@ -854,16 +859,13 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           decalTexture.generateMipmaps = false;
           objectsToDispose.push(decalTexture);
 
-          // Camera is straight-on at +Z, so the decal projects from
-          // +Z directly toward the ball center along -Z. Default
-          // identity Euler aims the projection box's -Z axis at the
-          // origin, which IS the ball center — the print lands flat
-          // on the camera-facing face of the ball.
-          const decalPosition = new THREE.Vector3(0, 0, targetRadius * 0.999);
-          const decalOrientation = new THREE.Euler(0, 0, 0);
-          // Print-area extent (x/y) is dev-tunable; z is the projection
-          // depth through the ball and stays fixed.
-          const printAreaScale = initialBallRef.current.printAreaScale ?? 0.7;
+          // Front: camera at +Z, identity Euler aims the projector box's -Z at
+          // the origin → print lands flat on the camera-facing face. Back: same
+          // box rotated 180° about Y and positioned at -Z, so it projects onto
+          // the far pole (reads correctly once the ball is spun to face it).
+          const sign = back ? -1 : 1;
+          const decalPosition = new THREE.Vector3(0, 0, sign * targetRadius * 0.999);
+          const decalOrientation = new THREE.Euler(0, back ? Math.PI : 0, 0);
           const decalSize = new THREE.Vector3(targetRadius * printAreaScale, targetRadius * printAreaScale, targetRadius * 2);
 
           const decalGeo = new DecalGeometry(ballMesh, decalPosition, decalOrientation, decalSize);
@@ -888,28 +890,31 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           const decalMat = renderer.capabilities.isWebGL2
             ? new THREE.MeshStandardMaterial({ ...decalMatOpts, roughness: 0.5, metalness: 0 })
             : new THREE.MeshBasicMaterial(decalMatOpts);
-          decalMesh = new THREE.Mesh(decalGeo, decalMat);
+          const mesh = new THREE.Mesh(decalGeo, decalMat);
           // Match the ball's transform so the decal's UV mapping aligns;
           // same Group as the ball so throw / drag / zoom move them together.
-          decalMesh.position.copy(ballMesh.position);
-          decalMesh.scale.copy(ballMesh.scale);
-          // Lift the decal a hair off the surface along the camera-facing pole
-          // (+Z), so it wins the depth test by REAL depth separation rather than
-          // polygonOffset. Mac GL honors polygonOffset; ANGLE/D3D11 on Adreno
-          // (Windows-ARM) does not, leaving the coplanar print to lose the depth
-          // test and render invisible. ~1.5 units out of a ~100 radius is
-          // imperceptible but beats the z-fight on every driver.
-          decalMesh.position.z += targetRadius * 0.015;
-          ballGroup.add(decalMesh);
+          mesh.position.copy(ballMesh.position);
+          mesh.scale.copy(ballMesh.scale);
+          // Lift the decal a hair off the surface along its own pole so it wins
+          // the depth test by REAL depth separation rather than polygonOffset
+          // (Mac GL honors polygonOffset; ANGLE/D3D11 on Adreno does not).
+          mesh.position.z += sign * targetRadius * 0.015;
           objectsToDispose.push(decalGeo, decalMat);
+          return { mesh, params: { position: decalPosition.clone(), orientation: decalOrientation.clone(), size: decalSize.clone(), texture: decalTexture } };
+        }
 
-          // Stash projection params for explode-time per-shard reuse.
-          decalProjectionParams = {
-            position: decalPosition.clone(),
-            orientation: decalOrientation.clone(),
-            size: decalSize.clone(),
-            texture: decalTexture,
-          };
+        // ── Front decal (+Z pole) ──────────────────────────────
+        const front = await buildDecal(decalDataUrl, false);
+        if (front) {
+          decalMesh = front.mesh;
+          ballGroup.add(decalMesh);
+          decalProjectionParams = front.params;   // explode reuses the FRONT decal
+        }
+        // ── Second decal (-Z pole) — dual-pole imprint ─────────
+        const second = await buildDecal(secondDecalDataUrl, true);
+        if (second) {
+          decalMesh2 = second.mesh;
+          ballGroup.add(decalMesh2);
         }
 
         /* ── Snapshot ────────────────────────────────────────────
@@ -1476,6 +1481,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           if (ballExploded) {
             ballMesh.visible = true;
             if (decalMesh) decalMesh.visible = true;
+            if (decalMesh2) decalMesh2.visible = true;
             ballExploded = false;
           }
         };
@@ -1764,6 +1770,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // Hide the intact ball + decal — shards carry both visuals.
           ballMesh.visible = false;
           if (decalMesh) decalMesh.visible = false;
+          if (decalMesh2) decalMesh2.visible = false;
           ballExploded = true;
           spawnExplodeParticles();
         };
@@ -2828,6 +2835,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               shards.length = 0;
               ballMesh.visible = true;
               if (decalMesh) decalMesh.visible = true;
+              if (decalMesh2) decalMesh2.visible = true;
               ballExploded = false;
             }
           }
@@ -3154,7 +3162,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
     // Re-running on decalDataUrl change is desired so swapping the
     // alignment image rebuilds the decal projection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [decalDataUrl]);
+  }, [decalDataUrl, secondDecalDataUrl]);
 
   // cleanupRef holds the dispose closure across the async boundary so
   // strict-mode double-mount + teardown still releases GPU resources.
