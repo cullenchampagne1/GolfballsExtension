@@ -1,6 +1,7 @@
-import React, { useId } from 'react';
+import React, { useId, useContext } from 'react';
 import { motion } from 'motion/react';
 import { Dot } from './Dot.jsx';
+import { PopupDragContext } from './DraggablePopup.jsx';
 
 const UNDERLINE_SPRING = { type: 'spring', stiffness: 420, damping: 34, mass: 0.85 };
 
@@ -22,6 +23,13 @@ export function Tabs({ value, onChange, options = [], style }) {
   // Unique per Tabs instance so the underline only animates within its
   // own rail (not across two unrelated <Tabs/> rendered on the page).
   const groupId = useId();
+  // True only while the host DraggablePopup is being dragged (false
+  // everywhere else — the context defaults to false). During a drag the
+  // popup's left/top change every frame; a spring-driven layout underline
+  // re-measures and chases the moving target, so it visibly lags behind
+  // the modal. Snapping the layout transition to instant makes it ride
+  // rigidly with the popup; tab-to-tab switches keep the spring.
+  const dragging = useContext(PopupDragContext);
   return (
     <div style={{
       display: 'flex', padding: '0 16px', flexShrink: 0,
@@ -54,7 +62,7 @@ export function Tabs({ value, onChange, options = [], style }) {
             {active && (
               <motion.span
                 layoutId={`tabs-${groupId}-underline`}
-                transition={UNDERLINE_SPRING}
+                transition={dragging ? { duration: 0 } : UNDERLINE_SPRING}
                 style={{
                   position: 'absolute', left: 0, right: 0, bottom: -1,
                   height: 2, background: 'var(--gb-brand-label)',
