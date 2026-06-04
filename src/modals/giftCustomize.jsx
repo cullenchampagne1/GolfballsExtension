@@ -496,6 +496,11 @@ const _hexOrNone = (name) => {
    that's what keeps every style the same on-ball size as the thumbnail. */
 
 const MONOGRAM_ENDPOINT = 'https://www.icustomize.com/GBC/Monogram/r';
+/* Fraction of the decal print-area square the trimmed monogram fills. Tuned
+   so the monogram sits at ~0.35 of the ball diameter, matching the real
+   icustomize preview (it otherwise renders ~1.7× too large vs image/logo
+   decals, which fill the print area directly). */
+const MONO_DECAL_FILL = 0.52;
 /* MONO_STYLES key → icustomize `view` param. */
 const _MONO_VIEW = {
   'circle': 'circle3', 'hex': 'hex3', 'gardenia': 'gardenia',
@@ -592,7 +597,12 @@ function _tintMask(mask, hex) {
 function composeMonoDecal(masks, c1, c2) {
   if (!masks || masks.empty) return null;
   const { mC, mC2, w, h } = masks;
-  const SIZE = 1024, FILL = 0.9;
+  // Monogram-specific on-ball scale. Image/logo/photo decals fill the viewer's
+  // print area (printAreaScale) and look right; the monogram reads ~1.7× too
+  // big at that size, so it gets its own smaller fill. Measured against the
+  // real icustomize preview (monogram ≈ 0.35 of the ball diameter) the right
+  // fraction of the print-area square is ~0.52. Bump this up to enlarge.
+  const SIZE = 1024, FILL = MONO_DECAL_FILL;
   const s = (SIZE * FILL) / Math.max(w, h);
   const dw = w * s, dh = h * s, dx = (SIZE - dw) / 2, dy = (SIZE - dh) / 2;
   const out = document.createElement('canvas'); out.width = SIZE; out.height = SIZE;
