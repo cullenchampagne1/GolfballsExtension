@@ -1,5 +1,6 @@
 import React, { useState, useEffect, createContext, useContext, useMemo, useCallback, useRef } from 'react';
-import { Btn, Tag, Dot, DraggablePopup, Segmented } from '../ui/index.js';
+import { Btn, Tag, Dot, DraggablePopup, Segmented, CompactModal, ModalHeader, ModalFooter, Slider, IconBtn } from '../ui/index.js';
+import { AnimatePresence } from 'motion/react';
 import { Icon, I } from '../ui/icons.jsx';
 import { GolfballViewer } from './GolfballViewer.jsx';
 
@@ -358,23 +359,108 @@ function IconGrid({ value, onChange }) {
   );
 }
 
-/* Drag-drop / click-to-browse image picker. Reads the picked file via
-   FileReader, writes the data URL into the matching PrintTypeContext slot
-   (Custom Logo vs Photo) so the BallPreview can decal it immediately.
-   Mock-only previously — the data URL pipeline is the smallest wire-up
-   needed for the live preview, not a real upload to the server. */
+/* Minimal alignment popup — drag to move, scroll/slider to size the uploaded
+   image inside the (square) print area, over an alignment grid. Apply composites
+   the transform onto a transparent 1024² decal; Cancel discards. Re-openable to
+   tweak (the raw image + transform are kept so re-aligning never compounds). */
+const ALIGN_OUT = 1024;       // output decal resolution
+const ALIGN_STAGE = 280;      // on-screen stage size
+function ImageAlignModal({ image, initial, onCancel, onApply }) {
+  const [nat, setNat] = useState({ w: 0, h: 0 });
+  const [scale, setScale] = useState(initial?.scale ?? 1);
+  const [pos, setPos] = useState({ x: initial?.x ?? 0, y: initial?.y ?? 0 });  // stage px offset
+  useEffect(() => { _loadImage(image).then((im) => setNat({ w: im.naturalWidth || im.width, h: im.naturalHeight || im.height })).catch(() => {}); }, [image]);
+
+  const baseFit = nat.w && nat.h ? Math.min(ALIGN_STAGE / nat.w, ALIGN_STAGE / nat.h) : 1;
+  const dispW = nat.w * baseFit * scale, dispH = nat.h * baseFit * scale;
+
+  const onPointerDown = (e) => {
+    e.preventDefault();
+    const sx = e.clientX, sy = e.clientY, px = pos.x, py = pos.y;
+    const move = (ev) => setPos({ x: px + (ev.clientX - sx), y: py + (ev.clientY - sy) });
+    const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+  };
+  const onWheel = (e) => { e.preventDefault(); setScale((s) => Math.max(0.2, Math.min(3, s - e.deltaY * 0.0015))); };
+  const reset = () => { setScale(1); setPos({ x: 0, y: 0 }); };
+
+  const apply = async () => {
+    const R = ALIGN_OUT / ALIGN_STAGE;
+    const im = await _loadImage(image);
+    const c = document.createElement('canvas'); c.width = ALIGN_OUT; c.height = ALIGN_OUT;
+    const ctx = c.getContext('2d');
+    const w = dispW * R, h = dispH * R;
+    const cx = ALIGN_OUT / 2 + pos.x * R, cy = ALIGN_OUT / 2 + pos.y * R;
+    ctx.drawImage(im, cx - w / 2, cy - h / 2, w, h);
+    onApply(c.toDataURL('image/png'), { scale, x: pos.x, y: pos.y });
+  };
+
+  // alignment grid: fine lines + a stronger center cross, behind the image.
+  const gridBg = [
+    'linear-gradient(var(--gb-border-subtle) 1px, transparent 1px)',
+    'linear-gradient(90deg, var(--gb-border-subtle) 1px, transparent 1px)',
+  ].join(', ');
+  return (
+    <CompactModal size="compact" stacked onClose={onCancel}>
+      <ModalHeader icon={<I.eye />} title="Align Image" subtitle="Drag to move · scroll or slider to size" onClose={onCancel} />
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'center' }}>
+        <div
+          onPointerDown={onPointerDown}
+          onWheel={onWheel}
+          style={{
+            position: 'relative', width: ALIGN_STAGE, height: ALIGN_STAGE, flexShrink: 0,
+            borderRadius: 'var(--gb-r-md)', overflow: 'hidden', cursor: 'grab', touchAction: 'none',
+            background: 'var(--gb-surface-modal)', backgroundImage: gridBg, backgroundSize: '20px 20px',
+            border: '1px solid var(--gb-border-default)', userSelect: 'none',
+          }}
+        >
+          {/* print-area boundary + center crosshair */}
+          <div style={{ position: 'absolute', inset: '7%', borderRadius: '50%', border: '1.5px dashed var(--gb-brand-tint-border)', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', left: 0, right: 0, top: '50%', height: 1, background: 'var(--gb-brand-tint-border)', opacity: .6, pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', top: 0, bottom: 0, left: '50%', width: 1, background: 'var(--gb-brand-tint-border)', opacity: .6, pointerEvents: 'none' }} />
+          {nat.w > 0 && (
+            <img
+              src={image} alt="" draggable={false}
+              style={{
+                position: 'absolute', left: '50%', top: '50%', width: dispW, height: dispH,
+                transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px))`,
+                pointerEvents: 'none',
+              }}
+            />
+          )}
+        </div>
+        <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--gb-text-muted)', minWidth: 30 }}>Size</span>
+          <Slider value={Math.round(scale * 100)} min={20} max={300} step={5} unit="%" onChange={(v) => setScale(v / 100)} style={{ flex: 1 }} />
+          <IconBtn size="sm" icon={<I.refresh />} onClick={reset} title="Reset position & size" />
+        </div>
+      </div>
+      <ModalFooter>
+        <span style={{ flex: 1 }} />
+        <Btn variant="ghost" onClick={onCancel}>Cancel</Btn>
+        <Btn variant="primary" icon={<I.check />} onClick={apply}>Apply</Btn>
+      </ModalFooter>
+    </CompactModal>
+  );
+}
+
+/* Drag-drop / click-to-browse image picker. Reads the picked file, opens the
+   alignment popup, and writes the ALIGNED data URL into the matching
+   PrintTypeContext slot (Custom Logo vs Photo) so BallPreview can decal it.
+   The raw image + transform are kept (rawDataUrl / align) so the buyer can
+   re-align without recompositing an already-composited image. */
 function ImageUpload({ ai, label = 'Upload Your Company Logo', slot = 'Custom Logo' }) {
   const [hover, setHover] = useState(false);
   const [dataUrl, setDataUrl] = usePTField(slot, 'imageDataUrl');
   const [fileName, setFileName] = usePTField(slot, 'fileName');
+  const [rawUrl, setRawUrl] = usePTField(slot, 'rawDataUrl');
+  const [align, setAlign] = usePTField(slot, 'align');
+  const [pending, setPending] = useState(null);   // { url, name, initial } → show modal
   const inputRef = useRef(null);
   const ingest = (file) => {
     if (!file || !file.type.startsWith('image/')) return;
     const r = new FileReader();
-    r.onload = () => {
-      setDataUrl(r.result);
-      setFileName(file.name);
-    };
+    r.onload = () => setPending({ url: r.result, name: file.name, initial: null });
     r.readAsDataURL(file);
   };
   const onDrop = (e) => {
@@ -385,12 +471,28 @@ function ImageUpload({ ai, label = 'Upload Your Company Logo', slot = 'Custom Lo
   const onChange = (e) => ingest(e.target.files && e.target.files[0]);
   const clear = (e) => {
     e.stopPropagation();
-    setDataUrl(null);
-    setFileName(null);
+    setDataUrl(null); setFileName(null); setRawUrl(null); setAlign(null);
     if (inputRef.current) inputRef.current.value = '';
+  };
+  const reAlign = (e) => { e.stopPropagation(); if (rawUrl) setPending({ url: rawUrl, name: fileName, initial: align }); };
+  const applyAlign = (composited, transform) => {
+    if (pending) { setRawUrl(pending.url); setFileName(pending.name); }
+    setDataUrl(composited);
+    setAlign(transform);
+    setPending(null);
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <AnimatePresence>
+        {pending && (
+          <ImageAlignModal
+            image={pending.url}
+            initial={pending.initial}
+            onCancel={() => setPending(null)}
+            onApply={applyAlign}
+          />
+        )}
+      </AnimatePresence>
       <div
         onClick={() => inputRef.current && inputRef.current.click()}
         onMouseEnter={() => setHover(true)}
@@ -406,7 +508,10 @@ function ImageUpload({ ai, label = 'Upload Your Company Logo', slot = 'Custom Lo
             <img src={dataUrl} alt="" style={{ width: 40, height: 40, objectFit: 'contain', borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-surface-modal)' }} />
             <div style={{ textAlign: 'left', minWidth: 0, flex: 1 }}>
               <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fileName || 'Uploaded image'}</div>
-              <button onClick={clear} style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-brand-label)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Replace</button>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {rawUrl && <button onClick={reAlign} style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-brand-label)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Align</button>}
+                <button onClick={clear} style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-tertiary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Replace</button>
+              </div>
             </div>
           </div>
         ) : (
