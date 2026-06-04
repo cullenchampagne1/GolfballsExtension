@@ -360,51 +360,108 @@ function IconGrid({ value, onChange }) {
   );
 }
 
-/* Alignment popup — same zoom + pan feel as the logo image viewer
-   (ImagePreview): wheel/buttons zoom around the cursor, drag to pan, a clean
-   centered ring (dim outside + crosshair) marks the round ball print area, and
-   Apply crops to a CIRCLE (arc-clip) so the decal matches the ball — not a
-   square that fills the pole. Transform is kept so re-aligning never compounds. */
+/* ── Alignment popup — a faithful copy of the Image Viewer's align window ──
+   Same zoom/pan/rotate mechanics, the same frosted ring + rotation slider +
+   zoom chips + dashed Save/Cancel strip — just without the Image Viewer's 3D /
+   back / color-swap chrome (not used here). Apply crops to a CIRCLE so the
+   decal matches the round ball print area. Helpers below are copied verbatim
+   from ImagePreview so the look is identical. */
 const ALIGN_OUT = 1024;       // output decal resolution
-const ALIGN_STAGE = 300;      // on-screen stage size
-const ALIGN_RING = 0.8;       // ring diameter as a fraction of the stage
-const AZ_MIN = 0.5, AZ_MAX = 8, AZ_STEP_BTN = 0.15, AZ_STEP_WHEEL = 0.06;
+const ALIGN_STAGE = 320;      // on-screen stage size (square)
+const A_ZOOM_MIN = 0.5, A_ZOOM_MAX = 8, A_ZOOM_STEP_BTN = 0.12, A_ZOOM_STEP_WHEEL = 0.05;
+const AG_BG     = 'color-mix(in srgb, var(--gb-surface-canvas) 62%, transparent)';
+const AG_BG_HVR = 'color-mix(in srgb, var(--gb-surface-canvas) 78%, transparent)';
+const AG_BORDER = 'color-mix(in srgb, var(--gb-text-primary) 12%, transparent)';
+const AG_FILTER = 'blur(18px) saturate(160%)';
+const AG_SHADOW = '0 4px 14px -6px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.05) inset';
+const AG_RADIUS = 9;
+
+/* Centered ring + crosshair (copied from ImagePreview.AlignmentOverlay). */
+function AlignRing() {
+  return (
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+      <div style={{ height: '70%', aspectRatio: '1 / 1', maxWidth: 240, maxHeight: 240, borderRadius: '50%', border: '2px solid var(--gb-brand-label)', boxShadow: '0 0 0 9999px rgba(0,0,0,.55)' }} />
+      <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: 'var(--gb-brand-label)', opacity: 0.4 }} />
+      <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'var(--gb-brand-label)', opacity: 0.4 }} />
+    </div>
+  );
+}
+/* Frosted zoom chip (copied from ImagePreview.ZoomChipBtn). */
+function AZoomChip({ children, onClick, title }) {
+  const [h, setH] = useState(false);
+  return (
+    <button type="button" onClick={onClick} title={title} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+      style={{ minWidth: 22, height: 22, padding: '0 7px', fontSize: 11, fontWeight: 700, letterSpacing: 0.4, fontFamily: 'var(--gb-font-mono)', color: h ? 'var(--gb-text-primary)' : 'var(--gb-text-secondary)', background: h ? AG_BG_HVR : AG_BG, backdropFilter: AG_FILTER, WebkitBackdropFilter: AG_FILTER, border: `1px solid ${AG_BORDER}`, borderRadius: AG_RADIUS, boxShadow: AG_SHADOW, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1, outline: 'none' }}>
+      {children}
+    </button>
+  );
+}
+/* Vertical rotation slider (copied from ImagePreview.RotationSlider). */
+function ARotationSlider({ value, onChange }) {
+  const trackRef = useRef(null);
+  const dragRef = useRef(false);
+  const valueFromY = (clientY) => {
+    const el = trackRef.current; if (!el) return value;
+    const r = el.getBoundingClientRect();
+    const ratio = 1 - Math.max(0, Math.min(1, (clientY - r.top) / r.height));
+    return Math.round(ratio * 360 - 180);
+  };
+  const down = (e) => { e.stopPropagation(); dragRef.current = true; try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} onChange(valueFromY(e.clientY)); };
+  const move = (e) => { if (dragRef.current) onChange(valueFromY(e.clientY)); };
+  const up = (e) => { dragRef.current = false; try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {} };
+  const pct = (180 - value) / 360;
+  const TRACK_H = 130;
+  return (
+    <div style={{ position: 'absolute', top: '50%', right: 10, marginTop: -((TRACK_H + 30) / 2), zIndex: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '8px 6px', background: AG_BG, backdropFilter: AG_FILTER, WebkitBackdropFilter: AG_FILTER, border: `1px solid ${AG_BORDER}`, borderRadius: AG_RADIUS, boxShadow: AG_SHADOW, userSelect: 'none' }}>
+      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, color: 'var(--gb-text-secondary)', fontFamily: 'var(--gb-font-mono)' }}>{value > 0 ? '+' : ''}{value}°</span>
+      <div ref={trackRef} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={(e) => { e.stopPropagation(); onChange(0); }}
+        style={{ position: 'relative', width: 4, height: TRACK_H, borderRadius: 2, background: 'color-mix(in srgb, var(--gb-text-primary) 18%, transparent)', cursor: 'ns-resize' }}>
+        <div style={{ position: 'absolute', left: -3, right: -3, top: '50%', height: 1, background: 'color-mix(in srgb, var(--gb-text-primary) 30%, transparent)', transform: 'translateY(-0.5px)' }} />
+        <div style={{ position: 'absolute', left: '50%', top: `${pct * 100}%`, width: 12, height: 12, borderRadius: '50%', background: '#fff', border: '1px solid color-mix(in srgb, var(--gb-text-primary) 25%, transparent)', boxShadow: '0 0 0 1px rgba(255,255,255,0.22) inset, 0 2px 6px -1px rgba(0,0,0,0.4)', transform: 'translate(-50%, -50%)' }} />
+      </div>
+    </div>
+  );
+}
+
 function ImageAlignModal({ image, initial, onCancel, onApply }) {
   const [nat, setNat] = useState(null);
-  const [zoomPct, setZoomPct] = useState(Math.round((initial?.scale ?? 1) * 100));
+  const [zoomLevel, setZoomLevel] = useState(Math.round((initial?.scale ?? 1) * 100));
+  const [rotation, setRotation] = useState(initial?.rot ?? 0);
   // Transform tracked in refs (no re-render per wheel/drag) — mirrors ImagePreview.
   const scaleRef = useRef(initial?.scale ?? 1);
   const txRef = useRef(initial?.x ?? 0);
   const tyRef = useRef(initial?.y ?? 0);
+  const rotationRef = useRef(initial?.rot ?? 0);
   const wrapRef = useRef(null);
   const vpRef = useRef(null);
 
   useEffect(() => { _loadImage(image).then((im) => setNat({ w: im.naturalWidth || im.width, h: im.naturalHeight || im.height })).catch(() => {}); }, [image]);
 
-  // Image fits the stage at scale 1 (contain). Used by both the live <img> and
-  // the capture canvas so display and output stay in lockstep.
+  // Image fits the stage at scale 1 (contain) — same fit used by the capture
+  // canvas so display and output stay in lockstep.
   const fit = nat ? Math.min(0.85 * ALIGN_STAGE / nat.w, 0.85 * ALIGN_STAGE / nat.h) : 1;
 
   const applyTransform = (animate) => {
     const el = vpRef.current; if (!el) return;
     el.style.transition = animate ? 'transform .18s cubic-bezier(.25,.8,.25,1)' : 'none';
-    el.style.transform = `translate(${txRef.current}px, ${tyRef.current}px) scale(${scaleRef.current})`;
+    el.style.transform = `translate(${txRef.current}px, ${tyRef.current}px) rotate(${rotationRef.current}deg) scale(${scaleRef.current})`;
   };
   useEffect(() => { if (nat) applyTransform(false); /* eslint-disable-next-line */ }, [nat]);
+  useEffect(() => { rotationRef.current = rotation; applyTransform(false); /* eslint-disable-next-line */ }, [rotation]);
 
   const clampPan = () => {
     const c = wrapRef.current; if (!c) return;
     const cw = c.clientWidth, ch = c.clientHeight;
     const img = c.querySelector('img');
     const iw = img?.clientWidth || cw, ih = img?.clientHeight || ch, s = scaleRef.current;
-    const KEEP = 28;   // keep a sliver on-screen so the image can't be lost
+    const KEEP = 24;   // keep a sliver on-screen so the image can't be lost
     const mx = Math.max(0, (cw + iw * s) / 2 - KEEP), my = Math.max(0, (ch + ih * s) / 2 - KEEP);
     txRef.current = Math.max(-mx, Math.min(mx, txRef.current));
     tyRef.current = Math.max(-my, Math.min(my, tyRef.current));
   };
   const zoom = (delta, ox, oy) => {
     const prev = scaleRef.current;
-    const next = Math.max(AZ_MIN, Math.min(AZ_MAX, prev * (1 + delta)));
+    const next = Math.max(A_ZOOM_MIN, Math.min(A_ZOOM_MAX, prev * (1 + delta)));
     if (next === prev) return;
     const c = wrapRef.current;
     if (c && ox != null) {   // pivot around the cursor so its focal point stays put
@@ -412,9 +469,9 @@ function ImageAlignModal({ image, initial, onCancel, onApply }) {
       txRef.current -= (ox - c.clientWidth / 2 - txRef.current) * r;
       tyRef.current -= (oy - c.clientHeight / 2 - tyRef.current) * r;
     }
-    scaleRef.current = next; clampPan(); applyTransform(false); setZoomPct(Math.round(next * 100));
+    scaleRef.current = next; clampPan(); applyTransform(false); setZoomLevel(Math.round(next * 100));
   };
-  const reset = () => { scaleRef.current = 1; txRef.current = 0; tyRef.current = 0; applyTransform(true); setZoomPct(100); };
+  const resetZoom = () => { scaleRef.current = 1; txRef.current = 0; tyRef.current = 0; applyTransform(true); setZoomLevel(100); };
 
   // Wheel zoom (passive:false so we can preventDefault the page scroll).
   useEffect(() => {
@@ -422,7 +479,7 @@ function ImageAlignModal({ image, initial, onCancel, onApply }) {
     const onWheel = (e) => {
       e.preventDefault();
       const r = c.getBoundingClientRect();
-      zoom(e.deltaY < 0 ? AZ_STEP_WHEEL : -AZ_STEP_WHEEL, e.clientX - r.left, e.clientY - r.top);
+      zoom(e.deltaY < 0 ? A_ZOOM_STEP_WHEEL : -A_ZOOM_STEP_WHEEL, e.clientX - r.left, e.clientY - r.top);
     };
     c.addEventListener('wheel', onWheel, { passive: false });
     return () => c.removeEventListener('wheel', onWheel);
@@ -430,7 +487,7 @@ function ImageAlignModal({ image, initial, onCancel, onApply }) {
   }, [nat]);
 
   const onPointerDown = (e) => {
-    if (e.button !== 0 || e.target?.closest?.('button')) return;
+    if (e.button !== 0 || e.target?.closest?.('button, [data-viewer-ui="true"]')) return;
     e.preventDefault();
     const sx = e.clientX, sy = e.clientY, px = txRef.current, py = tyRef.current;
     const move = (ev) => { txRef.current = px + (ev.clientX - sx); tyRef.current = py + (ev.clientY - sy); clampPan(); applyTransform(false); };
@@ -438,11 +495,11 @@ function ImageAlignModal({ image, initial, onCancel, onApply }) {
     window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
   };
 
-  // Apply — replicate the viewport transform onto a circular-clipped canvas, so
-  // the decal is round (the ball print area), not a square.
+  // Apply — same transform→canvas pipeline as ImagePreview.captureAlignment,
+  // clipped to a CIRCLE so the decal is round (the ball print area).
   const apply = () => {
     const wrap = wrapRef.current; if (!wrap || !nat) return;
-    const ringD = ALIGN_STAGE * ALIGN_RING;
+    const ringD = Math.min(wrap.clientHeight * 0.70, 240);   // matches AlignRing
     const c = document.createElement('canvas'); c.width = ALIGN_OUT; c.height = ALIGN_OUT;
     const ctx = c.getContext('2d');
     const k = ALIGN_OUT / ringD;        // wrapper px → canvas px (ring → full canvas)
@@ -451,23 +508,23 @@ function ImageAlignModal({ image, initial, onCancel, onApply }) {
     ctx.translate(ALIGN_OUT / 2, ALIGN_OUT / 2);
     ctx.scale(k, k);
     ctx.translate(txRef.current, tyRef.current);
+    ctx.rotate((rotationRef.current * Math.PI) / 180);
     ctx.scale(scaleRef.current, scaleRef.current);
     const im = wrap.querySelector('img');
     ctx.drawImage(im, -(nat.w * fit) / 2, -(nat.h * fit) / 2, nat.w * fit, nat.h * fit);
     ctx.restore();
-    onApply(c.toDataURL('image/png'), { scale: scaleRef.current, x: txRef.current, y: tyRef.current });
+    onApply(c.toDataURL('image/png'), { scale: scaleRef.current, x: txRef.current, y: tyRef.current, rot: rotationRef.current });
   };
 
-  const chipBtn = { width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--gb-r-sm)', background: 'transparent', border: 'none', color: 'var(--gb-text-on-glass, #fff)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 15, fontWeight: 700, lineHeight: 1 };
   return (
     <CompactModal size="compact" stacked onClose={onCancel}>
-      <ModalHeader icon={<I.eye />} title="Align Image" subtitle="Scroll or +/− to zoom · drag to move" onClose={onCancel} />
-      <div style={{ padding: 16, display: 'flex', justifyContent: 'center' }}>
+      <ModalHeader icon={<I.eye />} title="Align Image" subtitle="Drag to move · scroll to zoom · slider to rotate" onClose={onCancel} />
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div
           ref={wrapRef}
           onPointerDown={onPointerDown}
           style={{
-            position: 'relative', width: ALIGN_STAGE, height: ALIGN_STAGE, flexShrink: 0,
+            position: 'relative', width: '100%', height: ALIGN_STAGE,
             borderRadius: 'var(--gb-r-md)', overflow: 'hidden', cursor: 'grab', touchAction: 'none',
             background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', userSelect: 'none',
           }}
@@ -476,26 +533,23 @@ function ImageAlignModal({ image, initial, onCancel, onApply }) {
           <div ref={vpRef} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
             {nat && <img src={image} alt="" draggable={false} style={{ width: nat.w * fit, height: nat.h * fit, display: 'block' }} />}
           </div>
-          {/* clean alignment ring: circle border + dim outside + crosshair */}
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-            <div style={{ height: `${ALIGN_RING * 100}%`, aspectRatio: '1 / 1', borderRadius: '50%', border: '2px solid var(--gb-brand-label)', boxShadow: '0 0 0 9999px rgba(0,0,0,.5)' }} />
-          </div>
-          <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: 'var(--gb-brand-label)', opacity: .35, pointerEvents: 'none' }} />
-          <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'var(--gb-brand-label)', opacity: .35, pointerEvents: 'none' }} />
-          {/* zoom chips — bottom-right, like the image viewer */}
-          <div style={{ position: 'absolute', right: 8, bottom: 8, display: 'flex', alignItems: 'center', gap: 2, padding: '2px 4px', borderRadius: 'var(--gb-r-pill)', background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)' }}>
-            <button type="button" style={chipBtn} onClick={() => zoom(-AZ_STEP_BTN * 2.2)} title="Zoom out">−</button>
-            <span style={{ minWidth: 38, textAlign: 'center', fontSize: 10.5, fontWeight: 700, color: '#fff', fontFamily: 'var(--gb-font-mono)' }}>{zoomPct}%</span>
-            <button type="button" style={chipBtn} onClick={() => zoom(AZ_STEP_BTN * 2.2)} title="Zoom in">+</button>
-            <button type="button" style={{ ...chipBtn, fontSize: 12 }} onClick={reset} title="Reset"><I.refresh size={12} /></button>
+          <AlignRing />
+          <ARotationSlider value={rotation} onChange={setRotation} />
+          {/* zoom readout (bottom-left) + chips (bottom-right) — exactly the viewer's layout */}
+          <div style={{ position: 'absolute', bottom: 8, left: 10, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, color: 'var(--gb-text-secondary)', background: AG_BG, backdropFilter: AG_FILTER, WebkitBackdropFilter: AG_FILTER, border: `1px solid ${AG_BORDER}`, borderRadius: AG_RADIUS, boxShadow: AG_SHADOW, padding: '2px 7px', pointerEvents: 'none', fontFamily: 'var(--gb-font-mono)' }}>{zoomLevel}%</div>
+          <div style={{ position: 'absolute', bottom: 8, right: 8, display: 'flex', gap: 4 }}>
+            <AZoomChip title="Zoom out" onClick={() => { const c = wrapRef.current; zoom(-A_ZOOM_STEP_BTN, c ? c.clientWidth / 2 : 0, c ? c.clientHeight / 2 : 0); }}>−</AZoomChip>
+            <AZoomChip title="Reset zoom" onClick={resetZoom}>1:1</AZoomChip>
+            <AZoomChip title="Zoom in" onClick={() => { const c = wrapRef.current; zoom(A_ZOOM_STEP_BTN, c ? c.clientWidth / 2 : 0, c ? c.clientHeight / 2 : 0); }}>+</AZoomChip>
           </div>
         </div>
+        {/* dashed action strip — matches the Image Viewer's alignment strip */}
+        <div style={{ padding: 8, background: 'var(--gb-surface-2)', border: '1px dashed var(--gb-brand-tint-border)', borderRadius: 'var(--gb-r-md)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ flex: 1, fontSize: 10.5, fontWeight: 600, letterSpacing: 0.2, color: 'var(--gb-text-tertiary)' }}>Position image inside the alignment ring</span>
+          <Btn size="sm" variant="secondary" onClick={onCancel}>Cancel</Btn>
+          <Btn size="sm" variant="tinted" status="brand" icon={<I.check />} onClick={apply}>Save</Btn>
+        </div>
       </div>
-      <ModalFooter>
-        <span style={{ flex: 1 }} />
-        <Btn variant="ghost" onClick={onCancel}>Cancel</Btn>
-        <Btn variant="primary" icon={<I.check />} onClick={apply}>Apply</Btn>
-      </ModalFooter>
     </CompactModal>
   );
 }
