@@ -88,6 +88,34 @@ const BLOCKED_PATTERNS = [
   { re: /\bXMLHttpRequest\b/,                  reason: 'XHR not allowed' },
 ];
 
+/* Fetch coalescing + short-lived cache, shared across every resolution.
+   Variable resolution runs the full set repeatedly — the popup re-resolves
+   on re-render, the editor previews each row, matching may re-run — and a
+   code var that does h.fetchText(orderUrl) would otherwise re-request the
+   SAME page on every pass, piling 20+ identical fetches through the one
+   sandbox iframe until they time out. Keyed by URL: an in-flight request is
+   shared, and a just-fetched result is reused for RAW_TTL_MS so a burst of
+   resolutions costs ONE network request. */
+const RAW_TTL_MS = 30000;
+const _rawCache = new Map();     // url → { ts, ok, status, text, error }
+const _rawInflight = new Map();  // url → Promise<entry>
+const _parseCache = new Map();   // html → { schemaId, data } (avoids re-DOMParsing the same page)
+function fetchRawCached(send, url) {
+  const cached = _rawCache.get(url);
+  if (cached && (Date.now() - cached.ts) < RAW_TTL_MS) return Promise.resolve(cached);
+  const existing = _rawInflight.get(url);
+  if (existing) return existing;
+  const p = send('fetchRaw', { url }).then((resp) => {
+    const entry = { ts: Date.now(), ok: !!(resp && resp.ok), status: resp && resp.status, text: (resp && resp.text) || '', error: resp && resp.error };
+    _rawCache.set(url, entry);
+    _rawInflight.delete(url);
+    return entry;
+  });
+  p.catch(() => _rawInflight.delete(url));
+  _rawInflight.set(url, p);
+  return p;
+}
+
 /** Build the helpers namespace passed in as `h`. Frozen so the user
  *  can't mutate it. The async server helpers route through the
  *  background service worker (CORS / mixed-content immune) and only
@@ -113,9 +141,9 @@ function buildHelpers() {
     });
 
   const fetchText = async (url) => {
-    const resp = await send('fetchRaw', { url });
-    if (!resp || !resp.ok) throw new Error(resp?.error || `fetch failed (status ${resp?.status ?? '??'})`);
-    return resp.text || '';
+    const entry = await fetchRawCached(send, url);
+    if (!entry.ok) throw new Error(entry.error || `fetch failed (status ${entry.status ?? '??'})`);
+    return entry.text || '';
   };
 
   const fetchJson = async (url) => {
@@ -209,12 +237,16 @@ function buildHelpers() {
      No order-specific URL or schema knowledge lives in the engine. */
   const parse = async (html) => {
     if (typeof html !== 'string' || !html) return { schemaId: null, data: {} };
+    const hit = _parseCache.get(html);
+    if (hit) return hit;
     if (typeof DOMParser === 'undefined') throw new Error('DOMParser unavailable in this context');
     const doc = new DOMParser().parseFromString(html, 'text/html');
     const schema = detectSchema(doc);
-    if (!schema) return { schemaId: null, data: {} };
-    const result = extract(schema, doc);
-    return { schemaId: (result && result.schemaId) || schema.id || null, data: (result && result.data) || {} };
+    const result = schema ? extract(schema, doc) : null;
+    const out = { schemaId: (result && result.schemaId) || (schema && schema.id) || null, data: (result && result.data) || {} };
+    if (_parseCache.size > 8) _parseCache.clear();   // tiny cap — order pages are big strings
+    _parseCache.set(html, out);
+    return out;
   };
   /* Unit price for `qty` by walking a product's quantity price breaks
      ([{ q, p }] ascending). Falls back to the base price. */
