@@ -470,56 +470,136 @@ const _hexOrNone = (name) => {
   const m = IMPRINT_COLORS.find((c) => c.name === name);
   return (m && m.hex) || 'none';
 };
-/* Dynamic monogram renderers — one per style key. Each takes the user's
-   actual initials + the two colors, and emits SVG inner content sized to a
-   100×100 logical canvas. The thumbnails in MonoGrid still use the static
-   icustomize path art (fixed visual identity); these renderers are for the
-   live ball decal, where the typed letters need to show. `fill` is c1 (the
-   letter glyphs), `accent` is c2 when set, else falls back to c1 so a
-   single-color pick still paints the decoration. */
-const MONO_RENDERS = {
-  'circle': (t, fill, accent) =>
-    `<circle cx="50" cy="50" r="28" fill="none" stroke="${accent}" stroke-width="2.4"/>`
-    + `<text x="50" y="60" text-anchor="middle" font-family="Georgia,serif" font-style="italic" font-weight="700" font-size="24" fill="${fill}">${_escXml(t)}</text>`,
-  'hex': (t, fill, accent) =>
-    `<polygon points="50,18 76,33 76,67 50,82 24,67 24,33" fill="none" stroke="${accent}" stroke-width="2.4"/>`
-    + `<text x="50" y="59" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="19" fill="${fill}">${_escXml(t)}</text>`,
-  'gardenia': (t, fill, accent) =>
-    `<path d="M18,50 q9,-10 16,0 q-9,10 -16,0Z" fill="${accent}" opacity=".55"/>`
-    + `<path d="M82,50 q-9,-10 -16,0 q9,10 16,0Z" fill="${accent}" opacity=".55"/>`
-    + `<text x="50" y="62" text-anchor="middle" font-family="'Brush Script MT',cursive" font-style="italic" font-size="34" fill="${fill}">${_escXml(t)}</text>`,
-  'vertical': (t, fill, accent) =>
-    `<text x="32" y="64" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="32" fill="${fill}">${_escXml(t.charAt(0))}</text>`
-    + `<line x1="50" y1="22" x2="50" y2="78" stroke="${accent}" stroke-width="2.2"/>`
-    + `<text x="68" y="64" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="32" fill="${fill}">${_escXml(t.charAt(1) || '')}</text>`,
-  'horizontal': (t, fill, accent) =>
-    `<text x="50" y="42" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="22" fill="${fill}">${_escXml(t.charAt(0))}</text>`
-    + `<line x1="28" y1="50" x2="72" y2="50" stroke="${accent}" stroke-width="2.2"/>`
-    + `<text x="50" y="76" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="22" fill="${fill}">${_escXml(t.charAt(1) || '')}</text>`,
-  'diagonal': (t, fill, accent) =>
-    `<text x="28" y="78" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="30" fill="${fill}">${_escXml(t.charAt(0))}</text>`
-    + `<line x1="72" y1="22" x2="28" y2="78" stroke="${accent}" stroke-width="2.2"/>`
-    + `<text x="72" y="46" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="30" fill="${fill}">${_escXml(t.charAt(1) || '')}</text>`,
-  'simple-circle': (t, fill, accent) =>
-    `<circle cx="50" cy="50" r="26" fill="none" stroke="${accent}" stroke-width="2.4"/>`
-    + `<text x="50" y="64" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="34" fill="${fill}">${_escXml(t.charAt(0))}</text>`,
+/* ── Live monogram decal — REAL icustomize art ──────────────────────
+   The live ball decal renders the buyer's ACTUAL initials by fetching
+   the real monogram from icustomize's flat endpoint, then recoloring it
+   client-side. The trick (verified against the server):
+
+     • icustomize.com/GBC/Monogram/r is a TWO-color renderer keyed by
+       `C` and `C2` (NOT Color1/Color2 — those are silently ignored).
+       The two regions differ per view (circle: C=ring, C2=letters;
+       vertical: C=letters, C2=divider) — we just mirror the server's
+       own C/C2 onto our Color / Color 2.
+     • We request it ONCE with two SENTINEL colors we can pull apart:
+       C=#FF0000 (red) and C2=#00FF00 (green). (White can't be a sentinel
+       — the server renders a white region as transparent, so the layer
+       vanishes.) Splitting red-vs-green gives the two recolorable layers
+       we own. Re-fetch only when the LETTERS or STYLE change.
+     • On every COLOR change we just re-tint those two cached layers —
+       C layer → Color, C2 layer → Color 2 — with zero network. A
+       `Transparent` Color 2 simply omits that layer (e.g. a ring with the
+       initials knocked out so the ball shows through — the classic look).
+
+   Padding in the raw render varies a lot per view (a vertical monogram
+   only fills ~38% of the frame height, a circle ~63%), so we trim to the
+   art's bbox and re-center it into a fixed square at a consistent scale —
+   that's what keeps every style the same on-ball size as the thumbnail. */
+
+const MONOGRAM_ENDPOINT = 'https://www.icustomize.com/GBC/Monogram/r';
+/* MONO_STYLES key → icustomize `view` param. */
+const _MONO_VIEW = {
+  'circle': 'circle3', 'hex': 'hex3', 'gardenia': 'gardenia',
+  'vertical': 'vertical', 'horizontal': 'horizontal', 'diagonal': 'diagonal',
+  'simple-circle': 'circle',
 };
-function buildMonogramSvgUrl(style, initials, c1, c2) {
-  const render = MONO_RENDERS[style] || MONO_RENDERS['circle'];
-  // Show placeholder text when nothing typed so the buyer sees what they'll
-  // get the moment they pick a style. Slot count is derived from MONO_STYLES.
-  const n = _monoCount(style);
-  const t = initials && initials.length ? initials.slice(0, n) : _monoPlaceholder(n);
-  const fill = _hexOf(c1);
-  const c2hex = _hexOrNone(c2);
-  const accent = c2hex === 'none' ? fill : c2hex;
-  const inner = render(t, fill, accent);
-  // Renderers draw inside a 100×100 logical region. The outer viewBox adds
-  // 30 units of padding on every side so the decal lands on the ball roughly
-  // the size of a real monogram — without padding the art was covering most
-  // of the pole. width+height are required so TextureLoader rasterizes.
-  const doc = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="-30 -30 160 160">${inner}</svg>`;
-  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(doc);
+const _monoView = (styleKey) => _MONO_VIEW[styleKey] || 'circle3';
+/* Uppercase, A–Z only, capped to the style's letter count. */
+const _monoLetters = (initials, styleKey) =>
+  String(initials || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, _monoCount(styleKey));
+
+/* Cache of split black/white layers, keyed by `view|letters` — survives
+   color changes so re-tinting is instant. */
+const _monoMaskCache = new Map();
+const _monoMaskKey = (view, letters) => view + '|' + letters;
+const peekMonoMasks = (view, letters) => _monoMaskCache.get(_monoMaskKey(view, letters)) || null;
+
+/* Ask the background SW to fetch the (cross-origin) render and hand back a
+   same-origin data: URL we can safely draw + read on a canvas. */
+function proxyImageDataUrl(url) {
+  return new Promise((resolve, reject) => {
+    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) {
+      reject(new Error('no extension context')); return;
+    }
+    chrome.runtime.sendMessage({ action: 'proxyFetchImage', url }, (resp) => {
+      if (chrome.runtime.lastError) { reject(new Error(chrome.runtime.lastError.message)); return; }
+      if (resp && resp.ok && resp.dataUrl) resolve(resp.dataUrl);
+      else reject(new Error((resp && resp.error) || 'fetch failed'));
+    });
+  });
+}
+const _loadImage = (src) => new Promise((res, rej) => {
+  const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = src;
+});
+
+/* Split a red/green-sentinel render into two masks (each a white silhouette
+   so it can be tinted via source-in), trimmed to the combined content bbox.
+   Returns { mC, mC2, w, h } where mC = the C region (red sentinel) and
+   mC2 = the C2 region (green sentinel), or { empty:true } if no ink.
+   Classification is nearest-sentinel (red channel ≥ green channel); the thin
+   anti-aliased seam where the two regions meet splits cleanly down it. */
+async function splitMonoMasks(dataUrl) {
+  const img = await _loadImage(dataUrl);
+  const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+  const src = document.createElement('canvas'); src.width = W; src.height = H;
+  const sctx = src.getContext('2d'); sctx.drawImage(img, 0, 0);
+  const d = sctx.getImageData(0, 0, W, H).data;
+  // content bbox over alpha
+  let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (d[(y * W + x) * 4 + 3] > 16) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  if (x1 < x0) return { empty: true };
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  const cC = document.createElement('canvas'); cC.width = w; cC.height = h;
+  const cC2 = document.createElement('canvas'); cC2.width = w; cC2.height = h;
+  const xC = cC.getContext('2d'), xC2 = cC2.getContext('2d');
+  const iC = xC.createImageData(w, h), iC2 = xC2.createImageData(w, h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const si = (((y + y0) * W) + (x + x0)) * 4, di = (y * w + x) * 4;
+    const a = d[si + 3]; if (!a) continue;
+    const dst = d[si] >= d[si + 1] ? iC.data : iC2.data;  // red→C, green→C2
+    dst[di] = 255; dst[di + 1] = 255; dst[di + 2] = 255; dst[di + 3] = a;
+  }
+  xC.putImageData(iC, 0, 0); xC2.putImageData(iC2, 0, 0);
+  return { mC: cC, mC2: cC2, w, h };
+}
+
+async function getMonoMasks(view, letters) {
+  const key = _monoMaskKey(view, letters);
+  if (_monoMaskCache.has(key)) return _monoMaskCache.get(key);
+  const overlay = letters.split('').join(',');                    // "ABC" → "A,B,C"
+  const cfg = JSON.stringify({ C: '#FF0000', C2: '#00FF00' });    // separable sentinels
+  const url = `${MONOGRAM_ENDPOINT}?userOverlay=${encodeURIComponent(overlay)}`
+    + `&configOverrides=${encodeURIComponent(cfg)}&view=${encodeURIComponent(view)}`;
+  const masks = await splitMonoMasks(await proxyImageDataUrl(url));
+  _monoMaskCache.set(key, masks);
+  return masks;
+}
+
+/* Tint a white mask to a solid hex, preserving its alpha (anti-aliasing). */
+function _tintMask(mask, hex) {
+  const t = document.createElement('canvas'); t.width = mask.width; t.height = mask.height;
+  const c = t.getContext('2d');
+  c.drawImage(mask, 0, 0);
+  c.globalCompositeOperation = 'source-in';
+  c.fillStyle = hex; c.fillRect(0, 0, t.width, t.height);
+  return t;
+}
+/* Compose the final decal: C layer (Color) as the base, C2 layer (Color 2)
+   on top, trimmed art re-centered into a fixed square at a consistent scale.
+   Returns a PNG data URL (or null for empty art). c2 = null (Transparent)
+   omits the C2 layer entirely — e.g. a ring with the initials knocked out. */
+function composeMonoDecal(masks, c1, c2) {
+  if (!masks || masks.empty) return null;
+  const { mC, mC2, w, h } = masks;
+  const SIZE = 1024, FILL = 0.9;
+  const s = (SIZE * FILL) / Math.max(w, h);
+  const dw = w * s, dh = h * s, dx = (SIZE - dw) / 2, dy = (SIZE - dh) / 2;
+  const out = document.createElement('canvas'); out.width = SIZE; out.height = SIZE;
+  const oc = out.getContext('2d');
+  oc.drawImage(_tintMask(mC, c1), dx, dy, dw, dh);              // Color (base)
+  if (c2) oc.drawImage(_tintMask(mC2, c2), dx, dy, dw, dh);     // Color 2 (on top)
+  return out.toDataURL('image/png');
 }
 function buildIconUrl(iconName) {
   if (!iconName) return null;
@@ -586,34 +666,56 @@ function buildPersonalizedUrl(line1, line2, line3, font, color, size) {
   const doc = `<svg xmlns="http://www.w3.org/2000/svg" width="${VB_W}" height="${VB_H}" viewBox="0 0 ${VB_W} ${VB_H}">${textEls}</svg>`;
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(doc);
 }
-/* Hook: given the active print-type snapshot, return the URL the viewer
-   should render. Monogram + Personalized are local SVGs so their color
-   updates land in the next frame — no debounce, no network. */
+/* Hook: given the active print-type snapshot, return the decal URL the viewer
+   should render. Icons / Personalized / uploads are local and resolve
+   synchronously. Monogram is fetched from icustomize (the real letter art):
+   the black/white layers are fetched once per (style, letters) and cached, so
+   a COLOR change just re-tints them in place — only a TEXT/STYLE change hits
+   the network (debounced). Returns null while the first fetch is in flight. */
 function useDecalUrl() {
   const ctx = usePT();
   const sel = ctx.sel;
   const data = ctx.data || {};
-  return useMemo(() => {
-    if (sel === 'Monogram') {
-      const { style, initials, c1, c2 } = data.Monogram || {};
-      return buildMonogramSvgUrl(style, initials, c1, c2);
-    }
-    if (sel === 'Icons') {
-      const { icon } = data.Icons || {};
-      return buildIconUrl(icon);
-    }
+
+  // Non-network decal types — computed directly.
+  const syncUrl = useMemo(() => {
+    if (sel === 'Icons') return buildIconUrl((data.Icons || {}).icon);
     if (sel === 'Personalized') {
-      const snap = data.Personalized || {};
-      return buildPersonalizedUrl(snap.l1, snap.l2, snap.l3, snap.font, snap.color, snap.size);
+      const s = data.Personalized || {};
+      return buildPersonalizedUrl(s.l1, s.l2, s.l3, s.font, s.color, s.size);
     }
-    if (sel === 'Custom Logo') {
-      return (data['Custom Logo'] && data['Custom Logo'].imageDataUrl) || null;
-    }
-    if (sel === 'Photo') {
-      return (data.Photo && data.Photo.imageDataUrl) || null;
-    }
+    if (sel === 'Custom Logo') return (data['Custom Logo'] && data['Custom Logo'].imageDataUrl) || null;
+    if (sel === 'Photo') return (data.Photo && data.Photo.imageDataUrl) || null;
     return null;
   }, [sel, data]);
+
+  const mono = sel === 'Monogram' ? (data.Monogram || {}) : null;
+  const mStyle = mono && mono.style, mInit = mono && mono.initials;
+  const mC1 = mono && mono.c1, mC2 = mono && mono.c2;
+
+  const [url, setUrl] = useState(null);
+  useEffect(() => {
+    if (sel !== 'Monogram') { setUrl(syncUrl); return; }
+    const letters = _monoLetters(mInit, mStyle);
+    if (!letters) { setUrl(null); return; }
+    const view = _monoView(mStyle);
+    const c1 = _hexOf(mC1);
+    const c2 = (mC2 && mC2 !== 'Transparent') ? _hexOf(mC2) : null;  // null → monochrome
+    // Layers already cached (e.g. a color-only change) → re-tint instantly.
+    const cached = peekMonoMasks(view, letters);
+    if (cached) { setUrl(composeMonoDecal(cached, c1, c2)); return; }
+    // First time for these letters → debounce the network fetch so typing
+    // doesn't fire a request per keystroke.
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      getMonoMasks(view, letters)
+        .then((masks) => { if (!cancelled) setUrl(composeMonoDecal(masks, c1, c2)); })
+        .catch(() => { if (!cancelled) setUrl(null); });
+    }, 240);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [sel, syncUrl, mStyle, mInit, mC1, mC2]);
+
+  return url;
 }
 
 /* Second-pole imprint — the live reveal: a choice row, then the matching control. */
@@ -1169,6 +1271,9 @@ function BallPreview() {
   const ctx = usePT();
   const decalUrl = useDecalUrl();
   const supported = ['Monogram', 'Personalized', 'Icons', 'Custom Logo', 'Photo'].includes(ctx.sel);
+  // Monogram fetches its art — distinguish "nothing typed yet" from "fetching".
+  const monoHasLetters = ctx.sel === 'Monogram'
+    && _monoLetters((ctx.data.Monogram || {}).initials, (ctx.data.Monogram || {}).style).length > 0;
   const emptyMsg = !supported
     ? 'Preview not yet available for this print type'
     : ctx.sel === 'Personalized'
@@ -1177,7 +1282,9 @@ function BallPreview() {
         ? 'Upload an image to preview'
         : ctx.sel === 'Icons'
           ? 'Pick an icon to preview'
-          : 'Pick a style to preview';
+          : ctx.sel === 'Monogram'
+            ? (monoHasLetters ? 'Rendering monogram…' : 'Type initials to preview')
+            : 'Pick a style to preview';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Live preview</div>
