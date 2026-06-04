@@ -356,7 +356,10 @@ function PopupApp() {
     setResolvedVars({});
     setResolvedTo('');
     setToPending(true);
-    setPendingVars(Object.keys(allVars));
+    // Variables named with a leading underscore are "plumbing" (the order
+    // blob, the matched product object) — they resolve and chain but are
+    // hidden from the popup, so only clean display values show.
+    setPendingVars(Object.keys(allVars).filter((n) => !n.startsWith('_')));
 
     let cancelled = false;
     let port = null;
@@ -1110,7 +1113,7 @@ function MainView({
                         ? <LoadingVal />
                         : (resolvedTo || <Tag tone="error" size="xs">Not found</Tag>)}
                     tone={toPending ? 'default' : (hasRecipient ? 'ok' : 'error')} />
-                  {Object.entries(tpl?.vars || {}).map(([name, def]) => {
+                  {Object.entries(tpl?.vars || {}).filter(([name]) => !name.startsWith('_')).map(([name, def]) => {
                     const pending = pendingVars.includes(name);
                     const val = resolvedVars[name];
                     return (

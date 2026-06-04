@@ -244,7 +244,19 @@ function buildHelpers() {
     const key = normUrl(url);
     if (!key) return null;
     const all = await loadCatalog();
-    const hit = all.find((p) => p.url && normUrl(p.url) === key);
+    let hit = all.find((p) => p.url && normUrl(p.url) === key);
+    /* Tail fallback: same product, different category folder (e.g. an order
+       links /accessories/…/x.htm but the catalog has /corporate/…/x.htm).
+       Only trust it when the filename is UNIQUE in the catalog, so we never
+       cross models (ball filenames carry the model year, so they stay
+       distinct). */
+    if (!hit) {
+      const tail = key.split('/').pop();
+      if (tail) {
+        const sameTail = all.filter((p) => p.url && normUrl(p.url).split('/').pop() === tail);
+        if (sameTail.length === 1) hit = sameTail[0];
+      }
+    }
     /* ── TEMP DEBUG (catalog-match diagnosis) — persist to storage so
        __gbDownloadDebug() can export it. Remove when fixed. ── */
     try {
