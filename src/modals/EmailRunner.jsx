@@ -112,10 +112,13 @@ const sendBg = (msg) => new Promise((resolve) => {
 
 /* Delegates to the shared renderer so OR-blocks (`{{a|b}}`) and
    conditional drop-out behave identically to the popup's
-   single-contact path. Unknown / fully-unresolved tokens still pass
+   single-contact path. `defs` (the template's variable definitions)
+   MUST be passed so renderTemplate runs dropConditional — without it
+   the smart.conditional "drop the sentence when empty" option silently
+   no-ops on the bulk path. Unknown / fully-unresolved tokens still pass
    through as `{{...}}` so the rep notices missing data instead of
    silently sending blanks. */
-const renderStr = (str, vars) => renderTemplate(str, vars);
+const renderStr = (str, vars, defs) => renderTemplate(str, vars, defs);
 
 /* The vanilla sendViaPA handler appends emailSignature for the popup's
    single-contact path; the orchestrator hits paAutomate directly so we
@@ -582,9 +585,9 @@ export function EmailRunner({
           // 3. Render template strings. The signature is applied by
           //    emailSender on the PA path (and dropped on the mailto
           //    fallback), so render the body WITHOUT it here.
-          const subject  = renderStr(rawSubject, resolvedVars);
+          const subject  = renderStr(rawSubject, resolvedVars, tplVars);
           const signature = await readSignature();
-          const htmlBody  = renderStr(rawBody, resolvedVars);
+          const htmlBody  = renderStr(rawBody, resolvedVars, tplVars);
 
           /* 4. Send. `from` resolves per-row: senderRandomize=true makes
              pickFromAddress fire a fresh random pick per contact so a

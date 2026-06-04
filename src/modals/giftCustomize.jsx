@@ -1079,8 +1079,8 @@ function Commercial({ p, config, serviceLevel }) {
   const serviceOpts = (config
     ? (config.serviceLevel && config.serviceLevel.length ? config.serviceLevel : config.shipping)
     : (serviceLevel ? ['8 Business Day Standard', '3-Day', '2-Day', 'Overnight'] : []))
-    // Drop the internal "(Override)" service levels — not buyer-facing.
-    .filter((s) => !/\(override\)/i.test(String(s)));
+    // Drop the internal "{Override}" service levels — not buyer-facing.
+    .filter((s) => !/\{[^}]*override[^}]*\}/i.test(String(s)));
   const [svc, setSvc] = useState(null);
   const selSvc = svc ?? serviceOpts[0];
   const prodTime = p.productionTime;
