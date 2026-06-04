@@ -506,13 +506,9 @@ function ImageUpload({ ai, label = 'Upload Your Company Logo', slot = 'Custom Lo
         {dataUrl ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, justifyContent: 'flex-start' }}>
             <img src={dataUrl} alt="" style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-surface-modal)', flexShrink: 0 }} />
-            <div style={{ textAlign: 'left', minWidth: 0, flex: 1 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fileName || 'Uploaded image'}</div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                {rawUrl && <button onClick={reAlign} style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-brand-label)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Align</button>}
-                <button onClick={clear} style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-tertiary)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Replace</button>
-              </div>
-            </div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0, textAlign: 'left' }}>{fileName || 'Uploaded image'}</div>
+            {rawUrl && <IconBtn size="xs" variant="ghost" icon={<I.edit />} onClick={reAlign} title="Align image" />}
+            <IconBtn size="xs" variant="ghost" danger icon={<I.trash />} onClick={clear} title="Remove / replace" />
           </div>
         ) : (
           <>
