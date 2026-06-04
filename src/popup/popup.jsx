@@ -241,22 +241,9 @@ function PopupApp() {
         });
         if (cancelled) return;
         renderMain(info || {}, tpls);
-
-        // Phase 2 — eagerly resolve variable-driven (pending) matches in
-        // parallel; each flips its own "resolving" dot when it settles,
-        // so slow code blocks never block the fast/var-free matches.
-        const pending = (info && info.pendingTemplateIds) || [];
-        for (const id of pending) {
-          const t = tpls.find((x) => x.id === id);
-          if (!t) continue;
-          const tree = t.type === 'account' ? t.accountConditions : t.rules;
-          sendMessage(currentTab.id, { action: 'resolveMatch', tree, vars: t.vars || {} })
-            .then((res) => {
-              if (cancelled) return;
-              setResolvingIds((prev) => prev.filter((x) => x !== id));
-              if (res && res.matched) setMatchedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-            });
-        }
+        // Matching is fully synchronous now — no phase-2 variable resolution.
+        // Variables (which can fetch orders / hit the catalog) resolve ONLY
+        // when a template is clicked, via the streaming resolver above.
       };
 
       if (alreadyLoaded) {

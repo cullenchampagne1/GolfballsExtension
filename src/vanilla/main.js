@@ -185,9 +185,13 @@ window.__gbContentReady = true;
         const accountId = smartAccountId();
         const engine    = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
 
-        // Sync value resolver for var-free grouped conditions (schema
-        // path / legacy DOM selector). Variable conditions defer to the
-        // popup's per-template resolveMatch pass — they may run code.
+        // Sync value resolver for grouped conditions (schema path / legacy
+        // DOM selector). Match rules must NOT use variables: code/template
+        // variables are expensive (they fetch past orders, hit the catalog)
+        // and resolving them for every template on page load is exactly
+        // what we're avoiding. A `var` condition therefore resolves to ''
+        // here — it's inert in matching. Variables resolve ONLY when a
+        // template is clicked, via the streaming resolver.
         const getMatchValue = (cond) => {
           if (!cond) return '';
           if (cond.source === 'schema') {
@@ -213,17 +217,15 @@ window.__gbContentReady = true;
         };
 
         const matched = [];
-        const pending = [];
         for (const t of (msg.templates || [])) {
           const tree = t.type === 'account' ? t.accountConditions : t.rules;
           if (engine && engine.isGroupedTree(tree)) {
-            if (engine.treeUsesVars(tree)) {
-              pending.push(t.id);   // resolved progressively via resolveMatch
-            } else {
-              let ok = false;
-              try { ok = await engine.evalTree(tree, getMatchValue); } catch { ok = false; }
-              if (ok) matched.push(t.id);
-            }
+            // Evaluated synchronously, NO variable resolution. Any `var`
+            // condition reads '' (see getMatchValue) so it can't gate a
+            // match — matching never runs the code chain on page load.
+            let ok = false;
+            try { ok = await engine.evalTree(tree, getMatchValue); } catch { ok = false; }
+            if (ok) matched.push(t.id);
           } else if (t.type === 'account') {
             if (checkRules(t.rules) && checkAccountConditions(t.accountConditions)) matched.push(t.id);
           } else if (checkRules(t.rules)) {
@@ -242,64 +244,14 @@ window.__gbContentReady = true;
         const pageChargeRows  = smartPageChargeRows();
         const messageId       = smartMessageId();
         const pageVars        = (pageType === 'contact' || pageType === 'account') ? smartPageVariables() : {};
-        sendResponse({ email, orderNo, matchedTemplateIds: matched, pendingTemplateIds: pending, userId, pageOrderTotal, pageChargeTotal, pageChargeRows, messageId, pageType, contactId, accountId, pageVars });
+        sendResponse({ email, orderNo, matchedTemplateIds: matched, pendingTemplateIds: [], userId, pageOrderTotal, pageChargeTotal, pageChargeRows, messageId, pageType, contactId, accountId, pageVars });
       })();
       return true;
     }
 
-    if (msg.action === 'resolveMatch') {
-      // Phase 2 of page matching: resolve ONE template's variable
-      // conditions (which may run async code) and evaluate its grouped
-      // tree. The popup fires these in parallel for the pending
-      // templates getPageInfo returned, so slow code blocks never hold
-      // up the fast/var-free matches.
-      (async () => {
-        const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
-        const tree = msg.tree;
-        if (!engine || !engine.isGroupedTree(tree)) { sendResponse({ matched: false }); return; }
-
-        // Resolve the referenced variables up front (one batch, cached).
-        let resolved = {};
-        const refVars = engine.varsReferenced(tree);
-        if (refVars.length && msg.vars) {
-          const defs = {};
-          for (const name of refVars) if (msg.vars[name]) defs[name] = msg.vars[name];
-          if (Object.keys(defs).length) {
-            try { const r = await resolveAllVarsAsync(defs, { type: 'auto' }, document); resolved = r.resolved || {}; }
-            catch { resolved = {}; }
-          }
-        }
-
-        const getValue = (cond) => {
-          if (!cond) return '';
-          if (cond.source === 'var')    return resolved[cond.ref] != null ? resolved[cond.ref] : '';
-          if (cond.source === 'schema') {
-            const quant = engine.arrayQuantifier && engine.arrayQuantifier(cond.ref);
-            if (quant) {
-              const mm = cond.ref.match(/^(.*?)\[(?:any|none)\](.*)$/);
-              if (!mm) return [];
-              const arr = engine.resolvePath(document, mm[1], []);
-              if (!Array.isArray(arr)) return [];
-              const suffix = (mm[2] || '').replace(/^\./, '');
-              return arr.map((item) => (suffix ? engine.resolve(item, suffix, '') : item));
-            }
-            return engine.resolvePath(document, cond.ref, '');
-          }
-          if (cond.source === 'dom') {
-            try {
-              const el = document.querySelector(cond.ref);
-              return el ? ((typeof getTextOf === 'function') ? getTextOf(el) : (el.innerText || el.textContent || '').trim()) : '';
-            } catch { return ''; }
-          }
-          return '';
-        };
-
-        let matched = false;
-        try { matched = await engine.evalTree(tree, getValue); } catch { matched = false; }
-        sendResponse({ matched });
-      })();
-      return true;
-    }
+    /* (removed) `resolveMatch` — match rules no longer resolve variables.
+       Matching is fully synchronous in getPageInfo; variables resolve only
+       when a template is clicked (the streaming resolver). */
 
     if (msg.action === 'GB_FEATURE_FLAGS') {
       window.__gbFeatureFlags = { ...(window.__gbFeatureFlags || {}), ...msg.flags };
