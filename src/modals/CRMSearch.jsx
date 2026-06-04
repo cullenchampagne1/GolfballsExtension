@@ -1570,22 +1570,18 @@ function ResultRow({ row, isSelected, isActive, emailStatus, showStatusCol, onTo
         onToggle(e);
       }}
     >
-      {/* Selection highlight underlay — behind the content so its toggle
-          doesn't jolt the row text (see the style note above). */}
+      {/* Selection highlight + accent bar both painted on this ONE
+          always-present underlay (behind the content). The bar is an inset
+          box-shadow, not a separate <span> that gets added/removed on
+          select — adding/removing a child on toggle was making the selected
+          row render fractionally different and shift the text. Nothing is
+          added to the row now; only this underlay's paint changes. */}
       <div aria-hidden style={{
         position: 'absolute', inset: 0, zIndex: -1,
         background: rowBg,
-        transition: 'background-color .15s',
+        boxShadow: isSelected && !isActive ? 'inset 3px 0 0 0 var(--gb-brand-label)' : 'none',
+        transition: 'background-color .15s, box-shadow .15s',
       }} />
-      {/* Straight left accent bar for checkbox-selected rows — absolute so
-          it never shifts the grid layout and stays square. Hidden while the
-          keyboard-active ring owns the row. */}
-      {isSelected && !isActive && (
-        <span aria-hidden style={{
-          position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
-          background: 'var(--gb-brand-label)',
-        }} />
-      )}
       <div>
         <Checkbox checked={isSelected} onChange={(e) => onToggle(e)} />
       </div>
