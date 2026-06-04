@@ -169,6 +169,10 @@ function PopupApp() {
   const [resolvedVars, setResolvedVars] = useState({});
   const [resolvedTo, setResolvedTo] = useState('');
   const [resolving, setResolving] = useState(false);
+  // Names of variables still resolving (the slow code chain). The fast
+  // pass clears To + sync vars immediately; only these keep spinning.
+  const [pendingVars, setPendingVars] = useState([]);
+  const [toPending, setToPending] = useState(false);
 
   // ── inline modal state ──
   const [watchModalOpen, setWatchModalOpen] = useState(false);
@@ -347,20 +351,55 @@ function PopupApp() {
       setResolvedVars(empty);
       setResolvedTo('');
       setResolving(false);
+      setPendingVars([]);
+      setToPending(false);
       return;
     }
+
+    /* Progressive resolution. The cheap vars (schema/selector/literal) and
+       the To recipient resolve in a fast first pass so name + To paint
+       instantly; the slow code chain (order fetch → match) resolves in a
+       second pass and only those rows keep their spinner. With no code
+       vars the fast pass IS the whole resolution (no second round-trip). */
+    const allVars  = tpl.vars || {};
+    const toField  = tpl.toField || { type: 'auto' };
+    const codeNames = Object.keys(allVars).filter((n) => allVars[n]?.type === 'code');
+    const fastVars  = Object.fromEntries(
+      Object.entries(allVars).filter(([, def]) => def?.type !== 'code'));
+
     setResolving(true);
     setResolvedVars({});
     setResolvedTo('');
-    sendMessage(tab.id, {
-      action: 'resolveVars',
-      vars: tpl.vars || {},
-      toField: tpl.toField || { type: 'auto' },
-    }).then((result) => {
-      setResolvedVars(result?.resolved || {});
-      setResolvedTo(result?.toEmail || '');
-      setResolving(false);
-    });
+    setToPending(true);
+    setPendingVars(Object.keys(allVars));
+
+    let cancelled = false;
+
+    // Fast pass — sync vars + recipient.
+    sendMessage(tab.id, { action: 'resolveVars', vars: fastVars, toField })
+      .then((r) => {
+        if (cancelled) return;
+        setResolvedVars((prev) => ({ ...prev, ...(r?.resolved || {}) }));
+        setResolvedTo(r?.toEmail || '');
+        setToPending(false);
+        // Fast vars are done; only the code chain stays pending.
+        setPendingVars(codeNames.slice());
+        if (codeNames.length === 0) setResolving(false);
+      });
+
+    // Slow pass — the full set (code chain). Skipped when there's nothing slow.
+    if (codeNames.length) {
+      sendMessage(tab.id, { action: 'resolveVars', vars: allVars, toField })
+        .then((r) => {
+          if (cancelled) return;
+          setResolvedVars(r?.resolved || {});
+          setResolvedTo(r?.toEmail || '');
+          setPendingVars([]);
+          setResolving(false);
+        });
+    }
+
+    return () => { cancelled = true; };
   }, [selectedId, tab, visibleTemplates, ignorePageContext]);
 
   /* ── live-sync feature flags + watchList + templates from storage ──
@@ -1065,30 +1104,28 @@ function MainView({
           {flags.emailTemplatesEnabled && (
             <Reveal key="send-block" gap={14}>
               {hasTemplates && (
-                resolving ? (
-                  /* Per-variable skeleton while the page-validation round-trip
-                     runs. Code variables may do async server calls (h.server),
-                     so they get a distinct "running code…" tag instead of one
-                     global spinner — the rows reconcile in place (same keys) to
-                     their resolved values when the batch returns. */
-                  <div>
-                    <KeyVal k="To" v={<LoadingVal />} tone="default" />
-                    {Object.entries(tpl?.vars || {}).map(([name, def]) => (
+                /* Per-variable progressive state. To + the sync vars paint as
+                   soon as the fast pass returns; only the still-pending code
+                   chain keeps a spinner (code vars get the "running code…"
+                   tag). Rows reconcile in place (same keys) as values land. */
+                <div>
+                  <KeyVal k="To"
+                    v={toPending
+                        ? <LoadingVal />
+                        : (resolvedTo || <Tag tone="error" size="xs">Not found</Tag>)}
+                    tone={toPending ? 'default' : (hasRecipient ? 'ok' : 'error')} />
+                  {Object.entries(tpl?.vars || {}).map(([name, def]) => {
+                    const pending = pendingVars.includes(name);
+                    const val = resolvedVars[name];
+                    return (
                       <KeyVal key={name} k={name}
-                        v={<LoadingVal code={def?.type === 'code'} />}
-                        tone="default" />
-                    ))}
-                  </div>
-                ) : (
-                  <div>
-                    <KeyVal k="To" v={resolvedTo || <Tag tone="error" size="xs">Not found</Tag>} tone={hasRecipient ? 'ok' : 'error'} />
-                    {Object.entries(resolvedVars).map(([name, val]) => (
-                      <KeyVal key={name} k={name}
-                        v={val ? String(val).slice(0, 40) : <Tag tone="error" size="xs">Not found</Tag>}
-                        tone={val ? 'default' : 'error'} />
-                    ))}
-                  </div>
-                )
+                        v={pending
+                            ? <LoadingVal code={def?.type === 'code'} />
+                            : (val ? String(val).slice(0, 40) : <Tag tone="error" size="xs">Not found</Tag>)}
+                        tone={pending ? 'default' : (val ? 'default' : 'error')} />
+                    );
+                  })}
+                </div>
               )}
 
               <hr style={{ border: 0, borderTop: '1px solid var(--gb-border-subtle)', margin: '10px 0' }} />
