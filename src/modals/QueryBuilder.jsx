@@ -16,7 +16,7 @@ const hasChromeStorage = () => {
   try { return typeof chrome !== 'undefined' && !!chrome.storage?.local; } catch { return false; }
 };
 
-async function loadSavedQueries() {
+export async function loadSavedQueries() {
   if (hasChromeStorage()) {
     return new Promise((resolve) => {
       chrome.storage.local.get(QB_STORAGE_KEY, (data) => {
@@ -313,7 +313,7 @@ function compileGroup(group) {
   if (parts.length === 1) return parts[0];
   return `(${parts.join(` ${group.joiner} `)})`;
 }
-function compileGroupsToSolr(groups, outerJoiner) {
+export function compileGroupsToSolr(groups, outerJoiner) {
   const parts = groups.map(compileGroup).filter(Boolean);
   if (parts.length === 0) return '';
   if (parts.length === 1) return parts[0];

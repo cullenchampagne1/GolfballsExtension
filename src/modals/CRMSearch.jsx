@@ -6,7 +6,7 @@ import {
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { callSource, defineSource, hasExtensionContext } from '../lib/dataSource.js';
-import { QueryBuilder, describeCondition, compileToSolr, compileToLabel } from './QueryBuilder.jsx';
+import { QueryBuilder, describeCondition, compileToSolr, compileToLabel, loadSavedQueries, compileGroupsToSolr } from './QueryBuilder.jsx';
 import { EmailRunner } from './EmailRunner.jsx';
 import {
   indexRecords, getAllIndexed, deleteIndexed, clearIndex, searchIndexed,
@@ -758,6 +758,70 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
            a mouse click to pick a different row. */
         setActiveIdx(-1);
         try { searchInputRef.current?.focus({ preventScroll: true }); } catch {}
+      },
+    });
+    return unsub;
+  }, [runSearch, toast]);
+
+  /* "Scan for recent orders" — a one-click morning routine. Applies the
+     user's saved "My Clients" filter ANDed with "last order on/after the
+     last time this was run" (first run = the last 7 days), so the result
+     set is exactly the clients who've ordered since the previous scan.
+     The clock advances on every run so tomorrow's scan starts where this
+     one ended. Requires a saved filter literally named "My Clients". */
+  const SCAN_LAST_RUN_KEY = 'gbScanRecentOrders_lastRun';
+  useEffect(() => {
+    const unsub = actionRegistry.register({
+      id: 'gb-crm-scan-recent-orders',
+      label: 'Scan for recent orders',
+      icon: <I.bolt size={13} />,
+      hint: 'My Clients who ordered since your last scan',
+      whenModalOpen: ['crm-search'],
+      handler: async () => {
+        // 1. Locate the saved "My Clients" filter (case-insensitive).
+        let saved = [];
+        try { saved = await loadSavedQueries(); } catch {}
+        const mine = (saved || []).find((f) => (f?.name || '').trim().toLowerCase() === 'my clients');
+        if (!mine) {
+          toast?.error?.('No “My Clients” filter found. Open Query Builder, build your client filter, and save it named exactly “My Clients”.', { duration: 6000, placement: 'top-center' });
+          return;
+        }
+
+        // 2. Lower bound = last run (first time → 7 days ago). Day
+        //    granularity matches the lastOrderDate_dt field (midnight
+        //    stamps); using the previous run's DATE keeps a one-day
+        //    overlap so same-day-later orders are never missed.
+        let lastRun = null;
+        try {
+          const o = await new Promise((r) => chrome.storage.local.get(SCAN_LAST_RUN_KEY, r));
+          lastRun = o?.[SCAN_LAST_RUN_KEY] || null;
+        } catch {}
+        const sinceMs = lastRun || (Date.now() - 7 * 86400000);
+        const sinceDate = new Date(sinceMs);
+        const sinceStr = sinceDate.toISOString().slice(0, 10); // YYYY-MM-DD
+        const niceSince = sinceDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+        // 3. Combine: (My Clients filter) AND lastOrderDate on/after since.
+        const mineFq = compileGroupsToSolr(mine.groups || [], mine.outerJoiner || 'AND');
+        const dateFq = `lastOrderDate_dt:[${sinceStr}T00:00:00Z TO *]`;
+        const solrFq = mineFq ? `(${mineFq}) AND ${dateFq}` : dateFq;
+        // Flattened conditions drive the filter-bar tags (informational).
+        const conditions = [
+          ...(mine.groups || []).flatMap((g) => g.conditions || []),
+          { id: `scan_${Date.now()}`, fieldKey: 'lastOrderDate_dt', op: 'after', val: sinceStr },
+        ];
+        const filter = { label: `My Clients · ordered since ${niceSince}`, solrFq, conditions };
+
+        // 4. Apply + run server-side (paginates all matches via infinite scroll).
+        setQuery('');
+        setType('all');
+        setQbFilter(filter);
+        setMode('server');
+        runSearch('', filter, 'all');
+        setActiveIdx(-1);
+
+        // 5. Advance the clock so the next scan starts from now.
+        try { chrome.storage.local.set({ [SCAN_LAST_RUN_KEY]: Date.now() }); } catch {}
       },
     });
     return unsub;
