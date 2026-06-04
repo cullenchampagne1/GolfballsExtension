@@ -500,12 +500,12 @@ function ImageUpload({ ai, label = 'Upload Your Company Logo', slot = 'Custom Lo
         onDragOver={(e) => { e.preventDefault(); setHover(true); }}
         onDragLeave={() => setHover(false)}
         onDrop={onDrop}
-        style={{ padding: '20px 16px', borderRadius: 'var(--gb-r-lg)', textAlign: 'center', cursor: 'pointer', background: hover ? 'var(--gb-brand-tint-soft)' : 'var(--gb-fill-inverse-medium)', border: '1.5px dashed ' + (hover ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'), transition: 'all var(--gb-anim)' }}
+        style={{ padding: dataUrl ? '8px 10px' : '20px 16px', borderRadius: 'var(--gb-r-lg)', textAlign: 'center', cursor: 'pointer', background: hover ? 'var(--gb-brand-tint-soft)' : 'var(--gb-fill-inverse-medium)', border: '1.5px dashed ' + (hover ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'), transition: 'all var(--gb-anim)' }}
       >
         <input ref={inputRef} type="file" accept="image/*" onChange={onChange} style={{ display: 'none' }} />
         {dataUrl ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center' }}>
-            <img src={dataUrl} alt="" style={{ width: 40, height: 40, objectFit: 'contain', borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-surface-modal)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, justifyContent: 'flex-start' }}>
+            <img src={dataUrl} alt="" style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-surface-modal)', flexShrink: 0 }} />
             <div style={{ textAlign: 'left', minWidth: 0, flex: 1 }}>
               <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{fileName || 'Uploaded image'}</div>
               <div style={{ display: 'flex', gap: 10 }}>
