@@ -502,14 +502,21 @@ const MONO_DECAL_FILL = 0.52;
    ACTUAL number of letters. The ring/badge styles carry a count suffix —
    circle2/circle3, hex2/hex3 — so passing 2 letters to a 3-slot ring (which
    leaves an empty wedge) is the "cuts off" bug. The rest are fixed-count. */
+/* `knockout`: when Color 2 is Transparent, what becomes of the C2 region?
+   - circle2/circle3 have C2 = the disc-fill BEHIND the letters, so dropping it
+     leaves the clean ring + knocked-out letters (the classic look) → knockout.
+   - every other style has C2 = essential structure (ring/border, divider line,
+     gardenia's middle letter), so it must paint in Color 1 instead of vanishing
+     → NOT knockout. (Dropping it was the "missing border / middle letter / line"
+     bug.) An explicit Color 2 always paints that region regardless. */
 const _MONO_SPEC = {
-  'circle':        { min: 2, max: 3, view: (n) => 'circle' + n },   // circle2 / circle3
+  'circle':        { min: 2, max: 3, view: (n) => 'circle' + n, knockout: true },  // circle2 / circle3
   'hex':           { min: 2, max: 3, view: (n) => 'hex' + n },      // hex2 / hex3
   'gardenia':      { min: 3, max: 3, view: () => 'gardenia' },
   'vertical':      { min: 2, max: 2, view: () => 'vertical' },
   'horizontal':    { min: 2, max: 2, view: () => 'horizontal' },
   'diagonal':      { min: 2, max: 2, view: () => 'diagonal' },
-  'simple-circle': { min: 1, max: 1, view: () => 'circle' },        // single initial
+  'simple-circle': { min: 1, max: 1, view: () => 'circle' },        // single initial + ring
 };
 const _monoSpec = (styleKey) => _MONO_SPEC[styleKey] || _MONO_SPEC['circle'];
 /* Largest letter count any style takes — the Initials input caps to this, so a
@@ -626,7 +633,8 @@ function composeMonoDecal(masks, c1, c2) {
    href, so the decal rendered the browser's broken-image glyph. Instead the
    raw URL is fetched through the background proxy → same-origin data URL (see
    useDecalUrl), which the viewer can load directly. */
-const _iconCache = new Map();   // host URL → data URL
+const ICON_DECAL_FILL = 0.75;   // icons read large on the ball — shrink to 0.75
+const _iconCache = new Map();   // host URL → processed (downscaled) data URL
 function iconSrc(iconName) {
   if (!iconName) return null;
   for (const items of Object.values(ICON_THEMES)) {
@@ -634,6 +642,16 @@ function iconSrc(iconName) {
     if (hit) return ICON_HOST + hit[1];
   }
   return null;
+}
+/* Redraw an image centered at `fill` of its own size on a transparent canvas,
+   so the decal projector lands it smaller on the ball. Used to shrink icons. */
+async function padImageDecal(dataUrl, fill) {
+  const img = await _loadImage(dataUrl);
+  const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const dw = W * fill, dh = H * fill;
+  c.getContext('2d').drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  return c.toDataURL('image/png');
 }
 /* XML-escape user text before it lands inside an SVG <text>. Just the chars
    that would otherwise break the document. */
@@ -721,6 +739,7 @@ function useDecalUrl() {
       if (_iconCache.has(src)) { setUrl(_iconCache.get(src)); return; }
       let cancelled = false;
       proxyImageDataUrl(src)
+        .then((du) => padImageDecal(du, ICON_DECAL_FILL))
         .then((du) => { _iconCache.set(src, du); if (!cancelled) setUrl(du); })
         .catch(() => { if (!cancelled) setUrl(null); });
       return () => { cancelled = true; };
@@ -732,7 +751,10 @@ function useDecalUrl() {
       if (letters.length < spec.min) { setUrl(null); return; }   // not enough initials yet
       const view = spec.view(letters.length);                    // circle2 / circle3 / …
       const c1 = _hexOf(mC1);
-      const c2 = (mC2 && mC2 !== 'Transparent') ? _hexOf(mC2) : null;  // null → monochrome
+      // Color 2 painting: explicit color → use it; Transparent → omit the C2
+      // layer ONLY for knockout styles (circle), else paint it in Color 1 so the
+      // border / divider / middle letter still shows.
+      const c2 = (mC2 && mC2 !== 'Transparent') ? _hexOf(mC2) : (spec.knockout ? null : c1);
       // Layers already cached (e.g. a color-only change) → re-tint instantly.
       const cached = peekMonoMasks(view, letters);
       if (cached) { setUrl(composeMonoDecal(cached, c1, c2)); return; }
