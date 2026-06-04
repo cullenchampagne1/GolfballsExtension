@@ -303,6 +303,18 @@ window.__gbContentReady = true;
       return true;
     }
 
+    /* Fire a toast on THIS page (the active tab). Lets surfaces that
+       live in their own window — chiefly the browser-action popup —
+       show feedback where the user is actually looking instead of in a
+       window that's about to close. Routes through the page-wide
+       window.__gbToast that the actions-shelf mounts. */
+    if (msg.action === 'showToast') {
+      const t = window.__gbToast;
+      const tone = ['success', 'error', 'warning', 'info'].includes(msg.tone) ? msg.tone : 'info';
+      try { t?.[tone]?.(msg.message || '', msg.opts || {}); } catch {}
+      return true;
+    }
+
     if (msg.action === 'showChargeModal') {
       __gbShowChargeModal(msg.context);
       return true;

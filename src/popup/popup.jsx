@@ -778,6 +778,13 @@ function MainView({
   const onCopy = async () => {
     if (!tpl || !canSend) return;
     const { rawBody, plainBody } = buildSendContent();
+    /* Show feedback on the ACTIVE PAGE, not in the popup window (which is
+       tiny and about to lose focus). Falls back to the popup's own toast
+       if there's no active tab to message. */
+    const notify = (tone, message, opts) => {
+      if (tab) sendMessage(tab.id, { action: 'showToast', tone, message, opts });
+      else window.__gbToast?.[tone]?.(message, opts);
+    };
     try {
       if (navigator.clipboard?.write && typeof ClipboardItem !== 'undefined') {
         await navigator.clipboard.write([
@@ -789,9 +796,9 @@ function MainView({
       } else {
         await navigator.clipboard.writeText(plainBody);
       }
-      window.__gbToast?.success?.('Copied — paste keeps formatting', { duration: 1800 });
+      notify('success', 'Copied — paste keeps formatting', { duration: 1800 });
     } catch (e) {
-      window.__gbToast?.error?.(`Couldn't copy: ${e?.message || 'clipboard blocked'}`, { duration: 3000 });
+      notify('error', `Couldn't copy: ${e?.message || 'clipboard blocked'}`, { duration: 3000 });
     }
   };
 

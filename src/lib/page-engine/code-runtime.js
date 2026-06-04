@@ -56,6 +56,7 @@ import {
   fmtCurrency, fmtNumber, fmtDate,
   coalesce, titleCase, parseNumber, parseDate, normalizePhone,
 } from './transforms.js';
+import { loadCatalog } from '../giftCatalog.js';
 
 const MAX_BODY_LENGTH = 8192;
 /* Async path only — server calls route through the background worker,
@@ -121,6 +122,45 @@ function buildHelpers() {
     catch { throw new Error('response was not valid JSON'); }
   };
 
+  /* ── Gifting-catalog index (async, cached) ──────────────────────
+     Search the live gifting catalog so a code variable can pull CURRENT
+     prices — e.g. look up a previous order's item by name and quote
+     today's price. loadCatalog() is paginated + cached in storage. */
+  const slimProduct = (p) => ({
+    id: p.id, title: p.title, brand: p.brand,
+    price: p.price, logo: p.logo, orig: p.orig,
+    breaks: p.breaks, minQty: p.minQty, url: p.url,
+  });
+  const catalogSearch = async (query, opts = {}) => {
+    const limit = Math.max(1, Math.min(50, Number(opts.limit) || 10));
+    const all = await loadCatalog();
+    const q = String(query == null ? '' : query).trim().toLowerCase();
+    if (!q) return all.slice(0, limit).map(slimProduct);
+    const terms = q.split(/\s+/).filter(Boolean);
+    const out = [];
+    for (const p of all) {
+      const hay = `${p.title || ''} ${p.brand || ''} ${p.id || ''}`.toLowerCase();
+      if (terms.every((t) => hay.includes(t))) {
+        out.push(p);
+        if (out.length >= limit) break;
+      }
+    }
+    return out.map(slimProduct);
+  };
+  const catalogFind = async (query) => {
+    const r = await catalogSearch(query, { limit: 1 });
+    return r[0] || null;
+  };
+  /* Unit price for `qty` by walking a product's quantity price breaks
+     ([{ q, p }] ascending). Falls back to the base price. */
+  const catalogPriceAt = (product, qty = 1) => {
+    const breaks = (product && Array.isArray(product.breaks)) ? product.breaks : [];
+    if (!breaks.length) return product ? (product.price ?? null) : null;
+    let price = breaks[0].p;
+    for (const b of breaks) { if (qty >= b.q) price = b.p; }
+    return price;
+  };
+
   const h = {
     fmt: Object.freeze({
       currency: fmtCurrency,
@@ -165,6 +205,12 @@ function buildHelpers() {
     send,
     fetchText,
     fetchJson,
+    /* ── Gifting catalog index (async) ── */
+    catalog: Object.freeze({
+      search:  catalogSearch,
+      find:    catalogFind,
+      priceAt: catalogPriceAt,
+    }),
   };
   return Object.freeze(h);
 }
@@ -315,6 +361,9 @@ export function describeHelpers() {
     'h.send':           { kind: 'fn', signature: 'async (action, payload?) → background response  // calls a background worker action' },
     'h.fetchText':      { kind: 'fn', signature: 'async (url) → string  // GET via background (CORS/mixed-content immune)' },
     'h.fetchJson':      { kind: 'fn', signature: 'async (url) → parsed JSON' },
+    'h.catalog.search':  { kind: 'fn', signature: 'async (query, { limit = 10 }) → [{ id, title, brand, price, logo, orig, breaks, minQty, url }]  // search the gifting catalog index' },
+    'h.catalog.find':    { kind: 'fn', signature: 'async (query) → first match | null' },
+    'h.catalog.priceAt': { kind: 'fn', signature: '(product, qty = 1) → current unit price for that quantity (walks price breaks)' },
     'h.dom':            { kind: 'fn', signature: '(selector) → Element | null  // queries the live page DOM' },
     'h.domAll':         { kind: 'fn', signature: '(selector) → Element[]' },
     'h.domText':        { kind: 'fn', signature: '(selector) → trimmed text of first match | ""' },
