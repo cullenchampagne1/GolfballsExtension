@@ -1199,13 +1199,7 @@ function TasksTable({ rows, status, query, allChecked, selected, onToggle, onTog
         <div>
           <Checkbox checked={allChecked} onChange={onToggleAll} />
         </div>
-        {/* Account + Category stacked, mirroring the row layout — both
-            are independently sortable so Category stays reachable even
-            though it no longer has its own column. */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
-          <SortHeader col={SORT_COLS.account}  sortChain={sortChain} onSort={onSort} />
-          <SortHeader col={SORT_COLS.category} sortChain={sortChain} onSort={onSort} muted />
-        </div>
+        <SortHeader col={SORT_COLS.account}  sortChain={sortChain} onSort={onSort} />
         <SortHeader col={SORT_COLS.contact}  sortChain={sortChain} onSort={onSort} />
         <SortHeader col={SORT_COLS.dueDate}  sortChain={sortChain} onSort={onSort} />
         <SortHeader col={SORT_COLS.priority} sortChain={sortChain} onSort={onSort} />
