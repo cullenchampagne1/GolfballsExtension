@@ -116,8 +116,15 @@ export function SmartPopover({ variable, cursor, onSave, onClose }) {
       closeOnOutside
       enterFrom="bottom"
     >
-      {/* Icon tab strip — 5 columns equal width, with sliding underline. */}
+      {/* Icon tab strip — 5 columns equal width, with sliding underline.
+          The underline is a SINGLE transform-positioned bar (translateX by
+          column), not a per-button layoutId element. layoutId/layout animations
+          interpolate VIEWPORT position, so while the popover is being dragged
+          the spring chased the bar's new screen coords and it lagged behind the
+          panel. A transform composes with the popover's drag transform, so the
+          bar now moves 1:1 with the panel and only springs when the tab changes. */}
       <div style={{
+        position: 'relative',
         display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)',
         background: 'var(--gb-surface-canvas)',
         borderBottom: '1px solid var(--gb-border-subtle)',
@@ -143,18 +150,6 @@ export function SmartPopover({ variable, cursor, onSave, onClose }) {
                 fontFamily: 'inherit',
               }}
             >
-              {active && (
-                <motion.span
-                  layoutId="gb-smart-tab"
-                  transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.85 }}
-                  style={{
-                    position: 'absolute',
-                    left: 0, right: 0, bottom: -1,
-                    height: 2,
-                    background: 'var(--gb-brand-label)',
-                  }}
-                />
-              )}
               <TabIcon size={12} />
               <span style={{
                 fontSize: 8.5, fontWeight: 700, textTransform: 'uppercase',
@@ -173,6 +168,19 @@ export function SmartPopover({ variable, cursor, onSave, onClose }) {
             </button>
           );
         })}
+        {/* Sliding underline — one bar, transform-positioned to the active column. */}
+        <motion.span
+          aria-hidden
+          initial={false}
+          animate={{ x: `${Math.max(0, TABS.findIndex((t) => t.id === tab)) * 100}%` }}
+          transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.85 }}
+          style={{
+            position: 'absolute', bottom: -1, left: 0,
+            width: `${100 / TABS.length}%`, height: 2,
+            background: 'var(--gb-brand-label)',
+            pointerEvents: 'none',
+          }}
+        />
       </div>
 
       {/* Tab body — fixed-ish height with scroll if needed */}
