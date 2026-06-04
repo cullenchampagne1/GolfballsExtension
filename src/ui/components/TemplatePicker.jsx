@@ -231,7 +231,7 @@ export function TemplatePicker({
   /* Group split — only used in single mode (popup) and only when
      both buckets have entries. Same logic the legacy
      dropdownOptions builder used. */
-  const useGroups = mode === 'single'
+  const useGroups = (mode === 'single' || mode === 'random')
     && matchedSet.size > 0
     && templates.some((t) => !matchedSet.has(t.id))
     && templates.some((t) => matchedSet.has(t.id));

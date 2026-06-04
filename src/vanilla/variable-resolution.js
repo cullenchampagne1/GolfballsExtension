@@ -213,7 +213,16 @@
     const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
     const resolved = {};      // name → display string (template substitution)
     const rawValues = {};     // name → raw value (objects intact; fed to later code blocks as `vars`)
-    for (const name of orderVars(vars)) {
+    /* Resolve the INSTANT vars (schema / selector / regex / literal — none of
+       which reference other vars) BEFORE the code chain, so cheap fields like
+       first_name stream to the popup immediately instead of waiting behind a
+       slow order fetch. Code vars keep their dependency order after that. */
+    const topo = orderVars(vars);
+    const resolveOrder = [
+      ...topo.filter((n) => (vars || {})[n] && (vars || {})[n].type !== 'code'),
+      ...topo.filter((n) => (vars || {})[n] && (vars || {})[n].type === 'code'),
+    ];
+    for (const name of resolveOrder) {
       const def = (vars || {})[name];
       let raw;        // raw value for chaining
       let display;    // string for the resolved map
