@@ -109,6 +109,7 @@ function buildHelpers(jobId) {
       search:  makeProxy(jobId, 'catalog.search'),
       find:    makeProxy(jobId, 'catalog.find'),
       byId:    makeProxy(jobId, 'catalog.byId'),
+      byUrl:   makeProxy(jobId, 'catalog.byUrl'),
       priceAt: catalogPriceAt,
     }),
     domText: makeProxy(jobId, 'domText'),

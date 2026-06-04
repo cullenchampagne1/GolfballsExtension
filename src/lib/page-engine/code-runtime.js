@@ -227,6 +227,26 @@ function buildHelpers() {
     });
     return hit ? slimProduct(hit) : null;
   };
+  /* Match by product-page URL — the most reliable join we have. The
+     catalog `id` is a Solr GUID (not the order's SKU), but every product
+     carries its `url`, and order line items carry the SAME product page
+     URL. Compare PATH only (drop scheme/query/hash/trailing slash) so
+     "…Supersoft-Golf-Balls-2025-Model.htm?p1=C&personalization=…" matches
+     the catalog product's clean URL. Exact page = exact product. */
+  const normUrl = (u) => {
+    let s = String(u == null ? '' : u).trim().toLowerCase();
+    if (!s) return '';
+    s = s.split('#')[0].split('?')[0];          // drop query + hash
+    s = s.replace(/^https?:\/\//, '').replace(/\/+$/, ''); // drop scheme + trailing slash
+    return s;
+  };
+  const catalogByUrl = async (url) => {
+    const key = normUrl(url);
+    if (!key) return null;
+    const all = await loadCatalog();
+    const hit = all.find((p) => p.url && normUrl(p.url) === key);
+    return hit ? slimProduct(hit) : null;
+  };
   /* Generic primitive: take an HTML string, run it through the SAME page
      engine the live page uses (detect schema → extract), and return
      { schemaId, data }. This is a building block, not a feature — a code
@@ -309,6 +329,7 @@ function buildHelpers() {
       search:  catalogSearch,
       find:    catalogFind,
       byId:    catalogById,
+      byUrl:   catalogByUrl,
       priceAt: catalogPriceAt,
     }),
   };
