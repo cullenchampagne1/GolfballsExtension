@@ -439,12 +439,18 @@ const FIELDS = {
       },
       url: {
         type: 'string',
-        label: 'Order URL',
-        /* href on the first cell's <a> — the link to the order
-           detail page. Useful for code vars that want to link
-           back into the CRM from a template. rowFn because the
-           extractor reads from the current <tr>, not the doc. */
+        label: 'Order ID',
+        /* The orderID query param off the first cell's <a>. rowFn
+           because the extractor reads from the current <tr>. */
         extract: { rowFn: 'readHrefParam', args: [0, 'orderID'] },
+      },
+      href: {
+        type: 'string',
+        label: 'Order URL',
+        /* Absolute URL of the order detail page (resolved against the
+           page) so a code var can fetch it directly with h.fetchText —
+           no host/path reconstruction. */
+        extract: { rowFn: 'firstCellHref', args: [0] },
       },
       summary: {
         type: 'string',

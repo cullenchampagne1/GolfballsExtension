@@ -199,28 +199,22 @@ function buildHelpers() {
     });
     return hit ? slimProduct(hit) : null;
   };
-  /* Fetch an order page by id, run it through the order page engine,
-     and return the extracted `order` object (identity / totals /
-     items[] with sku, qty, unitPrice, lineTotal, …). This is what lets
-     a code var read a customer's ACTUAL past order — real skus and real
-     quantities — instead of guessing from the robotic line-item names
-     on the contact page. Routes the fetch through the background worker
-     (session cookies attached) so admin order pages render. */
-  const ORDER_URL = (id) =>
-    `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=ViewOrder&orderID=${encodeURIComponent(String(id).trim())}`;
-  const fetchOrder = async (orderID) => {
-    const id = String(orderID == null ? '' : orderID).trim();
-    if (!id) return null;
-    const resp = await send('fetchRaw', { url: ORDER_URL(id) });
-    if (!resp || !resp.ok || !resp.text) {
-      throw new Error(resp && resp.error ? resp.error : `order ${id} fetch failed`);
-    }
+  /* Generic primitive: take an HTML string, run it through the SAME page
+     engine the live page uses (detect schema → extract), and return
+     { schemaId, data }. This is a building block, not a feature — a code
+     var fetches whatever page it wants with h.fetchText(url) and parses
+     it here, so "read a customer's past order" is just:
+       const { data } = await h.parse(await h.fetchText(order.href));
+       data.order.items  // real skus, real quantities
+     No order-specific URL or schema knowledge lives in the engine. */
+  const parse = async (html) => {
+    if (typeof html !== 'string' || !html) return { schemaId: null, data: {} };
     if (typeof DOMParser === 'undefined') throw new Error('DOMParser unavailable in this context');
-    const doc = new DOMParser().parseFromString(resp.text, 'text/html');
+    const doc = new DOMParser().parseFromString(html, 'text/html');
     const schema = detectSchema(doc);
-    if (!schema || schema.id !== 'order') throw new Error(`order ${id} did not match the order schema`);
+    if (!schema) return { schemaId: null, data: {} };
     const result = extract(schema, doc);
-    return (result && result.data && result.data.order) || null;
+    return { schemaId: (result && result.schemaId) || schema.id || null, data: (result && result.data) || {} };
   };
   /* Unit price for `qty` by walking a product's quantity price breaks
      ([{ q, p }] ascending). Falls back to the base price. */
@@ -276,8 +270,8 @@ function buildHelpers() {
     send,
     fetchText,
     fetchJson,
-    /* ── Past-order lookup (async, background-routed) ── */
-    fetchOrder,
+    /* ── Run the page engine on an arbitrary HTML string (async) ── */
+    parse,
     /* ── Gifting catalog index (async) ── */
     catalog: Object.freeze({
       search:  catalogSearch,
