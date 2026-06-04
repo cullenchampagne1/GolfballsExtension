@@ -1,5 +1,5 @@
 import React, { useState, useEffect, createContext, useContext, useMemo, useCallback, useRef } from 'react';
-import { Btn, Tag, Dot, DraggablePopup, Segmented, CompactModal, ModalHeader, ModalFooter, Slider, IconBtn } from '../ui/index.js';
+import { Btn, Tag, Dot, DraggablePopup, Segmented, CompactModal, ModalHeader, ModalFooter, Slider, IconBtn, Dropdown } from '../ui/index.js';
 import { AnimatePresence } from 'motion/react';
 import { Icon, I } from '../ui/icons.jsx';
 import { GolfballViewer } from './GolfballViewer.jsx';
@@ -1076,9 +1076,13 @@ function SecondImprint() {
 function Commercial({ p, config, serviceLevel }) {
   const ladder = (p.breaks && p.breaks.length ? p.breaks : [{ q: p.minQty || 12, p: p.price || 0 }]);
   // setup fee + service options come from the live config; balls (no config) keep the legacy defaults.
-  const serviceOpts = config
+  const serviceOpts = (config
     ? (config.serviceLevel && config.serviceLevel.length ? config.serviceLevel : config.shipping)
-    : (serviceLevel ? ['8 Business Day Standard', '3-Day', '2-Day', 'Overnight'] : []);
+    : (serviceLevel ? ['8 Business Day Standard', '3-Day', '2-Day', 'Overnight'] : []))
+    // Drop the internal "(Override)" service levels — not buyer-facing.
+    .filter((s) => !/\(override\)/i.test(String(s)));
+  const [svc, setSvc] = useState(null);
+  const selSvc = svc ?? serviceOpts[0];
   const prodTime = p.productionTime;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
@@ -1097,9 +1101,13 @@ function Commercial({ p, config, serviceLevel }) {
       {serviceOpts.length > 0 && (
         <div>
           <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)', marginBottom: 4 }}>Service level</div>
-          <select defaultValue={serviceOpts[0]} style={{ width: '100%', height: 32, padding: '0 10px', background: 'var(--gb-fill-inverse-medium)', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 11.5, fontWeight: 600 }}>
-            {serviceOpts.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
+          <Dropdown
+            size="sm"
+            value={selSvc}
+            options={serviceOpts.map((s) => ({ id: s, label: s }))}
+            onChange={setSvc}
+            style={{ width: '100%' }}
+          />
         </div>
       )}
       <div>
