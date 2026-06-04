@@ -153,6 +153,10 @@ function PopupApp() {
 
   // ── selected template + resolved data ──
   const [selectedId, setSelectedId] = useState(null);
+  // True once the user has manually picked a template — stops the
+  // auto-matcher from yanking the selection out from under them when a
+  // phase-2 (variable-driven) match later resolves. Reset on each page load.
+  const userPickedRef = useRef(false);
   // When the selected template has variations and the user explicitly
   // picked one, this is its id. Null = use the parent template's own
   // subject/body. Parent / variation pick logic lives in MainView; we
@@ -312,10 +316,24 @@ function PopupApp() {
 
     const matched = info.matchedTemplateIds || [];
     const initial = matched.find((id) => visible.some((t) => t.id === id)) || visible[0]?.id || null;
+    userPickedRef.current = false;   // fresh page → let the auto-matcher drive
     setSelectedId(initial);
     setSelectedVariationId(null);
     setStage('main');
   }
+
+  /* Auto-select the first template that MATCHES the page. Runs whenever
+     matchedIds changes — crucially after phase 2 resolves variable-driven
+     (pending) matches, which the initial render in renderMain can't see
+     (they're not in info.matchedTemplateIds yet). Without this, a template
+     whose rules use variables never auto-selects and the popup sticks on
+     visible[0] ("Abandoned Cart"). Skips once the user has picked manually. */
+  useEffect(() => {
+    if (userPickedRef.current || stage !== 'main') return;
+    const firstMatched = visibleTemplates.find((t) => matchedIds.includes(t.id));
+    if (firstMatched && firstMatched.id !== selectedId) setSelectedId(firstMatched.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchedIds, visibleTemplates, stage]);
 
   /* ── resolve variables whenever the selected template changes ── */
   useEffect(() => {
