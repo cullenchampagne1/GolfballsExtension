@@ -100,6 +100,16 @@
           }
         }
 
+        /* A literal variable is fixed text — there's nothing to resolve,
+           so it must return its own value (was falling through to the
+           default '' and showing as "unresolved"). The value lives in
+           `value` (canonical) or `config`/`literal` (editor shapes). */
+        case 'literal':
+          return def.value   != null ? String(def.value)
+               : def.config  != null ? String(def.config)
+               : def.literal != null ? String(def.literal)
+               : '';
+
         default: return '';
       }
     } catch { return ''; }
