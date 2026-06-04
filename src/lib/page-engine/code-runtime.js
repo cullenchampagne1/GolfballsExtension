@@ -128,24 +128,39 @@ function buildHelpers() {
      today's price. loadCatalog() is paginated + cached in storage. */
   const slimProduct = (p) => ({
     id: p.id, title: p.title, brand: p.brand,
+    name: `${p.brand ? p.brand + ' ' : ''}${p.title || ''}`.trim(), // brand + title (catalog strips brand off title)
     price: p.price, logo: p.logo, orig: p.orig,
     breaks: p.breaks, minQty: p.minQty, url: p.url,
   });
+  /* Order-item names carry modifiers the catalog title doesn't ("Custom
+     Logo", "Bulk", "Golf Balls"…), so an exact "all terms match" never
+     hits. Instead: tokenize to whole words (so "v1" ≠ "v1x"), drop noise
+     words, and SCORE each product by how many distinctive query words
+     appear in its brand+title. Best score wins. */
+  const CATALOG_STOPWORDS = new Set([
+    'golf', 'ball', 'balls', 'custom', 'logo', 'logos', 'personalized', 'print',
+    'printed', 'imprint', 'imprinted', 'bulk', 'the', 'a', 'an', 'and', 'with',
+    'for', 'of', 'model', 'pack', 'set', 'inch', 'new', 'design', 'dozen',
+  ]);
+  const catalogTokens = (s) => String(s == null ? '' : s)
+    .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(Boolean);
   const catalogSearch = async (query, opts = {}) => {
     const limit = Math.max(1, Math.min(50, Number(opts.limit) || 10));
     const all = await loadCatalog();
-    const q = String(query == null ? '' : query).trim().toLowerCase();
-    if (!q) return all.slice(0, limit).map(slimProduct);
-    const terms = q.split(/\s+/).filter(Boolean);
-    const out = [];
+    const rawTerms = catalogTokens(query);
+    if (!rawTerms.length) return all.slice(0, limit).map(slimProduct);
+    let terms = rawTerms.filter((t) => t.length > 1 && !CATALOG_STOPWORDS.has(t));
+    if (!terms.length) terms = rawTerms; // query was ALL noise — fall back to it
+    const need = Math.min(2, terms.length); // demand a real signal
+    const scored = [];
     for (const p of all) {
-      const hay = `${p.title || ''} ${p.brand || ''} ${p.id || ''}`.toLowerCase();
-      if (terms.every((t) => hay.includes(t))) {
-        out.push(p);
-        if (out.length >= limit) break;
-      }
+      const words = new Set(catalogTokens(`${p.brand || ''} ${p.title || ''}`));
+      let score = 0;
+      for (const t of terms) if (words.has(t)) score += 1;
+      if (score >= need) scored.push({ p, score });
     }
-    return out.map(slimProduct);
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, limit).map((s) => slimProduct(s.p));
   };
   const catalogFind = async (query) => {
     const r = await catalogSearch(query, { limit: 1 });
@@ -361,7 +376,7 @@ export function describeHelpers() {
     'h.send':           { kind: 'fn', signature: 'async (action, payload?) → background response  // calls a background worker action' },
     'h.fetchText':      { kind: 'fn', signature: 'async (url) → string  // GET via background (CORS/mixed-content immune)' },
     'h.fetchJson':      { kind: 'fn', signature: 'async (url) → parsed JSON' },
-    'h.catalog.search':  { kind: 'fn', signature: 'async (query, { limit = 10 }) → [{ id, title, brand, price, logo, orig, breaks, minQty, url }]  // search the gifting catalog index' },
+    'h.catalog.search':  { kind: 'fn', signature: 'async (query, { limit = 10 }) → [{ id, title, brand, name, price, logo, orig, breaks, minQty, url }]  // scored search; `name` = brand + title' },
     'h.catalog.find':    { kind: 'fn', signature: 'async (query) → first match | null' },
     'h.catalog.priceAt': { kind: 'fn', signature: '(product, qty = 1) → current unit price for that quantity (walks price breaks)' },
     'h.dom':            { kind: 'fn', signature: '(selector) → Element | null  // queries the live page DOM' },
