@@ -463,17 +463,62 @@ const _hexOf = (name) => {
   const m = IMPRINT_COLORS.find((c) => c.name === name);
   return (m && m.hex) || '#000000';
 };
-function buildMonogramSvgUrl(style, c1) {
-  const def = MONO_STYLES.find((s) => s.key === style) || MONO_STYLES[0];
-  const hex = _hexOf(c1);
-  // The path data was authored with fill="currentColor" (via the _C constant).
-  // Recolor by string-substituting; cheap, no DOM parse needed.
-  const recolored = def.svg.split('currentColor').join(hex);
-  // Explicit width+height are REQUIRED for Three.js's TextureLoader — it loads
-  // the data URL via Image(), and an SVG with only a viewBox has no intrinsic
-  // size, so Image() rasterizes to 0x0 and texSubImage2D fails with
-  // "bad image data". 512 is plenty for the decal projection.
-  const doc = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="${def.viewBox || '0 0 256 256'}">${recolored}</svg>`;
+/* For optional/stroke roles: 'Transparent' → 'none' so SVG paints nothing
+   instead of treating it as black. */
+const _hexOrNone = (name) => {
+  if (!name || name === 'Transparent') return 'none';
+  const m = IMPRINT_COLORS.find((c) => c.name === name);
+  return (m && m.hex) || 'none';
+};
+/* Dynamic monogram renderers — one per style key. Each takes the user's
+   actual initials + the two colors, and emits SVG inner content sized to a
+   100×100 logical canvas. The thumbnails in MonoGrid still use the static
+   icustomize path art (fixed visual identity); these renderers are for the
+   live ball decal, where the typed letters need to show. `fill` is c1 (the
+   letter glyphs), `accent` is c2 when set, else falls back to c1 so a
+   single-color pick still paints the decoration. */
+const MONO_RENDERS = {
+  'circle': (t, fill, accent) =>
+    `<circle cx="50" cy="50" r="28" fill="none" stroke="${accent}" stroke-width="2.4"/>`
+    + `<text x="50" y="60" text-anchor="middle" font-family="Georgia,serif" font-style="italic" font-weight="700" font-size="24" fill="${fill}">${_escXml(t)}</text>`,
+  'hex': (t, fill, accent) =>
+    `<polygon points="50,18 76,33 76,67 50,82 24,67 24,33" fill="none" stroke="${accent}" stroke-width="2.4"/>`
+    + `<text x="50" y="59" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="19" fill="${fill}">${_escXml(t)}</text>`,
+  'gardenia': (t, fill, accent) =>
+    `<path d="M18,50 q9,-10 16,0 q-9,10 -16,0Z" fill="${accent}" opacity=".55"/>`
+    + `<path d="M82,50 q-9,-10 -16,0 q9,10 16,0Z" fill="${accent}" opacity=".55"/>`
+    + `<text x="50" y="62" text-anchor="middle" font-family="'Brush Script MT',cursive" font-style="italic" font-size="34" fill="${fill}">${_escXml(t)}</text>`,
+  'vertical': (t, fill, accent) =>
+    `<text x="32" y="64" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="32" fill="${fill}">${_escXml(t.charAt(0))}</text>`
+    + `<line x1="50" y1="22" x2="50" y2="78" stroke="${accent}" stroke-width="2.2"/>`
+    + `<text x="68" y="64" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="32" fill="${fill}">${_escXml(t.charAt(1) || '')}</text>`,
+  'horizontal': (t, fill, accent) =>
+    `<text x="50" y="42" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="22" fill="${fill}">${_escXml(t.charAt(0))}</text>`
+    + `<line x1="28" y1="50" x2="72" y2="50" stroke="${accent}" stroke-width="2.2"/>`
+    + `<text x="50" y="76" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="22" fill="${fill}">${_escXml(t.charAt(1) || '')}</text>`,
+  'diagonal': (t, fill, accent) =>
+    `<text x="28" y="78" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="30" fill="${fill}">${_escXml(t.charAt(0))}</text>`
+    + `<line x1="72" y1="22" x2="28" y2="78" stroke="${accent}" stroke-width="2.2"/>`
+    + `<text x="72" y="46" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="30" fill="${fill}">${_escXml(t.charAt(1) || '')}</text>`,
+  'simple-circle': (t, fill, accent) =>
+    `<circle cx="50" cy="50" r="26" fill="none" stroke="${accent}" stroke-width="2.4"/>`
+    + `<text x="50" y="64" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="34" fill="${fill}">${_escXml(t.charAt(0))}</text>`,
+};
+function buildMonogramSvgUrl(style, initials, c1, c2) {
+  const render = MONO_RENDERS[style] || MONO_RENDERS['circle'];
+  // Show placeholder text when nothing typed so the buyer sees what they'll
+  // get the moment they pick a style. Slot count is derived from MONO_STYLES.
+  const n = _monoCount(style);
+  const t = initials && initials.length ? initials.slice(0, n) : _monoPlaceholder(n);
+  const fill = _hexOf(c1);
+  const c2hex = _hexOrNone(c2);
+  const accent = c2hex === 'none' ? fill : c2hex;
+  const inner = render(t, fill, accent);
+  // Renderers draw inside a 100×100 logical region. The outer viewBox adds
+  // 30 units of padding on every side so the decal lands on the ball roughly
+  // the size of a real monogram — without padding the art was covering most
+  // of the pole. width+height are required so TextureLoader rasterizes.
+  const doc = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="-30 -30 160 160">${inner}</svg>`;
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(doc);
 }
 function buildIconUrl(iconName) {
@@ -481,7 +526,16 @@ function buildIconUrl(iconName) {
   // ICON_THEMES values are arrays of [displayName, fileName] — find the matching one.
   for (const items of Object.values(ICON_THEMES)) {
     const hit = items.find(([n]) => n === iconName);
-    if (hit) return ICON_HOST + hit[1];
+    if (hit) {
+      const src = ICON_HOST + hit[1];
+      // The site icons are cropped tight to their content, so handing the raw
+      // URL to the decal projector covers most of the pole. Wrap in a padded
+      // SVG so the bitmap rasterizes with transparent margins around it —
+      // gives roughly the same visual scale on the ball as an uploaded photo
+      // (the only decal type the buyer confirmed looks right).
+      const doc = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="-30 -30 160 160"><image href="${src}" x="0" y="0" width="100" height="100" preserveAspectRatio="xMidYMid meet"/></svg>`;
+      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(doc);
+    }
   }
   return null;
 }
@@ -490,21 +544,42 @@ function buildIconUrl(iconName) {
 const _escXml = (s) => String(s || '').replace(/[&<>"']/g, (c) => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]
 ));
-function buildPersonalizedUrl(line1, line2, line3, font, color) {
+/* The four named customizer fonts aren't shipped from any S3 bucket we can
+   reach (confirmed by the earlier mapping), so the SVG can only ask for them
+   by name and let the browser fall back. These stacks pick the closest
+   system substitute when the real family is missing so the preview at least
+   reads as the right *kind* of font (geometric vs sans-serif vs script). */
+const FONT_STACK = {
+  'Kabel Dm BT':        "'Kabel Dm BT','Kabel','Futura','Avenir','Trebuchet MS',sans-serif",
+  'Calibri':            "'Calibri','Carlito','Helvetica','Arial',sans-serif",
+  'Lucida Handwriting': "'Lucida Handwriting','Brush Script MT','Snell Roundhand',cursive",
+  'Bradley Hand':       "'Bradley Hand','Bradley Hand ITC','Brush Script MT','Snell Roundhand',cursive",
+};
+/* Size segmented value → relative font scale. Standard is the natural size;
+   Large bumps ~20%, Max ~45%. The auto-fit below still clamps the final
+   value if the chosen size would overflow the decal width. */
+const SIZE_SCALE = { Standard: 1.0, Large: 1.2, Max: 1.45 };
+function buildPersonalizedUrl(line1, line2, line3, font, color, size) {
   const lines = [line1, line2, line3].map((l) => String(l || '').trim()).filter(Boolean);
   if (!lines.length) return null;
   const hex = _hexOf(color);
-  // Vector text → fully crisp at any zoom, recolor is instant. Approximating
-  // the live customizer's clublabel render; exact production fonts aren't
-  // available in the bucket (confirmed earlier), so we use the family name
-  // and let the browser pick its closest substitute.
+  const stack = FONT_STACK[font] || `'${font}',Georgia,serif`;
+  // Vector text → fully crisp at any zoom; recolor + resize are instant.
   const VB_W = 512, VB_H = 256;
-  const fontSize = lines.length === 1 ? 80 : lines.length === 2 ? 60 : 46;
+  const baseByLines = lines.length === 1 ? 80 : lines.length === 2 ? 60 : 46;
+  const desired = baseByLines * (SIZE_SCALE[size] || 1);
+  // Auto-shrink so the longest line fits — ~0.55em per char is a rough
+  // proportional-font average. Prevents the input maxLength from silently
+  // overflowing the decal at Standard size.
+  const maxChars = Math.max(...lines.map((l) => l.length));
+  const widthLimit = VB_W * 0.9;
+  const fitCap = widthLimit / (maxChars * 0.55);
+  const fontSize = Math.max(18, Math.min(desired, fitCap));
   const lineHeight = fontSize * 1.1;
   const totalH = lines.length * lineHeight;
   const startY = (VB_H - totalH) / 2 + fontSize * 0.85;
   const textEls = lines.map((line, i) =>
-    `<text x="${VB_W / 2}" y="${startY + i * lineHeight}" text-anchor="middle" font-family="${_escXml(font)}, Georgia, serif" font-size="${fontSize}" font-weight="700" fill="${hex}">${_escXml(line)}</text>`
+    `<text x="${VB_W / 2}" y="${startY + i * lineHeight}" text-anchor="middle" font-family="${stack}" font-size="${fontSize.toFixed(1)}" font-weight="700" fill="${hex}">${_escXml(line)}</text>`
   ).join('');
   // width+height attrs are required so Image() rasterizes to a real bitmap;
   // viewBox alone leaves the SVG sizeless and TextureLoader rejects it.
@@ -520,8 +595,8 @@ function useDecalUrl() {
   const data = ctx.data || {};
   return useMemo(() => {
     if (sel === 'Monogram') {
-      const { style, c1 } = data.Monogram || {};
-      return buildMonogramSvgUrl(style, c1);
+      const { style, initials, c1, c2 } = data.Monogram || {};
+      return buildMonogramSvgUrl(style, initials, c1, c2);
     }
     if (sel === 'Icons') {
       const { icon } = data.Icons || {};
@@ -529,7 +604,7 @@ function useDecalUrl() {
     }
     if (sel === 'Personalized') {
       const snap = data.Personalized || {};
-      return buildPersonalizedUrl(snap.l1, snap.l2, snap.l3, snap.font, snap.color);
+      return buildPersonalizedUrl(snap.l1, snap.l2, snap.l3, snap.font, snap.color, snap.size);
     }
     if (sel === 'Custom Logo') {
       return (data['Custom Logo'] && data['Custom Logo'].imageDataUrl) || null;
