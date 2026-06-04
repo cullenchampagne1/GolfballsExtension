@@ -1616,7 +1616,7 @@ function BallPreview() {
       <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Live preview</div>
       <div style={{ position: 'relative', width: '100%', height: 200, borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)' }}>
         {(decalUrl || secondUrl) ? (
-          <GolfballViewer minimal decalDataUrl={decalUrl} secondDecalDataUrl={secondUrl} />
+          <GolfballViewer minimal initialScale={3} decalDataUrl={decalUrl} secondDecalDataUrl={secondUrl} />
         ) : (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, textAlign: 'center' }}>
             <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', lineHeight: 1.4 }}>{emptyMsg}</div>

@@ -94,7 +94,7 @@ export const SCENES = [
   { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'assets/moonlit_golf_4k.exr',     icon: 'moon' },
 ];
 
-export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, secondDecalDataUrl, onError, onSceneChange, onThrowChange, minimal = false }, ref) {
+export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, secondDecalDataUrl, onError, onSceneChange, onThrowChange, minimal = false, initialScale }, ref) {
   const containerRef = useRef(null);
   // Imperative snapshot handle — set by the WebGL effect once the
   // scene is ready. Parent calls snapshotRef.current() to capture a
@@ -228,7 +228,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   if (!initialBallRef.current) {
     const deg = (k, fallback) => (Number(dev[k] ?? fallback) * Math.PI) / 180;
     initialBallRef.current = {
-      scale: Number(dev['golfballViewer.ballScale'] ?? 1),
+      // `initialScale` prop (e.g. the catalog preview's 3×) overrides the
+      // dev-setting default framing.
+      scale: Number(initialScale ?? dev['golfballViewer.ballScale'] ?? 1),
       rotX: deg('golfballViewer.ballRotX', 0),
       rotY: deg('golfballViewer.ballRotY', 0),
       rotZ: deg('golfballViewer.ballRotZ', 0),
@@ -254,7 +256,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
     const HALF_Y = 175;
     const HALF_Z = 180;
     const SCALE_MIN = 0.4;
-    const SCALE_MAX = 2.5;
+    // Allow zooming a bit past the initial framing so a large default (the
+    // catalog's 3×) isn't immediately clamped back down on scroll.
+    const SCALE_MAX = Math.max(2.5, (initialBallRef.current.scale || 1) * 1.4);
     const ROTATE_SENSITIVITY = 0.008;  // radians per CSS px of drag
     const THROW_SCALE = 0.55;
     const MAX_THROW_SPEED = 1500;
