@@ -660,45 +660,78 @@ const _escXml = (s) => String(s || '').replace(/[&<>"']/g, (c) => (
 ));
 /* The four named customizer fonts aren't shipped from any S3 bucket we can
    reach (confirmed by the earlier mapping), so the SVG can only ask for them
-   by name and let the browser fall back. These stacks pick the closest
-   system substitute when the real family is missing so the preview at least
-   reads as the right *kind* of font (geometric vs sans-serif vs script). */
-const FONT_STACK = {
-  'Kabel Dm BT':        "'Kabel Dm BT','Kabel','Futura','Avenir','Trebuchet MS',sans-serif",
-  'Calibri':            "'Calibri','Carlito','Helvetica','Arial',sans-serif",
-  'Lucida Handwriting': "'Lucida Handwriting','Brush Script MT','Snell Roundhand',cursive",
-  'Bradley Hand':       "'Bradley Hand','Bradley Hand ITC','Brush Script MT','Snell Roundhand',cursive",
-};
-/* Size segmented value → relative font scale. Standard is the natural size;
-   Large bumps ~20%, Max ~45%. The auto-fit below still clamps the final
-   value if the chosen size would overflow the decal width. */
-const SIZE_SCALE = { Standard: 1.0, Large: 1.2, Max: 1.45 };
-function buildPersonalizedUrl(line1, line2, line3, font, color, size) {
-  const lines = [line1, line2, line3].map((l) => String(l || '').trim()).filter(Boolean);
-  if (!lines.length) return null;
-  const hex = _hexOf(color);
-  const stack = FONT_STACK[font] || `'${font}',Georgia,serif`;
-  // Vector text → fully crisp at any zoom; recolor + resize are instant.
-  const VB_W = 512, VB_H = 256;
-  const baseByLines = lines.length === 1 ? 80 : lines.length === 2 ? 60 : 46;
-  const desired = baseByLines * (SIZE_SCALE[size] || 1);
-  // Auto-shrink so the longest line fits — ~0.55em per char is a rough
-  // proportional-font average. Prevents the input maxLength from silently
-  // overflowing the decal at Standard size.
-  const maxChars = Math.max(...lines.map((l) => l.length));
-  const widthLimit = VB_W * 0.9;
-  const fitCap = widthLimit / (maxChars * 0.55);
-  const fontSize = Math.max(18, Math.min(desired, fitCap));
-  const lineHeight = fontSize * 1.1;
-  const totalH = lines.length * lineHeight;
-  const startY = (VB_H - totalH) / 2 + fontSize * 0.85;
-  const textEls = lines.map((line, i) =>
-    `<text x="${VB_W / 2}" y="${startY + i * lineHeight}" text-anchor="middle" font-family="${stack}" font-size="${fontSize.toFixed(1)}" font-weight="700" fill="${hex}">${_escXml(line)}</text>`
-  ).join('');
-  // width+height attrs are required so Image() rasterizes to a real bitmap;
-  // viewBox alone leaves the SVG sizeless and TextureLoader rejects it.
-  const doc = `<svg xmlns="http://www.w3.org/2000/svg" width="${VB_W}" height="${VB_H}" viewBox="0 0 ${VB_W} ${VB_H}">${textEls}</svg>`;
-  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(doc);
+   by name and let the browser fall back. (Kept only as a reference of the four
+   live-verified families; the live decal now uses the real server render.) */
+
+/* ── Personalized text — REAL icustomize render, masked off the ball ─────────
+   There is NO flat transparent text endpoint (unlike monograms): the server
+   only renders Personalized text composited onto the ball via Item/GolfBall/r,
+   which is exactly what golfballs.com itself shows (confirmed in the network
+   capture). To get the buyer's actual letters in the REAL font/scale onto our
+   3D ball, we:
+     1. Render the ball WITH the text (Item/GolfBall/r, Print=Personalized).
+     2. Render the SAME ball with NO text (cached once — it never changes).
+     3. Diff the two: identical ball / dimples / "preview" watermark cancel,
+        leaving exactly the text pixels (any color, even black or white).
+     4. Tint that mask to the chosen color, trim + scale → a flat decal we
+        project onto the 3D ball like the monogram.
+   MFS (icustomize's font-size knob) is held high+constant for a crisp source;
+   the on-ball size comes from our own per-Size fill. */
+const PERSONALIZED_ENDPOINT = 'https://www.icustomize.com/Item/GolfBall/r';
+const PERSONALIZED_MFS = 372;                                   // crisp source render
+const PERSONALIZED_FILL = { Standard: 0.5, Large: 0.65, Max: 0.8 };
+/* Build the composited Item/GolfBall/r render URL. The Print value is itself a
+   query string, so userText/configOverrides get encoded twice (matches the
+   site's own URLs). */
+function personalizedRenderUrl(lines, font, color) {
+  const ut = encodeURIComponent(JSON.stringify([{ lines, font, color }]));
+  const icfg = encodeURIComponent(JSON.stringify({ MFS: String(PERSONALIZED_MFS), SecondMFS: String(PERSONALIZED_MFS) }));
+  const print = encodeURIComponent(`Personalized?userText=${ut}&configOverrides=${icfg}`);
+  const outer = encodeURIComponent(JSON.stringify({ BC: '#FFFFFF', MFS: String(PERSONALIZED_MFS), SecondMFS: String(PERSONALIZED_MFS) }));
+  return `${PERSONALIZED_ENDPOINT}?configOverrides=${outer}&view=&Print=${print}`;
+}
+/* Draw a render URL onto a canvas and return its raw pixel data. */
+async function _renderPixels(url) {
+  const img = await _loadImage(await proxyImageDataUrl(url));
+  const W = img.naturalWidth || img.width, H = img.naturalHeight || img.height;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const cx = c.getContext('2d'); cx.drawImage(img, 0, 0);
+  return { data: cx.getImageData(0, 0, W, H).data, W, H };
+}
+/* The blank ball (empty text) is identical for every render, so fetch it once. */
+let _blankBallPromise = null;
+const getBlankBall = () => (_blankBallPromise ||= _renderPixels(personalizedRenderUrl([], 'Kabel Dm BT', '#000000')));
+
+const _personalizedCache = new Map();
+/* Render the text on the ball, diff vs the blank ball, tint to `color`, trim +
+   center into a 1024 square at `fill`. Returns a flat decal data URL (or null). */
+async function extractTextDecal(lines, font, color, fill) {
+  const [blank, txt] = await Promise.all([getBlankBall(), _renderPixels(personalizedRenderUrl(lines, font, color))]);
+  const { W, H } = blank; const bd = blank.data, td = txt.data;
+  if (txt.W !== W || txt.H !== H) return null;
+  const r = parseInt(color.slice(1, 3), 16), g = parseInt(color.slice(3, 5), 16), b = parseInt(color.slice(5, 7), 16);
+  const alpha = new Uint8ClampedArray(W * H);
+  let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  for (let p = 0, i = 0; p < W * H; p++, i += 4) {
+    const d = Math.abs(td[i] - bd[i]) + Math.abs(td[i + 1] - bd[i + 1]) + Math.abs(td[i + 2] - bd[i + 2]);
+    const a = Math.max(0, Math.min(255, (d - 20) * 2));   // threshold tuned to skip dimple noise
+    alpha[p] = a;
+    if (a > 40) { const x = p % W, y = (p / W) | 0; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  if (x1 < x0) return null;
+  const tw = x1 - x0 + 1, th = y1 - y0 + 1;
+  const crop = document.createElement('canvas'); crop.width = tw; crop.height = th;
+  const cctx = crop.getContext('2d'); const id = cctx.createImageData(tw, th);
+  for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
+    const di = (y * tw + x) * 4;
+    id.data[di] = r; id.data[di + 1] = g; id.data[di + 2] = b; id.data[di + 3] = alpha[(y + y0) * W + (x + x0)];
+  }
+  cctx.putImageData(id, 0, 0);
+  const SIZE = 1024, s = (SIZE * fill) / Math.max(tw, th);
+  const dw = tw * s, dh = th * s;
+  const out = document.createElement('canvas'); out.width = SIZE; out.height = SIZE;
+  out.getContext('2d').drawImage(crop, (SIZE - dw) / 2, (SIZE - dh) / 2, dw, dh);
+  return out.toDataURL('image/png');
 }
 /* Hook: given the active print-type snapshot, return the decal URL the viewer
    should render. Personalized / uploads are local and resolve synchronously.
@@ -716,10 +749,6 @@ function useDecalUrl() {
 
   // Non-network decal types — computed directly.
   const syncUrl = useMemo(() => {
-    if (sel === 'Personalized') {
-      const s = data.Personalized || {};
-      return buildPersonalizedUrl(s.l1, s.l2, s.l3, s.font, s.color, s.size);
-    }
     if (sel === 'Custom Logo') return (data['Custom Logo'] && data['Custom Logo'].imageDataUrl) || null;
     if (sel === 'Photo') return (data.Photo && data.Photo.imageDataUrl) || null;
     return null;
@@ -729,9 +758,29 @@ function useDecalUrl() {
   const mStyle = mono && mono.style, mInit = mono && mono.initials;
   const mC1 = mono && mono.c1, mC2 = mono && mono.c2;
   const iconName = sel === 'Icons' ? (data.Icons || {}).icon : null;
+  const pers = sel === 'Personalized' ? (data.Personalized || {}) : null;
+  const pL1 = pers && pers.l1, pL2 = pers && pers.l2, pL3 = pers && pers.l3;
+  const pFont = pers && pers.font, pColor = pers && pers.color, pSize = pers && pers.size;
 
   const [url, setUrl] = useState(null);
   useEffect(() => {
+    // ── Personalized — render the real text on the ball, mask it off. ──
+    if (sel === 'Personalized') {
+      const lines = [pL1, pL2, pL3].map((l) => String(l || '').trim()).filter(Boolean);
+      if (!lines.length) { setUrl(null); return; }
+      const font = pFont || 'Kabel Dm BT';
+      const color = _hexOf(pColor);
+      const fill = PERSONALIZED_FILL[pSize] || PERSONALIZED_FILL.Standard;
+      const key = JSON.stringify([lines, font, color, fill]);
+      if (_personalizedCache.has(key)) { setUrl(_personalizedCache.get(key)); return; }
+      let cancelled = false;
+      const timer = setTimeout(() => {
+        extractTextDecal(lines, font, color, fill)
+          .then((u) => { if (u) _personalizedCache.set(key, u); if (!cancelled) setUrl(u); })
+          .catch(() => { if (!cancelled) setUrl(null); });
+      }, 300);
+      return () => { cancelled = true; clearTimeout(timer); };
+    }
     // ── Icons — fetch the real PNG to a data URL (cached). ──
     if (sel === 'Icons') {
       const src = iconSrc(iconName);
@@ -769,7 +818,7 @@ function useDecalUrl() {
     }
     // ── Everything else — synchronous. ──
     setUrl(syncUrl);
-  }, [sel, syncUrl, iconName, mStyle, mInit, mC1, mC2]);
+  }, [sel, syncUrl, iconName, mStyle, mInit, mC1, mC2, pL1, pL2, pL3, pFont, pColor, pSize]);
 
   return url;
 }
