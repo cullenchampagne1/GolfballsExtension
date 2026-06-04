@@ -126,17 +126,19 @@ function buildHelpers() {
      Search the live gifting catalog so a code variable can pull CURRENT
      prices — e.g. look up a previous order's item by name and quote
      today's price. loadCatalog() is paginated + cached in storage. */
-  /* "short" = the natural product line for casual copy: drop the
-     promo / "– 2026 Model" tails and the "Golf Balls" suffix, e.g.
-     "Pro V1 High Number Golf Balls – 2026 Model" → "Pro V1 High Number". */
-  const cleanShort = (t) => String(t == null ? '' : t)
-    .split(/\s+[–—-]\s+/)[0]
-    .replace(/\bgolf balls?\b/ig, '')
-    .replace(/\s{2,}/g, ' ').trim();
+  /* Catalog titles strip the brand and append promo / "– 2026 Model"
+     tails, so derive cleaner names for copy. We sell more than balls,
+     so KEEP the product type ("Golf Balls" / "Golf Towel" / …):
+       label = brand + title-without-tails  → "Titleist Pro V1 High Number Golf Balls"
+       short = product line only            → "Pro V1 High Number"        */
+  const cleanBrand = (b) => String(b == null ? '' : b).replace(/\s+golf$/i, '').trim();  // "Callaway Golf" → "Callaway"
+  const dropTails  = (t) => String(t == null ? '' : t).split(/\s+[–—-]\s+/)[0].replace(/\s{2,}/g, ' ').trim();
+  const shortLine  = (t) => dropTails(t).replace(/\bgolf balls?\b/ig, '').replace(/\s{2,}/g, ' ').trim();
   const slimProduct = (p) => ({
     id: p.id, title: p.title, brand: p.brand,
-    name:  `${p.brand ? p.brand + ' ' : ''}${p.title || ''}`.trim(), // brand + title (catalog strips brand off title)
-    short: cleanShort(p.title),                                       // "Pro V1 High Number"
+    name:  `${p.brand ? p.brand + ' ' : ''}${p.title || ''}`.trim(),       // raw brand + raw title
+    label: `${cleanBrand(p.brand)} ${dropTails(p.title)}`.trim(),          // "Titleist Pro V1 High Number Golf Balls"
+    short: shortLine(p.title),                                             // "Pro V1 High Number"
     price: p.price, logo: p.logo, orig: p.orig,
     breaks: p.breaks, minQty: p.minQty, url: p.url,
   });
@@ -384,7 +386,7 @@ export function describeHelpers() {
     'h.send':           { kind: 'fn', signature: 'async (action, payload?) → background response  // calls a background worker action' },
     'h.fetchText':      { kind: 'fn', signature: 'async (url) → string  // GET via background (CORS/mixed-content immune)' },
     'h.fetchJson':      { kind: 'fn', signature: 'async (url) → parsed JSON' },
-    'h.catalog.search':  { kind: 'fn', signature: 'async (query, { limit = 10 }) → [{ id, title, brand, name, short, price, logo, orig, breaks, minQty, url }]  // scored; name=brand+title, short=natural line ("Pro V1 High Number")' },
+    'h.catalog.search':  { kind: 'fn', signature: 'async (query, { limit = 10 }) → [{ id, title, brand, name, label, short, price, logo, orig, breaks, minQty, url }]  // label="Titleist Pro V1 High Number Golf Balls", short="Pro V1 High Number"' },
     'h.catalog.find':    { kind: 'fn', signature: 'async (query) → first match | null' },
     'h.catalog.priceAt': { kind: 'fn', signature: '(product, qty = 1) → current unit price for that quantity (walks price breaks)' },
     'h.dom':            { kind: 'fn', signature: '(selector) → Element | null  // queries the live page DOM' },
