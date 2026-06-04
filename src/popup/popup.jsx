@@ -474,6 +474,8 @@ function PopupApp() {
           onSelectVariation={setSelectedVariationId}
           tpl={tpl}
           resolving={resolving}
+          pendingVars={pendingVars}
+          toPending={toPending}
           resolvedVars={resolvedVars}
           resolvedTo={resolvedTo}
           pageInfo={pageInfo}
@@ -693,6 +695,7 @@ function LoadingVal({ code }) {
 
 function MainView({
   templates, matchedIds, resolvingIds = [], selectedId, onSelect,
+  pendingVars = [], toPending = false,
   selectedVariationId, onSelectVariation,
   tpl,
   resolving, resolvedVars, resolvedTo, pageInfo, flags, watchList, tab,
