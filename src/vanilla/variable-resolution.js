@@ -132,11 +132,12 @@
       if (def.type === 'builtin' && def.builtin === 'recommended_replacement') {
         try { raw = await getRecommendedReplacement(doc); }
         catch { raw = ''; }
-      } else if (def.type === 'code' && def.async) {
-        /* Async code variables get the timeout-guarded runtime so a
-           runaway promise can't hang the whole resolution loop. The
-           sync variant in resolveVar is enough for the common case
-           (pure expressions over ctx). */
+      } else if (def.type === 'code') {
+        /* ALL code variables resolve through engine.evaluateCode, which
+           runs the body in a sandboxed iframe — MV3 forbids `new Function`
+           in the content-script world, so the old sync path (resolveVar →
+           evaluateCodeSync) is CSP-blocked. The async engine call is the
+           only one that works on a live page. */
         const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
         if (!engine) { raw = ''; }
         else {

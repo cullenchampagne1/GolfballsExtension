@@ -33,6 +33,7 @@ const surfaces = [
   { srcDir: 'src/popup',         outDir: 'react-dist/popup',      suffix: '.jsx',      stripSuffix: '.jsx' },
   { srcDir: 'src/playground',    outDir: 'react-dist/playground', suffix: '.jsx',      stripSuffix: '.jsx' },
   { srcDir: 'src/vanilla-build', outDir: 'react-dist/vanilla',    suffix: '.entry.js', stripSuffix: '.entry.js' },
+  { srcDir: 'src/sandbox',       outDir: 'react-dist/sandbox',    suffix: '.entry.js', stripSuffix: '.entry.js' },
 ];
 
 let total = 0;

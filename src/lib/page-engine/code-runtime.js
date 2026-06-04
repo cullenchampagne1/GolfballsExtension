@@ -229,7 +229,7 @@ const STATIC_HELPERS = buildHelpers();
  *  recommended replacement) move into code today — before the order
  *  schema exists — by querying the DOM now and swapping to ctx.* once
  *  the engine extracts those fields. */
-function helpersFor(doc) {
+export function helpersFor(doc) {
   const d = doc || (typeof document !== 'undefined' ? document : null);
   const domAll  = (sel) => (d ? Array.from(d.querySelectorAll(sel)) : []);
   const dom     = (sel) => (d ? d.querySelector(sel) : null);

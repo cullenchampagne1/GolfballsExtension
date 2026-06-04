@@ -27,6 +27,7 @@
 import { extract } from './extract.js';
 import { resolve, listPaths, toDisplayString, existsAt, tokenizePath } from './resolve.js';
 import { runCode, runCodeSync, compile, compileAsync, describeHelpers } from './code-runtime.js';
+import { runInSandbox } from './sandbox-bridge.js';
 import { detectSchema } from '../page-schemas/registry.js';
 
 /** Per-doc memoization. Key: Document. Value:
@@ -73,7 +74,12 @@ export function resolvePath(doc, path, defaultV = '') {
  *  `await h.fetchJson(...)`. */
 export async function evaluateCode(doc, body, vars = {}) {
   const ctx = runEngine(doc);
-  return runCode(body, ctx?.data || {}, vars, { doc });
+  /* MV3 blocks `new Function` in the content-script world, so the body is
+     compiled + run in a sandboxed iframe (sandbox-bridge.js). Privileged
+     helpers it calls (h.send / h.fetch* / h.catalog.* / h.domText) are
+     serviced back here against this doc. runCode (direct new Function) is
+     kept only for non-MV3 / test contexts. */
+  return runInSandbox(body, ctx?.data || {}, vars, doc);
 }
 
 /** Sync variant — bypasses the timeout. Only safe for synchronous
