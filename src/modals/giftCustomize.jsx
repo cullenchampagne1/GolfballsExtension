@@ -469,7 +469,11 @@ function buildMonogramSvgUrl(style, c1) {
   // The path data was authored with fill="currentColor" (via the _C constant).
   // Recolor by string-substituting; cheap, no DOM parse needed.
   const recolored = def.svg.split('currentColor').join(hex);
-  const doc = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${def.viewBox || '0 0 256 256'}">${recolored}</svg>`;
+  // Explicit width+height are REQUIRED for Three.js's TextureLoader — it loads
+  // the data URL via Image(), and an SVG with only a viewBox has no intrinsic
+  // size, so Image() rasterizes to 0x0 and texSubImage2D fails with
+  // "bad image data". 512 is plenty for the decal projection.
+  const doc = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="${def.viewBox || '0 0 256 256'}">${recolored}</svg>`;
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(doc);
 }
 function buildIconUrl(iconName) {
@@ -494,15 +498,17 @@ function buildPersonalizedUrl(line1, line2, line3, font, color) {
   // the live customizer's clublabel render; exact production fonts aren't
   // available in the bucket (confirmed earlier), so we use the family name
   // and let the browser pick its closest substitute.
-  const VB_W = 400, VB_H = 200;
-  const fontSize = lines.length === 1 ? 64 : lines.length === 2 ? 48 : 36;
+  const VB_W = 512, VB_H = 256;
+  const fontSize = lines.length === 1 ? 80 : lines.length === 2 ? 60 : 46;
   const lineHeight = fontSize * 1.1;
   const totalH = lines.length * lineHeight;
   const startY = (VB_H - totalH) / 2 + fontSize * 0.85;
   const textEls = lines.map((line, i) =>
     `<text x="${VB_W / 2}" y="${startY + i * lineHeight}" text-anchor="middle" font-family="${_escXml(font)}, Georgia, serif" font-size="${fontSize}" font-weight="700" fill="${hex}">${_escXml(line)}</text>`
   ).join('');
-  const doc = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VB_W} ${VB_H}">${textEls}</svg>`;
+  // width+height attrs are required so Image() rasterizes to a real bitmap;
+  // viewBox alone leaves the SVG sizeless and TextureLoader rejects it.
+  const doc = `<svg xmlns="http://www.w3.org/2000/svg" width="${VB_W}" height="${VB_H}" viewBox="0 0 ${VB_W} ${VB_H}">${textEls}</svg>`;
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(doc);
 }
 /* Hook: given the active print-type snapshot, return the URL the viewer
@@ -1098,9 +1104,9 @@ function BallPreview() {
           ? 'Pick an icon to preview'
           : 'Pick a style to preview';
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
-      <div style={{ alignSelf: 'flex-start', fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Live preview</div>
-      <div style={{ position: 'relative', width: '100%', maxWidth: 240, aspectRatio: '1 / 1', borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Live preview</div>
+      <div style={{ position: 'relative', width: '100%', height: 200, borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)' }}>
         {decalUrl ? (
           <GolfballViewer minimal decalDataUrl={decalUrl} />
         ) : (
