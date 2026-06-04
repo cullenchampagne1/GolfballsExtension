@@ -115,10 +115,64 @@
     } catch { return ''; }
   }
 
+  /* Find which OTHER variables a code body reads via `vars.foo` /
+     vars['foo']. Only names that actually exist in the template count
+     as dependencies (a stray `vars.whatever` isn't an edge). This is
+     what lets the resolver run code blocks in the right order without
+     the author hand-declaring an order. */
+  function parseVarDeps(body, knownNames) {
+    const deps = new Set();
+    if (typeof body !== 'string' || !body) return deps;
+    const dot = /\bvars\s*\.\s*([A-Za-z_$][\w$]*)/g;
+    const idx = /\bvars\s*\[\s*['"]([^'"]+)['"]\s*\]/g;
+    let m;
+    while ((m = dot.exec(body))) if (knownNames.has(m[1])) deps.add(m[1]);
+    while ((m = idx.exec(body))) if (knownNames.has(m[1])) deps.add(m[1]);
+    return deps;
+  }
+
+  /* Topologically order the variables so every code block runs AFTER the
+     variables it references. Stable: among ready nodes we keep insertion
+     order, so a template with no cross-references resolves exactly as
+     before. Cycles / refs to missing vars are appended last (best-effort
+     — they just see whatever resolved before them). */
+  function orderVars(vars) {
+    const names = Object.keys(vars || {});
+    const known = new Set(names);
+    const deps = new Map();
+    for (const n of names) {
+      const d = vars[n];
+      const body = d && d.type === 'code' ? (d.body || '') : '';
+      const ds = parseVarDeps(body, known);
+      ds.delete(n);
+      deps.set(n, ds);
+    }
+    const order = [];
+    const done = new Set();
+    let progress = true;
+    while (order.length < names.length && progress) {
+      progress = false;
+      for (const n of names) {
+        if (done.has(n)) continue;
+        let ready = true;
+        for (const dn of deps.get(n)) if (!done.has(dn)) { ready = false; break; }
+        if (ready) { order.push(n); done.add(n); progress = true; }
+      }
+    }
+    for (const n of names) if (!done.has(n)) order.push(n);
+    return order;
+  }
+
   /**
    * Resolves all template variables for a given template asynchronously,
    * handling the `recommended_replacement` builtin which requires a network
    * call. Also resolves the recipient email from the `toField` definition.
+   *
+   * Variables resolve in DEPENDENCY ORDER (see orderVars): a code block can
+   * read an earlier variable's resolved value via `vars.thatName`. Two views
+   * are kept — `rawValues` carries the unstringified result (an object/array
+   * is preserved intact) and is what later code blocks receive as `vars`;
+   * `resolved` carries the display string used for template substitution.
    * @param {Object.<string,object>} vars - Map of variable name to definition.
    * @param {{type:string, value?:string, selector?:string}} toField - The To-field definition.
    * @param {Document} doc - The document to scan (defaults to global document).
@@ -136,31 +190,39 @@
     if (deprecated.length) {
       throw new Error(`Template uses deprecated variable${deprecated.length > 1 ? 's' : ''}: ${deprecated.join(', ')}. Open the template editor to fix.`);
     }
-    const resolved = {};
-    for (const [name, def] of Object.entries(vars || {})) {
-      let raw;
+    const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
+    const resolved = {};      // name → display string (template substitution)
+    const rawValues = {};     // name → raw value (objects intact; fed to later code blocks as `vars`)
+    for (const name of orderVars(vars)) {
+      const def = (vars || {})[name];
+      let raw;        // raw value for chaining
+      let display;    // string for the resolved map
       if (def.type === 'builtin' && def.builtin === 'recommended_replacement') {
         try { raw = await getRecommendedReplacement(doc); }
         catch { raw = ''; }
+        display = raw;
       } else if (def.type === 'code') {
         /* ALL code variables resolve through engine.evaluateCode, which
            runs the body in a sandboxed iframe — MV3 forbids `new Function`
            in the content-script world, so the old sync path (resolveVar →
            evaluateCodeSync) is CSP-blocked. The async engine call is the
-           only one that works on a live page. */
-        const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
-        if (!engine) { raw = ''; }
+           only one that works on a live page. We pass the values resolved
+           BEFORE this one so the body can read `vars.earlierName`. */
+        if (!engine) { raw = ''; display = ''; }
         else {
           try {
-            const value = await engine.evaluateCode(doc, def.body || '');
-            raw = engine.toDisplayString(value);
+            const value = await engine.evaluateCode(doc, def.body || '', rawValues);
+            raw = value;                              // keep intact (could be an object/array) for downstream vars
+            display = engine.toDisplayString(value);  // stringify only for template substitution
           } catch (e) {
-            raw = `<code-var error: ${e.message}>`;
+            raw = ''; display = `<code-var error: ${e.message}>`;
           }
         }
       } else {
         raw = resolveVar(name, def, doc);
+        display = raw;
       }
+      rawValues[name] = raw;
       /* Smart options run BEFORE any per-variable validation that
          consumers downstream might apply. Order is load-bearing:
          a path field marked `validate.required` would otherwise
@@ -169,7 +231,7 @@
          validation that runs inside extract.js is informational
          (warnings carried on the ctx); the AUTHORITATIVE value the
          renderer sees is the one returned here — post-smart. */
-      resolved[name] = applySmart(raw, def);
+      resolved[name] = applySmart(display, def);
     }
 
     let toEmail = '';

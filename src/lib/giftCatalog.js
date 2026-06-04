@@ -174,6 +174,7 @@ export function normalizeDoc(doc) {
 
   return {
     id:      doc.id || doc.parentCode_s || '',
+    parentCode: doc.parentCode_s || '',                 // order line items reference this; keep it for by-id matching
     title:   cleanTitle(doc.title_s || doc.title_txt_en || ''),
     brand:   doc.brand_s || '',
     cat:     deriveCat(doc),

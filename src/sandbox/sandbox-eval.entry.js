@@ -101,12 +101,14 @@ function buildHelpers(jobId) {
   return Object.freeze({
     fmt, coalesce, regex, parseNumber, parseDate, normalizePhone, pick, sum,
     /* privileged → proxied to the bridge (which has chrome + DOM) */
-    send:      makeProxy(jobId, 'send'),
-    fetchText: makeProxy(jobId, 'fetchText'),
-    fetchJson: makeProxy(jobId, 'fetchJson'),
+    send:       makeProxy(jobId, 'send'),
+    fetchText:  makeProxy(jobId, 'fetchText'),
+    fetchJson:  makeProxy(jobId, 'fetchJson'),
+    fetchOrder: makeProxy(jobId, 'fetchOrder'),
     catalog: Object.freeze({
       search:  makeProxy(jobId, 'catalog.search'),
       find:    makeProxy(jobId, 'catalog.find'),
+      byId:    makeProxy(jobId, 'catalog.byId'),
       priceAt: catalogPriceAt,
     }),
     domText: makeProxy(jobId, 'domText'),

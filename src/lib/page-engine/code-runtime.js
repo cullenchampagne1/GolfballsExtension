@@ -57,6 +57,8 @@ import {
   coalesce, titleCase, parseNumber, parseDate, normalizePhone,
 } from './transforms.js';
 import { loadCatalog } from '../giftCatalog.js';
+import { extract } from './extract.js';
+import { detectSchema } from '../page-schemas/registry.js';
 
 const MAX_BODY_LENGTH = 8192;
 /* Async path only — server calls route through the background worker,
@@ -135,7 +137,7 @@ function buildHelpers() {
   const dropTails  = (t) => String(t == null ? '' : t).split(/\s+[–—-]\s+/)[0].replace(/\s{2,}/g, ' ').trim();
   const shortLine  = (t) => dropTails(t).replace(/\bgolf balls?\b/ig, '').replace(/\s{2,}/g, ' ').trim();
   const slimProduct = (p) => ({
-    id: p.id, title: p.title, brand: p.brand,
+    id: p.id, parentCode: p.parentCode, title: p.title, brand: p.brand,
     name:  `${p.brand ? p.brand + ' ' : ''}${p.title || ''}`.trim(),       // raw brand + raw title
     label: `${cleanBrand(p.brand)} ${dropTails(p.title)}`.trim(),          // "Titleist Pro V1 High Number Golf Balls"
     short: shortLine(p.title),                                             // "Pro V1 High Number"
@@ -147,10 +149,15 @@ function buildHelpers() {
      hits. Instead: tokenize to whole words (so "v1" ≠ "v1x"), drop noise
      words, and SCORE each product by how many distinctive query words
      appear in its brand+title. Best score wins. */
+  /* Generic noise only. Do NOT drop pack-size / variant words like
+     "dozen", "double", "bulk", "box", "dz" — those are exactly what
+     separate a "Double Dozen Box" or "Bulk" SKU (priced as a flat box /
+     different basis) from the plain per-dozen item. Dropping them made
+     the matcher tie on the line name and pick the wrong-priced variant. */
   const CATALOG_STOPWORDS = new Set([
     'golf', 'ball', 'balls', 'custom', 'logo', 'logos', 'personalized', 'print',
-    'printed', 'imprint', 'imprinted', 'bulk', 'the', 'a', 'an', 'and', 'with',
-    'for', 'of', 'model', 'pack', 'set', 'inch', 'new', 'design', 'dozen',
+    'printed', 'imprint', 'imprinted', 'the', 'a', 'an', 'and', 'with',
+    'for', 'of', 'model', 'pack', 'set', 'inch', 'new', 'design',
   ]);
   const catalogTokens = (s) => String(s == null ? '' : s)
     .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(Boolean);
@@ -175,6 +182,45 @@ function buildHelpers() {
   const catalogFind = async (query) => {
     const r = await catalogSearch(query, { limit: 1 });
     return r[0] || null;
+  };
+  /* Exact lookup by the catalog's product id (doc.id) or parentCode.
+     This is the ACCURATE path: an order line item's sku maps to a real
+     product, so we never fuzzy-guess a same-named-but-different ball.
+     Returns null when the id isn't in the index (caller then decides
+     whether to fall back to a name search). */
+  const catalogById = async (id) => {
+    const key = String(id == null ? '' : id).trim().toLowerCase();
+    if (!key) return null;
+    const all = await loadCatalog();
+    const hit = all.find((p) => {
+      const pid = String(p.id == null ? '' : p.id).trim().toLowerCase();
+      const pc  = String(p.parentCode == null ? '' : p.parentCode).trim().toLowerCase();
+      return pid === key || pc === key;
+    });
+    return hit ? slimProduct(hit) : null;
+  };
+  /* Fetch an order page by id, run it through the order page engine,
+     and return the extracted `order` object (identity / totals /
+     items[] with sku, qty, unitPrice, lineTotal, …). This is what lets
+     a code var read a customer's ACTUAL past order — real skus and real
+     quantities — instead of guessing from the robotic line-item names
+     on the contact page. Routes the fetch through the background worker
+     (session cookies attached) so admin order pages render. */
+  const ORDER_URL = (id) =>
+    `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=ViewOrder&orderID=${encodeURIComponent(String(id).trim())}`;
+  const fetchOrder = async (orderID) => {
+    const id = String(orderID == null ? '' : orderID).trim();
+    if (!id) return null;
+    const resp = await send('fetchRaw', { url: ORDER_URL(id) });
+    if (!resp || !resp.ok || !resp.text) {
+      throw new Error(resp && resp.error ? resp.error : `order ${id} fetch failed`);
+    }
+    if (typeof DOMParser === 'undefined') throw new Error('DOMParser unavailable in this context');
+    const doc = new DOMParser().parseFromString(resp.text, 'text/html');
+    const schema = detectSchema(doc);
+    if (!schema || schema.id !== 'order') throw new Error(`order ${id} did not match the order schema`);
+    const result = extract(schema, doc);
+    return (result && result.data && result.data.order) || null;
   };
   /* Unit price for `qty` by walking a product's quantity price breaks
      ([{ q, p }] ascending). Falls back to the base price. */
@@ -230,10 +276,13 @@ function buildHelpers() {
     send,
     fetchText,
     fetchJson,
+    /* ── Past-order lookup (async, background-routed) ── */
+    fetchOrder,
     /* ── Gifting catalog index (async) ── */
     catalog: Object.freeze({
       search:  catalogSearch,
       find:    catalogFind,
+      byId:    catalogById,
       priceAt: catalogPriceAt,
     }),
   };
