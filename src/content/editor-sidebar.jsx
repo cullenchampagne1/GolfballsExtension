@@ -256,7 +256,19 @@ function TemplateRow({ tpl, isNote, type, active, onClick, onMove, folders, onDr
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>{tpl.name || 'Untitled'}</div>
         {!isNote && (() => {
-          const ruleN = (tpl.rules || []).length;
+          // Rules live in `accountConditions` for account templates, `rules`
+          // for everything else — and both are now the grouped tree
+          // ({groups:[{conditions:[]}]}), so the old `tpl.rules.length` was
+          // `undefined`. Count total conditions across all groups (still
+          // handling the legacy flat array).
+          const tree = tpl.type === 'account' ? tpl.accountConditions : tpl.rules;
+          const ruleN = !tree
+            ? 0
+            : Array.isArray(tree)
+              ? tree.length
+              : Array.isArray(tree.groups)
+                ? tree.groups.reduce((n, g) => n + ((g && g.conditions ? g.conditions.length : 0)), 0)
+                : 0;
           const varN  = Object.keys(tpl.vars || {}).length;
           const varsN = (tpl.variations || []).length;
           return (
