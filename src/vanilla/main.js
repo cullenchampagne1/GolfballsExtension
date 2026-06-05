@@ -485,6 +485,16 @@ window.__gbContentReady = true;
         tableIds: (H.match(/<table[^>]*\bid="[^"]+"/gi) || []).slice(0, 20),
         allTables: doc.querySelectorAll('table').length,
         rowsInAnyTable: doc.querySelectorAll('table tbody tr').length,
+        // per-table fingerprint so the items grid can be identified if the
+        // content heuristic misfires (headers + first row + has-order-link)
+        tablesInfo: Array.from(doc.querySelectorAll('table')).slice(0, 25).map((t) => ({
+          id: t.id || null,
+          cls: (t.className || '').slice(0, 40),
+          headers: Array.from(t.querySelectorAll('thead th, thead td')).map((c) => (c.textContent || '').trim()).filter(Boolean).slice(0, 8),
+          firstRow: Array.from((t.querySelector('tbody tr') || {}).children || []).map((c) => (c.textContent || '').trim().slice(0, 24)).slice(0, 8),
+          rows: t.querySelectorAll('tbody tr').length,
+          viewOrder: !!t.querySelector('a[href*="ViewOrder" i]'),
+        })),
       };
       const logBulk = (extra) => {
         try {

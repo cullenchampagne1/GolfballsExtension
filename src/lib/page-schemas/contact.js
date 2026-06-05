@@ -484,7 +484,9 @@ const FIELDS = {
   items: {
     type: 'array',
     label: 'Ordered items (aggregate)',
-    extract: { sel: '#DataTables_Table_1 tbody tr', max: 100 },
+    /* Same DataTables-id issue as orders — found by content so it works in
+       bulk (static fetch) as well as live. See contactItemRows. */
+    extract: { fn: 'contactItemRows' },
     itemFields: {
       name: {
         type: 'string',

@@ -181,6 +181,30 @@ export function contactOrderRows(doc) {
   }).slice(0, 50);
 }
 
+/** Aggregate ordered-items table rows. Same DataTables-id problem as the
+ *  orders grid (#DataTables_Table_1 is assigned in the browser, absent in a
+ *  fetched page) — but this one has no link to key off. Live page: use the
+ *  runtime id. Static fetch: it's the id-less table whose rows have a
+ *  product-name first cell + a dollar column and NO ViewOrder link (that's
+ *  the orders grid). Works in both contexts. */
+export function contactItemRows(doc) {
+  if (!doc || typeof doc.querySelectorAll !== 'function') return [];
+  const byId = Array.from(doc.querySelectorAll('#DataTables_Table_1 tbody tr'));
+  if (byId.length) return byId.slice(0, 100);
+  const tables = Array.from(doc.querySelectorAll('table')).filter((t) => !t.id);
+  for (const t of tables) {
+    if (t.querySelector('a[href*="ViewOrder" i]')) continue;                 // that's the orders grid
+    const trs = Array.from(t.querySelectorAll('tbody tr')).filter((tr) => (tr.children || []).length >= 3);
+    const hits = trs.filter((tr) => {
+      const first = (tr.children[0]?.textContent || '').trim();
+      const money = Array.from(tr.children).some((td) => /\$\s*[\d,]/.test(td.textContent || ''));
+      return first && !/^[\d.$,]+$/.test(first) && money;
+    });
+    if (hits.length && hits.length >= trs.length * 0.5) return trs.slice(0, 100);
+  }
+  return [];
+}
+
 /** Find a `.portlet` element by its visible caption text. The CRM
  *  pages stamp the same id on multiple sibling tables (the account
  *  page's Open + Completed Tasks tables share `#TableTasks`); the
@@ -614,6 +638,7 @@ export const FN_REGISTRY = {
   queryKeyedRows,
   readHrefParam,
   contactOrderRows,
+  contactItemRows,
   keyedField,
   accountContactRows,
   firstAccountContactField,
