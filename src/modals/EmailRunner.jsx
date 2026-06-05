@@ -553,12 +553,13 @@ export function EmailRunner({
            reported as "every send fails to evaluate." */
         const directResolve = useMock ? null : window.__gbResolveVarsForHtml;
         const resolved = directResolve
-          ? await directResolve(fetched.text, tplVars, tplToField)
+          ? await directResolve(fetched.text, tplVars, tplToField, c.contactUrl)
           : await dispatchBg({
               action:  'resolveVarsForHtml',
               html:    fetched.text,
               vars:    tplVars,
               toField: tplToField,
+              url:     c.contactUrl,
             });
         const resolvedVars = resolved?.resolved || {};
         const toEmail      = resolved?.toEmail  || '';

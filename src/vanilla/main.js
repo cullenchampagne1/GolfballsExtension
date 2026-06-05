@@ -152,7 +152,7 @@ window.__gbContentReady = true;
        Document — we just parse + hand it through. */
     if (msg.action === 'resolveVarsForHtml') {
       try {
-        const doc = new DOMParser().parseFromString(msg.html || '', 'text/html');
+        const doc = new DOMParser().parseFromString(gbWithBase(msg.html || '', msg.url), 'text/html');
         /* Match the window-global path: include the contact's display
            name so EmailRunner's trail row can label itself with the
            actual name rather than '(unknown)'. */
@@ -427,9 +427,23 @@ window.__gbContentReady = true;
      sidesteps the routing entirely. The chrome.runtime listener
      above stays as the canonical message handler for any caller
      that prefers messaging (popup, other extensions). */
-  window.__gbResolveVarsForHtml = (html, vars, toField) => {
+  /* Inject a <base href> so RELATIVE links in a fetched page (the orders
+     table's order-detail anchors) resolve to absolute URLs when parsed by
+     DOMParser — which, unlike the live document, has no browsing context and
+     would otherwise leave a.href empty/broken. This is what lets the
+     order-fetch chain (_last_order.href → h.fetchText) work in bulk send the
+     same way it does on the live page. */
+  function gbWithBase(html, baseUrl) {
+    if (!baseUrl || typeof html !== 'string') return html || '';
+    const tag = `<base href="${baseUrl}">`;
+    if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (m) => m + tag);
+    if (/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, (m) => `${m}<head>${tag}</head>`);
+    return `<head>${tag}</head>${html}`;
+  }
+
+  window.__gbResolveVarsForHtml = (html, vars, toField, baseUrl) => {
     try {
-      const doc = new DOMParser().parseFromString(html || '', 'text/html');
+      const doc = new DOMParser().parseFromString(gbWithBase(html || '', baseUrl), 'text/html');
       /* Pull the contact's display name straight off the page via the
          schema engine — independent of whatever template vars are
          defined. EmailRunner needs this for the per-row trail label;
