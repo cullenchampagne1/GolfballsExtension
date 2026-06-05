@@ -235,8 +235,11 @@ function ConditionRow({ condition, renderSubject, opsFor, onPatch, onRemove, can
       borderRadius: 'var(--gb-r-sm)', transition: 'border-color .2s',
     }}>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {/* Row 1 — NOT · subject · operator (· value when there's no array row). */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {/* Row 1 — NOT · subject · operator (· value when there's no array row).
+            flexWrap so a wide value (e.g. the native date input, which can't
+            shrink) drops to the next line instead of overflowing the card and
+            pushing the delete button outside its bounds. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <NotPill on={condition.not} onClick={() => onPatch({ not: !condition.not })} />
           <div style={{ flex: '1 1 150px', minWidth: 140 }}>
             {renderSubject?.(condition, (patch) => onPatch(patch))}
@@ -246,7 +249,7 @@ function ConditionRow({ condition, renderSubject, opsFor, onPatch, onRemove, can
         </div>
         {/* Row 2 — array mode + value, aligned under the subject. */}
         {arrayInfo && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 34 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 34, flexWrap: 'wrap' }}>
             <ArrayModeControl
               arrayInfo={arrayInfo}
               path={condition.ref}
