@@ -458,9 +458,35 @@ window.__gbContentReady = true;
           displayName = `${first} ${last}`.trim();
         }
       } catch {}
+      /* ── TEMP DEBUG (bulk send) — capture what the FETCHED html actually
+         contains so we can tell whether the orders/items tables are even
+         present (DataTables grids may be JS-populated and absent from the
+         static HTML), whether the base-url fix absolutized the order link,
+         and what the chain resolved to. Appended to gbBulkDebug. ── */
+      const firstA = doc.querySelector('#DataTables_Table_0 tbody tr a[href]');
+      const dbg = {
+        ts: Date.now(),
+        baseUrl: baseUrl || null,
+        htmlLen: (html || '').length,
+        ordersRows: doc.querySelectorAll('#DataTables_Table_0 tbody tr').length,
+        itemsRows: doc.querySelectorAll('#DataTables_Table_1 tbody tr').length,
+        firstOrderHref: firstA ? firstA.href : null,                       // absolute (post base inject)?
+        firstOrderHrefRaw: firstA ? firstA.getAttribute('href') : null,    // raw attribute
+        hasOrdersTable: !!doc.querySelector('#DataTables_Table_0'),
+      };
+      const logBulk = (extra) => {
+        try {
+          Object.assign(dbg, extra || {});
+          chrome.storage.local.get('gbBulkDebug', (d) => {
+            const arr = Array.isArray(d && d.gbBulkDebug) ? d.gbBulkDebug : [];
+            arr.push(dbg); while (arr.length > 15) arr.shift();
+            chrome.storage.local.set({ gbBulkDebug: arr });
+          });
+        } catch {}
+      };
       return resolveAllVarsAsync(vars, toField, doc)
-        .then((res) => ({ ...res, displayName }))
-        .catch((err) => ({ resolved: {}, toEmail: '', displayName, error: err?.message || 'resolve failed' }));
+        .then((res) => { logBulk({ resolved: res.resolved || {}, toEmail: res.toEmail || '' }); return { ...res, displayName }; })
+        .catch((err) => { logBulk({ error: err?.message || 'resolve failed' }); return { resolved: {}, toEmail: '', displayName, error: err?.message || 'resolve failed' }; });
     } catch (e) {
       return Promise.resolve({ resolved: {}, toEmail: '', displayName: '', error: e?.message || 'parse failed' });
     }
@@ -472,8 +498,8 @@ window.__gbContentReady = true;
      fixed. ── */
   window.__gbDownloadDebug = () => {
     try {
-      chrome.storage.local.get(['gbVarsDebug', 'gbByUrlDebug'], (d) => {
-        const payload = { exportedAt: new Date().toISOString(), vars: d.gbVarsDebug || null, byUrl: d.gbByUrlDebug || [] };
+      chrome.storage.local.get(['gbVarsDebug', 'gbByUrlDebug', 'gbBulkDebug'], (d) => {
+        const payload = { exportedAt: new Date().toISOString(), vars: d.gbVarsDebug || null, byUrl: d.gbByUrlDebug || [], bulk: d.gbBulkDebug || [] };
         const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
