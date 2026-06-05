@@ -429,7 +429,10 @@ const FIELDS = {
   orders: {
     type: 'array',
     label: 'Recent orders',
-    extract: { sel: '#DataTables_Table_0 tbody tr', max: 50 },
+    /* Find rows by their ViewOrder link, NOT the #DataTables_Table_0 id —
+       that id is assigned by DataTables in the browser and is absent when the
+       page is fetched as static HTML (bulk send). See contactOrderRows. */
+    extract: { fn: 'contactOrderRows' },
     itemFields: {
       number: {
         type: 'string',

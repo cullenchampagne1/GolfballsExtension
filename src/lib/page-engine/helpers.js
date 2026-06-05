@@ -166,6 +166,21 @@ export function readHrefParam(rowEl, cellIdx, paramName) {
   } catch { return null; }
 }
 
+/** Contact-page orders-table rows, found by their `…page=ViewOrder…` link in
+ *  the first cell rather than the table id. The orders grid is a DataTables
+ *  table with NO server-side id — DataTables assigns `#DataTables_Table_0` in
+ *  the browser, so that id is ABSENT when the page is fetched as static HTML
+ *  (bulk send). The rows ARE server-rendered, so we locate them by content.
+ *  Works identically on the live page and a fetched document. */
+export function contactOrderRows(doc) {
+  if (!doc || typeof doc.querySelectorAll !== 'function') return [];
+  return Array.from(doc.querySelectorAll('tr')).filter((tr) => {
+    const a = tr.querySelector('td:first-child a[href]');
+    if (!a) return false;
+    return /[?&]page=ViewOrder\b/i.test(a.getAttribute('href') || a.href || '');
+  }).slice(0, 50);
+}
+
 /** Find a `.portlet` element by its visible caption text. The CRM
  *  pages stamp the same id on multiple sibling tables (the account
  *  page's Open + Completed Tasks tables share `#TableTasks`); the
@@ -598,6 +613,7 @@ export const FN_REGISTRY = {
   queryRows,
   queryKeyedRows,
   readHrefParam,
+  contactOrderRows,
   keyedField,
   accountContactRows,
   firstAccountContactField,
