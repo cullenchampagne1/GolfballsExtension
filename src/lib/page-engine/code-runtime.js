@@ -211,6 +211,47 @@ function buildHelpers() {
     const r = await catalogSearch(query, { limit: 1 });
     return r[0] || null;
   };
+  /* Backup price source for items NOT in the custom-logo catalog index.
+     golfballs.com is a Next.js app — every product page embeds a
+     <script id="__NEXT_DATA__"> JSON blob with the live product (ShortCode,
+     Brand, itemFee price breaks, and the per-decoration ProductModification
+     upcharges). We fetch the order item's product URL, read that, and return
+     a product in the SAME slim shape as the catalog (logo-inclusive breaks,
+     so priceAt gives the custom-logo unit price) — a drop-in fallback for the
+     match chain. Returns null if the page has no product data. */
+  const round2 = (n) => (n == null ? null : Math.round(Number(n) * 100) / 100);
+  const fetchProduct = async (url) => {
+    const u = String(url == null ? '' : url).trim();
+    if (!u) return null;
+    const resp = await fetchRawCached(send, u);
+    if (!resp.ok || !resp.text) return null;
+    const m = resp.text.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+    if (!m) return null;
+    let nd; try { nd = JSON.parse(m[1]); } catch { return null; }
+    const p = nd && nd.props && nd.props.pageProps && nd.props.pageProps.product;
+    if (!p) return null;
+    const baseBreaks = ((p.itemFee_priceBreakHeader || {}).PriceBreak || [])
+      .map((b) => ({ q: Number(b.Quantity) || 1, p: round2(b.Price) }))
+      .filter((b) => b.p != null).sort((a, b) => a.q - b.q);
+    // the "Custom Logo / Icon" decoration upcharge → add so the unit price matches what a logo order pays
+    const logoMod = (p.ProductModification || []).find((mm) => /icon|custom logo|logo/i.test(((mm.Modification || {}).Name) || ''));
+    const up = logoMod ? Number((((logoMod.itemFee_priceBreakHeader || {}).PriceBreak || [{}])[0] || {}).Price) || 0 : 0;
+    const breaks = baseBreaks.map((b) => ({ q: b.q, p: round2(b.p + up) }));
+    const brand = (p.Brand || {}).Name || '';
+    // derive a readable title from the URL slug (the JSON Title is unreliable)
+    const slug = u.split('?')[0].split('#')[0].split('/').pop()
+      .replace(/\.html?$/i, '').replace(/[-_]+/g, ' ')
+      .replace(/\bmodel\b/ig, '').replace(/\b20\d\d\b/g, '').replace(/\s{2,}/g, ' ').trim();
+    const title = dropTails(slug);
+    const label = `${cleanBrand(brand)} ${title}`.replace(/\s{2,}/g, ' ').trim();
+    return {
+      id: p.ShortCode || '', parentCode: p.ShortCode || '',
+      brand, title, name: label, label, short: title,
+      price: breaks.length ? breaks[0].p : (baseBreaks.length ? baseBreaks[0].p : null),
+      logo: breaks.length ? breaks[0].p : null,
+      breaks, minQty: (breaks[0] && breaks[0].q) || 1, url: u,
+    };
+  };
   /* Exact lookup by the catalog's product id (doc.id) or parentCode.
      This is the ACCURATE path: an order line item's sku maps to a real
      product, so we never fuzzy-guess a same-named-but-different ball.
@@ -355,6 +396,8 @@ function buildHelpers() {
     fetchJson,
     /* ── Run the page engine on an arbitrary HTML string (async) ── */
     parse,
+    /* ── Live product (Next.js __NEXT_DATA__) by product URL (async) ── */
+    product: fetchProduct,
     /* ── Gifting catalog index (async) ── */
     catalog: Object.freeze({
       search:  catalogSearch,

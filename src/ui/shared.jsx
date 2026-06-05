@@ -79,16 +79,29 @@ export function useAsyncState(stateProp = 'idle') {
 }
 
 /** Spinning ring — the gb-spin keyframe, expressed with Motion. */
+/* CSS-keyframe spinner (NOT framer-motion). The popup re-renders rapidly
+   while variables stream in, and a motion `animate` target restarts on every
+   render — so the spin visibly froze. A CSS animation runs on the compositor,
+   independent of React renders. The keyframe is injected once. */
+let _gbSpinKeyframe = false;
+function ensureSpinKeyframe() {
+  if (_gbSpinKeyframe || typeof document === 'undefined') return;
+  _gbSpinKeyframe = true;
+  const s = document.createElement('style');
+  s.textContent = '@keyframes gb-spin{to{transform:rotate(360deg)}}';
+  (document.head || document.documentElement).appendChild(s);
+}
 export function Spinner({ size = 12 }) {
+  ensureSpinKeyframe();
   return (
-    <motion.span
+    <span
+      aria-hidden="true"
       style={{
         width: size, height: size, borderRadius: '50%',
         border: '2px solid currentColor', borderTopColor: 'transparent',
         display: 'block', flexShrink: 0,
+        animation: 'gb-spin 0.7s linear infinite',
       }}
-      animate={{ rotate: [0, 360] }}
-      transition={{ duration: 0.8, ease: 'linear', repeat: Infinity }}
     />
   );
 }

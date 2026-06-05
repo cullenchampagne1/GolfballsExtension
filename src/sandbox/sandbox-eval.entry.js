@@ -105,6 +105,7 @@ function buildHelpers(jobId) {
     fetchText: makeProxy(jobId, 'fetchText'),
     fetchJson: makeProxy(jobId, 'fetchJson'),
     parse:     makeProxy(jobId, 'parse'),
+    product:   makeProxy(jobId, 'product'),
     catalog: Object.freeze({
       search:  makeProxy(jobId, 'catalog.search'),
       find:    makeProxy(jobId, 'catalog.find'),
