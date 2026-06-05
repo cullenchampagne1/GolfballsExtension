@@ -171,6 +171,12 @@ function buildHelpers() {
     short: shortLine(p.title),                                             // "Pro V1 High Number"
     price: p.price, logo: p.logo, orig: p.orig,
     breaks: p.breaks, minQty: p.minQty, url: p.url,
+    // sales-framework fields: category, deal/promo, sale flag, stock.
+    // Catalog products are pulled with `-tag_ss:ExcludeStock`, so anything
+    // IN the index is in stock for custom logo → inStock:true.
+    cat: p.cat || '', promo: p.promo || null, tags: p.tags || [],
+    onSale: !!(p.orig && p.price && p.orig > p.price),
+    inStock: true,
   });
   /* Order-item names carry modifiers the catalog title doesn't ("Custom
      Logo", "Bulk", "Golf Balls"…), so an exact "all terms match" never
@@ -237,6 +243,7 @@ function buildHelpers() {
     const logoMod = (p.ProductModification || []).find((mm) => /icon|custom logo|logo/i.test(((mm.Modification || {}).Name) || ''));
     const up = logoMod ? Number((((logoMod.itemFee_priceBreakHeader || {}).PriceBreak || [{}])[0] || {}).Price) || 0 : 0;
     const breaks = baseBreaks.map((b) => ({ q: b.q, p: round2(b.p + up) }));
+    const availableQty = (p.inventory || []).reduce((s, i) => s + (Number(i.availableQty) || 0), 0);
     const brand = (p.Brand || {}).Name || '';
     // derive a readable title from the URL slug (the JSON Title is unreliable)
     const slug = u.split('?')[0].split('#')[0].split('/').pop()
@@ -250,6 +257,9 @@ function buildHelpers() {
       price: breaks.length ? breaks[0].p : (baseBreaks.length ? baseBreaks[0].p : null),
       logo: breaks.length ? breaks[0].p : null,
       breaks, minQty: (breaks[0] && breaks[0].q) || 1, url: u,
+      cat: '', promo: null, tags: [], onSale: false,
+      // REAL stock from the live page — this is the out-of-stock signal.
+      availableQty, inStock: availableQty > 0,
     };
   };
   /* Exact lookup by the catalog's product id (doc.id) or parentCode.
