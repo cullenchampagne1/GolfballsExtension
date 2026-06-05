@@ -464,15 +464,27 @@ window.__gbContentReady = true;
          static HTML), whether the base-url fix absolutized the order link,
          and what the chain resolved to. Appended to gbBulkDebug. ── */
       const firstA = doc.querySelector('#DataTables_Table_0 tbody tr a[href]');
+      const H = html || '';
+      const countOf = (s) => { let n=0,i=0; while ((i=H.indexOf(s,i))>=0) { n++; i+=s.length; } return n; };
+      const around  = (s) => { const i=H.indexOf(s); return i<0?null:H.slice(Math.max(0,i-220), i+140).replace(/\s+/g,' '); };
       const dbg = {
         ts: Date.now(),
         baseUrl: baseUrl || null,
-        htmlLen: (html || '').length,
+        htmlLen: H.length,
         ordersRows: doc.querySelectorAll('#DataTables_Table_0 tbody tr').length,
         itemsRows: doc.querySelectorAll('#DataTables_Table_1 tbody tr').length,
-        firstOrderHref: firstA ? firstA.href : null,                       // absolute (post base inject)?
-        firstOrderHrefRaw: firstA ? firstA.getAttribute('href') : null,    // raw attribute
+        firstOrderHref: firstA ? firstA.href : null,
+        firstOrderHrefRaw: firstA ? firstA.getAttribute('href') : null,
         hasOrdersTable: !!doc.querySelector('#DataTables_Table_0'),
+        // ── how does the orders grid get its data? ──
+        viewOrderCount:  countOf('ViewOrder'),          // >0 ⇒ order links ARE server-rendered
+        orderIdCount:    countOf('orderID'),
+        hasAjaxConfig:   /sAjaxSource|"ajax"|ajax\s*:/.test(H),
+        aroundViewOrder: around('ViewOrder'),           // shows the real table/cell markup if rendered
+        aroundAjax:      around('sAjaxSource') || around('"ajax"'),
+        tableIds: (H.match(/<table[^>]*\bid="[^"]+"/gi) || []).slice(0, 20),
+        allTables: doc.querySelectorAll('table').length,
+        rowsInAnyTable: doc.querySelectorAll('table tbody tr').length,
       };
       const logBulk = (extra) => {
         try {
