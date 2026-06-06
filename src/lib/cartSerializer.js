@@ -258,6 +258,67 @@ const canonicalUrl = (product) => {
   return product.url || product.URL || '';
 };
 
+/* ── Decorated pricing = the site's own recompute ─────────────────────────────
+   golfballs.com recomputes every cart line's price on load from the product's
+   live fee ladders — NOT from any cached number — so a stale/guessed price shows
+   "the price has changed". We reproduce that formula exactly so our ItemPrice
+   matches and no "changed" prompt appears:
+
+     ItemPriceBreak[q] = ParentItemFee[q]
+                       + the chosen modification's itemFee ladder
+                         (ProductModification-level, else Modification-level)
+                       + the selected PriceTier and Second Pole option fees (balls)
+     SetupPrice[q]     = the chosen modification's setupFee ladder (+ option setups)
+
+   Service Level and Express Logo option fees are NOT part of the line ladder.
+   `priceAtQ` takes the largest break ≤ q. Verified byte-exact against real carts
+   (tee, divot, towel, Wilson / Pro V1 / Pro V1x). */
+const _pb = (h) => (h && h.PriceBreak) || null;
+export const priceAtQ = (breaks, q) => { let p = 0; for (const b of (breaks || [])) if (b.Quantity <= q) p = b.Price; return p; };
+function modFeeLadders(pm) {
+  const item = [], setup = [];
+  if (!pm) return { item, setup };
+  const M = pm.Modification || {};
+  const it = _pb(pm.itemFee_priceBreakHeader) || _pb(M.itemFee_priceBreakHeader);
+  if (it) item.push(it);
+  const su = _pb(pm.setupFee_priceBreakHeader) || _pb(M.setupFee_priceBreakHeader);
+  if (su) setup.push(su);
+  for (const opt of (M.ModificationOption || [])) {
+    const inLadder = opt.Name === 'PriceTier' || opt.Name === 'Second Pole';
+    for (const v of (opt.ModificationOptionValue || [])) {
+      if (!v.selected) continue;
+      const vit = _pb(v.itemFee_priceBreakHeader);
+      if (inLadder && vit) item.push(vit);
+      const vsu = _pb(v.setupFee_priceBreakHeader);
+      if (vsu && vsu.some((b) => b.Price)) setup.push(vsu);
+    }
+  }
+  return { item, setup };
+}
+/* Returns { breaks:[{q,p}], setupBreaks:[{q,p}]|null } computed from the product's
+   ParentItemFee + the chosen ProductModification, or null if the product carries
+   no fee ladder (caller then falls back to catalog pricing). */
+export function computeDecoratedPricing(product, pm) {
+  const parent = _pb(product && product.itemFee_priceBreakHeader);
+  if (!parent) return null;
+  const { item, setup } = modFeeLadders(pm);
+  // Volume breakpoints come ONLY from ladders that actually step (>1 break); a
+  // single-break ladder like [{1,X}] is a flat add-on, not a tier boundary. If
+  // nothing steps, the line is a single {1} tier. The base value at each tier is
+  // ParentItemFee + every fee ladder evaluated at that qty.
+  const tiers = (ladders) => {
+    const s = new Set();
+    ladders.forEach((l) => { if (l && l.length > 1) l.forEach((b) => s.add(b.Quantity)); });
+    if (!s.size) s.add(1);
+    return [...s].sort((a, b) => a - b);
+  };
+  const breaks = tiers([parent, ...item])
+    .map((q) => ({ q, p: Math.round((priceAtQ(parent, q) + item.reduce((s, l) => s + priceAtQ(l, q), 0)) * 100) / 100 }));
+  const setupBreaks = tiers(setup)
+    .map((q) => ({ q, p: Math.round(setup.reduce((s, l) => s + priceAtQ(l, q), 0) * 100) / 100 }));
+  return { breaks, setupBreaks: setupBreaks.some((b) => b.p) ? setupBreaks : null };
+}
+
 /* Find the product's ProductModification matching a target modID / FriendlyName
    (the decoration the buyer picked). Falls back to the first modification. */
 function findMod(product, { modID, friendly } = {}) {
@@ -532,13 +593,23 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
   if (!child && wantIds.size) child = children.find((c) => (c.PropertyValueProduct || []).some((pv) => wantIds.has(pv.propertyValueProductID))) || null;
   child = child || children[0] || {};
   const selectedIds = (child.PropertyValueProduct || []).map((pv) => pv.propertyValueProductID);
-  const breaks = (pricing.breaks && pricing.breaks.length) ? pricing.breaks : [{ q: 1, p: pricing.price || 0 }];
-  const unit = pricing.price != null ? pricing.price : (breaks[0] && breaks[0].p) || 0;
   // Towel/hat embroidery needs the chosen child's background color for the BC
   // overlay — fold it in so buildDecoration can reach it.
   const childBg = child && child.CustomData && child.CustomData.backgroundHex;
   const decoForBuild = childBg ? { ...(decoration || { engine: 'none' }), _childBgHex: childBg } : (decoration || { engine: 'none' });
   const { block: decoBlock, customUserImage } = buildDecoration(product, decoForBuild);
+
+  // Price the way golfballs.com recomputes it on cart load: from the product's
+  // live fee ladders + the chosen modification (ParentItemFee + the mod's itemFee
+  // + selected PriceTier/Second Pole). This is what stops the "price has changed"
+  // prompt. Falls back to the catalog ladder only when the page has no fee data.
+  const atQ = (bks, q) => { let p = 0; for (const b of (bks || [])) if (b.q <= q) p = b.p; return p; };
+  const computed = decoBlock ? computeDecoratedPricing(product, decoBlock.ProductModification) : null;
+  const breaks = computed ? computed.breaks
+    : ((pricing.breaks && pricing.breaks.length) ? pricing.breaks : [{ q: 1, p: pricing.price || 0 }]);
+  const unit = computed ? atQ(breaks, qty) : (pricing.price != null ? pricing.price : (breaks[0] && breaks[0].p) || 0);
+  const setupBreaks = (computed && computed.setupBreaks) || null;
+  const setupUnit = setupBreaks ? atQ(setupBreaks, qty) : 0;
 
   // Resolve the cart name the way the site does: substitute the decoration's
   // FriendlyName into NameFormat's "{Decoration}" slot (→ "… Custom Logo …";
@@ -560,9 +631,11 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
     childList: [child],
     ModificationGroupDetail: product.ModificationGroupDetail || null,
     ItemPriceBreak: { priceBreakHeaderID: 0, PriceBreak: breaks.map((b) => ({ Quantity: b.q, Price: b.p, Cost: 0 })), ProductionTime: 0, minimumQty: 1 },
-    SetupPriceBreak: { priceBreakHeaderID: 0, PriceBreak: [{ Quantity: 1, Price: 0, Cost: 0 }], ProductionTime: 0 },
+    SetupPriceBreak: setupBreaks
+      ? { priceBreakHeaderID: 0, PriceBreak: setupBreaks.map((b) => ({ Quantity: b.q, Price: b.p, Cost: 0 })), ProductionTime: 0 }
+      : { priceBreakHeaderID: 0, PriceBreak: [{ Quantity: 1, Price: 0, Cost: 0 }], ProductionTime: 0 },
     ItemPrice: unit,
-    SetupPrice: 0,
+    SetupPrice: setupUnit,
     originalPrice_priceBreakHeader: null,
     originalPrice_priceBreakHeaderID: 0,
     disableGiftWrap: false,
