@@ -44,18 +44,26 @@ const MAX_PRODUCTS = 6000;  // safety bound, well above the live numFound (~3.1k
 const MAIN_QUERY = '*:*';
 
 /* Canonical "Shop by Type" + "Shop by Brand" taxonomies from the live
-   custom-logo section — the rail/chips render in this order. */
+   custom-logo section — the custom-logo rail/chips render in this order. */
 export const CATEGORY_ORDER = [
   'Logo Golf Balls', 'Golf Shirts', 'Golf Towels', 'Golf Hats', 'Divot Tools',
   'Logo Tees', 'Logo Travel Bags', 'Promotional Products', 'Golf Umbrellas',
   'Golf Gloves', 'Custom Packaging', 'Drinkware', 'Golf Bags', 'Ball Markers', 'Outerwear',
+];
+/* Top-level departments for the FULL catalog (everything golfballs.com
+   sells, not just custom-logo). Each product gets one via deriveDept; the
+   sidebar lists them under the collapsible custom-logo group. Order =
+   render order; 'Other' is the catch-all and always trails. */
+export const DEPT_ORDER = [
+  'Golf Balls', 'Clubs', 'Apparel', 'Footwear', 'Golf Bags',
+  'Accessories', 'Drinkware', 'Promotional Products', 'Gift Sets', 'Other',
 ];
 export const BRAND_ORDER = [
   'Titleist', 'Callaway Golf', 'TaylorMade', 'Bridgestone', 'Srixon', 'Mizuno',
   'PXG', 'Pinnacle', 'Venture Golf', 'Vice Golf', 'Wilson',
 ];
 
-const CACHE_KEY = 'gbGiftCatalogCache_v3'; // bumped: main-query change invalidates old cache
+const CACHE_KEY = 'gbGiftCatalogCache_v4'; // bumped: full-catalog query + sku/dept/customLogo shape
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // re-index daily
 
 const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
@@ -125,6 +133,47 @@ function deriveCat(doc) {
   return 'Promotional Products';
 }
 
+/* Coarse top-level department for the FULL catalog (browse rail). Unlike
+   deriveCat (custom-logo "Shop by Type"), this buckets EVERY product —
+   consumer clubs, balls, apparel, footwear, bags, etc. itemType_s wins
+   (e.g. "Consumer-Clubs-Putters"); a title-keyword fallback covers the
+   seed and any itemType-less doc. Must return a value in DEPT_ORDER. */
+function deriveDept(doc) {
+  const it = String(doc.itemType_s || (Array.isArray(doc.itemType_ss) ? doc.itemType_ss.join(' ') : '')).toLowerCase();
+  if (it) {
+    if (it.includes('golf_ball'))                                  return 'Golf Balls';
+    if (it.includes('clubs'))                                      return 'Clubs';
+    if (it.includes('golf_bags') || it.includes('golf-golf_bags')) return 'Golf Bags';
+    if (it.includes('shoe') || it.includes('footwear'))            return 'Footwear';
+    if (it.includes('apparel') || /(shirt|polo|outerwear|pullover|jacket|hat|cap|visor|glove|sock|belt)/.test(it)) return 'Apparel';
+    if (it.includes('drinkware'))                                  return 'Drinkware';
+    if (it.includes('gift_set') || it.includes('gift_card'))       return 'Gift Sets';
+    if (it.includes('promotional_products'))                       return 'Promotional Products';
+    if (it.includes('accessories') || /(golf_tees|tools|towel|headcover|range_finder|ball_marker|divot|umbrella)/.test(it)) return 'Accessories';
+  }
+  const t = String(doc.title_s || doc.title_txt_en || doc.title || '').toLowerCase();
+  if (/golf ball/.test(t))                                              return 'Golf Balls';
+  if (/(driver|iron set|putter|wedge|fairway wood|hybrid|club|grip)/.test(t)) return 'Clubs';
+  if (/(shoe|spikeless|sneaker)/.test(t))                              return 'Footwear';
+  if (/(cart bag|stand bag|golf bag|duffel|backpack|travel bag)/.test(t)) return 'Golf Bags';
+  if (/(polo|shirt|hat|cap|visor|glove|jacket|pullover|vest|sock|outerwear|belt)/.test(t)) return 'Apparel';
+  if (/(tumbler|mug|bottle|flask|drinkware|cooler|can cooler)/.test(t)) return 'Drinkware';
+  if (/(gift set|gift card|tin)/.test(t))                              return 'Gift Sets';
+  if (/(tee|towel|marker|divot|umbrella|headcover|tool|rangefinder|range finder)/.test(t)) return 'Accessories';
+  return 'Other';
+}
+
+/* Is this product custom-logo capable? Reproduces the OLD catalog query
+   (modificationName_ss:"Custom Logo" OR itemType_ss:Corporate) so the
+   sidebar's "Custom Logo" group holds exactly the items the catalog used
+   to show — now a subset of the full feed. */
+function isCustomLogo(doc) {
+  const mods = Array.isArray(doc.modificationName_ss) ? doc.modificationName_ss : [];
+  if (mods.includes('Custom Logo')) return true;
+  const it = String(doc.itemType_s || (Array.isArray(doc.itemType_ss) ? doc.itemType_ss.join(' ') : '')).toLowerCase();
+  return it.includes('corporate');
+}
+
 /** product_url_s is a site-relative path (e.g. "/Golf-Balls/…"); make it an
     absolute golfballs.com URL so a background fetch doesn't resolve it against
     the extension's own origin (chrome-extension://…). */
@@ -177,9 +226,12 @@ export function normalizeDoc(doc) {
   return {
     id:      doc.id || doc.parentCode_s || '',
     parentCode: doc.parentCode_s || '',                 // order line items reference this; keep it for by-id matching
+    sku:     customData.parentSku || doc.parentCode_s || '', // human SKU (parentSku, e.g. "M6594"); falls back to the product code
     title:   cleanTitle(doc.title_s || doc.title_txt_en || ''),
     brand:   doc.brand_s || '',
-    cat:     deriveCat(doc),
+    cat:     deriveCat(doc),                             // custom-logo "Shop by Type" bucket
+    dept:    deriveDept(doc),                            // full-catalog department bucket
+    customLogo: isCustomLogo(doc),                       // in the old custom-logo catalog?
     itemType: doc.itemType_s || (Array.isArray(doc.itemType_ss) && doc.itemType_ss[0]) || '',
     price:   round2(price),
     orig:    orig && orig > 0 ? round2(orig) : null,
@@ -237,19 +289,37 @@ function setCache(payload) {
  *  rebuild truly clears stale data instead of falling back to the old cache. */
 export function clearCatalogCache() {
   return new Promise((resolve) => {
-    try { chrome.storage.local.remove([CACHE_KEY, 'gbGiftCatalogCache_v1', 'gbGiftCatalogCache_v2'], resolve); }
+    try { chrome.storage.local.remove([CACHE_KEY, 'gbGiftCatalogCache_v1', 'gbGiftCatalogCache_v2', 'gbGiftCatalogCache_v3'], resolve); }
     catch { resolve(); }
   });
 }
 
+/** Read the cached catalog WITHOUT triggering a live pull — for an instant
+ *  first paint. Returns { products, ts, stale }: products is null when the
+ *  cache is empty/absent; stale is true when older than the re-index
+ *  interval (or there's nothing cached). The modal paints `products`
+ *  immediately, then refreshes in the background when stale. */
+export async function readCatalogCache() {
+  const cached = await getCache();
+  if (!cached || !Array.isArray(cached.products) || !cached.products.length) {
+    return { products: null, ts: 0, stale: true };
+  }
+  const ttl = await cacheTtlMs();
+  const stale = ttl > 0 && (Date.now() - (cached.ts || 0)) >= ttl;
+  return { products: cached.products, ts: cached.ts || 0, stale };
+}
+
 /**
- * loadCatalog({ force }) — returns the gifting catalog. Served from a
- * 24-hour chrome.storage cache (re-indexed daily) so reopening the
+ * loadCatalog({ force, onProgress }) — returns the full catalog. Served
+ * from a 24-hour chrome.storage cache (re-indexed daily) so reopening the
  * modal is instant; only a stale/missing cache triggers the live Solr
  * pull. Falls back to the bundled seed when there's no chrome.runtime
  * (the playground) or the live fetch yields nothing.
+ *
+ * onProgress({ loaded, total }) fires after each page so the modal can
+ * show an "Indexing 1,240 / 3,111" readout + progress bar during a pull.
  */
-export async function loadCatalog({ force = false } = {}) {
+export async function loadCatalog({ force = false, onProgress } = {}) {
   const hasChrome = typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage;
   if (!hasChrome) return GIFT_CATALOG_SEED;
 
@@ -274,6 +344,9 @@ export async function loadCatalog({ force = false } = {}) {
       if (p && p.id && !seenIds.has(p.id)) { seenIds.add(p.id); out.push(p); }
     }
     start += PAGE_ROWS;
+    if (typeof onProgress === 'function') {
+      try { onProgress({ loaded: out.length, total: numFound || 0 }); } catch { /* non-fatal */ }
+    }
     if (numFound && start >= numFound) break;
   }
   if (out.length) { setCache({ ts: Date.now(), products: out }); return out; }

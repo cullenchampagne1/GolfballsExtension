@@ -1441,7 +1441,14 @@ function DecorationArea({ p, config, mods, dualPole }) {
           return <button key={t.tab} onClick={() => setActive(t.tab)} style={{ padding: '8px 13px', background: 'transparent', border: 'none', borderBottom: '2px solid ' + (on ? 'var(--gb-brand-label)' : 'transparent'), marginBottom: -1, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)' }}>{t.tab}</button>;
         })}
       </div>
-      {renderDeco(cur.kind, p, config, dualPole)}
+      {/* Animate the swap between decoration types (Stock / Custom / …). */}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div key={cur.tab}
+          initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: .18, ease: [0.32, 0.72, 0, 1] }}>
+          {renderDeco(cur.kind, p, config, dualPole)}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }

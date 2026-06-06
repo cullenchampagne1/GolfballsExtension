@@ -49,6 +49,8 @@
       + '  --gb-surface-hover:      ' + v('--gb-surface-hover',    '#1e1e1e') + ';\n'
       + '  --gb-surface-float:      ' + v('--gb-surface-float',    '#222222') + ';\n'
       + '  --gb-surface-elevated:   ' + v('--gb-surface-elevated', '#171717') + ';\n'
+      + '  --gb-surface-canvas:     ' + v('--gb-surface-canvas',   '#0e0f10') + ';\n'
+      + '  --gb-surface-modal:      ' + v('--gb-surface-modal',    '#131517') + ';\n'
       + '  --gb-border-subtle:      ' + v('--gb-border-subtle',   '#1c1c1c') + ';\n'
       + '  --gb-border-standard:    ' + v('--gb-border-standard', '#333333') + ';\n'
       + '  --gb-border-strong:      ' + v('--gb-border-strong',   '#444444') + ';\n'

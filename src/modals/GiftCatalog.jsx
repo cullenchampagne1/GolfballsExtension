@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Btn, IconBtn, Tag, Dot } from '../ui/index.js';
 import { Icon, I } from '../ui/icons.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
-import { loadCatalog, clearCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
+import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, DEPT_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock } from './giftCustomize.jsx';
 
@@ -32,6 +32,7 @@ function ensureCatalogKeyframes() {
     @keyframes gb-spin { to { transform: rotate(360deg); } }
     @keyframes gc-orb-pulse { 0% { transform: scale(1); opacity: .5; } 70%, 100% { transform: scale(2.6); opacity: 0; } }
     @keyframes pp-rise { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform:none; } }
+    @keyframes gc-indef { 0% { left: -40%; } 100% { left: 100%; } }
     .gb-gc-norail { scrollbar-width: none; -ms-overflow-style: none; }
     .gb-gc-norail::-webkit-scrollbar { width: 0; height: 0; display: none; }`;
   (document.head || document.documentElement).appendChild(s);
@@ -52,6 +53,19 @@ const isDeal = (p) => onSale(p) || hasPromo(p);
 
 const money = (n) => '$' + (n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const rid = () => Math.random().toString(36).slice(2, 8);
+const nfmt = (n) => Number(n || 0).toLocaleString('en-US');
+
+/* "updated just now / 5m ago / 2h ago / 3d ago" for the catalog index age. */
+function relTime(ts) {
+  if (!ts) return '';
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 45) return 'just now';
+  const m = Math.round(s / 60);
+  if (m < 60) return m + 'm ago';
+  const h = Math.round(m / 60);
+  if (h < 24) return h + 'h ago';
+  return Math.round(h / 24) + 'd ago';
+}
 
 /* Per-unit price for a quantity, walking the custom-logo volume ladder. */
 function priceAtQty(p, qty) {
@@ -110,8 +124,25 @@ const CAT_ICON = {
   'Outerwear': (p) => <Icon {...p}><path d="M6 4l6 3 6-3 2 4.5-3 1.8V21H7V10.3L4 8.5z"/><path d="M12 7v14"/></Icon>,
 };
 const AllItemsIcon = (p) => <Icon {...p}><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></Icon>;
+const ClubsIcon = (p) => <Icon {...p}><path d="M16 3.5l3 3-8.5 8.5"/><path d="M10.5 15a3.4 3.4 0 11-3.5 3.4c0-1 .5-1.8 1.2-2.4L16 6.5"/></Icon>;
+const FootwearIcon = (p) => <Icon {...p}><path d="M3 9.5l4-1 2.5 2.5 3.5.5c4 .6 7 1.8 8 3.5v2.5H3z"/><path d="M3 14h18"/></Icon>;
+/* Per-department glyphs for the full-catalog rail — reuse the custom-logo
+   icons where the shape matches, add club/shoe for the new departments. */
+const DEPT_ICON = {
+  'Golf Balls': CAT_ICON['Logo Golf Balls'],
+  'Clubs': ClubsIcon,
+  'Apparel': CAT_ICON['Golf Shirts'],
+  'Footwear': FootwearIcon,
+  'Golf Bags': CAT_ICON['Golf Bags'],
+  'Accessories': (p) => <Icon {...p}><path d="M20.6 13.4L13 21a1.7 1.7 0 01-2.4 0L3 13.4A1.7 1.7 0 012.5 12V4.5A1.5 1.5 0 014 3h7.5a1.7 1.7 0 011.2.5l7.9 7.9a1.7 1.7 0 010 2.4z"/><circle cx="7.5" cy="7.5" r="1.3" fill="currentColor"/></Icon>,
+  'Drinkware': CAT_ICON['Drinkware'],
+  'Promotional Products': CAT_ICON['Promotional Products'],
+  'Gift Sets': CAT_ICON['Custom Packaging'],
+  'Other': AllItemsIcon,
+};
+const CustomLogoIcon = (p) => <Icon {...p}><circle cx="12" cy="12" r="8.5"/><path d="M8.4 12.2l2.4 2.4 4.8-4.8"/></Icon>;
 function CatGlyph({ id, size = 15, color = 'currentColor' }) {
-  const Ico = (id === 'all' ? AllItemsIcon : CAT_ICON[id]) || AllItemsIcon;
+  const Ico = (id === 'all' ? AllItemsIcon : id === 'cl' ? CustomLogoIcon : (CAT_ICON[id] || DEPT_ICON[id])) || AllItemsIcon;
   return <Ico size={size} style={{ color, flexShrink: 0 }} />;
 }
 
@@ -183,7 +214,7 @@ function SearchBox({ value, onChange, commands, onPick, filtersActive, onClearAl
             <div key={c.type + ':' + c.id} onMouseDown={(e) => { e.preventDefault(); onPick(c); }} onMouseEnter={() => setHi(i)}
               style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', background: i === hi ? 'var(--gb-brand-tint-soft)' : 'transparent' }}>
               {c.type === 'cat'
-                ? <CatGlyph id={c.id} size={14} color={i === hi ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)'} />
+                ? <CatGlyph id={c.glyph || c.id} size={14} color={i === hi ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)'} />
                 : c.type === 'special'
                 ? <TagI size={13} style={{ color: i === hi ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)', flexShrink: 0 }} />
                 : <span style={{ width: 11, textAlign: 'center', fontSize: 11, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)' }}>@</span>}
@@ -309,6 +340,13 @@ function ProductCard({ p, compact, showRating, active, inProposal, onClick }) {
           {showRating && p.rating && <Rating value={p.rating} count={p.reviews} size={10} />}
         </div>
         <div style={{ fontSize: compact ? 12 : 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.32, letterSpacing: -.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: compact ? undefined : '2.6em' }}>{p.title}</div>
+        {p.sku && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+            <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-ghost)' }}>SKU</span>
+            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.sku}</span>
+            {p.customLogo && <span title="Custom-logo available" style={{ flexShrink: 0, width: 5, height: 5, borderRadius: '50%', background: 'var(--gb-brand-label)', opacity: .8 }} />}
+          </div>
+        )}
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
@@ -367,11 +405,20 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
           <ProductImage src={p.img} alt={p.title} pad={26} radius="var(--gb-r-lg)" />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, marginBottom: 6, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-brand-label)', fontFamily: 'var(--gb-font-mono)' }}>{p.brand}</span>
-            <Tag tone="neutral" size="sm" icon={<CatGlyph id={p.cat} size={12} />}>{p.cat}</Tag>
+            <Tag tone="neutral" size="sm" icon={<CatGlyph id={p.dept || p.cat} size={12} />}>{p.dept || p.cat}</Tag>
+            {p.customLogo && <Tag tone="brand" size="sm" icon={<CustomLogoIcon size={11} />}>Custom logo</Tag>}
             {onSale(p) && <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 'var(--gb-r-pill)', fontSize: 9.5, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-danger, #e5484d)' }}>Sale −{usd(p.orig - p.price)}</span>}
           </div>
           <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--gb-text-primary)', lineHeight: 1.25, letterSpacing: -.2 }}>{p.title}</div>
-          <div style={{ marginTop: 8 }}><Rating value={p.rating} count={p.reviews} size={12} /></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+            <Rating value={p.rating} count={p.reviews} size={12} />
+            {p.sku && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-ghost)' }}>SKU</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-secondary)' }}>{p.sku}</span>
+              </span>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
             <PriceStat label="Per unit" value={usd(netTop(p))} accent was={onSale(p) ? usd(topPrice(p)) : null} />
             {lowPrice(p) < topPrice(p) && <PriceStat label="Volume price" value={usd(netLow(p))} />}
@@ -407,31 +454,37 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
               <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 6, lineHeight: 1.4 }}>Per-unit price drops with order volume — quote the tier that matches the gift run.</div>
             </div>
           )}
-          <CustomizeBlock p={p} />
+          {p.customLogo && <CustomizeBlock p={p} />}
         </div>
         <div style={{ padding: 12, borderTop: '1px solid var(--gb-border-subtle)', display: 'flex', gap: 8, flexShrink: 0, background: 'var(--gb-fill-inverse-strong)' }}>
           <Btn variant="secondary" size="md" icon={<I.eye />} style={{ flex: 1 }} onClick={openProduct}>View product</Btn>
-          {inProposal ? (
-            <Btn variant="secondary" size="md" icon={<I.check />} style={{ flex: 1.2 }} onClick={onOpenProposal}>In proposal</Btn>
-          ) : (
-            <Btn variant="primary" size="md" icon={<I.plus />} style={{ flex: 1.2 }} onClick={() => onAdd && onAdd(p)}>Add to proposal</Btn>
-          )}
+          {/* Always allow adding — a product can sit on multiple proposal
+              lines (different customizations/quantities). */}
+          <Btn variant="primary" size="md" icon={<I.plus />} style={{ flex: 1.2 }} onClick={() => onAdd && onAdd(p)}>{inProposal ? 'Add another' : 'Add to proposal'}</Btn>
         </div>
       </motion.div>
     </>
   );
 }
 
-function CatRow({ id, label, count, value, onChange }) {
-  const on = value === id;
+/* One selectable rail row. `glyph` is the CatGlyph id (category/dept/'all'/
+   'cl'); `indent` nudges child rows under a group header; `chevron` (when
+   provided) renders a collapse caret that fires onToggle without selecting. */
+function CatRow({ glyph, label, count, active, onClick, indent = false, chevron, onToggle }) {
   const [hover, setHover] = useState(false);
-  const col = on ? 'var(--gb-brand-label)' : hover ? 'var(--gb-text-secondary)' : 'var(--gb-text-tertiary)';
+  const col = active ? 'var(--gb-brand-label)' : hover ? 'var(--gb-text-secondary)' : 'var(--gb-text-tertiary)';
   return (
-    <div onClick={() => onChange(id)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 11px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', flexShrink: 0, transition: 'all var(--gb-anim)', background: on ? 'var(--gb-brand-tint-medium)' : hover ? 'var(--gb-fill-subtle)' : 'transparent', border: '1px solid ' + (on ? 'var(--gb-brand-tint-border)' : 'transparent') }}>
-      <CatGlyph id={id} size={15} color={col} />
-      <span style={{ flex: 1, fontSize: 11.5, fontWeight: on ? 700 : 500, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
-      <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }}>{count}</span>
+    <div onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 11px', paddingLeft: indent ? 26 : 11, borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', flexShrink: 0, transition: 'all var(--gb-anim)', background: active ? 'var(--gb-brand-tint-medium)' : hover ? 'var(--gb-fill-subtle)' : 'transparent', border: '1px solid ' + (active ? 'var(--gb-brand-tint-border)' : 'transparent') }}>
+      {chevron != null && (
+        <span onClick={(e) => { e.stopPropagation(); onToggle && onToggle(); }} title={chevron ? 'Collapse' : 'Expand'}
+          style={{ display: 'flex', flexShrink: 0, color: col, marginLeft: -4 }}>
+          <I.chevr size={12} style={{ transform: chevron ? 'rotate(90deg)' : 'none', transition: 'transform var(--gb-anim)' }} />
+        </span>
+      )}
+      <CatGlyph id={glyph} size={indent ? 14 : 15} color={col} />
+      <span style={{ flex: 1, fontSize: 11.5, fontWeight: active ? 700 : 500, color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+      <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }}>{count}</span>
     </div>
   );
 }
@@ -447,14 +500,40 @@ function SavedStub({ label, icon }) {
   );
 }
 
-function CategoryRail({ cats, value, onChange, counts, total, dock }) {
+function CategoryRail({ sel, onSelect, clTotal, clCats, clCounts, depts, deptCounts, total, dock }) {
+  // Custom-logo group starts expanded — it's the catalog's primary use and
+  // holds the items the modal used to show before it indexed everything.
+  const [clOpen, setClOpen] = useState(true);
   return (
     <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: 12, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px', flexShrink: 0 }}>Categories</div>
+      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px', flexShrink: 0 }}>Browse</div>
       {/* Capped, scrollable list with a soft fade at the top/bottom edges. */}
       <div className="gb-gc-norail" style={{ flex: 1, minHeight: 60, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, padding: '14px 0', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%)', maskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%)' }}>
-        <CatRow id="all" label="All Items" count={total} value={value} onChange={onChange} />
-        {cats.map((c) => <CatRow key={c} id={c} label={c} count={counts[c] || 0} value={value} onChange={onChange} />)}
+        <CatRow glyph="all" label="All Items" count={total} active={sel === 'all'} onClick={() => onSelect('all')} />
+
+        {/* ── Custom Logo (collapsible) — the old catalog, now a subset ── */}
+        {clTotal > 0 && (
+          <>
+            <CatRow glyph="cl" label="Custom Logo" count={clTotal}
+              active={sel === 'cl'} onClick={() => { onSelect('cl'); setClOpen(true); }}
+              chevron={clOpen} onToggle={() => setClOpen((o) => !o)} />
+            {clOpen && clCats.map((c) => (
+              <CatRow key={'cl:' + c} glyph={c} label={c} count={clCounts[c] || 0} indent
+                active={sel === 'cl:' + c} onClick={() => onSelect('cl:' + c)} />
+            ))}
+          </>
+        )}
+
+        {/* ── Departments — the full catalog, everything else included ── */}
+        {depts.length > 0 && (
+          <>
+            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', padding: '10px 11px 4px', flexShrink: 0 }}>Departments</div>
+            {depts.map((d) => (
+              <CatRow key={'dept:' + d} glyph={d} label={d} count={deptCounts[d] || 0}
+                active={sel === 'dept:' + d} onClick={() => onSelect('dept:' + d)} />
+            ))}
+          </>
+        )}
       </div>
       <div style={{ flexShrink: 0, marginTop: 4 }}>
         <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '8px 10px 6px' }}>Saved</div>
@@ -554,7 +633,11 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove 
   const lineTot = line.splits.reduce((s, x) => s + x.qty * x.price, 0);
   const lineUnits = line.splits.reduce((s, x) => s + x.qty, 0);
   return (
-    <div style={{ background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-lg)', padding: 12 }}>
+    <motion.div layout
+      initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: .92, transition: { duration: .15 } }}
+      transition={{ type: 'spring', stiffness: 500, damping: 40 }}
+      style={{ background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-lg)', padding: 12 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <MiniThumb src={p.img} size={38} />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -578,7 +661,7 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove 
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{lineUnits} units</span>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -640,13 +723,17 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
               <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>No products yet</div>
               <div style={{ fontSize: 11, lineHeight: 1.5, maxWidth: 220 }}>Open a product and hit <b style={{ color: 'var(--gb-brand-label)' }}>Add to proposal</b> — then set quantities, prices, and split tiers here.</div>
             </div>
-          ) : proposal.map((line) => (
-            <ProposalLine key={line.id} line={line}
-              onPatchSplit={(sid, patch) => onPatchSplit(line.id, sid, patch)}
-              onAddSplit={() => onAddSplit(line.id)}
-              onRemoveSplit={(sid) => onRemoveSplit(line.id, sid)}
-              onRemove={() => onRemoveLine(line.id)} />
-          ))}
+          ) : (
+            <AnimatePresence initial={false}>
+              {proposal.map((line) => (
+                <ProposalLine key={line.id} line={line}
+                  onPatchSplit={(sid, patch) => onPatchSplit(line.id, sid, patch)}
+                  onAddSplit={() => onAddSplit(line.id)}
+                  onRemoveSplit={(sid) => onRemoveSplit(line.id, sid)}
+                  onRemove={() => onRemoveLine(line.id)} />
+              ))}
+            </AnimatePresence>
+          )}
         </div>
         {proposal.length > 0 && (
           <div style={{ flexShrink: 0, borderTop: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-inverse-strong)' }}>
@@ -688,11 +775,17 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const scale = useCatalogScale(); // loaded before first paint to avoid a resize snap
   const toast = useToast();
   const [catalog, setCatalog] = useState(GIFT_CATALOG_SEED);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);        // first paint pending (no data yet)
+  const [refreshing, setRefreshing] = useState(false); // a live pull is in flight
+  const [progress, setProgress] = useState(null);      // { loaded, total } during a pull, else null
+  const [updatedTs, setUpdatedTs] = useState(0);       // when the shown catalog was last indexed
+  const aliveRef = useRef(true);
+  useEffect(() => () => { aliveRef.current = false; }, []);
   const [query, setQuery] = useState('');
   const [selBrands, setSelBrands] = useState(() => new Set()); // empty = all brands
   const toggleBrand = (b) => setSelBrands((s) => { const n = new Set(s); n.has(b) ? n.delete(b) : n.add(b); return n; });
-  const [cat, setCat] = useState('all');
+  // Sidebar selection: 'all' | 'cl' (all custom-logo) | 'cl:<category>' | 'dept:<department>'.
+  const [sel, setSel] = useState('all');
   const [sort, setSort] = useState('popular');
   // Seed sort/density from dev settings (giftCatalog.defaultSort / .density);
   // re-applies only when the setting itself changes, so a user's in-session
@@ -712,47 +805,90 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
 
   const compact = (dsDensity || density) === 'compact';
 
-  const inProposal = (id) => proposal.some((l) => l.id === id);
+  // `productId` (not the line id) drives the "added" hint on cards, since a
+  // product can now appear on multiple lines (e.g. different customizations).
+  const inProposal = (id) => proposal.some((l) => l.productId === id);
   const propTotal = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
   const addToProposal = (p) => setProposal((prev) => {
-    if (prev.some((l) => l.id === p.id)) return prev;
-    // Default to the smallest tier so the line starts at the highest price.
+    // Always add a NEW line (unique id) — the same product can be added more
+    // than once so the rep can quote different customizations/quantities.
     const qty = p.minQty || 1;
-    return [...prev, { id: p.id, product: p, splits: [{ id: rid(), qty, price: priceAtQty(p, qty) }] }];
+    return [...prev, { id: rid(), productId: p.id, product: p, splits: [{ id: rid(), qty, price: priceAtQty(p, qty) }] }];
   });
   const patchSplit = (lineId, splitId, patch) => setProposal((prev) => prev.map((l) => l.id === lineId ? { ...l, splits: l.splits.map((s) => s.id === splitId ? { ...s, ...patch } : s) } : l));
   const addSplit = (lineId) => setProposal((prev) => prev.map((l) => { if (l.id !== lineId) return l; const last = l.splits[l.splits.length - 1]; return { ...l, splits: [...l.splits, { id: rid(), qty: last.qty, price: last.price }] }; }));
   const removeSplit = (lineId, splitId) => setProposal((prev) => prev.flatMap((l) => { if (l.id !== lineId) return [l]; const splits = l.splits.filter((s) => s.id !== splitId); return splits.length ? [{ ...l, splits }] : []; }));
   const removeLine = (lineId) => setProposal((prev) => prev.filter((l) => l.id !== lineId));
 
-  // Seed paints instantly; the live pull replaces it when it lands.
-  useEffect(() => {
-    let live = true;
-    loadCatalog().then((c) => { if (live) { if (c && c.length) setCatalog(c); setLoading(false); } });
-    return () => { live = false; };
-  }, []);
-
-  // Manual re-index: wipe the cache first (so stale items/sales can't survive
-  // as a fallback), then force a fresh crawl and re-cache.
-  const refresh = () => {
-    if (loading) return;
-    setLoading(true);
-    clearCatalogCache().then(() => loadCatalog({ force: true }))
-      .then((c) => { if (c && c.length) setCatalog(c); })
-      .catch((e) => toast?.error?.('Catalog rebuild failed — ' + (e?.message || 'couldn’t reach the pricing service') + '. Showing previous data.'))
-      .finally(() => setLoading(false));
+  /* One shared live pull, with progress. `force` clears the cache first
+     (manual rebuild — stale items/sales can't survive as a fallback);
+     `silent` keeps the grid painted and suppresses the error toast (a
+     background top-up over good cache — failures stay quiet, per the
+     errors-only notification rule). */
+  const runPull = (opts = {}) => {
+    const { force = false, silent = false } = opts;
+    if (!silent) setLoading(true);
+    setRefreshing(true);
+    setProgress({ loaded: 0, total: 0 });
+    const pre = force ? clearCatalogCache() : Promise.resolve();
+    pre.then(() => loadCatalog({ force: true, onProgress: (p) => { if (aliveRef.current) setProgress(p); } }))
+      .then((c) => { if (aliveRef.current && c && c.length) { setCatalog(c); setUpdatedTs(Date.now()); } })
+      .catch((e) => { if (aliveRef.current && !silent) toast?.error?.('Catalog rebuild failed — ' + (e?.message || 'couldn’t reach the pricing service') + '. Showing previous data.'); })
+      .finally(() => { if (aliveRef.current) { setRefreshing(false); setProgress(null); setLoading(false); } });
   };
 
-  const catCounts = useMemo(() => { const m = {}; catalog.forEach((p) => { m[p.cat] = (m[p.cat] || 0) + 1; }); return m; }, [catalog]);
-  // Canonical "Shop by Type" order; only categories with products show.
-  const cats = useMemo(() => {
-    const present = new Set(catalog.map((p) => p.cat));
+  // Paint the cache instantly (even if stale), then top up in the background
+  // when it's stale or empty — opening the modal never blocks on the network.
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      let haveCache = false;
+      try {
+        const { products, ts, stale } = await readCatalogCache();
+        if (!live) return;
+        if (products && products.length) { setCatalog(products); setUpdatedTs(ts); setLoading(false); haveCache = true; if (!stale) return; }
+      } catch { /* no cache → fall through to a live pull */ }
+      if (live) runPull({ silent: haveCache });
+    })();
+    return () => { live = false; };
+  }, []); // eslint-disable-line
+
+  // Manual rebuild button — always a fresh, cache-clearing crawl.
+  const refresh = () => { if (refreshing) return; runPull({ force: true }); };
+
+  // Custom-logo subset: total, per-"Shop by Type" category counts, and the
+  // ordered list of categories present (canonical order, extras trail).
+  const clItems = useMemo(() => catalog.filter((p) => p.customLogo), [catalog]);
+  const clTotal = clItems.length;
+  const clCounts = useMemo(() => { const m = {}; clItems.forEach((p) => { m[p.cat] = (m[p.cat] || 0) + 1; }); return m; }, [clItems]);
+  const clCats = useMemo(() => {
+    const present = new Set(clItems.map((p) => p.cat));
     const ordered = CATEGORY_ORDER.filter((c) => present.has(c));
     const extra = [...present].filter((c) => !CATEGORY_ORDER.includes(c)).sort();
     return [...ordered, ...extra];
+  }, [clItems]);
+
+  // Full-catalog departments: per-dept counts + ordered list present.
+  const deptCounts = useMemo(() => { const m = {}; catalog.forEach((p) => { m[p.dept] = (m[p.dept] || 0) + 1; }); return m; }, [catalog]);
+  const depts = useMemo(() => {
+    const present = new Set(catalog.map((p) => p.dept).filter(Boolean));
+    const ordered = DEPT_ORDER.filter((d) => present.has(d));
+    const extra = [...present].filter((d) => !DEPT_ORDER.includes(d)).sort();
+    return [...ordered, ...extra];
   }, [catalog]);
 
-  const inCat = useMemo(() => (cat === 'all' ? catalog : catalog.filter((p) => p.cat === cat)), [cat, catalog]);
+  // Readable label for the current selection (footer + "in <x>" text).
+  const selLabel = sel === 'all' ? '' : sel === 'cl' ? 'Custom Logo'
+    : sel.startsWith('cl:') ? sel.slice(3) : sel.startsWith('dept:') ? sel.slice(5) : sel;
+
+  // Products in the current sidebar selection.
+  const inCat = useMemo(() => {
+    if (sel === 'all') return catalog;
+    if (sel === 'cl') return catalog.filter((p) => p.customLogo);
+    if (sel.startsWith('cl:')) { const c = sel.slice(3); return catalog.filter((p) => p.customLogo && p.cat === c); }
+    if (sel.startsWith('dept:')) { const d = sel.slice(5); return catalog.filter((p) => p.dept === d); }
+    return catalog;
+  }, [sel, catalog]);
   const brands = useMemo(() => {
     const m = {}; inCat.forEach((p) => { m[p.brand] = (m[p.brand] || 0) + 1; });
     // "Shop by Brand" order; brands outside the canonical list trail by count.
@@ -773,25 +909,32 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const brandCounts = useMemo(() => { const m = {}; catalog.forEach((p) => { m[p.brand] = (m[p.brand] || 0) + 1; }); return m; }, [catalog]);
   const commands = useMemo(() => {
     const specCmds = SPECIAL_CMDS.map((s) => ({ ...s, count: catalog.filter(s.match).length })).filter((s) => s.count > 0);
-    const catCmds = cats.map((c) => ({ type: 'cat', id: c, label: c, count: catCounts[c] || 0 }));
+    // Category jumps carry the full selection key as `id`; `glyph` is the bare
+    // name so the palette icon still resolves. Custom-logo group + its types,
+    // then the full-catalog departments.
+    const clCmds = clTotal > 0
+      ? [{ type: 'cat', id: 'cl', glyph: 'cl', label: 'Custom Logo', count: clTotal },
+         ...clCats.map((c) => ({ type: 'cat', id: 'cl:' + c, glyph: c, label: c, count: clCounts[c] || 0 }))]
+      : [];
+    const deptCmds = depts.map((d) => ({ type: 'cat', id: 'dept:' + d, glyph: d, label: d, count: deptCounts[d] || 0 }));
     const rank = (b) => { const i = BRAND_ORDER.indexOf(b); return i === -1 ? BRAND_ORDER.length : i; };
     const brandCmds = Object.keys(brandCounts)
       .sort((a, b) => (rank(a) - rank(b)) || (brandCounts[b] - brandCounts[a]))
       .map((b) => ({ type: 'brand', id: b, label: b, count: brandCounts[b] }));
-    return [...specCmds, ...catCmds, ...brandCmds];
-  }, [cats, catCounts, brandCounts, catalog]);
+    return [...specCmds, ...clCmds, ...deptCmds, ...brandCmds];
+  }, [clTotal, clCats, clCounts, depts, deptCounts, brandCounts, catalog]);
   // Commands stack + combine: a brand toggles into the multi-select,
   // category replaces, special toggles — so "/titleist /callaway /sale"
   // narrows to both brands on sale.
   const onPickCommand = (c) => {
     if (!c) return;
-    if (c.type === 'cat') setCat(c.id);
+    if (c.type === 'cat') setSel(c.id);
     else if (c.type === 'brand') toggleBrand(c.id);
     else if (c.type === 'special') setSpecial((cur) => (cur === c.id ? null : c.id));
     setQuery('');
   };
-  const filtersActive = cat !== 'all' || selBrands.size > 0 || !!special || !!query;
-  const clearAll = () => { setCat('all'); setSelBrands(new Set()); setSpecial(null); setQuery(''); };
+  const filtersActive = sel !== 'all' || selBrands.size > 0 || !!special || !!query;
+  const clearAll = () => { setSel('all'); setSelBrands(new Set()); setSpecial(null); setQuery(''); };
 
   const results = useMemo(() => {
     let r = inCat;
@@ -799,7 +942,12 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     if (special) { const sc = SPECIAL_CMDS.find((s) => s.id === special); if (sc) r = r.filter(sc.match); }
     if (query.trim() && !query.startsWith('/')) {
       const q = query.toLowerCase();
-      r = r.filter((p) => p.title.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q) || p.cat.toLowerCase().includes(q));
+      r = r.filter((p) =>
+        p.title.toLowerCase().includes(q)
+        || p.brand.toLowerCase().includes(q)
+        || (p.sku && p.sku.toLowerCase().includes(q))
+        || (p.dept && p.dept.toLowerCase().includes(q))
+        || p.cat.toLowerCase().includes(q));
     }
     r = [...r];
     if (sort === 'popular') r.sort((a, b) => b.reviews - a.reviews);
@@ -841,22 +989,43 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             <Gift size={17} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Corporate Gifting Catalog</div>
-            <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 2, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6 }}>
-              {catalog.length} products · custom-logo imprint pricing
-              {loading && <span style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite', display: 'inline-block' }} />}
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Golfballs.com Catalog</div>
+            <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 2, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {refreshing && progress ? (
+                <>Indexing {nfmt(progress.loaded)}{progress.total ? ' / ' + nfmt(progress.total) : ''} products…</>
+              ) : (
+                <>{nfmt(catalog.length)} products{clTotal ? <> · {nfmt(clTotal)} custom-logo</> : null}{updatedTs ? <> · updated {relTime(updatedTs)}</> : null}</>
+              )}
+              {refreshing && <span style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite', display: 'inline-block', flexShrink: 0 }} />}
             </div>
           </div>
           <SearchBox value={query} onChange={setQuery} commands={commands} onPick={onPickCommand} filtersActive={filtersActive} onClearAll={clearAll} />
           <SortSelect value={sort} onChange={setSort} />
-          <IconBtn size="md" title="Rebuild catalog index" icon={<I.refresh style={{ animation: loading ? 'gb-spin .8s linear infinite' : 'none' }} />} onClick={refresh} />
+          <IconBtn size="md" title="Rebuild catalog index" icon={<I.refresh style={{ animation: refreshing ? 'gb-spin .8s linear infinite' : 'none' }} />} onClick={refresh} />
           <IconBtn size="md" icon={<I.close />} onClick={doClose} />
+        </div>
+
+        {/* Re-index progress bar — determinate when numFound is known, a thin
+            indeterminate sweep otherwise. Sits flush under the header so the
+            grid below stays visible (no blanking) during a refresh. */}
+        <div style={{ height: 2, flexShrink: 0, position: 'relative', overflow: 'hidden', background: refreshing ? 'var(--gb-border-subtle)' : 'transparent' }}>
+          {refreshing && (
+            <div style={{
+              position: 'absolute', top: 0, bottom: 0, left: 0,
+              width: progress && progress.total ? `${Math.min(100, Math.round((progress.loaded / progress.total) * 100))}%` : '35%',
+              background: 'var(--gb-brand-label)', borderRadius: 2,
+              transition: 'width .35s ease',
+              animation: progress && progress.total ? 'none' : 'gc-indef 1.1s ease-in-out infinite',
+            }} />
+          )}
         </div>
 
         {/* Body — also the positioning context for the slide-over panels,
             so they span the sidebar's height (header + footer stay visible). */}
         <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative', overflow: 'hidden', boxShadow: 'inset 0 7px 7px -7px rgba(0,0,0,.16), inset 0 -7px 7px -7px rgba(0,0,0,.16)' }}>
-          <CategoryRail cats={cats} value={cat} onChange={setCat} counts={catCounts} total={catalog.length}
+          <CategoryRail sel={sel} onSelect={setSel} total={catalog.length}
+            clTotal={clTotal} clCats={clCats} clCounts={clCounts}
+            depts={depts} deptCounts={deptCounts}
             dock={proposal.length > 0 && !proposalOpen ? <ProposalDock count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} /> : null} />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <div className="gb-gc-norail" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 16px', borderBottom: '1px solid var(--gb-border-subtle)', overflowX: 'auto', flexShrink: 0, WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 40px), transparent)', maskImage: 'linear-gradient(to right, #000 calc(100% - 40px), transparent)' }}>
@@ -911,8 +1080,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10, background: 'var(--gb-fill-inverse-strong)', borderTop: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
           <Layers size={13} style={{ color: 'var(--gb-text-muted)' }} />
           <span style={{ fontSize: 11.5, color: 'var(--gb-text-tertiary)', fontWeight: 500 }}>
-            Showing <b style={{ color: 'var(--gb-text-primary)' }}>{results.length}</b> of {catalog.length}
-            {cat !== 'all' && <> in <b style={{ color: 'var(--gb-text-secondary)' }}>{cat}</b></>}
+            Showing <b style={{ color: 'var(--gb-text-primary)' }}>{nfmt(results.length)}</b> of {nfmt(catalog.length)}
+            {selLabel && <> in <b style={{ color: 'var(--gb-text-secondary)' }}>{selLabel}</b></>}
             {selBrands.size > 0 && <> · <b style={{ color: 'var(--gb-text-secondary)' }}>{[...selBrands].join(', ')}</b></>}
             {special && <> · <b style={{ color: 'var(--gb-success-fg, #2e9e5b)' }}>{(SPECIAL_CMDS.find((s) => s.id === special) || {}).label}</b></>}
           </span>

@@ -1050,7 +1050,7 @@ function PlaygroundSurface() {
 
     {!panelsHidden && (<>
     {/* ── Modals pane (top-left default) ── */}
-    <DraggablePanel title="Modals" width={200} initial={{ top: 14, left: 14 }} dim={!!mounted}>
+    <DraggablePanel title="Modals" width={200} initial={{ top: 14, left: 14 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {MODAL_REGISTRY.filter((entry) => flagOn(entry.flag)).map((entry) => {
           const Icon = I[entry.icon] || I.bolt;
@@ -1073,7 +1073,7 @@ function PlaygroundSurface() {
     </DraggablePanel>
 
     {/* ── Notifications pane (top-right default) ── */}
-    <DraggablePanel title="Notifications" width={220} initial={{ top: 14, right: 14 }} dim={!!mounted}>
+    <DraggablePanel title="Notifications" width={220} initial={{ top: 14, right: 14 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {/* Placement switcher — applies to the next fire of any non-edge
             toast. Edge toasts override (they have their own ambient
