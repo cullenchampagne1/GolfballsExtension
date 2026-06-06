@@ -681,7 +681,7 @@ function CategoryRail({ sel, onSelect, depts, deptCounts, total, dock, view, onS
       <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px', flexShrink: 0 }}>Browse</div>
       {/* Capped, scrollable list with a soft fade at the top/bottom edges. */}
       <div className="gb-gc-norail" style={{ flex: 1, minHeight: 60, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, padding: '14px 0', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%)', maskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%)' }}>
-        <CatRow glyph="all" label="All Items" count={total} active={sel === 'all'} onClick={() => onSelect('all')} />
+        <CatRow glyph="all" label="All Items" count={total} active={view === 'catalog' && sel === 'all'} onClick={() => onSelect('all')} />
 
         {/* ── Departments — custom-logo items are folded into their depts; use
             the /Commissionable filter to scope to commissionable products. ── */}
@@ -690,7 +690,7 @@ function CategoryRail({ sel, onSelect, depts, deptCounts, total, dock, view, onS
             <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', padding: '10px 11px 4px', flexShrink: 0 }}>Departments</div>
             {depts.map((d) => (
               <CatRow key={'dept:' + d} glyph={d} label={d} count={deptCounts[d] || 0}
-                active={sel === 'dept:' + d} onClick={() => onSelect('dept:' + d)} />
+                active={view === 'catalog' && sel === 'dept:' + d} onClick={() => onSelect('dept:' + d)} />
             ))}
           </>
         )}
@@ -991,19 +991,43 @@ function ThumbStack({ entries, max = 4, size = 44 }) {
   );
 }
 
+/* Square icon action used on a saved card (copy / delete) — its own hover. */
+function CardIconBtn({ icon, title, danger, active, onClick }) {
+  const [h, setH] = useState(false);
+  const col = active ? 'var(--gb-success-fg, #2e9e5b)' : (danger && h) ? 'var(--gb-danger, #e5484d)' : h ? 'var(--gb-text-primary)' : 'var(--gb-text-tertiary)';
+  return (
+    <button onClick={onClick} title={title} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+      style={{ width: 34, height: 30, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', background: h ? 'var(--gb-fill-strong)' : 'var(--gb-fill-subtle)', border: '1px solid ' + ((danger && h) ? 'var(--gb-danger-tint-border, rgba(229,72,77,.4))' : h ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'), color: col, transition: 'background var(--gb-anim), border-color var(--gb-anim), color var(--gb-anim)', fontFamily: 'inherit' }}>
+      {icon}
+    </button>
+  );
+}
+
 function SavedCard({ item, loaded, onLoad, onCopy, onDelete }) {
   const [hover, setHover] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copying, setCopying] = useState(false);
   const r = useMemo(() => resolveSavedEntry(item), [item]);
-  const subtitle = (r.entries[0] && r.entries[0].product && (r.entries[0].product.brand || r.entries[0].product.title)) || 'Draft proposal';
+  const lines = r.entries.map((e) => ({ qty: e.splits.reduce((a, x) => a + (x.qty || 0), 0), title: (e.product.title || e.product.brand || 'Item') }));
+  const shownLines = lines.slice(0, 3);
+  // Copying isn't instant — it uploads each line's artwork before building the
+  // cart command — so the button spins until that round-trip finishes.
   const doCopy = (e) => {
     e.stopPropagation();
-    Promise.resolve(onCopy(item)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }).catch(() => {});
+    if (copying) return;
+    setCopying(true);
+    Promise.resolve(onCopy(item))
+      .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); })
+      .catch(() => {})
+      .finally(() => setCopying(false));
   };
+  const copyIcon = copying
+    ? <span style={{ width: 13, height: 13, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', display: 'inline-block', animation: 'gb-spin .7s linear infinite' }} />
+    : copied ? <I.check size={14} strokeWidth={3} /> : <I.copy size={14} />;
   return (
     <motion.div layout initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .92 }} transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }}
       onClick={() => onLoad(item)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ display: 'flex', flexDirection: 'column', gap: 11, padding: 13, cursor: 'pointer', background: 'var(--gb-surface-modal)', border: '1px solid ' + (loaded ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'), borderRadius: 'var(--gb-r-lg)', boxShadow: hover ? 'var(--gb-shadow-popover)' : 'none', transform: hover ? 'translateY(-2px)' : 'none', transition: 'transform var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)' }}>
+      style={{ display: 'flex', flexDirection: 'column', gap: 11, padding: 13, cursor: 'pointer', background: 'var(--gb-surface-1)', border: '1px solid ' + (loaded ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'), borderRadius: 'var(--gb-r-lg)', boxShadow: hover ? '0 2px 7px rgba(0,0,0,.07)' : 'none', transform: hover && !loaded ? 'translateY(-1px)' : 'none', transition: 'transform var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <ThumbStack entries={r.entries} />
         <div style={{ flex: 1 }} />
@@ -1011,27 +1035,32 @@ function SavedCard({ item, loaded, onLoad, onCopy, onDelete }) {
       </div>
       <div>
         <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
-        <div style={{ fontSize: 11, color: 'var(--gb-text-tertiary)', marginTop: 3, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subtitle}</div>
+        {/* A short, readable run-down of what's inside (qty × product). Each
+            row truncates with an ellipsis, never a fade, so it stays legible. */}
+        <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {shownLines.map((l, i) => (
+            <div key={i} style={{ fontSize: 11, color: 'var(--gb-text-tertiary)', fontWeight: 500, lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <span style={{ fontFamily: 'var(--gb-font-mono)', fontWeight: 700, color: 'var(--gb-text-secondary)' }}>{l.qty}×</span> {l.title}
+            </div>
+          ))}
+          {lines.length > shownLines.length && (
+            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontWeight: 600 }}>+{lines.length - shownLines.length} more</div>
+          )}
+        </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, paddingTop: 10, borderTop: '1px solid var(--gb-border-subtle)' }}>
         <span style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', fontWeight: 600 }}>{fmtSavedDate(item.date)}</span>
         <Dot tone="muted" size={3} />
-        <span style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', fontWeight: 600 }}>{r.entries.length} item{r.entries.length === 1 ? '' : 's'} · {r.units} units</span>
+        <span style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', fontWeight: 600 }}>{r.units} units</span>
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 14, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)', letterSpacing: -.4 }}>{money(r.total)}</span>
       </div>
       <div style={{ display: 'flex', gap: 7 }}>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 30, borderRadius: 'var(--gb-r-md)', background: loaded ? 'var(--gb-brand-label)' : hover ? 'var(--gb-brand-tint-medium)' : 'var(--gb-brand-tint-soft)', border: '1px solid ' + (loaded ? 'var(--gb-brand-label)' : 'var(--gb-brand-tint-border)'), color: loaded ? 'var(--gb-surface-deep, #fff)' : 'var(--gb-brand-label)', fontSize: 11.5, fontWeight: 700, transition: 'all var(--gb-anim)' }}>
-          {loaded ? <><I.check size={13} strokeWidth={3} /> Added to proposal</> : <><I.plus size={13} /> Load into proposal</>}
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 30, borderRadius: 'var(--gb-r-md)', background: hover ? 'var(--gb-brand-tint-medium)' : 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 11.5, fontWeight: 700, transition: 'background var(--gb-anim)' }}>
+          <I.plus size={13} /> Load into proposal
         </div>
-        <button onClick={doCopy} title="Copy as a console command"
-          style={{ width: 34, height: 30, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: copied ? 'var(--gb-success-fg, #2e9e5b)' : 'var(--gb-text-tertiary)', transition: 'color var(--gb-anim)', fontFamily: 'inherit' }}>
-          {copied ? <I.check size={14} strokeWidth={3} /> : <I.copy size={14} />}
-        </button>
-        <button onClick={(e) => { e.stopPropagation(); onDelete(item.id); }} title="Delete draft"
-          style={{ width: 34, height: 30, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-tertiary)', fontFamily: 'inherit' }}>
-          <I.trash size={14} />
-        </button>
+        <CardIconBtn title={copying ? 'Preparing command…' : 'Copy as a console command'} active={copied} onClick={doCopy} icon={copyIcon} />
+        <CardIconBtn title="Delete draft" danger onClick={(e) => { e.stopPropagation(); onDelete(item.id); }} icon={<I.trash size={14} />} />
       </div>
     </motion.div>
   );
@@ -1046,7 +1075,7 @@ function SavedGallery({ items, loadedId, onLoad, onCopy, onDelete }) {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Saved Proposals</div>
-          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, fontWeight: 500 }}>{items.length} saved draft{items.length === 1 ? '' : 's'} · click a card to load it, or copy it as a console command</div>
+          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, fontWeight: 500 }}>{items.length} saved · click to load one back into a proposal{items.length ? ', or copy it as a cart command' : ''}</div>
         </div>
       </div>
       <div className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
@@ -1565,13 +1594,14 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             depts={depts} deptCounts={deptCounts}
             view={view} onSetView={setView} savedCount={savedProposals.length}
             dock={proposal.length > 0 && !proposalOpen ? <ProposalDock key="dock" count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} /> : null} />
+          <AnimatePresence mode="wait" initial={false}>
           {view === 'proposals' ? (
-            <motion.div key="gallery" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <motion.div key="gallery" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <SavedGallery items={savedProposals} loadedId={loadedId}
               onLoad={loadSaved} onCopy={copySaved} onDelete={deleteSaved} />
           </motion.div>
           ) : (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+          <motion.div key="catalog" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <div className="gb-gc-norail" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 16px', borderBottom: '1px solid var(--gb-border-subtle)', overflowX: 'auto', flexShrink: 0, WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 40px), transparent)', maskImage: 'linear-gradient(to right, #000 calc(100% - 40px), transparent)' }}>
               <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flexShrink: 0, marginRight: 2 }}>Brand</span>
               <BrandChip label="All" count={inCat.length} on={selBrands.size === 0} onClick={() => setSelBrands(new Set())} />
@@ -1619,8 +1649,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                 </>
               )}
             </div>
-          </div>
+          </motion.div>
           )}
+          </AnimatePresence>
 
           {/* Item details stay an overlay INSIDE the catalog card, so they
               coexist with the proposal side card (both visible at once). */}
