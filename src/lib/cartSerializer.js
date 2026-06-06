@@ -35,6 +35,7 @@ export const getCartUrl = (cartNumber) => `${ICU}/getCart/${encodeURIComponent(c
 
 const enc = encodeURIComponent;
 const upper = (s) => (s == null ? null : String(s).toUpperCase());
+const hasPoleText = (p) => !!(p && Array.isArray(p.lines) && p.lines.some((l) => l != null && String(l).trim() !== ''));
 
 /* ── Engine A — modern golf ball ──────────────────────────────────────────── */
 
@@ -98,7 +99,8 @@ function buildBallDecorationBlock(product, decoration) {
     ProductModification: pm,
     interfaceState: {
       firstPoleUserText: decoration.pole1 || { lines: [null, null, null], font: '', color: '' },
-      secondPoleUserText: decoration.pole2 || {},
+      // Empty 2nd pole stores {} even though an empty Print2 still renders.
+      secondPoleUserText: hasPoleText(decoration.pole2) ? decoration.pole2 : {},
       maxTextArea: 1,
     },
     dynamicImage: [buildBallDynamicImage(decoration)],
@@ -106,19 +108,188 @@ function buildBallDecorationBlock(product, decoration) {
   };
 }
 
+/* ── Engine A — monogram (modID 6) ────────────────────────────────────────── */
+
+const MONO_THUMB = 'https://d1tp32r8b76g0z.cloudfront.net/images/productPage/dropdown-personalization/thumb-monogram-circle.png';
+
+/* The monogram preview URL — same double-encoded GolfBall/r form as the text
+   renderer, but the print engine is MonogramPadded with a comma-joined letter
+   overlay + Color1/Color2. Verified byte-exact against the real capture. */
+export function monogramPreviewUrl({ baseColor = '#FFFFFF', overlayName, printConfig, view }) {
+  const printVal = `MonogramPadded?userOverlay=${enc(overlayName)}`
+    + `&configOverrides=${enc(JSON.stringify(printConfig))}&view=${view}`;
+  return `https://www.icustomize.com/Item/GolfBall/r`
+    + `?configOverrides=${enc(JSON.stringify({ BC: baseColor }))}`
+    + `&view=&Print=${enc(printVal)}`;
+}
+
+/* dynamicImage[0] for a monogram ball. `text` is the 2–3 letter monogram;
+   view is circle2 (2 letters) / circle3 (3) unless overridden. */
+export function buildMonogramDynamicImage({
+  baseColor = '#FFFFFF', text = '', color = '#000000', color2 = '#FFFFFF',
+  view, key = 'Circle Monograms', imageURL = MONO_THUMB, overlay = 'circle',
+  minChars = 2, maxChars = 3, legacyFont = true,
+}) {
+  const chars = String(text || '').split('');
+  const overlayName = chars.join(',');            // "bb" → "b,b"
+  const v = view || (chars.length >= 3 ? 'circle3' : 'circle2');
+  const printConfig = { Color1: color, Color2: color2 };
+  return {
+    sku: 'GolfBall', clientID: 'Item',
+    configOverrides: { BC: baseColor },
+    versionProperties: { versionNumber: 2 }, view: '',
+    Print: {
+      view: v,
+      userOverlay: [{ visible: true, fileName: overlayName }],
+      configOverrides: printConfig,
+      versionProperties: { versionNumber: 2, decorationType: 'MonogramPadded' },
+    },
+    metaData: { key, imageURL, overlay, minChars, maxChars, legacyFont, text: String(text || ''), color, color2 },
+    renderedPreviewImage: monogramPreviewUrl({ baseColor, overlayName, printConfig, view: v }),
+  };
+}
+
+/* ── Engine A — custom logo ON the ball (modID 1008) ──────────────────────────
+   The logo is applied server-side from interfaceState.GolfBallCustomLogo; the
+   dynamicImage is just a blank Personalized print (no text). */
+export function buildBallLogoDynamicImage({ baseColor = '#FFFFFF' }) {
+  const blank = { lines: [null, null, null], font: 'Kabel Dm BT', color: '#000000' };
+  return {
+    sku: 'GolfBall', clientID: 'Item',
+    configOverrides: { BC: baseColor },
+    versionProperties: { versionNumber: 2 }, view: '',
+    Print: {
+      userText: [blank],
+      configOverrides: {},
+      versionProperties: { versionNumber: 2, decorationType: 'Personalized' },
+    },
+    renderedPreviewImage: ballPreviewUrl({
+      bc: baseColor, finish: {},
+      print: { decorationType: 'Personalized', lines: [null, null, null], font: 'Kabel Dm BT', color: '#000000', configOverrides: {} },
+    }),
+  };
+}
+
+/* ── Engine B/C — logo overlay (modID 84 inhouse / 25 outsource) ──────────────
+   Towels, polos, poker chips, etc. The uploaded company logo (filePath under
+   Source/CustomerUploads/CustomLogo) is referenced, not rendered into a preview
+   URL. `logo` may be null (no logo yet — useCustomLogo stays true, paths empty). */
+const LOGO_BASE_URL = 'https://d1tp32r8b76g0z.cloudfront.net/userlogos';
+const LOGO_OVERLAY_PREVIEW = 'https://www.icustomize.com/Render.aspx?sku=undefined&overlay=&useroverlay=&usertext=%5B%5D';
+
+export function buildLogoOverlayDynamicImage({ outsource = false, logo = null } = {}) {
+  return {
+    imageType: outsource ? 'Generic Outsource Custom' : 'Generic Inhouse Custom',
+    condition: 'Custom Logo',
+    customLogo: {
+      useCustomLogo: true,
+      filePath: (logo && logo.filePath) || '',
+      fileName: (logo && logo.fileName) || '',
+      baseUrl: LOGO_BASE_URL,
+    },
+    renderedPreviewImage: LOGO_OVERLAY_PREVIEW,
+  };
+}
+
 const emptyPole = () => ({ fileName: '', filePath: '', userImage: null, fileSupported: false });
+const logoPole = (logo) => ({
+  fileName: (logo && logo.fileName) || '',
+  filePath: (logo && logo.filePath) || '',
+  userImage: null,
+  fileSupported: !!(logo && logo.filePath),
+});
 const canonicalUrl = (product) => {
   const u = product.ProductUrl;
   if (Array.isArray(u)) return (u.find((x) => !x.productChildID) || u[0] || {}).URL || '';
   return product.url || product.URL || '';
 };
 
-/* Assemble one itemsInCart line for a golf ball from the product page object
+/* Find the product's ProductModification matching a target modID / FriendlyName
+   (the decoration the buyer picked). Falls back to the first modification. */
+function findMod(product, { modID, friendly } = {}) {
+  const mods = product.ProductModification || [];
+  return mods.find((m) => m.Modification && (
+    (modID != null && m.Modification.modificationID === modID)
+    || (friendly && (m.Modification.FriendlyName === friendly || m.Modification.Name === friendly))
+  )) || null;
+}
+
+/* ── decoration dispatcher ─────────────────────────────────────────────────────
+   Build the modificationHistory[] entry + line-level customUserImage from an
+   engine-agnostic decoration descriptor (what CustomizeBlock emits). Engines:
+     none        → plain product, no decoration
+     ballText    → modID 5  Personalized (text ± second pole)
+     ballLogo    → modID 1008 custom logo on the ball (uploaded logo)
+     monogram    → modID 6  Monogram
+     logoOverlay → modID 84 inhouse / 25 outsource (uploaded logo overlay)
+   Returns { block, customUserImage }. block === null means no decoration. */
+export function buildDecoration(product, decoration = {}) {
+  const engine = decoration.engine || 'none';
+  const noImage = { firstPole: emptyPole(), secondPole: emptyPole() };
+
+  if (engine === 'ballText') {
+    return { block: buildBallDecorationBlock(product, { ...decoration, decorationType: 'Personalized' }), customUserImage: noImage };
+  }
+  if (engine === 'monogram') {
+    return {
+      block: {
+        ProductModification: findMod(product, { modID: 6, friendly: 'Monogram' }),
+        interfaceState: {},
+        dynamicImage: [buildMonogramDynamicImage(decoration.monogram || decoration)],
+        isTemporary: false,
+      },
+      customUserImage: noImage,
+    };
+  }
+  if (engine === 'ballLogo') {
+    const logo = decoration.logo || null;
+    return {
+      block: {
+        ProductModification: findMod(product, { modID: 1008, friendly: 'Custom Logo' }),
+        interfaceState: {
+          GolfBallCustomLogo: {
+            customLogo: {
+              useCustomLogo: true,
+              filePath: (logo && logo.filePath) || '',
+              fileName: (logo && logo.fileName) || '',
+              cropFilePath: (logo && logo.cropFilePath) || '',
+            },
+            expressLogo: { isUsed: false },
+          },
+          DoubleDigit: {},
+        },
+        dynamicImage: [buildBallLogoDynamicImage({ baseColor: decoration.baseColor })],
+        isTemporary: false,
+      },
+      // The uploaded logo is referenced via filePath/cropFilePath; the real
+      // site also stores a fabric.js crop object in userImage (in-browser
+      // cropper render state) which we can't reproduce headlessly.
+      customUserImage: { firstPole: logoPole(logo), secondPole: emptyPole() },
+    };
+  }
+  if (engine === 'logoOverlay') {
+    const outsource = !!decoration.outsource;
+    const logo = decoration.logo || null;
+    return {
+      block: {
+        ProductModification: findMod(product, { modID: outsource ? 25 : 84, friendly: 'Custom Logo' }),
+        interfaceState: null,
+        dynamicImage: [buildLogoOverlayDynamicImage({ outsource, logo })],
+        isTemporary: false,
+      },
+      customUserImage: { firstPole: logoPole(logo), secondPole: emptyPole() },
+    };
+  }
+  return { block: null, customUserImage: noImage }; // engine === 'none'
+}
+
+/* Assemble one itemsInCart line from the product page object
    (__NEXT_DATA__.props.pageProps.product), the catalog pricing ladder, the
-   buyer's property selection, the decoration, and quantity. Pricing comes
-   from the catalog (`pricing.breaks` = [{q,p}], `pricing.price`) — the page
-   carries only the parent fee header. itemGuid is generated if omitted. */
-export function assembleBallLine({ product, pricing = {}, selection = {}, decoration, qty = 1, itemGuid } = {}) {
+   buyer's property selection, the decoration descriptor, and quantity. Works
+   for every item type — the decoration engine is chosen by buildDecoration().
+   Pricing comes from the catalog (`pricing.breaks` = [{q,p}], `pricing.price`);
+   the page carries only the parent fee header. itemGuid is generated if omitted. */
+export function assembleLine({ product, pricing = {}, selection = {}, decoration, qty = 1, itemGuid } = {}) {
   const children = product.ProductChild || [];
   const wantIds = new Set(selection.propertyValueIDs || []);
   const child = children.find((c) =>
@@ -127,7 +298,7 @@ export function assembleBallLine({ product, pricing = {}, selection = {}, decora
   const selectedIds = (child.PropertyValueProduct || []).map((pv) => pv.propertyValueProductID);
   const breaks = (pricing.breaks && pricing.breaks.length) ? pricing.breaks : [{ q: 1, p: pricing.price || 0 }];
   const unit = pricing.price != null ? pricing.price : (breaks[0] && breaks[0].p) || 0;
-  const decoBlock = buildBallDecorationBlock(product, decoration);
+  const { block: decoBlock, customUserImage } = buildDecoration(product, decoration || { engine: 'none' });
 
   return {
     nameFormat: product.NameFormat || product.Name || '',
@@ -153,20 +324,20 @@ export function assembleBallLine({ product, pricing = {}, selection = {}, decora
     childFilters: [null],
     widgetSelections: selectedIds.map((v) => ({ values: [v] })),
     widgetApplicationOrder: [],
-    modificationHistory: [decoBlock],
+    modificationHistory: decoBlock ? [decoBlock] : [],
     modificationTemporaryHistory: [],
     selectionWidgets: (product.PropertyProduct || []).map((_, i) => ({ WidgetType: 'TextButtonGroup', Configuration: { propertyIndex: i, maxValues: 1 } })),
-    modification: decoBlock,
+    modification: decoBlock || { interfaceState: {} },
     subscription: { frequency: 1, isSubscribable: false, brand: '' },
     itemTypeID: product.itemTypeID,
     ProductTagDetail: product.ProductTagDetail || [],
     inventory: product.inventory || [],
     preorder: { show: false, date: null },
-    customUserImage: { firstPole: emptyPole(), secondPole: emptyPole() },
+    customUserImage: customUserImage || { firstPole: emptyPole(), secondPole: emptyPole() },
     CustomData: product.CustomData || {},
     bundle: null,
     hasQtyParam: false,
-    itemType: (product.ItemType && product.ItemType.Name) || 'Golf Balls',
+    itemType: (product.ItemType && product.ItemType.Name) || (product.itemType_s || '').split('-').pop() || 'Golf Balls',
     images: product.ProductImage || product.images || [],
     itemGuid: itemGuid || (globalThis.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
     url: canonicalUrl(product),
@@ -174,6 +345,9 @@ export function assembleBallLine({ product, pricing = {}, selection = {}, decora
     dropship: { active: false, dropshipTime: 0, dropshipDate: '' },
   };
 }
+
+/* Back-compat alias — assembleLine now handles every item type, not just balls. */
+export const assembleBallLine = assembleLine;
 
 /* ── cart wrapper + totals ────────────────────────────────────────────────── */
 
