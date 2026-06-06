@@ -298,22 +298,27 @@ function modFeeLadders(pm) {
 /* Returns { breaks:[{q,p}], setupBreaks:[{q,p}]|null } computed from the product's
    ParentItemFee + the chosen ProductModification, or null if the product carries
    no fee ladder (caller then falls back to catalog pricing). */
-export function computeDecoratedPricing(product, pm) {
+export function computeDecoratedPricing(product, pm, child) {
   const parent = _pb(product && product.itemFee_priceBreakHeader);
   if (!parent) return null;
   const { item, setup } = modFeeLadders(pm);
+  // A variant base modifier (Tee Count, iron set, …) rides on the selected child
+  // ON TOP of the parent fee — the same resolution background.js uses for variants.
+  const childMod = _pb(child && child.itemFeeModifier_priceBreakHeader);
+  const base = childMod ? [parent, childMod] : [parent];
   // Volume breakpoints come ONLY from ladders that actually step (>1 break); a
   // single-break ladder like [{1,X}] is a flat add-on, not a tier boundary. If
-  // nothing steps, the line is a single {1} tier. The base value at each tier is
-  // ParentItemFee + every fee ladder evaluated at that qty.
+  // nothing steps, the line is a single {1} tier. The value at each tier is the
+  // sum of every base + fee ladder evaluated at that qty.
   const tiers = (ladders) => {
     const s = new Set();
     ladders.forEach((l) => { if (l && l.length > 1) l.forEach((b) => s.add(b.Quantity)); });
     if (!s.size) s.add(1);
     return [...s].sort((a, b) => a - b);
   };
-  const breaks = tiers([parent, ...item])
-    .map((q) => ({ q, p: Math.round((priceAtQ(parent, q) + item.reduce((s, l) => s + priceAtQ(l, q), 0)) * 100) / 100 }));
+  const all = [...base, ...item];
+  const breaks = tiers(all)
+    .map((q) => ({ q, p: Math.round(all.reduce((s, l) => s + priceAtQ(l, q), 0) * 100) / 100 }));
   const setupBreaks = tiers(setup)
     .map((q) => ({ q, p: Math.round(setup.reduce((s, l) => s + priceAtQ(l, q), 0) * 100) / 100 }));
   return { breaks, setupBreaks: setupBreaks.some((b) => b.p) ? setupBreaks : null };
@@ -573,11 +578,11 @@ export function buildDecoration(product, decoration = {}) {
    for every item type — the decoration engine is chosen by buildDecoration().
    Pricing comes from the catalog (`pricing.breaks` = [{q,p}], `pricing.price`);
    the page carries only the parent fee header. itemGuid is generated if omitted. */
-export function assembleLine({ product, pricing = {}, selection = {}, decoration, qty = 1, itemGuid, url } = {}) {
+/* Pick the child (variant) the buyer selected — by option values
+   ({ "Tee Count": "100", Color: "White" }), then by explicit propertyValueIDs,
+   then the first child. Shared by assembleLine + decoratedUnitPrice. */
+export function selectChild(product, selection = {}) {
   const children = product.ProductChild || [];
-  // Pick the child the buyer actually selected. Prefer matching by option values
-  // ({ "Tee Count": "100", Color: "White" } — what the modal captures), then by
-  // explicit propertyValueIDs, then fall back to the first child.
   const wantVals = selection.values && Object.keys(selection.values).length ? selection.values : null;
   const wantIds = new Set(selection.propertyValueIDs || []);
   let child = null;
@@ -591,7 +596,27 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
     }) || null;
   }
   if (!child && wantIds.size) child = children.find((c) => (c.PropertyValueProduct || []).some((pv) => wantIds.has(pv.propertyValueProductID))) || null;
-  child = child || children[0] || {};
+  return child || children[0] || {};
+}
+
+/* The decorated per-unit price ladder for a line, computed from the raw product
+   page exactly as assembleLine does — so the in-modal proposal DISPLAY matches the
+   cart the site will load. Returns { breaks:[{q,p}], setupBreaks } or null when the
+   page has no fee data. */
+export function decoratedPricingForLine(product, decoration, selection) {
+  const child = selectChild(product, selection);
+  const deco = decoration || { engine: 'none' };
+  let pm = null;
+  if (deco.engine && deco.engine !== 'none') {
+    const bg = child && child.CustomData && child.CustomData.backgroundHex;
+    const { block } = buildDecoration(product, bg ? { ...deco, _childBgHex: bg } : deco);
+    pm = block && block.ProductModification;
+  }
+  return computeDecoratedPricing(product, pm, child);
+}
+
+export function assembleLine({ product, pricing = {}, selection = {}, decoration, qty = 1, itemGuid, url } = {}) {
+  const child = selectChild(product, selection);
   const selectedIds = (child.PropertyValueProduct || []).map((pv) => pv.propertyValueProductID);
   // Towel/hat embroidery needs the chosen child's background color for the BC
   // overlay — fold it in so buildDecoration can reach it.
@@ -604,7 +629,7 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
   // + selected PriceTier/Second Pole). This is what stops the "price has changed"
   // prompt. Falls back to the catalog ladder only when the page has no fee data.
   const atQ = (bks, q) => { let p = 0; for (const b of (bks || [])) if (b.q <= q) p = b.p; return p; };
-  const computed = decoBlock ? computeDecoratedPricing(product, decoBlock.ProductModification) : null;
+  const computed = decoBlock ? computeDecoratedPricing(product, decoBlock.ProductModification, child) : null;
   const breaks = computed ? computed.breaks
     : ((pricing.breaks && pricing.breaks.length) ? pricing.breaks : [{ q: 1, p: pricing.price || 0 }]);
   const unit = computed ? atQ(breaks, qty) : (pricing.price != null ? pricing.price : (breaks[0] && breaks[0].p) || 0);

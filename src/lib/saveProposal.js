@@ -71,6 +71,14 @@ async function fetchRawProducts(urls) {
   return new Map(entries);
 }
 
+/* Single raw product fetch (background-cached). Used by the proposal to price its
+   DISPLAY from the same fee ladders the cart uses. Returns the product or null. */
+export async function fetchRawProduct(url) {
+  if (!url) return null;
+  try { const r = await sendBg('fetchProductRaw', { url }); return r.product || null; }
+  catch { return null; }
+}
+
 /* If a line's decoration carries a locally-aligned image that hasn't been
    uploaded yet, upload it NOW (at save time) and fold the returned
    filePath/cropFilePath/userImage into the decoration so the cart references a

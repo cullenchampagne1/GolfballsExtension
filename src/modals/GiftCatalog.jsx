@@ -6,8 +6,9 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, DEPT_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
-import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved } from '../lib/saveProposal.js';
+import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct } from '../lib/saveProposal.js';
 import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
+import { decoratedPricingForLine } from '../lib/cartSerializer.js';
 
 /* ───────────────────────────────────────────────────────────────
    GiftCatalog — Corporate Gifting Catalog modal.
@@ -106,6 +107,8 @@ function linePriceAt(line, qty) {
   return Math.round((base + lineSecondPoleFee(line)) * 100) / 100;
 }
 const lineIsTierPrice = (line, qty, price) => Math.abs(linePriceAt(line, qty) - price) < 0.005;
+// Largest break ≤ q from a [{q,p}] ladder (the verified engine's output shape).
+const priceAtBreaks = (breaks, q) => { let p = null; for (const b of (breaks || [])) if (b.q <= q) p = b.p; return p; };
 
 /* The per-imprint model (capabilities + chip/merge/validation) lives in
    ../lib/giftImprints.js so it's unit-testable; imported at the top of this file. */
@@ -1208,6 +1211,48 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const [special, setSpecial] = useState(null); // 'sale' | 'logo' | null
   const [proposal, setProposal] = useState([]);
   const [proposalOpen, setProposalOpen] = useState(false);
+  // ── Verified DISPLAY pricing ───────────────────────────────────────────────
+  // The catalog only carries the custom-logo ladder, so a monogram / embroidery /
+  // tee line can't be priced from it. Pull each DECORATED line's raw product page
+  // (background-cached) and reprice its splits with the SAME engine the cart uses
+  // (decoratedPricingForLine), so the proposal shows exactly what the site will
+  // charge — no "price changed" surprise. Retail lines keep their estimate. The
+  // signature excludes prices, so applying prices doesn't re-trigger the fetch.
+  const rawCacheRef = useRef(new Map());
+  const pricedSigRef = useRef('');
+  useEffect(() => {
+    const decorated = proposal.filter((l) => l.decoration && l.decoration.engine && l.decoration.engine !== 'none' && l.product && l.product.url);
+    const sig = JSON.stringify(decorated.map((l) => [l.product.url, l.decoration, l.variant && l.variant.values, l.splits.map((s) => s.qty)]));
+    if (!decorated.length || sig === pricedSigRef.current) return undefined;
+    let alive = true;
+    (async () => {
+      for (const l of decorated) {
+        const url = l.product.url;
+        if (!rawCacheRef.current.has(url)) rawCacheRef.current.set(url, await fetchRawProduct(url));
+      }
+      if (!alive) return;
+      let changed = false;
+      const next = proposal.map((l) => {
+        if (!l.decoration || !l.decoration.engine || l.decoration.engine === 'none') return l;
+        const raw = rawCacheRef.current.get(l.product && l.product.url);
+        if (!raw) return l;
+        let pr; try { pr = decoratedPricingForLine(raw, l.decoration, { values: l.variant && l.variant.values }); } catch { pr = null; }
+        if (!pr || !pr.breaks || !pr.breaks.length) return l;
+        let lineChanged = false;
+        const splits = l.splits.map((s) => {
+          const unit = priceAtBreaks(pr.breaks, s.qty);
+          if (unit != null && Math.abs(unit - s.price) > 0.005) { lineChanged = true; return { ...s, price: unit }; }
+          return s;
+        });
+        if (lineChanged) changed = true;
+        return lineChanged ? { ...l, splits } : l;
+      });
+      pricedSigRef.current = sig;
+      if (alive && changed) setProposal(next);
+    })();
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proposal]);
   // Saved Proposals library (chrome.storage). `view` swaps the catalog grid
   // for the gallery; `loadedId` flags the last draft copied into the proposal.
   const [view, setView] = useState('catalog');        // 'catalog' | 'proposals'
