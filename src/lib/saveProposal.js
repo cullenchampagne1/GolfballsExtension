@@ -16,6 +16,10 @@
 
 import { assembleLine, buildSaveCartBody, buildCartData, buildAsCartContents } from './cartSerializer.js';
 
+// golfballs.com second-pole upcharge per dozen (Logo / Text), added on top of
+// the custom-logo ladder for a dual-pole imprint. Mirrors the modal's pricing.
+const SECOND_POLE_FEE = { logo: 6, text: 4 };
+
 /* Copy text to the clipboard. Tries the async Clipboard API, then falls back to
    a hidden-textarea execCommand (which survives the loss of transient
    activation after our async product fetches, as long as the doc is focused). */
@@ -108,10 +112,18 @@ export async function buildProposalLines(proposal) {
     // carry them on the decoration (__base); other products on line.variant.
     const selValues = (decoration && decoration.baseSelection) || (line.variant && line.variant.values) || null;
     const selection = selValues ? { values: selValues } : {};
+    // Price ladder that matches the line: retail-flat when there's no imprint,
+    // the custom-logo ladder (+ second-pole upcharge) when there is — so the
+    // cart's ItemPriceBreak agrees with ItemPrice.
+    const imprinted = !!(decoration && decoration.engine && decoration.engine !== 'none');
+    const fee = (decoration && decoration.dualPole && decoration.pole2) ? (SECOND_POLE_FEE[decoration.pole2.kind] || 0) : 0;
+    const lineBreaks = (imprinted && cat.customLogo && breaks.length)
+      ? breaks.map((b) => ({ q: b.q, p: Math.round((b.p + fee) * 100) / 100 }))
+      : [{ q: 1, p: cat.price || 0 }];
     for (const split of (line.splits || [])) {
       items.push(assembleLine({
         product: raw,
-        pricing: { price: split.price, breaks },
+        pricing: { price: split.price, breaks: lineBreaks },
         decoration,
         selection,
         qty: split.qty,

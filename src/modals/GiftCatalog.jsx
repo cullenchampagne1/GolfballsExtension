@@ -80,6 +80,32 @@ function priceAtQty(p, qty) {
 /* Has the price been hand-edited away from the tier the qty implies? */
 const isTierPrice = (p, qty, price) => Math.abs(priceAtQty(p, qty) - price) < 0.005;
 
+/* ── Accurate proposal-line pricing ───────────────────────────────────────────
+   The card headlines the custom-logo "from" price, but the PROPOSAL/cart must
+   reflect what's actually configured:
+     • no imprint            → retail (product.price)
+     • custom-logo imprint   → the custom-logo volume ladder at the qty
+     • a chosen base variant → its price (tee count, etc.)
+     • + the second-pole upcharge when a dual-pole imprint is added
+   These (Logo +$6 / Text +$4 per dozen) are golfballs.com's standard second-pole
+   fees — the charge that was missing and skewing cart totals. */
+const SECOND_POLE_FEE = { logo: 6, text: 4 };
+const lineHasImprint = (line) => { const d = line && line.decoration; return !!(d && d.engine && d.engine !== 'none'); };
+const lineSecondPoleFee = (line) => {
+  const d = line && line.decoration;
+  if (!d || !d.dualPole || !d.pole2) return 0;
+  return SECOND_POLE_FEE[d.pole2.kind] || 0;
+};
+function linePriceAt(line, qty) {
+  const p = (line && line.product) || {};
+  let base;
+  if (line && line.variant && line.variant.price != null) base = line.variant.price;          // tee count etc.
+  else if (lineHasImprint(line) && p.customLogo) base = priceAtQty(p, qty);                    // custom-logo ladder
+  else base = p.price || 0;                                                                     // no imprint → retail
+  return Math.round((base + lineSecondPoleFee(line)) * 100) / 100;
+}
+const lineIsTierPrice = (line, qty, price) => Math.abs(linePriceAt(line, qty) - price) < 0.005;
+
 /* Highest custom-logo per-unit price (the smallest-qty tier) — shown
    on the card by default ("from" pricing), before volume discounts. */
 const topPrice = (p) => (p.breaks && p.breaks.length ? Math.max(...p.breaks.map((b) => b.p)) : (p.logo ?? p.price ?? 0));
@@ -403,11 +429,11 @@ function ProductCard({ p, compact, showRating, active, inProposal, onAdd, onClic
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
             <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-              {/* Retail price (matches the product page); the custom-logo imprint
-                  ladder lives in the detail panel — headlining it here showed
-                  e.g. $31.99 for a ball that retails $16.99. */}
-              <span style={{ fontSize: compact ? 16 : 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.5, fontFamily: 'var(--gb-font-mono)' }}>{usd(p.price)}</span>
-              {onSale(p) && <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-ghost)', textDecoration: 'line-through', fontFamily: 'var(--gb-font-mono)' }}>{usd(p.orig)}</span>}
+              {/* Custom-logo items headline the "from" (first-ladder) imprint price;
+                  everything else headlines retail. The PROPOSAL re-prices each line
+                  accurately (retail when no imprint, ladder + 2nd-pole when added). */}
+              <span style={{ fontSize: compact ? 16 : 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.5, fontFamily: 'var(--gb-font-mono)' }}>{usd(p.customLogo ? netTop(p) : p.price)}</span>
+              {onSale(p) && <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-ghost)', textDecoration: 'line-through', fontFamily: 'var(--gb-font-mono)' }}>{usd(p.customLogo ? topPrice(p) : p.orig)}</span>}
             </span>
             <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>each</span>
           </div>
@@ -439,10 +465,10 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
   // for products whose options change the price. Reset when the product changes.
   const [variant, setVariant] = useState(null);
   useEffect(() => { setDecoration(null); setVariant(null); }, [p.id]);
-  // Headline the RETAIL price (matches the product page); a chosen variant
-  // (e.g. Tee Count) overrides it. The custom-logo imprint ladder shows
-  // separately below for custom-logo items.
-  const unitPrice = (variant && variant.price != null) ? variant.price : p.price;
+  // Headline: a chosen variant (Tee Count, …) wins; otherwise custom-logo items
+  // show their "from" (first-ladder) imprint price and everything else retail.
+  // The proposal re-prices accurately on add (retail / ladder + 2nd-pole).
+  const unitPrice = (variant && variant.price != null) ? variant.price : (p.customLogo ? netTop(p) : p.price);
   const openProduct = () => {
     if (!p.url) return;
     // p.url is a complete URL now, but an older cached catalog may still hold a
@@ -661,13 +687,15 @@ function MiniThumb({ src, size = 42 }) {
    volume ladder unless the price was hand-edited; a "tier ↺" link
    re-snaps it to the auto price. */
 function SplitRow({ line, split, canRemove, onChange, onRemove }) {
-  const p = line.product;
+  // Price follows the LINE (imprint/variant/2nd-pole aware), not just the bare
+  // product's custom-logo ladder — so a no-imprint line stays at retail and a
+  // dual-pole line keeps its second-pole upcharge as the qty changes.
   const onQty = (q) => {
-    const followTier = isTierPrice(p, split.qty, split.price);
-    onChange({ qty: q, price: followTier ? priceAtQty(p, q) : split.price });
+    const followTier = lineIsTierPrice(line, split.qty, split.price);
+    onChange({ qty: q, price: followTier ? linePriceAt(line, q) : split.price });
   };
-  const tier = priceAtQty(p, split.qty);
-  const custom = !isTierPrice(p, split.qty, split.price);
+  const tier = linePriceAt(line, split.qty);
+  const custom = !lineIsTierPrice(line, split.qty, split.price);
   return (
     <motion.div layout
       initial={{ opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0 }}
@@ -678,8 +706,8 @@ function SplitRow({ line, split, canRemove, onChange, onRemove }) {
       <QtyStepper value={split.qty} onChange={onQty} />
       <span style={{ fontSize: 11, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)', flexShrink: 0 }}>×</span>
       <PriceField value={split.price} onChange={(pr) => onChange({ price: pr })} />
-      {custom && p.breaks && (
-        <span onClick={() => onChange({ price: tier })} title={`Reset to tier ${usd(tier)}`}
+      {custom && (
+        <span onClick={() => onChange({ price: tier })} title={`Reset to ${usd(tier)}`}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 9.5, fontWeight: 600, color: 'var(--gb-brand-label)', cursor: 'pointer', fontFamily: 'var(--gb-font-mono)', flexShrink: 0, whiteSpace: 'nowrap' }}>↺ {usd(tier)}</span>
       )}
       <div style={{ flex: 1 }} />
@@ -931,8 +959,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     // selected base variant (e.g. Tee Count → its price) ride along so Save
     // draft serializes the real imprint + price; the card quick-add omits both.
     const qty = p.minQty || 1;
-    // A picked variant whose option changes the price wins over the catalog tier.
-    const startPrice = (!p.customLogo && variant && variant.price != null) ? variant.price : priceAtQty(p, qty);
+    // Accurate per-unit price: retail when no imprint, custom-logo ladder when
+    // imprinted, a chosen variant's price, + the second-pole upcharge if dual.
+    const startPrice = linePriceAt({ product: p, decoration, variant }, qty);
     return [...prev, { id: rid(), productId: p.id, product: p, decoration: decoration || null, variant: variant || null, splits: [{ id: rid(), qty, price: startPrice }] }];
   });
   const patchSplit = (lineId, splitId, patch) => setProposal((prev) => prev.map((l) => l.id === lineId ? { ...l, splits: l.splits.map((s) => s.id === splitId ? { ...s, ...patch } : s) } : l));
