@@ -183,3 +183,68 @@ export async function saveProposalToServer(proposal, { proposalID = null, custom
   const resp = await sendBg('giftSaveCart', { body });
   return { cartNumber: resp.cartNumber, cartID: resp.cartID, message: resp.message, savedLines: items.length, skipped };
 }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Saved Proposals library — named drafts persisted to chrome.storage.local.
+
+   A saved entry snapshots each line's catalog product + its split tiers, so the
+   gallery renders and a draft reloads WITHOUT a fresh catalog pull (and the
+   quoted prices stay frozen at save time, which is what a saved quote should
+   be). `linesFromSaved` rebuilds live proposal lines from the snapshot.
+   ─────────────────────────────────────────────────────────────────────────── */
+const SAVED_KEY = 'gbSavedProposals';
+const _rid = () => Math.random().toString(36).slice(2, 9);
+
+export function loadSavedProposals() {
+  return new Promise((resolve) => {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) { resolve([]); return; }
+      chrome.storage.local.get(SAVED_KEY, (d) => resolve((d && Array.isArray(d[SAVED_KEY])) ? d[SAVED_KEY] : []));
+    } catch { resolve([]); }
+  });
+}
+function _writeSaved(list) {
+  return new Promise((resolve) => {
+    try { chrome.storage.local.set({ [SAVED_KEY]: list }, () => resolve(list)); } catch { resolve(list); }
+  });
+}
+
+/* Snapshot the current proposal as a named draft; prepend to the library. */
+export async function saveProposalDraft(name, proposal) {
+  if (!proposal || !proposal.length) throw new Error('Proposal is empty');
+  const list = await loadSavedProposals();
+  const entry = {
+    id: 'prop-' + _rid(),
+    name: (name && name.trim()) || 'Untitled draft',
+    date: new Date().toISOString().slice(0, 10),
+    lines: proposal.map((l) => ({
+      product: l.product,
+      decoration: l.decoration || null,
+      variant: l.variant || null,
+      splits: (l.splits || []).map((s) => ({ qty: s.qty, price: s.price })),
+    })),
+  };
+  const next = [entry, ...list];
+  await _writeSaved(next);
+  return { entry, list: next };
+}
+
+export async function removeSavedProposal(id) {
+  const list = await loadSavedProposals();
+  const next = list.filter((p) => p.id !== id);
+  await _writeSaved(next);
+  return next;
+}
+
+/* Rebuild live proposal lines (with fresh ids) from a saved entry's snapshot. */
+export function linesFromSaved(entry, ridFn) {
+  const mk = ridFn || _rid;
+  return (entry.lines || []).map((l) => ({
+    id: mk(),
+    productId: l.product && l.product.id,
+    product: l.product,
+    decoration: l.decoration || undefined,
+    variant: l.variant || undefined,
+    splits: (l.splits || []).map((s) => ({ id: mk(), qty: s.qty, price: s.price })),
+  }));
+}

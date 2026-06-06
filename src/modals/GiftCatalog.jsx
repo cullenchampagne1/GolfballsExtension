@@ -6,7 +6,7 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, DEPT_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
-import { buildProposalDraft, copyToClipboard } from '../lib/saveProposal.js';
+import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved } from '../lib/saveProposal.js';
 
 /* ───────────────────────────────────────────────────────────────
    GiftCatalog — Corporate Gifting Catalog modal.
@@ -909,6 +909,25 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
   const endDrag = () => setDrag(null);
   const dropDeco = (toLineId) => { if (drag) onCopyDecoration(drag.fromLineId, toLineId, drag.mode); setDrag(null); };
   const canCopy = proposal.length >= 2 && proposal.some((l) => decoSummary(l.decoration));
+  // Save-draft flow: an inline name box → confirm → success flash.
+  const [saveMode, setSaveMode] = useState(false);
+  const [name, setName] = useState('');
+  const [nameFocus, setNameFocus] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const nameRef = useRef(null);
+  const savedTimer = useRef(null);
+  useEffect(() => () => clearTimeout(savedTimer.current), []);
+  useEffect(() => { if (proposal.length === 0) { setSaveMode(false); setSaved(false); } }, [proposal.length]);
+  useEffect(() => { if (!saveMode) return; const id = setTimeout(() => nameRef.current && nameRef.current.focus(), 60); return () => clearTimeout(id); }, [saveMode]);
+  const confirmSave = () => {
+    if (saving) return;
+    setSaving(true);
+    Promise.resolve(onSaveDraft && onSaveDraft(name.trim() || 'Untitled draft')).then(() => {
+      setSaving(false); setSaveMode(false); setName(''); setSaved(true);
+      clearTimeout(savedTimer.current); savedTimer.current = setTimeout(() => setSaved(false), 2400);
+    }).catch(() => setSaving(false));
+  };
   return (
     /* In-flow side card (not an overlay) — sits BESIDE the catalog so the
        proposal and item details are visible at once. The slide/resize is
@@ -966,10 +985,37 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
               <div style={{ flex: 1 }} />
               <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', letterSpacing: -.6 }}>{money(total)}</span>
             </div>
-            <div style={{ padding: '0 12px 12px', display: 'flex', gap: 8 }}>
-              <Btn variant="secondary" size="md" icon={<I.copy />} style={{ flex: 1 }} onClick={onSaveDraft}>Save draft</Btn>
-              <Btn variant="primary" size="md" icon={<I.send />} style={{ flex: 1.4 }}>Send proposal</Btn>
+            {/* Name box — collapses in between the total and the buttons. */}
+            <div style={{ overflow: 'hidden', maxHeight: saveMode ? 110 : 0, opacity: saveMode ? 1 : 0, transition: 'max-height .3s cubic-bezier(.4,0,.2,1), opacity .22s ease' }}>
+              <div style={{ padding: '2px 12px 4px' }}>
+                <div style={{ borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', padding: '9px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .7, color: 'var(--gb-text-muted)' }}>Draft name</label>
+                  <input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)}
+                    onFocus={() => setNameFocus(true)} onBlur={() => setNameFocus(false)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') confirmSave(); if (e.key === 'Escape') { setSaveMode(false); setName(''); } }}
+                    placeholder="e.g. Q3 Client Gift Run"
+                    style={{ width: '100%', height: 32, padding: '0 10px', boxSizing: 'border-box', background: 'var(--gb-fill-inverse-medium)', borderRadius: 'var(--gb-r-sm)', border: '1px solid ' + (nameFocus ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), outline: 'none', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 12.5, fontWeight: 500, transition: 'border-color var(--gb-anim)' }} />
+                </div>
+              </div>
             </div>
+            {/* Action row — morphs between idle / name-entry / saved flash. */}
+            {saved ? (
+              <div style={{ padding: '4px 12px 12px' }}>
+                <div style={{ height: 38, borderRadius: 'var(--gb-r-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'var(--gb-success-tint-medium, rgba(46,158,91,.16))', border: '1px solid var(--gb-success-tint-border, rgba(46,158,91,.35))', color: 'var(--gb-success-fg, #2e9e5b)', fontSize: 12.5, fontWeight: 700, animation: 'pp-rise .2s cubic-bezier(.34,1.5,.64,1)' }}>
+                  <I.check size={15} strokeWidth={3} /> Saved to Saved Proposals
+                </div>
+              </div>
+            ) : saveMode ? (
+              <div style={{ padding: '4px 12px 12px', display: 'flex', gap: 8 }}>
+                <Btn variant="ghost" size="md" style={{ flex: 1 }} onClick={() => { setSaveMode(false); setName(''); }}>Cancel</Btn>
+                <Btn variant="primary" size="md" icon={<I.check />} style={{ flex: 1.4 }} loading={saving} onClick={confirmSave}>Confirm save</Btn>
+              </div>
+            ) : (
+              <div style={{ padding: '0 12px 12px', display: 'flex', gap: 8 }}>
+                <Btn variant="secondary" size="md" icon={<I.bookmark />} style={{ flex: 1 }} onClick={() => { setSaved(false); setName(''); setSaveMode(true); }}>Save draft</Btn>
+                <Btn variant="primary" size="md" icon={<I.send />} style={{ flex: 1.4 }}>Send proposal</Btn>
+              </div>
+            )}
           </div>
         )}
     </div>
@@ -1020,6 +1066,18 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const [special, setSpecial] = useState(null); // 'sale' | 'logo' | null
   const [proposal, setProposal] = useState([]);
   const [proposalOpen, setProposalOpen] = useState(false);
+  // Saved Proposals library (chrome.storage). `view` swaps the catalog grid
+  // for the gallery; `loadedId` flags the last draft copied into the proposal.
+  const [view, setView] = useState('catalog');        // 'catalog' | 'proposals'
+  const [savedProposals, setSavedProposals] = useState([]);
+  const [loadedId, setLoadedId] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    loadSavedProposals().then((l) => { if (alive) setSavedProposals(l); });
+    const onCh = (changes) => { if (changes && changes.gbSavedProposals) setSavedProposals(changes.gbSavedProposals.newValue || []); };
+    try { chrome.storage.onChanged.addListener(onCh); } catch { /* */ }
+    return () => { alive = false; try { chrome.storage.onChanged.removeListener(onCh); } catch { /* */ } };
+  }, []);
   // Animated open/close: doClose plays the exit, AnimatePresence's
   // onExitComplete then runs the real onClose (unmount) — matches the
   // slide-over panels so the whole modal fades/scales out, not snaps.
@@ -1066,23 +1124,40 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
       : l));
   };
 
-  // Save draft — serialize the proposal into the golfballs.com cart shape and
-  // copy a paste-and-run console command to the clipboard (no network). Paste
-  // it in the golfballs.com console to load the cart into localStorage and
-  // preview it. Returns the promise so the Save button drives its own
-  // loading→success/error state. (Later this will persist as a preset proposal.)
-  const saveDraft = () => {
+  // Save draft — snapshot the current proposal into the Saved Proposals
+  // library (chrome.storage) under a name. Returns the promise so the panel's
+  // confirm button can drive its success flash.
+  const saveDraft = (name) => {
     if (!proposal.length) return Promise.resolve();
-    return buildProposalDraft(proposal)
-      .then((r) => copyToClipboard(r.command).then(() => {
-        const skip = r.skipped && r.skipped.length ? ` · ${r.skipped.length} line${r.skipped.length > 1 ? 's' : ''} skipped (no product data)` : '';
-        toast?.success?.(`Proposal copied — paste in the golfballs.com console to load ${r.itemCount} item${r.itemCount > 1 ? 's' : ''}${skip}`);
-      }))
-      .catch((e) => {
-        toast?.error?.('Couldn’t build the proposal — ' + ((e && e.message) || 'unknown error'));
-        throw e; // surface the error state on the Save button
-      });
+    return saveProposalDraft(name, proposal)
+      .then((r) => { setSavedProposals(r.list); toast?.success?.(`Saved “${r.entry.name}” to Saved Proposals`); })
+      .catch((e) => { toast?.error?.('Couldn’t save — ' + ((e && e.message) || 'unknown error')); throw e; });
   };
+
+  // Load a saved draft's lines into the live proposal (merging by product so
+  // re-loading the same draft doesn't duplicate lines), then jump back to the
+  // catalog with the proposal open.
+  const loadSaved = (entry) => {
+    const incoming = linesFromSaved(entry, rid);
+    setProposal((prev) => {
+      const have = new Set(prev.map((l) => l.productId));
+      return [...prev, ...incoming.filter((l) => !have.has(l.productId))];
+    });
+    setLoadedId(entry.id);
+    setView('catalog');
+    setProposalOpen(true);
+  };
+
+  // Copy a saved draft as a paste-and-run console command (loads it into the
+  // golfballs.com cart). This is the "copy as a command" action on each card.
+  const copySaved = (entry) => buildProposalDraft(linesFromSaved(entry, rid))
+    .then((r) => copyToClipboard(r.command).then(() => {
+      const skip = r.skipped && r.skipped.length ? ` · ${r.skipped.length} skipped` : '';
+      toast?.success?.(`“${entry.name}” copied — paste in the golfballs.com console to load ${r.itemCount} item${r.itemCount > 1 ? 's' : ''}${skip}`);
+    }))
+    .catch((e) => { toast?.error?.('Couldn’t build the command — ' + ((e && e.message) || 'unknown error')); throw e; });
+
+  const deleteSaved = (id) => removeSavedProposal(id).then((next) => setSavedProposals(next));
 
   /* One shared live pull, with progress. `force` clears the cache first
      (manual rebuild — stale items/sales can't survive as a fallback);

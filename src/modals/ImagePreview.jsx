@@ -5,8 +5,11 @@ import {
   FloatingPanel, ModalHeader, IconBtn, Btn, Callout, Spinner,
   I, T, Slider, Input, DraggablePopup,
 } from '../ui/index.js';
-import { ColorPickerPopover as DSColorPickerPopover } from '../ui/components/ColorPicker.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
+import {
+  PREVIEW_GRID, GLASS_BG, GLASS_BG_HVR, GLASS_BORDER, GLASS_FILTER, GLASS_SHADOW, GLASS_RADIUS,
+  GlassIconBtn, DropperIcon, ResetIcon, SwapPopover, recolorImage,
+} from '../ui/components/ImageColorSwap.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { GolfballViewer } from './GolfballViewer.jsx';
 import { GrassMockupComposer } from './GrassMockupComposer.jsx';
@@ -45,17 +48,10 @@ import { LiquidDrawer } from '../ui/components/LiquidDrawer.jsx';
                                 wrappers + the playground wire this).
 ─────────────────────────────────────────────────────────────── */
 
-/* Frosted-glass tokens — match the LiquidDrawer capsule aesthetic.
-   background uses color-mix directly (NOT backgroundImage — color-mix
-   is a <color>, not an <image>, so backgroundImage silently discards it).
-   backdrop-filter provides the blur; color-mix provides the tint that
-   adapts across all 4 themes automatically. */
-const GLASS_BG     = 'color-mix(in srgb, var(--gb-surface-canvas) 62%, transparent)';
-const GLASS_BG_HVR = 'color-mix(in srgb, var(--gb-surface-canvas) 78%, transparent)';
-const GLASS_BORDER = 'color-mix(in srgb, var(--gb-text-primary) 12%, transparent)';
-const GLASS_FILTER = 'blur(18px) saturate(160%)';
-const GLASS_SHADOW = '0 4px 14px -6px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.05) inset';
-const GLASS_RADIUS = 9; // px — slightly tighter than the capsule's 14
+/* Frosted-glass tokens (GLASS_*) + the graph-paper PREVIEW_GRID + the color-swap
+   kit (eyedropper button, swap popover, recolorImage) now live in the shared
+   ../ui/components/ImageColorSwap module so the Gift-Catalog align modal reuses
+   the exact same surface. Imported at the top. */
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 8;
@@ -64,22 +60,6 @@ const ZOOM_MAX = 8;
 // adjustments instead of jumps. Was 0.35 / 0.12.
 const ZOOM_STEP_BTN = 0.12;
 const ZOOM_STEP_WHEEL = 0.05;
-
-/* Preview-surface grid — mirrors the playground's two-layer graph-
-   paper backdrop but at a tighter spacing since the area is only
-   320px tall. Minor lines every 12px, major every 48px. Re-themes
-   automatically because it uses --gb-border-* tokens. */
-const PREVIEW_GRID = {
-  background: 'var(--gb-surface-canvas)',
-  backgroundImage: [
-    'linear-gradient(to right,  var(--gb-border-default) 1px, transparent 1px)',
-    'linear-gradient(to bottom, var(--gb-border-default) 1px, transparent 1px)',
-    'linear-gradient(to right,  var(--gb-border-subtle)  1px, transparent 1px)',
-    'linear-gradient(to bottom, var(--gb-border-subtle)  1px, transparent 1px)',
-  ].join(', '),
-  backgroundSize: '48px 48px, 48px 48px, 12px 12px, 12px 12px',
-  backgroundPosition: '0 0',
-};
 
 /** Fallback image when no URL is provided. Resolves to a runtime-
  *  qualified URL inside the extension (web_accessible_resources
@@ -446,39 +426,7 @@ export function ImagePreview({
   // ERR_CONNECTION_TIMED_OUT, etc.) makes color swaps fail even though
   // the modal can display the image fine from the bg-fetched bytes.
   function applyColorSwap(fromRgb, toRgb, tolerance, sourceUrl = (editedDataUrl || dataUrl || effectiveUrl)) {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const c = document.createElement('canvas');
-        c.width = img.naturalWidth;
-        c.height = img.naturalHeight;
-        const ctx = c.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        try {
-          const idata = ctx.getImageData(0, 0, c.width, c.height);
-          const d = idata.data;
-          const tol2 = tolerance * tolerance;
-          for (let i = 0; i < d.length; i += 4) {
-            if (d[i + 3] === 0) continue;
-            const dr = d[i]     - fromRgb.r;
-            const dg = d[i + 1] - fromRgb.g;
-            const db = d[i + 2] - fromRgb.b;
-            if (dr * dr + dg * dg + db * db <= tol2) {
-              d[i]     = toRgb.r;
-              d[i + 1] = toRgb.g;
-              d[i + 2] = toRgb.b;
-            }
-          }
-          ctx.putImageData(idata, 0, 0);
-          resolve(c.toDataURL('image/png'));
-        } catch (e) {
-          reject(e);
-        }
-      };
-      img.onerror = reject;
-      img.src = sourceUrl;
-    });
+    return recolorImage(sourceUrl, fromRgb, toRgb, tolerance);
   }
 
   function applyTransform(animate) {
@@ -1899,40 +1847,6 @@ function ZoomChipBtn({ children, tooltip: _tooltip, onClick }) {
    preview surface so all glass elements share the same aesthetic.
    `active` applies a white pip highlight identical to the
    LiquidDrawer's active pip. */
-function GlassIconBtn({ icon, active, onClick }) {
-  const [hovered, setHovered] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      data-viewer-ui="true"
-      style={{
-        width: 26, height: 26, padding: 0,
-        color: active ? '#ffffff' : (hovered ? 'var(--gb-text-primary)' : 'var(--gb-text-secondary)'),
-        background: active
-          ? 'rgba(255,255,255,0.20)'
-          : (hovered ? GLASS_BG_HVR : GLASS_BG),
-        backdropFilter: GLASS_FILTER,
-        WebkitBackdropFilter: GLASS_FILTER,
-        border: `1px solid ${active ? 'rgba(255,255,255,0.22)' : GLASS_BORDER}`,
-        borderRadius: GLASS_RADIUS,
-        boxShadow: active
-          ? '0 0 0 1px rgba(255,255,255,0.22) inset, 0 0 14px -2px rgba(255,255,255,0.35)'
-          : GLASS_SHADOW,
-        cursor: 'pointer',
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        outline: 'none',
-        transition: 'color .12s, background-color .12s, border-color .12s, box-shadow .12s',
-        WebkitTapHighlightColor: 'transparent',
-      }}
-    >
-      {icon}
-    </button>
-  );
-}
-
 // Small inline icons not in the shared registry — modal-local so we
 // don't pollute the global icon set with one-offs.
 const MinusIcon = (p) => (
@@ -2072,156 +1986,6 @@ const ExplodeIcon = (p) => (
   </svg>
 );
 
-/* Eyedropper glyph — pipette body + small drop tip. */
-const DropperIcon = (p) => (
-  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M14.5 4.5l5 5" />
-    <path d="M17 2l5 5-3 3-5-5z" />
-    <path d="M14 6l-9 9v4h4l9-9" />
-  </svg>
-);
-
-/* Curved reset arrow. */
-const ResetIcon = (p) => (
-  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
-    stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M3 12a9 9 0 1 0 3-6.7" />
-    <polyline points="3 4 3 9 8 9" />
-  </svg>
-);
-
-/* ── SwapPopover ─────────────────────────────────────────────────
-   Tooltip-style popover anchored at the user's last sample point.
-   Shows the sampled color, a clickable swatch that opens the
-   design-system color picker (themable, matches Settings page),
-   a tolerance slider, and Apply / Cancel. Clamps inside the
-   wrapRef bounds so it never spills past the preview surface. */
-function SwapPopover({ pick, wrapRef, swapCount, onPreview, onCancel, onApply }) {
-  const [newColor, setNewColor] = React.useState(rgbToHex(pick.color));
-  const [tolerance, setTolerance] = React.useState(30);
-  const [pickerOpen, setPickerOpen] = React.useState(false);
-  const newSwatchRef = useRef(null);
-  React.useEffect(() => { setNewColor(rgbToHex(pick.color)); }, [pick.color]);
-
-  const pickedHex = rgbToHex(pick.color);
-  const toRgb = hexToRgb(newColor);
-
-  // Debounced live preview — refresh on color/tolerance change but
-  // skip redundant work while the slider is being dragged at high
-  // frequency. 90ms feels responsive without thrashing the canvas.
-  React.useEffect(() => {
-    const id = setTimeout(() => {
-      onPreview?.(toRgb, tolerance);
-    }, 90);
-    return () => clearTimeout(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newColor, tolerance]);
-
-  /* Cursor anchor: pick.x/pick.y are wrap-relative coords from the
-     image click. Convert to viewport coords so DraggablePopup can
-     spawn the popup right where the user clicked the color. */
-  const wrapRect = wrapRef?.current?.getBoundingClientRect();
-  const cursor = wrapRect ? {
-    x: wrapRect.left + (pick?.x ?? 0),
-    y: wrapRect.top  + (pick?.y ?? 0),
-  } : null;
-
-  /* DraggablePopup handles the chrome (drag, header icon + title +
-     close X, scale-aware clamp, portal). We just supply the body. */
-  return (
-    <DraggablePopup
-      open={true}
-      onClose={onCancel}
-      cursorAnchor={cursor}
-      width={226}
-      maxHeight={170}
-      icon={<I.eye size={12} />}
-      title={swapCount > 0 ? `Swap color · #${swapCount + 1}` : 'Swap color'}
-      enterFrom="bottom"
-      /* Style override gives the body a compact 10px padding the
-         caller-friendly default doesn't supply. */
-      style={{}}
-    >
-      <div style={{
-        padding: 10,
-        display: 'flex', flexDirection: 'column', gap: 9,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div title="Picked color" style={{
-            width: 26, height: 26, borderRadius: 'var(--gb-r-sm)', background: pickedHex,
-            border: '1px solid var(--gb-border-default)',
-          }} />
-          <I.chevr size={11} style={{ color: 'var(--gb-text-tertiary)' }} />
-          <button
-            ref={newSwatchRef}
-            type="button"
-            onClick={() => setPickerOpen((v) => !v)}
-            style={{
-              width: 26, height: 26, padding: 0, cursor: 'pointer',
-              background: newColor,
-              border: '1px solid var(--gb-border-default)',
-              borderRadius: 'var(--gb-r-sm)',
-            }}
-          />
-          <span style={{
-            flex: 1, textAlign: 'right',
-            fontFamily: 'var(--gb-font-mono)', fontSize: 10.5,
-            color: 'var(--gb-text-secondary)',
-            letterSpacing: 0.4,
-          }}>{newColor.toUpperCase()}</span>
-        </div>
-        <AnimatePresence>
-          {pickerOpen && (
-            <DSColorPickerPopover
-              value={newColor}
-              onChange={(hex) => setNewColor(hex)}
-              anchorRef={newSwatchRef}
-              onClose={() => setPickerOpen(false)}
-              align="left"
-            />
-          )}
-        </AnimatePresence>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            fontSize: 10, fontWeight: 600, color: 'var(--gb-text-muted)',
-            letterSpacing: 0.3,
-          }}>
-            <span>Tolerance</span>
-          </div>
-          <Slider
-            value={tolerance}
-            min={0}
-            max={120}
-            step={1}
-            onChange={setTolerance}
-          />
-        </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <Btn size="sm" variant="secondary" onClick={onCancel} style={{ flex: 1 }}>Cancel</Btn>
-          <Btn
-            size="sm"
-            variant="tinted"
-            status="brand"
-            onClick={() => onApply(toRgb, tolerance)}
-            style={{ flex: 1 }}
-          >Apply</Btn>
-        </div>
-      </div>
-    </DraggablePopup>
-  );
-}
-
-function rgbToHex({ r, g, b }) {
-  const h = (v) => v.toString(16).padStart(2, '0');
-  return `#${h(r)}${h(g)}${h(b)}`;
-}
-function hexToRgb(hex) {
-  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!m) return { r: 0, g: 0, b: 0 };
-  return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
-}
 
 /* ── ViewerToolbox ──────────────────────────────────────────────
    Bottom-right frosted-glass dropup built on <LiquidDrawer>.

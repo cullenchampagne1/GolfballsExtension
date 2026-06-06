@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Icon, I } from '../ui/icons.jsx';
 import { GolfballViewer } from './GolfballViewer.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
+import { PREVIEW_GRID, GlassIconBtn, DropperIcon, ResetIcon, SwapPopover, recolorImage, samplePixel } from '../ui/components/ImageColorSwap.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    giftCustomize.jsx — the real per-product personalization UI for
@@ -434,12 +435,41 @@ function ImageAlignModal({ image, initial, onCancel, onApply }) {
   const rotationRef = useRef(initial?.rot ?? 0);
   const wrapRef = useRef(null);
   const vpRef = useRef(null);
+  // Color-swap (eyedropper) state — same model as the Image Viewer.
+  const [eyedropping, setEyedropping] = useState(false);
+  const [pendingPick, setPendingPick] = useState(null);   // { color:{r,g,b}, x, y }
+  const [editedDataUrl, setEditedDataUrl] = useState(null);
+  const [previewDataUrl, setPreviewDataUrl] = useState(null);
+  const [colorSwaps, setColorSwaps] = useState([]);
+  // Painted in the stage: live preview > committed swaps > original image.
+  const shownSrc = previewDataUrl || editedDataUrl || image;
+  // The committed base every new swap recolors from (never the live preview).
+  const swapBase = () => editedDataUrl || image;
 
   useEffect(() => { _loadImage(image).then((im) => setNat({ w: im.naturalWidth || im.width, h: im.naturalHeight || im.height })).catch(() => {}); }, [image]);
 
   // Image fits the stage at scale 1 (contain) — same fit used by the capture
   // canvas so display and output stay in lockstep.
   const fit = nat ? Math.min(0.85 * ALIGN_STAGE / nat.w, 0.85 * ALIGN_STAGE / nat.h) : 1;
+
+  // Eyedropper: read the {r,g,b} under a stage point, mapped through the live
+  // pan/zoom back to the image's natural pixels (shared helper).
+  const samplePixelAt = (cssX, cssY) => {
+    const c = wrapRef.current; const img = c && c.querySelector('img');
+    if (!c || !img || !nat) return null;
+    return samplePixel(img, { natW: nat.w, natH: nat.h, wrapperW: c.clientWidth, wrapperH: c.clientHeight, fit, scale: scaleRef.current, tx: txRef.current, ty: tyRef.current, cssX, cssY });
+  };
+  // Live preview while the popover tunes color/tolerance; recolors the committed
+  // base, never the preview, so swaps don't compound.
+  const previewSwap = async (toRgb, tol) => { try { setPreviewDataUrl(await recolorImage(swapBase(), pendingPick.color, toRgb, tol)); } catch { /* CORS */ } };
+  const applySwap = async (toRgb, tol) => {
+    let url = previewDataUrl;
+    if (!url) { try { url = await recolorImage(swapBase(), pendingPick.color, toRgb, tol); } catch { url = null; } }
+    if (url) { setEditedDataUrl(url); setColorSwaps((p) => [...p, { from: pendingPick.color, to: toRgb, tolerance: tol }]); }
+    setPreviewDataUrl(null); setPendingPick(null);
+  };
+  const cancelSwap = () => { setPreviewDataUrl(null); setPendingPick(null); };
+  const resetSwaps = () => { setEditedDataUrl(null); setColorSwaps([]); setPreviewDataUrl(null); setPendingPick(null); setEyedropping(false); };
 
   const applyTransform = (animate) => {
     const el = vpRef.current; if (!el) return;
@@ -488,6 +518,15 @@ function ImageAlignModal({ image, initial, onCancel, onApply }) {
 
   const onPointerDown = (e) => {
     if (e.button !== 0 || e.target?.closest?.('button, [data-viewer-ui="true"]')) return;
+    // Eyedropper armed → clicking the image samples a pixel + opens the swap popover.
+    if (eyedropping) {
+      const c = wrapRef.current; if (!c) return;
+      const r = c.getBoundingClientRect();
+      const cssX = e.clientX - r.left, cssY = e.clientY - r.top;
+      const sample = samplePixelAt(cssX, cssY);
+      if (sample) { setPendingPick({ color: sample, x: cssX, y: cssY }); setEyedropping(false); }
+      return;
+    }
     e.preventDefault();
     const sx = e.clientX, sy = e.clientY, px = txRef.current, py = tyRef.current;
     const move = (ev) => { txRef.current = px + (ev.clientX - sx); tyRef.current = py + (ev.clientY - sy); clampPan(); applyTransform(false); };
@@ -510,30 +549,36 @@ function ImageAlignModal({ image, initial, onCancel, onApply }) {
     ctx.translate(txRef.current, tyRef.current);
     ctx.rotate((rotationRef.current * Math.PI) / 180);
     ctx.scale(scaleRef.current, scaleRef.current);
-    const im = wrap.querySelector('img');
+    const im = wrap.querySelector('img');   // already showing the recolored bytes
     ctx.drawImage(im, -(nat.w * fit) / 2, -(nat.h * fit) / 2, nat.w * fit, nat.h * fit);
     ctx.restore();
-    onApply(c.toDataURL('image/png'), { scale: scaleRef.current, x: txRef.current, y: tyRef.current, rot: rotationRef.current });
+    // Pass back the recolored full-res source so a later re-align keeps the swaps.
+    onApply(c.toDataURL('image/png'), { scale: scaleRef.current, x: txRef.current, y: tyRef.current, rot: rotationRef.current }, editedDataUrl || image);
   };
 
   return (
     <CompactModal size="compact" stacked onClose={onCancel}>
-      <ModalHeader icon={<I.eye />} title="Align Image" subtitle="Drag to move · scroll to zoom · slider to rotate" onClose={onCancel} />
+      <ModalHeader icon={<I.eye />} title="Align Image" subtitle="Drag to move · scroll to zoom · slider to rotate · eyedrop to recolor" onClose={onCancel} />
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div
           ref={wrapRef}
           onPointerDown={onPointerDown}
           style={{
             position: 'relative', width: '100%', height: ALIGN_STAGE,
-            borderRadius: 'var(--gb-r-md)', overflow: 'hidden', cursor: 'grab', touchAction: 'none',
-            background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', userSelect: 'none',
+            borderRadius: 'var(--gb-r-md)', overflow: 'hidden', cursor: eyedropping ? 'crosshair' : 'grab', touchAction: 'none',
+            ...PREVIEW_GRID, border: '1px solid var(--gb-border-default)', userSelect: 'none',
           }}
         >
-          {/* transform layer — centered img sized to fit */}
+          {/* transform layer — centered img sized to fit (shows live recolor) */}
           <div ref={vpRef} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-            {nat && <img src={image} alt="" draggable={false} style={{ width: nat.w * fit, height: nat.h * fit, display: 'block' }} />}
+            {nat && <img src={shownSrc} alt="" draggable={false} style={{ width: nat.w * fit, height: nat.h * fit, display: 'block' }} />}
           </div>
           <AlignRing />
+          {/* Eyedropper + reset cluster (top-left) — same tools as the Image Viewer. */}
+          <div data-viewer-ui="true" style={{ position: 'absolute', top: 8, left: 10, display: 'flex', alignItems: 'center', gap: 4, zIndex: 6 }}>
+            <GlassIconBtn icon={<DropperIcon />} active={eyedropping} title="Swap a color" onClick={() => { setEyedropping((v) => !v); setPendingPick(null); }} />
+            {colorSwaps.length > 0 && <GlassIconBtn icon={<ResetIcon />} title="Reset colors" onClick={resetSwaps} />}
+          </div>
           <ARotationSlider value={rotation} onChange={setRotation} />
           {/* zoom readout (bottom-left) + chips (bottom-right) — exactly the viewer's layout */}
           <div style={{ position: 'absolute', bottom: 8, left: 10, fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, color: 'var(--gb-text-secondary)', background: AG_BG, backdropFilter: AG_FILTER, WebkitBackdropFilter: AG_FILTER, border: `1px solid ${AG_BORDER}`, borderRadius: AG_RADIUS, boxShadow: AG_SHADOW, padding: '2px 7px', pointerEvents: 'none', fontFamily: 'var(--gb-font-mono)' }}>{zoomLevel}%</div>
@@ -543,6 +588,11 @@ function ImageAlignModal({ image, initial, onCancel, onApply }) {
             <AZoomChip title="Zoom in" onClick={() => { const c = wrapRef.current; zoom(A_ZOOM_STEP_BTN, c ? c.clientWidth / 2 : 0, c ? c.clientHeight / 2 : 0); }}>+</AZoomChip>
           </div>
         </div>
+        {/* Sampled-color → replacement-color popover (anchored at the click). */}
+        {pendingPick && (
+          <SwapPopover pick={pendingPick} wrapRef={wrapRef} swapCount={colorSwaps.length}
+            onPreview={previewSwap} onCancel={cancelSwap} onApply={applySwap} />
+        )}
         {/* dashed action strip — matches the Image Viewer's alignment strip */}
         <div style={{ padding: 8, background: 'var(--gb-surface-2)', border: '1px dashed var(--gb-brand-tint-border)', borderRadius: 'var(--gb-r-md)', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ flex: 1, fontSize: 10.5, fontWeight: 600, letterSpacing: 0.2, color: 'var(--gb-text-tertiary)' }}>Position image inside the alignment ring</span>
@@ -591,8 +641,10 @@ function ImageUpload({ ai, label = 'Upload Your Company Logo', slot = 'Custom Lo
     if (inputRef.current) inputRef.current.value = '';
   };
   const reAlign = (e) => { e.stopPropagation(); if (alignable && rawUrl) setPending({ url: rawUrl, name: fileName, initial: align }); };
-  const applyAlign = (composited, transform) => {
-    if (pending) { setRawUrl(pending.url); setFileName(pending.name); }
+  const applyAlign = (composited, transform, workingSrc) => {
+    // workingSrc = the recolored full-res source (or original) → store as the raw
+    // so a later re-align starts from the swapped colors, not the untouched file.
+    if (pending) { setRawUrl(workingSrc || pending.url); setFileName(pending.name); }
     setDataUrl(composited);
     setAlign(transform);
     setPending(null);
