@@ -7,6 +7,7 @@ import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CA
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved } from '../lib/saveProposal.js';
+import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
 
 /* ───────────────────────────────────────────────────────────────
    GiftCatalog — Corporate Gifting Catalog modal.
@@ -106,49 +107,8 @@ function linePriceAt(line, qty) {
 }
 const lineIsTierPrice = (line, qty, price) => Math.abs(linePriceAt(line, qty) - price) < 0.005;
 
-/* ── Drag-to-copy imprints between proposal lines ─────────────────────────────
-   An imprint tag on one proposal line can be dragged onto another line to copy
-   it: the imprint pill copies the FRONT imprint; the "Front + Back" pill copies
-   both poles. Each drop is validated against what the TARGET product can take
-   (a towel accepts a logo but has no 2nd pole; only balls take text/monogram). */
-const ballish = (p) => !!(p && p.cat === 'Logo Golf Balls' && !((p.modNames || []).includes('Custom Accessory Bundle')));
-const supportsMod = (p, name) => Array.isArray(p && p.modNames) && p.modNames.includes(name);
-const supportsLogo = (p) => !!(p && (p.customLogo || supportsMod(p, 'Custom Logo')));
-// Balls carry a second-pole imprint BY DEFAULT (the Personalized / Custom-Logo
-// modifications include a "Second Pole" option); the `dualPole` flag is the
-// accessory opt-in (poker chips, etc.). ExcludeDualPole removes it either way.
-const supportsDualPole = (p) => !!(p && !p.excludeDualPole && (ballish(p) || p.dualPole));
-
-/* Can `deco` (mode 'front' copies the front imprint, 'full' copies both poles)
-   be applied to `target`? → { ok, reason }. */
-function canApplyDecoration(target, deco, mode) {
-  if (!target) return { ok: false, reason: 'No target' };
-  if (!deco || !deco.engine || deco.engine === 'none') return { ok: false, reason: 'Nothing to copy' };
-  const name = target.title || 'This item';
-  if (deco.engine === 'ballText') { if (!(ballish(target) && supportsMod(target, 'Personalized'))) return { ok: false, reason: `${name} doesn’t support personalization` }; }
-  else if (deco.engine === 'monogram') { if (!(ballish(target) && supportsMod(target, 'Monogram'))) return { ok: false, reason: `${name} doesn’t support monograms` }; }
-  else if (deco.engine === 'ballLogo' || deco.engine === 'logoOverlay') { if (!supportsLogo(target)) return { ok: false, reason: `${name} doesn’t take a custom logo` }; }
-  else return { ok: false, reason: 'Unsupported imprint' };
-  if (mode === 'full' && deco.pole2) {
-    if (deco.engine === 'monogram') return { ok: false, reason: 'Monograms can’t carry a second imprint' };
-    if (!supportsDualPole(target)) return { ok: false, reason: `${name} has no second-pole imprint` };
-  }
-  return { ok: true };
-}
-
-/* Re-target `deco` onto `target`: swap the custom-logo engine to the target's
-   product type (ball ↔ accessory), keep or drop the 2nd pole per mode, and drop
-   the source's base-option picks (the target keeps its own color/size). */
-function adaptDecoration(target, deco, mode) {
-  const isBall = ballish(target);
-  let engine = deco.engine;
-  if (engine === 'ballLogo' || engine === 'logoOverlay') engine = isBall ? 'ballLogo' : 'logoOverlay';
-  const copy = { ...deco, engine };
-  delete copy.baseSelection;
-  if (mode === 'full' && deco.pole2 && supportsDualPole(target)) copy.dualPole = true;
-  else { delete copy.pole2; copy.dualPole = false; }
-  return copy;
-}
+/* The per-imprint model (capabilities + chip/merge/validation) lives in
+   ../lib/giftImprints.js so it's unit-testable; imported at the top of this file. */
 
 /* When a dual-pole line's FRONT imprint is deleted, the 2nd pole is promoted to
    be the sole (front) imprint. Rebuild a front decoration from the pole2
@@ -798,44 +758,23 @@ function SplitRow({ line, split, canRemove, onChange, onRemove }) {
   );
 }
 
-/* One-line summary of a proposal line's decoration (imprint) + any image(s) —
-   so the proposal shows what's attached, including a dual-pole 2nd imprint. */
-function decoSummary(d) {
-  if (!d || !d.engine || d.engine === 'none') return null;
-  const p2 = d.pole2 || null;
-  const dual = !!(d.dualPole && p2);
-  const p2kind = p2 ? (p2.kind === 'text' ? 'Personalized' : p2.kind === 'monogram' ? 'Monogram' : 'Logo') : null;
-  const image2 = (p2 && p2.kind === 'logo') ? (p2._localImageDataUrl || (p2.logo && (p2.logo.dataUrl || p2.logo.preview))) : null;
-  let label, image = null;
-  if (d.engine === 'ballText') {
-    const lines = ((d.pole1 && d.pole1.lines) || []).filter((l) => l != null && String(l).trim() !== '');
-    label = lines.length ? `Personalized — “${lines.join(' / ')}”` : 'Personalized';
-  } else if (d.engine === 'monogram') {
-    label = `Monogram — ${String((d.monogram && d.monogram.text) || '').toUpperCase()}`;
-  } else if (d.engine === 'ballLogo' || d.engine === 'logoOverlay') {
-    label = 'Custom logo';
-    image = d._localImageDataUrl || (d.logo && (d.logo.dataUrl || d.logo.preview)) || null;
-  } else {
-    label = 'Custom imprint';
-  }
-  return { label, image, image2, dual, secondLabel: p2kind };
-}
-
 function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove, drag, onTagDragStart, onTagDragEnd, onDropDeco, onRemoveFront, onRemoveSecond }) {
   const p = line.product;
   const lineTot = line.splits.reduce((s, x) => s + x.qty * x.price, 0);
   const lineUnits = line.splits.reduce((s, x) => s + x.qty, 0);
-  const deco = decoSummary(line.decoration);
-  const variantLabel = line.variant && line.variant.values
-    ? Object.entries(line.variant.values).filter(([k]) => k !== 'Color').map(([k, v]) => `${k}: ${v}`).join(' · ')
-    : '';
-  // Drag-to-copy: another line's imprint is in flight — can it land on this one?
+  const chips = decoImprints(line.decoration);   // one draggable tag per imprint (front + 2nd pole)
+  // Each custom base-option (Tee Count, Set Makeup, Shaft …) becomes its own pill
+  // so a long option set wraps onto new rows instead of overflowing the line.
+  const variantPills = (line.variant && line.variant.values)
+    ? Object.entries(line.variant.values).filter(([k]) => k !== 'Color').map(([k, v]) => `${k}: ${v}`)
+    : [];
+  // Drag-to-copy: a single imprint from another line is in flight — can it land here?
   const [over, setOver] = useState(false);
   const dragActive = !!(drag && drag.fromLineId !== line.id);
-  const dropOk = dragActive && canApplyDecoration(p, drag.deco, drag.mode).ok;
-  const tagDrag = (mode) => ({
+  const dropOk = dragActive && canApplyImprint(p, drag.imprint, line.decoration).ok;
+  const tagDrag = (chip) => ({
     draggable: true,
-    onDragStart: (e) => { e.stopPropagation(); e.dataTransfer.effectAllowed = 'copy'; try { e.dataTransfer.setData('text/plain', 'gb-imprint'); } catch { /* */ } onTagDragStart(line, mode); },
+    onDragStart: (e) => { e.stopPropagation(); e.dataTransfer.effectAllowed = 'copy'; try { e.dataTransfer.setData('text/plain', 'gb-imprint'); } catch { /* */ } onTagDragStart(line, chip); },
     onDragEnd: () => onTagDragEnd(),
   });
   // Trailing × on a pill — deletes the imprint. preventDefault on dragstart so a
@@ -880,32 +819,31 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove,
         </div>
         <span onClick={onRemove} style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--gb-text-muted)', cursor: 'pointer', borderRadius: 'var(--gb-r-sm)' }}><I.trash size={13} /></span>
       </div>
-      {/* Attached imprint / variant — shows what's been customized on this line. */}
-      {(deco || variantLabel) && (
+      {/* Per-imprint tags (front + 2nd pole, each draggable) + per-option pills,
+          all wrapping independently so nothing overflows the line width. */}
+      {(chips.length > 0 || variantPills.length > 0) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 7, flexWrap: 'wrap' }}>
-          {deco && deco.image && (
-            <img src={deco.image} alt="front" title="Front imprint" draggable={false} style={{ width: 24, height: 24, borderRadius: 'var(--gb-r-sm)', objectFit: 'cover', border: '1px solid var(--gb-border-subtle)', background: '#f4f4f1', flexShrink: 0 }} />
-          )}
-          {deco && deco.image2 && (
-            <img src={deco.image2} alt="back" title="Second-pole imprint" draggable={false} style={{ width: 24, height: 24, borderRadius: 'var(--gb-r-sm)', objectFit: 'cover', border: '1px solid var(--gb-border-subtle)', background: '#f4f4f1', flexShrink: 0 }} />
-          )}
-          {deco && (
-            <span {...tagDrag('front')} title="Drag onto another item to copy this imprint"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 5px 2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 9.5, fontWeight: 700, maxWidth: 200, overflow: 'hidden', whiteSpace: 'nowrap', cursor: 'grab' }}>
-              <I.edit size={9} /> <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{deco.label}</span>
-              <TagX onClick={onRemoveFront} title={deco.dual ? 'Remove front imprint (the second pole becomes the only imprint)' : 'Remove imprint'} />
-            </span>
-          )}
-          {deco && deco.dual && (
-            <span {...tagDrag('full')} title="Drag onto another item to copy both imprints"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 5px 2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-success-tint, rgba(46,158,91,.14))', border: '1px solid var(--gb-success-border, rgba(46,158,91,.32))', color: 'var(--gb-success-fg, #2e9e5b)', fontSize: 9.5, fontWeight: 800, whiteSpace: 'nowrap', cursor: 'grab' }}>
-              <Layers size={9} /> Front + Back · {deco.secondLabel}
-              <TagX onClick={onRemoveSecond} title="Remove second imprint" />
-            </span>
-          )}
-          {variantLabel && (
-            <span style={{ padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', color: 'var(--gb-text-tertiary)', fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{variantLabel}</span>
-          )}
+          {chips.map((chip) => {
+            const second = chip.slot === 'second';
+            return (
+              <span key={chip.slot} {...tagDrag(chip)} title="Drag onto another item to copy this imprint"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 5px 2px 7px', borderRadius: 'var(--gb-r-pill)',
+                  background: second ? 'var(--gb-success-tint, rgba(46,158,91,.14))' : 'var(--gb-brand-tint-soft)',
+                  border: '1px solid ' + (second ? 'var(--gb-success-border, rgba(46,158,91,.32))' : 'var(--gb-brand-tint-border)'),
+                  color: second ? 'var(--gb-success-fg, #2e9e5b)' : 'var(--gb-brand-label)',
+                  fontSize: 9.5, fontWeight: second ? 800 : 700, maxWidth: 220, overflow: 'hidden', whiteSpace: 'nowrap', cursor: 'grab' }}>
+                {chip.image
+                  ? <img src={chip.image} alt="" draggable={false} style={{ width: 14, height: 14, borderRadius: 3, objectFit: 'cover', background: '#f4f4f1', flexShrink: 0 }} />
+                  : (chip.kind === 'monogram' ? <Layers size={9} /> : <I.edit size={9} />)}
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{chip.label}</span>
+                <TagX onClick={() => (second ? onRemoveSecond() : onRemoveFront())}
+                  title={second ? 'Remove second imprint' : (chips.length > 1 ? 'Remove front imprint (the second pole becomes the only imprint)' : 'Remove imprint')} />
+              </span>
+            );
+          })}
+          {variantPills.map((label, i) => (
+            <span key={'v' + i} style={{ padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', color: 'var(--gb-text-tertiary)', fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{label}</span>
+          ))}
         </div>
       )}
       <div style={{ marginTop: 8, borderTop: '1px solid var(--gb-border-subtle)' }}>
@@ -1101,16 +1039,16 @@ function SavedGallery({ items, loadedId, onLoad, onCopy, onDelete }) {
   );
 }
 
-function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onCopyDecoration, onRemoveFront, onRemoveSecond }) {
+function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onMergeImprint, onRemoveFront, onRemoveSecond }) {
   const total = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
   const units = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty, 0), 0);
   // Drag-to-copy imprints between lines. `drag` holds the in-flight source so
   // every line can light up (or stay dim) based on whether it can take it.
-  const [drag, setDrag] = useState(null);              // { fromLineId, mode, deco }
-  const startDrag = (line, mode) => setDrag({ fromLineId: line.id, mode, deco: line.decoration });
+  const [drag, setDrag] = useState(null);              // { fromLineId, slot, imprint }
+  const startDrag = (line, chip) => setDrag({ fromLineId: line.id, slot: chip.slot, imprint: chip });
   const endDrag = () => setDrag(null);
-  const dropDeco = (toLineId) => { if (drag) onCopyDecoration(drag.fromLineId, toLineId, drag.mode); setDrag(null); };
-  const canCopy = proposal.length >= 2 && proposal.some((l) => decoSummary(l.decoration));
+  const dropDeco = (toLineId) => { if (drag) onMergeImprint(drag.fromLineId, toLineId, drag.imprint); setDrag(null); };
+  const canCopy = proposal.length >= 2 && proposal.some((l) => decoImprints(l.decoration).length > 0);
   // Save-draft flow: an inline name box → confirm → success flash.
   const [saveMode, setSaveMode] = useState(false);
   const [name, setName] = useState('');
@@ -1314,16 +1252,18 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // front imprint; 'full' copies both poles. Validated against what the target
   // supports, then the engine is re-targeted (ball ↔ accessory) and prices are
   // recomputed for the new imprint (custom-logo ladder + any 2nd-pole upcharge).
-  const copyDecoration = (fromLineId, toLineId, mode) => {
-    if (!fromLineId || fromLineId === toLineId) return;
-    const src = proposal.find((l) => l.id === fromLineId);
+  // Drag-drop: merge ONE imprint from a source line onto a target line. The
+  // imprint is validated against the target, then merged (front, or a free 2nd
+  // pole — logo wins the front slot), and the line is re-priced for the new state.
+  const mergeImprintOnLine = (fromLineId, toLineId, imprint) => {
+    if (!fromLineId || fromLineId === toLineId || !imprint) return;
     const tgt = proposal.find((l) => l.id === toLineId);
-    if (!src || !tgt) return;
-    const check = canApplyDecoration(tgt.product, src.decoration, mode);
+    if (!tgt) return;
+    const check = canApplyImprint(tgt.product, imprint, tgt.decoration);
     if (!check.ok) { toast?.error?.(check.reason); return; }
-    const adapted = adaptDecoration(tgt.product, src.decoration, mode);
+    const next = mergeImprint(tgt.decoration, tgt.product, imprint);
     setProposal((prev) => prev.map((l) => l.id === toLineId
-      ? { ...l, decoration: adapted, splits: l.splits.map((s) => ({ ...s, price: linePriceAt({ product: l.product, decoration: adapted, variant: l.variant }, s.qty) })) }
+      ? { ...l, decoration: next, splits: l.splits.map((s) => ({ ...s, price: linePriceAt({ product: l.product, decoration: next, variant: l.variant }, s.qty) })) }
       : l));
   };
 
@@ -1691,7 +1631,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           <div style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: 400, opacity: proposalOpen ? 1 : 0, pointerEvents: proposalOpen ? 'auto' : 'none', transition: 'opacity .24s ease' }}>
             <ProposalPanel proposal={proposal} onClose={() => setProposalOpen(false)}
               onPatchSplit={patchSplit} onAddSplit={addSplit} onRemoveSplit={removeSplit}
-              onRemoveLine={removeLine} onSaveDraft={saveDraft} onCopyDecoration={copyDecoration}
+              onRemoveLine={removeLine} onSaveDraft={saveDraft} onMergeImprint={mergeImprintOnLine}
               onRemoveFront={removeFrontImprint} onRemoveSecond={removeSecondPole}
               onClear={() => { setProposal([]); setProposalOpen(false); }} />
           </div>
