@@ -731,7 +731,10 @@ export function EmailRunner({
                   placeholder={templates.length ? 'Pick a template' : 'No templates'}
                   disabled={status === 'running'}
                   floating={false}
-                  listMaxHeight={240}
+                  /* No inner scroll on the list — let it grow full-width and
+                     let the runner body (its scrollbar is hidden) handle any
+                     overflow, so rows aren't narrowed by a gutter. */
+                  listMaxHeight={2000}
                 />
               </Field>
 
