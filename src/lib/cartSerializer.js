@@ -218,6 +218,33 @@ export function buildTeeDynamicImage({ text = '', font = 'Kabel Dm BT', color = 
   };
 }
 
+/* ── Engine E — towel / hat embroidery (modID 23 "Golf Towel" / "Golf Hat") ────
+   Embroidered Personalized text OR a Monogram on a towel/hat. The decal renders
+   over the product's background color (BC = the child's backgroundHex) on a
+   WaffleTowel.png ground via Render.aspx (sku MonogramTowel / PersonalizedTowel).
+   Both sub-conditions are always stored in interfaceState; the active one is
+   mirrored into the top-level dynamicImage. Verified against a real towel cart. */
+const TOWEL_BG = 'WaffleTowel.png';
+const TOWEL_MONO_FONT = 'Circle Monograms White';
+const TOWEL_TEXT_FONT = 'Century';
+export function towelPreviewUrl({ sku, bc = '#FFFFFF', lines = [], font, color = '#000000' }) {
+  const userText = [{ lines, font, color }];
+  return `https://www.icustomize.com/Render.aspx?sku=${enc(sku)}&overlay=&useroverlay=`
+    + `&usertext=${enc(JSON.stringify(userText))}`
+    + `&configoverrides=${enc(JSON.stringify({ BC: bc, BG: TOWEL_BG, GlossType: '' }))}`
+    + '&clientID=GBC';
+}
+function buildTowelDynamicImage({ condition, bc, lines, font, color, withPreview = true }) {
+  const sku = condition === 'Monogram' ? 'MonogramTowel' : 'PersonalizedTowel';
+  const di = {
+    imageType: 'Golf Towel', condition, sku, clientID: 'GBC',
+    configOverrides: { BC: bc, BG: TOWEL_BG, GlossType: '' },
+    userText: [{ lines, font, color }],
+  };
+  if (withPreview) di.renderedPreviewImage = towelPreviewUrl({ sku, bc, lines, font, color });
+  return di;
+}
+
 const emptyPole = () => ({ fileName: '', filePath: '', userImage: null, fileSupported: false });
 const logoPole = (logo) => ({
   fileName: (logo && logo.fileName) || '',
@@ -445,6 +472,32 @@ export function buildDecoration(product, decoration = {}) {
       },
       customUserImage: noImage,
     };
+  } else if (engine === 'towelMonogram' || engine === 'towelText') {
+    // Towel / hat embroidery (modID 23). BC = the selected child's backgroundHex
+    // (injected by assembleLine). Both sub-conditions live in interfaceState; the
+    // active one is mirrored into the top-level dynamicImage.
+    const isMono = engine === 'towelMonogram';
+    const bc = decoration._childBgHex || decoration.baseColor || '#FFFFFF';
+    const m = decoration.monogram || {};
+    const p = decoration.pole1 || {};
+    const monoLines = [String(m.text || '').toUpperCase()].filter((l) => l !== '');
+    const textLines = [(p.l1 != null ? p.l1 : (p.lines && p.lines[0])) || '', (p.l2 != null ? p.l2 : (p.lines && p.lines[1])) || ''];
+    const monoColor = m.color || '#000000';
+    const textColor = p.color || '#000000';
+    const monoDI = buildTowelDynamicImage({ condition: 'Monogram', bc, lines: isMono ? monoLines : [], font: TOWEL_MONO_FONT, color: monoColor, withPreview: isMono });
+    const textDI = buildTowelDynamicImage({ condition: 'Personalized', bc, lines: isMono ? ['', ''] : textLines, font: TOWEL_TEXT_FONT, color: textColor, withPreview: !isMono });
+    out = {
+      block: {
+        ProductModification: findMod(product, { modID: 23, friendly: 'Golf Towel' }) || findMod(product, { friendly: 'Golf Hat' }),
+        interfaceState: {
+          GolfTowelPersonalized: { dynamicImage: [textDI], userText: [{ lines: isMono ? ['', ''] : textLines, font: TOWEL_TEXT_FONT, color: textColor }] },
+          GolfTowelMonogram: { dynamicImage: [monoDI], userText: [{ lines: isMono ? monoLines : [], font: TOWEL_MONO_FONT, color: monoColor }] },
+        },
+        dynamicImage: [isMono ? monoDI : textDI],
+        isTemporary: false,
+      },
+      customUserImage: noImage,
+    };
   } else {
     return { block: null, customUserImage: noImage }; // engine === 'none'
   }
@@ -481,7 +534,11 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
   const selectedIds = (child.PropertyValueProduct || []).map((pv) => pv.propertyValueProductID);
   const breaks = (pricing.breaks && pricing.breaks.length) ? pricing.breaks : [{ q: 1, p: pricing.price || 0 }];
   const unit = pricing.price != null ? pricing.price : (breaks[0] && breaks[0].p) || 0;
-  const { block: decoBlock, customUserImage } = buildDecoration(product, decoration || { engine: 'none' });
+  // Towel/hat embroidery needs the chosen child's background color for the BC
+  // overlay — fold it in so buildDecoration can reach it.
+  const childBg = child && child.CustomData && child.CustomData.backgroundHex;
+  const decoForBuild = childBg ? { ...(decoration || { engine: 'none' }), _childBgHex: childBg } : (decoration || { engine: 'none' });
+  const { block: decoBlock, customUserImage } = buildDecoration(product, decoForBuild);
 
   // Resolve the cart name the way the site does: substitute the decoration's
   // FriendlyName into NameFormat's "{Decoration}" slot (→ "… Custom Logo …";

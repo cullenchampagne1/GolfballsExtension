@@ -1362,13 +1362,16 @@ function CustomLogoFlow({ p, config, dualPole }) {
   );
 }
 
-/* embroidery decoration: text + thread color */
+/* embroidery decoration: text (2 lines) + thread color. Writes through the
+   `Personalized` context slot so AccessoryDecorationEmitter serializes it. */
 function PersonalizedDecoration() {
-  const [v, setV] = useState('');
-  const [c, setC] = useState('Black');
+  const [l1, setL1] = usePTField('Personalized', 'l1');
+  const [l2, setL2] = usePTField('Personalized', 'l2');
+  const [c, setC] = usePTField('Personalized', 'color');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <Field label="Line 1"><TextInput value={v} onChange={setV} placeholder="Your text" maxLength={17} /></Field>
+      <Field label="Line 1"><TextInput value={l1} onChange={setL1} placeholder="Your text" maxLength={17} /></Field>
+      <Field label="Optional Line 2"><TextInput value={l2} onChange={setL2} placeholder="Optional" maxLength={17} /></Field>
       <Field label="Thread Color"><ColorRow swatches={THREAD_COLORS} value={c} onChange={setC} /></Field>
     </div>
   );
@@ -1379,12 +1382,12 @@ function PersonalizedDecoration() {
    chosen style — switching to a 1-initial style after typing 3 letters
    truncates the value so the user never has leftover letters that can't fit. */
 function MonogramDecoration() {
-  const [style, setStyle] = useState(MONO_STYLES[0].key);
-  const [v, setV] = useState('');
-  const [c1, setC1] = useState('Black');
-  const [c2, setC2] = useState('Transparent');
+  const [style, setStyle] = usePTField('Monogram', 'style');
+  const [v, setV] = usePTField('Monogram', 'initials');
+  const [c1, setC1] = usePTField('Monogram', 'c1');
+  const [c2, setC2] = usePTField('Monogram', 'c2');
   const n = _monoCount(style);
-  const pickStyle = (k) => { setStyle(k); const m = _monoCount(k); if (v.length > m) setV(v.slice(0, m)); };
+  const pickStyle = (k) => { setStyle(k); const m = _monoCount(k); if ((v || '').length > m) setV((v || '').slice(0, m)); };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <Field label="Monogram Style"><MonoGrid value={style} onChange={pickStyle} /></Field>
@@ -1481,7 +1484,9 @@ function decorationsFor(mods) {
   const add = (tab, kind) => { if (!decos.some((d) => d.tab === tab)) decos.push({ tab, kind }); };
   norm.forEach((m) => {
     if (m === 'Custom Logo') add('Custom', 'custom');
-    else if (/^Golf (Towel|Hat)/i.test(m)) add('Personalized', 'personalized');
+    // Towel / hat embroidery carries BOTH a Personalized text imprint AND a
+    // Monogram (verified in the live cart) — offer both, not just Personalized.
+    else if (/^Golf (Towel|Hat)/i.test(m)) { add('Personalized', 'personalized'); add('Monogram', 'monogram'); }
     else if (m === 'Personalized') add('Personalized', 'personalized');
     else if (m === 'Ball Marker') add('Personalized', 'personalized'); // personalized ball-marker text (e.g. hat clips)
     else if (m === 'Monogram') add('Monogram', 'monogram');
@@ -2024,6 +2029,25 @@ function AccessoryDecorationEmitter({ p, onChange }) {
       const text = String(tee.text || '').trim();
       onChange(text
         ? { engine: 'accessoryText', dualPole: false, pole2: null, pole1: { lines: [tee.text, null, null], font: 'Kabel Dm BT', color: _hexOf(tee.color) } }
+        : { engine: 'none' });
+      return;
+    }
+    // Towel / hat embroidery — Monogram or Personalized text (gated to embroidery
+    // products so a logo-only accessory keeps the overlay path).
+    const embroidery = (p.modNames || []).some((m) => /^Golf (Towel|Hat)/i.test(m));
+    if (embroidery && kind === 'monogram') {
+      const mg = data.Monogram || {};
+      const initials = String(mg.initials || '').toUpperCase().replace(/[^A-Z]/g, '');
+      onChange(initials
+        ? { engine: 'towelMonogram', dualPole: false, pole2: null, monogram: { text: initials, color: _hexOf(mg.c1) } }
+        : { engine: 'none' });
+      return;
+    }
+    if (embroidery && kind === 'personalized') {
+      const ps = data.Personalized || {};
+      const l1 = String(ps.l1 || '').trim();
+      onChange(l1
+        ? { engine: 'towelText', dualPole: false, pole2: null, pole1: { l1: ps.l1, l2: ps.l2 || '', color: _hexOf(ps.color) } }
         : { engine: 'none' });
       return;
     }
