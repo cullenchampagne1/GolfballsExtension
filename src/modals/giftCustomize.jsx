@@ -1776,6 +1776,71 @@ function BallPreview() {
 }
 
 /* ── exported: the Customization accordion for the DetailPanel ── */
+/* ── Base-product options + variant pricing ───────────────────────────────────
+   Some base options change the PRICE (e.g. golf-tee "Tee Count", apparel size
+   bundles) — and those options often live ONLY on the product page (not the
+   Solr facet), so they never showed in the catalog. This renders the real
+   purchasable option set from config.variants and reports the selected variant
+   (values + price + sku) up via onChange, so the detail panel can price it.
+   Shows only options that actually vary; renders nothing otherwise. */
+export function ProductOptions({ p, onChange }) {
+  const { config, loading } = useProductConfig(p);
+  const variants = (config && config.variants) || [];
+  // Labels that represent a real choice (more than one distinct value).
+  const propLabels = useMemo(() => {
+    const labels = [];
+    for (const v of variants) for (const k of Object.keys(v.values || {})) if (!labels.includes(k)) labels.push(k);
+    return labels.filter((lbl) => new Set(variants.map((v) => v.values[lbl])).size > 1);
+  }, [variants]);
+  const optionsFor = (lbl) => {
+    const seen = [];
+    for (const v of variants) { const val = v.values[lbl]; if (val != null && !seen.includes(val)) seen.push(val); }
+    return seen;
+  };
+  // Default to the cheapest in-stock variant — matches the catalog "from" price.
+  const cheapest = useMemo(
+    () => variants.filter((v) => v.available && v.price != null).sort((a, b) => a.price - b.price)[0] || variants[0] || null,
+    [variants],
+  );
+  const [sel, setSel] = useState(null);
+  useEffect(() => { setSel(cheapest ? { ...cheapest.values } : null); }, [cheapest]);
+  const match = useMemo(
+    () => (sel && variants.find((v) => Object.keys(sel).every((k) => v.values[k] === sel[k]))) || cheapest,
+    [variants, sel, cheapest],
+  );
+  useEffect(() => { if (match && onChange) onChange({ values: match.values, price: match.price, sku: match.sku }); }, [match, onChange]);
+
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', color: 'var(--gb-text-muted)', fontSize: 11.5 }}>
+      <span style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} /> Loading options…
+    </div>
+  );
+  if (!propLabels.length) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
+      {propLabels.map((lbl) => (
+        <Field label={lbl} key={lbl}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {optionsFor(lbl).map((val) => {
+              const on = sel && sel[lbl] === val;
+              return (
+                <button key={val} onClick={() => setSel((s) => ({ ...(s || {}), [lbl]: val }))}
+                  style={{
+                    padding: '5px 11px', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', fontFamily: 'inherit',
+                    fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap',
+                    background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)',
+                    border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
+                    color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', transition: 'all var(--gb-anim)',
+                  }}>{val}</button>
+              );
+            })}
+          </div>
+        </Field>
+      ))}
+    </div>
+  );
+}
+
 /* ── Decoration capture ───────────────────────────────────────────────────────
    Turn the live customizer state into the engine-agnostic decoration descriptor
    the cart serializer consumes (cartSerializer.buildDecoration). Personalized

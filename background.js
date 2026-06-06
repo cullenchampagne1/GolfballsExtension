@@ -61,6 +61,33 @@ function gbModOptionValues(mod, name) {
   return (o.ModificationOptionValue || []).map((v) => v.FriendlyName || v.Name || v.Value).filter(Boolean);
 }
 
+// Per-child variants + their price. Many base options change the price without
+// it living on the child's `Price` (often null) — e.g. golf tees price by "Tee
+// Count" via each child's itemFeeModifier_priceBreakHeader ON TOP of the parent
+// itemFee. Resolve: price = child.Price ?? (parent itemFee + child modifier).
+// Returns [{ sku, values:{<propLabel>:<value>}, price, available }].
+function gbExtractVariants(prod) {
+  const round2 = (n) => Math.round(n * 100) / 100;
+  const firstBreak = (h) => (h && Array.isArray(h.PriceBreak) && h.PriceBreak[0]) || null;
+  const idToLabel = {};
+  (prod.PropertyProduct || []).forEach((pp) => { idToLabel[pp.propertyProductID] = pp.Name || pp.FriendlyName || 'Option'; });
+  const baseFee = firstBreak(prod.itemFee_priceBreakHeader);
+  const base = baseFee != null ? (Number(baseFee.Price) || 0) : 0;
+  return (prod.ProductChild || []).map((c) => {
+    const values = {};
+    (c.PropertyValueProduct || []).forEach((pv) => {
+      const lbl = idToLabel[pv.propertyProductID];
+      if (lbl) values[lbl] = String(pv.Value);
+    });
+    let price = c.Price != null ? Number(c.Price) : null;
+    if (price == null) {
+      const modBreak = firstBreak(c.itemFeeModifier_priceBreakHeader);
+      price = modBreak != null ? round2(base + (Number(modBreak.Price) || 0)) : (base || null);
+    }
+    return { sku: c.ShortCode, values, price, available: c.AvailableForSale !== false };
+  });
+}
+
 function gbNormalizeProductConfig(prod) {
   const mods = (prod.ProductModification || []).map((pm) => pm.Modification || {});
   const customLogo = mods.find((m) => /custom/i.test(m.Name || '') || /custom logo/i.test(m.FriendlyName || ''));
@@ -68,9 +95,13 @@ function gbNormalizeProductConfig(prod) {
   let cd = {}; try { cd = JSON.parse(prod.customData_s || '{}'); } catch { /* none */ }
   // Product-page authoritative second-pole suppression (Triple Track lines).
   const excludeDualPole = (prod.ProductTagDetail || []).some((t) => /ExcludeDualPole/i.test(t.Name || ''));
+  const variants = gbExtractVariants(prod);
+  const distinctPrices = new Set(variants.map((v) => v.price).filter((p) => p != null));
   return {
     itemType: (prod.itemType_ss && prod.itemType_ss[0]) || prod.ItemType || prod.itemType_s || '',
-    properties: gbExtractProperties(prod),                                       // base inputs: Color, Size, Metal Finish, …
+    properties: gbExtractProperties(prod),                                       // base inputs: Color, Size, Tee Count, …
+    variants,                                                                    // per-child price by option selection
+    priceVaries: distinctPrices.size > 1,                                        // does an option change the price?
     modifications: mods.map((m) => m.FriendlyName || m.Name).filter(Boolean),    // decoration blocks
     dualPole: (cd.variant === 'dualPole' || !!secondPole) && !excludeDualPole,   // → second-pole imprint
     excludeDualPole,                                                             // ExcludeDualPolePrinting tag → no second pole

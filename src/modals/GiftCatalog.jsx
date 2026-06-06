@@ -5,7 +5,7 @@ import { Icon, I } from '../ui/icons.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, DEPT_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
-import { CustomizeBlock } from './giftCustomize.jsx';
+import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
 import { saveProposalDraft } from '../lib/saveProposal.js';
 
 /* ───────────────────────────────────────────────────────────────
@@ -430,7 +430,13 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
   // rides along when the product is added so the saved cart carries the real
   // imprint. Reset when the panel switches to a different product.
   const [decoration, setDecoration] = useState(null);
-  useEffect(() => { setDecoration(null); }, [p.id]);
+  // Selected base-product variant (e.g. Tee Count) → drives the displayed price
+  // for products whose options change the price. Reset when the product changes.
+  const [variant, setVariant] = useState(null);
+  useEffect(() => { setDecoration(null); setVariant(null); }, [p.id]);
+  // For non-custom-logo products the price follows the chosen variant; custom-
+  // logo products keep their imprint-ladder pricing.
+  const unitPrice = (!p.customLogo && variant && variant.price != null) ? variant.price : netTop(p);
   const openProduct = () => {
     if (!p.url) return;
     // p.url is a complete URL now, but an older cached catalog may still hold a
@@ -471,9 +477,12 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
               </span>
             )}
           </div>
+          {/* Base options that change the price (Tee Count, pack size, …) —
+              only renders when the product actually has price-varying options. */}
+          {!p.customLogo && <ProductOptions p={p} onChange={setVariant} />}
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-            <PriceStat label="Per unit" value={usd(netTop(p))} accent was={onSale(p) ? usd(topPrice(p)) : null} />
-            {lowPrice(p) < topPrice(p) && <PriceStat label="Volume price" value={usd(netLow(p))} />}
+            <PriceStat label="Per unit" value={usd(unitPrice)} accent was={onSale(p) ? usd(topPrice(p)) : null} />
+            {p.customLogo && lowPrice(p) < topPrice(p) && <PriceStat label="Volume price" value={usd(netLow(p))} />}
           </div>
           {hasPromo(p) && (
             <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint, rgba(46,158,91,.12))', border: '1px solid var(--gb-success-border, rgba(46,158,91,.3))' }}>
@@ -512,7 +521,7 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
           <Btn variant="secondary" size="md" icon={<I.eye />} style={{ flex: 1 }} onClick={openProduct}>View product</Btn>
           {/* Always allow adding — a product can sit on multiple proposal
               lines (different customizations/quantities). */}
-          <Btn variant="primary" size="md" icon={<I.plus />} style={{ flex: 1.2 }} onClick={() => onAdd && onAdd(p, decoration)}>{inProposal ? 'Add another' : 'Add to proposal'}</Btn>
+          <Btn variant="primary" size="md" icon={<I.plus />} style={{ flex: 1.2 }} onClick={() => onAdd && onAdd(p, decoration, variant)}>{inProposal ? 'Add another' : 'Add to proposal'}</Btn>
         </div>
       </motion.div>
     </>
@@ -882,13 +891,16 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // product can now appear on multiple lines (e.g. different customizations).
   const inProposal = (id) => proposal.some((l) => l.productId === id);
   const propTotal = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
-  const addToProposal = (p, decoration = null) => setProposal((prev) => {
+  const addToProposal = (p, decoration = null, variant = null) => setProposal((prev) => {
     // Always add a NEW line (unique id) — the same product can be added more
     // than once so the rep can quote different customizations/quantities. The
-    // decoration descriptor (from the detail panel's CustomizeBlock) rides along
-    // so Save draft serializes the real imprint; the card quick-add omits it.
+    // decoration descriptor (from the detail panel's CustomizeBlock) and the
+    // selected base variant (e.g. Tee Count → its price) ride along so Save
+    // draft serializes the real imprint + price; the card quick-add omits both.
     const qty = p.minQty || 1;
-    return [...prev, { id: rid(), productId: p.id, product: p, decoration: decoration || null, splits: [{ id: rid(), qty, price: priceAtQty(p, qty) }] }];
+    // A picked variant whose option changes the price wins over the catalog tier.
+    const startPrice = (!p.customLogo && variant && variant.price != null) ? variant.price : priceAtQty(p, qty);
+    return [...prev, { id: rid(), productId: p.id, product: p, decoration: decoration || null, variant: variant || null, splits: [{ id: rid(), qty, price: startPrice }] }];
   });
   const patchSplit = (lineId, splitId, patch) => setProposal((prev) => prev.map((l) => l.id === lineId ? { ...l, splits: l.splits.map((s) => s.id === splitId ? { ...s, ...patch } : s) } : l));
   const addSplit = (lineId) => setProposal((prev) => prev.map((l) => { if (l.id !== lineId) return l; const last = l.splits[l.splits.length - 1]; return { ...l, splits: [...l.splits, { id: rid(), qty: last.qty, price: last.price }] }; }));
