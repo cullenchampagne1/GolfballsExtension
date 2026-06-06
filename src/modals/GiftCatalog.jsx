@@ -838,6 +838,16 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove,
     onDragStart: (e) => { e.stopPropagation(); e.dataTransfer.effectAllowed = 'copy'; try { e.dataTransfer.setData('text/plain', 'gb-imprint'); } catch { /* */ } onTagDragStart(line, mode); },
     onDragEnd: () => onTagDragEnd(),
   });
+  // Trailing × on a pill — deletes the imprint. preventDefault on dragstart so a
+  // press on the × never starts a drag of the pill it sits inside.
+  const TagX = ({ onClick, title }) => (
+    <span role="button" title={title} draggable={false}
+      onDragStart={(e) => e.preventDefault()} onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 13, height: 13, marginLeft: 2, marginRight: -2, borderRadius: '50%', cursor: 'pointer', opacity: 0.6 }}>
+      <I.close size={9} />
+    </span>
+  );
   return (
     <motion.div layout
       initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }}
@@ -881,14 +891,16 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove,
           )}
           {deco && (
             <span {...tagDrag('front')} title="Drag onto another item to copy this imprint"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 9.5, fontWeight: 700, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'grab' }}>
-              <I.edit size={9} /> {deco.label}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 5px 2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 9.5, fontWeight: 700, maxWidth: 200, overflow: 'hidden', whiteSpace: 'nowrap', cursor: 'grab' }}>
+              <I.edit size={9} /> <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{deco.label}</span>
+              <TagX onClick={onRemoveFront} title={deco.dual ? 'Remove front imprint (the second pole becomes the only imprint)' : 'Remove imprint'} />
             </span>
           )}
           {deco && deco.dual && (
             <span {...tagDrag('full')} title="Drag onto another item to copy both imprints"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-success-tint, rgba(46,158,91,.14))', border: '1px solid var(--gb-success-border, rgba(46,158,91,.32))', color: 'var(--gb-success-fg, #2e9e5b)', fontSize: 9.5, fontWeight: 800, whiteSpace: 'nowrap', cursor: 'grab' }}>
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 5px 2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-success-tint, rgba(46,158,91,.14))', border: '1px solid var(--gb-success-border, rgba(46,158,91,.32))', color: 'var(--gb-success-fg, #2e9e5b)', fontSize: 9.5, fontWeight: 800, whiteSpace: 'nowrap', cursor: 'grab' }}>
               <Layers size={9} /> Front + Back · {deco.secondLabel}
+              <TagX onClick={onRemoveSecond} title="Remove second imprint" />
             </span>
           )}
           {variantLabel && (
