@@ -328,7 +328,33 @@ function Rating({ value, count, size = 11 }) {
   );
 }
 
-function ProductCard({ p, compact, showRating, active, inProposal, onClick }) {
+/* Quick-add control on each card's bottom-right — drop an item straight into
+   the proposal without opening the detail panel. Shows a check once it's in
+   the proposal. Stops propagation so it never also opens the card. */
+function AddButton({ inProposal, compact, onAdd }) {
+  const [h, setH] = useState(false);
+  const sz = compact ? 26 : 28;
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); if (!inProposal) onAdd && onAdd(); }}
+      onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+      title={inProposal ? 'In proposal' : 'Add to proposal'}
+      style={{
+        flexShrink: 0, width: sz, height: sz, borderRadius: '50%', padding: 0, fontFamily: 'inherit',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: inProposal ? 'default' : 'pointer',
+        border: '1px solid ' + (inProposal ? 'var(--gb-brand-label)' : h ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
+        background: inProposal ? 'var(--gb-brand-label)' : h ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)',
+        color: inProposal ? 'var(--gb-surface-deep)' : 'var(--gb-brand-label)',
+        boxShadow: h && !inProposal ? '0 1px 6px rgba(0,0,0,.14)' : 'none',
+        transform: h && !inProposal ? 'scale(1.08)' : 'none',
+        transition: 'all var(--gb-anim)',
+      }}>
+      {inProposal ? <I.check size={14} /> : <I.plus size={15} />}
+    </button>
+  );
+}
+
+function ProductCard({ p, compact, showRating, active, inProposal, onAdd, onClick }) {
   const [hover, setHover] = useState(false);
   const ring = active ? '0 0 0 1px var(--gb-brand-label), 0 2px 8px rgba(0,0,0,.09)' : hover ? '0 2px 7px rgba(0,0,0,.07)' : '';
   return (
@@ -375,12 +401,7 @@ function ProductCard({ p, compact, showRating, active, inProposal, onClick }) {
             </span>
             <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>each</span>
           </div>
-          {inProposal && (
-            <span title="In proposal" style={{ position: 'relative', width: 9, height: 9, flexShrink: 0, marginBottom: 4 }}>
-              <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'var(--gb-brand-label)', animation: 'gc-orb-pulse 1.6s ease-out infinite' }} />
-              <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'var(--gb-brand-label)' }} />
-            </span>
-          )}
+          <AddButton inProposal={inProposal} compact={compact} onAdd={() => onAdd && onAdd(p)} />
         </div>
       </div>
     </div>
@@ -1118,14 +1139,14 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                       {shown.map((p) => (
                         <motion.div key={p.id} initial={{ opacity: 0, scale: .95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .95 }} transition={{ duration: .17, ease: [0.32, 0.72, 0, 1] }}>
                           <ProductCard p={p} compact={compact} showRating={showRating}
-                            active={selected && selected.id === p.id} inProposal={inProposal(p.id)} onClick={() => setSelected(p)} />
+                            active={selected && selected.id === p.id} inProposal={inProposal(p.id)} onAdd={addToProposal} onClick={() => setSelected(p)} />
                         </motion.div>
                       ))}
                     </AnimatePresence>
                   ) : (
                     shown.map((p) => (
                       <ProductCard key={p.id} p={p} compact={compact} showRating={showRating}
-                        active={selected && selected.id === p.id} inProposal={inProposal(p.id)} onClick={() => setSelected(p)} />
+                        active={selected && selected.id === p.id} inProposal={inProposal(p.id)} onAdd={addToProposal} onClick={() => setSelected(p)} />
                     ))
                   )}
                 </div>
