@@ -1113,7 +1113,8 @@ function useSecondDecalUrl(frontUrl) {
 }
 
 /* Second-pole imprint — the live reveal: a choice row, then the matching control. */
-const SECOND_IMPRINT_CHOICES = ['Same as Front', 'Personalized', 'Monogram', 'Upload Image', 'Logo Library', 'Custom'];
+// A custom-logo ball's opposite pole only takes a logo or text — NOT a monogram.
+const SECOND_IMPRINT_CHOICES = ['Same as Front', 'Personalized', 'Upload Image', 'Logo Library', 'Custom'];
 /* full personalized imprint — 3 wired text lines + imprint color, font, size.
    Shared by the Personalized print type and the second-pole Personalized choice. */
 function PersonalizedImprint({ slot = 'Personalized' }) {
@@ -1179,7 +1180,6 @@ function SecondImprint() {
             })}
           </div>
           {choice === 'Personalized' && <PersonalizedImprint slot="__second" />}
-          {choice === 'Monogram' && <SecondMonogram />}
           {(choice === 'Upload Image' || choice === 'Custom' || choice === 'Logo Library') && <ImageUpload slot="__second" label="Upload Second Imprint" />}
           {choice === 'Same as Front' && <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontStyle: 'italic' }}>Reuses your front imprint on the opposite pole — rotate the ball to see it.</div>}
         </motion.div>
@@ -1414,6 +1414,7 @@ function decorationsFor(mods) {
     if (m === 'Custom Logo') add('Custom', 'custom');
     else if (/^Golf (Towel|Hat)/i.test(m)) add('Personalized', 'personalized');
     else if (m === 'Personalized') add('Personalized', 'personalized');
+    else if (m === 'Ball Marker') add('Personalized', 'personalized'); // personalized ball-marker text (e.g. hat clips)
     else if (m === 'Monogram') add('Monogram', 'monogram');
     else if (m === 'Tee') add('Tee', 'tee');
     else if (m === 'Photo') add('Photo', 'photo');

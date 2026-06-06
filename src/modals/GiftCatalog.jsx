@@ -403,8 +403,11 @@ function ProductCard({ p, compact, showRating, active, inProposal, onAdd, onClic
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
             <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-              <span style={{ fontSize: compact ? 16 : 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.5, fontFamily: 'var(--gb-font-mono)' }}>{usd(netTop(p))}</span>
-              {onSale(p) && <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-ghost)', textDecoration: 'line-through', fontFamily: 'var(--gb-font-mono)' }}>{usd(topPrice(p))}</span>}
+              {/* Retail price (matches the product page); the custom-logo imprint
+                  ladder lives in the detail panel — headlining it here showed
+                  e.g. $31.99 for a ball that retails $16.99. */}
+              <span style={{ fontSize: compact ? 16 : 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.5, fontFamily: 'var(--gb-font-mono)' }}>{usd(p.price)}</span>
+              {onSale(p) && <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-ghost)', textDecoration: 'line-through', fontFamily: 'var(--gb-font-mono)' }}>{usd(p.orig)}</span>}
             </span>
             <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>each</span>
           </div>
@@ -436,9 +439,10 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
   // for products whose options change the price. Reset when the product changes.
   const [variant, setVariant] = useState(null);
   useEffect(() => { setDecoration(null); setVariant(null); }, [p.id]);
-  // For non-custom-logo products the price follows the chosen variant; custom-
-  // logo products keep their imprint-ladder pricing.
-  const unitPrice = (!p.customLogo && variant && variant.price != null) ? variant.price : netTop(p);
+  // Headline the RETAIL price (matches the product page); a chosen variant
+  // (e.g. Tee Count) overrides it. The custom-logo imprint ladder shows
+  // separately below for custom-logo items.
+  const unitPrice = (variant && variant.price != null) ? variant.price : p.price;
   const openProduct = () => {
     if (!p.url) return;
     // p.url is a complete URL now, but an older cached catalog may still hold a
@@ -480,11 +484,10 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
             )}
           </div>
           {/* Base options that change the price (Tee Count, pack size, …) —
-              only renders when the product actually has price-varying options. */}
-          {!p.customLogo && <ProductOptions p={p} onChange={setVariant} />}
+              self-hides when the product has no price-varying options. */}
+          <ProductOptions p={p} onChange={setVariant} />
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-            <PriceStat label="Per unit" value={usd(unitPrice)} accent was={onSale(p) ? usd(topPrice(p)) : null} />
-            {p.customLogo && lowPrice(p) < topPrice(p) && <PriceStat label="Volume price" value={usd(netLow(p))} />}
+            <PriceStat label="Per unit" value={usd(unitPrice)} accent was={onSale(p) ? usd(p.orig) : null} />
           </div>
           {hasPromo(p) && (
             <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint, rgba(46,158,91,.12))', border: '1px solid var(--gb-success-border, rgba(46,158,91,.3))' }}>
@@ -517,7 +520,10 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
               <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 6, lineHeight: 1.4 }}>Per-unit price drops with order volume — quote the tier that matches the gift run.</div>
             </div>
           )}
-          {p.customLogo && <CustomizeBlock p={p} onChange={setDecoration} />}
+          {/* Show the customization UI for ANY customizable product (custom
+              logo, personalized, monogram, photo, ball-marker, …), not just
+              custom-logo — e.g. a "Personalized Ball Marker" hat clip. */}
+          {(p.customizable || p.customLogo) && <CustomizeBlock p={p} onChange={setDecoration} />}
         </div>
         <div style={{ padding: 12, borderTop: '1px solid var(--gb-border-subtle)', display: 'flex', gap: 8, flexShrink: 0, background: 'var(--gb-fill-inverse-strong)' }}>
           <Btn variant="secondary" size="md" icon={<I.eye />} style={{ flex: 1 }} onClick={openProduct}>View product</Btn>
