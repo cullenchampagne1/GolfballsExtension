@@ -354,6 +354,47 @@ export function buildDecoration(product, decoration = {}) {
       di.Print2 = { userText: [{ lines: [null, null, null], font: 'Kabel Dm BT', color: '#000000' }], configOverrides: {}, versionProperties: { versionNumber: 2, decorationType: 'Personalized' } };
       out.customUserImage = { firstPole: logoPole(logo), secondPole: logoPole(p2logo) };
     }
+    // Dual pole — a TEXT imprint on the opposite pole. A custom logo on one pole
+    // + a Personalized text imprint on the other is stored under GolfBallCustomLogo
+    // (textSecondPole) at MFS 372: the TEXT lives in the TOP Print (Print2 stays
+    // blank), firstPoleUserText carries it, maxTextArea is 2 — matching the real
+    // cart. (Distinct from a Personalized-front ball, which keeps text in Print2.)
+    const p2text = decoration.pole2 && decoration.pole2.kind === 'text' ? decoration.pole2 : null;
+    if (p2text) {
+      const lines = (p2text.lines || [null, null, null]).map(upper);
+      const font = p2text.font || 'Kabel Dm BT';
+      const color = p2text.color || '#000000';
+      const baseColor = decoration.baseColor || '#FFFFFF';
+      const finish = { MFS: '372', SecondMFS: '372' };
+      const textSlot = { userText: [{ lines, font, color }], configOverrides: { ...finish }, versionProperties: { versionNumber: 2, decorationType: 'Personalized' } };
+      const blankSlot = { userText: [{ lines: [null, null, null], font: 'Kabel Dm BT', color: '#000000' }], configOverrides: { ...finish }, versionProperties: { versionNumber: 2, decorationType: 'Personalized' } };
+      const di = {
+        sku: 'GolfBall', clientID: 'Item',
+        configOverrides: { BC: baseColor, ...finish },
+        versionProperties: { versionNumber: 2 }, view: '',
+        Print: textSlot,
+        renderedPreviewImage: ballPreviewUrl({
+          bc: baseColor, finish,
+          print: { decorationType: 'Personalized', lines, font, color, configOverrides: finish },
+          print2: { decorationType: 'Personalized', lines: [null, null, null], font: 'Kabel Dm BT', color: '#000000', configOverrides: finish },
+        }),
+        Print2: blankSlot,
+      };
+      // The nested copy's preview was rendered with the default ink (#000000)
+      // before the chosen color was applied — its Print.userText still carries
+      // the real color, only the thumbnail URL differs.
+      const nestedPreview = ballPreviewUrl({
+        bc: baseColor, finish,
+        print: { decorationType: 'Personalized', lines, font, color: '#000000', configOverrides: finish },
+        print2: { decorationType: 'Personalized', lines: [null, null, null], font: 'Kabel Dm BT', color: '#000000', configOverrides: finish },
+      });
+      out.block.dynamicImage = [di];
+      const gb = out.block.interfaceState.GolfBallCustomLogo;
+      gb.textSecondPole = { useCustomLogo: true, dynamicImage: [{ ...di, renderedPreviewImage: nestedPreview, userText: [] }] };
+      out.block.interfaceState.firstPoleUserText = { color, font, lines };
+      out.block.interfaceState.maxTextArea = 2;
+      out.block.interfaceState.secondPoleUserText = {};
+    }
   } else if (engine === 'logoOverlay') {
     // Inhouse (84) vs outsource (25) is a property of the product — auto-detect.
     const mods = product.ProductModification || [];
