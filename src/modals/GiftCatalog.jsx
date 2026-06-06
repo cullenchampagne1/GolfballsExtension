@@ -152,15 +152,17 @@ function CatGlyph({ id, size = 15, color = 'currentColor' }) {
    itemType), so a custom-logo twin (e.g. B5367) wears the $ and its plain-
    stock twin (B5368) doesn't — telling them apart in the "All" view. The
    parent image wrapper must be position: relative. */
-function CommissionDollar({ size = 20 }) {
+function CommissionDollar({ size = 16 }) {
   return (
     <span title="Commissionable — custom-logo SKU" style={{
-      position: 'absolute', bottom: 7, right: 7, zIndex: 2,
+      position: 'absolute', bottom: 6, right: 6, zIndex: 2,
       width: size, height: size, borderRadius: '50%',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'var(--gb-success-solid, #2e9e5b)', color: '#fff',
-      fontSize: Math.round(size * 0.62), fontWeight: 800, fontFamily: 'var(--gb-font-mono)',
-      boxShadow: '0 1px 5px rgba(0,0,0,.28)', lineHeight: 1, userSelect: 'none',
+      background: 'transparent',
+      border: '1px solid var(--gb-success-fg, #2e9e5b)',
+      color: 'var(--gb-success-fg, #2e9e5b)',
+      fontSize: Math.round(size * 0.64), fontWeight: 800, fontFamily: 'var(--gb-font-mono)',
+      lineHeight: 1, userSelect: 'none',
     }}>$</span>
   );
 }
@@ -378,7 +380,7 @@ function ProductCard({ p, compact, showRating, active, inProposal, onAdd, onClic
         {onSale(p) && (
           <span style={{ position: 'absolute', top: 7, right: 7, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-danger, #e5484d)', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>Sale</span>
         )}
-        {p.customLogo && <CommissionDollar size={compact ? 18 : 20} />}
+        {p.customLogo && <CommissionDollar size={compact ? 14 : 16} />}
       </div>
       <div style={{ paddingTop: compact ? 8 : 10, display: 'flex', flexDirection: 'column', gap: compact ? 4 : 5, flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -444,7 +446,7 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
         <div className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 16 }}>
           <div style={{ position: 'relative' }}>
             <ProductImage src={p.img} alt={p.title} pad={26} radius="var(--gb-r-lg)" />
-            {p.customLogo && <CommissionDollar size={26} />}
+            {p.customLogo && <CommissionDollar size={20} />}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, marginBottom: 6, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-brand-label)', fontFamily: 'var(--gb-font-mono)' }}>{p.brand}</span>
