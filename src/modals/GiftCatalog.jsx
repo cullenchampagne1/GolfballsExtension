@@ -1033,7 +1033,7 @@ function SavedGallery({ items, loadedId, onLoad, onCopy, onDelete }) {
           // Masonry via CSS columns — cards keep their natural height and pack
           // up the shortest column instead of stretching to a row baseline.
           <div style={{ columnWidth: 296, columnGap: 12 }}>
-            <AnimatePresence mode="popLayout">
+            <AnimatePresence>
               {items.map((it) => <SavedCard key={it.id} item={it} loaded={loadedId === it.id} onLoad={onLoad} onCopy={onCopy} onDelete={onDelete} />)}
             </AnimatePresence>
           </div>
@@ -1069,7 +1069,7 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
     setSaving(true);
     Promise.resolve(onSaveDraft && onSaveDraft(name.trim() || 'Untitled draft')).then(() => {
       setSaving(false); setSaveMode(false); setName(''); setSaved(true);
-      clearTimeout(savedTimer.current); savedTimer.current = setTimeout(() => setSaved(false), 2400);
+      clearTimeout(savedTimer.current); savedTimer.current = setTimeout(() => setSaved(false), 1600);
     }).catch(() => setSaving(false));
   };
   return (
@@ -1143,24 +1143,28 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
                 </div>
               </div>
             </div>
-            {/* Action row — morphs between idle / name-entry / saved flash. */}
+            {/* Action row — morphs between idle / name-entry / saved flash. The
+                flash pops in on a successful save, then fades out on a timer and
+                the buttons fade back in. */}
+            <AnimatePresence mode="wait" initial={false}>
             {saved ? (
-              <div style={{ padding: '4px 12px 12px' }}>
-                <div style={{ height: 38, borderRadius: 'var(--gb-r-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'var(--gb-success-tint-medium, rgba(46,158,91,.16))', border: '1px solid var(--gb-success-tint-border, rgba(46,158,91,.35))', color: 'var(--gb-success-fg, #2e9e5b)', fontSize: 12.5, fontWeight: 700, animation: 'pp-rise .2s cubic-bezier(.34,1.5,.64,1)' }}>
+              <motion.div key="flash" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: .18, ease: 'easeOut' }} style={{ padding: '4px 12px 12px' }}>
+                <div style={{ height: 38, borderRadius: 'var(--gb-r-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'var(--gb-success-tint-medium, rgba(46,158,91,.16))', border: '1px solid var(--gb-success-tint-border, rgba(46,158,91,.35))', color: 'var(--gb-success-fg, #2e9e5b)', fontSize: 12.5, fontWeight: 700 }}>
                   <I.check size={15} strokeWidth={3} /> Saved to Saved Proposals
                 </div>
-              </div>
+              </motion.div>
             ) : saveMode ? (
-              <div style={{ padding: '4px 12px 12px', display: 'flex', gap: 8 }}>
+              <motion.div key="namebox" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14 }} style={{ padding: '4px 12px 12px', display: 'flex', gap: 8 }}>
                 <Btn variant="ghost" size="md" style={{ flex: 1 }} onClick={() => { setSaveMode(false); setName(''); }}>Cancel</Btn>
                 <Btn variant="primary" size="md" icon={<I.check />} style={{ flex: 1.4 }} state={saving ? 'loading' : 'idle'} onClick={confirmSave}>Confirm save</Btn>
-              </div>
+              </motion.div>
             ) : (
-              <div style={{ padding: '0 12px 12px', display: 'flex', gap: 8 }}>
+              <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14 }} style={{ padding: '0 12px 12px', display: 'flex', gap: 8 }}>
                 <Btn variant="secondary" size="md" icon={<I.bookmark />} style={{ flex: 1 }} onClick={() => { setSaved(false); setName(''); setSaveMode(true); }}>Save draft</Btn>
                 <Btn variant="primary" size="md" icon={<I.send />} style={{ flex: 1.4 }}>Send proposal</Btn>
-              </div>
+              </motion.div>
             )}
+            </AnimatePresence>
           </div>
         )}
     </div>
