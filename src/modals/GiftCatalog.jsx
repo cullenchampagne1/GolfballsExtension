@@ -522,9 +522,9 @@ function SavedStub({ label, icon }) {
 }
 
 function CategoryRail({ sel, onSelect, clTotal, clCats, clCounts, depts, deptCounts, total, dock }) {
-  // Custom-logo group starts expanded — it's the catalog's primary use and
-  // holds the items the modal used to show before it indexed everything.
-  const [clOpen, setClOpen] = useState(true);
+  // Custom-logo group starts collapsed — keeps the rail compact; click the
+  // row (or its caret) to expand the custom-logo categories.
+  const [clOpen, setClOpen] = useState(false);
   return (
     <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: 12, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px', flexShrink: 0 }}>Browse</div>
