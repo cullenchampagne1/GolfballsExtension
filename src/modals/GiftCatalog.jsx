@@ -1025,9 +1025,9 @@ function SavedCard({ item, loaded, onLoad, onCopy, onDelete }) {
     ? <span style={{ width: 13, height: 13, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', display: 'inline-block', animation: 'gb-spin .7s linear infinite' }} />
     : copied ? <I.check size={14} strokeWidth={3} /> : <I.copy size={14} />;
   return (
-    <motion.div layout initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .92 }} transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }}
+    <motion.div initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .92 }} transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }}
       onClick={() => onLoad(item)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ display: 'flex', flexDirection: 'column', gap: 11, padding: 13, cursor: 'pointer', background: 'var(--gb-surface-1)', border: '1px solid ' + (loaded ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'), borderRadius: 'var(--gb-r-lg)', boxShadow: hover ? '0 2px 7px rgba(0,0,0,.07)' : 'none', transform: hover && !loaded ? 'translateY(-1px)' : 'none', transition: 'transform var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)' }}>
+      style={{ breakInside: 'avoid', WebkitColumnBreakInside: 'avoid', marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 11, padding: 13, cursor: 'pointer', background: 'var(--gb-surface-1)', border: '1px solid ' + (loaded ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'), borderRadius: 'var(--gb-r-lg)', boxShadow: hover ? '0 2px 7px rgba(0,0,0,.07)' : 'none', transform: hover && !loaded ? 'translateY(-1px)' : 'none', transition: 'transform var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <ThumbStack entries={r.entries} />
         <div style={{ flex: 1 }} />
@@ -1088,7 +1088,9 @@ function SavedGallery({ items, loadedId, onLoad, onCopy, onDelete }) {
             <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', textAlign: 'center', maxWidth: 240, lineHeight: 1.5 }}>Build a proposal and hit “Save draft” to keep it here for later.</div>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(296px, 1fr))', gap: 12 }}>
+          // Masonry via CSS columns — cards keep their natural height and pack
+          // up the shortest column instead of stretching to a row baseline.
+          <div style={{ columnWidth: 296, columnGap: 12 }}>
             <AnimatePresence mode="popLayout">
               {items.map((it) => <SavedCard key={it.id} item={it} loaded={loadedId === it.id} onLoad={onLoad} onCopy={onCopy} onDelete={onDelete} />)}
             </AnimatePresence>
