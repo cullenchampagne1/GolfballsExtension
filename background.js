@@ -190,6 +190,65 @@ async function gbGetProductConfig(rawUrl) {
   return config;
 }
 
+// ── Custom-logo upload (runs at cart-save time, not during customization) ─────
+// Mirrors the site's exact flow (reverse-engineered from the saveCart HAR):
+//   1. PUT master.api.icustomize.com/user/upload {name,type} → presigned S3 URL
+//   2. PUT <signedURL> the image bytes → S3 (Source/CustomerUploads/CustomLogo/…)
+//   3. PUT /user/cropImage {userImage, url:<convert?fileName=…>} → cropped path
+// The image we upload is our already-aligned, rotation-baked decal, so the
+// fabric userImage is a centered placement (their crop is axis-aligned — no
+// rotate — which is why we bake rotation into the pixels). Returns the pieces
+// the cart line needs: { filePath, fileName, cropFilePath, userImage }.
+const GB_CONVERT_URL = 'https://7uyieah5s5.execute-api.us-east-2.amazonaws.com/dev/convert';
+
+// The fabric.js image object the cart stores (customUserImage.firstPole.userImage)
+// AND that /user/cropImage consumes. `scale` is the print-area fill factor (the
+// site used 0.41 of a 500-unit canvas); left/top center it. Tune if the decal
+// sits wrong on the ball.
+function gbLogoUserImage({ scale = 0.41, left = 250, top = 300, size = 500, src = '' } = {}) {
+  return {
+    type: 'image', version: '5.3.0', originX: 'center', originY: 'center',
+    left, top, width: size, height: size,
+    fill: 'rgb(0,0,0)', stroke: null, strokeWidth: 0, strokeDashArray: null, strokeLineCap: 'butt',
+    strokeDashOffset: 0, strokeLineJoin: 'miter', strokeUniform: false, strokeMiterLimit: 4,
+    scaleX: scale, scaleY: scale, angle: 0, flipX: false, flipY: false, opacity: 1,
+    shadow: null, visible: true, backgroundColor: '', fillRule: 'nonzero', paintFirst: 'fill',
+    globalCompositeOperation: 'source-over', skewX: 0, skewY: 0, cropX: 0, cropY: 0, src, crossOrigin: null, filters: [],
+  };
+}
+
+async function gbUploadCustomLogo({ dataUrl, fileName = 'logo.png' }) {
+  if (!dataUrl) throw new Error('No image data');
+  const type = (/^data:([^;]+)/.exec(dataUrl) || [])[1] || 'image/png';
+  // 1. presign
+  const sr = await fetch('https://master.api.icustomize.com/user/upload', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json', sitekey: 'golfballs' },
+    body: JSON.stringify({ name: fileName, type }),
+  });
+  if (!sr.ok) throw new Error('presign HTTP ' + sr.status);
+  const signedURL = (await sr.json()).signedURL;
+  if (!signedURL) throw new Error('no signedURL returned');
+  const filePath = new URL(signedURL).pathname.replace(/^\/static\.golfballs\.com\//, '').replace(/^\//, '');
+  // 2. upload bytes to the presigned S3 URL (Content-Type MUST match what was signed)
+  const blob = await (await fetch(dataUrl)).blob();
+  const pr = await fetch(signedURL, { method: 'PUT', headers: { 'Content-Type': type }, body: blob });
+  if (!pr.ok) throw new Error('S3 PUT HTTP ' + pr.status);
+  // 3. crop → cropFilePath (the overlay the ball renders)
+  const publicUrl = 'https://static.golfballs.com/' + filePath;
+  const userImage = gbLogoUserImage({ src: publicUrl });
+  let cropFilePath = '';
+  try {
+    const cr = await fetch('https://master.api.icustomize.com/user/cropImage', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', sitekey: 'golfballs' },
+      body: JSON.stringify({ userImage, url: GB_CONVERT_URL + '?fileName=' + publicUrl }),
+    });
+    if (cr.ok) cropFilePath = (await cr.json()).url || '';
+  } catch (e) { /* crop is best-effort; the upload + fabric still drive the cart */ }
+  return { filePath, fileName, cropFilePath, userImage };
+}
+
 // ── Seed default state on first install ──────────────────────────────────────
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   if (reason !== 'install') return; // skip updates and browser_update
@@ -421,6 +480,19 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .then((product) => sendResponse({ ok: true, product }))
       .catch((err) => {
         console.warn('[GB] fetchProductRaw error:', err.message);
+        sendResponse({ ok: false, error: String(err) });
+      });
+    return true;
+  }
+
+  // ── Custom-logo upload (at cart-save time) ─────────────────────────
+  // dataUrl = the aligned + rotation-baked decal; returns
+  // { filePath, fileName, cropFilePath, userImage } for the cart line.
+  if (msg.action === 'uploadCustomLogo' && msg.dataUrl) {
+    gbUploadCustomLogo(msg)
+      .then((r) => sendResponse({ ok: true, ...r }))
+      .catch((err) => {
+        console.warn('[GB] uploadCustomLogo error:', err.message);
         sendResponse({ ok: false, error: String(err) });
       });
     return true;

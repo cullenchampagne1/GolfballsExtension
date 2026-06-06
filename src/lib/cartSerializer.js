@@ -195,7 +195,7 @@ const emptyPole = () => ({ fileName: '', filePath: '', userImage: null, fileSupp
 const logoPole = (logo) => ({
   fileName: (logo && logo.fileName) || '',
   filePath: (logo && logo.filePath) || '',
-  userImage: null,
+  userImage: (logo && logo.userImage) || null,   // fabric placement (from the upload step)
   fileSupported: !!(logo && logo.filePath),
 });
 const canonicalUrl = (product) => {

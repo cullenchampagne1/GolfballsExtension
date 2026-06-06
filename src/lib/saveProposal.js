@@ -67,8 +67,29 @@ async function fetchRawProducts(urls) {
   return new Map(entries);
 }
 
+/* If a line's decoration carries a locally-aligned image that hasn't been
+   uploaded yet, upload it NOW (at save time) and fold the returned
+   filePath/cropFilePath/userImage into the decoration so the cart references a
+   real, server-rendered logo. Returns the (possibly enriched) decoration. */
+async function uploadDecorationImage(decoration, skipped, title) {
+  const d = decoration || { engine: 'none' };
+  const needsLogo = (d.engine === 'ballLogo' || d.engine === 'logoOverlay') && d._localImageDataUrl;
+  const alreadyUploaded = d.logo && d.logo.filePath;
+  if (!needsLogo || alreadyUploaded) return d;
+  try {
+    const up = await sendBg('uploadCustomLogo', {
+      dataUrl: d._localImageDataUrl,
+      fileName: (d.logo && d.logo.fileName) || d.fileName || 'logo.png',
+    });
+    return { ...d, logo: { filePath: up.filePath, fileName: up.fileName, cropFilePath: up.cropFilePath, userImage: up.userImage } };
+  } catch (e) {
+    skipped.push({ title, reason: 'logo upload failed (' + (e.message || 'error') + ')' });
+    return d; // keep the line; it just won't carry a server logo
+  }
+}
+
 /* Build the saveCart itemsInCart[] from the proposal. Returns
-   { items, skipped:[{title, reason}] }. */
+   { items, skipped:[{title, reason}] }. Uploads any aligned images first. */
 export async function buildProposalLines(proposal) {
   const rawByUrl = await fetchRawProducts(proposal.map((l) => l.product && l.product.url));
   const items = [];
@@ -78,11 +99,12 @@ export async function buildProposalLines(proposal) {
     const raw = rawByUrl.get(cat.url);
     if (!raw) { skipped.push({ title: cat.title || cat.sku || 'item', reason: 'product page unavailable' }); continue; }
     const breaks = cat.breaks || [];
+    const decoration = await uploadDecorationImage(line.decoration, skipped, cat.title || cat.sku || 'item');
     for (const split of (line.splits || [])) {
       items.push(assembleLine({
         product: raw,
         pricing: { price: split.price, breaks },
-        decoration: line.decoration || { engine: 'none' },
+        decoration,
         qty: split.qty,
       }));
     }
