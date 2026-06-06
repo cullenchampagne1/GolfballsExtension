@@ -1143,13 +1143,15 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
                 </div>
               </div>
             </div>
-            {/* Action row — morphs between idle / name-entry / saved flash. The
-                flash pops in on a successful save, then fades out on a timer and
-                the buttons fade back in. */}
+            {/* Action row — morphs between idle / name-entry / saved flash. All
+                three states are the same height and the slot has a fixed
+                min-height, so the footer never jumps: the content crossfades in
+                place instead of the surrounding section snapping to a new size. */}
+            <div style={{ minHeight: 48 }}>
             <AnimatePresence mode="wait" initial={false}>
             {saved ? (
               <motion.div key="flash" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: .18, ease: 'easeOut' }} style={{ padding: '4px 12px 12px' }}>
-                <div style={{ height: 38, borderRadius: 'var(--gb-r-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'var(--gb-success-tint-medium, rgba(46,158,91,.16))', border: '1px solid var(--gb-success-tint-border, rgba(46,158,91,.35))', color: 'var(--gb-success-fg, #2e9e5b)', fontSize: 12.5, fontWeight: 700 }}>
+                <div style={{ height: 32, borderRadius: 'var(--gb-r-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'var(--gb-success-tint-medium, rgba(46,158,91,.16))', border: '1px solid var(--gb-success-tint-border, rgba(46,158,91,.35))', color: 'var(--gb-success-fg, #2e9e5b)', fontSize: 12.5, fontWeight: 700 }}>
                   <I.check size={15} strokeWidth={3} /> Saved to Saved Proposals
                 </div>
               </motion.div>
@@ -1159,12 +1161,13 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
                 <Btn variant="primary" size="md" icon={<I.check />} style={{ flex: 1.4 }} state={saving ? 'loading' : 'idle'} onClick={confirmSave}>Confirm save</Btn>
               </motion.div>
             ) : (
-              <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14 }} style={{ padding: '0 12px 12px', display: 'flex', gap: 8 }}>
+              <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14 }} style={{ padding: '4px 12px 12px', display: 'flex', gap: 8 }}>
                 <Btn variant="secondary" size="md" icon={<I.bookmark />} style={{ flex: 1 }} onClick={() => { setSaved(false); setName(''); setSaveMode(true); }}>Save draft</Btn>
                 <Btn variant="primary" size="md" icon={<I.send />} style={{ flex: 1.4 }}>Send proposal</Btn>
               </motion.div>
             )}
             </AnimatePresence>
+            </div>
           </div>
         )}
     </div>
