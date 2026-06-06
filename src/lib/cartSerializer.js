@@ -78,11 +78,14 @@ export function buildBallDynamicImage({
     versionProperties: { versionNumber: 2 }, view: '',
     Print: slot(pole1),
   };
-  if (pole2) img.Print2 = slot(pole2);
+  // Only a TEXT second pole renders here; monogram/logo second poles are added
+  // centrally by buildDecoration (they're not userText slots).
+  const p2text = pole2 && (!pole2.kind || pole2.kind === 'text') ? pole2 : null;
+  if (p2text) img.Print2 = slot(p2text);
   img.renderedPreviewImage = ballPreviewUrl({
     bc: baseColor, finish,
     print:  { decorationType, lines: pole1.lines, font: pole1.font, color: pole1.color, configOverrides: finish },
-    print2: pole2 ? { decorationType, lines: pole2.lines, font: pole2.font, color: pole2.color, configOverrides: finish } : null,
+    print2: p2text ? { decorationType, lines: p2text.lines, font: p2text.font, color: p2text.color, configOverrides: finish } : null,
   });
   return img;
 }
@@ -100,7 +103,11 @@ function buildBallDecorationBlock(product, decoration) {
     interfaceState: {
       firstPoleUserText: decoration.pole1 || { lines: [null, null, null], font: '', color: '' },
       // Empty 2nd pole stores {} even though an empty Print2 still renders.
-      secondPoleUserText: hasPoleText(decoration.pole2) ? decoration.pole2 : {},
+      secondPoleUserText: (() => {
+        const p2 = decoration.pole2;
+        return (p2 && (!p2.kind || p2.kind === 'text') && hasPoleText(p2))
+          ? { lines: p2.lines, font: p2.font, color: p2.color } : {};
+      })(),
       maxTextArea: 1,
     },
     dynamicImage: [buildBallDynamicImage(decoration)],
@@ -223,15 +230,53 @@ function findMod(product, { modID, friendly } = {}) {
      monogram    → modID 6  Monogram
      logoOverlay → modID 84 inhouse / 25 outsource (uploaded logo overlay)
    Returns { block, customUserImage }. block === null means no decoration. */
+/* The opposite-pole imprint slot for a ball, from a {kind,…} pole2 descriptor.
+   Text → a Personalized userText slot; Monogram → a MonogramPadded overlay.
+   (Logo on the 2nd pole needs its own upload — captured but not slotted yet.) */
+function secondPrintSlot(pole2, finish = {}) {
+  if (!pole2 || !pole2.kind) return null;
+  if (pole2.kind === 'text') {
+    return {
+      userText: [{ lines: (pole2.lines || [null, null, null]).map(upper), font: pole2.font || 'Kabel Dm BT', color: pole2.color || '#000000' }],
+      configOverrides: { ...finish },
+      versionProperties: { versionNumber: 2, decorationType: 'Personalized' },
+    };
+  }
+  if (pole2.kind === 'monogram') {
+    const chars = String(pole2.text || '').split('');
+    return {
+      view: pole2.view || (chars.length >= 3 ? 'circle3' : 'circle2'),
+      userOverlay: [{ visible: true, fileName: chars.join(',') }],
+      configOverrides: { Color1: pole2.color || '#000000', Color2: pole2.color2 || '#FFFFFF' },
+      versionProperties: { versionNumber: 2, decorationType: 'MonogramPadded' },
+    };
+  }
+  return null;
+}
+
+/* Add the second-pole imprint to a built ball block, unless the front engine
+   already placed it (ballText handles a text 2nd pole inline). */
+function applySecondPole(block, decoration) {
+  const pole2 = decoration && decoration.pole2;
+  if (!pole2 || !block || !block.dynamicImage || !block.dynamicImage[0] || block.dynamicImage[0].Print2) return;
+  const slot = secondPrintSlot(pole2, decoration.finish || {});
+  if (!slot) return;
+  block.dynamicImage[0].Print2 = slot;
+  if (pole2.kind === 'text') {
+    block.interfaceState = block.interfaceState || {};
+    block.interfaceState.secondPoleUserText = { lines: pole2.lines || [null, null, null], font: pole2.font || 'Kabel Dm BT', color: pole2.color || '#000000' };
+  }
+}
+
 export function buildDecoration(product, decoration = {}) {
   const engine = decoration.engine || 'none';
   const noImage = { firstPole: emptyPole(), secondPole: emptyPole() };
+  let out;
 
   if (engine === 'ballText') {
-    return { block: buildBallDecorationBlock(product, { ...decoration, decorationType: 'Personalized' }), customUserImage: noImage };
-  }
-  if (engine === 'monogram') {
-    return {
+    out = { block: buildBallDecorationBlock(product, { ...decoration, decorationType: 'Personalized' }), customUserImage: noImage };
+  } else if (engine === 'monogram') {
+    out = {
       block: {
         ProductModification: findMod(product, { modID: 6, friendly: 'Monogram' }),
         interfaceState: {},
@@ -240,10 +285,9 @@ export function buildDecoration(product, decoration = {}) {
       },
       customUserImage: noImage,
     };
-  }
-  if (engine === 'ballLogo') {
+  } else if (engine === 'ballLogo') {
     const logo = decoration.logo || null;
-    return {
+    out = {
       block: {
         ProductModification: findMod(product, { modID: 1008, friendly: 'Custom Logo' }),
         interfaceState: {
@@ -261,20 +305,17 @@ export function buildDecoration(product, decoration = {}) {
         dynamicImage: [buildBallLogoDynamicImage({ baseColor: decoration.baseColor })],
         isTemporary: false,
       },
-      // The uploaded logo is referenced via filePath/cropFilePath; the real
-      // site also stores a fabric.js crop object in userImage (in-browser
-      // cropper render state) which we can't reproduce headlessly.
+      // The uploaded logo is referenced via filePath/cropFilePath; the real site
+      // also stores a fabric.js crop object in userImage we can't reproduce.
       customUserImage: { firstPole: logoPole(logo), secondPole: emptyPole() },
     };
-  }
-  if (engine === 'logoOverlay') {
-    // Inhouse (84) vs outsource (25) is a property of the product — auto-detect
-    // from its modifications when the descriptor doesn't say (it usually won't).
+  } else if (engine === 'logoOverlay') {
+    // Inhouse (84) vs outsource (25) is a property of the product — auto-detect.
     const mods = product.ProductModification || [];
     const hasMod = (id) => mods.some((m) => m.Modification && m.Modification.modificationID === id);
     const outsource = decoration.outsource != null ? !!decoration.outsource : (hasMod(25) && !hasMod(84));
     const logo = decoration.logo || null;
-    return {
+    out = {
       block: {
         ProductModification: findMod(product, { modID: outsource ? 25 : 84, friendly: 'Custom Logo' }),
         interfaceState: null,
@@ -283,8 +324,12 @@ export function buildDecoration(product, decoration = {}) {
       },
       customUserImage: { firstPole: logoPole(logo), secondPole: emptyPole() },
     };
+  } else {
+    return { block: null, customUserImage: noImage }; // engine === 'none'
   }
-  return { block: null, customUserImage: noImage }; // engine === 'none'
+
+  applySecondPole(out.block, decoration); // opposite-pole imprint (dual pole)
+  return out;
 }
 
 /* Assemble one itemsInCart line from the product page object
@@ -295,10 +340,23 @@ export function buildDecoration(product, decoration = {}) {
    the page carries only the parent fee header. itemGuid is generated if omitted. */
 export function assembleLine({ product, pricing = {}, selection = {}, decoration, qty = 1, itemGuid } = {}) {
   const children = product.ProductChild || [];
+  // Pick the child the buyer actually selected. Prefer matching by option values
+  // ({ "Tee Count": "100", Color: "White" } — what the modal captures), then by
+  // explicit propertyValueIDs, then fall back to the first child.
+  const wantVals = selection.values && Object.keys(selection.values).length ? selection.values : null;
   const wantIds = new Set(selection.propertyValueIDs || []);
-  const child = children.find((c) =>
-    (c.PropertyValueProduct || []).some((pv) => wantIds.has(pv.propertyValueProductID)))
-    || children[0] || {};
+  let child = null;
+  if (wantVals) {
+    const idToLabel = {};
+    (product.PropertyProduct || []).forEach((pp) => { idToLabel[pp.propertyProductID] = pp.Name || pp.FriendlyName; });
+    child = children.find((c) => {
+      const vals = {};
+      (c.PropertyValueProduct || []).forEach((pv) => { const l = idToLabel[pv.propertyProductID]; if (l) vals[l] = String(pv.Value); });
+      return Object.entries(wantVals).every(([l, v]) => String(v) === vals[l]);
+    }) || null;
+  }
+  if (!child && wantIds.size) child = children.find((c) => (c.PropertyValueProduct || []).some((pv) => wantIds.has(pv.propertyValueProductID))) || null;
+  child = child || children[0] || {};
   const selectedIds = (child.PropertyValueProduct || []).map((pv) => pv.propertyValueProductID);
   const breaks = (pricing.breaks && pricing.breaks.length) ? pricing.breaks : [{ q: 1, p: pricing.price || 0 }];
   const unit = pricing.price != null ? pricing.price : (breaks[0] && breaks[0].p) || 0;

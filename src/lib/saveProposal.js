@@ -100,11 +100,16 @@ export async function buildProposalLines(proposal) {
     if (!raw) { skipped.push({ title: cat.title || cat.sku || 'item', reason: 'product page unavailable' }); continue; }
     const breaks = cat.breaks || [];
     const decoration = await uploadDecorationImage(line.decoration, skipped, cat.title || cat.sku || 'item');
+    // The buyer's base-option picks → the right child/widgetSelections. Balls
+    // carry them on the decoration (__base); other products on line.variant.
+    const selValues = (decoration && decoration.baseSelection) || (line.variant && line.variant.values) || null;
+    const selection = selValues ? { values: selValues } : {};
     for (const split of (line.splits || [])) {
       items.push(assembleLine({
         product: raw,
         pricing: { price: split.price, breaks },
         decoration,
+        selection,
         qty: split.qty,
       }));
     }

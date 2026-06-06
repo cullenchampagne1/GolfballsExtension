@@ -1371,9 +1371,12 @@ function MonogramFlow() {
 
 /* one base-product input (Color, Size, Metal Finish, Imprint side, …) — from data */
 function PropertyInput({ label, options }) {
-  const [v, setV] = useState(options[0]);
+  // Capture the chosen value in the __base slot (keyed by label) so the cart's
+  // widgetSelections/childList reflect the buyer's pick, not the first child.
+  const [v, setV] = usePTField('__base', label);
+  const val = (v != null && v !== '') ? v : options[0];
   const clean = (label || 'Option').replace(/^(Accessories|Apparel|Product)\s+/i, '');
-  return <BaseColorPicker label={clean} colors={options} value={v} onChange={setV} />;
+  return <BaseColorPicker label={clean} colors={options} value={val} onChange={setV} />;
 }
 
 /* all of a product's base-product inputs (PropertyProduct / property_*_ss) —
@@ -1847,45 +1850,71 @@ export function ProductOptions({ p, onChange }) {
    text + Monogram are captured fully; Custom Logo / Photo capture the engine +
    the local image but leave filePath empty until a server upload step exists
    (a structurally-valid not-yet-uploaded-logo line, same as the real site). */
+/* A monogram pole2 descriptor from a __second-style slot, or null. */
+function monoPole(s) {
+  const letters = _monoLetters(s.initials, s.style);
+  if (!letters) return null;
+  return { kind: 'monogram', text: letters, view: _monoSpec(s.style).view(letters.length),
+    color: _hexOf(s.c1), color2: (s.c2 && s.c2 !== 'Transparent') ? _hexOf(s.c2) : '#FFFFFF' };
+}
+/* The opposite-pole imprint (dual pole), as a kind-tagged descriptor the cart
+   serializer understands (text | monogram | logo), or null. */
+function derivePole2(data, frontSel) {
+  const s = data.__second || {};
+  if (!s.enabled) return null;
+  const textPole = (x) => ({ kind: 'text', lines: [x.l1 || null, x.l2 || null, x.l3 || null], font: x.font || 'Kabel Dm BT', color: _hexOf(x.color) });
+  if (s.choice === 'Same as Front') {
+    if (frontSel === 'Personalized') return textPole(data.Personalized || {});
+    if (frontSel === 'Monogram') return monoPole(data.Monogram || {});
+    return null; // same-as-front logo/photo → future
+  }
+  if (s.choice === 'Personalized') return textPole(s);
+  if (s.choice === 'Monogram') return monoPole(s);
+  if ((s.choice === 'Upload Image' || s.choice === 'Custom' || s.choice === 'Logo Library') && s.imageDataUrl) {
+    return { kind: 'logo', _localImageDataUrl: s.imageDataUrl, fileName: s.fileName };
+  }
+  return null;
+}
+
 function deriveBallDecoration(p, sel, data) {
   const baseColor = '#FFFFFF';                 // most custom balls are white; base-color capture is a refinement
   const finish = { MFS: '279', SecondMFS: '279' };
-  if (!sel) return { engine: 'none' };
+  // Shared across engines: the buyer's base-option picks + the 2nd-pole imprint.
+  const baseSelection = (data.__base && Object.keys(data.__base).length) ? { ...data.__base } : null;
+  const dualPole = !!(data.__second && data.__second.enabled);
+  const extra = { baseSelection, dualPole, pole2: derivePole2(data, sel) };
+  if (!sel) return { engine: 'none', ...extra };
 
   if (sel === 'Personalized') {
     const s = data.Personalized || {};
-    const pole = (x) => ({ lines: [x.l1 || null, x.l2 || null, x.l3 || null], font: x.font || 'Kabel Dm BT', color: _hexOf(x.color) });
-    const pole1 = pole(s);
-    const sec = data.__second || {};
-    let pole2 = null;
-    if (sec.enabled && (sec.choice === 'Same as Front' || sec.choice === 'Personalized')) {
-      pole2 = pole(sec.choice === 'Same as Front' ? s : sec); // monogram/upload 2nd pole → future work
-    }
-    return { engine: 'ballText', baseColor, finish, pole1, pole2 };
+    const pole1 = { lines: [s.l1 || null, s.l2 || null, s.l3 || null], font: s.font || 'Kabel Dm BT', color: _hexOf(s.color) };
+    return { engine: 'ballText', baseColor, finish, pole1, ...extra };
   }
   if (sel === 'Monogram') {
     const s = data.Monogram || {};
     const letters = _monoLetters(s.initials, s.style);
-    if (!letters) return { engine: 'none' };   // no initials entered yet
+    if (!letters) return { engine: 'none', ...extra };   // no initials entered yet
     return {
-      engine: 'monogram', baseColor,
+      engine: 'monogram', baseColor, finish,
       monogram: {
         baseColor, text: letters, view: _monoSpec(s.style).view(letters.length),
         color: _hexOf(s.c1), color2: (s.c2 && s.c2 !== 'Transparent') ? _hexOf(s.c2) : '#FFFFFF',
         overlay: s.style === 'circle' ? 'circle' : s.style,
       },
+      ...extra,
     };
   }
   if (sel === 'Custom Logo' || sel === 'Photo') {
     const s = data[sel] || {};
     return {
-      engine: 'ballLogo', baseColor,
+      engine: 'ballLogo', baseColor, finish,
       logo: s.fileName ? { filePath: '', fileName: s.fileName, cropFilePath: '' } : null,
-      _localImageDataUrl: s.imageDataUrl || null, // for a future upload step
+      _localImageDataUrl: s.imageDataUrl || null, // uploaded at save time
+      ...extra,
     };
   }
-  if (sel === 'Icons') return { engine: 'ballLogo', baseColor, logo: null };
-  return { engine: 'none' };
+  if (sel === 'Icons') return { engine: 'ballLogo', baseColor, finish, logo: null, ...extra };
+  return { engine: 'none', ...extra };
 }
 
 /* Lives inside PrintTypeProvider; emits the current ball decoration whenever the
