@@ -107,6 +107,32 @@ function gbProductUrl(url) {
   return 'https://www.golfballs.com' + u;
 }
 
+// Raw product object (__NEXT_DATA__.props.pageProps.product) — the full shape
+// the cart serializer needs (ProductChild, ProductModification, PropertyProduct,
+// fee headers …). Large, so cached IN MEMORY for the service-worker lifetime
+// only (re-fetched on restart); it's needed transiently at cart-save time, not
+// worth persisting. Shared by the config fetch so we never double-fetch a page.
+const GB_RAW_MAX = 60;
+const gbRawCache = new Map(); // url -> prod (insertion-ordered → cheap LRU)
+
+async function gbFetchProductPage(rawUrl) {
+  const url = gbProductUrl(rawUrl);
+  if (!url) throw new Error('No product URL');
+  if (gbRawCache.has(url)) {                       // LRU touch
+    const p = gbRawCache.get(url); gbRawCache.delete(url); gbRawCache.set(url, p); return p;
+  }
+  const r = await fetch(url, { headers: { Accept: 'text/html,*/*', 'Accept-Language': 'en-US,en;q=0.9' }, credentials: 'include' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const html = await r.text();
+  const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
+  if (!m) throw new Error('__NEXT_DATA__ not found');
+  const prod = JSON.parse(m[1])?.props?.pageProps?.product;
+  if (!prod) throw new Error('No product in page data');
+  gbRawCache.set(url, prod);
+  if (gbRawCache.size > GB_RAW_MAX) gbRawCache.delete(gbRawCache.keys().next().value); // evict oldest
+  return prod;
+}
+
 async function gbGetProductConfig(rawUrl) {
   const url = gbProductUrl(rawUrl);
   if (!url) throw new Error('No product URL');
@@ -116,13 +142,7 @@ async function gbGetProductConfig(rawUrl) {
 
   let prod;
   try {
-    const r = await fetch(url, { headers: { Accept: 'text/html,*/*', 'Accept-Language': 'en-US,en;q=0.9' }, credentials: 'include' });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const html = await r.text();
-    const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
-    if (!m) throw new Error('__NEXT_DATA__ not found');
-    prod = JSON.parse(m[1])?.props?.pageProps?.product;
-    if (!prod) throw new Error('No product in page data');
+    prod = await gbFetchProductPage(url);
   } catch (err) {
     if (hit && hit.config) return hit.config;   // stale-on-error: keep the last-known inputs
     throw err;
@@ -356,6 +376,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .then((config) => sendResponse({ ok: true, config }))
       .catch((err) => {
         console.warn('[GB] fetchProductConfig error:', err.message);
+        sendResponse({ ok: false, error: String(err) });
+      });
+    return true;
+  }
+
+  // ── Raw product object (for cart serialization) ────────────────────
+  // Returns the full __NEXT_DATA__.product the cart serializer needs to
+  // assemble a saveCart line (ProductChild / ProductModification / fee
+  // headers). Cached in-memory in the worker; safe to call per cart save.
+  if (msg.action === 'fetchProductRaw' && msg.url) {
+    gbFetchProductPage(msg.url)
+      .then((product) => sendResponse({ ok: true, product }))
+      .catch((err) => {
+        console.warn('[GB] fetchProductRaw error:', err.message);
         sendResponse({ ok: false, error: String(err) });
       });
     return true;

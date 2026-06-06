@@ -6,6 +6,7 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, DEPT_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock } from './giftCustomize.jsx';
+import { saveProposalDraft } from '../lib/saveProposal.js';
 
 /* ───────────────────────────────────────────────────────────────
    GiftCatalog — Corporate Gifting Catalog modal.
@@ -757,7 +758,7 @@ function ProposalDock({ count, total, active, onOpen }) {
   );
 }
 
-function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear }) {
+function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, savedCart }) {
   const total = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
   const units = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty, 0), 0);
   return (
@@ -809,7 +810,9 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
               <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', letterSpacing: -.6 }}>{money(total)}</span>
             </div>
             <div style={{ padding: '0 12px 12px', display: 'flex', gap: 8 }}>
-              <Btn variant="secondary" size="md" icon={<I.copy />} style={{ flex: 1 }}>Save draft</Btn>
+              <Btn variant="secondary" size="md" icon={savedCart ? <I.check /> : <I.copy />} style={{ flex: 1 }} onClick={onSaveDraft}>
+                {savedCart ? `Update #${savedCart.cartNumber}` : 'Save draft'}
+              </Btn>
               <Btn variant="primary" size="md" icon={<I.send />} style={{ flex: 1.4 }}>Send proposal</Btn>
             </div>
           </div>
@@ -884,6 +887,27 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const addSplit = (lineId) => setProposal((prev) => prev.map((l) => { if (l.id !== lineId) return l; const last = l.splits[l.splits.length - 1]; return { ...l, splits: [...l.splits, { id: rid(), qty: last.qty, price: last.price }] }; }));
   const removeSplit = (lineId, splitId) => setProposal((prev) => prev.flatMap((l) => { if (l.id !== lineId) return [l]; const splits = l.splits.filter((s) => s.id !== splitId); return splits.length ? [{ ...l, splits }] : []; }));
   const removeLine = (lineId) => setProposal((prev) => prev.filter((l) => l.id !== lineId));
+
+  // Save draft — serialize the proposal into a golfballs.com cart/proposal and
+  // PUT it server-side (cartSerializer → giftSaveCart). Returns the promise so
+  // the Save button drives its own loading→success/error state. Success is
+  // silent per house style (the button shows "Update #<n>"); only warnings
+  // (partial) and failures toast. Re-save passes the prior cartID to update.
+  const [savedCart, setSavedCart] = useState(null); // { cartNumber, cartID }
+  const saveDraft = () => {
+    if (!proposal.length) return Promise.resolve();
+    return saveProposalDraft(proposal, { proposalID: (savedCart && savedCart.cartID) || null })
+      .then((r) => {
+        setSavedCart({ cartNumber: r.cartNumber, cartID: r.cartID });
+        if (r.skipped && r.skipped.length) {
+          toast?.warning?.(`Saved #${r.cartNumber} — ${r.skipped.length} line${r.skipped.length > 1 ? 's' : ''} couldn’t load product data and were left off`);
+        }
+      })
+      .catch((e) => {
+        toast?.error?.('Couldn’t save the proposal — ' + ((e && e.message) || 'unknown error'));
+        throw e; // surface the error state on the Save button
+      });
+  };
 
   /* One shared live pull, with progress. `force` clears the cache first
      (manual rebuild — stale items/sales can't survive as a fallback);
@@ -1203,7 +1227,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           <div style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: 400, opacity: proposalOpen ? 1 : 0, pointerEvents: proposalOpen ? 'auto' : 'none', transition: 'opacity .24s ease' }}>
             <ProposalPanel proposal={proposal} onClose={() => setProposalOpen(false)}
               onPatchSplit={patchSplit} onAddSplit={addSplit} onRemoveSplit={removeSplit}
-              onRemoveLine={removeLine} onClear={() => { setProposal([]); setProposalOpen(false); }} />
+              onRemoveLine={removeLine} onSaveDraft={saveDraft} savedCart={savedCart}
+              onClear={() => { setProposal([]); setProposalOpen(false); setSavedCart(null); }} />
           </div>
         </div>
         </div>{/* /flex row */}
