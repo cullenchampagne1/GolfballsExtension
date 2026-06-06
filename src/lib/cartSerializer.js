@@ -268,7 +268,11 @@ export function buildDecoration(product, decoration = {}) {
     };
   }
   if (engine === 'logoOverlay') {
-    const outsource = !!decoration.outsource;
+    // Inhouse (84) vs outsource (25) is a property of the product — auto-detect
+    // from its modifications when the descriptor doesn't say (it usually won't).
+    const mods = product.ProductModification || [];
+    const hasMod = (id) => mods.some((m) => m.Modification && m.Modification.modificationID === id);
+    const outsource = decoration.outsource != null ? !!decoration.outsource : (hasMod(25) && !hasMod(84));
     const logo = decoration.logo || null;
     return {
       block: {

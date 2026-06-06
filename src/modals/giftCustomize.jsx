@@ -1776,7 +1776,62 @@ function BallPreview() {
 }
 
 /* ── exported: the Customization accordion for the DetailPanel ── */
-export function CustomizeBlock({ p }) {
+/* ── Decoration capture ───────────────────────────────────────────────────────
+   Turn the live customizer state into the engine-agnostic decoration descriptor
+   the cart serializer consumes (cartSerializer.buildDecoration). Personalized
+   text + Monogram are captured fully; Custom Logo / Photo capture the engine +
+   the local image but leave filePath empty until a server upload step exists
+   (a structurally-valid not-yet-uploaded-logo line, same as the real site). */
+function deriveBallDecoration(p, sel, data) {
+  const baseColor = '#FFFFFF';                 // most custom balls are white; base-color capture is a refinement
+  const finish = { MFS: '279', SecondMFS: '279' };
+  if (!sel) return { engine: 'none' };
+
+  if (sel === 'Personalized') {
+    const s = data.Personalized || {};
+    const pole = (x) => ({ lines: [x.l1 || null, x.l2 || null, x.l3 || null], font: x.font || 'Kabel Dm BT', color: _hexOf(x.color) });
+    const pole1 = pole(s);
+    const sec = data.__second || {};
+    let pole2 = null;
+    if (sec.enabled && (sec.choice === 'Same as Front' || sec.choice === 'Personalized')) {
+      pole2 = pole(sec.choice === 'Same as Front' ? s : sec); // monogram/upload 2nd pole → future work
+    }
+    return { engine: 'ballText', baseColor, finish, pole1, pole2 };
+  }
+  if (sel === 'Monogram') {
+    const s = data.Monogram || {};
+    const letters = _monoLetters(s.initials, s.style);
+    if (!letters) return { engine: 'none' };   // no initials entered yet
+    return {
+      engine: 'monogram', baseColor,
+      monogram: {
+        baseColor, text: letters, view: _monoSpec(s.style).view(letters.length),
+        color: _hexOf(s.c1), color2: (s.c2 && s.c2 !== 'Transparent') ? _hexOf(s.c2) : '#FFFFFF',
+        overlay: s.style === 'circle' ? 'circle' : s.style,
+      },
+    };
+  }
+  if (sel === 'Custom Logo' || sel === 'Photo') {
+    const s = data[sel] || {};
+    return {
+      engine: 'ballLogo', baseColor,
+      logo: s.fileName ? { filePath: '', fileName: s.fileName, cropFilePath: '' } : null,
+      _localImageDataUrl: s.imageDataUrl || null, // for a future upload step
+    };
+  }
+  if (sel === 'Icons') return { engine: 'ballLogo', baseColor, logo: null };
+  return { engine: 'none' };
+}
+
+/* Lives inside PrintTypeProvider; emits the current ball decoration whenever the
+   buyer's selection/state changes. Renders nothing. */
+function DecorationEmitter({ p, onChange }) {
+  const { sel, data } = usePT();
+  useEffect(() => { if (onChange) onChange(deriveBallDecoration(p, sel, data)); }, [sel, data, p, onChange]);
+  return null;
+}
+
+export function CustomizeBlock({ p, onChange }) {
   // A "Custom Accessory Bundle" (e.g. a Sleeve/Chip/Tee Kit) is a bundle, not a
   // plain ball — route it to the bundle path even though it's filed under Golf Balls.
   const isBundle = (p.modNames || []).includes('Custom Accessory Bundle');
@@ -1784,6 +1839,10 @@ export function CustomizeBlock({ p }) {
   const { mods } = modsForProduct(p);
   const { config, loading } = useProductConfig(p);
   const [open, setOpen] = useState(false);
+  // Non-ball custom-logo items are decorated via the logo-overlay engine by
+  // nature → emit it (the uploaded-logo filePath is filled by a future upload
+  // step). Balls emit through <DecorationEmitter> from their live print state.
+  useEffect(() => { if (onChange && !isBall) onChange({ engine: 'logoOverlay' }); }, [isBall, onChange]);
   // golf ball with no supported print types (USA / pre-decorated editions) → ships as-is
   if (isBall && !mods.length) {
     return (
@@ -1812,6 +1871,7 @@ export function CustomizeBlock({ p }) {
             <div style={{ padding: 14 }}>
               {isBall ? (
                 <PrintTypeProvider mods={mods}>
+                  <DecorationEmitter p={p} onChange={onChange} />
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <BallPreview />
                     <BaseProperties p={p} config={config} />

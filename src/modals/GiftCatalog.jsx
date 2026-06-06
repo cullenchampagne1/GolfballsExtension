@@ -426,6 +426,11 @@ function PriceStat({ label, value, accent, was }) {
 }
 
 function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
+  // The live decoration the buyer is building (emitted by CustomizeBlock); it
+  // rides along when the product is added so the saved cart carries the real
+  // imprint. Reset when the panel switches to a different product.
+  const [decoration, setDecoration] = useState(null);
+  useEffect(() => { setDecoration(null); }, [p.id]);
   const openProduct = () => {
     if (!p.url) return;
     // p.url is a complete URL now, but an older cached catalog may still hold a
@@ -501,13 +506,13 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
               <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 6, lineHeight: 1.4 }}>Per-unit price drops with order volume — quote the tier that matches the gift run.</div>
             </div>
           )}
-          {p.customLogo && <CustomizeBlock p={p} />}
+          {p.customLogo && <CustomizeBlock p={p} onChange={setDecoration} />}
         </div>
         <div style={{ padding: 12, borderTop: '1px solid var(--gb-border-subtle)', display: 'flex', gap: 8, flexShrink: 0, background: 'var(--gb-fill-inverse-strong)' }}>
           <Btn variant="secondary" size="md" icon={<I.eye />} style={{ flex: 1 }} onClick={openProduct}>View product</Btn>
           {/* Always allow adding — a product can sit on multiple proposal
               lines (different customizations/quantities). */}
-          <Btn variant="primary" size="md" icon={<I.plus />} style={{ flex: 1.2 }} onClick={() => onAdd && onAdd(p)}>{inProposal ? 'Add another' : 'Add to proposal'}</Btn>
+          <Btn variant="primary" size="md" icon={<I.plus />} style={{ flex: 1.2 }} onClick={() => onAdd && onAdd(p, decoration)}>{inProposal ? 'Add another' : 'Add to proposal'}</Btn>
         </div>
       </motion.div>
     </>
@@ -877,11 +882,13 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // product can now appear on multiple lines (e.g. different customizations).
   const inProposal = (id) => proposal.some((l) => l.productId === id);
   const propTotal = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
-  const addToProposal = (p) => setProposal((prev) => {
+  const addToProposal = (p, decoration = null) => setProposal((prev) => {
     // Always add a NEW line (unique id) — the same product can be added more
-    // than once so the rep can quote different customizations/quantities.
+    // than once so the rep can quote different customizations/quantities. The
+    // decoration descriptor (from the detail panel's CustomizeBlock) rides along
+    // so Save draft serializes the real imprint; the card quick-add omits it.
     const qty = p.minQty || 1;
-    return [...prev, { id: rid(), productId: p.id, product: p, splits: [{ id: rid(), qty, price: priceAtQty(p, qty) }] }];
+    return [...prev, { id: rid(), productId: p.id, product: p, decoration: decoration || null, splits: [{ id: rid(), qty, price: priceAtQty(p, qty) }] }];
   });
   const patchSplit = (lineId, splitId, patch) => setProposal((prev) => prev.map((l) => l.id === lineId ? { ...l, splits: l.splits.map((s) => s.id === splitId ? { ...s, ...patch } : s) } : l));
   const addSplit = (lineId) => setProposal((prev) => prev.map((l) => { if (l.id !== lineId) return l; const last = l.splits[l.splits.length - 1]; return { ...l, splits: [...l.splits, { id: rid(), qty: last.qty, price: last.price }] }; }));
