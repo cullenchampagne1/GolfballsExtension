@@ -146,6 +146,27 @@ function CatGlyph({ id, size = 15, color = 'currentColor' }) {
   return <Ico size={size} style={{ color, flexShrink: 0 }} />;
 }
 
+/* Commission badge — the at-a-glance "this is the commissionable SKU" marker.
+   Driven by the SAME customLogo flag that files a product under the Custom
+   Logo section (modificationName "Custom Logo" / Corporate itemType), so a
+   custom-logo twin (e.g. B5367) reads as commission and its plain-stock twin
+   (B5368) carries no badge — telling them apart in the "All" view. */
+const DollarI = (p) => <Icon {...p}><path d="M12 2.5v19M16.5 6.8c-.9-1.2-2.6-2-4.5-2-2.6 0-4.5 1.4-4.5 3.4 0 2 1.7 3 4.5 3.6s4.5 1.6 4.5 3.6c0 2-1.9 3.4-4.5 3.4-1.9 0-3.6-.8-4.5-2"/></Icon>;
+function CommissionBadge({ small }) {
+  return (
+    <span title="Commissionable — custom-logo SKU" style={{
+      display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0,
+      padding: small ? '1px 6px' : '2px 8px', borderRadius: 'var(--gb-r-pill)',
+      background: 'var(--gb-success-tint, rgba(46,158,91,.14))',
+      border: '1px solid var(--gb-success-border, rgba(46,158,91,.32))',
+      color: 'var(--gb-success-fg, #2e9e5b)',
+      fontSize: small ? 8.5 : 9.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', lineHeight: 1.25, whiteSpace: 'nowrap',
+    }}>
+      <DollarI size={small ? 9 : 11} /> Commission
+    </span>
+  );
+}
+
 /* The search box doubles as a command bar: typing "/" switches into
    filter mode (like Quick Notes) — type a category or brand, pick it,
    and the matching filter is applied while the search field clears so
@@ -340,11 +361,14 @@ function ProductCard({ p, compact, showRating, active, inProposal, onClick }) {
           {showRating && p.rating && <Rating value={p.rating} count={p.reviews} size={10} />}
         </div>
         <div style={{ fontSize: compact ? 12 : 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.32, letterSpacing: -.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: compact ? undefined : '2.6em' }}>{p.title}</div>
-        {p.sku && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-            <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-ghost)' }}>SKU</span>
-            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.sku}</span>
-            {p.customLogo && <span title="Custom-logo available" style={{ flexShrink: 0, width: 5, height: 5, borderRadius: '50%', background: 'var(--gb-brand-label)', opacity: .8 }} />}
+        {(p.sku || p.customLogo) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            {p.sku && <>
+              <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', flexShrink: 0 }}>SKU</span>
+              <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.sku}</span>
+            </>}
+            <div style={{ flex: 1 }} />
+            {p.customLogo && <CommissionBadge small />}
           </div>
         )}
         <div style={{ flex: 1 }} />
@@ -406,7 +430,7 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, marginBottom: 6, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-brand-label)', fontFamily: 'var(--gb-font-mono)' }}>{p.brand}</span>
             <Tag tone="neutral" size="sm" icon={<CatGlyph id={p.dept || p.cat} size={12} />}>{p.dept || p.cat}</Tag>
-            {p.customLogo && <Tag tone="brand" size="sm" icon={<CustomLogoIcon size={11} />}>Custom logo</Tag>}
+            {p.customLogo && <CommissionBadge />}
             {onSale(p) && <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 'var(--gb-r-pill)', fontSize: 9.5, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-danger, #e5484d)' }}>Sale −{usd(p.orig - p.price)}</span>}
           </div>
           <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--gb-text-primary)', lineHeight: 1.25, letterSpacing: -.2 }}>{p.title}</div>
