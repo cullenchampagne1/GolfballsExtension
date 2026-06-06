@@ -97,7 +97,9 @@ const netLow  = (p) => netP(p, lowPrice(p));                  // actual top-volu
 /* "/" quick-filters beyond category + brand. */
 const SPECIAL_CMDS = [
   { type: 'special', id: 'sale', label: 'On sale / promo', match: (p) => isDeal(p) },
-  { type: 'special', id: 'logo', label: 'Custom-logo ready', match: (p) => !!p.logo },
+  // Commissionable = custom-logo products (the ones that carry the commission
+  // badge). Replaces the old Custom Logo rail group as the way to scope to them.
+  { type: 'special', id: 'commission', label: 'Commissionable only', match: (p) => !!p.customLogo },
 ];
 
 /* Base card dimensions; on-screen size is this × the "Gifting Catalog:
@@ -561,10 +563,7 @@ function SavedStub({ label, icon }) {
   );
 }
 
-function CategoryRail({ sel, onSelect, clTotal, clCats, clCounts, depts, deptCounts, total, dock }) {
-  // Custom-logo group starts collapsed — keeps the rail compact; click the
-  // row (or its caret) to expand the custom-logo categories.
-  const [clOpen, setClOpen] = useState(false);
+function CategoryRail({ sel, onSelect, depts, deptCounts, total, dock }) {
   return (
     <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: 12, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px', flexShrink: 0 }}>Browse</div>
@@ -572,29 +571,8 @@ function CategoryRail({ sel, onSelect, clTotal, clCats, clCounts, depts, deptCou
       <div className="gb-gc-norail" style={{ flex: 1, minHeight: 60, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, padding: '14px 0', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%)', maskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%)' }}>
         <CatRow glyph="all" label="All Items" count={total} active={sel === 'all'} onClick={() => onSelect('all')} />
 
-        {/* ── Custom Logo (collapsible) — the old catalog, now a subset ── */}
-        {clTotal > 0 && (
-          <>
-            <CatRow glyph="cl" label="Custom Logo" count={clTotal}
-              active={sel === 'cl'} onClick={() => { onSelect('cl'); setClOpen(true); }}
-              chevron={clOpen} onToggle={() => setClOpen((o) => !o)} />
-            {/* Children slide open/closed via a CSS grid-rows transition
-                (1fr ↔ 0fr) with the inner track clipped. Pure CSS, so it
-                animates smoothly regardless of the modal's transform: scale()
-                ancestor — a JS height:'auto' measure reads the scaled rect and
-                sticks mid-animation. */}
-            <div style={{ display: 'grid', gridTemplateRows: clOpen ? '1fr' : '0fr', opacity: clOpen ? 1 : 0, transition: 'grid-template-rows .26s cubic-bezier(.32,.72,0,1), opacity .2s ease', flexShrink: 0 }}>
-              <div style={{ overflow: 'hidden', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {clCats.map((c) => (
-                  <CatRow key={'cl:' + c} glyph={c} label={c} count={clCounts[c] || 0} indent
-                    active={sel === 'cl:' + c} onClick={() => onSelect('cl:' + c)} />
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* ── Departments — the full catalog, everything else included ── */}
+        {/* ── Departments — custom-logo items are folded into their depts; use
+            the /Commissionable filter to scope to commissionable products. ── */}
         {depts.length > 0 && (
           <>
             <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', padding: '10px 11px 4px', flexShrink: 0 }}>Departments</div>
@@ -997,15 +975,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
 
   // Custom-logo subset: total, per-"Shop by Type" category counts, and the
   // ordered list of categories present (canonical order, extras trail).
-  const clItems = useMemo(() => catalog.filter((p) => p.customLogo), [catalog]);
-  const clTotal = clItems.length;
-  const clCounts = useMemo(() => { const m = {}; clItems.forEach((p) => { m[p.cat] = (m[p.cat] || 0) + 1; }); return m; }, [clItems]);
-  const clCats = useMemo(() => {
-    const present = new Set(clItems.map((p) => p.cat));
-    const ordered = CATEGORY_ORDER.filter((c) => present.has(c));
-    const extra = [...present].filter((c) => !CATEGORY_ORDER.includes(c)).sort();
-    return [...ordered, ...extra];
-  }, [clItems]);
+  // Commissionable (custom-logo) count — kept only for the header stat; these
+  // items now live in their departments, scoped via the /Commissionable filter.
+  const clTotal = useMemo(() => catalog.filter((p) => p.customLogo).length, [catalog]);
 
   // Full-catalog departments: per-dept counts + ordered list present.
   const deptCounts = useMemo(() => { const m = {}; catalog.forEach((p) => { m[p.dept] = (m[p.dept] || 0) + 1; }); return m; }, [catalog]);
@@ -1017,14 +989,11 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   }, [catalog]);
 
   // Readable label for the current selection (footer + "in <x>" text).
-  const selLabel = sel === 'all' ? '' : sel === 'cl' ? 'Custom Logo'
-    : sel.startsWith('cl:') ? sel.slice(3) : sel.startsWith('dept:') ? sel.slice(5) : sel;
+  const selLabel = sel === 'all' ? '' : sel.startsWith('dept:') ? sel.slice(5) : sel;
 
   // Products in the current sidebar selection.
   const inCat = useMemo(() => {
     if (sel === 'all') return catalog;
-    if (sel === 'cl') return catalog.filter((p) => p.customLogo);
-    if (sel.startsWith('cl:')) { const c = sel.slice(3); return catalog.filter((p) => p.customLogo && p.cat === c); }
     if (sel.startsWith('dept:')) { const d = sel.slice(5); return catalog.filter((p) => p.dept === d); }
     return catalog;
   }, [sel, catalog]);
@@ -1049,19 +1018,15 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const commands = useMemo(() => {
     const specCmds = SPECIAL_CMDS.map((s) => ({ ...s, count: catalog.filter(s.match).length })).filter((s) => s.count > 0);
     // Category jumps carry the full selection key as `id`; `glyph` is the bare
-    // name so the palette icon still resolves. Custom-logo group + its types,
-    // then the full-catalog departments.
-    const clCmds = clTotal > 0
-      ? [{ type: 'cat', id: 'cl', glyph: 'cl', label: 'Custom Logo', count: clTotal },
-         ...clCats.map((c) => ({ type: 'cat', id: 'cl:' + c, glyph: c, label: c, count: clCounts[c] || 0 }))]
-      : [];
+    // name so the palette icon still resolves. Departments only now —
+    // custom-logo items are folded into them.
     const deptCmds = depts.map((d) => ({ type: 'cat', id: 'dept:' + d, glyph: d, label: d, count: deptCounts[d] || 0 }));
     const rank = (b) => { const i = BRAND_ORDER.indexOf(b); return i === -1 ? BRAND_ORDER.length : i; };
     const brandCmds = Object.keys(brandCounts)
       .sort((a, b) => (rank(a) - rank(b)) || (brandCounts[b] - brandCounts[a]))
       .map((b) => ({ type: 'brand', id: b, label: b, count: brandCounts[b] }));
-    return [...specCmds, ...clCmds, ...deptCmds, ...brandCmds];
-  }, [clTotal, clCats, clCounts, depts, deptCounts, brandCounts, catalog]);
+    return [...specCmds, ...deptCmds, ...brandCmds];
+  }, [depts, deptCounts, brandCounts, catalog]);
   // Commands stack + combine: a brand toggles into the multi-select,
   // category replaces, special toggles — so "/titleist /callaway /sale"
   // narrows to both brands on sale.
@@ -1188,7 +1153,6 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             so they span the sidebar's height (header + footer stay visible). */}
         <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative', overflow: 'hidden', boxShadow: 'inset 0 7px 7px -7px rgba(0,0,0,.16), inset 0 -7px 7px -7px rgba(0,0,0,.16)' }}>
           <CategoryRail sel={sel} onSelect={setSel} total={catalog.length}
-            clTotal={clTotal} clCats={clCats} clCounts={clCounts}
             depts={depts} deptCounts={deptCounts}
             dock={proposal.length > 0 && !proposalOpen ? <ProposalDock key="dock" count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} /> : null} />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>

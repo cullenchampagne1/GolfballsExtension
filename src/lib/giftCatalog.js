@@ -231,7 +231,12 @@ export function normalizeDoc(doc) {
     brand:   doc.brand_s || '',
     cat:     deriveCat(doc),                             // custom-logo "Shop by Type" bucket
     dept:    deriveDept(doc),                            // full-catalog department bucket
-    customLogo: isCustomLogo(doc),                       // in the old custom-logo catalog?
+    customLogo: isCustomLogo(doc),                       // in the old custom-logo catalog? (drives the $ badge)
+    // Customizable = carries ANY decoration modification (Custom Logo,
+    // Personalized, Monogram, Photo, Ball Marker, …) — broader than customLogo.
+    // Drives whether the detail panel shows the customization UI (e.g. a
+    // "Personalized Ball Marker" hat clip is customizable but not custom-logo).
+    customizable: Array.isArray(doc.modificationName_ss) && doc.modificationName_ss.length > 0,
     itemType: doc.itemType_s || (Array.isArray(doc.itemType_ss) && doc.itemType_ss[0]) || '',
     price:   round2(price),
     orig:    orig && orig > 0 ? round2(orig) : null,
