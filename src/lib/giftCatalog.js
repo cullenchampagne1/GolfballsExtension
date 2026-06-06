@@ -63,7 +63,7 @@ export const BRAND_ORDER = [
   'PXG', 'Pinnacle', 'Venture Golf', 'Vice Golf', 'Wilson',
 ];
 
-const CACHE_KEY = 'gbGiftCatalogCache_v4'; // bumped: full-catalog query + sku/dept/customLogo shape
+const CACHE_KEY = 'gbGiftCatalogCache_v5'; // bumped: normalizeDoc now carries urlPath (the commission "_1" slug); a v4 cache predates it, so force a one-time re-index
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // re-index daily
 
 const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));

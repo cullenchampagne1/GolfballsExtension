@@ -559,7 +559,7 @@ function ImageAlignModal({ image, initial, onCancel, onApply }) {
    PrintTypeContext slot (Custom Logo vs Photo) so BallPreview can decal it.
    The raw image + transform are kept (rawDataUrl / align) so the buyer can
    re-align without recompositing an already-composited image. */
-function ImageUpload({ ai, label = 'Upload Your Company Logo', slot = 'Custom Logo' }) {
+function ImageUpload({ ai, label = 'Upload Your Company Logo', slot = 'Custom Logo', alignable = true }) {
   const [hover, setHover] = useState(false);
   const [dataUrl, setDataUrl] = usePTField(slot, 'imageDataUrl');
   const [fileName, setFileName] = usePTField(slot, 'fileName');
@@ -570,7 +570,13 @@ function ImageUpload({ ai, label = 'Upload Your Company Logo', slot = 'Custom Lo
   const ingest = (file) => {
     if (!file || !file.type.startsWith('image/')) return;
     const r = new FileReader();
-    r.onload = () => setPending({ url: r.result, name: file.name, initial: null });
+    // Balls open the alignment ring (the logo is decaled onto a sphere); flat
+    // products (towels, shirts, …) have no pole to align to — the logo just gets
+    // attached as-is, so skip the modal and store the image directly.
+    r.onload = () => {
+      if (alignable) setPending({ url: r.result, name: file.name, initial: null });
+      else { setRawUrl(r.result); setFileName(file.name); setDataUrl(r.result); setAlign(null); }
+    };
     r.readAsDataURL(file);
   };
   const onDrop = (e) => {
@@ -584,7 +590,7 @@ function ImageUpload({ ai, label = 'Upload Your Company Logo', slot = 'Custom Lo
     setDataUrl(null); setFileName(null); setRawUrl(null); setAlign(null);
     if (inputRef.current) inputRef.current.value = '';
   };
-  const reAlign = (e) => { e.stopPropagation(); if (rawUrl) setPending({ url: rawUrl, name: fileName, initial: align }); };
+  const reAlign = (e) => { e.stopPropagation(); if (alignable && rawUrl) setPending({ url: rawUrl, name: fileName, initial: align }); };
   const applyAlign = (composited, transform) => {
     if (pending) { setRawUrl(pending.url); setFileName(pending.name); }
     setDataUrl(composited);
@@ -617,7 +623,7 @@ function ImageUpload({ ai, label = 'Upload Your Company Logo', slot = 'Custom Lo
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, justifyContent: 'flex-start' }}>
             <img src={dataUrl} alt="" style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-surface-modal)', flexShrink: 0 }} />
             <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0, textAlign: 'left' }}>{fileName || 'Uploaded image'}</div>
-            {rawUrl && <IconBtn size="xs" variant="ghost" icon={<I.edit />} onClick={reAlign} title="Align image" />}
+            {alignable && rawUrl && <IconBtn size="xs" variant="ghost" icon={<I.edit />} onClick={reAlign} title="Align image" />}
             <IconBtn size="xs" variant="ghost" danger icon={<I.trash />} onClick={clear} title="Remove / replace" />
           </div>
         ) : (
@@ -1162,7 +1168,7 @@ function SecondMonogram() {
    pole; this puts a second, independent imprint on the opposite pole (e.g. a
    Custom Logo on one side + Personalization/Monogram on the other). All state
    lives in the __second context slot so it survives + drives the back decal. */
-function SecondImprint() {
+function SecondImprint({ alignable = true }) {
   const [on, setOn] = usePTField('__second', 'enabled');
   const [choice, setChoice] = usePTField('__second', 'choice');
   return (
@@ -1181,7 +1187,7 @@ function SecondImprint() {
             })}
           </div>
           {choice === 'Personalized' && <PersonalizedImprint slot="__second" />}
-          {(choice === 'Upload Image' || choice === 'Custom' || choice === 'Logo Library') && <ImageUpload slot="__second" label="Upload Second Imprint" />}
+          {(choice === 'Upload Image' || choice === 'Custom' || choice === 'Logo Library') && <ImageUpload slot="__second" label="Upload Second Imprint" alignable={alignable} />}
           {choice === 'Same as Front' && <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontStyle: 'italic' }}>Reuses your front imprint on the opposite pole — rotate the ball to see it.</div>}
         </motion.div>
       )}
@@ -1285,13 +1291,14 @@ function BaseColorPicker({ label = 'Color', colors, value, onChange }) {
 /* Custom Logo decoration — logo upload + (second imprint only where the product
    actually has a second pole) + commercial block. */
 function CustomLogoFlow({ p, config, dualPole }) {
+  // Flat product — the logo is just attached (no on-ball alignment step).
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <ImageUpload />
+      <ImageUpload alignable={false} />
       {dualPole && (
         <div>
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)', marginBottom: 7 }}>Second Pole Imprint</div>
-          <SecondImprint />
+          <SecondImprint alignable={false} />
         </div>
       )}
       <Commercial p={p} config={config} />
@@ -1433,7 +1440,7 @@ function renderDeco(kind, p, config, dualPole) {
     case 'personalized': return <PersonalizedDecoration />;
     case 'monogram': return <MonogramDecoration />;
     case 'tee': return <TeeDecoration />;
-    case 'photo': return <ImageUpload ai label="Upload Image" />;
+    case 'photo': return <ImageUpload ai label="Upload Image" alignable={false} />;
     case 'stock': return <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', padding: '8px 0' }}>Buy as-is — no decoration.</div>;
     default: return null;
   }
@@ -1935,6 +1942,28 @@ function DecorationEmitter({ p, onChange }) {
   return null;
 }
 
+/* Accessory counterpart to DecorationEmitter — lives inside the non-ball
+   PrintTypeProvider and re-emits the logo-overlay decoration whenever the buyer
+   attaches a logo (or picks a 2nd-pole imprint). The attached image rides along
+   as _localImageDataUrl and is uploaded at save time (cartSerializer leaves
+   filePath empty until then). Without this, the accessory upload had no backing
+   store and never reached the cart. */
+function AccessoryDecorationEmitter({ p, onChange }) {
+  const { data } = usePT();
+  useEffect(() => {
+    if (!onChange) return;
+    const cl = data['Custom Logo'] || {};
+    onChange({
+      engine: 'logoOverlay',
+      logo: cl.fileName ? { filePath: '', fileName: cl.fileName, cropFilePath: '' } : null,
+      _localImageDataUrl: cl.imageDataUrl || cl.rawDataUrl || null,
+      dualPole: !!(data.__second && data.__second.enabled),
+      pole2: derivePole2(data, 'Custom Logo'),
+    });
+  }, [data, p, onChange]);
+  return null;
+}
+
 export function CustomizeBlock({ p, onChange }) {
   // A "Custom Accessory Bundle" (e.g. a Sleeve/Chip/Tee Kit) is a bundle, not a
   // plain ball — route it to the bundle path even though it's filed under Golf Balls.
@@ -1987,7 +2016,12 @@ export function CustomizeBlock({ p, onChange }) {
                   </div>
                 </PrintTypeProvider>
               ) : (
-                <AccessoryCustomizer p={p} config={config} loading={loading} />
+                <PrintTypeProvider mods={mods}>
+                  {/* Captures the attached logo (+ base picks) into the decoration —
+                      accessories otherwise had no context to store the upload. */}
+                  <AccessoryDecorationEmitter p={p} onChange={onChange} />
+                  <AccessoryCustomizer p={p} config={config} loading={loading} />
+                </PrintTypeProvider>
               )}
             </div>
           </motion.div>
