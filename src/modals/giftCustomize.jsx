@@ -2072,10 +2072,10 @@ export function CustomizeBlock({ p, onChange }) {
   const { mods } = modsForProduct(p);
   const { config, loading } = useProductConfig(p);
   const [open, setOpen] = useState(false);
-  // Non-ball custom-logo items are decorated via the logo-overlay engine by
-  // nature → emit it (the uploaded-logo filePath is filled by a future upload
-  // step). Balls emit through <DecorationEmitter> from their live print state.
-  useEffect(() => { if (onChange && !isBall) onChange({ engine: 'logoOverlay' }); }, [isBall, onChange]);
+  // Accessory emission is fully owned by <AccessoryDecorationEmitter> (it picks
+  // logo / tee text / embroidery from the live print state); balls emit through
+  // <DecorationEmitter>. (A blanket logoOverlay emit here would run after the
+  // child emitter on mount and clobber tee/embroidery decorations.)
   // golf ball with no supported print types (USA / pre-decorated editions) → ships as-is
   if (isBall && !mods.length) {
     return (
