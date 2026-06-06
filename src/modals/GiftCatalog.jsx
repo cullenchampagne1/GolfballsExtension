@@ -613,11 +613,15 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
   const total = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
   const units = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty, 0), 0);
   return (
-    <>
-      <motion.div onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .18 }}
-        style={{ position: 'absolute', inset: 0, background: 'var(--gb-backdrop)', zIndex: 30 }} />
-      <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 460, damping: 40 }}
-        style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 'min(440px, 90%)', zIndex: 31, background: 'var(--gb-surface-modal)', borderLeft: '1px solid var(--gb-border-default)', boxShadow: '-10px 0 28px rgba(0,0,0,.18)', display: 'flex', flexDirection: 'column' }}>
+    /* In-flow side card (not an overlay) — sits BESIDE the catalog so the
+       proposal and item details are visible at once. The slide/resize is
+       driven by the parent column's flex-basis + opacity transition. */
+    <div style={{
+      width: '100%', height: '100%',
+      background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)',
+      borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)',
+      display: 'flex', flexDirection: 'column',
+    }}>
         <div style={{ padding: '13px 14px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0, background: 'var(--gb-fill-inverse-strong)' }}>
           <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <I.card size={15} />
@@ -658,8 +662,7 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
             </div>
           </div>
         )}
-      </motion.div>
-    </>
+    </div>
   );
 }
 
@@ -824,10 +827,14 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           scales the paint; transform-origin center + margin auto keep it
           centered. */}
       <div style={{ margin: 'auto', flexShrink: 0, transform: `scale(${scale})`, transformOrigin: 'center center' }}>
+        {/* Flex row: catalog card + proposal side column. The row WIDENS when
+            the proposal opens (CARD_W → CARD_W+416), so the centered catalog
+            slides left and the proposal emerges beside it — both visible. */}
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', height: CARD_H, width: proposalOpen ? CARD_W + 416 : CARD_W, transition: 'width .42s cubic-bezier(.4,0,.2,1)' }}>
         <motion.div
           initial={{ opacity: 0, scale: .96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97, y: 6 }}
           transition={{ type: 'spring', stiffness: 380, damping: 32 }}
-          style={{ width: CARD_W, height: CARD_H, position: 'relative', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column' }}>
+          style={{ width: CARD_W, height: '100%', flex: '0 0 auto', zIndex: 2, position: 'relative', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
         <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
           <div style={{ width: 32, height: 32, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -850,7 +857,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             so they span the sidebar's height (header + footer stay visible). */}
         <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative', overflow: 'hidden', boxShadow: 'inset 0 7px 7px -7px rgba(0,0,0,.16), inset 0 -7px 7px -7px rgba(0,0,0,.16)' }}>
           <CategoryRail cats={cats} value={cat} onChange={setCat} counts={catCounts} total={catalog.length}
-            dock={proposal.length > 0 ? <ProposalDock count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} /> : null} />
+            dock={proposal.length > 0 && !proposalOpen ? <ProposalDock count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} /> : null} />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <div className="gb-gc-norail" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 16px', borderBottom: '1px solid var(--gb-border-subtle)', overflowX: 'auto', flexShrink: 0, WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 40px), transparent)', maskImage: 'linear-gradient(to right, #000 calc(100% - 40px), transparent)' }}>
               <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flexShrink: 0, marginRight: 2 }}>Brand</span>
@@ -890,15 +897,12 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             </div>
           </div>
 
+          {/* Item details stay an overlay INSIDE the catalog card, so they
+              coexist with the proposal side card (both visible at once). */}
           <AnimatePresence>
             {selected && (
               <DetailPanel key="detail" p={selected} inProposal={inProposal(selected.id)} onAdd={addToProposal}
                 onOpenProposal={() => { setSelected(null); setProposalOpen(true); }} onClose={() => setSelected(null)} />
-            )}
-            {proposalOpen && (
-              <ProposalPanel key="proposal" proposal={proposal} onClose={() => setProposalOpen(false)}
-                onPatchSplit={patchSplit} onAddSplit={addSplit} onRemoveSplit={removeSplit}
-                onRemoveLine={removeLine} onClear={() => { setProposal([]); setProposalOpen(false); }} />
             )}
           </AnimatePresence>
         </div>
@@ -919,6 +923,20 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         </div>
 
         </motion.div>
+
+        {/* Proposal side column — a PHYSICALLY SEPARATE card that lives beside
+            the catalog. It emerges from BEHIND the catalog (which holds
+            zIndex:2): the column's flex-basis grows 0 → 416 in lockstep with
+            the row widening, and the absolute panel (anchored right:0) rides
+            out from under the catalog's right edge. */}
+        <div style={{ flex: proposalOpen ? '0 0 416px' : '0 0 0px', height: '100%', position: 'relative', overflow: 'visible', transition: 'flex-basis .42s cubic-bezier(.4,0,.2,1)' }}>
+          <div style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: 400, opacity: proposalOpen ? 1 : 0, pointerEvents: proposalOpen ? 'auto' : 'none', transition: 'opacity .24s ease' }}>
+            <ProposalPanel proposal={proposal} onClose={() => setProposalOpen(false)}
+              onPatchSplit={patchSplit} onAddSplit={addSplit} onRemoveSplit={removeSplit}
+              onRemoveLine={removeLine} onClear={() => { setProposal([]); setProposalOpen(false); }} />
+          </div>
+        </div>
+        </div>{/* /flex row */}
       </div>
       </motion.div>
       )}

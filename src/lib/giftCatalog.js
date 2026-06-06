@@ -29,17 +29,19 @@ async function cacheTtlMs() {
   } catch { return 24 * 60 * 60 * 1000; }
 }
 
-const PAGE_ROWS = 60;
-const MAX_PRODUCTS = 1500; // safety bound; we paginate to the live numFound
+const PAGE_ROWS = 500;      // the API honors big pages — ~7 round-trips for the whole catalog
+const MAX_PRODUCTS = 6000;  // safety bound, well above the live numFound (~3.1k); we paginate to it
 
-/* The site's full custom-logo catalog query — the exact body the live
-   master.api.icustomize.com/user/solr-refinement calls send: every
-   product carrying the "Custom Logo" modification OR in ANY Corporate
-   itemType, minus excluded stock. That `OR itemType_ss:Corporate` is the
-   key fix — a modificationName-only filter dropped every Corporate item
-   that lacks that exact mod (towels, hats, bags, …). Products are
-   bucketed afterward by their itemType (see deriveCat). */
-const MAIN_QUERY = 'modificationName_ss:"Custom Logo" OR itemType_ss:Corporate';
+/* The ENTIRE golfballs.com catalog. `*:*` (Solr match-all) is what the
+   site's own search/category pages resolve to once every refinement is
+   cleared — it returns every indexed product (~3,100), not just the
+   ~990 custom-logo SKUs the old `modificationName_ss:"Custom Logo" OR
+   itemType_ss:Corporate` query caught. We pull the lot so search finds
+   anything the site sells; each product is then tagged customLogo (see
+   isCustomLogo) and bucketed by department (deriveDept) / custom-logo
+   category (deriveCat) on the client. Out-of-stock is excluded server-
+   side via additionalFacets (-tag_ss:ExcludeStock) in the background. */
+const MAIN_QUERY = '*:*';
 
 /* Canonical "Shop by Type" + "Shop by Brand" taxonomies from the live
    custom-logo section — the rail/chips render in this order. */
