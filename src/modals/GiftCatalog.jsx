@@ -146,24 +146,22 @@ function CatGlyph({ id, size = 15, color = 'currentColor' }) {
   return <Ico size={size} style={{ color, flexShrink: 0 }} />;
 }
 
-/* Commission badge — the at-a-glance "this is the commissionable SKU" marker.
-   Driven by the SAME customLogo flag that files a product under the Custom
-   Logo section (modificationName "Custom Logo" / Corporate itemType), so a
-   custom-logo twin (e.g. B5367) reads as commission and its plain-stock twin
-   (B5368) carries no badge — telling them apart in the "All" view. */
-const DollarI = (p) => <Icon {...p}><path d="M12 2.5v19M16.5 6.8c-.9-1.2-2.6-2-4.5-2-2.6 0-4.5 1.4-4.5 3.4 0 2 1.7 3 4.5 3.6s4.5 1.6 4.5 3.6c0 2-1.9 3.4-4.5 3.4-1.9 0-3.6-.8-4.5-2"/></Icon>;
-function CommissionBadge({ small }) {
+/* Commissionable marker — a "$" coin pinned to the bottom-right of the
+   product photo. Driven by the SAME customLogo flag that files a product
+   under the Custom Logo section (modificationName "Custom Logo" / Corporate
+   itemType), so a custom-logo twin (e.g. B5367) wears the $ and its plain-
+   stock twin (B5368) doesn't — telling them apart in the "All" view. The
+   parent image wrapper must be position: relative. */
+function CommissionDollar({ size = 20 }) {
   return (
     <span title="Commissionable — custom-logo SKU" style={{
-      display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0,
-      padding: small ? '1px 6px' : '2px 8px', borderRadius: 'var(--gb-r-pill)',
-      background: 'var(--gb-success-tint, rgba(46,158,91,.14))',
-      border: '1px solid var(--gb-success-border, rgba(46,158,91,.32))',
-      color: 'var(--gb-success-fg, #2e9e5b)',
-      fontSize: small ? 8.5 : 9.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', lineHeight: 1.25, whiteSpace: 'nowrap',
-    }}>
-      <DollarI size={small ? 9 : 11} /> Commission
-    </span>
+      position: 'absolute', bottom: 7, right: 7, zIndex: 2,
+      width: size, height: size, borderRadius: '50%',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'var(--gb-success-solid, #2e9e5b)', color: '#fff',
+      fontSize: Math.round(size * 0.62), fontWeight: 800, fontFamily: 'var(--gb-font-mono)',
+      boxShadow: '0 1px 5px rgba(0,0,0,.28)', lineHeight: 1, userSelect: 'none',
+    }}>$</span>
   );
 }
 
@@ -354,6 +352,7 @@ function ProductCard({ p, compact, showRating, active, inProposal, onClick }) {
         {onSale(p) && (
           <span style={{ position: 'absolute', top: 7, right: 7, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-danger, #e5484d)', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>Sale</span>
         )}
+        {p.customLogo && <CommissionDollar size={compact ? 18 : 20} />}
       </div>
       <div style={{ paddingTop: compact ? 8 : 10, display: 'flex', flexDirection: 'column', gap: compact ? 4 : 5, flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -361,14 +360,10 @@ function ProductCard({ p, compact, showRating, active, inProposal, onClick }) {
           {showRating && p.rating && <Rating value={p.rating} count={p.reviews} size={10} />}
         </div>
         <div style={{ fontSize: compact ? 12 : 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.32, letterSpacing: -.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: compact ? undefined : '2.6em' }}>{p.title}</div>
-        {(p.sku || p.customLogo) && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-            {p.sku && <>
-              <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', flexShrink: 0 }}>SKU</span>
-              <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.sku}</span>
-            </>}
-            <div style={{ flex: 1 }} />
-            {p.customLogo && <CommissionBadge small />}
+        {p.sku && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
+            <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', flexShrink: 0 }}>SKU</span>
+            <span style={{ fontSize: 10, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.sku}</span>
           </div>
         )}
         <div style={{ flex: 1 }} />
@@ -426,11 +421,13 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
           <IconBtn size="sm" icon={<I.close />} onClick={onClose} />
         </div>
         <div className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 16 }}>
-          <ProductImage src={p.img} alt={p.title} pad={26} radius="var(--gb-r-lg)" />
+          <div style={{ position: 'relative' }}>
+            <ProductImage src={p.img} alt={p.title} pad={26} radius="var(--gb-r-lg)" />
+            {p.customLogo && <CommissionDollar size={26} />}
+          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, marginBottom: 6, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-brand-label)', fontFamily: 'var(--gb-font-mono)' }}>{p.brand}</span>
             <Tag tone="neutral" size="sm" icon={<CatGlyph id={p.dept || p.cat} size={12} />}>{p.dept || p.cat}</Tag>
-            {p.customLogo && <CommissionBadge />}
             {onSale(p) && <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 'var(--gb-r-pill)', fontSize: 9.5, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-danger, #e5484d)' }}>Sale −{usd(p.orig - p.price)}</span>}
           </div>
           <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--gb-text-primary)', lineHeight: 1.25, letterSpacing: -.2 }}>{p.title}</div>
