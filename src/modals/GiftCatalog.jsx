@@ -517,21 +517,19 @@ function CategoryRail({ sel, onSelect, clTotal, clCats, clCounts, depts, deptCou
             <CatRow glyph="cl" label="Custom Logo" count={clTotal}
               active={sel === 'cl'} onClick={() => { onSelect('cl'); setClOpen(true); }}
               chevron={clOpen} onToggle={() => setClOpen((o) => !o)} />
-            {/* Children slide open/closed (height + fade) — overflow hidden so
-                rows are clipped, not popped, during the transition. */}
-            <AnimatePresence initial={false}>
-              {clOpen && (
-                <motion.div key="cl-children"
-                  initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: .24, ease: [0.32, 0.72, 0, 1] }}
-                  style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
-                  {clCats.map((c) => (
-                    <CatRow key={'cl:' + c} glyph={c} label={c} count={clCounts[c] || 0} indent
-                      active={sel === 'cl:' + c} onClick={() => onSelect('cl:' + c)} />
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* Children slide open/closed via a CSS grid-rows transition
+                (1fr ↔ 0fr) with the inner track clipped. Pure CSS, so it
+                animates smoothly regardless of the modal's transform: scale()
+                ancestor — a JS height:'auto' measure reads the scaled rect and
+                sticks mid-animation. */}
+            <div style={{ display: 'grid', gridTemplateRows: clOpen ? '1fr' : '0fr', opacity: clOpen ? 1 : 0, transition: 'grid-template-rows .26s cubic-bezier(.32,.72,0,1), opacity .2s ease', flexShrink: 0 }}>
+              <div style={{ overflow: 'hidden', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {clCats.map((c) => (
+                  <CatRow key={'cl:' + c} glyph={c} label={c} count={clCounts[c] || 0} indent
+                    active={sel === 'cl:' + c} onClick={() => onSelect('cl:' + c)} />
+                ))}
+              </div>
+            </div>
           </>
         )}
 
@@ -626,7 +624,12 @@ function SplitRow({ line, split, canRemove, onChange, onRemove }) {
   const tier = priceAtQty(p, split.qty);
   const custom = !isTierPrice(p, split.qty, split.price);
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 0' }}>
+    <motion.div layout
+      initial={{ opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0 }}
+      animate={{ opacity: 1, height: 'auto', paddingTop: 7, paddingBottom: 7 }}
+      exit={{ opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0 }}
+      transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }}
+      style={{ display: 'flex', alignItems: 'center', gap: 7, overflow: 'hidden' }}>
       <QtyStepper value={split.qty} onChange={onQty} />
       <span style={{ fontSize: 11, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)', flexShrink: 0 }}>×</span>
       <PriceField value={split.price} onChange={(pr) => onChange({ price: pr })} />
@@ -637,7 +640,7 @@ function SplitRow({ line, split, canRemove, onChange, onRemove }) {
       <div style={{ flex: 1 }} />
       <span style={{ fontSize: 13, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)', minWidth: 58, textAlign: 'right', flexShrink: 0 }}>{money(split.qty * split.price)}</span>
       <span onClick={canRemove ? onRemove : undefined} style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: canRemove ? 'var(--gb-text-muted)' : 'var(--gb-text-ghost)', cursor: canRemove ? 'pointer' : 'default', opacity: canRemove ? 1 : .35 }}><I.close size={11} /></span>
-    </div>
+    </motion.div>
   );
 }
 
@@ -663,9 +666,11 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove 
         <span onClick={onRemove} style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--gb-text-muted)', cursor: 'pointer', borderRadius: 'var(--gb-r-sm)' }}><I.trash size={13} /></span>
       </div>
       <div style={{ marginTop: 8, borderTop: '1px solid var(--gb-border-subtle)' }}>
-        {line.splits.map((s) => (
-          <SplitRow key={s.id} line={line} split={s} canRemove={line.splits.length > 1} onChange={(patch) => onPatchSplit(s.id, patch)} onRemove={() => onRemoveSplit(s.id)} />
-        ))}
+        <AnimatePresence initial={false}>
+          {line.splits.map((s) => (
+            <SplitRow key={s.id} line={line} split={s} canRemove={line.splits.length > 1} onChange={(patch) => onPatchSplit(s.id, patch)} onRemove={() => onRemoveSplit(s.id)} />
+          ))}
+        </AnimatePresence>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', marginTop: 6 }}>
         <button onClick={onAddSplit} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-brand-tint-soft)', color: 'var(--gb-brand-label)', border: '1px dashed var(--gb-brand-tint-border)', fontFamily: 'inherit', fontSize: 10.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
@@ -738,7 +743,7 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
               <div style={{ fontSize: 11, lineHeight: 1.5, maxWidth: 220 }}>Open a product and hit <b style={{ color: 'var(--gb-brand-label)' }}>Add to proposal</b> — then set quantities, prices, and split tiers here.</div>
             </div>
           ) : (
-            <AnimatePresence initial={false}>
+            <AnimatePresence initial={false} mode="popLayout">
               {proposal.map((line) => (
                 <ProposalLine key={line.id} line={line}
                   onPatchSplit={(sid, patch) => onPatchSplit(line.id, sid, patch)}

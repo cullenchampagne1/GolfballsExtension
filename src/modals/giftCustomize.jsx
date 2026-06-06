@@ -1166,8 +1166,12 @@ function SecondImprint() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
       <Checkbox checked={!!on} onClick={() => setOn(!on)} label="Add Second Imprint (opposite pole)" />
+      <AnimatePresence initial={false}>
       {on && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <motion.div
+          initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+          transition={{ duration: .22, ease: [0.32, 0.72, 0, 1] }}
+          style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {SECOND_IMPRINT_CHOICES.map((vv) => {
               const sel = choice === vv;
@@ -1178,8 +1182,9 @@ function SecondImprint() {
           {choice === 'Monogram' && <SecondMonogram />}
           {(choice === 'Upload Image' || choice === 'Custom' || choice === 'Logo Library') && <ImageUpload slot="__second" label="Upload Second Imprint" />}
           {choice === 'Same as Front' && <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontStyle: 'italic' }}>Reuses your front imprint on the opposite pole — rotate the ball to see it.</div>}
-        </div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1798,25 +1803,32 @@ export function CustomizeBlock({ p }) {
         </div>
         <I.chevd size={13} style={{ color: 'var(--gb-text-tertiary)', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform var(--gb-anim)' }} />
       </div>
-      {open && (
-        <div style={{ border: '1px solid var(--gb-brand-tint-border)', borderTop: 'none', borderRadius: '0 0 var(--gb-r-md) var(--gb-r-md)', padding: 14 }}>
-          {isBall ? (
-            <PrintTypeProvider mods={mods}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                <BallPreview />
-                <BaseProperties p={p} config={config} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>Select a print type</span>
-                  <Tag tone="neutral" size="sm">corporate: Custom Logo</Tag>
-                </div>
-                <PrintTypeGridInner p={p} mods={mods} config={config} />
-              </div>
-            </PrintTypeProvider>
-          ) : (
-            <AccessoryCustomizer p={p} config={config} loading={loading} />
-          )}
-        </div>
-      )}
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: .22, ease: [0.32, 0.72, 0, 1] }}
+            style={{ overflow: 'hidden', border: '1px solid var(--gb-brand-tint-border)', borderTop: 'none', borderRadius: '0 0 var(--gb-r-md) var(--gb-r-md)' }}>
+            <div style={{ padding: 14 }}>
+              {isBall ? (
+                <PrintTypeProvider mods={mods}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <BallPreview />
+                    <BaseProperties p={p} config={config} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>Select a print type</span>
+                      <Tag tone="neutral" size="sm">corporate: Custom Logo</Tag>
+                    </div>
+                    <PrintTypeGridInner p={p} mods={mods} config={config} />
+                  </div>
+                </PrintTypeProvider>
+              ) : (
+                <AccessoryCustomizer p={p} config={config} loading={loading} />
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
