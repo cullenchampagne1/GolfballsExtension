@@ -83,7 +83,11 @@ export function CompactModal({
   return createPortal(
     <motion.div
       className="gb-compact-modal"
-      data-gb-scale="popovers"
+      // Use the "modals" scale group (real CSS `zoom`), NOT "popovers" — the
+      // popovers group scales via the `scale` transform with transform-origin
+      // top-left, which shrinks a full-screen fixed inset:0 backdrop toward the
+      // top-left at any scale ≠ 1. zoom keeps the scrim filling + card centered.
+      data-gb-scale="modals"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       transition={T.base}
       onClick={closeOnBackdrop ? onClose : undefined}
