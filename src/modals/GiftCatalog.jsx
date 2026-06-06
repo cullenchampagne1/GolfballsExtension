@@ -106,6 +106,44 @@ function linePriceAt(line, qty) {
 }
 const lineIsTierPrice = (line, qty, price) => Math.abs(linePriceAt(line, qty) - price) < 0.005;
 
+/* ── Drag-to-copy imprints between proposal lines ─────────────────────────────
+   An imprint tag on one proposal line can be dragged onto another line to copy
+   it: the imprint pill copies the FRONT imprint; the "Front + Back" pill copies
+   both poles. Each drop is validated against what the TARGET product can take
+   (a towel accepts a logo but has no 2nd pole; only balls take text/monogram). */
+const ballish = (p) => !!(p && p.cat === 'Logo Golf Balls' && !((p.modNames || []).includes('Custom Accessory Bundle')));
+const supportsMod = (p, name) => Array.isArray(p && p.modNames) && p.modNames.includes(name);
+const supportsLogo = (p) => !!(p && (p.customLogo || supportsMod(p, 'Custom Logo')));
+const supportsDualPole = (p) => !!(ballish(p) && p.dualPole && !p.excludeDualPole);
+
+/* Can `deco` (mode 'front' copies the front imprint, 'full' copies both poles)
+   be applied to `target`? → { ok, reason }. */
+function canApplyDecoration(target, deco, mode) {
+  if (!target) return { ok: false, reason: 'No target' };
+  if (!deco || !deco.engine || deco.engine === 'none') return { ok: false, reason: 'Nothing to copy' };
+  const name = target.title || 'This item';
+  if (deco.engine === 'ballText') { if (!(ballish(target) && supportsMod(target, 'Personalized'))) return { ok: false, reason: `${name} doesn’t support personalization` }; }
+  else if (deco.engine === 'monogram') { if (!(ballish(target) && supportsMod(target, 'Monogram'))) return { ok: false, reason: `${name} doesn’t support monograms` }; }
+  else if (deco.engine === 'ballLogo' || deco.engine === 'logoOverlay') { if (!supportsLogo(target)) return { ok: false, reason: `${name} doesn’t take a custom logo` }; }
+  else return { ok: false, reason: 'Unsupported imprint' };
+  if (mode === 'full' && deco.pole2 && !supportsDualPole(target)) return { ok: false, reason: `${name} has no second-pole imprint` };
+  return { ok: true };
+}
+
+/* Re-target `deco` onto `target`: swap the custom-logo engine to the target's
+   product type (ball ↔ accessory), keep or drop the 2nd pole per mode, and drop
+   the source's base-option picks (the target keeps its own color/size). */
+function adaptDecoration(target, deco, mode) {
+  const isBall = ballish(target);
+  let engine = deco.engine;
+  if (engine === 'ballLogo' || engine === 'logoOverlay') engine = isBall ? 'ballLogo' : 'logoOverlay';
+  const copy = { ...deco, engine };
+  delete copy.baseSelection;
+  if (mode === 'full' && deco.pole2 && supportsDualPole(target)) copy.dualPole = true;
+  else { delete copy.pole2; copy.dualPole = false; }
+  return copy;
+}
+
 /* Highest custom-logo per-unit price (the smallest-qty tier) — shown
    on the card by default ("from" pricing), before volume discounts. */
 const topPrice = (p) => (p.breaks && p.breaks.length ? Math.max(...p.breaks.map((b) => b.p)) : (p.logo ?? p.price ?? 0));
@@ -740,7 +778,7 @@ function decoSummary(d) {
   return { label, image, image2, dual, secondLabel: p2kind };
 }
 
-function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove }) {
+function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove, drag, onTagDragStart, onTagDragEnd, onDropDeco }) {
   const p = line.product;
   const lineTot = line.splits.reduce((s, x) => s + x.qty * x.price, 0);
   const lineUnits = line.splits.reduce((s, x) => s + x.qty, 0);
@@ -748,12 +786,36 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove 
   const variantLabel = line.variant && line.variant.values
     ? Object.entries(line.variant.values).filter(([k]) => k !== 'Color').map(([k, v]) => `${k}: ${v}`).join(' · ')
     : '';
+  // Drag-to-copy: another line's imprint is in flight — can it land on this one?
+  const [over, setOver] = useState(false);
+  const dragActive = !!(drag && drag.fromLineId !== line.id);
+  const dropOk = dragActive && canApplyDecoration(p, drag.deco, drag.mode).ok;
+  const tagDrag = (mode) => ({
+    draggable: true,
+    onDragStart: (e) => { e.stopPropagation(); e.dataTransfer.effectAllowed = 'copy'; try { e.dataTransfer.setData('text/plain', 'gb-imprint'); } catch { /* */ } onTagDragStart(line, mode); },
+    onDragEnd: () => onTagDragEnd(),
+  });
   return (
     <motion.div layout
       initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: .92, transition: { duration: .15 } }}
       transition={{ type: 'spring', stiffness: 500, damping: 40 }}
-      style={{ background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-lg)', padding: 12 }}>
+      onDragOver={(e) => { if (dropOk) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setOver(true); } }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOver(false); }}
+      onDrop={(e) => { if (dropOk) { e.preventDefault(); onDropDeco(line.id); } setOver(false); }}
+      style={{ position: 'relative', background: over && dropOk ? 'var(--gb-brand-tint-soft)' : 'var(--gb-surface-1)',
+        border: '1px solid ' + (over && dropOk ? 'var(--gb-brand-label)' : dropOk ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'),
+        borderRadius: 'var(--gb-r-lg)', padding: 12,
+        boxShadow: over && dropOk ? 'var(--gb-focus-ring)' : 'none',
+        opacity: dragActive && !dropOk ? 0.5 : 1,
+        transition: 'opacity var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim), background var(--gb-anim)' }}>
+      {dropOk && (
+        <div style={{ position: 'absolute', inset: 0, borderRadius: 'var(--gb-r-lg)', pointerEvents: 'none', display: over ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-brand-tint-soft)', zIndex: 2 }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-brand-label)', color: 'var(--gb-surface-deep)', fontSize: 10.5, fontWeight: 800 }}>
+            <I.copy size={11} /> Copy imprint here
+          </span>
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <MiniThumb src={p.img} size={38} />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -769,18 +831,20 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove 
       {(deco || variantLabel) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 7, flexWrap: 'wrap' }}>
           {deco && deco.image && (
-            <img src={deco.image} alt="front" title="Front imprint" style={{ width: 24, height: 24, borderRadius: 'var(--gb-r-sm)', objectFit: 'cover', border: '1px solid var(--gb-border-subtle)', background: '#f4f4f1', flexShrink: 0 }} />
+            <img src={deco.image} alt="front" title="Front imprint" draggable={false} style={{ width: 24, height: 24, borderRadius: 'var(--gb-r-sm)', objectFit: 'cover', border: '1px solid var(--gb-border-subtle)', background: '#f4f4f1', flexShrink: 0 }} />
           )}
           {deco && deco.image2 && (
-            <img src={deco.image2} alt="back" title="Second-pole imprint" style={{ width: 24, height: 24, borderRadius: 'var(--gb-r-sm)', objectFit: 'cover', border: '1px solid var(--gb-border-subtle)', background: '#f4f4f1', flexShrink: 0 }} />
+            <img src={deco.image2} alt="back" title="Second-pole imprint" draggable={false} style={{ width: 24, height: 24, borderRadius: 'var(--gb-r-sm)', objectFit: 'cover', border: '1px solid var(--gb-border-subtle)', background: '#f4f4f1', flexShrink: 0 }} />
           )}
           {deco && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 9.5, fontWeight: 700, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span {...tagDrag('front')} title="Drag onto another item to copy this imprint"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 9.5, fontWeight: 700, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'grab' }}>
               <I.edit size={9} /> {deco.label}
             </span>
           )}
           {deco && deco.dual && (
-            <span title={`Dual pole — back: ${deco.secondLabel}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-success-tint, rgba(46,158,91,.14))', border: '1px solid var(--gb-success-border, rgba(46,158,91,.32))', color: 'var(--gb-success-fg, #2e9e5b)', fontSize: 9.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
+            <span {...tagDrag('full')} title="Drag onto another item to copy both imprints"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-success-tint, rgba(46,158,91,.14))', border: '1px solid var(--gb-success-border, rgba(46,158,91,.32))', color: 'var(--gb-success-fg, #2e9e5b)', fontSize: 9.5, fontWeight: 800, whiteSpace: 'nowrap', cursor: 'grab' }}>
               <Layers size={9} /> Front + Back · {deco.secondLabel}
             </span>
           )}
@@ -835,9 +899,16 @@ function ProposalDock({ count, total, active, onOpen }) {
   );
 }
 
-function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft }) {
+function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onCopyDecoration }) {
   const total = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
   const units = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty, 0), 0);
+  // Drag-to-copy imprints between lines. `drag` holds the in-flight source so
+  // every line can light up (or stay dim) based on whether it can take it.
+  const [drag, setDrag] = useState(null);              // { fromLineId, mode, deco }
+  const startDrag = (line, mode) => setDrag({ fromLineId: line.id, mode, deco: line.decoration });
+  const endDrag = () => setDrag(null);
+  const dropDeco = (toLineId) => { if (drag) onCopyDecoration(drag.fromLineId, toLineId, drag.mode); setDrag(null); };
+  const canCopy = proposal.length >= 2 && proposal.some((l) => decoSummary(l.decoration));
   return (
     /* In-flow side card (not an overlay) — sits BESIDE the catalog so the
        proposal and item details are visible at once. The slide/resize is
@@ -867,15 +938,24 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
               <div style={{ fontSize: 11, lineHeight: 1.5, maxWidth: 220 }}>Open a product and hit <b style={{ color: 'var(--gb-brand-label)' }}>Add to proposal</b> — then set quantities, prices, and split tiers here.</div>
             </div>
           ) : (
-            <AnimatePresence initial={false} mode="popLayout">
-              {proposal.map((line) => (
-                <ProposalLine key={line.id} line={line}
-                  onPatchSplit={(sid, patch) => onPatchSplit(line.id, sid, patch)}
-                  onAddSplit={() => onAddSplit(line.id)}
-                  onRemoveSplit={(sid) => onRemoveSplit(line.id, sid)}
-                  onRemove={() => onRemoveLine(line.id)} />
-              ))}
-            </AnimatePresence>
+            <>
+              {canCopy && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 9px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px dashed var(--gb-border-default)', color: 'var(--gb-text-tertiary)', fontSize: 10, fontWeight: 600 }}>
+                  <I.copy size={11} style={{ flexShrink: 0, color: 'var(--gb-text-muted)' }} />
+                  Drag an imprint tag onto another item to copy it.
+                </div>
+              )}
+              <AnimatePresence initial={false} mode="popLayout">
+                {proposal.map((line) => (
+                  <ProposalLine key={line.id} line={line}
+                    drag={drag} onTagDragStart={startDrag} onTagDragEnd={endDrag} onDropDeco={dropDeco}
+                    onPatchSplit={(sid, patch) => onPatchSplit(line.id, sid, patch)}
+                    onAddSplit={() => onAddSplit(line.id)}
+                    onRemoveSplit={(sid) => onRemoveSplit(line.id, sid)}
+                    onRemove={() => onRemoveLine(line.id)} />
+                ))}
+              </AnimatePresence>
+            </>
           )}
         </div>
         {proposal.length > 0 && (
@@ -968,6 +1048,23 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const addSplit = (lineId) => setProposal((prev) => prev.map((l) => { if (l.id !== lineId) return l; const last = l.splits[l.splits.length - 1]; return { ...l, splits: [...l.splits, { id: rid(), qty: last.qty, price: last.price }] }; }));
   const removeSplit = (lineId, splitId) => setProposal((prev) => prev.flatMap((l) => { if (l.id !== lineId) return [l]; const splits = l.splits.filter((s) => s.id !== splitId); return splits.length ? [{ ...l, splits }] : []; }));
   const removeLine = (lineId) => setProposal((prev) => prev.filter((l) => l.id !== lineId));
+
+  // Drag-to-copy: stamp one line's imprint onto another. mode 'front' copies the
+  // front imprint; 'full' copies both poles. Validated against what the target
+  // supports, then the engine is re-targeted (ball ↔ accessory) and prices are
+  // recomputed for the new imprint (custom-logo ladder + any 2nd-pole upcharge).
+  const copyDecoration = (fromLineId, toLineId, mode) => {
+    if (!fromLineId || fromLineId === toLineId) return;
+    const src = proposal.find((l) => l.id === fromLineId);
+    const tgt = proposal.find((l) => l.id === toLineId);
+    if (!src || !tgt) return;
+    const check = canApplyDecoration(tgt.product, src.decoration, mode);
+    if (!check.ok) { toast?.error?.(check.reason); return; }
+    const adapted = adaptDecoration(tgt.product, src.decoration, mode);
+    setProposal((prev) => prev.map((l) => l.id === toLineId
+      ? { ...l, decoration: adapted, splits: l.splits.map((s) => ({ ...s, price: linePriceAt({ product: l.product, decoration: adapted, variant: l.variant }, s.qty) })) }
+      : l));
+  };
 
   // Save draft — serialize the proposal into the golfballs.com cart shape and
   // copy a paste-and-run console command to the clipboard (no network). Paste
@@ -1291,7 +1388,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           <div style={{ position: 'absolute', top: 0, right: 0, height: '100%', width: 400, opacity: proposalOpen ? 1 : 0, pointerEvents: proposalOpen ? 'auto' : 'none', transition: 'opacity .24s ease' }}>
             <ProposalPanel proposal={proposal} onClose={() => setProposalOpen(false)}
               onPatchSplit={patchSplit} onAddSplit={addSplit} onRemoveSplit={removeSplit}
-              onRemoveLine={removeLine} onSaveDraft={saveDraft}
+              onRemoveLine={removeLine} onSaveDraft={saveDraft} onCopyDecoration={copyDecoration}
               onClear={() => { setProposal([]); setProposalOpen(false); }} />
           </div>
         </div>
