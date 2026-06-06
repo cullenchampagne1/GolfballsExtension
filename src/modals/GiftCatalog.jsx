@@ -114,7 +114,10 @@ const lineIsTierPrice = (line, qty, price) => Math.abs(linePriceAt(line, qty) - 
 const ballish = (p) => !!(p && p.cat === 'Logo Golf Balls' && !((p.modNames || []).includes('Custom Accessory Bundle')));
 const supportsMod = (p, name) => Array.isArray(p && p.modNames) && p.modNames.includes(name);
 const supportsLogo = (p) => !!(p && (p.customLogo || supportsMod(p, 'Custom Logo')));
-const supportsDualPole = (p) => !!(ballish(p) && p.dualPole && !p.excludeDualPole);
+// Balls carry a second-pole imprint BY DEFAULT (the Personalized / Custom-Logo
+// modifications include a "Second Pole" option); the `dualPole` flag is the
+// accessory opt-in (poker chips, etc.). ExcludeDualPole removes it either way.
+const supportsDualPole = (p) => !!(p && !p.excludeDualPole && (ballish(p) || p.dualPole));
 
 /* Can `deco` (mode 'front' copies the front imprint, 'full' copies both poles)
    be applied to `target`? → { ok, reason }. */
@@ -126,7 +129,10 @@ function canApplyDecoration(target, deco, mode) {
   else if (deco.engine === 'monogram') { if (!(ballish(target) && supportsMod(target, 'Monogram'))) return { ok: false, reason: `${name} doesn’t support monograms` }; }
   else if (deco.engine === 'ballLogo' || deco.engine === 'logoOverlay') { if (!supportsLogo(target)) return { ok: false, reason: `${name} doesn’t take a custom logo` }; }
   else return { ok: false, reason: 'Unsupported imprint' };
-  if (mode === 'full' && deco.pole2 && !supportsDualPole(target)) return { ok: false, reason: `${name} has no second-pole imprint` };
+  if (mode === 'full' && deco.pole2) {
+    if (deco.engine === 'monogram') return { ok: false, reason: 'Monograms can’t carry a second imprint' };
+    if (!supportsDualPole(target)) return { ok: false, reason: `${name} has no second-pole imprint` };
+  }
   return { ok: true };
 }
 
@@ -142,6 +148,28 @@ function adaptDecoration(target, deco, mode) {
   if (mode === 'full' && deco.pole2 && supportsDualPole(target)) copy.dualPole = true;
   else { delete copy.pole2; copy.dualPole = false; }
   return copy;
+}
+
+/* When a dual-pole line's FRONT imprint is deleted, the 2nd pole is promoted to
+   be the sole (front) imprint. Rebuild a front decoration from the pole2
+   descriptor (text → ballText, monogram → monogram, logo → ball/overlay logo). */
+function promotePole2ToFront(product, deco) {
+  const p2 = deco && deco.pole2;
+  if (!p2) return null;
+  const baseColor = '#FFFFFF', finish = { MFS: '279', SecondMFS: '279' };
+  if (p2.kind === 'text') {
+    return { engine: 'ballText', baseColor, finish, dualPole: false,
+      pole1: { lines: p2.lines || [null, null, null], font: p2.font || 'Kabel Dm BT', color: p2.color || '#000000' } };
+  }
+  if (p2.kind === 'monogram') {
+    return { engine: 'monogram', baseColor, finish, dualPole: false,
+      monogram: { baseColor, text: p2.text || '', view: p2.view, color: p2.color || '#000000', color2: p2.color2 || '#FFFFFF', overlay: String(p2.view || 'circle').replace(/\d+$/, '') } };
+  }
+  if (p2.kind === 'logo') {
+    return { engine: ballish(product) ? 'ballLogo' : 'logoOverlay', baseColor, finish, dualPole: false,
+      logo: p2.logo || null, _localImageDataUrl: p2._localImageDataUrl || null };
+  }
+  return null;
 }
 
 /* Highest custom-logo per-unit price (the smallest-qty tier) — shown
@@ -633,7 +661,21 @@ function SavedStub({ label, icon }) {
   );
 }
 
-function CategoryRail({ sel, onSelect, depts, deptCounts, total, dock }) {
+/* A clickable saved-view nav row (active-aware, with a count badge). */
+function SavedNavRow({ label, icon, count, active, onClick }) {
+  const [hover, setHover] = useState(false);
+  const col = active ? 'var(--gb-brand-label)' : hover ? 'var(--gb-text-secondary)' : 'var(--gb-text-tertiary)';
+  return (
+    <div onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 11px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', flexShrink: 0, transition: 'all var(--gb-anim)', background: active ? 'var(--gb-brand-tint-medium)' : hover ? 'var(--gb-fill-subtle)' : 'transparent', border: '1px solid ' + (active ? 'var(--gb-brand-tint-border)' : 'transparent') }}>
+      <span style={{ color: col, display: 'flex', flexShrink: 0 }}>{icon}</span>
+      <span style={{ flex: 1, fontSize: 11.5, fontWeight: active ? 700 : 500, color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+      <span style={{ fontSize: 10.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }}>{count}</span>
+    </div>
+  );
+}
+
+function CategoryRail({ sel, onSelect, depts, deptCounts, total, dock, view, onSetView, savedCount }) {
   return (
     <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: 12, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px', flexShrink: 0 }}>Browse</div>
@@ -655,8 +697,9 @@ function CategoryRail({ sel, onSelect, depts, deptCounts, total, dock }) {
       </div>
       <div style={{ flexShrink: 0, marginTop: 4 }}>
         <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '8px 10px 6px' }}>Saved</div>
+        <SavedNavRow label="Saved Proposals" icon={<I.bookmark size={14} />} count={savedCount}
+          active={view === 'proposals'} onClick={() => onSetView('proposals')} />
         <SavedStub label="Previous orders" icon={<I.refresh size={14} />} />
-        <SavedStub label="Preset proposals" icon={<I.card size={14} />} />
       </div>
       {/* AnimatePresence so the dock plays its exit when the proposal opens
           (it carries marginTop/flexShrink itself now). */}
@@ -778,7 +821,7 @@ function decoSummary(d) {
   return { label, image, image2, dual, secondLabel: p2kind };
 }
 
-function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove, drag, onTagDragStart, onTagDragEnd, onDropDeco }) {
+function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove, drag, onTagDragStart, onTagDragEnd, onDropDeco, onRemoveFront, onRemoveSecond }) {
   const p = line.product;
   const lineTot = line.splits.reduce((s, x) => s + x.qty * x.price, 0);
   const lineUnits = line.splits.reduce((s, x) => s + x.qty, 0);
@@ -899,7 +942,123 @@ function ProposalDock({ count, total, active, onOpen }) {
   );
 }
 
-function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onCopyDecoration }) {
+/* ── Saved proposals gallery ───────────────────────────────────────────────
+   Renders the drafts persisted in chrome.storage. Each card resolves its
+   stored product snapshots into units/subtotal so it stands on its own even if
+   the live catalog has since changed. */
+function fmtSavedDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + (iso.length === 10 ? 'T00:00:00' : ''));
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function resolveSavedEntry(entry) {
+  const entries = (entry.lines || []).filter((l) => l && l.product).map((l) => ({
+    product: l.product, decoration: l.decoration, splits: l.splits || [],
+  }));
+  const units = entries.reduce((s, e) => s + e.splits.reduce((a, x) => a + (x.qty || 0), 0), 0);
+  const total = entries.reduce((s, e) => s + e.splits.reduce((a, x) => a + (x.qty || 0) * (x.price || 0), 0), 0);
+  return { entries, units, total };
+}
+
+function ThumbStack({ entries, max = 4, size = 44 }) {
+  const shown = entries.slice(0, max);
+  const extra = entries.length - shown.length;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center' }}>
+      {shown.map((e, i) => (
+        <div key={i} style={{ marginLeft: i ? -13 : 0, zIndex: shown.length - i, width: size, height: size, flexShrink: 0, background: '#f4f4f1', borderRadius: 'var(--gb-r-md)', overflow: 'hidden', border: '1px solid var(--gb-border-default)', boxShadow: '0 0 0 2px var(--gb-surface-modal), 0 1px 5px rgba(0,0,0,.18)' }}>
+          {e.product.img && <img src={e.product.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 5, boxSizing: 'border-box' }} />}
+        </div>
+      ))}
+      {extra > 0 && (
+        <div style={{ marginLeft: -13, zIndex: 0, width: size, height: size, flexShrink: 0, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-strong)', border: '1px solid var(--gb-border-default)', boxShadow: '0 0 0 2px var(--gb-surface-modal)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: 'var(--gb-text-secondary)', fontFamily: 'var(--gb-font-mono)' }}>+{extra}</div>
+      )}
+    </div>
+  );
+}
+
+function SavedCard({ item, loaded, onLoad, onCopy, onDelete }) {
+  const [hover, setHover] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const r = useMemo(() => resolveSavedEntry(item), [item]);
+  const subtitle = (r.entries[0] && r.entries[0].product && (r.entries[0].product.brand || r.entries[0].product.title)) || 'Draft proposal';
+  const doCopy = (e) => {
+    e.stopPropagation();
+    Promise.resolve(onCopy(item)).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }).catch(() => {});
+  };
+  return (
+    <motion.div layout initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .92 }} transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }}
+      onClick={() => onLoad(item)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ display: 'flex', flexDirection: 'column', gap: 11, padding: 13, cursor: 'pointer', background: 'var(--gb-surface-modal)', border: '1px solid ' + (loaded ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'), borderRadius: 'var(--gb-r-lg)', boxShadow: hover ? 'var(--gb-shadow-popover)' : 'none', transform: hover ? 'translateY(-2px)' : 'none', transition: 'transform var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+        <ThumbStack entries={r.entries} />
+        <div style={{ flex: 1 }} />
+        <Tag tone="neutral" size="sm" icon={<I.bookmark size={9} />}>Draft</Tag>
+      </div>
+      <div>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
+        <div style={{ fontSize: 11, color: 'var(--gb-text-tertiary)', marginTop: 3, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subtitle}</div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 7, paddingTop: 10, borderTop: '1px solid var(--gb-border-subtle)' }}>
+        <span style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', fontWeight: 600 }}>{fmtSavedDate(item.date)}</span>
+        <Dot tone="muted" size={3} />
+        <span style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', fontWeight: 600 }}>{r.entries.length} item{r.entries.length === 1 ? '' : 's'} · {r.units} units</span>
+        <div style={{ flex: 1 }} />
+        <span style={{ fontSize: 14, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)', letterSpacing: -.4 }}>{money(r.total)}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 7 }}>
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 30, borderRadius: 'var(--gb-r-md)', background: loaded ? 'var(--gb-brand-label)' : hover ? 'var(--gb-brand-tint-medium)' : 'var(--gb-brand-tint-soft)', border: '1px solid ' + (loaded ? 'var(--gb-brand-label)' : 'var(--gb-brand-tint-border)'), color: loaded ? 'var(--gb-surface-deep, #fff)' : 'var(--gb-brand-label)', fontSize: 11.5, fontWeight: 700, transition: 'all var(--gb-anim)' }}>
+          {loaded ? <><I.check size={13} strokeWidth={3} /> Added to proposal</> : <><I.plus size={13} /> Load into proposal</>}
+        </div>
+        <button onClick={doCopy} title="Copy as a console command"
+          style={{ width: 34, height: 30, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: copied ? 'var(--gb-success-fg, #2e9e5b)' : 'var(--gb-text-tertiary)', transition: 'color var(--gb-anim)', fontFamily: 'inherit' }}>
+          {copied ? <I.check size={14} strokeWidth={3} /> : <I.copy size={14} />}
+        </button>
+        <button onClick={(e) => { e.stopPropagation(); onDelete(item.id); }} title="Delete draft"
+          style={{ width: 34, height: 30, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-tertiary)', fontFamily: 'inherit' }}>
+          <I.trash size={14} />
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
+function SavedGallery({ items, loadedId, onLoad, onCopy, onDelete }) {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 16px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
+        <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <I.bookmark size={16} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Saved Proposals</div>
+          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, fontWeight: 500 }}>{items.length} saved draft{items.length === 1 ? '' : 's'} · click a card to load it, or copy it as a console command</div>
+        </div>
+      </div>
+      <div className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+        {items.length === 0 ? (
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--gb-text-muted)' }}>
+            <div style={{ width: 48, height: 48, borderRadius: 'var(--gb-r-lg)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <I.bookmark size={20} />
+            </div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>No saved proposals yet</div>
+            <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', textAlign: 'center', maxWidth: 240, lineHeight: 1.5 }}>Build a proposal and hit “Save draft” to keep it here for later.</div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(296px, 1fr))', gap: 12 }}>
+            <AnimatePresence mode="popLayout">
+              {items.map((it) => <SavedCard key={it.id} item={it} loaded={loadedId === it.id} onLoad={onLoad} onCopy={onCopy} onDelete={onDelete} />)}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onCopyDecoration, onRemoveFront, onRemoveSecond }) {
   const total = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
   const units = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty, 0), 0);
   // Drag-to-copy imprints between lines. `drag` holds the in-flight source so
@@ -968,6 +1127,7 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
                 {proposal.map((line) => (
                   <ProposalLine key={line.id} line={line}
                     drag={drag} onTagDragStart={startDrag} onTagDragEnd={endDrag} onDropDeco={dropDeco}
+                    onRemoveFront={() => onRemoveFront(line.id)} onRemoveSecond={() => onRemoveSecond(line.id)}
                     onPatchSplit={(sid, patch) => onPatchSplit(line.id, sid, patch)}
                     onAddSplit={() => onAddSplit(line.id)}
                     onRemoveSplit={(sid) => onRemoveSplit(line.id, sid)}
@@ -1008,7 +1168,7 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
             ) : saveMode ? (
               <div style={{ padding: '4px 12px 12px', display: 'flex', gap: 8 }}>
                 <Btn variant="ghost" size="md" style={{ flex: 1 }} onClick={() => { setSaveMode(false); setName(''); }}>Cancel</Btn>
-                <Btn variant="primary" size="md" icon={<I.check />} style={{ flex: 1.4 }} loading={saving} onClick={confirmSave}>Confirm save</Btn>
+                <Btn variant="primary" size="md" icon={<I.check />} style={{ flex: 1.4 }} state={saving ? 'loading' : 'idle'} onClick={confirmSave}>Confirm save</Btn>
               </div>
             ) : (
               <div style={{ padding: '0 12px 12px', display: 'flex', gap: 8 }}>
@@ -1123,6 +1283,21 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
       ? { ...l, decoration: adapted, splits: l.splits.map((s) => ({ ...s, price: linePriceAt({ product: l.product, decoration: adapted, variant: l.variant }, s.qty) })) }
       : l));
   };
+
+  // Re-price a line after its decoration changed (imprint removed / promoted).
+  const repriceLine = (l, decoration) => ({ ...l, decoration, splits: l.splits.map((s) => ({ ...s, price: linePriceAt({ product: l.product, decoration, variant: l.variant }, s.qty) })) });
+  // Delete the FRONT imprint. If the line is dual-pole, the 2nd pole is promoted
+  // to be the sole imprint; otherwise the line goes back to no imprint (retail).
+  const removeFrontImprint = (lineId) => setProposal((prev) => prev.map((l) => {
+    if (l.id !== lineId) return l;
+    const next = (l.decoration && l.decoration.pole2) ? promotePole2ToFront(l.product, l.decoration) : null;
+    return repriceLine(l, next);
+  }));
+  // Delete just the SECOND pole, keeping the front imprint (and dropping the fee).
+  const removeSecondPole = (lineId) => setProposal((prev) => prev.map((l) => {
+    if (l.id !== lineId || !l.decoration) return l;
+    return repriceLine(l, { ...l.decoration, pole2: null, dualPole: false });
+  }));
 
   // Save draft — snapshot the current proposal into the Saved Proposals
   // library (chrome.storage) under a name. Returns the promise so the panel's
@@ -1374,9 +1549,16 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         {/* Body — also the positioning context for the slide-over panels,
             so they span the sidebar's height (header + footer stay visible). */}
         <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative', overflow: 'hidden', boxShadow: 'inset 0 7px 7px -7px rgba(0,0,0,.16), inset 0 -7px 7px -7px rgba(0,0,0,.16)' }}>
-          <CategoryRail sel={sel} onSelect={setSel} total={catalog.length}
+          <CategoryRail sel={sel} onSelect={(s) => { setView('catalog'); setSel(s); }} total={catalog.length}
             depts={depts} deptCounts={deptCounts}
+            view={view} onSetView={setView} savedCount={savedProposals.length}
             dock={proposal.length > 0 && !proposalOpen ? <ProposalDock key="dock" count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} /> : null} />
+          {view === 'proposals' ? (
+            <motion.div key="gallery" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <SavedGallery items={savedProposals} loadedId={loadedId}
+              onLoad={loadSaved} onCopy={copySaved} onDelete={deleteSaved} />
+          </motion.div>
+          ) : (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <div className="gb-gc-norail" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 16px', borderBottom: '1px solid var(--gb-border-subtle)', overflowX: 'auto', flexShrink: 0, WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 40px), transparent)', maskImage: 'linear-gradient(to right, #000 calc(100% - 40px), transparent)' }}>
               <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flexShrink: 0, marginRight: 2 }}>Brand</span>
@@ -1426,6 +1608,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               )}
             </div>
           </div>
+          )}
 
           {/* Item details stay an overlay INSIDE the catalog card, so they
               coexist with the proposal side card (both visible at once). */}
@@ -1464,6 +1647,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             <ProposalPanel proposal={proposal} onClose={() => setProposalOpen(false)}
               onPatchSplit={patchSplit} onAddSplit={addSplit} onRemoveSplit={removeSplit}
               onRemoveLine={removeLine} onSaveDraft={saveDraft} onCopyDecoration={copyDecoration}
+              onRemoveFront={removeFrontImprint} onRemoveSecond={removeSecondPole}
               onClear={() => { setProposal([]); setProposalOpen(false); }} />
           </div>
         </div>
