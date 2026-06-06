@@ -330,28 +330,30 @@ function Rating({ value, count, size = 11 }) {
   );
 }
 
-/* Quick-add control on each card's bottom-right — drop an item straight into
-   the proposal without opening the detail panel. Shows a check once it's in
-   the proposal. Stops propagation so it never also opens the card. */
+/* Quick-add control on each card's bottom-right — drop an item into the
+   proposal without opening the detail panel. Always a "+" (no locked check
+   state) so repeated clicks keep adding; a subtle brand tint just signals the
+   item is already in the proposal. Stops propagation so it never opens the
+   card. */
 function AddButton({ inProposal, compact, onAdd }) {
   const [h, setH] = useState(false);
-  const sz = compact ? 26 : 28;
+  const sz = compact ? 17 : 19;
   return (
     <button
-      onClick={(e) => { e.stopPropagation(); if (!inProposal) onAdd && onAdd(); }}
+      onClick={(e) => { e.stopPropagation(); onAdd && onAdd(); }}
       onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
-      title={inProposal ? 'In proposal' : 'Add to proposal'}
+      title={inProposal ? 'Add another to proposal' : 'Add to proposal'}
       style={{
         flexShrink: 0, width: sz, height: sz, borderRadius: '50%', padding: 0, fontFamily: 'inherit',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: inProposal ? 'default' : 'pointer',
-        border: '1px solid ' + (inProposal ? 'var(--gb-brand-label)' : h ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
-        background: inProposal ? 'var(--gb-brand-label)' : h ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)',
-        color: inProposal ? 'var(--gb-surface-deep)' : 'var(--gb-brand-label)',
-        boxShadow: h && !inProposal ? '0 1px 6px rgba(0,0,0,.14)' : 'none',
-        transform: h && !inProposal ? 'scale(1.08)' : 'none',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+        border: '1px solid ' + (h || inProposal ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
+        background: h ? 'var(--gb-brand-tint-strong)' : inProposal ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)',
+        color: 'var(--gb-brand-label)',
+        boxShadow: h ? '0 1px 5px rgba(0,0,0,.12)' : 'none',
+        transform: h ? 'scale(1.12)' : 'none',
         transition: 'all var(--gb-anim)',
       }}>
-      {inProposal ? <I.check size={14} /> : <I.plus size={15} />}
+      <I.plus size={compact ? 11 : 12} />
     </button>
   );
 }
