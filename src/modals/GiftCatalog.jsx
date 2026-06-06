@@ -517,10 +517,21 @@ function CategoryRail({ sel, onSelect, clTotal, clCats, clCounts, depts, deptCou
             <CatRow glyph="cl" label="Custom Logo" count={clTotal}
               active={sel === 'cl'} onClick={() => { onSelect('cl'); setClOpen(true); }}
               chevron={clOpen} onToggle={() => setClOpen((o) => !o)} />
-            {clOpen && clCats.map((c) => (
-              <CatRow key={'cl:' + c} glyph={c} label={c} count={clCounts[c] || 0} indent
-                active={sel === 'cl:' + c} onClick={() => onSelect('cl:' + c)} />
-            ))}
+            {/* Children slide open/closed (height + fade) — overflow hidden so
+                rows are clipped, not popped, during the transition. */}
+            <AnimatePresence initial={false}>
+              {clOpen && (
+                <motion.div key="cl-children"
+                  initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: .24, ease: [0.32, 0.72, 0, 1] }}
+                  style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
+                  {clCats.map((c) => (
+                    <CatRow key={'cl:' + c} glyph={c} label={c} count={clCounts[c] || 0} indent
+                      active={sel === 'cl:' + c} onClick={() => onSelect('cl:' + c)} />
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </>
         )}
 
@@ -540,7 +551,9 @@ function CategoryRail({ sel, onSelect, clTotal, clCats, clCounts, depts, deptCou
         <SavedStub label="Previous orders" icon={<I.refresh size={14} />} />
         <SavedStub label="Preset proposals" icon={<I.card size={14} />} />
       </div>
-      {dock && <div style={{ flexShrink: 0, marginTop: 8 }}>{dock}</div>}
+      {/* AnimatePresence so the dock plays its exit when the proposal opens
+          (it carries marginTop/flexShrink itself now). */}
+      <AnimatePresence>{dock}</AnimatePresence>
     </div>
   );
 }
@@ -670,14 +683,15 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove 
 function ProposalDock({ count, total, active, onOpen }) {
   const [h, setH] = useState(false);
   return (
-    <div onClick={onOpen} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+    <motion.div onClick={onOpen} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
+      transition={{ type: 'spring', stiffness: 460, damping: 34 }}
       style={{
-        width: '100%', boxSizing: 'border-box', cursor: 'pointer',
+        width: '100%', boxSizing: 'border-box', cursor: 'pointer', marginTop: 8, flexShrink: 0,
         display: 'flex', alignItems: 'center', gap: 13, padding: '7px 9px',
         background: (h || active) ? 'var(--gb-brand-tint-strong)' : 'var(--gb-brand-tint-medium)',
         border: '1px solid var(--gb-brand-tint-border)', borderRadius: 'var(--gb-r-md)',
         boxShadow: 'var(--gb-shadow-popover)', transition: 'background var(--gb-anim)',
-        animation: 'pp-rise .24s cubic-bezier(.34,1.5,.64,1)',
       }}>
       <span style={{ position: 'relative', display: 'flex', color: 'var(--gb-brand-label)' }}>
         <I.card size={15} />
@@ -688,7 +702,7 @@ function ProposalDock({ count, total, active, onOpen }) {
         <div style={{ fontSize: 12.5, fontWeight: 800, color: 'var(--gb-brand-label)', fontFamily: 'var(--gb-font-mono)', letterSpacing: -.3 }}>{money(total)}</div>
       </div>
       <I.chevr size={12} style={{ color: 'var(--gb-brand-label)', flexShrink: 0 }} />
-    </div>
+    </motion.div>
   );
 }
 
@@ -957,6 +971,31 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     return r;
   }, [inCat, selBrands, query, sort, special]);
 
+  /* Incremental rendering — the full catalog is ~3,100 items; mounting that
+     many cards at once janks the open animation and lags scroll. Render an
+     initial window and grow it as the user nears the bottom, so the grid
+     reads as complete without ever holding the whole list in the DOM. */
+  const GRID_INITIAL = 60;
+  const GRID_CHUNK = 48;
+  const gridScrollRef = useRef(null);
+  const [visibleCount, setVisibleCount] = useState(GRID_INITIAL);
+  // Reset the window (and scroll to top) whenever the result set changes —
+  // a new filter/search/sort/catalog shouldn't inherit the old scroll depth.
+  useEffect(() => {
+    setVisibleCount(GRID_INITIAL);
+    if (gridScrollRef.current) gridScrollRef.current.scrollTop = 0;
+  }, [results]);
+  const onGridScroll = (e) => {
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 800) {
+      setVisibleCount((c) => (c < results.length ? Math.min(results.length, c + GRID_CHUNK) : c));
+    }
+  };
+  // Small result sets fit the initial window → keep the per-card entrance
+  // animation. Large sets render plain + windowed for performance.
+  const animateCards = results.length <= GRID_INITIAL;
+  const shown = animateCards ? results : results.slice(0, visibleCount);
+
   const colMin = compact ? 150 : 188;
 
   // Hold the first paint until the scale is known (avoids a size snap).
@@ -1026,14 +1065,14 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           <CategoryRail sel={sel} onSelect={setSel} total={catalog.length}
             clTotal={clTotal} clCats={clCats} clCounts={clCounts}
             depts={depts} deptCounts={deptCounts}
-            dock={proposal.length > 0 && !proposalOpen ? <ProposalDock count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} /> : null} />
+            dock={proposal.length > 0 && !proposalOpen ? <ProposalDock key="dock" count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} /> : null} />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <div className="gb-gc-norail" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 16px', borderBottom: '1px solid var(--gb-border-subtle)', overflowX: 'auto', flexShrink: 0, WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 40px), transparent)', maskImage: 'linear-gradient(to right, #000 calc(100% - 40px), transparent)' }}>
               <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flexShrink: 0, marginRight: 2 }}>Brand</span>
               <BrandChip label="All" count={inCat.length} on={selBrands.size === 0} onClick={() => setSelBrands(new Set())} />
               {brands.map(([b, n]) => <BrandChip key={b} label={b} count={n} on={selBrands.has(b)} onClick={() => toggleBrand(b)} />)}
             </div>
-            <div className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 16 }}>
+            <div ref={gridScrollRef} onScroll={onGridScroll} className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 16 }}>
               {results.length === 0 ? (
                 <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--gb-text-muted)' }}>
                   <div style={{ width: 48, height: 48, borderRadius: 'var(--gb-r-lg)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1043,12 +1082,14 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                   <Btn variant="secondary" size="sm" onClick={clearAll}>Clear filters</Btn>
                 </div>
               ) : (
+                <>
                 <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${colMin}px, 1fr))`, gap: compact ? 10 : 12 }}>
-                  {/* Animate item changes on search/filter — but only up to a
-                      sane count so the full ~1000-item "All Items" view stays snappy. */}
-                  {results.length <= 200 ? (
+                  {/* Small sets animate per-card; large sets render a windowed
+                      slice (grown on scroll by onGridScroll) so the DOM never
+                      holds all ~3,100 cards and the open animation stays smooth. */}
+                  {animateCards ? (
                     <AnimatePresence>
-                      {results.map((p) => (
+                      {shown.map((p) => (
                         <motion.div key={p.id} initial={{ opacity: 0, scale: .95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .95 }} transition={{ duration: .17, ease: [0.32, 0.72, 0, 1] }}>
                           <ProductCard p={p} compact={compact} showRating={showRating}
                             active={selected && selected.id === p.id} inProposal={inProposal(p.id)} onClick={() => setSelected(p)} />
@@ -1056,12 +1097,21 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                       ))}
                     </AnimatePresence>
                   ) : (
-                    results.map((p) => (
+                    shown.map((p) => (
                       <ProductCard key={p.id} p={p} compact={compact} showRating={showRating}
                         active={selected && selected.id === p.id} inProposal={inProposal(p.id)} onClick={() => setSelected(p)} />
                     ))
                   )}
                 </div>
+                {/* Lazy-load affordance: a quiet "loading more" row while the
+                    window hasn't reached the full result count yet. */}
+                {!animateCards && visibleCount < results.length && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '18px 0 6px', color: 'var(--gb-text-ghost)' }}>
+                    <span style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} />
+                    <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: .3 }}>Loading more — {nfmt(visibleCount)} of {nfmt(results.length)}</span>
+                  </div>
+                )}
+                </>
               )}
             </div>
           </div>
