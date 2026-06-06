@@ -14,7 +14,30 @@
    and PUT it through the giftSaveCart relay.
    ─────────────────────────────────────────────────────────────────────────── */
 
-import { assembleLine, buildSaveCartBody } from './cartSerializer.js';
+import { assembleLine, buildSaveCartBody, buildCartData, buildAsCartContents } from './cartSerializer.js';
+
+/* Copy text to the clipboard. Tries the async Clipboard API, then falls back to
+   a hidden-textarea execCommand (which survives the loss of transient
+   activation after our async product fetches, as long as the doc is focused). */
+export function copyToClipboard(text) {
+  return new Promise((resolve, reject) => {
+    const fallback = () => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        ok ? resolve() : reject(new Error('copy command rejected'));
+      } catch (e) { reject(e); }
+    };
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(resolve, fallback);
+      else fallback();
+    } catch { fallback(); }
+  });
+}
 
 function sendBg(action, payload = {}) {
   return new Promise((resolve, reject) => {
@@ -67,21 +90,47 @@ export async function buildProposalLines(proposal) {
   return { items, skipped };
 }
 
-/* Save the proposal as a cart/proposal. Resolves to
-   { cartNumber, cartID, message, savedLines, skipped }. Throws if nothing
-   could be assembled (so the UI surfaces a real error rather than a silent
-   empty save). Pass the prior cartID as `proposalID` to update in place. */
-export async function saveProposalDraft(proposal, { proposalID = null, customerID = 0, salesRepID = 0 } = {}) {
+/* The localStorage shape golfballs.com hydrates its cart from — verified live:
+   localStorage.shoppingCart === the cartData object WITH a nested shoppingCart
+   copy + asCartContents mirror (no `updated` flag, unlike the saveCart PUT). */
+function buildLocalStorageCart(items, { proposalID = null } = {}) {
+  const cart = buildCartData(items, { proposalID });
+  return { ...cart, shoppingCart: cart, asCartContents: buildAsCartContents(items) };
+}
+
+/* A paste-and-run console snippet for the golfballs.com tab: writes the cart to
+   localStorage.shoppingCart (the key the site reads) and reloads so the cart
+   shows. `cartJson` is the already-stringified cart; JSON.stringify wraps it as
+   a safe JS string literal. */
+function buildCartConsoleCommand(cartJson) {
+  return `(function(){try{`
+    + `localStorage.setItem('shoppingCart', ${JSON.stringify(cartJson)});`
+    + `var n=(JSON.parse(localStorage.getItem('shoppingCart')).itemsInCart||[]).length;`
+    + `console.log('%c[GB] Proposal loaded — '+n+' item(s). Reloading cart…','color:#2e9e5b;font-weight:bold');`
+    + `location.reload();`
+    + `}catch(e){console.error('[GB] proposal load failed:',e);}})();`;
+}
+
+/* Build a Save-draft payload: serialize the proposal into the golfballs.com
+   cart shape and wrap it in a console command. Returns { command, json,
+   itemCount, skipped }. No network — the caller copies `command` to the
+   clipboard so the rep can paste it into the site console to preview the cart.
+   (A future version persists `json` to extension storage as a preset proposal.) */
+export async function buildProposalDraft(proposal, { proposalID = null } = {}) {
+  if (!proposal || !proposal.length) throw new Error('Proposal is empty');
+  const { items, skipped } = await buildProposalLines(proposal);
+  if (!items.length) throw new Error('Could not load product data for any line — try again');
+  const json = JSON.stringify(buildLocalStorageCart(items, { proposalID }));
+  return { command: buildCartConsoleCommand(json), json, itemCount: items.length, skipped };
+}
+
+/* Server save (PUT /user/saveCart) — kept for the future "Send proposal" flow;
+   Save draft is clipboard-only for now. Resolves to { cartNumber, cartID, … }. */
+export async function saveProposalToServer(proposal, { proposalID = null, customerID = 0, salesRepID = 0 } = {}) {
   if (!proposal || !proposal.length) throw new Error('Proposal is empty');
   const { items, skipped } = await buildProposalLines(proposal);
   if (!items.length) throw new Error('Could not load product data for any line — try again');
   const body = buildSaveCartBody(items, { proposalID, customerID, salesRepID });
   const resp = await sendBg('giftSaveCart', { body });
-  return {
-    cartNumber: resp.cartNumber,
-    cartID: resp.cartID,
-    message: resp.message,
-    savedLines: items.length,
-    skipped,
-  };
+  return { cartNumber: resp.cartNumber, cartID: resp.cartID, message: resp.message, savedLines: items.length, skipped };
 }
