@@ -689,20 +689,27 @@ function SplitRow({ line, split, canRemove, onChange, onRemove }) {
   );
 }
 
-/* One-line summary of a proposal line's decoration (imprint) + any image —
-   so the proposal shows what's attached, not just the bare product. */
+/* One-line summary of a proposal line's decoration (imprint) + any image(s) —
+   so the proposal shows what's attached, including a dual-pole 2nd imprint. */
 function decoSummary(d) {
   if (!d || !d.engine || d.engine === 'none') return null;
+  const p2 = d.pole2 || null;
+  const dual = !!(d.dualPole && p2);
+  const p2kind = p2 ? (p2.kind === 'text' ? 'Personalized' : p2.kind === 'monogram' ? 'Monogram' : 'Logo') : null;
+  const image2 = (p2 && p2.kind === 'logo') ? (p2._localImageDataUrl || (p2.logo && (p2.logo.dataUrl || p2.logo.preview))) : null;
+  let label, image = null;
   if (d.engine === 'ballText') {
     const lines = ((d.pole1 && d.pole1.lines) || []).filter((l) => l != null && String(l).trim() !== '');
-    return { label: lines.length ? `Personalized — “${lines.join(' / ')}”` : 'Personalized', image: null };
+    label = lines.length ? `Personalized — “${lines.join(' / ')}”` : 'Personalized';
+  } else if (d.engine === 'monogram') {
+    label = `Monogram — ${String((d.monogram && d.monogram.text) || '').toUpperCase()}`;
+  } else if (d.engine === 'ballLogo' || d.engine === 'logoOverlay') {
+    label = 'Custom logo';
+    image = d._localImageDataUrl || (d.logo && (d.logo.dataUrl || d.logo.preview)) || null;
+  } else {
+    label = 'Custom imprint';
   }
-  if (d.engine === 'monogram') return { label: `Monogram — ${String((d.monogram && d.monogram.text) || '').toUpperCase()}`, image: null };
-  if (d.engine === 'ballLogo' || d.engine === 'logoOverlay') {
-    const image = d._localImageDataUrl || (d.logo && (d.logo.dataUrl || d.logo.preview)) || null;
-    return { label: 'Custom logo', image };
-  }
-  return { label: 'Custom imprint', image: null };
+  return { label, image, image2, dual, secondLabel: p2kind };
 }
 
 function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove }) {
@@ -734,11 +741,19 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove 
       {(deco || variantLabel) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 7, flexWrap: 'wrap' }}>
           {deco && deco.image && (
-            <img src={deco.image} alt="" style={{ width: 24, height: 24, borderRadius: 'var(--gb-r-sm)', objectFit: 'cover', border: '1px solid var(--gb-border-subtle)', background: '#f4f4f1', flexShrink: 0 }} />
+            <img src={deco.image} alt="front" title="Front imprint" style={{ width: 24, height: 24, borderRadius: 'var(--gb-r-sm)', objectFit: 'cover', border: '1px solid var(--gb-border-subtle)', background: '#f4f4f1', flexShrink: 0 }} />
+          )}
+          {deco && deco.image2 && (
+            <img src={deco.image2} alt="back" title="Second-pole imprint" style={{ width: 24, height: 24, borderRadius: 'var(--gb-r-sm)', objectFit: 'cover', border: '1px solid var(--gb-border-subtle)', background: '#f4f4f1', flexShrink: 0 }} />
           )}
           {deco && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 9.5, fontWeight: 700, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               <I.edit size={9} /> {deco.label}
+            </span>
+          )}
+          {deco && deco.dual && (
+            <span title={`Dual pole — back: ${deco.secondLabel}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-success-tint, rgba(46,158,91,.14))', border: '1px solid var(--gb-success-border, rgba(46,158,91,.32))', color: 'var(--gb-success-fg, #2e9e5b)', fontSize: 9.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
+              <Layers size={9} /> Front + Back · {deco.secondLabel}
             </span>
           )}
           {variantLabel && (

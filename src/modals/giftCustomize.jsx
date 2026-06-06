@@ -1113,8 +1113,9 @@ function useSecondDecalUrl(frontUrl) {
 }
 
 /* Second-pole imprint — the live reveal: a choice row, then the matching control. */
-// A custom-logo ball's opposite pole only takes a logo or text — NOT a monogram.
-const SECOND_IMPRINT_CHOICES = ['Same as Front', 'Personalized', 'Upload Image', 'Logo Library', 'Custom'];
+// A custom-logo ball's opposite pole: mirror the front, personalize (text), or
+// upload a custom logo. No monogram / no separate library picker.
+const SECOND_IMPRINT_CHOICES = ['Same as Front', 'Personalized', 'Custom'];
 /* full personalized imprint — 3 wired text lines + imprint color, font, size.
    Shared by the Personalized print type and the second-pole Personalized choice. */
 function PersonalizedImprint({ slot = 'Personalized' }) {
@@ -1371,12 +1372,16 @@ function MonogramFlow() {
 
 /* one base-product input (Color, Size, Metal Finish, Imprint side, …) — from data */
 function PropertyInput({ label, options }) {
-  // Capture the chosen value in the __base slot (keyed by label) so the cart's
-  // widgetSelections/childList reflect the buyer's pick, not the first child.
-  const [v, setV] = usePTField('__base', label);
-  const val = (v != null && v !== '') ? v : options[0];
+  // Local state drives the UI so it's always clickable (accessories aren't
+  // wrapped in a PrintTypeProvider, so the __base context setter is a no-op
+  // there — using it for the value made towels/shirts unselectable). We ALSO
+  // mirror the pick into the __base slot when a context exists (balls) so the
+  // cart's widgetSelections reflect it.
+  const ctx = usePT();
+  const [v, setV] = useState(options[0]);
+  const onChange = (val) => { setV(val); try { ctx.update && ctx.update('__base', { [label]: val }); } catch { /* no ctx */ } };
   const clean = (label || 'Option').replace(/^(Accessories|Apparel|Product)\s+/i, '');
-  return <BaseColorPicker label={clean} colors={options} value={val} onChange={setV} />;
+  return <BaseColorPicker label={clean} colors={options} value={v} onChange={onChange} />;
 }
 
 /* all of a product's base-product inputs (PropertyProduct / property_*_ss) —
@@ -1867,7 +1872,11 @@ function derivePole2(data, frontSel) {
   if (s.choice === 'Same as Front') {
     if (frontSel === 'Personalized') return textPole(data.Personalized || {});
     if (frontSel === 'Monogram') return monoPole(data.Monogram || {});
-    return null; // same-as-front logo/photo → future
+    if (frontSel === 'Custom Logo' || frontSel === 'Photo') {
+      const f = data[frontSel] || {};
+      return f.imageDataUrl ? { kind: 'logo', _localImageDataUrl: f.imageDataUrl, fileName: f.fileName } : null;
+    }
+    return null;
   }
   if (s.choice === 'Personalized') return textPole(s);
   if (s.choice === 'Monogram') return monoPole(s);

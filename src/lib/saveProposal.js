@@ -71,21 +71,25 @@ async function fetchRawProducts(urls) {
    uploaded yet, upload it NOW (at save time) and fold the returned
    filePath/cropFilePath/userImage into the decoration so the cart references a
    real, server-rendered logo. Returns the (possibly enriched) decoration. */
+async function uploadOneLogo(dataUrl, fileName) {
+  const up = await sendBg('uploadCustomLogo', { dataUrl, fileName: fileName || 'logo.png' });
+  return { filePath: up.filePath, fileName: up.fileName, cropFilePath: up.cropFilePath, userImage: up.userImage };
+}
+
 async function uploadDecorationImage(decoration, skipped, title) {
-  const d = decoration || { engine: 'none' };
-  const needsLogo = (d.engine === 'ballLogo' || d.engine === 'logoOverlay') && d._localImageDataUrl;
-  const alreadyUploaded = d.logo && d.logo.filePath;
-  if (!needsLogo || alreadyUploaded) return d;
-  try {
-    const up = await sendBg('uploadCustomLogo', {
-      dataUrl: d._localImageDataUrl,
-      fileName: (d.logo && d.logo.fileName) || d.fileName || 'logo.png',
-    });
-    return { ...d, logo: { filePath: up.filePath, fileName: up.fileName, cropFilePath: up.cropFilePath, userImage: up.userImage } };
-  } catch (e) {
-    skipped.push({ title, reason: 'logo upload failed (' + (e.message || 'error') + ')' });
-    return d; // keep the line; it just won't carry a server logo
+  let d = decoration || { engine: 'none' };
+  // First-pole logo (Custom Logo / Photo / logo overlay).
+  if ((d.engine === 'ballLogo' || d.engine === 'logoOverlay') && d._localImageDataUrl && !(d.logo && d.logo.filePath)) {
+    try { d = { ...d, logo: await uploadOneLogo(d._localImageDataUrl, (d.logo && d.logo.fileName) || d.fileName) }; }
+    catch (e) { skipped.push({ title, reason: 'logo upload failed (' + (e.message || 'error') + ')' }); }
   }
+  // Second-pole logo (dual pole). Upload it too and fold into pole2.logo.
+  const p2 = d.pole2;
+  if (p2 && p2.kind === 'logo' && p2._localImageDataUrl && !(p2.logo && p2.logo.filePath)) {
+    try { d = { ...d, pole2: { ...p2, logo: await uploadOneLogo(p2._localImageDataUrl, p2.fileName) } }; }
+    catch (e) { skipped.push({ title, reason: 'second-pole logo upload failed (' + (e.message || 'error') + ')' }); }
+  }
+  return d;
 }
 
 /* Build the saveCart itemsInCart[] from the proposal. Returns

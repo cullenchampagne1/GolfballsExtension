@@ -309,6 +309,22 @@ export function buildDecoration(product, decoration = {}) {
       // also stores a fabric.js crop object in userImage we can't reproduce.
       customUserImage: { firstPole: logoPole(logo), secondPole: emptyPole() },
     };
+    // Dual pole — a LOGO on the opposite pole. Stored under GolfBallCustomLogo
+    // (customLogoSecondPole) with a blank Personalized Print2 + MFS 201, exactly
+    // as the real dual-logo cart does.
+    const p2logo = decoration.pole2 && decoration.pole2.kind === 'logo' ? (decoration.pole2.logo || null) : null;
+    if (p2logo) {
+      const gb = out.block.interfaceState.GolfBallCustomLogo;
+      gb.customLogoSecondPole = { useCustomLogo: true, filePath: p2logo.filePath || '', fileName: p2logo.fileName || '', cropFilePath: p2logo.cropFilePath || '' };
+      gb.textSecondPole = { useCustomLogo: false, dynamicImage: [] };
+      out.block.interfaceState.firstPoleUserText = { lines: [null, null, null], font: 'Kabel Dm BT', color: '#000000' };
+      out.block.interfaceState.maxTextArea = 0;
+      out.block.interfaceState.secondPoleUserText = {};
+      const di = out.block.dynamicImage[0];
+      di.Print.configOverrides = { MFS: '201', SecondMFS: '201' };
+      di.Print2 = { userText: [{ lines: [null, null, null], font: 'Kabel Dm BT', color: '#000000' }], configOverrides: {}, versionProperties: { versionNumber: 2, decorationType: 'Personalized' } };
+      out.customUserImage = { firstPole: logoPole(logo), secondPole: logoPole(p2logo) };
+    }
   } else if (engine === 'logoOverlay') {
     // Inhouse (84) vs outsource (25) is a property of the product — auto-detect.
     const mods = product.ProductModification || [];
