@@ -709,6 +709,10 @@ const DEFAULT_PT_DATA = {
   Icons:         { icon: '' },
   'Custom Logo': { imageDataUrl: null, fileName: null },
   Photo:         { imageDataUrl: null, fileName: null },
+  Tee:           { text: '', color: 'Black' },
+  // Which accessory decoration tab is active (Custom Logo / Tee / Personalized /
+  // Monogram) so AccessoryDecorationEmitter serializes the right decoration.
+  __accessory:   { kind: '' },
   // Dual-pole second imprint — its own slot so it never collides with the
   // front print's fields. Holds whichever sub-type the buyer picks.
   __second:      { enabled: false, choice: 'Same as Front',
@@ -1454,10 +1458,11 @@ function BaseProperties({ p, config }) {
   return <>{properties.map((prop, i) => <PropertyInput key={(prop.label || '') + i} label={prop.label} options={prop.options} />)}</>;
 }
 
-/* a tee imprint — text (up to 23 chars) + text color */
+/* a tee imprint — text (up to 23 chars) + text color. Writes through context
+   (the `Tee` slot) so AccessoryDecorationEmitter can serialize it to the cart. */
 function TeeDecoration() {
-  const [v, setV] = useState('');
-  const [c, setC] = useState('Black');
+  const [v, setV] = usePTField('Tee', 'text');
+  const [c, setC] = usePTField('Tee', 'color');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <Field label="Imprint Text"><TextInput value={v} onChange={setV} placeholder="Up to 23 characters" maxLength={23} /></Field>
@@ -1502,9 +1507,15 @@ function renderDeco(kind, p, config, dualPole) {
    product supports more than one decoration type (driven by modificationName_ss). */
 function DecorationArea({ p, config, mods, dualPole }) {
   const decos = decorationsFor(mods);
+  const single = decos.length <= 1;
   const [active, setActive] = useState('Custom');
-  if (decos.length <= 1) return renderDeco(decos[0] ? decos[0].kind : 'custom', p, config, dualPole);
-  const tabs = [{ tab: 'Stock', kind: 'stock' }, ...decos].sort((a, b) => DECO_ORDER.indexOf(a.tab) - DECO_ORDER.indexOf(b.tab));
+  const [, setAccKind] = usePTField('__accessory', 'kind');
+  const tabs = single ? null : [{ tab: 'Stock', kind: 'stock' }, ...decos].sort((a, b) => DECO_ORDER.indexOf(a.tab) - DECO_ORDER.indexOf(b.tab));
+  const curKind = single ? (decos[0] ? decos[0].kind : 'custom') : (tabs.find((t) => t.tab === active) || tabs[tabs.length - 1]).kind;
+  // Publish the active accessory decoration kind so AccessoryDecorationEmitter
+  // serializes the right decoration (custom logo vs tee text vs embroidery).
+  useEffect(() => { setAccKind(curKind); }, [curKind, setAccKind]);
+  if (single) return renderDeco(curKind, p, config, dualPole);
   const cur = tabs.find((t) => t.tab === active) || tabs[tabs.length - 1];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -2004,6 +2015,19 @@ function AccessoryDecorationEmitter({ p, onChange }) {
   const { data } = usePT();
   useEffect(() => {
     if (!onChange) return;
+    const kind = (data.__accessory && data.__accessory.kind) || '';
+    if (kind === 'stock') { onChange({ engine: 'none' }); return; }
+    // Tee text → its own engine (so it shows a "Personalized" tag, not a logo,
+    // and can't be dragged onto balls). Empty text → no decoration yet.
+    if (kind === 'tee') {
+      const tee = data.Tee || {};
+      const text = String(tee.text || '').trim();
+      onChange(text
+        ? { engine: 'accessoryText', dualPole: false, pole2: null, pole1: { lines: [tee.text, null, null], font: 'Kabel Dm BT', color: _hexOf(tee.color) } }
+        : { engine: 'none' });
+      return;
+    }
+    // Custom Logo (default) — the printed/embroidered logo overlay.
     const cl = data['Custom Logo'] || {};
     onChange({
       engine: 'logoOverlay',

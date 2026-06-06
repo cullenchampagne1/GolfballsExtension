@@ -198,6 +198,26 @@ export function buildLogoOverlayDynamicImage({ outsource = false, logo = null } 
   };
 }
 
+/* ── Engine D — tee text (modID 15 "Tee") ─────────────────────────────────────
+   A printed text imprint on golf tees. Unlike ball text it is NOT uppercased,
+   is a single line, and renders through the legacy Render.aspx overlay (sku=tee,
+   clientID=GBC). Verified byte-exact against a real captured tee-text cart. */
+export function teePreviewUrl({ text = '', font = 'Kabel Dm BT', color = '#000000' }) {
+  const userText = [{ lines: [text], font, color }];
+  return 'https://www.icustomize.com/Render.aspx?sku=tee&overlay=&useroverlay='
+    + `&usertext=${enc(JSON.stringify(userText))}`
+    + `&configoverrides=${enc(JSON.stringify({ BG: '' }))}`
+    + '&clientID=GBC';
+}
+export function buildTeeDynamicImage({ text = '', font = 'Kabel Dm BT', color = '#000000' }) {
+  return {
+    imageType: 'Tee', sku: 'tee', clientID: 'GBC',
+    userText: [{ lines: [text], font, color }],
+    configOverrides: { BG: '' },
+    renderedPreviewImage: teePreviewUrl({ text, font, color }),
+  };
+}
+
 const emptyPole = () => ({ fileName: '', filePath: '', userImage: null, fileSupported: false });
 const logoPole = (logo) => ({
   fileName: (logo && logo.fileName) || '',
@@ -409,6 +429,21 @@ export function buildDecoration(product, decoration = {}) {
         isTemporary: false,
       },
       customUserImage: { firstPole: logoPole(logo), secondPole: emptyPole() },
+    };
+  } else if (engine === 'accessoryText') {
+    // Tee text (modID 15 "Tee"). Single line, case preserved, Render.aspx preview.
+    const p = decoration.pole1 || {};
+    const text = (p.lines || []).find((l) => l != null && String(l).trim() !== '') || '';
+    const font = p.font || 'Kabel Dm BT';
+    const color = p.color || '#000000';
+    out = {
+      block: {
+        ProductModification: findMod(product, { modID: 15, friendly: 'Tee' }),
+        interfaceState: {},
+        dynamicImage: [buildTeeDynamicImage({ text, font, color })],
+        isTemporary: false,
+      },
+      customUserImage: noImage,
     };
   } else {
     return { block: null, customUserImage: noImage }; // engine === 'none'
