@@ -116,10 +116,15 @@ export async function buildProposalLines(proposal) {
     // the custom-logo ladder (+ second-pole upcharge) when there is — so the
     // cart's ItemPriceBreak agrees with ItemPrice.
     const imprinted = !!(decoration && decoration.engine && decoration.engine !== 'none');
-    const fee = (decoration && decoration.dualPole && decoration.pole2) ? (SECOND_POLE_FEE[decoration.pole2.kind] || 0) : 0;
+    const fee = (decoration && decoration.pole2 && decoration.pole2.kind) ? (SECOND_POLE_FEE[decoration.pole2.kind] || 0) : 0;
     const lineBreaks = (imprinted && cat.customLogo && breaks.length)
       ? breaks.map((b) => ({ q: b.q, p: Math.round((b.p + fee) * 100) / 100 }))
       : [{ q: 1, p: cat.price || 0 }];
+    // Commissionable custom-logo path ("…_1") for an imprinted line; strip the
+    // "_1" slug for a plain/retail line so it references the base product (the
+    // base and "_1" pages serve the same product — only the line URL differs).
+    const urlPath = cat.urlPath || '';
+    const lineUrl = urlPath ? (imprinted ? urlPath : urlPath.replace(/_1$/, '')) : undefined;
     for (const split of (line.splits || [])) {
       items.push(assembleLine({
         product: raw,
@@ -127,18 +132,19 @@ export async function buildProposalLines(proposal) {
         decoration,
         selection,
         qty: split.qty,
+        url: lineUrl,
       }));
     }
   }
   return { items, skipped };
 }
 
-/* The localStorage shape golfballs.com hydrates its cart from — verified live:
-   localStorage.shoppingCart === the cartData object WITH a nested shoppingCart
-   copy + asCartContents mirror (no `updated` flag, unlike the saveCart PUT). */
+/* The localStorage shape golfballs.com hydrates its cart from — verified live
+   against a real captured cart: the cartData object spread at top level WITH a
+   nested shoppingCart copy, the asCartContents mirror, AND `updated:true`. */
 function buildLocalStorageCart(items, { proposalID = null } = {}) {
   const cart = buildCartData(items, { proposalID });
-  return { ...cart, shoppingCart: cart, asCartContents: buildAsCartContents(items) };
+  return { ...cart, shoppingCart: cart, asCartContents: buildAsCartContents(items), updated: true };
 }
 
 /* A paste-and-run console snippet for the golfballs.com tab: writes the cart to

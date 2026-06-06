@@ -221,6 +221,30 @@ function findMod(product, { modID, friendly } = {}) {
   )) || null;
 }
 
+/* Record the buyer's choices on a (cloned) Custom Logo ProductModification by
+   flipping `selected` on the right option values. golfballs.com derives the
+   decoration charge + commission tier from THESE flags (Second Pole = $0/$6/$4,
+   PriceTier = the SKU's tier), not just the cached ItemPrice — without them a
+   real order re-prices as an undecorated ball. Clones so the shared product
+   object is never mutated. Returns the original when there's nothing to mark. */
+function selectCustomLogoOptions(pm, { secondPole = 'No Print', priceTier = 'Default' } = {}) {
+  if (!pm) return pm;
+  const clone = JSON.parse(JSON.stringify(pm));
+  const groups = (clone.Modification && clone.Modification.ModificationOption) || [];
+  const choose = (groupName, match) => {
+    const g = groups.find((o) => o.Name === groupName);
+    if (!g || !Array.isArray(g.ModificationOptionValue)) return;
+    let hit = false;
+    g.ModificationOptionValue.forEach((v) => { v.selected = match(v); if (v.selected) hit = true; });
+    if (!hit && g.ModificationOptionValue[0]) g.ModificationOptionValue[0].selected = true; // default = first
+  };
+  choose('Service Level', () => false);                  // → first (default standard production)
+  choose('Second Pole', (v) => v.Name === secondPole);   // No Print / Logo / Text
+  choose('PriceTier', (v) => v.Name === priceTier);      // Econ / Rec / High / Tour / Mid
+  choose('Express Logo', (v) => v.Name === 'Yes');
+  return clone;
+}
+
 /* ── decoration dispatcher ─────────────────────────────────────────────────────
    Build the modificationHistory[] entry + line-level customUserImage from an
    engine-agnostic decoration descriptor (what CustomizeBlock emits). Engines:
@@ -287,9 +311,14 @@ export function buildDecoration(product, decoration = {}) {
     };
   } else if (engine === 'ballLogo') {
     const logo = decoration.logo || null;
+    // Mark the SKU's price tier + the chosen second-pole option as selected so
+    // the order bills the right custom-logo charge (and stays commissionable).
+    const tier = (product.CustomData && String(product.CustomData.customPriceTier || '').trim()) || 'Default';
+    const secondPole = decoration.pole2 ? (decoration.pole2.kind === 'logo' ? 'Logo' : 'Text') : 'No Print';
+    const customLogoMod = selectCustomLogoOptions(findMod(product, { modID: 1008, friendly: 'Custom Logo' }), { secondPole, priceTier: tier });
     out = {
       block: {
-        ProductModification: findMod(product, { modID: 1008, friendly: 'Custom Logo' }),
+        ProductModification: customLogoMod,
         interfaceState: {
           GolfBallCustomLogo: {
             customLogo: {
@@ -354,7 +383,7 @@ export function buildDecoration(product, decoration = {}) {
    for every item type — the decoration engine is chosen by buildDecoration().
    Pricing comes from the catalog (`pricing.breaks` = [{q,p}], `pricing.price`);
    the page carries only the parent fee header. itemGuid is generated if omitted. */
-export function assembleLine({ product, pricing = {}, selection = {}, decoration, qty = 1, itemGuid } = {}) {
+export function assembleLine({ product, pricing = {}, selection = {}, decoration, qty = 1, itemGuid, url } = {}) {
   const children = product.ProductChild || [];
   // Pick the child the buyer actually selected. Prefer matching by option values
   // ({ "Tee Count": "100", Color: "White" } — what the modal captures), then by
@@ -378,9 +407,19 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
   const unit = pricing.price != null ? pricing.price : (breaks[0] && breaks[0].p) || 0;
   const { block: decoBlock, customUserImage } = buildDecoration(product, decoration || { engine: 'none' });
 
+  // Resolve the cart name the way the site does: substitute the decoration's
+  // FriendlyName into NameFormat's "{Decoration}" slot (→ "… Custom Logo …";
+  // plain orders collapse the slot to nothing → "… Golf Balls").
+  const decoFriendly = (decoBlock && decoBlock.ProductModification && decoBlock.ProductModification.Modification
+    && decoBlock.ProductModification.Modification.FriendlyName) || '';
+  const nameFmt = product.NameFormat || product.Name || '';
+  const baseName = nameFmt.includes('{Decoration}')
+    ? nameFmt.replace('{Decoration}', decoFriendly).replace(/\s{2,}/g, ' ').trim()
+    : (product.Name || '');
+
   return {
     nameFormat: product.NameFormat || product.Name || '',
-    productTitle: [product.Brand && product.Brand.Name, product.Name].filter(Boolean).join(' ').trim(),
+    productTitle: [product.Brand && product.Brand.Name, baseName].filter(Boolean).join(' ').trim(),
     qtyFields: [],
     ShortCode: product.ShortCode,
     brand: (product.Brand && product.Brand.Name) || '',
@@ -418,7 +457,9 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
     itemType: (product.ItemType && product.ItemType.Name) || (product.itemType_s || '').split('-').pop() || 'Golf Balls',
     images: product.ProductImage || product.images || [],
     itemGuid: itemGuid || (globalThis.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now())),
-    url: canonicalUrl(product),
+    // Commissionable "_1" path for imprinted lines comes in via `url`; the page's
+    // canonical (base) URL is the fallback for plain/retail lines.
+    url: url || canonicalUrl(product),
     OrderQtyMultiple: null,
     dropship: { active: false, dropshipTime: 0, dropshipDate: '' },
   };

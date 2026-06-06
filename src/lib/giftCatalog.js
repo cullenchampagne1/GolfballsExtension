@@ -243,6 +243,10 @@ export function normalizeDoc(doc) {
     logo:    logo != null ? round2(logo) : null,
     img:     doc.image_s || '',
     url:     absoluteProductUrl(doc.product_url_s),
+    // Raw site path (e.g. "/Golf-Balls/…_1"). Custom-logo SKUs carry the "_1"
+    // commissionable slug; the cart line keeps it for an imprinted order and
+    // strips it for a plain/retail order (see saveProposal).
+    urlPath: doc.product_url_s || '',
     rating:  doc.review_d ? Math.round(num(doc.review_d) * 10) / 10 : null,
     reviews: doc.reviewCount_i || 0,
     mods:    Array.isArray(doc.modificationName_ss) ? doc.modificationName_ss.length : 0,

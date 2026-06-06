@@ -93,7 +93,7 @@ const SECOND_POLE_FEE = { logo: 6, text: 4 };
 const lineHasImprint = (line) => { const d = line && line.decoration; return !!(d && d.engine && d.engine !== 'none'); };
 const lineSecondPoleFee = (line) => {
   const d = line && line.decoration;
-  if (!d || !d.dualPole || !d.pole2) return 0;
+  if (!d || !d.pole2 || !d.pole2.kind) return 0;   // keyed on a real 2nd-pole imprint
   return SECOND_POLE_FEE[d.pole2.kind] || 0;
 };
 function linePriceAt(line, qty) {
