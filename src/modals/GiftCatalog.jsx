@@ -964,8 +964,8 @@ function SavedCard({ item, loaded, onLoad, onCopy, onDelete }) {
     : copied ? <I.check size={14} strokeWidth={3} /> : <I.copy size={14} />;
   return (
     <motion.div initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .92 }} transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }}
-      onClick={() => onLoad(item)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ breakInside: 'avoid', WebkitColumnBreakInside: 'avoid', marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 11, padding: 13, cursor: 'pointer', background: 'var(--gb-surface-1)', border: '1px solid ' + (loaded ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'), borderRadius: 'var(--gb-r-lg)', boxShadow: hover ? '0 2px 7px rgba(0,0,0,.07)' : 'none', transform: hover && !loaded ? 'translateY(-1px)' : 'none', transition: 'transform var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)' }}>
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ breakInside: 'avoid', WebkitColumnBreakInside: 'avoid', marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 11, padding: 13, background: 'var(--gb-surface-1)', border: '1px solid ' + (loaded ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'), borderRadius: 'var(--gb-r-lg)', boxShadow: hover ? '0 2px 7px rgba(0,0,0,.07)' : 'none', transform: hover && !loaded ? 'translateY(-1px)' : 'none', transition: 'transform var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <ThumbStack entries={r.entries} />
         <div style={{ flex: 1 }} />
@@ -994,9 +994,10 @@ function SavedCard({ item, loaded, onLoad, onCopy, onDelete }) {
         <span style={{ fontSize: 14, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)', letterSpacing: -.4 }}>{money(r.total)}</span>
       </div>
       <div style={{ display: 'flex', gap: 7 }}>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 30, borderRadius: 'var(--gb-r-md)', background: hover ? 'var(--gb-brand-tint-medium)' : 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 11.5, fontWeight: 700, transition: 'background var(--gb-anim)' }}>
+        <button onClick={(e) => { e.stopPropagation(); onLoad(item); }} title="Load these items into the proposal"
+          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 30, borderRadius: 'var(--gb-r-md)', cursor: 'pointer', background: hover ? 'var(--gb-brand-tint-medium)' : 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 11.5, fontWeight: 700, fontFamily: 'inherit', transition: 'background var(--gb-anim)' }}>
           <I.plus size={13} /> Load into proposal
-        </div>
+        </button>
         <CardIconBtn title={copying ? 'Preparing command…' : 'Copy as a console command'} active={copied} onClick={doCopy} icon={copyIcon} />
         <CardIconBtn title="Delete draft" danger onClick={(e) => { e.stopPropagation(); onDelete(item.id); }} icon={<I.trash size={14} />} />
       </div>
@@ -1293,8 +1294,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   };
 
   // Load a saved draft's lines into the live proposal (merging by product so
-  // re-loading the same draft doesn't duplicate lines), then jump back to the
-  // catalog with the proposal open.
+  // re-loading the same draft doesn't duplicate lines). Stay on the gallery and
+  // just open the proposal panel beside it, so the load is visible in place
+  // rather than dumping the user back into the All Items grid.
   const loadSaved = (entry) => {
     const incoming = linesFromSaved(entry, rid);
     setProposal((prev) => {
@@ -1302,7 +1304,6 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
       return [...prev, ...incoming.filter((l) => !have.has(l.productId))];
     });
     setLoadedId(entry.id);
-    setView('catalog');
     setProposalOpen(true);
   };
 
