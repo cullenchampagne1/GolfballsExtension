@@ -705,10 +705,30 @@ function SplitRow({ line, split, canRemove, onChange, onRemove }) {
   );
 }
 
+/* One-line summary of a proposal line's decoration (imprint) + any image —
+   so the proposal shows what's attached, not just the bare product. */
+function decoSummary(d) {
+  if (!d || !d.engine || d.engine === 'none') return null;
+  if (d.engine === 'ballText') {
+    const lines = ((d.pole1 && d.pole1.lines) || []).filter((l) => l != null && String(l).trim() !== '');
+    return { label: lines.length ? `Personalized — “${lines.join(' / ')}”` : 'Personalized', image: null };
+  }
+  if (d.engine === 'monogram') return { label: `Monogram — ${String((d.monogram && d.monogram.text) || '').toUpperCase()}`, image: null };
+  if (d.engine === 'ballLogo' || d.engine === 'logoOverlay') {
+    const image = d._localImageDataUrl || (d.logo && (d.logo.dataUrl || d.logo.preview)) || null;
+    return { label: 'Custom logo', image };
+  }
+  return { label: 'Custom imprint', image: null };
+}
+
 function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove }) {
   const p = line.product;
   const lineTot = line.splits.reduce((s, x) => s + x.qty * x.price, 0);
   const lineUnits = line.splits.reduce((s, x) => s + x.qty, 0);
+  const deco = decoSummary(line.decoration);
+  const variantLabel = line.variant && line.variant.values
+    ? Object.entries(line.variant.values).filter(([k]) => k !== 'Color').map(([k, v]) => `${k}: ${v}`).join(' · ')
+    : '';
   return (
     <motion.div layout
       initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }}
@@ -726,6 +746,22 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove 
         </div>
         <span onClick={onRemove} style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--gb-text-muted)', cursor: 'pointer', borderRadius: 'var(--gb-r-sm)' }}><I.trash size={13} /></span>
       </div>
+      {/* Attached imprint / variant — shows what's been customized on this line. */}
+      {(deco || variantLabel) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 7, flexWrap: 'wrap' }}>
+          {deco && deco.image && (
+            <img src={deco.image} alt="" style={{ width: 24, height: 24, borderRadius: 'var(--gb-r-sm)', objectFit: 'cover', border: '1px solid var(--gb-border-subtle)', background: '#f4f4f1', flexShrink: 0 }} />
+          )}
+          {deco && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 9.5, fontWeight: 700, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <I.edit size={9} /> {deco.label}
+            </span>
+          )}
+          {variantLabel && (
+            <span style={{ padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', color: 'var(--gb-text-tertiary)', fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{variantLabel}</span>
+          )}
+        </div>
+      )}
       <div style={{ marginTop: 8, borderTop: '1px solid var(--gb-border-subtle)' }}>
         <AnimatePresence initial={false}>
           {line.splits.map((s) => (
