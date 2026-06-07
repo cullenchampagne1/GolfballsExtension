@@ -1824,12 +1824,11 @@ function LivePreview3D({ shape = 'ball' }) {
   const isChip = shape === 'chip';
   const decalUrl = useDecalUrl();
   const secondUrl = useSecondDecalUrl(decalUrl);
-  // Ball uses the catalog preview scale; the chip is a small ball-marker, so it
-  // frames at the golfball's default scale ×0.75 rather than the larger ball
-  // preview scale.
+  // Ball uses the larger catalog preview scale; the chip is a small ball-marker,
+  // so it frames at the golfball's default scale (golfballViewer.ballScale).
   const ballDefaultScale = Number(useDevSetting('golfballViewer.ballScale') ?? 1) || 1;
   const catalogScale = Number(useDevSetting('giftCatalog.previewScale') ?? 2) || 2;
-  const previewScale = isChip ? ballDefaultScale * 0.75 : catalogScale;
+  const previewScale = isChip ? ballDefaultScale : catalogScale;
   // Slow auto-spin so both poles/sides (dual-pole imprints) are visible hands-free.
   const [spin, setSpin] = useState(false);
   // The chip is a product worth seeing blank, so it always mounts; the ball is

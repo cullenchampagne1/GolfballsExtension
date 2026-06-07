@@ -854,14 +854,16 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // around the ball's middle, not its model-space center.
         ballMesh.position.set(-bsphere.center.x * scale, -bsphere.center.y * scale, -bsphere.center.z * scale);
         // Chip prints land flat on the face (±chipFaceZ) and fill the recessed
-        // white center inlay — capture the scaled half-thickness + disc radius
-        // so the decal projector can target the face instead of a sphere pole.
+        // white center inlay. These are in LOCAL geometry units (the chip's
+        // world scale rides on ballMesh.scale, which DecalGeometry bakes via the
+        // decal mesh's own scale) — so the projector must be sized in local
+        // units, not world units, or its box misses the thin disc entirely.
         let chipFaceZ = 0, chipDiscR = 0;
         if (isChip) {
           ballMesh.geometry.computeBoundingBox();
           const cbb = ballMesh.geometry.boundingBox;
-          chipFaceZ = Math.max(Math.abs(cbb.min.z), Math.abs(cbb.max.z)) * scale;
-          chipDiscR = Math.max(Math.abs(cbb.min.x), Math.abs(cbb.max.x), Math.abs(cbb.min.y), Math.abs(cbb.max.y)) * scale;
+          chipFaceZ = Math.max(Math.abs(cbb.min.z), Math.abs(cbb.max.z));
+          chipDiscR = Math.max(Math.abs(cbb.min.x), Math.abs(cbb.max.x), Math.abs(cbb.min.y), Math.abs(cbb.max.y));
         }
         // Wrap ball+decal in a Group so throw-mode translates and
         // rotates the whole assembly together. The mesh's recentering
@@ -932,12 +934,13 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           const decalOrientation = new THREE.Euler(0, back ? Math.PI : 0, 0);
           let decalPosition, decalSize;
           if (isChip) {
-            // Project straight onto the flat face from just outside it. Depth is
-            // kept under the chip thickness so the front projector can't punch
-            // through to the back face (the back gets its own projector).
-            decalPosition = new THREE.Vector3(0, 0, sign * chipFaceZ * 1.02);
+            // Project straight onto the flat face from just outside it (local
+            // units). Box depth stays under the full thickness so the front
+            // projector can't punch through to the back face (which gets its
+            // own projector), but reaches the recessed center inlay.
+            decalPosition = new THREE.Vector3(0, 0, sign * chipFaceZ * 1.2);
             const w = chipDiscR * chipPrintScale;
-            decalSize = new THREE.Vector3(w, w, chipFaceZ * 2);
+            decalSize = new THREE.Vector3(w, w, chipFaceZ * 1.8);
           } else {
             decalPosition = new THREE.Vector3(0, 0, sign * targetRadius * 0.999);
             decalSize = new THREE.Vector3(targetRadius * printAreaScale, targetRadius * printAreaScale, targetRadius * 2);
@@ -973,7 +976,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // Lift the decal a hair off the surface along its own pole so it wins
           // the depth test by REAL depth separation rather than polygonOffset
           // (Mac GL honors polygonOffset; ANGLE/D3D11 on Adreno does not).
-          mesh.position.z += sign * (isChip ? chipFaceZ * 0.06 : targetRadius * 0.015);
+          mesh.position.z += sign * (isChip ? chipFaceZ * scale * 0.08 : targetRadius * 0.015);
           objectsToDispose.push(decalGeo, decalMat);
           return { mesh, params: { position: decalPosition.clone(), orientation: decalOrientation.clone(), size: decalSize.clone(), texture: decalTexture } };
         }
