@@ -203,6 +203,14 @@ export function isDivotProduct(p) {
   return hay.includes('divot') && hay.includes('lever');
 }
 
+/* The Bartender Divot Tool (divot tool with a bottle opener up top) — its own
+   3D model. Matches when the label has both "bartender" and "divot tool". */
+export function isBartenderProduct(p) {
+  if (!p) return false;
+  const hay = `${p.title || ''} ${p.url || ''}`.toLowerCase();
+  return hay.includes('bartender') && hay.includes('divot tool');
+}
+
 /* The buyer's base-color pick (stored in the __base slot as a color name, e.g.
    "Green") → hex for the 3D chip's clay. The model's white pattern/center is
    left untouched; only the clay recolors. Falls back to black. */
@@ -1403,7 +1411,7 @@ function BaseColorPicker({ label = 'Color', colors, value, onChange }) {
 function CustomLogoFlow({ p, config, dualPole }) {
   // Round markers (poker chips) align the logo onto the face like a ball; flat
   // products (towels, shirts, …) just attach the logo as-is (no place to align).
-  const alignable = isPokerChipProduct(p) || isDivotProduct(p);
+  const alignable = isPokerChipProduct(p) || isDivotProduct(p) || isBartenderProduct(p);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <ImageUpload alignable={alignable} />
@@ -1643,6 +1651,7 @@ function AccessoryCustomizer({ p, config, loading }) {
   // Pole" mod rather than the customData dualPole variant — honor either.
   const isChip = isPokerChipProduct(p);
   const isDivot = isDivotProduct(p);
+  const isBartender = isBartenderProduct(p);
   const dualPole = (p.dualPole || (config && config.dualPole) || isChip || false) && !excludeDualPole;
   const bundleItems = (p.bundleItems && p.bundleItems.length) ? p.bundleItems : ((config && config.bundleItems) || null);
   return (
@@ -1650,6 +1659,7 @@ function AccessoryCustomizer({ p, config, loading }) {
       {loading && <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontStyle: 'italic' }}>Loading live options…</div>}
       {isChip && !bundleItems && <LivePreview3D shape="chip" p={p} />}
       {isDivot && !bundleItems && <LivePreview3D shape="divot" p={p} />}
+      {isBartender && !bundleItems && <LivePreview3D shape="bartender" p={p} />}
       <BaseProperties p={p} config={config} />
       {bundleItems && bundleItems.length
         ? <BundleSections items={bundleItems} p={p} config={config} dualPole={dualPole} />
@@ -1874,18 +1884,21 @@ function LivePreview3D({ shape = 'ball', p }) {
   const ctx = usePT();
   const isChip = shape === 'chip';
   const isDivot = shape === 'divot';
-  const flat = isChip || isDivot;   // flat metal/plastic markers (chip + divot)
-  // Body tint: chip clay from the buyer's color pick; divot is fixed steel; ball
-  // from the product's colorway in its title (e.g. "Pro V1 Yellow" → optic yellow).
-  const tint = isChip ? chipClayHex(ctx.data) : (isDivot ? undefined : ballTitleTint(p && p.title));
+  const isBartender = shape === 'bartender';
+  const isMetalTool = isDivot || isBartender;   // steel divot tools (fixed steel, marker disc)
+  const flat = isChip || isMetalTool;   // flat markers (chip + divot tools)
+  // Body tint: chip clay from the buyer's color pick; divot tools are fixed
+  // steel; ball from the product's colorway in its title ("Pro V1 Yellow").
+  const tint = isChip ? chipClayHex(ctx.data) : (isMetalTool ? undefined : ballTitleTint(p && p.title));
   const decalUrl = useDecalUrl();
   const secondUrl = useSecondDecalUrl(decalUrl);
-  // Ball uses the catalog preview scale; the chip + divot each have their own
+  // Ball uses the catalog preview scale; chip + each divot tool have their own
   // (smaller) scale — all dev-tunable.
   const chipScale = Number(useDevSetting('giftCatalog.chipPreviewScale') ?? 1.58) || 1.58;
   const divotScale = Number(useDevSetting('giftCatalog.divotPreviewScale') ?? 1.0) || 1.0;
+  const bartenderScale = Number(useDevSetting('giftCatalog.bartenderPreviewScale') ?? 1.1) || 1.1;
   const catalogScale = Number(useDevSetting('giftCatalog.previewScale') ?? 2) || 2;
-  const previewScale = isChip ? chipScale : isDivot ? divotScale : catalogScale;
+  const previewScale = isChip ? chipScale : isDivot ? divotScale : isBartender ? bartenderScale : catalogScale;
   // Slow auto-spin so both poles/sides (dual-pole imprints) are visible hands-free.
   const [spin, setSpin] = useState(false);
   // Chip + divot are products worth seeing blank, so they always mount; the ball
@@ -1923,7 +1936,7 @@ function LivePreview3D({ shape = 'ball', p }) {
           <button
             type="button"
             onClick={() => setSpin((s) => !s)}
-            title={spin ? 'Stop rotating' : (isDivot ? 'Auto-rotate' : `Auto-rotate to see both ${isChip ? 'sides' : 'poles'}`)}
+            title={spin ? 'Stop rotating' : (isMetalTool ? 'Auto-rotate' : `Auto-rotate to see both ${isChip ? 'sides' : 'poles'}`)}
             style={{
               position: 'absolute', right: 8, bottom: 8, width: 28, height: 28,
               display: 'flex', alignItems: 'center', justifyContent: 'center',

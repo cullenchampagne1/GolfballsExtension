@@ -295,6 +295,17 @@ export const DEV_SETTINGS = [
     unit:    '×',
   },
   {
+    key:     'giftCatalog.bartenderPreviewScale',
+    label:   'Gifting Catalog: live preview bartender-tool scale',
+    desc:    'Initial zoom of the bartender divot tool (with bottle opener) in the catalog preview. Wheel zoom still overrides.',
+    type:    'number',
+    default: 1.1,
+    min:     0.3,
+    max:     5,
+    step:    0.05,
+    unit:    '×',
+  },
+  {
     key:     'giftCatalog.cacheHours',
     label:   'Gifting Catalog: re-index interval (hours)',
     desc:    'How long the catalog (products + pricing) is cached before a fresh live pull. Lower it if prices change often; 0 = always pull fresh on open.',

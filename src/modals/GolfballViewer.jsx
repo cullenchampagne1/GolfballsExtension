@@ -44,6 +44,7 @@ const MODEL_URLS = {
   ball: 'assets/golfball_model/Golf_ball.obj',
   chip: 'assets/poker_chip_model/PokerChip.obj',
   divot: 'assets/divot_tool_model/DivotTool.obj',
+  bartender: 'assets/bartender_tool_model/BartenderTool.obj',
 };
 
 async function loadThreeAndModel(shape = 'ball') {
@@ -84,7 +85,7 @@ async function loadThreeAndModel(shape = 'ball') {
           // per-vertex color mask. Stand them up so the face points at the camera
           // (±Z, like the ball's print poles), and convert the sRGB-encoded
           // vertex colors to linear so the masks compare correctly in-shader.
-          if (shape === 'chip' || shape === 'divot') {
+          if (shape === 'chip' || shape === 'divot' || shape === 'bartender') {
             geo.rotateX(Math.PI / 2);
             const col = geo.getAttribute('color');
             if (col) {
@@ -396,7 +397,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
       try {
         const { THREE, DecalGeometry, EXRLoader, CANNON, model } = await loadThreeAndModel(shape);
         const isChip = shape === 'chip';
-        const isDivot = shape === 'divot';
+        // Divot + bartender are the same in the viewer: steel body + white marker
+        // disc, decal projected onto the disc (located from the mask).
+        const isDivot = shape === 'divot' || shape === 'bartender';
         const flat = isChip || isDivot;   // flat vertex-colored markers (face-on, local decal)
         if (disposed) return;
         const container = containerRef.current;
