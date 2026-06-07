@@ -14,6 +14,9 @@ import {
 } from '../lib/campaign/fields.js';
 import { loadCallTemplates } from '../lib/callLog.js';
 import { loadTaskTemplates } from '../lib/quickTask.js';
+import { runCampaign } from '../lib/campaign/engine.js';
+import { readEmailConfig } from '../lib/emailSender.js';
+import { pickFromAddress } from '../lib/sender.js';
 
 /* ───────────────────────────────────────────────────────────────
    CampaignManager — full-page campaign editor.
@@ -587,7 +590,7 @@ function StatsStrip({ steps, campaign, selectedId, onClearSelection, dirty, onSa
 }
 
 /* ── Top bar ── */
-function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, dirty, audienceCount, onRun, onClose }) {
+function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, dirty, audienceCount, onRun, onClose, dryRun, onDryRunChange }) {
   return (
     <div style={{ padding: '12px 22px', background: 'var(--gb-surface-1)', borderBottom: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -621,6 +624,189 @@ function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, di
   );
 }
 
+/* ── Run engine bridge ─────────────────────────────────────────
+   Wraps lib/campaign/engine.runCampaign, projecting its progress
+   callbacks into per-contact row state the AudienceRunView renders.
+   Control (pause/resume/stop) is backed by a ref the engine polls. */
+const sendBg = (msg) => new Promise((resolve) => {
+  try { chrome.runtime.sendMessage(msg, (r) => resolve(chrome.runtime.lastError ? null : r)); }
+  catch { resolve(null); }
+});
+
+function useCampaignRunner() {
+  const [running, setRunning] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [complete, setComplete] = useState(false);
+  const [rows, setRows] = useState({});            // key -> { status, label, ran }
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const controlRef = useRef({ paused: false, stopped: false });
+  const lastArgsRef = useRef(null);
+
+  const start = async (args) => {
+    lastArgsRef.current = args;
+    const { campaign, audience, lookupTemplate, deps } = args;
+    controlRef.current = { paused: false, stopped: false };
+    setPaused(false); setComplete(false); setRunning(true);
+    const init = {};
+    audience.forEach((c) => { init[c._key] = { status: 'queued', label: '', ran: 0 }; });
+    setRows(init);
+    setProgress({ done: 0, total: audience.length });
+
+    await runCampaign({
+      campaign, audience, lookupTemplate, deps,
+      control: { isPaused: () => controlRef.current.paused, isStopped: () => controlRef.current.stopped },
+      on: {
+        contactStart: (c) => setRows((r) => ({ ...r, [c._key]: { ...(r[c._key] || {}), status: 'sending' } })),
+        stepResult: ({ contact, step, status }) => setRows((r) => {
+          const cur = r[contact._key] || { ran: 0 };
+          return { ...r, [contact._key]: { ...cur, label: step.label, ran: status === 'ran' ? (cur.ran || 0) + 1 : (cur.ran || 0) } };
+        }),
+        contactDone: (s) => setRows((r) => ({
+          ...r,
+          [s.contact._key]: {
+            ...(r[s.contact._key] || {}),
+            ran: s.ran,
+            status: s.failed ? 'failed' : s.stoppedAtBranch ? 'stopped' : s.ran > 0 ? 'sent' : 'skipped',
+          },
+        })),
+        progress: (p) => setProgress(p),
+        complete: ({ stopped }) => { setRunning(false); setComplete(!stopped); },
+      },
+    });
+  };
+
+  const pause = () => { controlRef.current.paused = true; setPaused(true); };
+  const resume = () => { controlRef.current.paused = false; setPaused(false); };
+  const stop = () => { controlRef.current.stopped = true; setRunning(false); };
+  const reset = () => { setRows({}); setProgress({ done: 0, total: 0 }); setComplete(false); };
+  const again = () => { if (lastArgsRef.current) start(lastArgsRef.current); };
+
+  return { running, paused, complete, rows, progress, start, pause, resume, stop, reset, again };
+}
+
+function RunInitials({ name, size = 28 }) {
+  const initials = (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+  return (
+    <span style={{ width: size, height: size, borderRadius: '50%', background: 'var(--gb-fill-strong)', color: 'var(--gb-text-secondary)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.36, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', flexShrink: 0, border: '1px solid var(--gb-border-default)' }}>{initials}</span>
+  );
+}
+
+const RUN_STATUS_TONE = {
+  queued: { fg: 'var(--gb-text-muted)', bg: 'var(--gb-fill-subtle)', bd: 'var(--gb-border-default)', label: 'Queued' },
+  sending: { fg: 'var(--gb-brand-label)', bg: 'var(--gb-brand-tint-medium)', bd: 'var(--gb-brand-tint-border)', label: 'Running' },
+  sent: { fg: 'var(--gb-success-fg)', bg: 'var(--gb-success-tint-medium)', bd: 'var(--gb-success-tint-border)', label: 'Done' },
+  stopped: { fg: 'var(--gb-warning-fg)', bg: 'var(--gb-warning-tint-medium)', bd: 'var(--gb-warning-tint-border)', label: 'Branch · stop' },
+  skipped: { fg: 'var(--gb-text-muted)', bg: 'var(--gb-fill-subtle)', bd: 'var(--gb-border-default)', label: 'Skipped' },
+  failed: { fg: 'var(--gb-error-fg)', bg: 'var(--gb-error-tint-medium)', bd: 'var(--gb-error-tint-border)', label: 'Failed' },
+};
+
+function RunPipeline({ mainCount, ran, status }) {
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+      {Array.from({ length: Math.max(1, mainCount) }).map((_, i) => {
+        const done = i < ran;
+        const active = status === 'sending' && i === ran;
+        const color = done || active ? 'var(--gb-brand-label)' : 'var(--gb-text-ghost)';
+        return (
+          <React.Fragment key={i}>
+            {i > 0 && <span style={{ width: 10, height: 1.5, background: i <= ran ? 'var(--gb-brand-label)' : 'var(--gb-border-default)' }} />}
+            <span style={{ width: active ? 10 : 8, height: active ? 10 : 8, borderRadius: '50%', background: (done || active) ? color : 'transparent', border: `1.5px solid ${color}`, animation: active ? 'cm-pulse-ring 1.2s ease-in-out infinite' : 'none', flexShrink: 0 }} />
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit }) {
+  const { rows, progress, paused, complete, running, pause, resume, again } = runner;
+  const exit = () => { runner.stop(); onExit?.(); };
+  const counts = useMemo(() => {
+    const c = { queued: 0, sending: 0, sent: 0, stopped: 0, skipped: 0, failed: 0 };
+    audience.forEach((a) => { const s = rows[a._key]?.status || 'queued'; c[s] = (c[s] || 0) + 1; });
+    return c;
+  }, [rows, audience]);
+  const total = audience.length;
+  const finished = counts.sent + counts.stopped + counts.skipped + counts.failed;
+  const pct = total > 0 ? (finished / total) * 100 : 0;
+
+  const Tally = ({ label, value, tone }) => (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>{label}</div>
+      <div style={{ fontSize: 16.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: tone || 'var(--gb-text-secondary)', lineHeight: 1.1 }}>{value}</div>
+    </div>
+  );
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .3 }}
+      style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-canvas)', minHeight: 0 }}>
+      {/* Header */}
+      <div style={{ padding: '14px 22px', background: 'var(--gb-surface-1)', borderBottom: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center', animation: (running && !paused) ? 'cm-running 1.8s ease-in-out infinite' : 'none' }}><I.send size={15} /></div>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>{dryRun ? 'Dry-run · nothing is sent' : 'Running campaign'}</div>
+          <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--gb-text-primary)', marginTop: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span>{campaign.name}</span>
+            {paused && <Tag tone="warning" size="xs">Paused</Tag>}
+            {complete && <Tag tone="brand" size="xs">Complete</Tag>}
+            {dryRun && <Tag tone="neutral" size="xs">DRY RUN</Tag>}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginLeft: 18, paddingLeft: 18, borderLeft: '1px solid var(--gb-border-default)' }}>
+          <Tally label="Audience" value={total} />
+          <Tally label="Running" value={counts.sending} tone="var(--gb-brand-label)" />
+          <Tally label="Sent" value={counts.sent} tone="var(--gb-success-fg)" />
+          <Tally label="Stopped" value={counts.stopped} tone="var(--gb-warning-fg)" />
+          <Tally label="Skipped" value={counts.skipped} />
+          {counts.failed > 0 && <Tally label="Failed" value={counts.failed} tone="var(--gb-error-fg)" />}
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: 3, background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>
+          {paused
+            ? <Btn size="sm" variant="tinted" status="brand" icon={<I.play />} onClick={resume}>Resume</Btn>
+            : complete
+              ? <Btn size="sm" variant="tinted" status="brand" icon={<I.refresh />} onClick={again}>Run again</Btn>
+              : <Btn size="sm" variant="tinted" status="warning" icon={<I.pause />} onClick={pause}>Pause</Btn>}
+          <Btn size="sm" variant="ghost" icon={<I.close />} onClick={exit}>Stop &amp; edit</Btn>
+        </div>
+      </div>
+      {/* Progress */}
+      <div style={{ height: 4, background: 'var(--gb-fill-inverse-medium)', borderBottom: '1px solid var(--gb-border-default)', flexShrink: 0, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg, var(--gb-brand) 0%, var(--gb-brand-label) 100%)', boxShadow: '0 0 8px var(--gb-brand-label)', transition: 'width .35s ease' }} />
+      </div>
+      {/* Column headers */}
+      <div style={{ display: 'grid', gridTemplateColumns: '36px 1.4fr 1.1fr auto 1.1fr 120px', gap: 14, padding: '9px 22px', background: 'var(--gb-surface-1)', borderBottom: '1px solid var(--gb-border-subtle)', fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flexShrink: 0 }}>
+        <div /><div>Contact</div><div>Email</div><div>Pipeline · {mainCount} steps</div><div>Current step</div><div style={{ textAlign: 'right' }}>State</div>
+      </div>
+      {/* Rows */}
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+        {audience.map((c) => {
+          const st = rows[c._key] || { status: 'queued', label: '', ran: 0 };
+          const tone = RUN_STATUS_TONE[st.status] || RUN_STATUS_TONE.queued;
+          const inflight = st.status === 'sending';
+          return (
+            <div key={c._key} style={{ display: 'grid', gridTemplateColumns: '36px 1.4fr 1.1fr auto 1.1fr 120px', gap: 14, alignItems: 'center', padding: '10px 19px', borderBottom: '1px solid var(--gb-border-subtle)', borderLeft: `3px solid ${inflight ? 'var(--gb-brand-label)' : st.status === 'stopped' ? 'var(--gb-warning)' : st.status === 'sent' ? 'color-mix(in srgb, var(--gb-brand-label) 30%, transparent)' : 'transparent'}`, background: inflight ? 'color-mix(in srgb, var(--gb-brand-tint-soft) 80%, transparent)' : st.status === 'stopped' ? 'color-mix(in srgb, var(--gb-warning-tint-soft) 70%, transparent)' : 'transparent', opacity: st.status === 'sent' || st.status === 'skipped' ? 0.75 : 1, transition: 'background-color .35s, opacity .35s, border-left-color .25s' }}>
+              <RunInitials name={c.contactName || c.name} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.contactName || c.name || '(unknown)'}</div>
+                <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.account || ''}</div>
+              </div>
+              <div style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 11, color: 'var(--gb-text-tertiary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.email || ''}</div>
+              <RunPipeline mainCount={mainCount} ran={st.ran || 0} status={st.status} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{st.label || (st.status === 'queued' ? 'Up next' : '—')}</div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 4, background: tone.bg, color: tone.fg, border: `1px solid ${tone.bd}`, fontSize: 10, fontWeight: 700, letterSpacing: .4, fontFamily: 'var(--gb-font-mono)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{tone.label}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+}
+
 /* ── Root ── */
 export function CampaignManager({ onClose, contacts = [] }) {
   ensureCampaignKeyframes();
@@ -631,6 +817,9 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const [dirty, setDirty] = useState(false);
   const [sim, setSim] = useState({ running: false, activeIdx: 0 });
   const [templateLib, setTemplateLib] = useState({ email: [], call: [], task: [] });
+  const [dryRun, setDryRun] = useState(false);
+  const [runMode, setRunMode] = useState(false);
+  const runner = useCampaignRunner();
   const simTimer = useRef(null);
 
   // Load campaigns + the template stores once.
@@ -712,10 +901,27 @@ export function CampaignManager({ onClose, contacts = [] }) {
     return () => { if (simTimer.current) clearTimeout(simTimer.current); };
   }, [sim.running, sim.activeIdx, steps.length]);
 
-  const runCampaignClick = () => {
+  const startRun = async () => {
     if (!contacts.length) { toast?.warning?.('No audience — launch from a CRM Search / Task selection.'); return; }
-    toast?.info?.('Live run lands in the next phase.');
+    if (!steps.length) { toast?.warning?.('Add at least one step before running.'); return; }
+    stopSim();
+    // Stable per-row key + the deps the engine delegates with.
+    const audience = contacts.map((c, i) => ({ ...c, _key: c.contactId || c.contactUrl || `row${i}` }));
+    const [emailConfig, rep] = await Promise.all([
+      readEmailConfig(),
+      new Promise((res) => { try { chrome.storage.local.get('gbEmployeeId', (d) => res({ employeeId: d?.gbEmployeeId || '' })); } catch { res({ employeeId: '' }); } }),
+    ]);
+    const lookupTemplate = (kind, id) => (templateLib[kind] || []).find((t) => t.id === id) || null;
+    setRunMode(true);
+    runner.start({
+      campaign,
+      audience,
+      lookupTemplate,
+      deps: { rep, emailConfig, signature: emailConfig.signature, fromLocalPart: emailConfig.localPart, dispatch: sendBg, dryRun },
+    });
   };
+
+  const mainCount = steps.filter((s) => !s.parentId).length;
 
   return (
     <div style={{ position: 'fixed', inset: 0, padding: 24, display: 'flex', background: 'var(--gb-surface-deep)', zIndex: 2147483000 }}>
