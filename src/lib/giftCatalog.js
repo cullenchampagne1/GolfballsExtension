@@ -253,6 +253,10 @@ export function normalizeDoc(doc) {
     modNames: Array.isArray(doc.modificationName_ss) ? doc.modificationName_ss : [],
     properties: extractProperties(doc),     // common base inputs (color/size) from the catalog facets
     prices:  extractPrices(doc),            // per-modification price (price_CustomLogo_d, …)
+    // Gift-set sleeve overlay asset (e.g. "sleeve-overlay-titleist-pro-v1") — drives
+    // the per-ball gift-set sleeve PREVIEW render; absent on most balls (sleeve falls
+    // back to a brand overlay). Presence does NOT gate gift-set availability.
+    giftSetSleeveImage: customData.giftSetSleeveImage || null,
     dualPole: customData.variant === 'dualPole',                                   // → second-pole imprint (opt-in, accessories)
     // Balls offer a second-pole imprint by DEFAULT; this tag (on Triple Track
     // lines, whose alignment art wraps the ball) removes it. Authoritative signal.

@@ -7,6 +7,7 @@ import { useDevSetting } from '../lib/devSettings.js';
 import { PREVIEW_GRID, GlassIconBtn, DropperIcon, ResetIcon, SwapPopover, recolorImage, samplePixel } from '../ui/components/ImageColorSwap.jsx';
 import { loadGiftSetOptions } from '../lib/giftSetsData.js';
 import { giftSetSizeLabel } from '../lib/giftSets.js';
+import { giftSetPreviewUrl } from '../lib/cartSerializer.js';
 
 /* ───────────────────────────────────────────────────────────────
    giftCustomize.jsx — the real per-product personalization UI for
@@ -2085,7 +2086,7 @@ function AccessoryDecorationEmitter({ p, onChange }) {
    which deriveBallDecoration folds into the decoration as `giftSet`. Options come
    from getPackageUpsellData (live, cached, seed-backed). Selecting a set turns the
    line into a "<set> with <Brand> <ball>" gift-set line priced per set. */
-function GiftSetPicker() {
+function GiftSetPicker({ p }) {
   const ctx = usePT();
   const [opts, setOpts] = useState([]);
   useEffect(() => { let on = true; loadGiftSetOptions().then((o) => { if (on) setOpts(o || []); }).catch(() => {}); return () => { on = false; }; }, []);
@@ -2103,6 +2104,8 @@ function GiftSetPicker() {
   ];
   const sel = opts.find((o) => o.id === selId) || null;
   const incl = (sel && sel.descriptions && sel.descriptions[0] && sel.descriptions[0].subtext) || [];
+  // The boxed preview render (sleeve overlay for sleeve sets, product photo for box/wooden).
+  const preview = sel ? giftSetPreviewUrl(sel, { sleeveImage: p && p.giftSetSleeveImage, brand: p && p.brand }) : null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -2112,13 +2115,20 @@ function GiftSetPicker() {
       </div>
       <Dropdown value={selId} onChange={pick} options={ddOptions} placeholder="Standard packaging (no gift set)" />
       {sel ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
-          {incl.map((t, i) => (
-            <span key={i} style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
-              <span style={{ color: 'var(--gb-brand-label)' }}>•</span>{t}
-            </span>
-          ))}
-          <span style={{ marginTop: 2, color: 'var(--gb-text-tertiary)' }}>Priced per gift set — the ball is customized inside.</span>
+        <div style={{ display: 'flex', gap: 10 }}>
+          {preview && (
+            <div style={{ width: 64, height: 64, flexShrink: 0, borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: '#fff', border: '1px solid var(--gb-border-subtle)' }}>
+              <img src={preview} alt={sel.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10.5, color: 'var(--gb-text-muted)', minWidth: 0 }}>
+            {incl.map((t, i) => (
+              <span key={i} style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
+                <span style={{ color: 'var(--gb-brand-label)' }}>•</span>{t}
+              </span>
+            ))}
+            <span style={{ marginTop: 2, color: 'var(--gb-text-tertiary)' }}>Priced per gift set — the ball is customized inside.</span>
+          </div>
         </div>
       ) : (
         <span style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)' }}>Box this ball into a corporate gift set for an upcharge.</span>
@@ -2171,7 +2181,7 @@ export function CustomizeBlock({ p, onChange }) {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <BallPreview />
                     <BaseProperties p={p} config={config} />
-                    {p.customLogo && <GiftSetPicker />}
+                    {p.customLogo && <GiftSetPicker p={p} />}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>Select a print type</span>
                       <Tag tone="neutral" size="sm">corporate: Custom Logo</Tag>

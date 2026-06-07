@@ -8,8 +8,17 @@ import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '
 import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct } from '../lib/saveProposal.js';
 import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
-import { decoratedPricingForLine } from '../lib/cartSerializer.js';
+import { decoratedPricingForLine, giftSetPreviewUrl } from '../lib/cartSerializer.js';
 import { giftSetLadder, giftSetSizeLabel } from '../lib/giftSets.js';
+
+/* The boxed gift-set preview for a line (sleeve render with the ball's print +
+   sleeve overlay; static photo for 6-ball / wooden), or null when not a gift set. */
+const lineGiftImg = (line) => {
+  const gs = line && line.decoration && line.decoration.giftSet;
+  if (!gs) return null;
+  const p = line.product || {};
+  return giftSetPreviewUrl(gs, { decoration: line.decoration, sleeveImage: p.giftSetSleeveImage, brand: p.brand }) || gs.thumbnail || null;
+};
 
 /* ───────────────────────────────────────────────────────────────
    GiftCatalog — Corporate Gifting Catalog modal.
@@ -509,6 +518,7 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
   // kit), so the header + tier table preview the gift-set ladder, not the ball's.
   const giftSet = decoration && decoration.giftSet;
   const giftBreaks = (giftSet && p.customLogo && p.breaks && p.breaks.length) ? giftSetLadder(p.breaks, giftSet) : null;
+  const giftImg = giftSet ? giftSetPreviewUrl(giftSet, { decoration, sleeveImage: p.giftSetSleeveImage, brand: p.brand }) : null;
   const priceLadder = giftBreaks || p.breaks;
   const isGiftPricing = !!giftBreaks;
   const unitPrice = giftBreaks
@@ -536,7 +546,7 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
         </div>
         <div className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 16 }}>
           <div style={{ position: 'relative' }}>
-            <ProductImage src={p.img} alt={p.title} pad={26} radius="var(--gb-r-lg)" />
+            <ProductImage src={giftImg || p.img} alt={p.title} pad={26} radius="var(--gb-r-lg)" />
             {p.customLogo && <CommissionDollar size={20} />}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, marginBottom: 6, flexWrap: 'wrap' }}>
@@ -831,7 +841,7 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove,
         </div>
       )}
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        <MiniThumb src={p.img} size={38} />
+        <MiniThumb src={lineGiftImg(line) || p.img} size={38} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{p.brand}</div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 1 }}>
@@ -1165,7 +1175,7 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
               {decorated.map((e, i) => (
                 <div key={e.id || i} style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <MiniThumb src={e.product.img} size={22} />
+                    <MiniThumb src={lineGiftImg(e) || e.product.img} size={22} />
                     <div style={{ minWidth: 0, fontSize: 11, fontWeight: 700, color: 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.product.title}</div>
                   </div>
                   {e.decoration && e.decoration.giftSet && (
