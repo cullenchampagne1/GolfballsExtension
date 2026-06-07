@@ -1081,6 +1081,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
                       contactId: r.id,
                       contactName: r.contactName_t || r.accountName_t || '',
                       contactUrl: contactUrl(r.id) || (useMock ? `mock://contact/${r.id}` : ''),
+                      value: r.yearToDateRevenue_f ?? r.priorYearRevenue_f ?? 0,
                     }))
                     .filter((c) => c.contactUrl);
                   if (!audience.length) { toast?.info?.('Select contacts first', { placement: 'top-center' }); return; }

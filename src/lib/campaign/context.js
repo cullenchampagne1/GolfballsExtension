@@ -109,6 +109,11 @@ export async function buildContactContext(contact, deps = {}) {
     Object.assign(signals, signalScrapers(doc, data, signals) || {});
   }
 
+  // Suppression flags (from the contact schema stat tiles).
+  const stats = (data && data.stats) || {};
+  const bounceCode = (stats.lastBounceCode || resolvePath(doc, 'stats.lastBounceCode') || '').toString().trim();
+  const mailerRemoved = !!parseInt(stats.mailerRemoved ?? resolvePath(doc, 'stats.mailerRemoved'), 10);
+
   const contactId = contact.contactId || contactIdFromUrl(contact.contactUrl)
     || resolvePath(doc, 'contact.id') || '';
   const phone = (resolvePath(doc, 'contact.phone') || '').toString().replace(/\D/g, '');
@@ -134,6 +139,7 @@ export async function buildContactContext(contact, deps = {}) {
   return {
     contact, html, doc, data, signals, error,
     contactId, employeeId: rep.employeeId || '', phone, contactName, accountId,
+    bounceCode, mailerRemoved,
     emailConfig, signature, fromLocalPart, dispatch, dryRun,
     getValue,
   };

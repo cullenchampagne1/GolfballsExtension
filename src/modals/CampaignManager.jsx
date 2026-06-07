@@ -564,6 +564,27 @@ function CampaignInspector({ campaign, onChange }) {
             <RangeSlider values={[paceLo, paceHi]} min={1} max={90} step={1} unit="s" onChange={([a, b]) => upd({ paceDelay: Math.round((a + b) / 2), paceJitter: Math.round((b - a) / 2) })} />
           </Field>
         </div>
+
+        <div>
+          <SectionLabel>Delivery</SectionLabel>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 9, padding: 12, background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)' }}>
+            <Checkbox checked={campaign.suppressBounced !== false} label="Skip bounced contacts" hint="Contacts with a CRM bounce code" onChange={(v) => upd({ suppressBounced: v })} />
+            <Checkbox checked={campaign.suppressMailerRemoved !== false} label="Skip mailer-removed contacts" hint="Opted out of mailings" onChange={(v) => upd({ suppressMailerRemoved: v })} />
+          </div>
+          <div style={{ height: 12 }} />
+          <Field label="Audience order" hint="The order contacts are worked through this run">
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              {[['list', 'As selected'], ['valueDesc', 'Highest value'], ['shuffle', 'Shuffle']].map(([id, label]) => (
+                <PillTag key={id} on={(campaign.audienceOrder || 'list') === id} onClick={() => upd({ audienceOrder: id })}>{label}</PillTag>
+              ))}
+            </div>
+          </Field>
+          <div style={{ height: 12 }} />
+          <Field label={<span>Send cap <span style={{ color: 'var(--gb-text-muted)', fontWeight: 500 }}>· {campaign.sendCap ? `${campaign.sendCap} per run` : 'no cap'}</span></span>} hint="Stop the run after this many sends/actions — 0 = unlimited">
+            <Input value={String(campaign.sendCap || 0)} mono onChange={(v) => upd({ sendCap: Math.max(0, parseInt(v.replace(/[^0-9]/g, ''), 10) || 0) })} />
+          </Field>
+        </div>
+
         <Callout tone="info" icon={<I.sparkle />} title="Branch behavior">
           Once a branch step sends, no later sibling steps run for that recipient.
         </Callout>
@@ -743,7 +764,7 @@ function useCampaignRunner() {
           [s.contact._key]: {
             ...(r[s.contact._key] || {}),
             ran: s.ran,
-            status: s.failed ? 'failed' : s.stoppedAtBranch ? 'stopped' : s.ran > 0 ? 'sent' : 'skipped',
+            status: s.suppressed ? 'suppressed' : s.failed ? 'failed' : s.stoppedAtBranch ? 'stopped' : s.ran > 0 ? 'sent' : 'skipped',
           },
         })),
         progress: (p) => setProgress(p),
@@ -774,6 +795,7 @@ const RUN_STATUS_TONE = {
   sent: { fg: 'var(--gb-success-fg)', bg: 'var(--gb-success-tint-medium)', bd: 'var(--gb-success-tint-border)', label: 'Done' },
   stopped: { fg: 'var(--gb-warning-fg)', bg: 'var(--gb-warning-tint-medium)', bd: 'var(--gb-warning-tint-border)', label: 'Branch · stop' },
   skipped: { fg: 'var(--gb-text-muted)', bg: 'var(--gb-fill-subtle)', bd: 'var(--gb-border-default)', label: 'Skipped' },
+  suppressed: { fg: 'var(--gb-warning-fg)', bg: 'var(--gb-warning-tint-soft)', bd: 'var(--gb-warning-tint-border)', label: 'Suppressed' },
   failed: { fg: 'var(--gb-error-fg)', bg: 'var(--gb-error-tint-medium)', bd: 'var(--gb-error-tint-border)', label: 'Failed' },
 };
 
@@ -800,7 +822,11 @@ function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit
   const exit = () => { runner.stop(); onExit?.(); };
   const counts = useMemo(() => {
     const c = { queued: 0, sending: 0, sent: 0, stopped: 0, skipped: 0, failed: 0 };
-    audience.forEach((a) => { const s = rows[a._key]?.status || 'queued'; c[s] = (c[s] || 0) + 1; });
+    audience.forEach((a) => {
+      const s = rows[a._key]?.status || 'queued';
+      const bucket = s === 'suppressed' ? 'skipped' : s; // fold suppressed into the skipped tally
+      c[bucket] = (c[bucket] || 0) + 1;
+    });
     return c;
   }, [rows, audience]);
   const total = audience.length;

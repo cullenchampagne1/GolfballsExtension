@@ -143,6 +143,10 @@ export function normalizeCampaign(raw) {
       : Number.isFinite(raw.delayBase) ? raw.delayBase : 12,
     paceJitter: Number.isFinite(raw.paceJitter) ? raw.paceJitter
       : Number.isFinite(raw.delayTolerance) ? raw.delayTolerance : 4,
+    suppressBounced: raw.suppressBounced != null ? !!raw.suppressBounced : true,
+    suppressMailerRemoved: raw.suppressMailerRemoved != null ? !!raw.suppressMailerRemoved : true,
+    sendCap: Number.isFinite(raw.sendCap) ? Math.max(0, raw.sendCap) : 0,
+    audienceOrder: ['list', 'shuffle', 'valueDesc'].includes(raw.audienceOrder) ? raw.audienceOrder : 'list',
     steps: Array.isArray(raw.steps) ? raw.steps.map(normalizeStep) : [],
     lastSaved: raw.lastSaved || null,
   };
@@ -155,6 +159,11 @@ export function newCampaign(name = 'Untitled campaign') {
     status: 'Draft',
     paceDelay: 12,
     paceJitter: 4,
+    // ── Delivery defaults ──
+    suppressBounced: true,        // skip contacts with a CRM bounce code
+    suppressMailerRemoved: true,  // skip mailer-removed contacts
+    sendCap: 0,                   // max actions per run (0 = unlimited)
+    audienceOrder: 'list',        // 'list' | 'shuffle' | 'valueDesc'
     steps: [],
     lastSaved: null,
   };

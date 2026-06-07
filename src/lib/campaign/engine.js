@@ -27,6 +27,25 @@ import { runStepAction } from './actions.js';
 const noop = () => {};
 const storeKindOf = (step) => (step.kind === 'branch' ? 'email' : step.kind);
 
+/* Order the audience per the campaign default. `valueDesc` sorts by a
+   contact's handed-off value (YTD revenue) when present — falls back to
+   list order when no value rode along (e.g. a TaskList selection). */
+function orderAudience(audience, order) {
+  const arr = Array.isArray(audience) ? audience.slice() : [];
+  if (order === 'shuffle') {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+  if (order === 'valueDesc') {
+    const val = (c) => Number(c.value ?? c.ytd ?? 0) || 0;
+    return arr.sort((a, b) => val(b) - val(a));
+  }
+  return arr;
+}
+
 function sleep(ms, control) {
   return new Promise((resolve) => {
     const start = Date.now();
@@ -74,12 +93,17 @@ export async function runCampaign({ campaign, audience, lookupTemplate, deps = {
   // can supply a context without a live CRM fetch; defaults to the real one.
   const makeContext = deps.buildContext || buildContactContext;
 
+  const ordered = orderAudience(audience, campaign?.audienceOrder);
+  const sendCap = Math.max(0, Number(campaign?.sendCap) || 0);
   const results = [];
-  const total = audience.length;
+  const total = ordered.length;
   let prevDidWork = false; // pace only between contacts that actually ran a step
+  let sentCount = 0;       // actions that fired this run (for the send cap)
+  const capHit = () => sendCap > 0 && sentCount >= sendCap;
 
   for (let i = 0; i < total; i++) {
     if (control.isStopped?.()) break;
+    if (capHit()) break; // run-wide send cap reached
     await waitWhilePaused(control);
     if (control.isStopped?.()) break;
 
@@ -90,11 +114,25 @@ export async function runCampaign({ campaign, audience, lookupTemplate, deps = {
       if (r === 'stopped') break;
     }
 
-    const contact = audience[i];
+    const contact = ordered[i];
     onContactStart(contact, i);
     onProgress({ done: i, total });
 
     const ctx = await makeContext(contact, deps);
+
+    // Suppression — skip the whole contact (bounced / mailer-removed) before
+    // any step runs.
+    const suppressReason = (campaign?.suppressBounced && ctx.bounceCode) ? 'bounced'
+      : (campaign?.suppressMailerRemoved && ctx.mailerRemoved) ? 'mailer-removed' : null;
+    if (suppressReason) {
+      const summary = { contact, contactId: ctx.contactId, ran: 0, skipped: 0, failed: 0, suppressed: true, suppressReason, stoppedAtBranch: false, error: ctx.error, steps: [] };
+      results.push(summary);
+      onContactDone(summary);
+      prevDidWork = false;
+      onProgress({ done: i + 1, total });
+      continue;
+    }
+
     const firedBranches = new Set();
     const firedGroups = new Set();
     const stepLog = [];
@@ -122,6 +160,8 @@ export async function runCampaign({ campaign, audience, lookupTemplate, deps = {
       catch { pass = false; }
       if (!pass) { emit('skipped', { reason: 'conditions' }); continue; }
 
+      if (capHit()) { emit('skipped', { reason: 'cap' }); continue; }
+
       const tpl = step.templateId ? lookupTemplate?.(storeKindOf(step), step.templateId) : null;
       const res = await runStepAction(step, tpl, ctx, { dryRun: deps.dryRun });
 
@@ -130,6 +170,7 @@ export async function runCampaign({ campaign, audience, lookupTemplate, deps = {
         if (step.group) firedGroups.add(step.group);
         if (step.branch) { firedBranches.add(step.id); stopMain = true; }
         didWork = true;
+        sentCount += 1;
       } else {
         emit('failed', { error: res.error, templateId: step.templateId });
       }
