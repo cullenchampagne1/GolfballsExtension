@@ -928,8 +928,11 @@ export function CampaignManager({ onClose, contacts = [] }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--gb-surface-deep) 78%, rgba(0,0,0,.55))', zIndex: 2147483000 }}>
+      {/* Fixed-pixel card (not vw/vh) so the modal-scale `zoom` on the
+          mount host scales it cleanly; the inline 1.08 zoom is the slight
+          default bump and composes with whatever modal scale is set. */}
       <motion.div initial={{ opacity: 0, scale: .98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }}
-        style={{ width: 'min(1180px, 96vw)', height: 'min(760px, 92vh)', display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden', color: 'var(--gb-text-secondary)' }}>
+        style={{ width: 1180, height: 760, maxWidth: '94vw', maxHeight: '90vh', zoom: 1.08, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden', color: 'var(--gb-text-secondary)' }}>
         <TopBar campaign={campaign} onChange={patchCampaign} sim={sim} onSimStart={startSim} onSimStop={stopSim} onSimReset={resetSim}
           dirty={dirty} audienceCount={contacts.length} onRun={startRun} onClose={onClose}
           dryRun={dryRun} onDryRunChange={setDryRun} />
