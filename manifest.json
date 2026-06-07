@@ -50,7 +50,7 @@
         "react-dist/content/email-preview.js",
         "react-dist/content/text-preview.js",
         "react-dist/content/watch-list.js",
-        "src/vanilla/modals/campaign-editor.js",
+        "react-dist/content/campaign-manager.js",
         "react-dist/content/task-list.js",
         "react-dist/content/call-log.js",
         "react-dist/content/quick-task.js",

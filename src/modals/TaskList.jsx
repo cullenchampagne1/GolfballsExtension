@@ -730,12 +730,13 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
   }, [selected, patchTaskLocal, toast]);
 
   const onRunCampaign = () => {
-    // Hand off to the Campaign Manager submodal which owns the picker,
-    // engine, and CRM-UI control. Until that lands, surface a TODO toast.
-    if (typeof window.__gbShowCampaignEditor === 'function') {
-      window.__gbShowCampaignEditor();
+    // Hand the current task selection off to the Campaign Manager, which
+    // owns the editor, the run engine, and the audience run view.
+    if (!selectedContacts.length) { toast?.info?.('Select tasks first', { placement: 'top-center' }); return; }
+    if (typeof window.__gbOpenCampaignManager === 'function') {
+      window.__gbOpenCampaignManager(selectedContacts);
     } else {
-      toast?.info?.('Campaign manager — coming later', { duration: 2400, placement: 'top-center' });
+      toast?.info?.('Campaign manager unavailable here', { duration: 2400, placement: 'top-center' });
     }
   };
 

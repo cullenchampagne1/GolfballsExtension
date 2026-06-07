@@ -45,21 +45,49 @@ const hasPoleText = (p) => !!(p && Array.isArray(p.lines) && p.lines.some((l) =>
    (Pro V1 empty + Triple Track text+Print2). The nested userText JSON is
    double-encoded; empty lines are dropped FROM THE URL (but kept in the
    stored Print.userText object). */
+/* The inner Print param "<decorationType>?userText=<enc>&configOverrides=<enc>"
+   (empty lines dropped + UPPERCASED). Shared by the ball preview + gift-set wrapper. */
+function _ballPrintVal(p) {
+  const lines = (p.lines || []).map(upper).filter((l) => l != null && l !== '');
+  const userText = [{ lines, font: p.font, color: p.color }];
+  return `${p.decorationType}?userText=${enc(JSON.stringify(userText))}`
+       + `&configOverrides=${enc(JSON.stringify(p.configOverrides || {}))}`;
+}
 export function ballPreviewUrl({ bc = '#FFFFFF', finish = {}, print, print2 }) {
   const top = { BC: bc, ...finish };
-  const printVal = (p) => {
-    const lines = (p.lines || []).map(upper).filter((l) => l != null && l !== '');
-    const userText = [{ lines, font: p.font, color: p.color }];
-    return `${p.decorationType}?userText=${enc(JSON.stringify(userText))}`
-         + `&configOverrides=${enc(JSON.stringify(p.configOverrides || {}))}`;
-  };
   const parts = [
     `configOverrides=${enc(JSON.stringify(top))}`,
     'view=',
-    `Print=${enc(printVal(print))}`,
+    `Print=${enc(_ballPrintVal(print))}`,
   ];
-  if (print2) parts.push(`Print2=${enc(printVal(print2))}`);
+  if (print2) parts.push(`Print2=${enc(_ballPrintVal(print2))}`);
   return `https://www.icustomize.com/Item/GolfBall/r?${parts.join('&')}`;
+}
+
+/* The ball's FRONT print as it renders ON a gift-set box. A custom-logo ball shows
+   a blank Personalized print (the logo is applied server-side via interfaceState,
+   not the Print param); a text (Personalized) ball carries its lines. */
+function _ballFrontPrint(decoration) {
+  const d = decoration || {};
+  if (d.engine === 'ballText' && d.pole1) {
+    return { decorationType: 'Personalized', lines: d.pole1.lines || [null, null, null], font: d.pole1.font || 'Kabel Dm BT', color: d.pole1.color || '#000000', configOverrides: {} };
+  }
+  return { decorationType: 'Personalized', lines: [null, null, null], font: 'Kabel Dm BT', color: '#000000', configOverrides: {} };
+}
+
+/* The gift-set box preview image. Matches golfballs.com exactly: SLEEVE sets render
+   the live wrapper (the boxed render with the ball's Print/BallPrint + the ball's
+   Sleeve overlay); 6-ball / wooden sets keep the static product thumbnail. Verified
+   byte-exact against the cart's bundle.renderedPreviewImage for all 8 sets. */
+export function giftSetPreviewUrl(gs, { decoration, sleeveImage, brand } = {}) {
+  const wrapper = (gs && gs.wrapperImage) || '';
+  const isSleeve = wrapper.toLowerCase().includes('sleeve');
+  if (!wrapper || !isSleeve) return (gs && gs.thumbnail) || '';
+  const param = enc(_ballPrintVal(_ballFrontPrint(decoration)));
+  let url = `${wrapper}Print=${param}&BallPrint=${param}`;
+  if (sleeveImage) url += `&Sleeve=${enc(sleeveImage)}`;
+  else if (brand) url += `&Sleeve=${enc('sleeve-overlay-' + String(brand).replace(/ Golf/i, '').toLowerCase())}`;
+  return url;
 }
 
 /* The stored modificationHistory[].dynamicImage[0] object for a golf ball.
@@ -642,7 +670,13 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
   // ×OriginalItemQty + the kit ladder) plus a `bundle` + a kit child in childList.
   const giftSet = decoForBuild.giftSet || null;
   const giftBreaks = (giftSet && computed) ? giftSetLadder(computed.breaks, giftSet) : null;
-  const bundleBlock = giftBreaks ? buildBundleBlock(giftSet) : null;
+  const bundleBlock = giftBreaks ? buildBundleBlock(giftSet, {
+    renderedPreviewImage: giftSetPreviewUrl(giftSet, {
+      decoration: decoForBuild,
+      sleeveImage: (product.CustomData && product.CustomData.giftSetSleeveImage) || null,
+      brand: (product.Brand && product.Brand.Name) || '',
+    }),
+  }) : null;
   const breaks = giftBreaks ? giftBreaks
     : computed ? computed.breaks
     : ((pricing.breaks && pricing.breaks.length) ? pricing.breaks : [{ q: 1, p: pricing.price || 0 }]);

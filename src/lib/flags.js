@@ -31,8 +31,7 @@ export const FEATURE_DEFAULTS = {
   quickTaskEnabled:         true,   // Quick Task modal + shelf action
   crmNewContactEnabled:     true,   // CRM Create Contact modal + Ctrl+Q keybind
   textPreviewEnabled:       true,   // Text/chat transcript row preview (was sharing emailPreviewEnabled)
-  campaignEditorEnabled:    true,   // legacy vanilla campaign editor (removed in the Campaign Manager migration)
-  campaignManagerEnabled:   true,   // new React Campaign Manager surface
+  campaignManagerEnabled:   true,   // React Campaign Manager surface (replaces the legacy vanilla editor)
 };
 // NOTE: the 3D golfball viewer is part of the Image Viewer (it renders inside
 // ImagePreview.jsx), so it has no separate flag — `imagePreviewEnabled` covers it.
@@ -65,7 +64,7 @@ export const FEATURE_FLAGS = [
   { key: 'submitProofEnabled',    section: 'Email & Templates', name: 'Submit Proof',      desc: 'Send art proofs from the order page.',                                icon: 'send' },
   { key: 'emailPreviewEnabled',   section: 'Email & Templates', name: 'Email Preview',     desc: 'Hover preview of emails in Case Email History.',                      icon: 'mail' },
   { key: 'textPreviewEnabled',    section: 'Email & Templates', name: 'Text Preview',      desc: 'Hover preview of case notes / chat transcripts.',                     icon: 'mail' },
-  { key: 'campaignEditorEnabled', section: 'Email & Templates', name: 'Campaign Editor',   desc: 'Edit template campaigns (from CRM Search / Tasks).',                   icon: 'edit' },
+  { key: 'campaignManagerEnabled', section: 'Email & Templates', name: 'Campaign Manager', desc: 'Multi-step campaign automation (from CRM Search / Tasks).',            icon: 'megaphone' },
   // ── CRM & Contacts ──
   { key: 'crmSearchEnabled',       section: 'CRM & Contacts', name: 'CRM Search',        desc: 'Quick search for customers and orders (Ctrl+K).',  icon: 'search' },
   { key: 'crmNewContactEnabled',   section: 'CRM & Contacts', name: 'New Contact',       desc: 'Quick-create a CRM contact (Ctrl+Q).',             icon: 'user' },

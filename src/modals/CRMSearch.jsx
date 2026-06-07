@@ -1075,11 +1075,17 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
                 variant="ghost"
                 icon={<MegaphoneIcon />}
                 onClick={() => {
-                  if (typeof window.__gbShowCampaignEditor === 'function') {
-                    window.__gbShowCampaignEditor();
-                  } else {
-                    toast?.info?.('Campaign manager — coming later', { duration: 2400, placement: 'top-center' });
-                  }
+                  const audience = displayedRows
+                    .filter((r) => selected.has(r.id))
+                    .map((r) => ({
+                      contactId: r.id,
+                      contactName: r.contactName_t || r.accountName_t || '',
+                      contactUrl: contactUrl(r.id) || (useMock ? `mock://contact/${r.id}` : ''),
+                    }))
+                    .filter((c) => c.contactUrl);
+                  if (!audience.length) { toast?.info?.('Select contacts first', { placement: 'top-center' }); return; }
+                  if (typeof window.__gbOpenCampaignManager === 'function') window.__gbOpenCampaignManager(audience);
+                  else toast?.info?.('Campaign manager unavailable here', { duration: 2400, placement: 'top-center' });
                 }}
               >Run campaign</Btn>
               <Btn
