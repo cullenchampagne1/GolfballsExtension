@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Btn, IconBtn, Tag, Dot } from '../ui/index.js';
 import { Icon, I } from '../ui/icons.jsx';
@@ -945,10 +945,22 @@ function CardIconBtn({ icon, title, danger, active, onClick }) {
   );
 }
 
-function SavedCard({ item, loaded, onLoad, onCopy, onDelete }) {
+function SavedCard({ item, loaded, pos, colW, onMeasure, onLoad, onCopy, onDelete }) {
   const [hover, setHover] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copying, setCopying] = useState(false);
+  const cardRef = useRef(null);
+  // Report natural height up so the masonry can pack columns and animate
+  // neighbors into the gap when a card is removed. Re-measure when the column
+  // width changes (re-wraps titles) or fonts/content settle.
+  useLayoutEffect(() => {
+    const el = cardRef.current; if (!el) return;
+    const report = () => onMeasure(item.id, el.offsetHeight);
+    report();
+    const ro = new ResizeObserver(report);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [item.id, colW, onMeasure]);
   const r = useMemo(() => resolveSavedEntry(item), [item]);
   const lines = r.entries.map((e) => ({ qty: e.splits.reduce((a, x) => a + (x.qty || 0), 0), title: (e.product.title || e.product.brand || 'Item') }));
   const shownLines = lines.slice(0, 3);
@@ -967,9 +979,13 @@ function SavedCard({ item, loaded, onLoad, onCopy, onDelete }) {
     ? <span style={{ width: 13, height: 13, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', display: 'inline-block', animation: 'gb-spin .7s linear infinite' }} />
     : copied ? <I.check size={14} strokeWidth={3} /> : <I.copy size={14} />;
   return (
-    <motion.div initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: .92 }} transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }}
+    <motion.div ref={cardRef}
+      initial={{ opacity: 0, scale: .97, x: pos.x + 26, y: pos.y }}
+      animate={{ opacity: 1, scale: 1, x: pos.x, y: pos.y }}
+      exit={{ opacity: 0, scale: .9 }}
+      transition={{ x: { type: 'spring', stiffness: 520, damping: 44, mass: .9 }, y: { type: 'spring', stiffness: 520, damping: 44, mass: .9 }, opacity: { duration: .18 }, scale: { duration: .18 } }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ breakInside: 'avoid', WebkitColumnBreakInside: 'avoid', marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 11, padding: 13, background: 'var(--gb-surface-1)', border: '1px solid ' + (loaded ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'), borderRadius: 'var(--gb-r-lg)', boxShadow: hover ? '0 2px 7px rgba(0,0,0,.07)' : 'none', transform: hover && !loaded ? 'translateY(-1px)' : 'none', transition: 'transform var(--gb-anim), border-color var(--gb-anim), box-shadow var(--gb-anim)' }}>
+      style={{ position: 'absolute', top: 0, left: 0, width: colW, display: 'flex', flexDirection: 'column', gap: 11, padding: 13, boxSizing: 'border-box', background: 'var(--gb-surface-1)', border: '1px solid ' + (loaded ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'), borderRadius: 'var(--gb-r-lg)', boxShadow: hover ? '0 2px 7px rgba(0,0,0,.07)' : 'none', transition: 'border-color var(--gb-anim), box-shadow var(--gb-anim)' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <ThumbStack entries={r.entries} />
         <div style={{ flex: 1 }} />
@@ -1009,7 +1025,52 @@ function SavedCard({ item, loaded, onLoad, onCopy, onDelete }) {
   );
 }
 
+// Masonry geometry: place each card in the shortest column (absolute x/y) so
+// columns stay balanced, cards keep their natural height, and framer can spring
+// neighbors into the gap when one is deleted.
+const MASONRY_GAP = 12;
+const MASONRY_COL_MIN = 290;
+function computeMasonry(items, width, heights) {
+  if (!width) return { positions: {}, height: 0, colW: MASONRY_COL_MIN, cols: 1 };
+  const cols = Math.max(1, Math.floor((width + MASONRY_GAP) / (MASONRY_COL_MIN + MASONRY_GAP)));
+  const colW = (width - MASONRY_GAP * (cols - 1)) / cols;
+  const colH = new Array(cols).fill(0);
+  const positions = {};
+  items.forEach((it) => {
+    let c = 0;
+    for (let i = 1; i < cols; i++) if (colH[i] < colH[c] - 0.5) c = i;
+    positions[it.id] = { x: c * (colW + MASONRY_GAP), y: colH[c] };
+    colH[c] += (heights[it.id] || 240) + MASONRY_GAP;
+  });
+  return { positions, height: Math.max(0, Math.max(...colH, 0) - MASONRY_GAP), colW, cols };
+}
+
 function SavedGallery({ items, loadedId, onLoad, onCopy, onDelete }) {
+  const scrollRef = useRef(null);
+  const [width, setWidth] = useState(0);
+  const [heights, setHeights] = useState({});
+  const setHeight = useCallback((id, h) => {
+    setHeights((prev) => (prev[id] === h ? prev : { ...prev, [id]: h }));
+  }, []);
+  // Track the scroll area's content width (minus its 16px padding) to size columns.
+  useLayoutEffect(() => {
+    const el = scrollRef.current; if (!el) return;
+    const measure = () => setWidth(el.clientWidth - 32);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // Drop heights for cards that no longer exist so stale rows don't skew packing.
+  useEffect(() => {
+    setHeights((prev) => {
+      const live = new Set(items.map((it) => it.id));
+      const next = {}; let changed = false;
+      for (const k in prev) { if (live.has(k)) next[k] = prev[k]; else changed = true; }
+      return changed ? next : prev;
+    });
+  }, [items]);
+  const { positions, height, colW } = useMemo(() => computeMasonry(items, width, heights), [items, width, heights]);
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 16px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
@@ -1021,7 +1082,7 @@ function SavedGallery({ items, loadedId, onLoad, onCopy, onDelete }) {
           <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, fontWeight: 500 }}>{items.length} saved · click to load one back into a proposal{items.length ? ', or copy it as a cart command' : ''}</div>
         </div>
       </div>
-      <div className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+      <div ref={scrollRef} className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
         {items.length === 0 ? (
           <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--gb-text-muted)' }}>
             <div style={{ width: 48, height: 48, borderRadius: 'var(--gb-r-lg)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1031,11 +1092,13 @@ function SavedGallery({ items, loadedId, onLoad, onCopy, onDelete }) {
             <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', textAlign: 'center', maxWidth: 240, lineHeight: 1.5 }}>Build a proposal and hit “Save draft” to keep it here for later.</div>
           </div>
         ) : (
-          // Masonry via CSS columns — cards keep their natural height and pack
-          // up the shortest column instead of stretching to a row baseline.
-          <div style={{ columnWidth: 296, columnGap: 12 }}>
+          <div style={{ position: 'relative', width: '100%', height }}>
             <AnimatePresence>
-              {items.map((it) => <SavedCard key={it.id} item={it} loaded={loadedId === it.id} onLoad={onLoad} onCopy={onCopy} onDelete={onDelete} />)}
+              {items.map((it) => (
+                <SavedCard key={it.id} item={it} loaded={loadedId === it.id}
+                  pos={positions[it.id] || { x: 0, y: 0 }} colW={colW} onMeasure={setHeight}
+                  onLoad={onLoad} onCopy={onCopy} onDelete={onDelete} />
+              ))}
             </AnimatePresence>
           </div>
         )}
