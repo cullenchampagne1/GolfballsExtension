@@ -595,9 +595,11 @@ function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, di
     <div style={{ padding: '12px 22px', background: 'var(--gb-surface-1)', borderBottom: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
         <div style={{ width: 36, height: 36, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.megaphone size={17} /></div>
-        <div style={{ display: 'flex', flexDirection: 'column', width: 230 }}>
-          <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)', paddingLeft: 9 }}>Campaign Manager</div>
-          <Input value={campaign.name} onChange={(v) => onChange({ ...campaign, name: v })} style={{ marginTop: 2, height: 28, fontSize: 15, fontWeight: 800 }} />
+        <div style={{ display: 'flex', flexDirection: 'column', width: 240, minWidth: 0 }}>
+          <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Campaign Manager</div>
+          {/* Plain transparent field — flush-left under the label, no box. */}
+          <input value={campaign.name} onChange={(e) => onChange({ ...campaign, name: e.target.value })}
+            style={{ marginTop: 2, width: '100%', height: 24, background: 'transparent', border: 'none', outline: 'none', padding: 0, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 16, fontWeight: 800, letterSpacing: -.3 }} />
         </div>
       </div>
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 11px', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-pill)' }}>
@@ -622,7 +624,7 @@ function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, di
       </PillTag>
       <Btn variant="primary" status="brand" size="sm" icon={<I.zap />} onClick={onRun} disabled={sim.running}>{dryRun ? 'Dry run' : 'Run campaign'}</Btn>
       <div style={{ width: 1, height: 26, background: 'var(--gb-border-default)' }} />
-      <IconBtn size="md" variant="ghost" icon={<I.close />} onClick={onClose} />
+      <IconBtn size="md" icon={<I.close />} onClick={onClose} />
     </div>
   );
 }
