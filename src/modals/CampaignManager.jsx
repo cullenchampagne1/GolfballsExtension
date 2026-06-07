@@ -617,7 +617,10 @@ function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, di
         <IconBtn size="sm" variant="ghost" icon={<I.rewind />} onClick={onSimReset} />
         <Btn variant={sim.running ? 'tinted' : 'secondary'} status={sim.running ? 'warning' : 'brand'} size="sm" icon={sim.running ? <I.pause /> : <I.play />} onClick={sim.running ? onSimStop : onSimStart}>{sim.running ? 'Pause sim' : 'Simulate'}</Btn>
       </div>
-      <Btn variant="primary" status="brand" size="sm" icon={<I.zap />} onClick={onRun} disabled={sim.running}>Run campaign</Btn>
+      <PillTag on={dryRun} onClick={() => onDryRunChange(!dryRun)}>
+        <Dot tone={dryRun ? 'warning' : 'muted'} /> Dry run
+      </PillTag>
+      <Btn variant="primary" status="brand" size="sm" icon={<I.zap />} onClick={onRun} disabled={sim.running}>{dryRun ? 'Dry run' : 'Run campaign'}</Btn>
       <div style={{ width: 1, height: 26, background: 'var(--gb-border-default)' }} />
       <IconBtn size="md" variant="ghost" icon={<I.close />} onClick={onClose} />
     </div>
@@ -928,7 +931,19 @@ export function CampaignManager({ onClose, contacts = [] }) {
       <motion.div initial={{ opacity: 0, scale: .98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }}
         style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden', color: 'var(--gb-text-secondary)' }}>
         <TopBar campaign={campaign} onChange={patchCampaign} sim={sim} onSimStart={startSim} onSimStop={stopSim} onSimReset={resetSim}
-          dirty={dirty} audienceCount={contacts.length} onRun={runCampaignClick} onClose={onClose} />
+          dirty={dirty} audienceCount={contacts.length} onRun={startRun} onClose={onClose}
+          dryRun={dryRun} onDryRunChange={setDryRun} />
+        {runMode ? (
+          <AudienceRunView
+            campaign={campaign}
+            audience={contacts.map((c, i) => ({ ...c, _key: c.contactId || c.contactUrl || `row${i}` }))}
+            mainCount={mainCount}
+            runner={runner}
+            dryRun={dryRun}
+            onExit={() => { setRunMode(false); runner.reset(); }}
+          />
+        ) : (
+        <>
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           <CampaignSidebar library={library} currentId={campaign.id} onSelect={selectCampaign} onNew={createCampaign} />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid var(--gb-border-default)' }}>
@@ -941,6 +956,8 @@ export function CampaignManager({ onClose, contacts = [] }) {
           </div>
         </div>
         <StatsStrip steps={steps} campaign={campaign} selectedId={selectedId} onClearSelection={() => setSelectedId(null)} dirty={dirty} onSave={save} />
+        </>
+        )}
       </motion.div>
     </div>
   );
