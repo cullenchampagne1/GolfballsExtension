@@ -1364,14 +1364,16 @@ function BaseColorPicker({ label = 'Color', colors, value, onChange }) {
 /* Custom Logo decoration — logo upload + (second imprint only where the product
    actually has a second pole) + commercial block. */
 function CustomLogoFlow({ p, config, dualPole }) {
-  // Flat product — the logo is just attached (no on-ball alignment step).
+  // Round markers (poker chips) align the logo onto the face like a ball; flat
+  // products (towels, shirts, …) just attach the logo as-is (no place to align).
+  const alignable = isPokerChipProduct(p);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <ImageUpload alignable={false} />
+      <ImageUpload alignable={alignable} />
       {dualPole && (
         <div>
           <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)', marginBottom: 7 }}>Second Pole Imprint</div>
-          <SecondImprint alignable={false} />
+          <SecondImprint alignable={alignable} />
         </div>
       )}
       <Commercial p={p} config={config} />
@@ -1822,9 +1824,12 @@ function LivePreview3D({ shape = 'ball' }) {
   const isChip = shape === 'chip';
   const decalUrl = useDecalUrl();
   const secondUrl = useSecondDecalUrl(decalUrl);
-  // Catalog preview scale — its own dev setting (separate from the Image
-  // Viewer's golfballViewer.ballScale).
-  const previewScale = Number(useDevSetting('giftCatalog.previewScale') ?? 2) || 2;
+  // Ball uses the catalog preview scale; the chip is a small ball-marker, so it
+  // frames at the golfball's default scale ×0.75 rather than the larger ball
+  // preview scale.
+  const ballDefaultScale = Number(useDevSetting('golfballViewer.ballScale') ?? 1) || 1;
+  const catalogScale = Number(useDevSetting('giftCatalog.previewScale') ?? 2) || 2;
+  const previewScale = isChip ? ballDefaultScale * 0.75 : catalogScale;
   // Slow auto-spin so both poles/sides (dual-pole imprints) are visible hands-free.
   const [spin, setSpin] = useState(false);
   // The chip is a product worth seeing blank, so it always mounts; the ball is
