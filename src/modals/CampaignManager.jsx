@@ -927,9 +927,9 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const mainCount = steps.filter((s) => !s.parentId).length;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, padding: 24, display: 'flex', background: 'var(--gb-surface-deep)', zIndex: 2147483000 }}>
+    <div style={{ position: 'fixed', inset: 0, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--gb-surface-deep) 78%, rgba(0,0,0,.55))', zIndex: 2147483000 }}>
       <motion.div initial={{ opacity: 0, scale: .98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }}
-        style={{ flex: 1, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden', color: 'var(--gb-text-secondary)' }}>
+        style={{ width: 'min(1180px, 96vw)', height: 'min(760px, 92vh)', display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden', color: 'var(--gb-text-secondary)' }}>
         <TopBar campaign={campaign} onChange={patchCampaign} sim={sim} onSimStart={startSim} onSimStop={stopSim} onSimReset={resetSim}
           dirty={dirty} audienceCount={contacts.length} onRun={startRun} onClose={onClose}
           dryRun={dryRun} onDryRunChange={setDryRun} />
