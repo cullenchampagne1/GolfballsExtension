@@ -268,9 +268,21 @@ async function evalCondition(cond, getValue) {
   if (!cond) return true;
   let value;
   try { value = await getValue(cond); } catch { value = undefined; }
-  const quant = arrayQuantifier(cond.ref);
   let res;
-  if (quant) {
+  // `arrayMode` (first/last/any/none/index) lets a value that IS an array —
+  // e.g. an array-returning code condition — pick which item(s) the op tests,
+  // mirroring the schema array quantifiers (which encode mode in the ref).
+  const mode = cond.arrayMode;
+  const quant = arrayQuantifier(cond.ref);
+  if (mode) {
+    const items = Array.isArray(value) ? value : [];
+    if (mode === 'any') res = items.some((v) => applyOp(cond.op, v, cond.value));
+    else if (mode === 'none') res = !items.some((v) => applyOp(cond.op, v, cond.value));
+    else {
+      const idx = mode === 'first' ? 0 : mode === 'last' ? items.length - 1 : Math.max(0, cond.arrayIndex | 0);
+      res = applyOp(cond.op, items[idx], cond.value);
+    }
+  } else if (quant) {
     const items = Array.isArray(value) ? value : [];
     const some = items.some((v) => applyOp(cond.op, v, cond.value));
     res = quant === 'any' ? some : !some; // 'none' = no item passes

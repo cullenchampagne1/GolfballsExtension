@@ -136,7 +136,7 @@ const GB_THEME = EditorView.theme({
   '.cm-lintRange-error': { textDecoration: 'underline wavy var(--gb-error-fg)' },
 }, { dark: true });
 
-export function CodeVarEditor({ value, onChange, typeId, varNames = [], placeholder }) {
+export function CodeVarEditor({ value, onChange, typeId, varNames = [], placeholder, hideActions = false }) {
   const hostRef    = useRef(null);
   const viewRef    = useRef(null);
   const onChangeRef = useRef(onChange);
@@ -277,9 +277,10 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
           <NsChip label="ctx" hint={typeId === 'account' ? 'page json' : 'empty here'} dim={typeId !== 'account'} />
           <NsChip label="vars" hint="other vars" />
           <NsChip label="h" hint="helpers" />
-          <span style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)' }}>· returns coerced to text</span>
+          {!hideActions && <span style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)' }}>· returns coerced to text</span>}
         </span>
         <div style={{ flex: 1 }} />
+        {!hideActions && (
         <div style={{ position: 'relative' }}>
           <Btn size="xs" variant="ghost" icon={<I.bolt />} onClick={() => setRecipesOpen((o) => !o)}>
             Recipes
@@ -318,6 +319,8 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
             </>
           )}
         </div>
+        )}
+        {!hideActions && (
         <Btn
           size="xs"
           variant="tinted"
@@ -327,6 +330,7 @@ export function CodeVarEditor({ value, onChange, typeId, varNames = [], placehol
         >
           {testing ? 'Running…' : 'Test on page'}
         </Btn>
+        )}
       </div>
 
       {/* Test result */}

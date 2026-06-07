@@ -2,7 +2,7 @@ import React from 'react';
 import { VariableSchemaPicker } from '../VariableSchemaPicker.jsx';
 import { CodeVarEditor } from '../CodeVarEditor.jsx';
 import { Dropdown } from '../Dropdown.jsx';
-import { RuleGroups } from './RuleGroups.jsx';
+import { RuleGroups, NotPill } from './RuleGroups.jsx';
 import { OPS_BY_TYPE } from '../../../lib/matchEngine.js';
 import { listPaths } from '../../../lib/page-engine/resolve.js';
 import { contactSchema } from '../../../lib/page-schemas/contact.js';
@@ -55,17 +55,13 @@ export const CODE_RETURN_TYPES = [
   { id: 'object',  label: 'Object' },
 ];
 const COLLECTION_OPS = {
+  // Array uses the schema array format: an item-mode (first/last/any/none/
+  // index) selector + a per-item operator — so its ops are the string ops
+  // applied to the chosen item(s).
+  array: OPS_BY_TYPE.string,
   boolean: [
     { id: 'isTrue',  label: 'is true',  valueless: true },
     { id: 'isFalse', label: 'is false', valueless: true },
-  ],
-  array: [
-    { id: 'contains',    label: 'contains' },
-    { id: 'notContains', label: 'does not contain' },
-    { id: 'notEmpty',    label: 'is not empty', valueless: true },
-    { id: 'isEmpty',     label: 'is empty',     valueless: true },
-    { id: 'lengthGte',   label: 'length ≥' },
-    { id: 'lengthLte',   label: 'length ≤' },
   ],
   object: [
     { id: 'hasKey',    label: 'has key' },
@@ -73,7 +69,16 @@ const COLLECTION_OPS = {
     { id: 'notExists', label: 'is not set', valueless: true },
   ],
 };
-const DEFAULT_OP = { string: 'contains', number: 'gte', date: 'before', boolean: 'isTrue', array: 'notEmpty', object: 'exists' };
+const DEFAULT_OP = { string: 'contains', number: 'gte', date: 'before', boolean: 'isTrue', array: 'contains', object: 'exists' };
+
+/* Array item-mode options — mirror the schema array quantifier control. */
+const ARRAY_MODES = [
+  { id: 'any',   label: 'Any item' },
+  { id: 'none',  label: 'No item' },
+  { id: 'first', label: 'First' },
+  { id: 'last',  label: 'Last' },
+  { id: 'index', label: 'At index' },
+];
 
 export function opsForCampaignCondition(c) {
   const t = c?.type || 'string';
@@ -118,16 +123,35 @@ function CampaignSubjectCell({ condition, patch }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Returns</span>
-            <div style={{ width: 130 }}>
+            <div style={{ width: 120 }}>
               <Dropdown size="sm" value={condition.type || 'string'} options={CODE_RETURN_TYPES}
-                onChange={(t) => patch({ type: t, op: DEFAULT_OP[t] || 'contains', value: '' })} />
+                onChange={(t) => patch({ type: t, op: DEFAULT_OP[t] || 'contains', value: '', arrayMode: t === 'array' ? (condition.arrayMode || 'any') : undefined, arrayIndex: undefined })} />
             </div>
+            {/* Array item-mode (first/last/any/none/index) — same format as
+                schema array types. */}
+            {condition.type === 'array' && (
+              <>
+                <div style={{ width: 110 }}>
+                  <Dropdown size="sm" value={condition.arrayMode || 'any'} options={ARRAY_MODES}
+                    onChange={(m) => patch({ arrayMode: m })} />
+                </div>
+                {condition.arrayMode === 'index' && (
+                  <input type="number" min={0} value={String(condition.arrayIndex ?? 0)}
+                    onChange={(e) => patch({ arrayIndex: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                    style={{ width: 52, height: 26, padding: '0 8px', boxSizing: 'border-box', background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', borderRadius: 4, color: 'var(--gb-text-primary)', fontSize: 11.5, outline: 'none' }} />
+                )}
+              </>
+            )}
+            <div style={{ flex: 1 }} />
+            {/* NOT lives here on the right so it doesn't shove the editor. */}
+            <NotPill on={condition.not} onClick={() => patch({ not: !condition.not })} />
           </div>
           <CodeVarEditor
             value={condition.ref || ''}
             onChange={(body) => patch({ ref: body })}
             typeId="account"
             varNames={[]}
+            hideActions
             placeholder="return a value · ctx = contact/account data · h = helpers"
           />
         </div>
@@ -143,6 +167,7 @@ export function CampaignConditions({ initial, onChange }) {
       defaultSource="schema"
       renderSubject={(condition, patch) => <CampaignSubjectCell condition={condition} patch={patch} />}
       opsFor={opsForCampaignCondition}
+      shouldHideNot={(c) => c.source === 'var'}
       onChange={onChange}
       label="Run conditions"
       emptyHint="No conditions — this step always runs. Add a group that tests a schema field or a code expression, combined with AND/OR."

@@ -88,6 +88,10 @@ export function RuleGroups({
   renderSubject, opsFor, onChange,
   label = 'Match rules',
   emptyHint = 'No match rules yet. Add a group of conditions to start matching.',
+  /* Optional: hide the default left-edge NOT pill for conditions where the
+     subject cell renders its own NOT (e.g. a full-width code editor that
+     would otherwise be shoved right). Default keeps the pill. */
+  shouldHideNot = () => false,
 }) {
   const [state, setState] = useState(() => normalizeInitial(initial, fromLegacy));
   const { outerJoiner, groups } = state;
@@ -145,6 +149,7 @@ export function RuleGroups({
                   canRemove={groups.length > 1}
                   renderSubject={renderSubject}
                   opsFor={opsFor}
+                  shouldHideNot={shouldHideNot}
                   onJoinerChange={(j) => setGroupJoiner(g.id, j)}
                   onAddCondition={() => addCondition(g.id)}
                   onPatchCondition={(cid, patch) => patchCondition(g.id, cid, patch)}
@@ -166,7 +171,7 @@ export function RuleGroups({
   );
 }
 
-function GroupCard({ group, index, canRemove, renderSubject, opsFor, onJoinerChange, onAddCondition, onPatchCondition, onRemoveCondition, onRemoveGroup }) {
+function GroupCard({ group, index, canRemove, renderSubject, opsFor, shouldHideNot, onJoinerChange, onAddCondition, onPatchCondition, onRemoveCondition, onRemoveGroup }) {
   return (
     <div style={{ padding: 12, background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -186,6 +191,7 @@ function GroupCard({ group, index, canRemove, renderSubject, opsFor, onJoinerCha
               canRemove={group.conditions.length > 1}
               renderSubject={renderSubject}
               opsFor={opsFor}
+              hideNot={!!(shouldHideNot && shouldHideNot(c))}
               onPatch={(patch) => onPatchCondition(c.id, patch)}
               onRemove={() => onRemoveCondition(c.id)}
             />
@@ -200,7 +206,7 @@ function GroupCard({ group, index, canRemove, renderSubject, opsFor, onJoinerCha
   );
 }
 
-function ConditionRow({ condition, renderSubject, opsFor, onPatch, onRemove, canRemove }) {
+function ConditionRow({ condition, renderSubject, opsFor, onPatch, onRemove, canRemove, hideNot }) {
   const ops = (opsFor ? opsFor(condition) : []) || [];
   const valueless = isValuelessOp(condition.op);
   const vKind = valueKind(condition.op, valueless);
@@ -240,7 +246,7 @@ function ConditionRow({ condition, renderSubject, opsFor, onPatch, onRemove, can
             shrink) drops to the next line instead of overflowing the card and
             pushing the delete button outside its bounds. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <NotPill on={condition.not} onClick={() => onPatch({ not: !condition.not })} />
+          {!hideNot && <NotPill on={condition.not} onClick={() => onPatch({ not: !condition.not })} />}
           <div style={{ flex: '1 1 150px', minWidth: 140 }}>
             {renderSubject?.(condition, (patch) => onPatch(patch))}
           </div>
@@ -348,7 +354,7 @@ function RelValue({ value, onChange }) {
   );
 }
 
-function NotPill({ on, onClick }) {
+export function NotPill({ on, onClick }) {
   return (
     <button type="button" onClick={onClick} title={on ? 'Negation on — click to remove' : 'Negate this condition'}
       style={{
