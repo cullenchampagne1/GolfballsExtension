@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Btn, IconBtn, Tag, Dot, Input, Field, Dropdown, Switch, Slider,
-  Callout, SectionLabel, PillTag, TemplateSplits, equalWeights, ModalShell, I, Icon,
+  Callout, SectionLabel, PillTag, TemplateSplits, equalWeights, ModalShell,
+  TemplatePicker, parseTemplateValue, I, Icon,
 } from '../ui/index.js';
 import { RuleGroups } from '../ui/components/template-rules/RuleGroups.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
@@ -413,6 +414,20 @@ function StepInspector({ step, allSteps, templateLib, onChange, onDelete }) {
           <SectionLabel>Template</SectionLabel>
           {tplOptions.length === 0 ? (
             <div style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>No {meta.label.toLowerCase()} templates saved yet.</div>
+          ) : isEmailKind ? (
+            /* Same rich picker as the Quick Send popover — shows each
+               template's variation count + expandable variations. We only
+               use the parent selection here; the weighting lives in the
+               variation split below. */
+            <TemplatePicker
+              mode="random"
+              templates={templateLib.email || []}
+              value={step.templateId}
+              onChange={(composite) => { const [pid] = parseTemplateValue(composite); onPickTemplate(pid); }}
+              placeholder="Choose email template…"
+              floating={false}
+              listMaxHeight={320}
+            />
           ) : (
             <Dropdown size="sm" value={step.templateId} placeholder="Choose template…" searchable
               options={tplOptions} onChange={onPickTemplate} />

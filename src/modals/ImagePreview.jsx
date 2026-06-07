@@ -14,6 +14,7 @@ import { useDevSetting } from '../lib/devSettings.js';
 import { GolfballViewer } from './GolfballViewer.jsx';
 import { GrassMockupComposer } from './GrassMockupComposer.jsx';
 import { LiquidDrawer } from '../ui/components/LiquidDrawer.jsx';
+import { ColorPickerPopover } from '../ui/components/ColorPicker.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    ImagePreview — port of content/logo-extractor.js's logo modal.
@@ -259,6 +260,22 @@ export function ImagePreview({
   // when gravity is on — bombs only do something meaningful when
   // physics is running.
   const [viewerThrowMode, setViewerThrowMode] = useState(false);
+  // 3D shape (golf ball vs poker chip) + per-shape body tint, driven by the two
+  // in-view controls (gravity-off). Separate tints so the ball and chip keep
+  // their own colorway when you toggle between them.
+  const [viewerShape, setViewerShape] = useState('ball');
+  const [ballTint, setBallTint] = useState(null);
+  const [chipTint, setChipTint] = useState(null);
+  const [tintPickerOpen, setTintPickerOpen] = useState(false);
+  const tintBtnRef = useRef(null);
+  const isChipShape = viewerShape === 'chip';
+  const activeTint = isChipShape ? chipTint : ballTint;
+  const setActiveTint = isChipShape ? setChipTint : setBallTint;
+  // Swatch shown on the color button / fed to the picker: the live tint, or the
+  // shape's default body color when none is set yet.
+  const tintSwatch = activeTint || (isChipShape ? '#1c1c1c' : '#f6f6f6');
+  // Close the tint picker when its control can't be shown (gravity on / left 3D).
+  useEffect(() => { if (viewerThrowMode || view !== '3d') setTintPickerOpen(false); }, [viewerThrowMode, view]);
 
   // Image load wiring. The <img>'s onLoad/onError flips status. We
   // pre-resolve URLs that are already cached so the spinner doesn't
@@ -981,6 +998,8 @@ export function ImagePreview({
                 <GolfballViewer
                   ref={viewerRef}
                   decalDataUrl={decalDataUrl}
+                  shape={viewerShape}
+                  tint={activeTint}
                   onSceneChange={setViewerSceneKey}
                   onThrowChange={setViewerThrowMode}
                   onError={() => {
@@ -1324,6 +1343,47 @@ export function ImagePreview({
                 style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 6 }}
               >
                 <ViewerToolbox viewerRef={viewerRef} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Shape toggle (ball ⇄ poker chip) + body-tint picker — bottom-right,
+              the gravity-OFF mirror of the fun menu. They fade out as gravity
+              turns on so the bomb toolbox can take this corner. */}
+          <AnimatePresence>
+            {view === '3d' && status === 'ready' && !viewerThrowMode && (
+              <motion.div
+                key="shape-tint-controls"
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.7 }}
+                style={{ position: 'absolute', bottom: 8, right: 8, display: 'flex', gap: 4, zIndex: 6 }}
+              >
+                <GlassIconBtn
+                  icon={isChipShape ? <ChipIcon size={13} /> : <BallIcon size={13} />}
+                  title={isChipShape ? 'Show golf ball' : 'Show poker chip'}
+                  onClick={() => { setTintPickerOpen(false); setViewerShape((s) => (s === 'ball' ? 'chip' : 'ball')); }}
+                />
+                <div ref={tintBtnRef} data-viewer-ui="true" style={{ position: 'relative', display: 'inline-flex' }}>
+                  <GlassIconBtn
+                    icon={<ColorCircleIcon size={14} color={tintSwatch} />}
+                    active={tintPickerOpen}
+                    title={isChipShape ? 'Chip color' : 'Ball tint'}
+                    onClick={() => setTintPickerOpen((o) => !o)}
+                  />
+                  <AnimatePresence>
+                    {tintPickerOpen && (
+                      <ColorPickerPopover
+                        value={tintSwatch}
+                        onChange={(hex) => setActiveTint(hex)}
+                        anchorRef={tintBtnRef}
+                        onClose={() => setTintPickerOpen(false)}
+                        align="right"
+                      />
+                    )}
+                  </AnimatePresence>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -1909,6 +1969,38 @@ const CameraIcon = (p) => (
     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
     <circle cx="12" cy="13" r="4" />
+  </svg>
+);
+
+// Golf ball — circle with a few dimples. The "ball" state of the shape toggle.
+const BallIcon = (p) => (
+  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="9" />
+    <circle cx="9" cy="9.5" r="0.9" fill="currentColor" stroke="none" />
+    <circle cx="14.5" cy="9.5" r="0.9" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="13" r="0.9" fill="currentColor" stroke="none" />
+    <circle cx="9" cy="15" r="0.9" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="15" r="0.9" fill="currentColor" stroke="none" />
+  </svg>
+);
+// Poker chip — outer ring, inner ring + four edge spots. The "chip" state.
+const ChipIcon = (p) => (
+  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24" fill="none"
+    stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="9" />
+    <circle cx="12" cy="12" r="4.5" />
+    <line x1="12" y1="3" x2="12" y2="6" />
+    <line x1="12" y1="18" x2="12" y2="21" />
+    <line x1="3" y1="12" x2="6" y2="12" />
+    <line x1="18" y1="12" x2="21" y2="12" />
+  </svg>
+);
+// Filled swatch showing the current body tint (ball color / chip clay).
+const ColorCircleIcon = (p) => (
+  <svg width={p.size || 14} height={p.size || 14} viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="8" fill={p.color || '#f6f6f6'}
+      stroke="currentColor" strokeWidth="1.6" strokeOpacity="0.55" />
   </svg>
 );
 

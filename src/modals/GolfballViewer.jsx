@@ -307,6 +307,19 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   const spinSpeedRef = useRef(0.01);
   spinSpeedRef.current = Number(dev['golfballViewer.spinSpeed'] ?? 0.01);
 
+  // Live-tint targets (set by the scene-build effect): the ball body material
+  // and the chip's clay color. A dedicated effect retints them when `tint`
+  // changes so dragging the color picker doesn't rebuild the scene per frame.
+  const tintMatRef = useRef(null);
+  const tintClayRef = useRef(null);
+  useEffect(() => {
+    if (shape === 'chip') {
+      if (tintClayRef.current) tintClayRef.current.set(tint || '#1c1c1c');
+    } else if (tintMatRef.current) {
+      tintMatRef.current.color.set(tint || 0xf6f6f6);
+    }
+  }, [tint, shape]);
+
   useEffect(() => {
     let disposed = false;
     let renderer, scene, camera, ballMesh, decalMesh, decalMesh2, ballGroup, animationId;
@@ -885,12 +898,19 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         );
         ballMesh.castShadow = true;
         ballMesh.receiveShadow = false;
+        // Live-recolor targets — the tint picker fires onChange every frame while
+        // dragging, so a separate effect retints these in place instead of
+        // re-running this whole effect (which would re-clone + re-project the
+        // decal each frame). Ball → material color; chip → the clay uniform color.
+        tintMatRef.current = isChip ? null : ballMesh.material;
+        tintClayRef.current = null;
         if (isChip) {
           // The baked vertex colors are a clay(dark)/pattern(light) mask. Recolor
           // ONLY the clay to the chosen colorway and keep the molded dashes /
           // spots / center inlay white — so one model serves every color and the
           // logo still reads on the white center. Default = near-black clay.
           const clay = new THREE.Color(tint || '#1c1c1c');
+          tintClayRef.current = clay;
           ballMesh.material.onBeforeCompile = (shader) => {
             shader.uniforms.uClay = { value: clay };
             shader.fragmentShader = 'uniform vec3 uClay;\n' + shader.fragmentShader.replace(
@@ -3299,6 +3319,8 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
 
     return () => {
       disposed = true;
+      tintMatRef.current = null;
+      tintClayRef.current = null;
       snapshotRef.current = null;
       dropBombRef.current = null;
       containsPointRef.current = null;
@@ -3320,8 +3342,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
     };
     // Re-running on decalDataUrl change is desired so swapping the
     // alignment image rebuilds the decal projection.
+    // `tint` is intentionally omitted — the live-tint effect above retints in
+    // place so a color drag doesn't rebuild the scene every frame.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [decalDataUrl, secondDecalDataUrl, shape, tint]);
+  }, [decalDataUrl, secondDecalDataUrl, shape]);
 
   // cleanupRef holds the dispose closure across the async boundary so
   // strict-mode double-mount + teardown still releases GPU resources.
