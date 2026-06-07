@@ -5,6 +5,8 @@ import { Icon, I } from '../ui/icons.jsx';
 import { GolfballViewer } from './GolfballViewer.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { PREVIEW_GRID, GlassIconBtn, DropperIcon, ResetIcon, SwapPopover, recolorImage, samplePixel } from '../ui/components/ImageColorSwap.jsx';
+import { loadGiftSetOptions } from '../lib/giftSetsData.js';
+import { giftSetSizeLabel } from '../lib/giftSets.js';
 
 /* ───────────────────────────────────────────────────────────────
    giftCustomize.jsx — the real per-product personalization UI for
@@ -713,6 +715,10 @@ const DEFAULT_PT_DATA = {
   // Which accessory decoration tab is active (Custom Logo / Tee / Personalized /
   // Monogram) so AccessoryDecorationEmitter serializes the right decoration.
   __accessory:   { kind: '' },
+  // Gift-set packaging for a custom-logo ball — { id, option } of the chosen
+  // bundle (sleeve / 6-ball / wooden), or {} for standard packaging. Rides on the
+  // ball decoration as `giftSet` so the line prices + serializes as a gift set.
+  __giftSet:     {},
   // Dual-pole second imprint — its own slot so it never collides with the
   // front print's fields. Holds whichever sub-type the buyer picks.
   __second:      { enabled: false, choice: 'Same as Front',
@@ -1967,8 +1973,15 @@ function deriveBallDecoration(p, sel, data) {
   // Shared across engines: the buyer's base-option picks + the 2nd-pole imprint.
   const baseSelection = (data.__base && Object.keys(data.__base).length) ? { ...data.__base } : null;
   const dualPole = !!(data.__second && data.__second.enabled);
-  const extra = { baseSelection, dualPole, pole2: derivePole2(data, sel) };
-  if (!sel) return { engine: 'none', ...extra };
+  // Gift-set packaging rides along on any engine; the serializer/pricing wrap the
+  // ball's ladder into the per-set gift-set ladder when `giftSet` is present.
+  const giftSet = (data.__giftSet && data.__giftSet.option) || null;
+  const extra = { baseSelection, dualPole, pole2: derivePole2(data, sel), ...(giftSet ? { giftSet } : {}) };
+  // A gift set implies a custom-logo ball even before a print type is chosen, so a
+  // set picked on its own still prices (engine 'none' would have no ladder).
+  if (!sel) return giftSet
+    ? { engine: 'ballLogo', baseColor, finish, logo: null, _localImageDataUrl: null, ...extra }
+    : { engine: 'none', ...extra };
 
   if (sel === 'Personalized') {
     const s = data.Personalized || {};
@@ -2067,6 +2080,51 @@ function AccessoryDecorationEmitter({ p, onChange }) {
   return null;
 }
 
+/* Gift-set packaging picker for a custom-logo ball. Lives inside the ball
+   PrintTypeProvider and writes the chosen bundle to the __giftSet context slot,
+   which deriveBallDecoration folds into the decoration as `giftSet`. Options come
+   from getPackageUpsellData (live, cached, seed-backed). Selecting a set turns the
+   line into a "<set> with <Brand> <ball>" gift-set line priced per set. */
+function GiftSetPicker() {
+  const ctx = usePT();
+  const [opts, setOpts] = useState([]);
+  useEffect(() => { let on = true; loadGiftSetOptions().then((o) => { if (on) setOpts(o || []); }).catch(() => {}); return () => { on = false; }; }, []);
+  const selId = (ctx.data.__giftSet && ctx.data.__giftSet.id) || '';
+  const pick = (id) => {
+    const option = opts.find((o) => o.id === id) || null;
+    ctx.update('__giftSet', option ? { id, option } : {});
+  };
+  if (!opts.length) return null;
+  const ddOptions = [
+    { id: '', label: 'Standard packaging (no gift set)' },
+    ...opts.map((o) => ({ id: o.id, label: o.name, group: o.friendly, trailing: <Tag tone="neutral" size="sm">{giftSetSizeLabel(o)}</Tag> })),
+  ];
+  const sel = opts.find((o) => o.id === selId) || null;
+  const incl = (sel && sel.descriptions && sel.descriptions[0] && sel.descriptions[0].subtext) || [];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <I.sparkle size={13} style={{ color: 'var(--gb-brand-label)' }} />
+        <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>Gift-set packaging</span>
+        {sel && <Tag tone="brand" size="sm">{giftSetSizeLabel(sel)}</Tag>}
+      </div>
+      <Dropdown value={selId} onChange={pick} options={ddOptions} placeholder="Standard packaging (no gift set)" />
+      {sel ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
+          {incl.map((t, i) => (
+            <span key={i} style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
+              <span style={{ color: 'var(--gb-brand-label)' }}>•</span>{t}
+            </span>
+          ))}
+          <span style={{ marginTop: 2, color: 'var(--gb-text-tertiary)' }}>Priced per gift set — the ball is customized inside.</span>
+        </div>
+      ) : (
+        <span style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)' }}>Box this ball into a corporate gift set for an upcharge.</span>
+      )}
+    </div>
+  );
+}
+
 export function CustomizeBlock({ p, onChange }) {
   // A "Custom Accessory Bundle" (e.g. a Sleeve/Chip/Tee Kit) is a bundle, not a
   // plain ball — route it to the bundle path even though it's filed under Golf Balls.
@@ -2111,6 +2169,7 @@ export function CustomizeBlock({ p, onChange }) {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     <BallPreview />
                     <BaseProperties p={p} config={config} />
+                    {p.customLogo && <GiftSetPicker />}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>Select a print type</span>
                       <Tag tone="neutral" size="sm">corporate: Custom Logo</Tag>

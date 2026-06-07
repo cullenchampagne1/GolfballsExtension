@@ -23,6 +23,7 @@ import { EmailPreview } from '../modals/EmailPreview.jsx';
 import { matchesCaseTpl } from '../lib/caseMatch.js';
 import { CalendarModal } from '../modals/CalendarModal.jsx';
 import { GiftCatalog } from '../modals/GiftCatalog.jsx';
+import { CampaignManager } from '../modals/CampaignManager.jsx';
 import { runOrderDateUpdate } from '../lib/submitOrderDates.js';
 import { TextPreview } from '../modals/TextPreview.jsx';
 import { parseChat } from '../lib/parseChat.js';
@@ -66,6 +67,7 @@ const MODAL_REGISTRY = [
   { id: 'quickTask',    label: 'Quick Task',      icon: 'check',   wired: true,  flag: 'quickTaskEnabled'    },
   { id: 'calendar',     label: 'Order Dates',     icon: 'cog',     wired: true,  flag: 'calendarEnabled'     },
   { id: 'giftCatalog',  label: 'Gift Catalog',    icon: 'card',    wired: true,  flag: 'giftCatalogEnabled'  },
+  { id: 'campaignManager', label: 'Campaigns',    icon: 'megaphone', wired: true, flag: 'campaignManagerEnabled' },
   // ── Not yet migrated — kept as-is (plain secondary buttons) ──
   { id: 'charge',       label: 'Charge',          icon: 'card',    wired: false, flag: 'chargeEnabled'       },
   { id: 'orderEdit',    label: 'Order Edit',      icon: 'edit',    wired: false, flag: 'orderEditEnabled'    },
@@ -857,6 +859,17 @@ function PlaygroundSurface() {
           <GiftCatalog
             key="giftCatalog"
             onClose={() => setMounted(null)}
+          />
+        )}
+        {mounted === 'campaignManager' && (
+          <CampaignManager
+            key="campaignManager"
+            onClose={() => setMounted(null)}
+            contacts={[
+              { contactId: '4421', contactName: 'Marcus Chen', name: 'Marcus Chen', email: 'marcus@acme.co', contactUrl: '' },
+              { contactId: '4517', contactName: 'Sarah Patel', name: 'Sarah Patel', email: 'sarah@pebble.com', contactUrl: '' },
+              { contactId: '5223', contactName: 'Jordan Brown', name: 'Jordan Brown', email: 'jordan@bcg.io', contactUrl: '' },
+            ]}
           />
         )}
         {mounted === 'imageViewer' && (

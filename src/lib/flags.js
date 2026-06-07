@@ -31,7 +31,8 @@ export const FEATURE_DEFAULTS = {
   quickTaskEnabled:         true,   // Quick Task modal + shelf action
   crmNewContactEnabled:     true,   // CRM Create Contact modal + Ctrl+Q keybind
   textPreviewEnabled:       true,   // Text/chat transcript row preview (was sharing emailPreviewEnabled)
-  campaignEditorEnabled:    true,   // campaign editor (opened from CRM Search / Tasks)
+  campaignEditorEnabled:    true,   // legacy vanilla campaign editor (removed in the Campaign Manager migration)
+  campaignManagerEnabled:   true,   // new React Campaign Manager surface
 };
 // NOTE: the 3D golfball viewer is part of the Image Viewer (it renders inside
 // ImagePreview.jsx), so it has no separate flag — `imagePreviewEnabled` covers it.

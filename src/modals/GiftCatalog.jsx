@@ -9,6 +9,7 @@ import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct } from '../lib/saveProposal.js';
 import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
 import { decoratedPricingForLine } from '../lib/cartSerializer.js';
+import { giftSetLadder, giftSetSizeLabel } from '../lib/giftSets.js';
 
 /* ───────────────────────────────────────────────────────────────
    GiftCatalog — Corporate Gifting Catalog modal.
@@ -100,6 +101,13 @@ const lineSecondPoleFee = (line) => {
 };
 function linePriceAt(line, qty) {
   const p = (line && line.product) || {};
+  // Gift set: per-set price from the verified gift-set ladder (the catalog's
+  // custom-logo ladder == the raw ladder, so this matches the cart exactly).
+  const gs = line && line.decoration && line.decoration.giftSet;
+  if (gs && p.customLogo && p.breaks && p.breaks.length) {
+    const v = priceAtBreaks(giftSetLadder(p.breaks, gs), qty);
+    if (v != null) return v;
+  }
   let base;
   if (line && line.variant && line.variant.price != null) base = line.variant.price;          // tee count etc.
   else if (lineHasImprint(line) && p.customLogo) base = priceAtQty(p, qty);                    // custom-logo ladder
@@ -767,6 +775,7 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove,
   const lineTot = line.splits.reduce((s, x) => s + x.qty * x.price, 0);
   const lineUnits = line.splits.reduce((s, x) => s + x.qty, 0);
   const chips = decoImprints(line.decoration);   // one draggable tag per imprint (front + 2nd pole)
+  const giftSet = line.decoration && line.decoration.giftSet;   // gift-set packaging (sleeve / 6-ball / wooden)
   // Each custom base-option (Tee Count, Set Makeup, Shaft …) becomes its own pill
   // so a long option set wraps onto new rows instead of overflowing the line.
   const variantPills = (line.variant && line.variant.values)
@@ -823,6 +832,15 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove,
         </div>
         <span onClick={onRemove} style={{ width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--gb-text-muted)', cursor: 'pointer', borderRadius: 'var(--gb-r-sm)' }}><I.trash size={13} /></span>
       </div>
+      {/* Gift-set packaging banner — the line is boxed into a corporate gift set,
+          priced per set (the ball customization shows as the imprint tags below). */}
+      {giftSet && (
+        <div style={{ marginTop: 7, display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)' }}>
+          <I.sparkle size={11} style={{ color: 'var(--gb-brand-label)', flexShrink: 0 }} />
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--gb-brand-label)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{giftSet.name}</span>
+          <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--gb-text-tertiary)', flexShrink: 0, whiteSpace: 'nowrap' }}>· {giftSetSizeLabel(giftSet)} · per set</span>
+        </div>
+      )}
       {/* Per-imprint tags (front + 2nd pole, each draggable) + per-option pills,
           all wrapping independently so nothing overflows the line width. */}
       {(chips.length > 0 || variantPills.length > 0) && (
