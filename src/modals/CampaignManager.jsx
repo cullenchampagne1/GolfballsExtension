@@ -32,11 +32,11 @@ import { pickFromAddress } from '../lib/sender.js';
 
 const sumPct = (templates) => (templates || []).reduce((a, t) => a + (t.pct || 0), 0);
 
+/* Branch is a flag, not a kind — these are the three real actions. */
 const STEP_KIND_META = {
   email:  { label: 'Email',  icon: I.mail,   color: 'var(--gb-brand-tint-medium)',   fg: 'var(--gb-brand-label)' },
   call:   { label: 'Call',   icon: I.phone,  color: 'var(--gb-info-tint-medium, var(--gb-fill-subtle))', fg: 'var(--gb-info-fg, var(--gb-text-secondary))' },
   task:   { label: 'Task',   icon: I.task,   color: 'var(--gb-info-tint-medium, var(--gb-fill-subtle))', fg: 'var(--gb-info-fg, var(--gb-text-secondary))' },
-  branch: { label: 'Branch', icon: I.branch, color: 'var(--gb-warning-tint-medium)', fg: 'var(--gb-warning-fg)' },
 };
 
 const KF_ID = '__gb-campaign-kf';
@@ -80,11 +80,10 @@ function Connector({ active, height = 30, tone = 'default', hookRight, hookLeft 
 /* ── Step card (collapsed timeline row) ── */
 function StepCard({ step, displayIdx, indent, branchChild, selected, simState, templateLib = {}, onSelect, onDelete, onDuplicate }) {
   const meta = STEP_KIND_META[step.kind] || STEP_KIND_META.email;
-  const KIcon = meta.icon;
+  const KIcon = step.branch ? I.branch : meta.icon;
   const live = simState === 'running';
   const done = simState === 'done';
-  const storeKind = step.kind === 'branch' ? 'email' : step.kind;
-  const tpl = (templateLib[storeKind] || []).find((t) => t.id === step.templateId);
+  const tpl = (templateLib[step.kind] || []).find((t) => t.id === step.templateId);
   const tplName = tpl?.name || (step.templateId ? 'template' : 'no template');
   const varWeights = Object.entries(step.variationWeights || {});
   const tone = branchChild
@@ -119,17 +118,13 @@ function StepCard({ step, displayIdx, indent, branchChild, selected, simState, t
         </div>
         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-            <KIcon size={12} style={{ color: meta.fg, flexShrink: 0 }} />
+            <KIcon size={12} style={{ color: step.branch ? 'var(--gb-warning-fg)' : meta.fg, flexShrink: 0 }} />
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{step.label}</span>
             {step.branch && <Tag tone="warning" size="xs" style={{ flexShrink: 0 }}>BRANCH</Tag>}
             {step.group && <span style={{ fontSize: 10, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)', flexShrink: 0 }}>· {step.group}</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--gb-text-muted)', minWidth: 0, overflow: 'hidden' }}>
-            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
-              {step.kind === 'email' || step.kind === 'branch'
-                ? (step.subject ? <><span style={{ color: 'var(--gb-text-ghost)' }}>subj</span> {step.subject}</> : <span style={{ color: 'var(--gb-text-ghost)', fontStyle: 'italic' }}>no subject</span>)
-                : <span style={{ color: 'var(--gb-text-tertiary)' }}>{meta.label} action</span>}
-            </span>
+            <span style={{ color: 'var(--gb-text-ghost)', flexShrink: 0 }}>{meta.label.toLowerCase()}</span>
             <span style={{ color: 'var(--gb-text-ghost)', flexShrink: 0 }}>·</span>
             <span style={{ color: step.templateId ? 'var(--gb-text-tertiary)' : 'var(--gb-text-ghost)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, fontStyle: step.templateId ? 'normal' : 'italic' }}>
               {tplName}{varWeights.length > 1 ? ` · ${varWeights.length} variations` : ''}
@@ -315,20 +310,21 @@ function ConditionSubject({ condition, patch }) {
 /* ── Step inspector ── */
 function StepInspector({ step, allSteps, templateLib, onChange, onDelete }) {
   const meta = STEP_KIND_META[step.kind] || STEP_KIND_META.email;
-  const MIcon = meta.icon;
+  const MIcon = step.branch ? I.branch : meta.icon;
+  const headLabel = step.branch ? 'Branch' : meta.label;
+  const headFg = step.branch ? 'var(--gb-warning-fg)' : meta.fg;
   const stepIdx = allSteps.findIndex((s) => s.id === step.id);
-  const candidateBranches = allSteps.filter((s, i) => s.branch && i < stepIdx);
-  const storeKind = step.kind === 'branch' ? 'email' : step.kind;
-  const isEmailKind = step.kind === 'email' || step.kind === 'branch';
-  const tplOptions = (templateLib[storeKind] || []).map((t) => ({ id: t.id, label: t.name }));
-  const selectedTpl = (templateLib[storeKind] || []).find((t) => t.id === step.templateId) || null;
+  const candidateBranches = allSteps.filter((s, i) => s.branch && s.id !== step.id && i < stepIdx);
+  const isEmailKind = step.kind === 'email';
+  const tplOptions = (templateLib[step.kind] || []).map((t) => ({ id: t.id, label: t.name }));
+  const selectedTpl = (templateLib[step.kind] || []).find((t) => t.id === step.templateId) || null;
 
   const upd = (patch) => onChange({ ...step, ...patch });
 
   /* Variation pool for the chosen template (base + saved variations) —
-     only meaningful for email/branch steps whose template has variations.
-     Mirrors the Quick Send popover: the split only appears when there are
-     variations, and the weights always sum to 100. */
+     only for email steps whose template has variations. Mirrors the Quick
+     Send popover: the split only appears when there are variations, and the
+     weights always sum to 100. */
   const variationItems = (() => {
     const vs = Array.isArray(selectedTpl?.variations) ? selectedTpl.variations : [];
     if (!isEmailKind || vs.length === 0) return [];
@@ -339,7 +335,7 @@ function StepInspector({ step, allSteps, templateLib, onChange, onDelete }) {
     : {};
 
   const onPickTemplate = (tid) => {
-    const t = (templateLib[storeKind] || []).find((x) => x.id === tid);
+    const t = (templateLib[step.kind] || []).find((x) => x.id === tid);
     const vs = Array.isArray(t?.variations) ? t.variations : [];
     const pool = (isEmailKind && vs.length) ? ['__original', ...vs.map((v) => v.id)] : [];
     upd({ templateId: tid, variationWeights: pool.length ? equalWeights(pool) : {} });
@@ -348,58 +344,50 @@ function StepInspector({ step, allSteps, templateLib, onChange, onDelete }) {
   return (
     <div key={step.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, animation: 'cm-inspector-in .22s ease-out' }}>
       <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-surface-modal)', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 'var(--gb-r-md)', background: meta.color, border: '1px solid var(--gb-border-default)', color: meta.fg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><MIcon size={15} /></div>
+        <div style={{ width: 32, height: 32, borderRadius: 'var(--gb-r-md)', background: step.branch ? 'var(--gb-warning-tint-medium)' : meta.color, border: '1px solid var(--gb-border-default)', color: headFg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><MIcon size={15} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: meta.fg }}>{meta.label} step</div>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: headFg }}>{headLabel} step</div>
           <Input value={step.label} onChange={(v) => upd({ label: v })} style={{ marginTop: 3, height: 28, fontSize: 14, fontWeight: 700 }} />
         </div>
         <IconBtn size="sm" variant="ghost" icon={<I.trash />} onClick={() => onDelete(step.id)} />
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px 80px', display: 'flex', flexDirection: 'column', gap: 18 }}>
-        {step.kind === 'branch' && <BranchVisualizer step={step} />}
+        {step.branch && <BranchVisualizer step={step} />}
 
         <div>
           <SectionLabel>Step type</SectionLabel>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
             {Object.entries(STEP_KIND_META).map(([k, m]) => {
               const On = k === step.kind;
               const KIcon = m.icon;
               return (
-                <button key={k} onClick={() => upd({ kind: k, branch: k === 'branch' })}
+                <button key={k} onClick={() => upd({ kind: k, templateId: '', variationWeights: {} })}
                   style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '11px 6px', background: On ? m.color : 'var(--gb-surface-2)', border: '1px solid ' + (On ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'), borderRadius: 'var(--gb-r-md)', color: On ? m.fg : 'var(--gb-text-tertiary)', cursor: 'pointer', fontFamily: 'var(--gb-font-sans)', fontSize: 11, fontWeight: 600 }}>
                   <KIcon size={16} /> {m.label}
                 </button>
               );
             })}
           </div>
-          {step.kind !== 'branch' && (
-            <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>Branch step</div>
-                <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>Stops the campaign after firing.</div>
-              </div>
-              <Switch on={step.branch} onChange={(on) => upd({ branch: on })} />
+          {/* Branch is a flag on any step — when it fires it stops the
+              campaign for that recipient and runs its child steps. */}
+          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>Branch step</div>
+              <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>Stops the campaign after firing; child steps run only if it fires.</div>
             </div>
-          )}
+            <Switch on={step.branch} tone="warning" onChange={(on) => upd({ branch: on })} />
+          </div>
         </div>
 
         <div>
           <SectionLabel>Identification</SectionLabel>
-          {(step.kind === 'email' || step.kind === 'branch') && (
-            <>
-              <Field label="Subject tag" hint="Non-personalized portion used for grouping / gating">
-                <Input value={step.subject} placeholder="e.g. Srixon Promo" onChange={(v) => upd({ subject: v })} />
-              </Field>
-              <div style={{ height: 8 }} />
-            </>
-          )}
-          <Field label="Group label" hint="Steps in the same group are mutually exclusive">
+          <Field label="Group label" hint="Steps in the same group are mutually exclusive — only the first whose conditions pass runs">
             <Input value={step.group} placeholder="(none)" mono onChange={(v) => upd({ group: v })} />
           </Field>
         </div>
 
-        {step.kind !== 'branch' && candidateBranches.length > 0 && (
+        {candidateBranches.length > 0 && (
           <div>
             <SectionLabel>Branch membership</SectionLabel>
             <Field label="Part of branch" hint="Only runs if the parent branch fires. Renders indented in the timeline.">

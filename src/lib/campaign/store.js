@@ -43,14 +43,17 @@ export function uid(p = 'id') { return `${p}-${Math.random().toString(36).slice(
 /* Legacy step.type → new step.kind. The legacy editor had delay /
    create_task / complete_task; we collapse the task variants to 'task'
    and drop standalone delays (pacing is campaign-wide now). */
+/* Branch is a FLAG (step.branch), not a kind — a branch is just an
+   email/call/task that also stops the flow + gates its children. Legacy
+   'branch' steps collapse to an email with the flag set. */
 function mapLegacyKind(type) {
   switch (type) {
-    case 'branch': return 'branch';
     case 'create_task':
     case 'complete_task':
     case 'task': return 'task';
     case 'call':
     case 'call_log': return 'call';
+    case 'branch':
     case 'email': return 'email';
     default: return 'email';
   }
@@ -78,23 +81,27 @@ function legacyConditionsToTree(conds, logic) {
 }
 
 export function newStep(kind = 'email') {
+  const isBranch = kind === 'branch';
+  const k = isBranch ? 'email' : kind;
   return {
     id: uid('s'),
-    kind,
-    label: kind === 'branch' ? 'New branch' : 'New step',
-    subject: '',
+    kind: k,                  // 'email' | 'call' | 'task'
+    label: 'New step',
     group: '',
     parentId: null,
-    branch: kind === 'branch',
+    branch: isBranch,         // a branch is any step that stops the flow + gates children
     templateId: '',           // the single template this step sends/runs
-    variationWeights: {},     // email/branch only: { varId|'__original': pct } over the template's variations
+    variationWeights: {},     // email only: { varId|'__original': pct } over the template's variations
     conditions: emptyTree(),
   };
 }
 
 function normalizeStep(raw) {
   if (!raw || typeof raw !== 'object') return newStep();
-  const kind = raw.kind || mapLegacyKind(raw.type);
+  const rawKind = raw.kind || mapLegacyKind(raw.type);
+  // Collapse the old 'branch' KIND into a flag on an email step.
+  const isBranch = raw.branch != null ? !!raw.branch : (rawKind === 'branch');
+  const kind = rawKind === 'branch' ? 'email' : rawKind;
 
   // One template per step (was a templates[]/splits[] array in the old shape).
   const templateId = raw.templateId
@@ -110,11 +117,10 @@ function normalizeStep(raw) {
   return {
     id: raw.id || uid('s'),
     kind,
-    label: raw.label || (kind === 'branch' ? 'Branch' : 'Step'),
-    subject: raw.subject || '',
+    label: raw.label || 'Step',
     group: raw.group || raw.stepGroup || '',
     parentId: raw.parentId || null,
-    branch: raw.branch != null ? !!raw.branch : kind === 'branch',
+    branch: isBranch,
     templateId,
     variationWeights,
     conditions,
