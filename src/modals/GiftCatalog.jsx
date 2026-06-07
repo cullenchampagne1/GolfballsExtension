@@ -916,6 +916,217 @@ function resolveSavedEntry(entry) {
   return { entries, units, total };
 }
 
+/* ── Margin / cost model ──────────────────────────────────────────────────────
+   PLACEHOLDER until real wholesale costs land: every item is assumed at a flat
+   40% margin (cost = 60% of the sell price). When real per-product cost arrives,
+   replace ONLY unitCostOf() (e.g. look the cost up by product/SKU) — marginReport
+   and the whole breakdown UI are cost-source-agnostic and need no other change. */
+const COST_RATIO = 0.60;            // assumed cost as a fraction of sell price → 40% margin
+const ASSUMED_MARGIN = 1 - COST_RATIO;
+const unitCostOf = (_product, unitPrice) => Math.round((unitPrice || 0) * COST_RATIO * 100) / 100;
+
+/* Per-line + blended margin for resolved entries
+   ([{ product, decoration, splits:[{qty,price}] }]). Setup/decoration fees fold
+   in here later (they're already in each split's price for the cart). */
+function marginReport(entries) {
+  let rev = 0, cost = 0, units = 0;
+  const lines = (entries || []).map((e) => {
+    let lr = 0, lc = 0, u = 0;
+    (e.splits || []).forEach((s) => { const q = s.qty || 0, p = s.price || 0; lr += q * p; lc += q * unitCostOf(e.product, p); u += q; });
+    rev += lr; cost += lc; units += u;
+    return { ...e, units: u, lineRev: lr, lineCost: lc, profit: lr - lc, margin: lr ? (lr - lc) / lr : 0 };
+  });
+  return { lines, units, count: lines.length, rev, cost, profit: rev - cost, margin: rev ? (rev - cost) / rev : 0 };
+}
+
+const marginTone = (m) => (m >= 0.45 ? 'success' : m >= 0.32 ? 'warning' : 'error');
+const TONE_FG = { success: 'var(--gb-success-fg, #2e9e5b)', warning: 'var(--gb-warning-fg, #b6830a)', error: 'var(--gb-danger, #e5484d)' };
+const TONE_BG = { success: 'var(--gb-success-tint, rgba(46,158,91,.12))', warning: 'var(--gb-warning-tint, rgba(182,131,10,.12))', error: 'var(--gb-danger-tint, rgba(229,72,77,.12))' };
+const TONE_BD = { success: 'var(--gb-success-border, rgba(46,158,91,.32))', warning: 'var(--gb-warning-border, rgba(182,131,10,.32))', error: 'var(--gb-danger-tint-border, rgba(229,72,77,.32))' };
+const pctOf = (n) => (n * 100).toFixed(1) + '%';
+
+function MarginBadge({ m, lg }) {
+  const t = marginTone(m);
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: lg ? '3px 9px' : '2px 7px', borderRadius: 'var(--gb-r-sm)', background: TONE_BG[t], border: '1px solid ' + TONE_BD[t], color: TONE_FG[t], fontSize: lg ? 12.5 : 10.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', whiteSpace: 'nowrap' }}>{pctOf(m)}</span>
+  );
+}
+
+function StatTile({ label, value, sub, accent, tone }) {
+  return (
+    <div style={{ flex: 1, minWidth: 0, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: accent ? 'var(--gb-brand-tint-soft)' : 'var(--gb-fill-subtle)', border: '1px solid ' + (accent ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-subtle)') }}>
+      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', marginBottom: 4 }}>{label}</div>
+      <div style={{ fontSize: 19, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', letterSpacing: -.4, color: tone || (accent ? 'var(--gb-brand-label)' : 'var(--gb-text-primary)') }}>{value}</div>
+      {sub && <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
+    </div>
+  );
+}
+
+function SectionTitle({ icon, children, right }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 9 }}>
+      {icon && <span style={{ color: 'var(--gb-brand-label)', display: 'flex' }}>{React.cloneElement(icon, { size: 13 })}</span>}
+      <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-secondary)' }}>{children}</span>
+      <div style={{ flex: 1 }} />
+      {right}
+    </div>
+  );
+}
+
+function SummaryRow({ label, value, strong, tone, badge }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', fontSize: strong ? 12.5 : 11.5, padding: strong ? '3px 0' : '2px 0' }}>
+      <span style={{ color: strong ? 'var(--gb-text-secondary)' : 'var(--gb-text-tertiary)', fontWeight: strong ? 700 : 500 }}>{label}</span>
+      <div style={{ flex: 1 }} />
+      {badge}
+      {value != null && <span style={{ fontFamily: 'var(--gb-font-mono)', fontWeight: strong ? 800 : 600, color: tone || (strong ? 'var(--gb-text-primary)' : 'var(--gb-text-secondary)'), marginLeft: 8 }}>{value}</span>}
+    </div>
+  );
+}
+
+/* One product row in the line-items + margin table. */
+function MarginLineRow({ e, first }) {
+  const chips = decoImprints(e.decoration);
+  return (
+    <div style={{ padding: '9px 12px', borderTop: first ? 'none' : '1px solid var(--gb-border-subtle)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <MiniThumb src={e.product.img} size={36} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{e.product.brand}</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.product.title}</div>
+        </div>
+        <span style={{ width: 50, textAlign: 'right', fontSize: 11.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-secondary)' }}>{e.units}</span>
+        <span style={{ width: 80, textAlign: 'right', fontSize: 12.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)' }}>{money(e.lineRev)}</span>
+        <span style={{ width: 74, textAlign: 'right', fontSize: 11.5, fontWeight: 600, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)' }}>{money(e.lineCost)}</span>
+        <span style={{ width: 56, display: 'flex', justifyContent: 'flex-end' }}><MarginBadge m={e.margin} /></span>
+      </div>
+      {(e.splits.length > 1 || chips.length > 0) && (
+        <div style={{ marginTop: 7, paddingLeft: 46, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {e.splits.length > 1 && e.splits.map((s, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', fontSize: 10.5, color: 'var(--gb-text-tertiary)', fontFamily: 'var(--gb-font-mono)' }}>
+              <span>{s.qty} × {usd(s.price)}</span>
+              <span style={{ color: 'var(--gb-text-ghost)', margin: '0 7px' }}>·</span>
+              <span style={{ color: 'var(--gb-text-muted)' }}>cost {usd(unitCostOf(e.product, s.price))}</span>
+              <div style={{ flex: 1 }} />
+              <span style={{ color: 'var(--gb-text-secondary)', fontWeight: 600 }}>{money((s.qty || 0) * (s.price || 0))}</span>
+            </div>
+          ))}
+          {chips.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: e.splits.length > 1 ? 3 : 0 }}>
+              {chips.map((c) => (
+                <span key={c.slot} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 9, fontWeight: 700 }}>{c.label}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* The proposal-breakdown drill-in: revenue, cost, gross profit, blended margin,
+   the line items + per-line margin, the imprints, and a margin summary. Opened
+   by clicking a saved card or the current-proposal card. */
+function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose, onLoad, onOpenProposal }) {
+  const M = useMemo(() => marginReport(entries), [entries]);
+  const decorated = M.lines.filter((l) => decoImprints(l.decoration).length > 0);
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24 }}
+      transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+      style={{ position: 'absolute', inset: 0, zIndex: 25, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-canvas)' }}>
+      {/* header */}
+      <div style={{ padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 11, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
+        <IconBtn size="sm" variant="ghost" icon={<ArrowL />} onClick={onClose} />
+        <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {current ? <I.card size={16} /> : <I.bookmark size={16} />}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+          {subtitle && <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subtitle}</div>}
+        </div>
+        {badge}
+        <IconBtn size="sm" icon={<I.close />} onClick={onClose} />
+      </div>
+
+      {/* stat strip */}
+      <div style={{ display: 'flex', gap: 10, padding: '14px 16px 6px', flexShrink: 0 }}>
+        <StatTile label="Revenue" value={money(M.rev)} sub={`${M.units} units · ${M.count} ${M.count === 1 ? 'item' : 'items'}`} />
+        <StatTile label="Est. cost" value={money(M.cost)} sub="assumed" />
+        <StatTile label="Gross profit" value={money(M.profit)} accent />
+        <StatTile label="Blended margin" value={pctOf(M.margin)} tone={TONE_FG[marginTone(M.margin)]} sub="all-in" />
+      </div>
+
+      {/* body */}
+      <div className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', padding: '12px 16px 16px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div>
+          <SectionTitle icon={<I.card />}>Line items &amp; margin</SectionTitle>
+          {M.lines.length === 0 ? (
+            <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', fontStyle: 'italic', padding: '8px 2px' }}>No items yet.</div>
+          ) : (
+            <div style={{ border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', background: 'var(--gb-fill-subtle)', borderBottom: '1px solid var(--gb-border-subtle)', fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>
+                <span style={{ flex: 1 }}>Product</span>
+                <span style={{ width: 50, textAlign: 'right' }}>Qty</span>
+                <span style={{ width: 80, textAlign: 'right' }}>Revenue</span>
+                <span style={{ width: 74, textAlign: 'right' }}>Cost</span>
+                <span style={{ width: 56, textAlign: 'right' }}>Margin</span>
+              </div>
+              {M.lines.map((e, i) => <MarginLineRow key={e.id || i} e={e} first={i === 0} />)}
+            </div>
+          )}
+        </div>
+
+        {decorated.length > 0 && (
+          <div>
+            <SectionTitle icon={<Gift />}>Customization</SectionTitle>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {decorated.map((e, i) => (
+                <div key={e.id || i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)' }}>
+                  <div style={{ minWidth: 0, flex: '0 0 42%', fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.product.title}</div>
+                  <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {decoImprints(e.decoration).map((c) => (
+                      <span key={c.slot} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 9.5, fontWeight: 700 }}>{c.label}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div>
+          <SectionTitle icon={<Layers />}>Margin summary</SectionTitle>
+          <div style={{ borderRadius: 'var(--gb-r-md)', border: '1px solid var(--gb-border-subtle)', padding: '11px 14px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <SummaryRow label={`Revenue · ${M.units} units`} value={money(M.rev)} />
+            <SummaryRow label={`Est. cost · ${pctOf(COST_RATIO)} of sell`} value={'−' + money(M.cost)} tone="var(--gb-text-muted)" />
+            <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '7px 0' }} />
+            <SummaryRow label="Gross profit" value={money(M.profit)} strong tone="var(--gb-brand-label)" />
+            <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '7px 0' }} />
+            <SummaryRow label="Blended margin" strong badge={<MarginBadge m={M.margin} lg />} />
+          </div>
+        </div>
+      </div>
+
+      {/* footer */}
+      <div style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--gb-fill-inverse-strong)', borderTop: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
+        <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <I.alert size={12} /> Costs &amp; margins are estimates ({pctOf(ASSUMED_MARGIN)} assumed) for quoting.
+        </span>
+        <div style={{ flex: 1 }} />
+        {current ? (
+          <Btn variant="primary" size="md" icon={<I.card />} onClick={onOpenProposal}>Open proposal</Btn>
+        ) : (
+          <>
+            <Btn variant="secondary" size="md" onClick={onClose}>Back</Btn>
+            <Btn variant="primary" size="md" icon={loaded ? <I.check /> : <I.plus />} onClick={onLoad}>{loaded ? 'Loaded — open proposal' : 'Load into proposal'}</Btn>
+          </>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
 function ThumbStack({ entries, max = 4, size = 44 }) {
   const shown = entries.slice(0, max);
   const extra = entries.length - shown.length;
@@ -945,7 +1156,7 @@ function CardIconBtn({ icon, title, danger, active, onClick }) {
   );
 }
 
-function SavedCard({ item, loaded, pos, colW, onMeasure, onLoad, onCopy, onDelete }) {
+function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onCopy, onDelete }) {
   const [hover, setHover] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copying, setCopying] = useState(false);
@@ -985,7 +1196,8 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onLoad, onCopy, onDelet
       exit={{ opacity: 0, scale: .9 }}
       transition={{ x: { type: 'spring', stiffness: 520, damping: 44, mass: .9 }, y: { type: 'spring', stiffness: 520, damping: 44, mass: .9 }, opacity: { duration: .18 }, scale: { duration: .18 } }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ position: 'absolute', top: 0, left: 0, width: colW, display: 'flex', flexDirection: 'column', gap: 11, padding: 13, boxSizing: 'border-box', background: 'var(--gb-surface-1)', border: '1px solid ' + (loaded ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'), borderRadius: 'var(--gb-r-lg)', boxShadow: hover ? '0 2px 7px rgba(0,0,0,.07)' : 'none', transition: 'border-color var(--gb-anim), box-shadow var(--gb-anim)' }}>
+      onClick={() => onOpen && onOpen(item)} title="View margin breakdown"
+      style={{ position: 'absolute', top: 0, left: 0, width: colW, display: 'flex', flexDirection: 'column', gap: 11, padding: 13, boxSizing: 'border-box', cursor: 'pointer', background: 'var(--gb-surface-1)', border: '1px solid ' + (loaded ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'), borderRadius: 'var(--gb-r-lg)', boxShadow: hover ? '0 2px 7px rgba(0,0,0,.07)' : 'none', transition: 'border-color var(--gb-anim), box-shadow var(--gb-anim)' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <ThumbStack entries={r.entries} />
         <div style={{ flex: 1 }} />
@@ -1013,7 +1225,10 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onLoad, onCopy, onDelet
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 14, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)', letterSpacing: -.4 }}>{money(r.total)}</span>
       </div>
-      <div style={{ display: 'flex', gap: 7 }}>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600, color: hover ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)', transition: 'color var(--gb-anim)' }}>
+        <I.eye size={12} /> View margin breakdown
+      </div>
+      <div style={{ display: 'flex', gap: 7 }} onClick={(e) => e.stopPropagation()}>
         <button onClick={(e) => { e.stopPropagation(); onLoad(item); }} title="Load these items into the proposal"
           style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 30, borderRadius: 'var(--gb-r-md)', cursor: 'pointer', background: hover ? 'var(--gb-brand-tint-medium)' : 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 11.5, fontWeight: 700, fontFamily: 'inherit', transition: 'background var(--gb-anim)' }}>
           <I.plus size={13} /> Load into proposal
@@ -1045,7 +1260,34 @@ function computeMasonry(items, width, heights) {
   return { positions, height: Math.max(0, Math.max(...colH, 0) - MASONRY_GAP), colW, cols };
 }
 
-function SavedGallery({ items, loadedId, onLoad, onCopy, onDelete }) {
+/* A pinned banner for the live, unsaved working proposal — click to inspect its
+   margin in the same breakdown panel. */
+function CurrentProposalCard({ entries, onOpen }) {
+  const [hover, setHover] = useState(false);
+  const M = useMemo(() => marginReport(entries), [entries]);
+  return (
+    <div onClick={onOpen} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} title="View margin breakdown"
+      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 13, marginBottom: 14, cursor: 'pointer', background: 'var(--gb-brand-tint-soft)', border: '1px dashed var(--gb-brand-tint-border)', borderRadius: 'var(--gb-r-lg)', boxShadow: hover ? '0 2px 7px rgba(0,0,0,.07)' : 'none', transition: 'box-shadow var(--gb-anim)' }}>
+      <ThumbStack entries={M.lines} size={42} />
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Current proposal</span>
+          <Tag tone="brand" size="sm" icon={<Dot tone="brand" size={5} />}>Unsaved</Tag>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--gb-text-tertiary)', marginTop: 3, fontWeight: 500 }}>{M.count} {M.count === 1 ? 'item' : 'items'} · {M.units} units · live working set</div>
+      </div>
+      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+        <div style={{ fontSize: 16, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)', letterSpacing: -.4 }}>{money(M.rev)}</div>
+        <div style={{ marginTop: 4, display: 'flex', justifyContent: 'flex-end' }}><MarginBadge m={M.margin} /></div>
+      </div>
+      <div style={{ width: 36, height: 36, borderRadius: 'var(--gb-r-md)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: hover ? 'var(--gb-brand-label)' : 'var(--gb-brand-tint-medium)', color: hover ? 'var(--gb-surface-deep)' : 'var(--gb-brand-label)', border: '1px solid var(--gb-brand-tint-border)', transition: 'all var(--gb-anim)' }}>
+        <I.chevr size={18} />
+      </div>
+    </div>
+  );
+}
+
+function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad, onCopy, onDelete }) {
   const scrollRef = useRef(null);
   const [width, setWidth] = useState(0);
   const [heights, setHeights] = useState({});
@@ -1079,25 +1321,30 @@ function SavedGallery({ items, loadedId, onLoad, onCopy, onDelete }) {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Saved Proposals</div>
-          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, fontWeight: 500 }}>{items.length} saved · click to load one back into a proposal{items.length ? ', or copy it as a cart command' : ''}</div>
+          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, fontWeight: 500 }}>Click any card to view its margin breakdown &amp; order items{items.length ? ' · or load / copy a draft' : ''}</div>
         </div>
       </div>
       <div ref={scrollRef} className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+        {current && current.length > 0 && <CurrentProposalCard entries={current} onOpen={onOpenCurrent} />}
         {items.length === 0 ? (
-          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--gb-text-muted)' }}>
-            <div style={{ width: 48, height: 48, borderRadius: 'var(--gb-r-lg)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <I.bookmark size={20} />
+          (current && current.length > 0) ? (
+            <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>Saved drafts appear here — hit “Save draft” to keep one.</div>
+          ) : (
+            <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--gb-text-muted)' }}>
+              <div style={{ width: 48, height: 48, borderRadius: 'var(--gb-r-lg)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <I.bookmark size={20} />
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>No saved proposals yet</div>
+              <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', textAlign: 'center', maxWidth: 240, lineHeight: 1.5 }}>Build a proposal and hit “Save draft” to keep it here for later.</div>
             </div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>No saved proposals yet</div>
-            <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', textAlign: 'center', maxWidth: 240, lineHeight: 1.5 }}>Build a proposal and hit “Save draft” to keep it here for later.</div>
-          </div>
+          )
         ) : (
           <div style={{ position: 'relative', width: '100%', height }}>
             <AnimatePresence>
               {items.map((it) => (
                 <SavedCard key={it.id} item={it} loaded={loadedId === it.id}
                   pos={positions[it.id] || { x: 0, y: 0 }} colW={colW} onMeasure={setHeight}
-                  onLoad={onLoad} onCopy={onCopy} onDelete={onDelete} />
+                  onOpen={onOpen} onLoad={onLoad} onCopy={onCopy} onDelete={onDelete} />
               ))}
             </AnimatePresence>
           </div>
@@ -1282,6 +1529,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const [special, setSpecial] = useState(null); // 'sale' | 'logo' | null
   const [proposal, setProposal] = useState([]);
   const [proposalOpen, setProposalOpen] = useState(false);
+  const [detail, setDetail] = useState(null);   // proposal-breakdown drill-in: { kind:'saved'|'current', item? }
   // ── Verified DISPLAY pricing ───────────────────────────────────────────────
   // The catalog only carries the custom-logo ladder, so a monogram / embroidery /
   // tee line can't be priced from it. Pull each DECORATED line's raw product page
@@ -1327,6 +1575,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // Saved Proposals library (chrome.storage). `view` swaps the catalog grid
   // for the gallery; `loadedId` flags the last draft copied into the proposal.
   const [view, setView] = useState('catalog');        // 'catalog' | 'proposals'
+  useEffect(() => { if (view !== 'proposals') setDetail(null); }, [view]);  // close breakdown on view change
   const [savedProposals, setSavedProposals] = useState([]);
   const [loadedId, setLoadedId] = useState(null);
   useEffect(() => {
@@ -1657,6 +1906,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           {view === 'proposals' ? (
             <motion.div key="gallery" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <SavedGallery items={savedProposals} loadedId={loadedId}
+              current={proposal} onOpen={(item) => setDetail({ kind: 'saved', item })} onOpenCurrent={() => setDetail({ kind: 'current' })}
               onLoad={loadSaved} onCopy={copySaved} onDelete={deleteSaved} />
           </motion.div>
           ) : (
@@ -1712,10 +1962,33 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           )}
           </AnimatePresence>
 
+          {/* Proposal breakdown drill-in — margin + order items. Overlays the
+              gallery when a saved card or the current-proposal card is clicked. */}
+          <AnimatePresence>
+            {view === 'proposals' && detail && (() => {
+              const close = () => setDetail(null);
+              if (detail.kind === 'current') {
+                return (
+                  <SavedDetail key="bd-current" current title="Current proposal" subtitle="Live working set · unsaved"
+                    badge={<Tag tone="brand" size="sm" icon={<Dot tone="brand" size={5} />}>Unsaved</Tag>}
+                    entries={proposal} onClose={close}
+                    onOpenProposal={() => { close(); setProposalOpen(true); }} />
+                );
+              }
+              const it = detail.item; const r = resolveSavedEntry(it);
+              return (
+                <SavedDetail key={'bd-' + it.id} title={it.name} subtitle={`${fmtSavedDate(it.date)} · ${r.units} units`}
+                  badge={<Tag tone="neutral" size="sm" icon={<I.bookmark size={9} />}>Draft</Tag>}
+                  entries={r.entries} loaded={loadedId === it.id} onClose={close}
+                  onLoad={() => { close(); loadSaved(it); }} />
+              );
+            })()}
+          </AnimatePresence>
+
           {/* Item details stay an overlay INSIDE the catalog card, so they
               coexist with the proposal side card (both visible at once). */}
           <AnimatePresence>
-            {selected && (
+            {selected && view !== 'proposals' && (
               <DetailPanel key="detail" p={selected} inProposal={inProposal(selected.id)} onAdd={addToProposal}
                 onOpenProposal={() => { setSelected(null); setProposalOpen(true); }} onClose={() => setSelected(null)} />
             )}
