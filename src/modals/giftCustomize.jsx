@@ -7,6 +7,7 @@ import { useDevSetting } from '../lib/devSettings.js';
 import { PREVIEW_GRID, GlassIconBtn, DropperIcon, ResetIcon, SwapPopover, recolorImage, samplePixel } from '../ui/components/ImageColorSwap.jsx';
 import { loadGiftSetOptions } from '../lib/giftSetsData.js';
 import { giftSetSizeLabel } from '../lib/giftSets.js';
+import { giftSetLayout } from '../lib/giftSetLayout.js';
 import { giftSetPreviewUrl } from '../lib/cartSerializer.js';
 
 /* ───────────────────────────────────────────────────────────────
@@ -1899,11 +1900,20 @@ function LivePreview3D({ shape = 'ball', p }) {
   const bartenderScale = Number(useDevSetting('giftCatalog.bartenderPreviewScale') ?? 1.1) || 1.1;
   const catalogScale = Number(useDevSetting('giftCatalog.previewScale') ?? 2) || 2;
   const previewScale = isChip ? chipScale : isDivot ? divotScale : isBartender ? bartenderScale : catalogScale;
+  // Gift set: when a set is picked on the ball AND there's a logo to print, upgrade
+  // the ball preview to the assembled box (balls + chips + tees in their slots).
+  // The ball `tint` (product colorway) recolors the balls; the chip clay recolors
+  // the chips; tees stay white. Falls back to the plain ball when no set / no logo.
+  const giftSetScale = Number(useDevSetting('giftCatalog.giftSetPreviewScale') ?? 1.0) || 1.0;
+  const giftSetOpt = (ctx.data.__giftSet && ctx.data.__giftSet.option) || null;
+  const giftLayout = (shape === 'ball' && giftSetOpt) ? giftSetLayout(giftSetOpt) : null;
+  const isGiftSet = !!giftLayout && !!decalUrl;
+  const effShape = isGiftSet ? 'giftset' : shape;
   // Slow auto-spin so both poles/sides (dual-pole imprints) are visible hands-free.
   const [spin, setSpin] = useState(false);
   // Chip + divot are products worth seeing blank, so they always mount; the ball
   // is only useful once there's a print to show.
-  const showViewer = flat ? true : !!(decalUrl || secondUrl);
+  const showViewer = isGiftSet ? true : flat ? true : !!(decalUrl || secondUrl);
   const supported = ['Monogram', 'Personalized', 'Icons', 'Custom Logo', 'Photo'].includes(ctx.sel);
   // Monogram fetches its art — distinguish "needs more initials" from "fetching".
   const monoStyle = (ctx.data.Monogram || {}).style;
@@ -1926,7 +1936,11 @@ function LivePreview3D({ shape = 'ball', p }) {
       <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Live preview</div>
       <div style={{ position: 'relative', width: '100%', height: 200, borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)' }}>
         {showViewer ? (
-          <GolfballViewer minimal shape={shape} tint={tint} initialScale={previewScale} autoRotate={spin} decalDataUrl={decalUrl} secondDecalDataUrl={secondUrl} />
+          <GolfballViewer minimal shape={effShape} tint={tint}
+            chipTint={isGiftSet ? chipClayHex(ctx.data) : undefined}
+            giftSet={isGiftSet ? giftLayout : undefined}
+            initialScale={isGiftSet ? giftSetScale : previewScale}
+            autoRotate={spin} decalDataUrl={decalUrl} secondDecalDataUrl={isGiftSet ? undefined : secondUrl} />
         ) : (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, textAlign: 'center' }}>
             <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', lineHeight: 1.4 }}>{emptyMsg}</div>

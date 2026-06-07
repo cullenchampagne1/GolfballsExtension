@@ -162,7 +162,7 @@ export const SCENES = [
   { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'assets/moonlit_golf_4k.exr',     icon: 'moon' },
 ];
 
-export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, secondDecalDataUrl, onError, onSceneChange, onThrowChange, minimal = false, initialScale, autoRotate = false, shape = 'ball', tint }, ref) {
+export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, secondDecalDataUrl, onError, onSceneChange, onThrowChange, minimal = false, initialScale, autoRotate = false, shape = 'ball', tint, chipTint, giftSet }, ref) {
   const containerRef = useRef(null);
   // Imperative snapshot handle — set by the WebGL effect once the
   // scene is ready. Parent calls snapshotRef.current() to capture a
@@ -327,6 +327,32 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
     }
   }, [tint, shape]);
 
+  // Gift-set live retint — the assembled box holds arrays of separate ball
+  // materials + one shared chip clay color. `tint` recolors every ball, `chipTint`
+  // the chip clay, in place (no rebuild) so color drags stay smooth.
+  const giftBallMatsRef = useRef(null);
+  const giftClayRef = useRef(null);
+  useEffect(() => {
+    if (shape !== 'giftset') return;
+    if (giftBallMatsRef.current) giftBallMatsRef.current.forEach((m) => m && m.color.set(tint || 0xf6f6f6));
+    if (giftClayRef.current) giftClayRef.current.set(chipTint || '#1c1c1c');
+  }, [tint, chipTint, shape]);
+
+  // Gift-set view tilt — the 3/4 top-down angle the box is viewed at. Held on the
+  // inner "view" group (so the auto-spin around vertical stays a clean turntable)
+  // and live-tunable from dev settings without a rebuild.
+  const giftViewRef = useRef(null);
+  const giftRotX = Number(dev['giftCatalog.giftSetPreviewRotX'] ?? -22);
+  const giftRotY = Number(dev['giftCatalog.giftSetPreviewRotY'] ?? 0);
+  // Stable rebuild key for the gift-set assembly — re-runs the scene-build effect
+  // only when the SET's structure changes (box / item counts), not on every
+  // re-render of the (freshly-built) giftSet object. Logo + colors update without it.
+  const giftKey = giftSet ? `${giftSet.boxModel}:${(giftSet.ballSlots || []).length}:${(giftSet.chipSlots || []).length}:${(giftSet.teeInstances || []).length}` : '';
+  useEffect(() => {
+    if (shape !== 'giftset' || !giftViewRef.current) return;
+    giftViewRef.current.rotation.set((giftRotX * Math.PI) / 180, (giftRotY * Math.PI) / 180, 0);
+  }, [giftRotX, giftRotY, shape]);
+
   // Live scale — `initialScale` (e.g. the catalog's chip/ball preview-scale dev
   // setting) is otherwise read once into initialBallRef on mount. Mirror changes
   // into the live render state so tuning the dev slider reframes the model
@@ -407,6 +433,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // disc, decal projected onto the disc (located from the mask).
         const isDivot = shape === 'divot' || shape === 'bartender';
         const flat = isChip || isDivot;   // flat vertex-colored markers (face-on, local decal)
+        const isGiftSet = shape === 'giftset';
         if (disposed) return;
         const container = containerRef.current;
         if (!container) return;
@@ -889,6 +916,234 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             applyLighting();
           }
         };
+
+        // ── Gift set ────────────────────────────────────────────
+        // A self-contained assembly: the presentation box + customized ball /
+        // chip / tee instances dropped into their measured slots. Runs its OWN
+        // small render loop + handlers and returns early, so it never touches the
+        // single-item ball / physics / walls / water machinery below — those stay
+        // byte-identical, so the ball/chip/divot/bartender previews can't regress.
+        if (isGiftSet && giftSet) {
+          const [boxRes, ballRes, chipRes, teeRes] = await Promise.all([
+            loadThreeAndModel('giftbox'), loadThreeAndModel('ball'),
+            loadThreeAndModel('chip'), loadThreeAndModel('tee'),
+          ]);
+          if (disposed) return;
+
+          // Center a cloned geometry on its own origin; report radius + half-extents.
+          const centeredGeo = (srcGeo) => {
+            const g = srcGeo.clone();
+            g.computeBoundingBox();
+            const bb = g.boundingBox;
+            g.translate(-(bb.min.x + bb.max.x) / 2, -(bb.min.y + bb.max.y) / 2, -(bb.min.z + bb.max.z) / 2);
+            g.computeBoundingBox(); g.computeBoundingSphere();
+            const b = g.boundingBox;
+            return {
+              geo: g, radius: g.boundingSphere.radius,
+              hx: (b.max.x - b.min.x) / 2, hy: (b.max.y - b.min.y) / 2, hz: (b.max.z - b.min.z) / 2,
+            };
+          };
+
+          // One shared white-knockout logo texture for every instance (build once).
+          let logoTex = null;
+          if (decalDataUrl) {
+            const ko = await knockoutWhiteToCanvas(decalDataUrl);
+            if (disposed) return;
+            if (ko) {
+              logoTex = new THREE.CanvasTexture(ko);
+            } else {
+              const tl = new THREE.TextureLoader();
+              logoTex = await new Promise((res) => tl.load(decalDataUrl, res, undefined, () => res(null)));
+              if (disposed) return;
+            }
+            if (logoTex) {
+              logoTex.colorSpace = THREE.SRGBColorSpace;
+              logoTex.wrapS = THREE.ClampToEdgeWrapping; logoTex.wrapT = THREE.ClampToEdgeWrapping;
+              logoTex.minFilter = THREE.LinearFilter; logoTex.generateMipmaps = false;
+              logoTex.needsUpdate = true;
+              objectsToDispose.push(logoTex);
+            }
+          }
+          const decalMaterial = () => {
+            const opts = { map: logoTex, transparent: true, depthTest: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 };
+            return renderer.capabilities.isWebGL2
+              ? new THREE.MeshStandardMaterial({ ...opts, roughness: 0.5, metalness: 0 })
+              : new THREE.MeshBasicMaterial(opts);
+          };
+          // Project the logo flat onto an instance's +Z face, parented as a CHILD
+          // so it rides the instance's slot transform. Built while the instance is
+          // still at identity (matrixWorld == identity) → decal geo in local units.
+          const addDecal = (instance, size, posZ, depth) => {
+            if (!logoTex) return;
+            const geo = new DecalGeometry(instance, new THREE.Vector3(0, 0, posZ), new THREE.Euler(0, 0, 0), new THREE.Vector3(size, size, depth));
+            const dm = new THREE.Mesh(geo, decalMaterial());
+            dm.position.z += posZ * 0.06;   // hair off the surface (depth-win on ANGLE)
+            instance.add(dm);
+            objectsToDispose.push(geo, dm.material);
+          };
+
+          const contentGroup = new THREE.Group();
+
+          // Box (foam + cut slots) — one dark material (foam/box not split here).
+          const boxMat = new THREE.MeshStandardMaterial({ color: 0x1b1c22, roughness: 0.5, metalness: 0.0, emissive: 0x0b0c10, emissiveIntensity: 0.55 });
+          const boxMesh = new THREE.Mesh(boxRes.model.geometry.clone(), boxMat);
+          contentGroup.add(boxMesh);
+          objectsToDispose.push(boxMat, boxMesh.geometry);
+          ballMesh = boxMesh;   // representative handle for downstream refs/diag
+
+          // Balls — each its own material so `tint` recolors all via the array ref.
+          const ballMats = [];
+          const ballCG = centeredGeo(ballRes.model.geometry);
+          const ballColor = tint ? new THREE.Color(tint) : new THREE.Color(0xf6f6f6);
+          for (const s of giftSet.ballSlots) {
+            const mat = new THREE.MeshStandardMaterial({ color: ballColor.clone(), emissive: 0x101418, emissiveIntensity: 0.4, roughness: 0.28, metalness: 0.02 });
+            const m = new THREE.Mesh(ballCG.geo.clone(), mat);
+            addDecal(m, ballCG.radius * 0.62, ballCG.radius * 0.999, ballCG.radius * 2);
+            m.scale.setScalar(giftSet.ballRadius / ballCG.radius);
+            m.position.set(s.x, s.y, s.z);
+            contentGroup.add(m); ballMats.push(mat);
+            objectsToDispose.push(mat, m.geometry);
+          }
+          giftBallMatsRef.current = ballMats;
+
+          // Chips — shared clay color (vertex-mask recolor shader), one logo each.
+          const chipClay = new THREE.Color(chipTint || '#1c1c1c');
+          giftClayRef.current = chipClay;
+          const chipCG = centeredGeo(chipRes.model.geometry);   // disc-axis +Z after the loader's rotateX
+          for (const s of giftSet.chipSlots) {
+            const mat = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, emissive: 0x0a0a0a, emissiveIntensity: 0.25, roughness: 0.55, metalness: 0.0 });
+            mat.onBeforeCompile = (sh) => {
+              sh.uniforms.uClay = { value: chipClay };
+              sh.fragmentShader = 'uniform vec3 uClay;\n' + sh.fragmentShader.replace('#include <color_fragment>', [
+                '#ifdef USE_COLOR',
+                '  float _pat = smoothstep(0.22, 0.6, max(vColor.r, max(vColor.g, vColor.b)));',
+                '  diffuseColor.rgb *= mix(uClay, vec3(1.0), _pat);',
+                '#endif',
+              ].join('\n'));
+            };
+            const m = new THREE.Mesh(chipCG.geo.clone(), mat);
+            addDecal(m, chipCG.hx * 0.85, chipCG.hz * 1.2, chipCG.hz * 1.8);
+            m.scale.setScalar(giftSet.chipRadius / chipCG.hx);
+            m.position.set(s.x, s.y, s.z);
+            contentGroup.add(m);
+            objectsToDispose.push(mat, m.geometry);
+          }
+
+          // Tees — plain white, no print; exact baked pile transforms. Tee + box
+          // both exported at Blender scale, so the tee needs no rescale (scale 1).
+          if (giftSet.teeInstances && giftSet.teeInstances.length) {
+            const teeCG = centeredGeo(teeRes.model.geometry);
+            const teeMat = new THREE.MeshStandardMaterial({ color: 0xe9e9ec, roughness: 0.5, metalness: 0.0, emissive: 0x101012, emissiveIntensity: 0.25 });
+            objectsToDispose.push(teeMat);
+            for (const t of giftSet.teeInstances) {
+              const m = new THREE.Mesh(teeCG.geo.clone(), teeMat);
+              m.rotation.set(t.rx, t.ry, t.rz);
+              m.position.set(t.x, t.y, t.z);
+              contentGroup.add(m);
+              objectsToDispose.push(m.geometry);
+            }
+          }
+
+          // Recenter the assembly on its bounding center and fit it to the camera
+          // framing (single-ball preview = radius 100 → diameter 200; box a touch
+          // under that). `fit` rides the view group so the loop's ballGroup.scale
+          // (zoom) and ballGroup.rotation.y (turntable) compose cleanly on top.
+          contentGroup.updateMatrixWorld(true);
+          const gsBox = new THREE.Box3().setFromObject(contentGroup);
+          const gsCtr = new THREE.Vector3(); gsBox.getCenter(gsCtr);
+          const gsSize = new THREE.Vector3(); gsBox.getSize(gsSize);
+          const gsFit = 185 / Math.max(gsSize.x, gsSize.y, gsSize.z);
+          contentGroup.position.set(-gsCtr.x, -gsCtr.y, -gsCtr.z);
+
+          const viewGroup = new THREE.Group();
+          viewGroup.add(contentGroup);
+          viewGroup.scale.setScalar(gsFit);
+          viewGroup.rotation.set((giftRotX * Math.PI) / 180, (giftRotY * Math.PI) / 180, 0);
+          giftViewRef.current = viewGroup;
+
+          ballGroup = new THREE.Group();
+          ballGroup.add(viewGroup);
+          ballGroup.rotation.set(0, 0, 0);
+          scene.add(ballGroup);
+          renderStateRef.current = state;
+          tintMatRef.current = null; tintClayRef.current = null;
+
+          // ── Render loop (zoom + turntable + render + debug HUD) ──
+          const gsRad2deg = (r) => (r * 180) / Math.PI;
+          let gsLastDebugTs = 0;
+          const gsRender = () => {
+            if (disposed) return;
+            ballGroup.scale.setScalar(state.scale);
+            if (autoRotateRef.current) ballGroup.rotation.y += spinSpeedRef.current;
+            renderer.render(scene, camera);
+            const now = performance.now();
+            if (debugEnabledRef.current && now - gsLastDebugTs > 100) {
+              gsLastDebugTs = now;
+              setDebug({ scale: state.scale, rotDeg: [gsRad2deg(viewGroup.rotation.x), gsRad2deg(viewGroup.rotation.y), gsRad2deg(ballGroup.rotation.y)], printAreaScale: 0 });
+            }
+            animationId = requestAnimationFrame(gsRender);
+          };
+          gsRender();
+
+          // ── Input: wheel zoom + drag to inspect (no physics) ──
+          const gsOnWheel = (e) => {
+            e.preventDefault();
+            const factor = e.deltaY < 0 ? 1.08 : 1 / 1.08;
+            state.scale = Math.max(SCALE_MIN, Math.min(SCALE_MAX, state.scale * factor));
+          };
+          let gsDragging = false, gsLastX = 0, gsLastY = 0;
+          const gsOnPDown = (e) => { if (e.button !== 0) return; gsDragging = true; gsLastX = e.clientX; gsLastY = e.clientY; };
+          const gsOnPMove = (e) => {
+            if (!gsDragging) return;
+            ballGroup.rotation.y += (e.clientX - gsLastX) * 0.01;
+            viewGroup.rotation.x = Math.max(-1.4, Math.min(0.2, viewGroup.rotation.x + (e.clientY - gsLastY) * 0.01));
+            gsLastX = e.clientX; gsLastY = e.clientY;
+          };
+          const gsOnPUp = () => { gsDragging = false; };
+          renderer.domElement.addEventListener('wheel', gsOnWheel, { passive: false });
+          renderer.domElement.addEventListener('pointerdown', gsOnPDown);
+          renderer.domElement.addEventListener('pointermove', gsOnPMove);
+          renderer.domElement.addEventListener('pointerup', gsOnPUp);
+          renderer.domElement.addEventListener('pointercancel', gsOnPUp);
+
+          // Snapshot — current view, walls hidden, transparent background.
+          snapshotRef.current = () => {
+            const prev = wallMeshes.map((m) => m.visible);
+            wallMeshes.forEach((m) => { m.visible = false; });
+            renderer.render(scene, camera);
+            const url = renderer.domElement.toDataURL('image/png');
+            wallMeshes.forEach((m, i) => { m.visible = prev[i]; });
+            return url;
+          };
+
+          const gsRo = new ResizeObserver(() => {
+            if (!renderer || !camera || !container) return;
+            const { clientWidth, clientHeight } = container;
+            renderer.setSize(clientWidth, clientHeight);
+            camera.aspect = clientWidth / clientHeight;
+            camera.updateProjectionMatrix();
+          });
+          gsRo.observe(container);
+
+          cleanupRef.current = () => {
+            gsRo.disconnect();
+            if (animationId) cancelAnimationFrame(animationId);
+            if (renderer) {
+              renderer.domElement?.removeEventListener('wheel', gsOnWheel);
+              renderer.domElement?.removeEventListener('pointerdown', gsOnPDown);
+              renderer.domElement?.removeEventListener('pointermove', gsOnPMove);
+              renderer.domElement?.removeEventListener('pointerup', gsOnPUp);
+              renderer.domElement?.removeEventListener('pointercancel', gsOnPUp);
+              renderer.dispose();
+              if (renderer.domElement?.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);
+            }
+            objectsToDispose.forEach((o) => o?.dispose?.());
+          };
+
+          const gsElapsed = performance.now() - mountStart;
+          setTimeout(() => { if (!disposed) setStatus('ready'); }, Math.max(0, MIN_LOADING_MS - gsElapsed));
+          return;
+        }
 
         // ── Ball ───────────────────────────────────────────────
         // Clone the cached geometry so multiple GolfballViewer mounts
@@ -3424,7 +3679,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
     // `tint` is intentionally omitted — the live-tint effect above retints in
     // place so a color drag doesn't rebuild the scene every frame.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [decalDataUrl, secondDecalDataUrl, shape]);
+  }, [decalDataUrl, secondDecalDataUrl, shape, giftKey]);
 
   // cleanupRef holds the dispose closure across the async boundary so
   // strict-mode double-mount + teardown still releases GPU resources.
@@ -3569,15 +3824,22 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 // own dev settings; the Image Viewer ball falls back to
                 // golfballViewer.ballScale. Label it with the key that actually
                 // controls it so the value can be pasted straight back.
-                const scaleKey = shape === 'chip'
+                const scaleKey = shape === 'giftset'
+                  ? 'giftCatalog.giftSetPreviewScale'
+                  : shape === 'chip'
                   ? 'giftCatalog.chipPreviewScale'
                   : (initialScale != null ? 'giftCatalog.previewScale' : 'golfballViewer.ballScale');
-                const snippet =
-                  `${scaleKey} = ${debug.scale.toFixed(2)}\n` +
-                  `golfballViewer.ballRotX  = ${debug.rotDeg[0].toFixed(1)}°\n` +
-                  `golfballViewer.ballRotY  = ${debug.rotDeg[1].toFixed(1)}°\n` +
-                  `golfballViewer.ballRotZ  = ${debug.rotDeg[2].toFixed(1)}°\n` +
-                  `golfballViewer.printAreaScale = ${(debug.printAreaScale ?? 0.7).toFixed(2)}`;
+                // Gift set: the rotDeg row carries the view-tilt (X) + turntable (Z),
+                // so paste back the tilt knobs instead of the ball-rotation keys.
+                const snippet = shape === 'giftset'
+                  ? `${scaleKey} = ${debug.scale.toFixed(2)}\n` +
+                    `giftCatalog.giftSetPreviewRotX = ${debug.rotDeg[0].toFixed(1)}°\n` +
+                    `giftCatalog.giftSetPreviewRotY = ${debug.rotDeg[1].toFixed(1)}°`
+                  : `${scaleKey} = ${debug.scale.toFixed(2)}\n` +
+                    `golfballViewer.ballRotX  = ${debug.rotDeg[0].toFixed(1)}°\n` +
+                    `golfballViewer.ballRotY  = ${debug.rotDeg[1].toFixed(1)}°\n` +
+                    `golfballViewer.ballRotZ  = ${debug.rotDeg[2].toFixed(1)}°\n` +
+                    `golfballViewer.printAreaScale = ${(debug.printAreaScale ?? 0.7).toFixed(2)}`;
                 navigator.clipboard?.writeText(snippet)
                   .then(() => { setDebugCopied(true); setTimeout(() => setDebugCopied(false), 1500); })
                   .catch(() => {});
@@ -3638,7 +3900,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           (rd.shaderErrors && rd.shaderErrors.length) ? rd.shaderErrors.join('\n----\n') : 'none',
           '',
           '-- Ball --',
-          `${shape === 'chip' ? 'chipScale' : 'ballScale'} (applied): ${debug.scale.toFixed(2)}   rot: ${debug.rotDeg.map((r) => r.toFixed(1)).join(' / ')}   printAreaScale: ${(debug.printAreaScale ?? 0.7).toFixed(2)}`,
+          shape === 'giftset'
+            ? `giftSetScale (applied): ${debug.scale.toFixed(2)}   tilt X/Y: ${debug.rotDeg[0].toFixed(1)} / ${debug.rotDeg[1].toFixed(1)}   turntable: ${debug.rotDeg[2].toFixed(1)}`
+            : `${shape === 'chip' ? 'chipScale' : 'ballScale'} (applied): ${debug.scale.toFixed(2)}   rot: ${debug.rotDeg.map((r) => r.toFixed(1)).join(' / ')}   printAreaScale: ${(debug.printAreaScale ?? 0.7).toFixed(2)}`,
         ].join('\n');
         const row = (k, v, warn) => (
           <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
