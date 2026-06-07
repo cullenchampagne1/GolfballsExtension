@@ -35,32 +35,40 @@ import { ColorPickerPopover } from '../ui/components/ColorPicker.jsx';
 // model geometry. Lazy-initialized on first mount.
 const cache = {
   three: null,           // resolved { THREE, OBJLoader, DecalGeometry, CANNON }
-  modelPromise: null,    // in-flight or resolved Promise<THREE.Mesh>
+  models: {},            // shape -> in-flight or resolved Promise<THREE.Mesh>
 };
 
-async function loadThreeAndModel() {
-  if (cache.three && cache.modelPromise) {
-    return { ...cache.three, model: await cache.modelPromise };
-  }
-  // Parallel-load engine + helpers + model so first-mount latency is
-  // dominated by whichever is slowest, not the sum. cannon-es is
-  // pulled in here too so throw mode has zero extra wait when toggled.
-  const [THREE, { OBJLoader }, { DecalGeometry }, { EXRLoader }, CANNON] = await Promise.all([
-    import('three'),
-    import('three/examples/jsm/loaders/OBJLoader.js'),
-    import('three/examples/jsm/geometries/DecalGeometry.js'),
-    import('three/examples/jsm/loaders/EXRLoader.js'),
-    import('cannon-es'),
-  ]);
-  cache.three = { THREE, OBJLoader, DecalGeometry, EXRLoader, CANNON };
+// Web-accessible OBJ per shape. The chip is a black/white poker-chip ball
+// marker; its model carries the molded pattern as per-vertex colors.
+const MODEL_URLS = {
+  ball: 'assets/golfball_model/Golf_ball.obj',
+  chip: 'assets/poker_chip_model/PokerChip.obj',
+};
 
-  // Kick off the model fetch+parse exactly once. The OBJ is web-
+async function loadThreeAndModel(shape = 'ball') {
+  // Parallel-load engine + helpers once so first-mount latency is dominated by
+  // whichever is slowest, not the sum. cannon-es is pulled in here too so throw
+  // mode has zero extra wait when toggled.
+  if (!cache.three) {
+    const [THREE, { OBJLoader }, { DecalGeometry }, { EXRLoader }, CANNON] = await Promise.all([
+      import('three'),
+      import('three/examples/jsm/loaders/OBJLoader.js'),
+      import('three/examples/jsm/geometries/DecalGeometry.js'),
+      import('three/examples/jsm/loaders/EXRLoader.js'),
+      import('cannon-es'),
+    ]);
+    cache.three = { THREE, OBJLoader, DecalGeometry, EXRLoader, CANNON };
+  }
+  const { OBJLoader } = cache.three;
+
+  // Kick off the model fetch+parse exactly once per shape. The OBJ is web-
   // accessible so chrome.runtime.getURL gives a load-anywhere URL.
-  if (!cache.modelPromise) {
+  if (!cache.models[shape]) {
+    const rel = MODEL_URLS[shape] || MODEL_URLS.ball;
     const url = (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
-      ? chrome.runtime.getURL('assets/golfball_model/Golf_ball.obj')
-      : 'assets/golfball_model/Golf_ball.obj';
-    cache.modelPromise = new Promise((resolve, reject) => {
+      ? chrome.runtime.getURL(rel)
+      : rel;
+    cache.models[shape] = new Promise((resolve, reject) => {
       const loader = new OBJLoader();
       loader.load(
         url,
@@ -70,8 +78,25 @@ async function loadThreeAndModel() {
           let foundMesh = null;
           group.traverse((child) => { if (!foundMesh && child.isMesh) foundMesh = child; });
           if (!foundMesh) { reject(new Error('OBJ contains no mesh')); return; }
+          const geo = foundMesh.geometry;
+          // The chip OBJ is exported Y-up (disc axis = Y) with the molded
+          // black/white pattern baked as per-vertex colors. Stand it up so its
+          // faces point at the camera (±Z, like the ball's print poles), and
+          // convert the sRGB-encoded vertex colors to linear so the black clay
+          // renders black rather than the mid-gray it'd be if read as linear.
+          if (shape === 'chip') {
+            geo.rotateX(Math.PI / 2);
+            const col = geo.getAttribute('color');
+            if (col) {
+              const s2l = (v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+              for (let i = 0; i < col.count; i++) {
+                col.setXYZ(i, s2l(col.getX(i)), s2l(col.getY(i)), s2l(col.getZ(i)));
+              }
+              col.needsUpdate = true;
+            }
+          }
           // Make sure normals exist (required by DecalGeometry).
-          foundMesh.geometry.computeVertexNormals();
+          geo.computeVertexNormals();
           resolve(foundMesh);
         },
         undefined,
@@ -79,7 +104,7 @@ async function loadThreeAndModel() {
       );
     });
   }
-  const model = await cache.modelPromise;
+  const model = await cache.models[shape];
   return { ...cache.three, model };
 }
 
@@ -94,7 +119,7 @@ export const SCENES = [
   { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'assets/moonlit_golf_4k.exr',     icon: 'moon' },
 ];
 
-export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, secondDecalDataUrl, onError, onSceneChange, onThrowChange, minimal = false, initialScale, autoRotate = false }, ref) {
+export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, secondDecalDataUrl, onError, onSceneChange, onThrowChange, minimal = false, initialScale, autoRotate = false, shape = 'ball' }, ref) {
   const containerRef = useRef(null);
   // Imperative snapshot handle — set by the WebGL effect once the
   // scene is ready. Parent calls snapshotRef.current() to capture a
@@ -301,7 +326,8 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
 
     (async () => {
       try {
-        const { THREE, DecalGeometry, EXRLoader, CANNON, model } = await loadThreeAndModel();
+        const { THREE, DecalGeometry, EXRLoader, CANNON, model } = await loadThreeAndModel(shape);
+        const isChip = shape === 'chip';
         if (disposed) return;
         const container = containerRef.current;
         if (!container) return;
@@ -791,16 +817,29 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // to the mesh and we'd cross-contaminate state).
         ballMesh = new THREE.Mesh(
           model.geometry.clone(),
-          new THREE.MeshStandardMaterial({
-            color: 0xf6f6f6,
-            // Slight emissive so the shadow-side never fully grays
-            // out. Roughness lowered so the dimples catch a crisper
-            // highlight (a real golfball is fairly glossy plastic).
-            emissive: 0x101418,
-            emissiveIntensity: 0.4,
-            roughness: 0.28,
-            metalness: 0.02,
-          }),
+          isChip
+            // Chip: paint from the OBJ's per-vertex colors (black clay + white
+            // molded dashes/spots/center). color stays white so it multiplies
+            // the vertex colors through unchanged; tiny emissive keeps the
+            // black from going fully dead on the shadow side.
+            ? new THREE.MeshStandardMaterial({
+                vertexColors: true,
+                color: 0xffffff,
+                emissive: 0x0a0a0a,
+                emissiveIntensity: 0.25,
+                roughness: 0.55,
+                metalness: 0.0,
+              })
+            : new THREE.MeshStandardMaterial({
+                color: 0xf6f6f6,
+                // Slight emissive so the shadow-side never fully grays
+                // out. Roughness lowered so the dimples catch a crisper
+                // highlight (a real golfball is fairly glossy plastic).
+                emissive: 0x101418,
+                emissiveIntensity: 0.4,
+                roughness: 0.28,
+                metalness: 0.02,
+              }),
         );
         ballMesh.castShadow = true;
         ballMesh.receiveShadow = false;
@@ -814,6 +853,16 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // Recenter the geometry on the origin so OrbitControls rotates
         // around the ball's middle, not its model-space center.
         ballMesh.position.set(-bsphere.center.x * scale, -bsphere.center.y * scale, -bsphere.center.z * scale);
+        // Chip prints land flat on the face (±chipFaceZ) and fill the recessed
+        // white center inlay — capture the scaled half-thickness + disc radius
+        // so the decal projector can target the face instead of a sphere pole.
+        let chipFaceZ = 0, chipDiscR = 0;
+        if (isChip) {
+          ballMesh.geometry.computeBoundingBox();
+          const cbb = ballMesh.geometry.boundingBox;
+          chipFaceZ = Math.max(Math.abs(cbb.min.z), Math.abs(cbb.max.z)) * scale;
+          chipDiscR = Math.max(Math.abs(cbb.min.x), Math.abs(cbb.max.x), Math.abs(cbb.min.y), Math.abs(cbb.max.y)) * scale;
+        }
         // Wrap ball+decal in a Group so throw-mode translates and
         // rotates the whole assembly together. The mesh's recentering
         // offset lives INSIDE the group so the group's origin is the
@@ -824,11 +873,17 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // Apply the dev-settings default rotation so the print sits
         // at whatever orientation the team has dialed in. Drag-to-
         // rotate during use can override this freely.
-        ballGroup.rotation.set(
-          initialBallRef.current.rotX,
-          initialBallRef.current.rotY,
-          initialBallRef.current.rotZ,
-        );
+        // Chip already faces the camera after its geometry stand-up rotation, so
+        // it starts face-on; the ball uses the team's dialed-in dev rotation.
+        if (isChip) {
+          ballGroup.rotation.set(0, 0, 0);
+        } else {
+          ballGroup.rotation.set(
+            initialBallRef.current.rotX,
+            initialBallRef.current.rotY,
+            initialBallRef.current.rotZ,
+          );
+        }
         scene.add(ballGroup);
         objectsToDispose.push(ballMesh.material);
 
@@ -840,6 +895,8 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // Print-area extent (x/y) is dev-tunable; z is the projection depth
         // through the ball and stays fixed. Shared by both poles.
         const printAreaScale = initialBallRef.current.printAreaScale ?? 0.7;
+        // Chip print fills most of the white center inlay (~0.9 of disc radius).
+        const chipPrintScale = 0.9;
         /* Build one projected decal. `back=false` is the camera-facing +Z pole
            (front print); `back=true` is the opposite -Z pole (dual-pole second
            imprint — visible when the ball is rotated 180°). Returns the mesh +
@@ -872,9 +929,19 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // box rotated 180° about Y and positioned at -Z, so it projects onto
           // the far pole (reads correctly once the ball is spun to face it).
           const sign = back ? -1 : 1;
-          const decalPosition = new THREE.Vector3(0, 0, sign * targetRadius * 0.999);
           const decalOrientation = new THREE.Euler(0, back ? Math.PI : 0, 0);
-          const decalSize = new THREE.Vector3(targetRadius * printAreaScale, targetRadius * printAreaScale, targetRadius * 2);
+          let decalPosition, decalSize;
+          if (isChip) {
+            // Project straight onto the flat face from just outside it. Depth is
+            // kept under the chip thickness so the front projector can't punch
+            // through to the back face (the back gets its own projector).
+            decalPosition = new THREE.Vector3(0, 0, sign * chipFaceZ * 1.02);
+            const w = chipDiscR * chipPrintScale;
+            decalSize = new THREE.Vector3(w, w, chipFaceZ * 2);
+          } else {
+            decalPosition = new THREE.Vector3(0, 0, sign * targetRadius * 0.999);
+            decalSize = new THREE.Vector3(targetRadius * printAreaScale, targetRadius * printAreaScale, targetRadius * 2);
+          }
 
           const decalGeo = new DecalGeometry(ballMesh, decalPosition, decalOrientation, decalSize);
           /* Decal material is WebGL-tier-dependent:
@@ -906,7 +973,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // Lift the decal a hair off the surface along its own pole so it wins
           // the depth test by REAL depth separation rather than polygonOffset
           // (Mac GL honors polygonOffset; ANGLE/D3D11 on Adreno does not).
-          mesh.position.z += sign * targetRadius * 0.015;
+          mesh.position.z += sign * (isChip ? chipFaceZ * 0.06 : targetRadius * 0.015);
           objectsToDispose.push(decalGeo, decalMat);
           return { mesh, params: { position: decalPosition.clone(), orientation: decalOrientation.clone(), size: decalSize.clone(), texture: decalTexture } };
         }
@@ -3176,7 +3243,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
     // Re-running on decalDataUrl change is desired so swapping the
     // alignment image rebuilds the decal projection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [decalDataUrl, secondDecalDataUrl]);
+  }, [decalDataUrl, secondDecalDataUrl, shape]);
 
   // cleanupRef holds the dispose closure across the async boundary so
   // strict-mode double-mount + teardown still releases GPU resources.

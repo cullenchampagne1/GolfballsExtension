@@ -184,6 +184,16 @@ export function modsForProduct(p) {
   return { ux: 'inline', mods };
 }
 
+/* A poker-chip ball marker (e.g. "6-Stripe Poker Chip Ball Marker") — gets a
+   live 3D chip preview (logo on the white center, dual-pole shows both sides)
+   instead of just a flat product photo. Detected by the second-pole mod or a
+   poker-chip product name/url. */
+export function isPokerChipProduct(p) {
+  if (!p) return false;
+  if ((p.modNames || []).includes('Poker Chip Second Pole')) return true;
+  return /poker\s*chip/i.test(`${p.title || ''} ${p.url || ''}`);
+}
+
 
 const UploadI = (props) => <Icon {...props}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" /></Icon>;
 const SparkI = (props) => <Icon {...props}><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></Icon>;
