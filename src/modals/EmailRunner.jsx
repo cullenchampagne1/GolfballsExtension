@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Btn, DraggablePopup, PopupDragContext, Dot, Field, RangeSlider, Tag, TemplatePicker, I, Spinner } from '../ui/index.js';
+import { Btn, DraggablePopup, PopupDragContext, Dot, Field, RangeSlider, Tag, TemplatePicker, TemplateSplits, I, Spinner } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { pickFromAddress } from '../lib/sender.js';
 import { sendEmail } from '../lib/emailSender.js';
@@ -416,32 +416,6 @@ export function EmailRunner({
     });
   }, [weightableItems]);
 
-  /* Drag handler — A goes to `raw`, the rest split the remainder
-     in proportion to their CURRENT values (relative balance among
-     them is preserved). When the others sum to zero (everyone was
-     at 0) we fall back to an equal split so the bar moves
-     predictably instead of getting stuck. */
-  const onWeightChange = (targetId, raw) => {
-    const clamped = Math.max(0, Math.min(100, Number(raw) || 0));
-    const others = weightableItems.filter((it) => it.id !== targetId).map((it) => it.id);
-    if (others.length === 0) {
-      setVariationWeights({ [targetId]: 100 });
-      return;
-    }
-    setVariationWeights((cur) => {
-      const oldOthersSum = others.reduce((s, id) => s + (cur[id] || 0), 0);
-      const remainder = 100 - clamped;
-      const next = { [targetId]: clamped };
-      if (oldOthersSum <= 0) {
-        const each = remainder / others.length;
-        for (const id of others) next[id] = each;
-      } else {
-        for (const id of others) next[id] = remainder * ((cur[id] || 0) / oldOthersSum);
-      }
-      return next;
-    });
-  };
-
   const canRun = !!selectedTpl && contacts.length > 0 && status !== 'running';
 
   const onRun = async () => {
@@ -743,16 +717,12 @@ export function EmailRunner({
               <div style={{ overflow: 'hidden', maxHeight: isRandomMode ? 360 : 0, opacity: isRandomMode ? 1 : 0, transition: 'max-height .3s cubic-bezier(.4,0,.2,1), opacity .22s ease' }}>
                 {isRandomMode && (
                   <Field label="Variation weights" hint="Sliders always sum to 100% — each contact rolls weighted by these.">
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 11, padding: 12, background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)' }}>
-                      <div style={{ display: 'flex', height: 10, borderRadius: 999, overflow: 'hidden', border: '1px solid var(--gb-border-subtle)' }}>
-                        {weightableItems.map((it, idx) => (
-                          <div key={it.id} style={{ flex: variationWeights[it.id] || 0.0001, background: weightStripeColor(idx), minWidth: 0, transition: 'flex .35s cubic-bezier(.4,0,.2,1)' }} title={`${it.label}: ${Math.round(variationWeights[it.id] || 0)}%`} />
-                        ))}
-                      </div>
-                      {weightableItems.map((it, idx) => (
-                        <VariationWeightRow key={it.id} colorIndex={idx} label={it.label} value={variationWeights[it.id] || 0} onChange={(val) => onWeightChange(it.id, val)} disabled={status === 'running'} />
-                      ))}
-                    </div>
+                    <TemplateSplits
+                      items={weightableItems}
+                      weights={variationWeights}
+                      onChange={setVariationWeights}
+                      disabled={status === 'running'}
+                    />
                   </Field>
                 )}
               </div>
@@ -803,70 +773,6 @@ export function EmailRunner({
       </div>
     </DraggablePopup>
   );
-}
-
-/* One row in the Random-mode weights panel: variation label,
-   horizontal range slider, percentage readout. `accent-color`
-   tints the native range thumb + track so the control reads
-   brand without a custom thumb implementation — the rounded
-   numeric on the right is what the rep watches when balancing
-   the split. */
-function VariationWeightRow({ colorIndex = 0, label, value, onChange, disabled }) {
-  const rounded = Math.round(value);
-  return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: '10px minmax(0, 1fr) minmax(0, 1.4fr) 36px',
-      gap: 10,
-      alignItems: 'center',
-    }}>
-      {/* Color swatch — matches the corresponding segment in the
-          stacked proportion bar above so the rep can map the slider
-          back to the bar without reading the label. */}
-      <div style={{
-        width: 8, height: 8, borderRadius: 2,
-        background: weightStripeColor(colorIndex),
-      }} />
-      <div style={{
-        fontSize: 11,
-        color: 'var(--gb-text-secondary)',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>{label}</div>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        step={1}
-        value={rounded}
-        onChange={(e) => onChange(Number(e.target.value))}
-        disabled={disabled}
-        style={{
-          width: '100%',
-          accentColor: 'var(--gb-brand-fg)',
-          cursor: disabled ? 'not-allowed' : 'pointer',
-          opacity: disabled ? 0.5 : 1,
-        }}
-      />
-      <div style={{
-        fontSize: 11,
-        fontWeight: 600,
-        fontVariantNumeric: 'tabular-nums',
-        color: 'var(--gb-text-primary)',
-        textAlign: 'right',
-      }}>{rounded}%</div>
-    </div>
-  );
-}
-
-/* Map a per-row index to a tint of the brand color. First row gets
-   the full brand label color; subsequent rows step down by ~40% per
-   index so a 4-variation pool still reads as distinct stripes. */
-function weightStripeColor(idx) {
-  const pcts = [100, 60, 30, 18, 12, 8];
-  const pct = pcts[idx] ?? Math.max(6, 100 - idx * 18);
-  return pct === 100
-    ? 'var(--gb-brand-label)'
-    : `color-mix(in srgb, var(--gb-brand-label) ${pct}%, transparent)`;
 }
 
 /* Stop square glyph used by the mid-run Cancel button. Filled

@@ -32,6 +32,7 @@ export { PillTag } from './components/PillTag.jsx';
 export { Checkbox } from './components/Checkbox.jsx';
 export { Slider } from './components/Slider.jsx';
 export { RangeSlider } from './components/RangeSlider.jsx';
+export { TemplateSplits, splitStripeColor, redistributeWeights, equalWeights } from './components/TemplateSplits.jsx';
 export { DatePicker, formatHumanDate, parseDateValue, serializeDateValue } from './components/DatePicker.jsx';
 export { SwitchTag } from './components/SwitchTag.jsx';
 export { Segmented } from './components/Segmented.jsx';
