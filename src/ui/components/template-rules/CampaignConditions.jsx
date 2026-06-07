@@ -168,6 +168,7 @@ export function CampaignConditions({ initial, onChange }) {
       renderSubject={(condition, patch) => <CampaignSubjectCell condition={condition} patch={patch} />}
       opsFor={opsForCampaignCondition}
       shouldHideNot={(c) => c.source === 'var'}
+      allowEmpty
       onChange={onChange}
       label="Run conditions"
       emptyHint="No conditions — this step always runs. Add a group that tests a schema field or a code expression, combined with AND/OR."

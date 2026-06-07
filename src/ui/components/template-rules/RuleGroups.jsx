@@ -92,6 +92,10 @@ export function RuleGroups({
      subject cell renders its own NOT (e.g. a full-width code editor that
      would otherwise be shoved right). Default keeps the pill. */
   shouldHideNot = () => false,
+  /* Optional: allow removing the very last condition / group, collapsing back
+     to the empty state. For campaign steps (conditions are optional, "no
+     rules = always runs") vs. template match-rules (a template needs a rule). */
+  allowEmpty = false,
 }) {
   const [state, setState] = useState(() => normalizeInitial(initial, fromLegacy));
   const { outerJoiner, groups } = state;
@@ -123,10 +127,13 @@ export function RuleGroups({
       ? { ...g, conditions: g.conditions.map((c) => (c.id === cid ? { ...c, ...patch } : c)) }
       : g)),
   });
-  const removeCondition = (gid, cid) => commit({
-    ...state,
-    groups: groups.map((g) => (g.id === gid ? { ...g, conditions: g.conditions.filter((c) => c.id !== cid) } : g)),
-  });
+  const removeCondition = (gid, cid) => {
+    const group = groups.find((g) => g.id === gid);
+    // In allowEmpty mode, deleting a group's last condition drops the whole
+    // group (rather than leaving an empty, always-true group).
+    if (allowEmpty && group && group.conditions.length <= 1) { removeGroup(gid); return; }
+    commit({ ...state, groups: groups.map((g) => (g.id === gid ? { ...g, conditions: g.conditions.filter((c) => c.id !== cid) } : g)) });
+  };
 
   const hasGroups = groups.length > 0;
 
@@ -146,7 +153,8 @@ export function RuleGroups({
                 <GroupCard
                   group={g}
                   index={i}
-                  canRemove={groups.length > 1}
+                  canRemove={allowEmpty || groups.length > 1}
+                  allowEmpty={allowEmpty}
                   renderSubject={renderSubject}
                   opsFor={opsFor}
                   shouldHideNot={shouldHideNot}
@@ -171,7 +179,7 @@ export function RuleGroups({
   );
 }
 
-function GroupCard({ group, index, canRemove, renderSubject, opsFor, shouldHideNot, onJoinerChange, onAddCondition, onPatchCondition, onRemoveCondition, onRemoveGroup }) {
+function GroupCard({ group, index, canRemove, allowEmpty, renderSubject, opsFor, shouldHideNot, onJoinerChange, onAddCondition, onPatchCondition, onRemoveCondition, onRemoveGroup }) {
   return (
     <div style={{ padding: 12, background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -188,7 +196,7 @@ function GroupCard({ group, index, canRemove, renderSubject, opsFor, shouldHideN
             {i > 0 && <JoinerDivider value={group.joiner} small />}
             <ConditionRow
               condition={c}
-              canRemove={group.conditions.length > 1}
+              canRemove={allowEmpty || group.conditions.length > 1}
               renderSubject={renderSubject}
               opsFor={opsFor}
               hideNot={!!(shouldHideNot && shouldHideNot(c))}
