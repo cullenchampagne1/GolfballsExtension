@@ -22,7 +22,7 @@
 
 import { evalTree } from '../matchEngine.js';
 import { buildContactContext } from './context.js';
-import { runStepAction, pickStepTemplate } from './actions.js';
+import { runStepAction } from './actions.js';
 
 const noop = () => {};
 const storeKindOf = (step) => (step.kind === 'branch' ? 'email' : step.kind);
@@ -122,17 +122,16 @@ export async function runCampaign({ campaign, audience, lookupTemplate, deps = {
       catch { pass = false; }
       if (!pass) { emit('skipped', { reason: 'conditions' }); continue; }
 
-      const row = pickStepTemplate(step);
-      const tpl = row ? lookupTemplate?.(storeKindOf(step), row.templateId) : null;
+      const tpl = step.templateId ? lookupTemplate?.(storeKindOf(step), step.templateId) : null;
       const res = await runStepAction(step, tpl, ctx, { dryRun: deps.dryRun });
 
       if (res.ok) {
-        emit('ran', { transport: res.transport, detail: res.detail, templateId: row?.templateId });
+        emit('ran', { transport: res.transport, detail: res.detail, templateId: step.templateId });
         if (step.group) firedGroups.add(step.group);
         if (step.branch) { firedBranches.add(step.id); stopMain = true; }
         didWork = true;
       } else {
-        emit('failed', { error: res.error, templateId: row?.templateId });
+        emit('failed', { error: res.error, templateId: step.templateId });
       }
     }
 

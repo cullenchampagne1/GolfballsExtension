@@ -43,13 +43,22 @@ export function pickWeighted(items, weightOf) {
   return items[items.length - 1];
 }
 
-/* Roll one of a step's template splits weighted by pct. Returns the
-   chosen { id, templateId, pct } row (or null when the step has none). */
-export function pickStepTemplate(step) {
-  const rows = (step.templates || []).filter((t) => t && t.templateId);
-  if (rows.length === 0) return null;
-  if (rows.length === 1) return rows[0];
-  return pickWeighted(rows, (t) => t.pct);
+/* The weightable variation pool for a template — the base ("__original")
+   plus each saved variation. Mirrors EmailRunner's pool so the split
+   behaves identically. */
+export function variationPool(template) {
+  const variations = Array.isArray(template?.variations) ? template.variations : [];
+  if (variations.length === 0) return [];
+  return [{ id: '__original', variation: null }, ...variations.map((v) => ({ id: v.id, variation: v }))];
+}
+
+/* Roll one variation of a template weighted by the step's
+   variationWeights. Returns the chosen variation object (or null = the
+   template's base subject/body). */
+export function pickStepVariation(template, weights) {
+  const pool = variationPool(template);
+  if (pool.length === 0) return null;
+  return pickWeighted(pool, (it) => (weights || {})[it.id])?.variation ?? null;
 }
 
 /* The delegated side-effect kind for a step. A branch sends like an
@@ -73,6 +82,11 @@ async function resolveVarsForHtml(ctx, vars, toField) {
 async function runEmail(step, template, ctx, { dryRun }) {
   const vars = template.vars || {};
   const toField = template.toField || { type: 'auto' };
+  // Pick one variation (weighted by the step) — its subject/body override
+  // the template's base, exactly like the Quick Send popover.
+  const v = pickStepVariation(template, step.variationWeights);
+  const rawSubject = v?.subject || template.subject || '';
+  const rawBody = v?.body || template.body || '';
 
   if (dryRun) {
     // Resolve the recipient so the dry-run line is concrete, but send nothing.
@@ -87,8 +101,8 @@ async function runEmail(step, template, ctx, { dryRun }) {
   if (resolved?.error) return { ok: false, error: `Resolve failed: ${resolved.error}` };
   if (!toEmail) return { ok: false, error: 'No recipient email resolved' };
 
-  const subject = renderTemplate(template.subject || '', resolvedVars, vars);
-  const htmlBody = renderTemplate(template.body || '', resolvedVars, vars);
+  const subject = renderTemplate(rawSubject, resolvedVars, vars);
+  const htmlBody = renderTemplate(rawBody, resolvedVars, vars);
   const from = pickFromAddress(template, ctx.fromLocalPart);
 
   const res = await sendEmail(

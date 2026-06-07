@@ -619,7 +619,7 @@ function ImageAlignModal({ image, initial, onCancel, onApply }) {
 
 /* Drag-drop / click-to-browse image picker. Reads the picked file, opens the
    alignment popup, and writes the ALIGNED data URL into the matching
-   PrintTypeContext slot (Custom Logo vs Photo) so BallPreview can decal it.
+   PrintTypeContext slot (Custom Logo vs Photo) so LivePreview3D can decal it.
    The raw image + transform are kept (rawDataUrl / align) so the buyer can
    re-align without recompositing an already-composited image. */
 function ImageUpload({ ai, label = 'Upload Your Company Logo', slot = 'Custom Logo', alignable = true }) {
@@ -711,7 +711,7 @@ function ImageUpload({ ai, label = 'Upload Your Company Logo', slot = 'Custom Lo
    Single source of truth for everything the live ball preview needs to
    render. Each Control + composite reads/writes through context instead
    of owning its own useState, so PrintTypeGrid can hand the snapshot to
-   <BallPreview /> without prop-drilling through every wrapper.
+   <LivePreview3D /> without prop-drilling through every wrapper.
    Slots are scoped per print-type so switching between types doesn't
    wipe the buyer's other work in progress. */
 const PrintTypeContext = createContext(null);
@@ -1588,11 +1588,15 @@ function AccessoryCustomizer({ p, config, loading }) {
   // authoritative source (richer than the product page), so prefer p.* here.
   const mods = (p.modNames && p.modNames.length) ? p.modNames : ((config && config.modifications) || []);
   const excludeDualPole = (p && p.excludeDualPole) || (config && config.excludeDualPole) || false;
-  const dualPole = (p.dualPole || (config && config.dualPole) || false) && !excludeDualPole;
+  // Poker chips carry their dual-pole capability via the "Poker Chip Second
+  // Pole" mod rather than the customData dualPole variant — honor either.
+  const isChip = isPokerChipProduct(p);
+  const dualPole = (p.dualPole || (config && config.dualPole) || isChip || false) && !excludeDualPole;
   const bundleItems = (p.bundleItems && p.bundleItems.length) ? p.bundleItems : ((config && config.bundleItems) || null);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {loading && <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontStyle: 'italic' }}>Loading live options…</div>}
+      {isChip && !bundleItems && <LivePreview3D shape="chip" />}
       <BaseProperties p={p} config={config} />
       {bundleItems && bundleItems.length
         ? <BundleSections items={bundleItems} p={p} config={config} dualPole={dualPole} />
@@ -1607,7 +1611,7 @@ function Control({ k, p, config, serviceLevel }) {
   const [c1, setC1] = useState('Black'); const [c2, setC2] = useState('Transparent');
   const [font, setFont] = useState(FONTS[0]); const [size, setSize] = useState(SIZES[0]);
   const [style, setStyle] = useState(MONO_STYLES[0].key);
-  // Icon picker reads/writes through context so <BallPreview /> sees it live.
+  // Icon picker reads/writes through context so <LivePreview3D /> sees it live.
   const [icon, setIcon] = usePTField('Icons', 'icon');
   const [align, setAlign] = useState(ALIGNXL_STYLES[0].key);
   const [alignID, setAlignID] = useState(IDALIGN_STYLES[0].key);
@@ -1708,7 +1712,7 @@ function splitTileRows(n) {
 }
 
 /* Inner grid + control area. Reads `sel` from PrintTypeContext so the parent
-   provider owns the snapshot the BallPreview also reads from. */
+   provider owns the snapshot the LivePreview3D also reads from. */
 function PrintTypeGridInner({ p, mods, config }) {
   const ctx = usePT();
   const sel = ctx.sel;
@@ -1813,15 +1817,19 @@ function PrintTypeGrid({ p, mods, config }) {
    print-type snapshot resolves to. When the user has nothing to preview yet
    (unsupported type, or an upload-based type with no image) we show a soft
    empty-state on a placeholder card the same shape as the canvas. */
-function BallPreview() {
+function LivePreview3D({ shape = 'ball' }) {
   const ctx = usePT();
+  const isChip = shape === 'chip';
   const decalUrl = useDecalUrl();
   const secondUrl = useSecondDecalUrl(decalUrl);
-  // Catalog preview ball scale — its own dev setting (separate from the Image
+  // Catalog preview scale — its own dev setting (separate from the Image
   // Viewer's golfballViewer.ballScale).
   const previewScale = Number(useDevSetting('giftCatalog.previewScale') ?? 2) || 2;
-  // Slow auto-spin so both poles (dual-pole imprints) are visible hands-free.
+  // Slow auto-spin so both poles/sides (dual-pole imprints) are visible hands-free.
   const [spin, setSpin] = useState(false);
+  // The chip is a product worth seeing blank, so it always mounts; the ball is
+  // only useful once there's a print to show.
+  const showViewer = isChip ? true : !!(decalUrl || secondUrl);
   const supported = ['Monogram', 'Personalized', 'Icons', 'Custom Logo', 'Photo'].includes(ctx.sel);
   // Monogram fetches its art — distinguish "needs more initials" from "fetching".
   const monoStyle = (ctx.data.Monogram || {}).style;
@@ -1843,18 +1851,18 @@ function BallPreview() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Live preview</div>
       <div style={{ position: 'relative', width: '100%', height: 200, borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)' }}>
-        {(decalUrl || secondUrl) ? (
-          <GolfballViewer minimal initialScale={previewScale} autoRotate={spin} decalDataUrl={decalUrl} secondDecalDataUrl={secondUrl} />
+        {showViewer ? (
+          <GolfballViewer minimal shape={shape} initialScale={previewScale} autoRotate={spin} decalDataUrl={decalUrl} secondDecalDataUrl={secondUrl} />
         ) : (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, textAlign: 'center' }}>
             <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', lineHeight: 1.4 }}>{emptyMsg}</div>
           </div>
         )}
-        {(decalUrl || secondUrl) && (
+        {showViewer && (
           <button
             type="button"
             onClick={() => setSpin((s) => !s)}
-            title={spin ? 'Stop rotating' : 'Auto-rotate to see both poles'}
+            title={spin ? 'Stop rotating' : `Auto-rotate to see both ${isChip ? 'sides' : 'poles'}`}
             style={{
               position: 'absolute', right: 8, bottom: 8, width: 30, height: 30,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1870,7 +1878,7 @@ function BallPreview() {
         )}
       </div>
       <div style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)', textAlign: 'center', lineHeight: 1.3 }}>
-        Drag to rotate · scroll to zoom{secondUrl ? ' · ↻ spins to show both poles' : ''}
+        Drag to rotate · scroll to zoom{(secondUrl || isChip) ? ` · ↻ spins to show both ${isChip ? 'sides' : 'poles'}` : ''}
       </div>
     </div>
   );
@@ -2189,7 +2197,7 @@ export function CustomizeBlock({ p, onChange }) {
                 <PrintTypeProvider mods={mods}>
                   <DecorationEmitter p={p} onChange={onChange} />
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <BallPreview />
+                    <LivePreview3D />
                     <BaseProperties p={p} config={config} />
                     {p.customLogo && <GiftSetPicker p={p} />}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

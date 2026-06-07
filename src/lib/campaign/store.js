@@ -86,7 +86,8 @@ export function newStep(kind = 'email') {
     group: '',
     parentId: null,
     branch: kind === 'branch',
-    templates: [{ id: uid('t'), templateId: '', pct: 100 }],
+    templateId: '',           // the single template this step sends/runs
+    variationWeights: {},     // email/branch only: { varId|'__original': pct } over the template's variations
     conditions: emptyTree(),
   };
 }
@@ -95,22 +96,12 @@ function normalizeStep(raw) {
   if (!raw || typeof raw !== 'object') return newStep();
   const kind = raw.kind || mapLegacyKind(raw.type);
 
-  let templates;
-  if (Array.isArray(raw.templates) && raw.templates.length) {
-    templates = raw.templates.map((t) => ({
-      id: t.id || uid('t'),
-      templateId: t.templateId || '',
-      pct: Number.isFinite(t.pct) ? t.pct : 0,
-    }));
-  } else if (Array.isArray(raw.splits) && raw.splits.length) {
-    templates = raw.splits.map((s) => ({
-      id: uid('t'),
-      templateId: s.templateId || '',
-      pct: Number.isFinite(s.pct) ? s.pct : 0,
-    }));
-  } else {
-    templates = [{ id: uid('t'), templateId: '', pct: 100 }];
-  }
+  // One template per step (was a templates[]/splits[] array in the old shape).
+  const templateId = raw.templateId
+    || (Array.isArray(raw.templates) && raw.templates[0]?.templateId)
+    || (Array.isArray(raw.splits) && raw.splits[0]?.templateId)
+    || '';
+  const variationWeights = (raw.variationWeights && typeof raw.variationWeights === 'object') ? raw.variationWeights : {};
 
   const conditions = isGroupedTree(raw.conditions)
     ? raw.conditions
@@ -124,7 +115,8 @@ function normalizeStep(raw) {
     group: raw.group || raw.stepGroup || '',
     parentId: raw.parentId || null,
     branch: raw.branch != null ? !!raw.branch : kind === 'branch',
-    templates,
+    templateId,
+    variationWeights,
     conditions,
   };
 }

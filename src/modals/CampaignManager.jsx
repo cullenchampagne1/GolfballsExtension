@@ -78,11 +78,15 @@ function Connector({ active, height = 30, tone = 'default', hookRight, hookLeft 
 }
 
 /* ── Step card (collapsed timeline row) ── */
-function StepCard({ step, displayIdx, indent, branchChild, selected, simState, onSelect, onDelete, onDuplicate }) {
+function StepCard({ step, displayIdx, indent, branchChild, selected, simState, templateLib = {}, onSelect, onDelete, onDuplicate }) {
   const meta = STEP_KIND_META[step.kind] || STEP_KIND_META.email;
   const KIcon = meta.icon;
   const live = simState === 'running';
   const done = simState === 'done';
+  const storeKind = step.kind === 'branch' ? 'email' : step.kind;
+  const tpl = (templateLib[storeKind] || []).find((t) => t.id === step.templateId);
+  const tplName = tpl?.name || (step.templateId ? 'template' : 'no template');
+  const varWeights = Object.entries(step.variationWeights || {});
   const tone = branchChild
     ? { bg: 'var(--gb-warning-tint-soft)', bd: 'var(--gb-warning-tint-border)', bdSel: 'var(--gb-warning-fg)', ring: 'var(--gb-warning-tint-soft)', badgeBg: 'var(--gb-warning-tint-medium)', badgeFg: 'var(--gb-warning-fg)', run: 'var(--gb-warning-fg)' }
     : { bg: 'var(--gb-surface-1)', bd: 'var(--gb-border-default)', bdSel: 'var(--gb-brand-tint-border)', ring: 'var(--gb-brand-tint-soft)', badgeBg: meta.color, badgeFg: meta.fg, run: 'var(--gb-brand-label)' };
@@ -127,8 +131,8 @@ function StepCard({ step, displayIdx, indent, branchChild, selected, simState, o
                 : <span style={{ color: 'var(--gb-text-tertiary)' }}>{meta.label} action</span>}
             </span>
             <span style={{ color: 'var(--gb-text-ghost)', flexShrink: 0 }}>·</span>
-            <span style={{ color: 'var(--gb-text-tertiary)', whiteSpace: 'nowrap' }}>
-              {(step.templates || []).filter((t) => t.templateId).length || 0} template{((step.templates || []).filter((t) => t.templateId).length) === 1 ? '' : 's'}
+            <span style={{ color: step.templateId ? 'var(--gb-text-tertiary)' : 'var(--gb-text-ghost)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, fontStyle: step.templateId ? 'normal' : 'italic' }}>
+              {tplName}{varWeights.length > 1 ? ` · ${varWeights.length} variations` : ''}
             </span>
             {condCount > 0 && (
               <>
@@ -139,10 +143,10 @@ function StepCard({ step, displayIdx, indent, branchChild, selected, simState, o
               </>
             )}
           </div>
-          {step.templates && step.templates.length > 1 && (
+          {varWeights.length > 1 && (
             <div style={{ marginTop: 2, height: 4, borderRadius: 2, background: 'var(--gb-fill-subtle)', overflow: 'hidden', display: 'flex' }}>
-              {step.templates.map((t, i) => (
-                <div key={t.id} style={{ width: `${t.pct}%`, height: '100%', background: i === 0 ? 'var(--gb-brand-label)' : i === 1 ? 'var(--gb-info, var(--gb-text-tertiary))' : 'var(--gb-warning)', opacity: .85, transition: 'width var(--gb-anim)' }} />
+              {varWeights.map(([vid, pct], i) => (
+                <div key={vid} style={{ width: `${pct}%`, height: '100%', background: i === 0 ? 'var(--gb-brand-label)' : i === 1 ? 'var(--gb-info, var(--gb-text-tertiary))' : 'var(--gb-warning)', opacity: .85, transition: 'width var(--gb-anim)' }} />
               ))}
             </div>
           )}
@@ -163,7 +167,7 @@ function shortRef(cond) {
 }
 
 /* ── Timeline ── */
-function Timeline({ steps, selectedId, sim, onSelect, onAdd, onDelete, onDuplicate }) {
+function Timeline({ steps, selectedId, sim, templateLib, onSelect, onAdd, onDelete, onDuplicate }) {
   let mainCount = 0;
   let branchChildCount = 0;
   return (
@@ -210,7 +214,7 @@ function Timeline({ steps, selectedId, sim, onSelect, onAdd, onDelete, onDuplica
             <React.Fragment key={step.id}>
               {connectorProps && <Connector {...connectorProps} />}
               <StepCard step={step} displayIdx={displayIdx} indent={isChild ? 32 : 0} branchChild={isChild}
-                selected={selectedId === step.id} simState={simState}
+                selected={selectedId === step.id} simState={simState} templateLib={templateLib}
                 onSelect={onSelect} onDelete={onDelete} onDuplicate={onDuplicate} />
               {isChild && (!next || next.parentId !== step.parentId) && (
                 <div style={{ marginLeft: 59, marginTop: 6, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -234,7 +238,7 @@ function Timeline({ steps, selectedId, sim, onSelect, onAdd, onDelete, onDuplica
 function BranchVisualizer({ step }) {
   const cond = step.conditions?.groups?.[0]?.conditions?.[0];
   const condLabel = cond ? `${shortRef(cond)} ${cond.op}${cond.value ? ' ' + cond.value : ''}` : '(no condition set)';
-  const tplCount = (step.templates || []).filter((t) => t.templateId).length;
+  const varCount = Object.keys(step.variationWeights || {}).length;
   return (
     <div style={{ padding: 14, background: 'var(--gb-warning-tint-soft)', border: '1px solid var(--gb-warning-tint-border)', borderRadius: 'var(--gb-r-lg)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 11 }}>
@@ -254,7 +258,7 @@ function BranchVisualizer({ step }) {
         <div style={{ flex: 1, padding: 10, background: 'var(--gb-success-tint-soft)', border: '1px solid var(--gb-success-tint-border)', borderRadius: 'var(--gb-r-md)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
             <I.zap size={11} style={{ color: 'var(--gb-success-fg)' }} />
-            <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>Sends {tplCount > 1 ? `${tplCount} templates` : 'its template'}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>Sends {varCount > 1 ? `1 of ${varCount} variations` : 'its template'}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', background: 'var(--gb-error-tint-soft)', border: '1px solid var(--gb-error-tint-border)', borderRadius: 'var(--gb-r-sm)' }}>
             <I.alert size={10} style={{ color: 'var(--gb-error-fg)' }} />
@@ -315,24 +319,31 @@ function StepInspector({ step, allSteps, templateLib, onChange, onDelete }) {
   const stepIdx = allSteps.findIndex((s) => s.id === step.id);
   const candidateBranches = allSteps.filter((s, i) => s.branch && i < stepIdx);
   const storeKind = step.kind === 'branch' ? 'email' : step.kind;
+  const isEmailKind = step.kind === 'email' || step.kind === 'branch';
   const tplOptions = (templateLib[storeKind] || []).map((t) => ({ id: t.id, label: t.name }));
+  const selectedTpl = (templateLib[storeKind] || []).find((t) => t.id === step.templateId) || null;
 
   const upd = (patch) => onChange({ ...step, ...patch });
-  const setTplWeights = (weights) => upd({ templates: step.templates.map((t) => ({ ...t, pct: Math.round(weights[t.id] ?? t.pct) })) });
-  const setTplId = (rowId, templateId) => upd({ templates: step.templates.map((t) => (t.id === rowId ? { ...t, templateId } : t)) });
-  const addTpl = () => {
-    const rows = [...step.templates, { id: uid('t'), templateId: '', pct: 0 }];
-    const eq = equalWeights(rows.map((r) => r.id));
-    upd({ templates: rows.map((r) => ({ ...r, pct: Math.round(eq[r.id]) })) });
-  };
-  const delTpl = (rowId) => {
-    const rows = step.templates.filter((t) => t.id !== rowId);
-    const eq = equalWeights(rows.map((r) => r.id));
-    upd({ templates: rows.map((r) => ({ ...r, pct: Math.round(eq[r.id]) })) });
-  };
 
-  const weights = Object.fromEntries(step.templates.map((t) => [t.id, t.pct]));
-  const splitItems = step.templates.map((t) => ({ id: t.id, templateId: t.templateId }));
+  /* Variation pool for the chosen template (base + saved variations) —
+     only meaningful for email/branch steps whose template has variations.
+     Mirrors the Quick Send popover: the split only appears when there are
+     variations, and the weights always sum to 100. */
+  const variationItems = (() => {
+    const vs = Array.isArray(selectedTpl?.variations) ? selectedTpl.variations : [];
+    if (!isEmailKind || vs.length === 0) return [];
+    return [{ id: '__original', label: 'Original' }, ...vs.map((v, i) => ({ id: v.id, label: v.label || `Variation ${i + 2}` }))];
+  })();
+  const variationWeights = variationItems.length
+    ? (Object.keys(step.variationWeights || {}).length ? step.variationWeights : equalWeights(variationItems.map((it) => it.id)))
+    : {};
+
+  const onPickTemplate = (tid) => {
+    const t = (templateLib[storeKind] || []).find((x) => x.id === tid);
+    const vs = Array.isArray(t?.variations) ? t.variations : [];
+    const pool = (isEmailKind && vs.length) ? ['__original', ...vs.map((v) => v.id)] : [];
+    upd({ templateId: tid, variationWeights: pool.length ? equalWeights(pool) : {} });
+  };
 
   return (
     <div key={step.id} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, animation: 'cm-inspector-in .22s ease-out' }}>
@@ -411,22 +422,23 @@ function StepInspector({ step, allSteps, templateLib, onChange, onDelete }) {
         )}
 
         <div>
-          <SectionLabel>Template splits</SectionLabel>
-          {tplOptions.length === 0 && (
-            <div style={{ marginBottom: 8, fontSize: 11, color: 'var(--gb-text-muted)' }}>No {meta.label.toLowerCase()} templates saved yet.</div>
+          <SectionLabel>Template</SectionLabel>
+          {tplOptions.length === 0 ? (
+            <div style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>No {meta.label.toLowerCase()} templates saved yet.</div>
+          ) : (
+            <Dropdown size="sm" value={step.templateId} placeholder="Choose template…" searchable
+              options={tplOptions} onChange={onPickTemplate} />
           )}
-          <TemplateSplits
-            items={splitItems}
-            weights={weights}
-            onChange={setTplWeights}
-            onAdd={addTpl}
-            onRemove={delTpl}
-            addLabel="Add template"
-            renderLabel={(it) => (
-              <Dropdown size="sm" value={it.templateId} placeholder="Choose template…" searchable
-                options={tplOptions} onChange={(tid) => setTplId(it.id, tid)} />
-            )}
-          />
+          {/* Variation split — only when the chosen email template has
+              variations; weights always sum to 100 and break down live as
+              you drag, same as the Quick Send popover. */}
+          {variationItems.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <Field label="Variation split" hint="Each contact rolls one variation, weighted by these.">
+                <TemplateSplits items={variationItems} weights={variationWeights} onChange={(w) => upd({ variationWeights: w })} />
+              </Field>
+            </div>
+          )}
         </div>
 
         <div>
@@ -546,7 +558,7 @@ function CampaignSidebar({ library, currentId, onSelect, onNew }) {
 function StatsStrip({ steps, campaign, selectedId, onClearSelection, dirty, onSave }) {
   const branches = steps.filter((s) => s.branch).length;
   const totalConditions = steps.reduce((a, s) => a + (s.conditions?.groups || []).reduce((x, g) => x + (g.conditions?.length || 0), 0), 0);
-  const invalid = steps.filter((s) => sumPct(s.templates) !== 100 || s.templates.some((t) => !t.templateId));
+  const invalid = steps.filter((s) => !s.templateId);
   const isValid = invalid.length === 0 && steps.length > 0;
   const selected = steps.find((s) => s.id === selectedId);
   const selectedIdx = selected ? steps.findIndex((s) => s.id === selectedId) + 1 : null;
@@ -947,7 +959,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           <CampaignSidebar library={library} currentId={campaign.id} onSelect={selectCampaign} onNew={createCampaign} />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid var(--gb-border-default)' }}>
-            <Timeline steps={steps} selectedId={selectedId} sim={sim} onSelect={setSelectedId} onAdd={addStep} onDelete={deleteStep} onDuplicate={duplicateStep} />
+            <Timeline steps={steps} selectedId={selectedId} sim={sim} templateLib={templateLib} onSelect={setSelectedId} onAdd={addStep} onDelete={deleteStep} onDuplicate={duplicateStep} />
           </div>
           <div style={{ width: 420, flexShrink: 0, background: 'var(--gb-surface-modal)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             {selected
