@@ -53,6 +53,11 @@ const MODEL_URLS = {
   giftbox: 'assets/giftbox_model/GiftBox.obj',
 };
 
+// Cache-bust token appended to every model URL. Chrome can serve a stale cached
+// .obj across extension reloads (the URL is otherwise constant), which masks a
+// re-exported model. Bump this whenever a model file changes to force a refetch.
+const MODEL_VERSION = '20250607-2';
+
 async function loadThreeAndModel(shape = 'ball') {
   // Parallel-load engine + helpers once so first-mount latency is dominated by
   // whichever is slowest, not the sum. cannon-es is pulled in here too so throw
@@ -73,9 +78,10 @@ async function loadThreeAndModel(shape = 'ball') {
   // accessible so chrome.runtime.getURL gives a load-anywhere URL.
   if (!cache.models[shape]) {
     const rel = MODEL_URLS[shape] || MODEL_URLS.ball;
-    const url = (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
+    const base = (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
       ? chrome.runtime.getURL(rel)
       : rel;
+    const url = `${base}?v=${MODEL_VERSION}`;   // defeat stale .obj caching
     cache.models[shape] = new Promise((resolve, reject) => {
       const loader = new OBJLoader();
       loader.load(

@@ -5,8 +5,8 @@
   "type": "module",
   "description": "Build tooling for incrementally migrating the extension to React.",
   "scripts": {
-    "build": "node build.js",
-    "watch": "node build.js --watch",
+    "build": "node --max-old-space-size=8192 build.js",
+    "watch": "node --max-old-space-size=8192 build.js --watch",
     "audit": "node scripts/audit-mappings.mjs"
   },
   "devDependencies": {
