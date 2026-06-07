@@ -5,14 +5,11 @@ import {
   Callout, SectionLabel, PillTag, TemplateSplits, equalWeights, ModalShell,
   TemplatePicker, parseTemplateValue, I, Icon,
 } from '../ui/index.js';
-import { RuleGroups } from '../ui/components/template-rules/RuleGroups.jsx';
+import { CampaignConditions } from '../ui/components/template-rules/CampaignConditions.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import {
   loadCampaigns, saveCampaign, removeCampaign, newCampaign, newStep, uid, subscribeCampaigns,
 } from '../lib/campaign/store.js';
-import {
-  opsForCondition, signalOptionGroups, blankConditionForSource, SIGNAL_BY_ID,
-} from '../lib/campaign/fields.js';
 import { loadCallTemplates } from '../lib/callLog.js';
 import { loadTaskTemplates } from '../lib/quickTask.js';
 import { runCampaign } from '../lib/campaign/engine.js';
@@ -158,8 +155,10 @@ function StepCard({ step, displayIdx, indent, branchChild, selected, simState, t
 
 function shortRef(cond) {
   if (!cond) return '';
-  if (cond.source === 'signal') return SIGNAL_BY_ID[cond.ref]?.label?.split(' — ')[0] || cond.ref;
-  return cond.ref || cond.source;
+  if (cond.source === 'var') return 'code';
+  // schema path — show the leaf (e.g. "orders[any].total" → "total")
+  const ref = cond.ref || '';
+  return ref.split(/[.[]/).filter(Boolean).pop() || ref || cond.source;
 }
 
 /* ── Timeline ── */
@@ -268,42 +267,6 @@ function BranchVisualizer({ step }) {
           <span style={{ fontSize: 11.5, color: 'var(--gb-text-tertiary)' }}>Skips this step · continues to the next step</span>
         </div>
       </div>
-    </div>
-  );
-}
-
-/* ── Condition subject cell (RuleGroups renderSubject) ── */
-const SIGNAL_GROUPS = signalOptionGroups();
-function ConditionSubject({ condition, patch }) {
-  const source = condition.source || 'signal';
-  const setSource = (src) => patch(blankConditionForSource(src));
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-      <div style={{ display: 'flex', gap: 4 }}>
-        {[['signal', 'Signal'], ['schema', 'Field'], ['var', 'Code']].map(([id, label]) => {
-          const on = source === id;
-          return (
-            <button key={id} type="button" onClick={() => setSource(id)}
-              style={{ flex: 1, height: 22, border: '1px solid ' + (on ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'), background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-surface-2)', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)', borderRadius: 4, fontSize: 9.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--gb-font-sans)' }}>{label}</button>
-          );
-        })}
-      </div>
-      {source === 'signal' && (
-        <Dropdown size="sm" value={condition.ref} placeholder="Pick a signal…"
-          options={SIGNAL_GROUPS.flatMap((g) => g.options.map((o) => ({ ...o, group: g.group })))}
-          onChange={(ref) => {
-            const t = SIGNAL_BY_ID[ref]?.type || 'string';
-            patch({ ref, type: t, op: t === 'number' ? 'gte' : 'contains' });
-          }} />
-      )}
-      {source === 'schema' && (
-        <Input size="sm" mono value={condition.ref} placeholder="contact.firstName / orders[any].total"
-          onChange={(ref) => patch({ ref })} />
-      )}
-      {source === 'var' && (
-        <Input size="sm" mono value={condition.ref} placeholder="code expression → value"
-          onChange={(ref) => patch({ ref })} />
-      )}
     </div>
   );
 }
@@ -445,16 +408,7 @@ function StepInspector({ step, allSteps, templateLib, onChange, onDelete }) {
         </div>
 
         <div>
-          <RuleGroups
-            key={step.id}
-            initial={step.conditions}
-            defaultSource="signal"
-            renderSubject={(condition, patch) => <ConditionSubject condition={condition} patch={patch} />}
-            opsFor={opsForCondition}
-            onChange={(tree) => upd({ conditions: tree })}
-            label="Run conditions"
-            emptyHint="No conditions — this step always runs. Add a group to gate it (e.g. sent E1 and no reply)."
-          />
+          <CampaignConditions key={step.id} initial={step.conditions} onChange={(tree) => upd({ conditions: tree })} />
         </div>
       </div>
     </div>

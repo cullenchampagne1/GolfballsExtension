@@ -86,9 +86,28 @@ export function applyOp(op, rawValue, compareValue) {
 
   if (k === 'exists') return isPresent(rawValue);
   if (k === 'notexists') return !isPresent(rawValue);
+  // Presence/boolean checks that must run even on a missing value.
+  if (k === 'isempty') return !isPresent(rawValue);
+  if (k === 'notempty') return isPresent(rawValue);
+  if (k === 'istrue')  return rawValue === true || rawValue === 1 || /^(true|1|yes)$/i.test(String(rawValue));
+  if (k === 'isfalse') return !(rawValue === true || rawValue === 1 || /^(true|1|yes)$/i.test(String(rawValue)));
   // Every other operator on a missing value fails (matches the legacy
   // `if (rawVal == null) return false` short-circuit).
   if (!isPresent(rawValue)) return false;
+
+  // Collection operators (arrays/objects returned by a code condition).
+  if (k === 'lengthgte' || k === 'lengthlte') {
+    const len = Array.isArray(rawValue) ? rawValue.length
+      : typeof rawValue === 'string' ? rawValue.length
+      : (rawValue && typeof rawValue === 'object') ? Object.keys(rawValue).length : 0;
+    const n = parseNum(compareValue);
+    if (n == null) return false;
+    return k === 'lengthgte' ? len >= n : len <= n;
+  }
+  if (k === 'haskey') {
+    return rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)
+      ? Object.prototype.hasOwnProperty.call(rawValue, compareValue) : false;
+  }
 
   switch (k) {
     // ── numeric ──
@@ -127,9 +146,10 @@ export function applyOp(op, rawValue, compareValue) {
     default: {
       const s = String(rawValue).toLowerCase();
       const c = String(compareValue == null ? '' : compareValue).toLowerCase();
+      // contains/notContains test membership on an array, substring on a string.
+      if (k === 'contains')    return Array.isArray(rawValue) ? rawValue.some((x) => String(x).toLowerCase() === c) : s.includes(c);
+      if (k === 'notcontains') return Array.isArray(rawValue) ? !rawValue.some((x) => String(x).toLowerCase() === c) : !s.includes(c);
       if (k === 'is' || k === 'equals')   return s === c;
-      if (k === 'contains')               return s.includes(c);
-      if (k === 'notcontains')            return !s.includes(c);
       if (k === 'startswith')             return s.startsWith(c);
       if (k === 'endswith')               return s.endsWith(c);
       if (k === 'matchesregex') {
@@ -176,9 +196,10 @@ export const OPS_BY_TYPE = {
   ],
 };
 
-const VALUELESS_OPS = new Set(['exists', 'notExists']);
+const VALUELESS_OPS = new Set(['exists', 'notExists', 'isTrue', 'isFalse', 'isEmpty', 'notEmpty']);
+const VALUELESS_NORM = new Set(['exists', 'notexists', 'istrue', 'isfalse', 'isempty', 'notempty']);
 export function isValuelessOp(op) {
-  return VALUELESS_OPS.has(op) || normOp(op) === 'exists' || normOp(op) === 'notexists';
+  return VALUELESS_OPS.has(op) || VALUELESS_NORM.has(normOp(op));
 }
 
 /** True if any condition in the tree reads a variable — lets the
