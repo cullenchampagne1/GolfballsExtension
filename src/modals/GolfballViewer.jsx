@@ -119,7 +119,7 @@ export const SCENES = [
   { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'assets/moonlit_golf_4k.exr',     icon: 'moon' },
 ];
 
-export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, secondDecalDataUrl, onError, onSceneChange, onThrowChange, minimal = false, initialScale, autoRotate = false, shape = 'ball', chipColor }, ref) {
+export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, secondDecalDataUrl, onError, onSceneChange, onThrowChange, minimal = false, initialScale, autoRotate = false, shape = 'ball', tint }, ref) {
   const containerRef = useRef(null);
   // Imperative snapshot handle — set by the WebGL effect once the
   // scene is ready. Parent calls snapshotRef.current() to capture a
@@ -266,6 +266,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
       printAreaScale: Number(dev['golfballViewer.printAreaScale'] ?? 0.7),
     };
   }
+  // Auto-spin speed (radians/frame) — live-tunable, read each render so the
+  // dev-settings slider takes effect without remounting.
+  const spinSpeedRef = useRef(0.01);
+  spinSpeedRef.current = Number(dev['golfballViewer.spinSpeed'] ?? 0.01);
 
   useEffect(() => {
     let disposed = false;
@@ -831,7 +835,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 metalness: 0.0,
               })
             : new THREE.MeshStandardMaterial({
-                color: 0xf6f6f6,
+                // Body color: off-white by default, or the product's colorway
+                // (e.g. a "Pro V1 Yellow" tints the whole ball optic-yellow).
+                color: tint ? new THREE.Color(tint) : 0xf6f6f6,
                 // Slight emissive so the shadow-side never fully grays
                 // out. Roughness lowered so the dimples catch a crisper
                 // highlight (a real golfball is fairly glossy plastic).
@@ -848,7 +854,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // ONLY the clay to the chosen colorway and keep the molded dashes /
           // spots / center inlay white — so one model serves every color and the
           // logo still reads on the white center. Default = near-black clay.
-          const clay = new THREE.Color(chipColor || '#1c1c1c');
+          const clay = new THREE.Color(tint || '#1c1c1c');
           ballMesh.material.onBeforeCompile = (shader) => {
             shader.uniforms.uClay = { value: clay };
             shader.fragmentShader = 'uniform vec3 uClay;\n' + shader.fragmentShader.replace(
@@ -2944,7 +2950,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // Slow auto-spin around Y so both poles come into view (dual-pole
           // preview). Disabled during throw/explode so it doesn't fight physics.
           if (autoRotateRef.current && !throwModeRef.current && !ballExploded) {
-            ballGroup.rotation.y += 0.01;
+            ballGroup.rotation.y += spinSpeedRef.current;
           }
 
           /* ── Two-pass render for refraction ────────────────────
@@ -3266,7 +3272,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
     // Re-running on decalDataUrl change is desired so swapping the
     // alignment image rebuilds the decal projection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [decalDataUrl, secondDecalDataUrl, shape, chipColor]);
+  }, [decalDataUrl, secondDecalDataUrl, shape, tint]);
 
   // cleanupRef holds the dispose closure across the async boundary so
   // strict-mode double-mount + teardown still releases GPU resources.

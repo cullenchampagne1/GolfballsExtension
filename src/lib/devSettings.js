@@ -116,6 +116,14 @@ export const DEV_SETTINGS = [
     default: 0.7,
     min:     0.2, max: 1.5, step: 0.05,
   },
+  {
+    key:     'golfballViewer.spinSpeed',
+    label:   'Golfball viewer: auto-spin speed',
+    desc:    'Radians per frame the model turns when the ↻ auto-rotate button is on (shows both poles/sides). Default 0.01 (~0.6°/frame).',
+    type:    'number',
+    default: 0.01,
+    min:     0, max: 0.1, step: 0.005,
+  },
   /* ── Per-modal draggable mode ─────────────────────────────────
      Each wired modal exposes a `<name>.draggable` flag. When ON, the
      modal is a click-through tool window the user can fling around
@@ -262,6 +270,17 @@ export const DEV_SETTINGS = [
     min:     0.5,
     max:     5,
     step:    0.25,
+    unit:    '×',
+  },
+  {
+    key:     'giftCatalog.chipPreviewScale',
+    label:   'Gifting Catalog: live preview poker-chip scale',
+    desc:    'Initial zoom of the poker chip in the catalog preview (chips are small ball-markers, so they frame smaller than the ball). Wheel zoom still overrides.',
+    type:    'number',
+    default: 1.58,
+    min:     0.5,
+    max:     5,
+    step:    0.05,
     unit:    '×',
   },
   {

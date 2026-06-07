@@ -206,6 +206,22 @@ function chipClayHex(data) {
   return '#1c1c1c';
 }
 
+/* Optic golf-ball colorways — vivid, not the muted base-product swatches.
+   A "Pro V1 Yellow Golf Balls" tints the whole ball neon yellow in the preview.
+   White/black balls stay default (undefined → off-white). */
+const BALL_TINTS = [
+  ['yellow', '#e8ff1a'], ['orange', '#ff6a16'], ['red', '#ec2a2a'],
+  ['green', '#5fe04a'], ['pink', '#ff5fa6'], ['blue', '#2f7fd6'],
+];
+function ballTitleTint(title) {
+  if (!title) return undefined;
+  const t = title.toLowerCase();
+  for (const [name, hex] of BALL_TINTS) {
+    if (new RegExp(`\\b${name}\\b`).test(t)) return hex;
+  }
+  return undefined;
+}
+
 
 const UploadI = (props) => <Icon {...props}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" /></Icon>;
 const SparkI = (props) => <Icon {...props}><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></Icon>;
@@ -1610,7 +1626,7 @@ function AccessoryCustomizer({ p, config, loading }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {loading && <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontStyle: 'italic' }}>Loading live options…</div>}
-      {isChip && !bundleItems && <LivePreview3D shape="chip" />}
+      {isChip && !bundleItems && <LivePreview3D shape="chip" p={p} />}
       <BaseProperties p={p} config={config} />
       {bundleItems && bundleItems.length
         ? <BundleSections items={bundleItems} p={p} config={config} dualPole={dualPole} />
@@ -1831,17 +1847,19 @@ function PrintTypeGrid({ p, mods, config }) {
    print-type snapshot resolves to. When the user has nothing to preview yet
    (unsupported type, or an upload-based type with no image) we show a soft
    empty-state on a placeholder card the same shape as the canvas. */
-function LivePreview3D({ shape = 'ball' }) {
+function LivePreview3D({ shape = 'ball', p }) {
   const ctx = usePT();
   const isChip = shape === 'chip';
-  const chipColor = isChip ? chipClayHex(ctx.data) : undefined;
+  // Body tint: chip clay from the buyer's color pick; ball from the product's
+  // colorway in its title (e.g. "Pro V1 Yellow" → optic yellow).
+  const tint = isChip ? chipClayHex(ctx.data) : ballTitleTint(p && p.title);
   const decalUrl = useDecalUrl();
   const secondUrl = useSecondDecalUrl(decalUrl);
-  // Ball uses the larger catalog preview scale; the chip is a small ball-marker,
-  // so it frames at the golfball's default scale (golfballViewer.ballScale).
-  const ballDefaultScale = Number(useDevSetting('golfballViewer.ballScale') ?? 1) || 1;
+  // Ball uses the catalog preview scale; the chip has its own (smaller) scale —
+  // both are dev-tunable.
+  const chipScale = Number(useDevSetting('giftCatalog.chipPreviewScale') ?? 1.58) || 1.58;
   const catalogScale = Number(useDevSetting('giftCatalog.previewScale') ?? 2) || 2;
-  const previewScale = isChip ? ballDefaultScale : catalogScale;
+  const previewScale = isChip ? chipScale : catalogScale;
   // Slow auto-spin so both poles/sides (dual-pole imprints) are visible hands-free.
   const [spin, setSpin] = useState(false);
   // The chip is a product worth seeing blank, so it always mounts; the ball is
@@ -1869,7 +1887,7 @@ function LivePreview3D({ shape = 'ball' }) {
       <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Live preview</div>
       <div style={{ position: 'relative', width: '100%', height: 200, borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)' }}>
         {showViewer ? (
-          <GolfballViewer minimal shape={shape} chipColor={chipColor} initialScale={previewScale} autoRotate={spin} decalDataUrl={decalUrl} secondDecalDataUrl={secondUrl} />
+          <GolfballViewer minimal shape={shape} tint={tint} initialScale={previewScale} autoRotate={spin} decalDataUrl={decalUrl} secondDecalDataUrl={secondUrl} />
         ) : (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, textAlign: 'center' }}>
             <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', lineHeight: 1.4 }}>{emptyMsg}</div>
@@ -2214,7 +2232,7 @@ export function CustomizeBlock({ p, onChange }) {
                 <PrintTypeProvider mods={mods}>
                   <DecorationEmitter p={p} onChange={onChange} />
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    <LivePreview3D />
+                    <LivePreview3D p={p} />
                     <BaseProperties p={p} config={config} />
                     {p.customLogo && <GiftSetPicker p={p} />}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
