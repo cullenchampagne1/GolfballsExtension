@@ -1510,18 +1510,17 @@ export function ImagePreview({
                 >
                   Image
                 </Btn>
-                <span style={{ flex: 1 }} />
                 {/* Model switcher — every 3D model we support. Replaces the old
                     ball/chip icon toggle. Its menu portals to <body>, so the
-                    strip's overflow:hidden doesn't clip it. */}
+                    strip's overflow:hidden doesn't clip it. Grows to fill the
+                    strip between the Image and Copy buttons. */}
                 <Dropdown
                   size="sm"
                   value={viewerShape}
                   options={MODEL_OPTIONS}
                   onChange={setViewerShape}
-                  style={{ minWidth: 150 }}
+                  style={{ flex: 1, minWidth: 150 }}
                 />
-                <span style={{ flex: 1 }} />
                 <Btn
                   size="sm"
                   variant="secondary"

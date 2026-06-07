@@ -1,91 +1,99 @@
 /* giftSetLayout.js — gift-set 3D assembly data (pure data + parsers, no three.js).
  *
- * The catalog previews a single customized item (ball / chip / divot / bartender)
- * in 3D. A gift set is the assembled product: a presentation box with the
- * customized balls + chips sitting in its foam slots (+ a pack of tees). This
- * module supplies (1) which box model to load and (2) where every item sits, in
- * the box model's LOCAL coordinate space, so GolfballViewer's `giftset` mode can
- * clone the already-customized ball/chip/tee models into those slots.
+ * The catalog/Image-Viewer can preview the assembled gift set in 3D: a presentation
+ * box with the customized balls + a kit (poker chips, or a divot tool) sitting in
+ * its foam slots. This module supplies, per set: which box model to load, where the
+ * balls sit, and a generic list of "kit items" (each = a model + a slot transform +
+ * whether it takes the logo). GolfballViewer's `giftset` mode clones the already-
+ * customized models into those slots.
  *
- * Coordinate space: matches assets/giftbox_model/GiftBox.obj exactly — exported
- * from Blender with NO axis conversion (up=Z, forward=Y), so +Z is the box
- * opening (up), origin = box center, units = the Blender model units (the foam
- * footprint is x ±5.0, y ±3.37; the box outer shell is x ±5.45, y ±3.82). Every
- * coordinate below was measured by blob-detecting the reference product photo and
- * verified against the rendered box. The tee pile is the exact per-instance
- * transform set baked out of the Blender scene (loc + XYZ Euler, radians).
+ * Coordinate space matches the exported box OBJs exactly — Blender Z-up, NO axis
+ * conversion, so +Z is the box opening (up), origin = box center, units = Blender
+ * model units (foam footprint x ±5.0, y ±3.37; outer shell x ±5.45, y ±3.82).
+ * Coords were blob-measured from the reference product photos + verified against the
+ * rendered boxes. The tee pile + its well are BAKED into each box OBJ (white-tinted
+ * verts), not placed at runtime — tees are never customized.
  *
- * Scope (today): the 6-ball poker-chip black box. `giftSetLayout()` returns null
- * for any other set, so the catalog falls back to the plain ball preview. Adding
- * a new box = model it, export the OBJ, drop another entry in BOX_LAYOUTS keyed
- * by ball count + kit type. Nothing else changes.
+ * All three 6-ball black-box sets share the SAME box (6-ball grid + tee well); they
+ * differ only in the upper-right kit: 2 poker chips, OR 1 divot tool + 2 (empty,
+ * not-yet-modeled) ball-marker spots.
  */
 
+// MODEL_URLS keys in GolfballViewer for each baked box (walls + cut foam + tees).
 export const BOX_MODELS = {
-  // The box model bakes in the tray walls, the cut foam (ball bowls + chip
-  // recesses + tee well), AND the white tee pile — so the whole container is one
-  // mesh and only the customized balls/chips get placed at runtime.
-  sixBallPokerChip: 'assets/giftbox_model/GiftBox.obj',
+  sixBallPokerChip: 'giftbox',
+  sixBallLever: 'giftboxLever',
+  sixBallBartender: 'giftboxBartender',
 };
 
-/* The 6-ball poker-chip presentation box. Slot centers are where each item's
-   CENTER sits (ball center, chip center). Radii are the target box-local radius
-   each model is scaled to fill (ball ~0.86, chip ~0.82). */
+// Shared 6-ball grid (2 cols × 3 rows, left side). Order: TL, TR, ML, MR, BL, BR.
+const BALL_SLOTS = [
+  { x: -3.70, y: 1.93, z: 0.06 }, { x: -1.33, y: 1.93, z: 0.06 },
+  { x: -3.70, y: 0.00, z: 0.06 }, { x: -1.33, y: 0.00, z: 0.06 },
+  { x: -3.70, y: -1.93, z: 0.06 }, { x: -1.33, y: -1.93, z: 0.06 },
+];
+
+/* A kit item is one customized object dropped into the box's upper-right:
+ *   shape   — GolfballViewer model key ('chip' | 'divot' | 'bartender')
+ *   x,y,z   — slot center (box-local)
+ *   radius  — for round items (chips): target box-local disc radius (model scaled to it)
+ *   scale   — for irregular tools: direct box-local scale factor (matches the foam recess)
+ *   rz      — in-plane angle (deg) the item is rotated to (tools lie diagonally)
+ *   decal   — true → project the shared logo onto its print face / marker disc
+ * (The 2 ball-marker spots in the divot/bartender sets are left empty for now —
+ *  no marker model yet — so they're not listed as kit items.)
+ */
 export const SIX_BALL_POKER_CHIP = {
   boxModel: BOX_MODELS.sixBallPokerChip,
   ballRadius: 0.86,
-  chipRadius: 0.82,
-  // 2 cols × 3 rows, left side. Order: top-left, top-right, mid-left, mid-right,
-  // bottom-left, bottom-right (so slicing to fewer balls keeps the top rows).
-  ballSlots: [
-    { x: -3.70, y: 1.93, z: 0.06 }, { x: -1.33, y: 1.93, z: 0.06 },
-    { x: -3.70, y: 0.00, z: 0.06 }, { x: -1.33, y: 0.00, z: 0.06 },
-    { x: -3.70, y: -1.93, z: 0.06 }, { x: -1.33, y: -1.93, z: 0.06 },
+  ballSlots: BALL_SLOTS,
+  kitItems: [
+    { shape: 'chip', x: 1.26, y: 1.84, z: -0.02, radius: 0.82, decal: true },
+    { shape: 'chip', x: 3.28, y: 0.27, z: -0.02, radius: 0.82, decal: true },
   ],
-  // Staggered diagonally (upper-left chip, lower-right chip), upper-right area.
-  chipSlots: [
-    { x: 1.26, y: 1.84, z: -0.02 },
-    { x: 3.28, y: 0.27, z: -0.02 },
+};
+export const SIX_BALL_LEVER = {
+  boxModel: BOX_MODELS.sixBallLever,
+  ballRadius: 0.86,
+  ballSlots: BALL_SLOTS,
+  kitItems: [
+    { shape: 'divot', x: 3.05, y: 1.70, z: -0.05, rz: -50, scale: 0.5, decal: true },
   ],
-  // NOTE: the tee pile + its inset well are BAKED into GiftBox.obj (white-tinted
-  // vertices), not placed at runtime — tees are never customized, so baking them
-  // into the one box model is simpler and guarantees the well/holes can't go
-  // missing on export. Only the balls + chips are placed into the foam holes.
+};
+export const SIX_BALL_BARTENDER = {
+  boxModel: BOX_MODELS.sixBallBartender,
+  ballRadius: 0.86,
+  ballSlots: BALL_SLOTS,
+  kitItems: [
+    { shape: 'bartender', x: 3.05, y: 1.70, z: -0.05, rz: -50, scale: 0.55, decal: true },
+  ],
 };
 
-/* What's physically in the set, parsed from a normalized gift-set option
-   (see normalizeBundleOption in giftSets.js). Returns null for sets this module
-   can't lay out yet (anything that isn't a poker-chip set), so callers fall back
-   to the single-item preview. */
+/* What's physically in the set, parsed from a normalized gift-set option (see
+   normalizeBundleOption in giftSets.js). Returns the set KIND or null for sets this
+   module can't lay out yet (so callers fall back to the single-item preview). */
 export function parseGiftSetContents(option) {
   if (!option) return null;
   const hay = [
     option.name, option.giftSetType, option.friendly, option.wrapperImage,
     ...((option.descriptions || []).flatMap((d) => [d && d.text, ...((d && d.subtext) || [])])),
   ].filter(Boolean).join(' ').toLowerCase();
-  // Only poker-chip sets are modeled today.
-  if (!/poker[\s-]?chip/.test(hay)) return null;
   const balls = option.ballsPerSet || Math.round((option.oiq || 0) * 12) || 0;
-  // Chip count: read "<n> poker chip(s)" from the copy, else the reference's 2.
-  const m = /(\d+)\s*poker[\s-]?chip/.exec(hay);
-  const chips = m ? Number(m[1]) : 2;
-  return { balls, chips, chipShape: 'chip', tees: true };
+  let kind = null;
+  if (/poker[\s-]?chip/.test(hay)) kind = 'pokerChip';
+  else if (/bartender/.test(hay)) kind = 'bartender';   // bartender divot tool
+  else if (/lever/.test(hay) || /divot/.test(hay)) kind = 'lever';
+  if (!kind) return null;
+  return { balls, kind };
 }
 
-/* Resolve the 3D layout for a chosen gift-set option. Returns
-   { boxModel, ballRadius, chipRadius, ballSlots, chipSlots }
-   sliced to the set's actual contents, or null if unsupported (→ plain preview). */
+/* Resolve the 3D layout for a chosen gift-set option, or null if unsupported
+   (→ plain ball preview). Only the 6-ball black-box sets are modeled today. */
 export function giftSetLayout(option) {
-  const contents = parseGiftSetContents(option);
-  if (!contents) return null;
-  // Only the 6-ball poker-chip box is modeled for now.
-  if (contents.balls !== 6) return null;
-  const L = SIX_BALL_POKER_CHIP;
-  return {
-    boxModel: L.boxModel,
-    ballRadius: L.ballRadius,
-    chipRadius: L.chipRadius,
-    ballSlots: L.ballSlots.slice(0, contents.balls),
-    chipSlots: L.chipSlots.slice(0, contents.chips),
-  };
+  const c = parseGiftSetContents(option);
+  if (!c || c.balls !== 6) return null;
+  if (c.kind === 'pokerChip') return SIX_BALL_POKER_CHIP;
+  if (c.kind === 'lever') return SIX_BALL_LEVER;
+  if (c.kind === 'bartender') return SIX_BALL_BARTENDER;
+  return null;
 }

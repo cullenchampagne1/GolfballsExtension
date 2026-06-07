@@ -51,12 +51,16 @@ const MODEL_URLS = {
   // coords match the slot table in giftSetLayout.js directly; loaded raw (NOT
   // rotateX-stood like the chip) — the giftset branch orients the assembly itself.
   giftbox: 'assets/giftbox_model/GiftBox.obj',
+  // The other 6-ball black-box sets reuse the same box (6 balls + tee well) but
+  // swap the upper-right kit (a divot/bartender tool recess + 2 empty marker spots).
+  giftboxLever: 'assets/giftbox_model/GiftBox_Lever.obj',
+  giftboxBartender: 'assets/giftbox_model/GiftBox_Bartender.obj',
 };
 
 // Cache-bust token appended to every model URL. Chrome can serve a stale cached
 // .obj across extension reloads (the URL is otherwise constant), which masks a
 // re-exported model. Bump this whenever a model file changes to force a refetch.
-const MODEL_VERSION = '20250607-3-tri';
+const MODEL_VERSION = '20250607-4-sets';
 
 async function loadThreeAndModel(shape = 'ball') {
   // Parallel-load engine + helpers once so first-mount latency is dominated by
@@ -103,7 +107,7 @@ async function loadThreeAndModel(shape = 'ball') {
           // correctly in-shader (chip/divot clay+marker masks) and the giftbox reads
           // as intended (dark foam/box ~0.07, white baked tees ~0.82) rather than
           // the washed-out values the OBJ exporter writes (sRGB-encoded).
-          if (shape === 'chip' || shape === 'divot' || shape === 'bartender' || shape === 'giftbox') {
+          if (shape === 'chip' || shape === 'divot' || shape === 'bartender' || shape.startsWith('giftbox')) {
             const col = geo.getAttribute('color');
             if (col) {
               const s2l = (v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
@@ -358,7 +362,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   // Stable rebuild key for the gift-set assembly — re-runs the scene-build effect
   // only when the SET's structure changes (box / item counts), not on every
   // re-render of the (freshly-built) giftSet object. Logo + colors update without it.
-  const giftKey = giftSet ? `${giftSet.boxModel}:${(giftSet.ballSlots || []).length}:${(giftSet.chipSlots || []).length}` : '';
+  const giftKey = giftSet ? `${giftSet.boxModel}:${(giftSet.ballSlots || []).length}:${(giftSet.kitItems || []).map((k) => k.shape).join(',')}` : '';
   useEffect(() => {
     if (shape !== 'giftset' || !giftViewRef.current) return;
     giftViewRef.current.rotation.set((giftRotX * Math.PI) / 180, (giftRotY * Math.PI) / 180, 0);
@@ -937,21 +941,20 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         if (isGiftSet && giftSet) {
           // Box model is baked: tray walls + foam (with all cut slots) + the white
           // tee pile, carrying per-vertex colors (dark box / white tees). Only the
-          // customized balls + chips are placed dynamically into the foam holes.
-          const [boxRes, ballRes, chipRes] = await Promise.all([
-            loadThreeAndModel('giftbox'), loadThreeAndModel('ball'), loadThreeAndModel('chip'),
+          // customized balls + kit items are placed dynamically into the foam holes.
+          // The kit-item models (chip / divot / bartender) load on demand in the loop.
+          const [boxRes, ballRes] = await Promise.all([
+            loadThreeAndModel(giftSet.boxModel || 'giftbox'), loadThreeAndModel('ball'),
           ]);
           if (disposed) return;
-          // Loud diagnostic so we can see in DevTools EXACTLY what's loaded:
-          //   boxVerts 7062 + boxHasColors true = the new baked box (holes+tees);
-          //   3722 = older (holes, no tees); missing log entirely = stale bundle.
           try {
             console.log('[GIFTSET]', {
               modelVersion: MODEL_VERSION,
+              boxModel: giftSet.boxModel,
               boxVerts: boxRes.model.geometry.attributes.position.count,
               boxHasColors: !!boxRes.model.geometry.attributes.color,
               balls: giftSet.ballSlots.length,
-              chips: giftSet.chipSlots.length,
+              kit: (giftSet.kitItems || []).map((k) => k.shape).join(','),
             });
           } catch (e) { /* noop */ }
 
@@ -995,16 +998,30 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               ? new THREE.MeshStandardMaterial({ ...opts, roughness: 0.5, metalness: 0 })
               : new THREE.MeshBasicMaterial(opts);
           };
-          // Project the logo flat onto an instance's +Z face, parented as a CHILD
-          // so it rides the instance's slot transform. Built while the instance is
-          // still at identity (matrixWorld == identity) → decal geo in local units.
-          const addDecal = (instance, size, posZ, depth) => {
+          // Project the logo flat onto an instance's +Z face at (cx,cy), parented as
+          // a CHILD so it rides the instance's slot transform. Built while the instance
+          // is still at identity (matrixWorld == identity) → decal geo in local units.
+          const addDecal = (instance, cx, cy, posZ, size, depth) => {
             if (!logoTex) return;
-            const geo = new DecalGeometry(instance, new THREE.Vector3(0, 0, posZ), new THREE.Euler(0, 0, 0), new THREE.Vector3(size, size, depth));
+            const geo = new DecalGeometry(instance, new THREE.Vector3(cx, cy, posZ), new THREE.Euler(0, 0, 0), new THREE.Vector3(size, size, depth));
             const dm = new THREE.Mesh(geo, decalMaterial());
-            dm.position.z += posZ * 0.06;   // hair off the surface (depth-win on ANGLE)
+            dm.position.z += Math.abs(posZ) * 0.06 + 0.001;   // hair off the surface (depth-win on ANGLE)
             instance.add(dm);
             objectsToDispose.push(geo, dm.material);
+          };
+          // Locate the white marker disc on a tool (from the baked vertex mask) so the
+          // logo lands on it (the divot/bartender print area), not the tool centroid.
+          const locateMarker = (geo) => {
+            const pos = geo.getAttribute('position'), col = geo.getAttribute('color');
+            let sx = 0, sy = 0, n = 0, maxz = -1e9; const wx = [], wy = [];
+            if (col) for (let i = 0; i < pos.count; i++) {
+              if (col.getX(i) > 0.5) { const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i); sx += x; sy += y; n++; wx.push(x); wy.push(y); if (z > maxz) maxz = z; }
+            }
+            geo.computeBoundingBox();
+            if (!n) return { cx: 0, cy: 0, faceZ: geo.boundingBox.max.z, discR: Math.max(geo.boundingBox.max.x, geo.boundingBox.max.y) * 0.5 };
+            const cx = sx / n, cy = sy / n; let dr = 0;
+            for (let k = 0; k < wx.length; k++) { const d = Math.hypot(wx[k] - cx, wy[k] - cy); if (d > dr) dr = d; }
+            return { cx, cy, faceZ: maxz, discR: dr };
           };
 
           const contentGroup = new THREE.Group();
@@ -1025,7 +1042,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           for (const s of giftSet.ballSlots) {
             const mat = new THREE.MeshStandardMaterial({ color: ballColor.clone(), emissive: 0x101418, emissiveIntensity: 0.4, roughness: 0.28, metalness: 0.02 });
             const m = new THREE.Mesh(ballCG.geo.clone(), mat);
-            addDecal(m, ballCG.radius * 0.62, ballCG.radius * 0.999, ballCG.radius * 2);
+            addDecal(m, 0, 0, ballCG.radius * 0.999, ballCG.radius * 0.62, ballCG.radius * 2);
             m.scale.setScalar(giftSet.ballRadius / ballCG.radius);
             m.position.set(s.x, s.y, s.z);
             contentGroup.add(m); ballMats.push(mat);
@@ -1033,25 +1050,48 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           }
           giftBallMatsRef.current = ballMats;
 
-          // Chips — shared clay color (vertex-mask recolor shader), one logo each.
+          // Kit items — the customized models dropped into the box's upper-right.
+          // chip → clay-recolored disc (logo on the white center); divot/bartender →
+          // brushed steel + white marker disc (logo on the disc). Each cached model
+          // loads once; markers (the 2 round spots in divot sets) aren't modeled yet
+          // so they're simply absent from kitItems → left as empty foam recesses.
           const chipClay = new THREE.Color(chipTint || '#1c1c1c');
           giftClayRef.current = chipClay;
-          const chipCG = centeredGeo(chipRes.model.geometry);   // disc-axis +Z after the loader's rotateX
-          for (const s of giftSet.chipSlots) {
-            const mat = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, emissive: 0x0a0a0a, emissiveIntensity: 0.25, roughness: 0.55, metalness: 0.0 });
-            mat.onBeforeCompile = (sh) => {
-              sh.uniforms.uClay = { value: chipClay };
-              sh.fragmentShader = 'uniform vec3 uClay;\n' + sh.fragmentShader.replace('#include <color_fragment>', [
-                '#ifdef USE_COLOR',
-                '  float _pat = smoothstep(0.22, 0.6, max(vColor.r, max(vColor.g, vColor.b)));',
-                '  diffuseColor.rgb *= mix(uClay, vec3(1.0), _pat);',
-                '#endif',
-              ].join('\n'));
-            };
-            const m = new THREE.Mesh(chipCG.geo.clone(), mat);
-            addDecal(m, chipCG.hx * 0.85, chipCG.hz * 1.2, chipCG.hz * 1.8);
-            m.scale.setScalar(giftSet.chipRadius / chipCG.hx);
-            m.position.set(s.x, s.y, s.z);
+          const steel = new THREE.Color('#c2c6cc');
+          for (const item of (giftSet.kitItems || [])) {
+            const res = await loadThreeAndModel(item.shape);
+            if (disposed) return;
+            const cg = centeredGeo(res.model.geometry);
+            let mat, m;
+            if (item.shape === 'chip') {
+              mat = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, emissive: 0x0a0a0a, emissiveIntensity: 0.25, roughness: 0.55, metalness: 0.0 });
+              mat.onBeforeCompile = (sh) => {
+                sh.uniforms.uClay = { value: chipClay };
+                sh.fragmentShader = 'uniform vec3 uClay;\n' + sh.fragmentShader.replace('#include <color_fragment>', [
+                  '#ifdef USE_COLOR',
+                  '  float _pat = smoothstep(0.22, 0.6, max(vColor.r, max(vColor.g, vColor.b)));',
+                  '  diffuseColor.rgb *= mix(uClay, vec3(1.0), _pat);',
+                  '#endif',
+                ].join('\n'));
+              };
+              m = new THREE.Mesh(cg.geo.clone(), mat);
+              if (item.decal) addDecal(m, 0, 0, cg.hz * 1.2, cg.hx * 0.85, cg.hz * 1.8);   // +Z disc face
+              m.scale.setScalar((item.radius || 0.82) / cg.hx);
+            } else {
+              // divot / bartender — same steel + marker-mask recipe as the single tool.
+              mat = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, metalness: 0.5, roughness: 0.5, emissive: 0x15171b, emissiveIntensity: 0.3 });
+              mat.onBeforeCompile = (sh) => {
+                sh.uniforms.uMetal = { value: steel };
+                sh.fragmentShader = 'uniform vec3 uMetal;\n' + sh.fragmentShader
+                  .replace('#include <color_fragment>', ['#ifdef USE_COLOR', '  float _wm = step(0.5, vColor.r);', '  diffuseColor.rgb = mix(uMetal, vec3(1.0), _wm);', '#endif'].join('\n'))
+                  .replace('#include <metalnessmap_fragment>', ['#include <metalnessmap_fragment>', '#ifdef USE_COLOR', '  metalnessFactor *= (1.0 - step(0.5, vColor.r));', '#endif'].join('\n'));
+              };
+              m = new THREE.Mesh(cg.geo.clone(), mat);
+              if (item.decal) { const mk = locateMarker(cg.geo); addDecal(m, mk.cx, mk.cy, mk.faceZ * 1.2, mk.discR * 1.8, mk.faceZ * 1.8); }
+              m.scale.setScalar(item.scale || 0.5);
+              m.rotation.z = ((item.rz || 0) * Math.PI) / 180;
+            }
+            m.position.set(item.x, item.y, item.z);
             contentGroup.add(m);
             objectsToDispose.push(mat, m.geometry);
           }
