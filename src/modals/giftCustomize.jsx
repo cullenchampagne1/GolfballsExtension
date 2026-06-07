@@ -194,11 +194,13 @@ export function isPokerChipProduct(p) {
   return /poker\s*chip/i.test(`${p.title || ''} ${p.url || ''}`);
 }
 
-/* A metal divot tool with a logo ball-marker disc (e.g. "Venture Golf Lever
-   Divot Tool with Logo Ball Marker Steel") — gets the live 3D divot preview. */
+/* The Venture Golf "Lever Divot Tool with Logo Ball Marker" specifically — that's
+   the one model we built. Other divot tools have different silhouettes, so match
+   the LEVER divot model (lever + divot together), not every divot tool. */
 export function isDivotProduct(p) {
   if (!p) return false;
-  return /divot\s*tool/i.test(`${p.title || ''} ${p.url || ''}`);
+  const hay = `${p.title || ''} ${p.url || ''}`.toLowerCase();
+  return hay.includes('divot') && hay.includes('lever');
 }
 
 /* The buyer's base-color pick (stored in the __base slot as a color name, e.g.
