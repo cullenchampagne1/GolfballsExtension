@@ -3501,8 +3501,16 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 // Snippet matches the dev-setting keys exactly so the
                 // user can paste the values directly into Developer
                 // Settings without translating coordinate systems.
+                // The applied (group) scale comes from whatever drives
+                // `initialScale`: the chip + catalog-ball previews pass their
+                // own dev settings; the Image Viewer ball falls back to
+                // golfballViewer.ballScale. Label it with the key that actually
+                // controls it so the value can be pasted straight back.
+                const scaleKey = shape === 'chip'
+                  ? 'giftCatalog.chipPreviewScale'
+                  : (initialScale != null ? 'giftCatalog.previewScale' : 'golfballViewer.ballScale');
                 const snippet =
-                  `golfballViewer.ballScale = ${debug.scale.toFixed(2)}\n` +
+                  `${scaleKey} = ${debug.scale.toFixed(2)}\n` +
                   `golfballViewer.ballRotX  = ${debug.rotDeg[0].toFixed(1)}°\n` +
                   `golfballViewer.ballRotY  = ${debug.rotDeg[1].toFixed(1)}°\n` +
                   `golfballViewer.ballRotZ  = ${debug.rotDeg[2].toFixed(1)}°\n` +
@@ -3567,7 +3575,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           (rd.shaderErrors && rd.shaderErrors.length) ? rd.shaderErrors.join('\n----\n') : 'none',
           '',
           '-- Ball --',
-          `ballScale: ${debug.scale.toFixed(2)}   rot: ${debug.rotDeg.map((r) => r.toFixed(1)).join(' / ')}   printAreaScale: ${(debug.printAreaScale ?? 0.7).toFixed(2)}`,
+          `${shape === 'chip' ? 'chipScale' : 'ballScale'} (applied): ${debug.scale.toFixed(2)}   rot: ${debug.rotDeg.map((r) => r.toFixed(1)).join(' / ')}   printAreaScale: ${(debug.printAreaScale ?? 0.7).toFixed(2)}`,
         ].join('\n');
         const row = (k, v, warn) => (
           <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
