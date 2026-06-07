@@ -53,8 +53,11 @@ export function hexToRgb(hex) {
 }
 
 /* Recolor an image: every pixel within `tolerance` RGB distance of `fromRgb`
-   becomes `toRgb`. Alpha is preserved (transparent stays transparent). Returns
-   a PNG dataURL. Rejects on a CORS-tainted canvas. */
+   becomes `toRgb` (alpha preserved). Pass `toRgb = null` to KNOCK OUT instead —
+   matching pixels fade to transparent (alpha → 0 at an exact match, ramping back
+   to opaque at the tolerance edge for a clean anti-aliased cut) so e.g. a white
+   logo background drops out and a colored ball/chip shows through. Returns a PNG
+   dataURL. Rejects on a CORS-tainted canvas. */
 export function recolorImage(sourceUrl, fromRgb, toRgb, tolerance) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -68,10 +71,19 @@ export function recolorImage(sourceUrl, fromRgb, toRgb, tolerance) {
         const idata = ctx.getImageData(0, 0, c.width, c.height);
         const d = idata.data;
         const tol2 = tolerance * tolerance;
+        const knockout = toRgb === null;
+        const tolSafe = Math.max(1, tolerance);
         for (let i = 0; i < d.length; i += 4) {
           if (d[i + 3] === 0) continue;
           const dr = d[i] - fromRgb.r, dg = d[i + 1] - fromRgb.g, db = d[i + 2] - fromRgb.b;
-          if (dr * dr + dg * dg + db * db <= tol2) { d[i] = toRgb.r; d[i + 1] = toRgb.g; d[i + 2] = toRgb.b; }
+          const dist2 = dr * dr + dg * dg + db * db;
+          if (dist2 > tol2) continue;
+          if (knockout) {
+            // fade alpha to 0 the closer the pixel is to the picked color
+            d[i + 3] = Math.round(d[i + 3] * Math.min(1, Math.sqrt(dist2) / tolSafe));
+          } else {
+            d[i] = toRgb.r; d[i + 1] = toRgb.g; d[i + 2] = toRgb.b;
+          }
         }
         ctx.putImageData(idata, 0, 0);
         resolve(c.toDataURL('image/png'));
@@ -149,22 +161,27 @@ export const ResetIcon = (p) => (
 /* SwapPopover — a tooltip-style popover anchored at the user's last sample
    point. Shows the sampled color, a clickable swatch that opens the DS color
    picker for the replacement, a tolerance slider, and Apply / Cancel. */
+// Checkerboard fill for the "transparent" target swatch.
+const CHECKER = 'conic-gradient(#cfcfcf 25%, #fff 0 50%, #cfcfcf 0 75%, #fff 0)';
+
 export function SwapPopover({ pick, wrapRef, swapCount, onPreview, onCancel, onApply }) {
   const [newColor, setNewColor] = useState(rgbToHex(pick.color));
   const [tolerance, setTolerance] = useState(30);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [strip, setStrip] = useState(false);   // strip → transparent (knockout)
   const newSwatchRef = useRef(null);
   React.useEffect(() => { setNewColor(rgbToHex(pick.color)); }, [pick.color]);
 
   const pickedHex = rgbToHex(pick.color);
   const toRgb = hexToRgb(newColor);
+  const target = strip ? null : toRgb;   // null = knock out to transparent
 
-  // Debounced live preview as color / tolerance change.
+  // Debounced live preview as color / tolerance / mode change.
   React.useEffect(() => {
-    const id = setTimeout(() => { onPreview?.(toRgb, tolerance); }, 90);
+    const id = setTimeout(() => { onPreview?.(target, tolerance); }, 90);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newColor, tolerance]);
+  }, [newColor, tolerance, strip]);
 
   const wrapRect = wrapRef?.current?.getBoundingClientRect();
   const cursor = wrapRect ? { x: wrapRect.left + (pick?.x ?? 0), y: wrapRect.top + (pick?.y ?? 0) } : null;
@@ -184,10 +201,21 @@ export function SwapPopover({ pick, wrapRef, swapCount, onPreview, onCancel, onA
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div title="Picked color" style={{ width: 26, height: 26, borderRadius: 'var(--gb-r-sm)', background: pickedHex, border: '1px solid var(--gb-border-default)' }} />
           <I.chevr size={11} style={{ color: 'var(--gb-text-tertiary)' }} />
-          <button ref={newSwatchRef} type="button" onClick={() => setPickerOpen((v) => !v)}
-            style={{ width: 26, height: 26, padding: 0, cursor: 'pointer', background: newColor, border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)' }} />
-          <span style={{ flex: 1, textAlign: 'right', fontFamily: 'var(--gb-font-mono)', fontSize: 10.5, color: 'var(--gb-text-secondary)', letterSpacing: 0.4 }}>{newColor.toUpperCase()}</span>
+          <button ref={newSwatchRef} type="button" onClick={() => { if (strip) setStrip(false); setPickerOpen((v) => !v); }}
+            title={strip ? 'Transparent (click to pick a color instead)' : 'Replacement color'}
+            style={{ width: 26, height: 26, padding: 0, cursor: 'pointer', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)',
+              ...(strip ? { background: CHECKER, backgroundSize: '10px 10px' } : { background: newColor }) }} />
+          <span style={{ flex: 1, textAlign: 'right', fontFamily: 'var(--gb-font-mono)', fontSize: 10.5, color: 'var(--gb-text-secondary)', letterSpacing: 0.4 }}>{strip ? 'STRIP' : newColor.toUpperCase()}</span>
         </div>
+        <button type="button" onClick={() => setStrip((s) => !s)}
+          title="Drop the picked color out to transparent so the surface color shows through"
+          style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 8px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 10.5, fontWeight: 600,
+            background: strip ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)',
+            border: '1px solid ' + (strip ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
+            color: strip ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>
+          <span style={{ width: 13, height: 13, borderRadius: 3, background: CHECKER, backgroundSize: '7px 7px', border: '1px solid var(--gb-border-default)', flexShrink: 0 }} />
+          Strip to transparent
+        </button>
         <AnimatePresence>
           {pickerOpen && (
             <DSColorPickerPopover value={newColor} onChange={(hex) => setNewColor(hex)} anchorRef={newSwatchRef} onClose={() => setPickerOpen(false)} align="left" />
@@ -201,7 +229,7 @@ export function SwapPopover({ pick, wrapRef, swapCount, onPreview, onCancel, onA
         </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <Btn size="sm" variant="secondary" onClick={onCancel} style={{ flex: 1 }}>Cancel</Btn>
-          <Btn size="sm" variant="tinted" status="brand" onClick={() => onApply(toRgb, tolerance)} style={{ flex: 1 }}>Apply</Btn>
+          <Btn size="sm" variant="tinted" status="brand" onClick={() => onApply(target, tolerance)} style={{ flex: 1 }}>Apply</Btn>
         </div>
       </div>
     </DraggablePopup>
