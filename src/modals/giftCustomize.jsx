@@ -1503,8 +1503,20 @@ function BaseProperties({ p, config }) {
   // The product page (PropertyProduct) is authoritative; the catalog facet is an
   // incomplete fallback (some products, e.g. Devant towels, have no facet at all).
   const all = (config && config.properties && config.properties.length) ? config.properties : (p.properties || []);
+  const isChip = isPokerChipProduct(p);
   // Skip single-value properties (e.g. "Colors in Logo: [1 Color]") — not a real picker.
-  const properties = all.filter((prop) => (prop.options || []).length > 1);
+  const properties = all
+    .filter((prop) => (prop.options || []).length > 1)
+    .map((prop) => {
+      // The 3D chip preview defaults to black clay; default its color picker to
+      // Black too (move it first) so the swatch selection and the live preview
+      // agree the moment customization opens.
+      if (isChip && /colou?r/i.test(prop.label || '')) {
+        const black = (prop.options || []).find((o) => /^black$/i.test(o));
+        if (black) return { ...prop, options: [black, ...prop.options.filter((o) => o !== black)] };
+      }
+      return prop;
+    });
   return <>{properties.map((prop, i) => <PropertyInput key={(prop.label || '') + i} label={prop.label} options={prop.options} />)}</>;
 }
 
