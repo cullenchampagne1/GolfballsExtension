@@ -10,6 +10,7 @@ const root = dirname(fileURLToPath(import.meta.url));
 const mode = 'production';
 
 const targets = [
+  { srcDir: 'src/playground', outDir: 'react-dist/playground', file: 'playground.jsx', name: 'playground' },
   { srcDir: 'src/content', outDir: 'react-dist/content', file: 'gift-catalog.jsx',    name: 'gift-catalog' },
   { srcDir: 'src/content', outDir: 'react-dist/content', file: 'image-preview.jsx',    name: 'image-preview' },
   { srcDir: 'src/content', outDir: 'react-dist/content', file: 'editor-settings.jsx',  name: 'editor-settings' },
