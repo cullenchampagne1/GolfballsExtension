@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Btn, IconBtn, Tag, Dot, Input, Field, Dropdown, Switch, Slider,
-  Callout, SectionLabel, PillTag, TemplateSplits, equalWeights, I, Icon,
+  Callout, SectionLabel, PillTag, TemplateSplits, equalWeights, ModalShell, I, Icon,
 } from '../ui/index.js';
 import { RuleGroups } from '../ui/components/template-rules/RuleGroups.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
@@ -927,12 +927,13 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const mainCount = steps.filter((s) => !s.parentId).length;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--gb-surface-deep) 78%, rgba(0,0,0,.55))', zIndex: 2147483000 }}>
-      {/* Fixed-pixel card (not vw/vh) so the modal-scale `zoom` on the
-          mount host scales it cleanly; the inline 1.08 zoom is the slight
-          default bump and composes with whatever modal scale is set. */}
-      <motion.div initial={{ opacity: 0, scale: .98 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: .2, ease: [0.32, 0.72, 0, 1] }}
-        style={{ width: 1180, height: 760, maxWidth: '94vw', maxHeight: '90vh', zoom: 1.08, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden', color: 'var(--gb-text-secondary)' }}>
+    <div style={{ position: 'fixed', inset: 0, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', zIndex: 2147483000 }}>
+      {/* The shared ModalShell (non-draggable card) keeps chrome + the
+          bounce-in consistent with every other modal. Fixed-pixel size (not
+          vw/vh) so the modal-scale `zoom` on the mount host scales it
+          cleanly; the inline 1.2 zoom is the default size bump and composes
+          on top of whatever the modal scaler is set to. */}
+      <ModalShell width={1180} height={760} style={{ maxWidth: '94vw', maxHeight: '90vh', zoom: 1.2, color: 'var(--gb-text-secondary)' }}>
         <TopBar campaign={campaign} onChange={patchCampaign} sim={sim} onSimStart={startSim} onSimStop={stopSim} onSimReset={resetSim}
           dirty={dirty} audienceCount={contacts.length} onRun={startRun} onClose={onClose}
           dryRun={dryRun} onDryRunChange={setDryRun} />
