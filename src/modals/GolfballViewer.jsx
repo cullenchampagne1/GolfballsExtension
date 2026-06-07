@@ -108,6 +108,42 @@ async function loadThreeAndModel(shape = 'ball') {
   return { ...cache.three, model };
 }
 
+/* Printers don't print white — white ink simply isn't laid down, so the ball /
+   chip substrate shows through wherever the art is white. Knock near-white
+   pixels out to transparent (soft ramp on anti-aliased edges) so the 3D print
+   preview matches reality: invisible on a white ball, revealing the color on a
+   tinted one. "Whiteness" = min(r,g,b) so bright COLORS (e.g. light yellow) are
+   kept — only true white/near-white drops out. Returns a canvas, or null if the
+   source is CORS-tainted (caller then loads it untouched). */
+function knockoutWhiteToCanvas(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+      if (!w || !h) { resolve(null); return; }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      let id;
+      try { id = ctx.getImageData(0, 0, w, h); }
+      catch { resolve(null); return; }   // tainted canvas → caller falls back
+      const px = id.data;
+      for (let i = 0; i < px.length; i += 4) {
+        if (px[i + 3] === 0) continue;
+        const m = Math.min(px[i], px[i + 1], px[i + 2]);   // all channels high → white
+        if (m <= 225) continue;
+        px[i + 3] = m >= 245 ? 0 : Math.round(px[i + 3] * ((245 - m) / 20));
+      }
+      ctx.putImageData(id, 0, 0);
+      resolve(c);
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
 /* HDRI scene registry — one entry per scene. Add a row, drop the
    matching .exr in /icons, and the drawer picks it up automatically.
    `icon` is the glyph component used in the drawer chip; `file` is
@@ -931,9 +967,21 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
            its projection params, or null. */
         async function buildDecal(url, back) {
           if (!url) return null;
-          const texLoader = new THREE.TextureLoader();
-          const decalTexture = await new Promise((res, rej) => texLoader.load(url, res, undefined, rej));
+          // Printers don't lay down white ink — white = no print, so the ball /
+          // chip shows through. Knock white out to transparent before projecting
+          // so the preview matches the printed result (invisible on a white ball,
+          // but reveals the color on a tinted one). Falls back to a plain texture
+          // load if the source canvas is CORS-tainted.
+          let decalTexture;
+          const koCanvas = await knockoutWhiteToCanvas(url);
           if (disposed) return null;
+          if (koCanvas) {
+            decalTexture = new THREE.CanvasTexture(koCanvas);
+          } else {
+            const texLoader = new THREE.TextureLoader();
+            decalTexture = await new Promise((res, rej) => texLoader.load(url, res, undefined, rej));
+            if (disposed) return null;
+          }
           // Texture flags: clamp to edge so edge pixels don't tile across
           // the decal's edges; sRGB so white reads as white.
           decalTexture.colorSpace = THREE.SRGBColorSpace;
@@ -950,6 +998,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // is why it only broke on the Adreno machine — same code.)
           decalTexture.minFilter = THREE.LinearFilter;
           decalTexture.generateMipmaps = false;
+          decalTexture.needsUpdate = true;
           objectsToDispose.push(decalTexture);
 
           // Front: camera at +Z, identity Euler aims the projector box's -Z at
