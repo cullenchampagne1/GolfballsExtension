@@ -23,7 +23,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["charge.html", "charge.js", "editor.html", "playground.html", "sandbox.html", "react-dist/sandbox/sandbox-eval.js", "assets/photo_ball.jpg", "assets/golfball_model/Golf_ball.obj", "assets/poker_chip_model/PokerChip.obj", "assets/golden_gate_hills_4k.exr", "assets/lilienstein_4k.exr", "assets/moonlit_golf_4k.exr", "assets/sunset_fairway_4k.exr", "assets/mockup_base.png"],
+      "resources": ["charge.html", "charge.js", "editor.html", "playground.html", "sandbox.html", "react-dist/sandbox/sandbox-eval.js", "assets/photo_ball.jpg", "assets/golfball_model/Golf_ball.obj", "assets/poker_chip_model/PokerChip.obj", "assets/divot_tool_model/DivotTool.obj", "assets/golden_gate_hills_4k.exr", "assets/lilienstein_4k.exr", "assets/moonlit_golf_4k.exr", "assets/sunset_fairway_4k.exr", "assets/mockup_base.png"],
       "matches": ["<all_urls>"]
     }
   ],

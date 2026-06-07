@@ -284,6 +284,17 @@ export const DEV_SETTINGS = [
     unit:    '×',
   },
   {
+    key:     'giftCatalog.divotPreviewScale',
+    label:   'Gifting Catalog: live preview divot-tool scale',
+    desc:    'Initial zoom of the divot tool in the catalog preview (it is elongated, so it frames smaller than the ball/chip). Wheel zoom still overrides.',
+    type:    'number',
+    default: 1.0,
+    min:     0.3,
+    max:     5,
+    step:    0.05,
+    unit:    '×',
+  },
+  {
     key:     'giftCatalog.cacheHours',
     label:   'Gifting Catalog: re-index interval (hours)',
     desc:    'How long the catalog (products + pricing) is cached before a fresh live pull. Lower it if prices change often; 0 = always pull fresh on open.',

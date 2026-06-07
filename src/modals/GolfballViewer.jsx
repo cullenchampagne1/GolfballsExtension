@@ -43,6 +43,7 @@ const cache = {
 const MODEL_URLS = {
   ball: 'assets/golfball_model/Golf_ball.obj',
   chip: 'assets/poker_chip_model/PokerChip.obj',
+  divot: 'assets/divot_tool_model/DivotTool.obj',
 };
 
 async function loadThreeAndModel(shape = 'ball') {
@@ -79,12 +80,11 @@ async function loadThreeAndModel(shape = 'ball') {
           group.traverse((child) => { if (!foundMesh && child.isMesh) foundMesh = child; });
           if (!foundMesh) { reject(new Error('OBJ contains no mesh')); return; }
           const geo = foundMesh.geometry;
-          // The chip OBJ is exported Y-up (disc axis = Y) with the molded
-          // black/white pattern baked as per-vertex colors. Stand it up so its
-          // faces point at the camera (±Z, like the ball's print poles), and
-          // convert the sRGB-encoded vertex colors to linear so the black clay
-          // renders black rather than the mid-gray it'd be if read as linear.
-          if (shape === 'chip') {
+          // The chip + divot OBJs are exported Y-up (flat face = Y) with a baked
+          // per-vertex color mask. Stand them up so the face points at the camera
+          // (±Z, like the ball's print poles), and convert the sRGB-encoded
+          // vertex colors to linear so the masks compare correctly in-shader.
+          if (shape === 'chip' || shape === 'divot') {
             geo.rotateX(Math.PI / 2);
             const col = geo.getAttribute('color');
             if (col) {
@@ -396,6 +396,8 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
       try {
         const { THREE, DecalGeometry, EXRLoader, CANNON, model } = await loadThreeAndModel(shape);
         const isChip = shape === 'chip';
+        const isDivot = shape === 'divot';
+        const flat = isChip || isDivot;   // flat vertex-colored markers (face-on, local decal)
         if (disposed) return;
         const container = containerRef.current;
         if (!container) return;
@@ -883,42 +885,60 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // Clone the cached geometry so multiple GolfballViewer mounts
         // don't share + mutate the same Mesh (DecalGeometry attaches
         // to the mesh and we'd cross-contaminate state).
-        ballMesh = new THREE.Mesh(
-          model.geometry.clone(),
-          isChip
-            // Chip: paint from the OBJ's per-vertex colors (black clay + white
-            // molded dashes/spots/center). color stays white so it multiplies
-            // the vertex colors through unchanged; tiny emissive keeps the
-            // black from going fully dead on the shadow side.
-            ? new THREE.MeshStandardMaterial({
-                vertexColors: true,
-                color: 0xffffff,
-                emissive: 0x0a0a0a,
-                emissiveIntensity: 0.25,
-                roughness: 0.55,
-                metalness: 0.0,
-              })
-            : new THREE.MeshStandardMaterial({
-                // Body color: off-white by default, or the product's colorway
-                // (e.g. a "Pro V1 Yellow" tints the whole ball optic-yellow).
-                color: tint ? new THREE.Color(tint) : 0xf6f6f6,
-                // Slight emissive so the shadow-side never fully grays
-                // out. Roughness lowered so the dimples catch a crisper
-                // highlight (a real golfball is fairly glossy plastic).
-                emissive: 0x101418,
-                emissiveIntensity: 0.4,
-                roughness: 0.28,
-                metalness: 0.02,
-              }),
-        );
+        const _ballMat = isChip
+          // Chip: paint from the OBJ's per-vertex colors (black clay + white
+          // molded dashes/spots/center) via the recolor shader below.
+          ? new THREE.MeshStandardMaterial({
+              vertexColors: true, color: 0xffffff,
+              emissive: 0x0a0a0a, emissiveIntensity: 0.25,
+              roughness: 0.55, metalness: 0.0,
+            })
+          : isDivot
+          // Divot: brushed steel body + a non-metallic white marker disc. The
+          // OBJ's vertex-color mask (white disc vs black metal) drives both the
+          // base color and the metalness in the shader below.
+          ? new THREE.MeshStandardMaterial({
+              vertexColors: true, color: 0xffffff,
+              metalness: 1.0, roughness: 0.45,
+            })
+          : new THREE.MeshStandardMaterial({
+              // Body color: off-white by default, or the product's colorway
+              // (e.g. a "Pro V1 Yellow" tints the whole ball optic-yellow).
+              color: tint ? new THREE.Color(tint) : 0xf6f6f6,
+              emissive: 0x101418, emissiveIntensity: 0.4,
+              roughness: 0.28, metalness: 0.02,
+            });
+        ballMesh = new THREE.Mesh(model.geometry.clone(), _ballMat);
         ballMesh.castShadow = true;
         ballMesh.receiveShadow = false;
         // Live-recolor targets — the tint picker fires onChange every frame while
         // dragging, so a separate effect retints these in place instead of
         // re-running this whole effect (which would re-clone + re-project the
         // decal each frame). Ball → material color; chip → the clay uniform color.
-        tintMatRef.current = isChip ? null : ballMesh.material;
+        tintMatRef.current = flat ? null : ballMesh.material;
         tintClayRef.current = null;
+        if (isDivot) {
+          // Vertex-color mask: white(~0.93) = marker disc, black(~0.02) = metal.
+          // Paint the metal a brushed-steel color and force the disc to a
+          // non-metallic white (so the projected logo reads on it like paper).
+          const steel = new THREE.Color('#9a9da3');
+          ballMesh.material.onBeforeCompile = (shader) => {
+            shader.uniforms.uMetal = { value: steel };
+            shader.fragmentShader = 'uniform vec3 uMetal;\n' + shader.fragmentShader
+              .replace('#include <color_fragment>', [
+                '#ifdef USE_COLOR',
+                '  float _wm = step(0.5, vColor.r);   // 1 = white marker disc, 0 = metal',
+                '  diffuseColor.rgb = mix(uMetal, vec3(1.0), _wm);',
+                '#endif',
+              ].join('\n'))
+              .replace('#include <metalnessmap_fragment>', [
+                '#include <metalnessmap_fragment>',
+                '#ifdef USE_COLOR',
+                '  metalnessFactor *= (1.0 - step(0.5, vColor.r));   // disc = non-metallic',
+                '#endif',
+              ].join('\n'));
+          };
+        }
         if (isChip) {
           // The baked vertex colors are a clay(dark)/pattern(light) mask. Recolor
           // ONLY the clay to the chosen colorway and keep the molded dashes /
@@ -962,6 +982,29 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           chipFaceZ = Math.max(Math.abs(cbb.min.z), Math.abs(cbb.max.z));
           chipDiscR = Math.max(Math.abs(cbb.min.x), Math.abs(cbb.max.x), Math.abs(cbb.min.y), Math.abs(cbb.max.y));
         }
+        // Divot: the logo prints on the OFF-CENTER white marker disc (top of the
+        // tool), not the tool's centroid. Locate that disc from the vertex-color
+        // mask (white = disc) so the decal projector can target it.
+        let divotCx = 0, divotCy = 0, divotFaceZ = 0, divotDiscR = 0;
+        if (isDivot) {
+          const pos = ballMesh.geometry.getAttribute('position');
+          const col = ballMesh.geometry.getAttribute('color');
+          let sx = 0, sy = 0, n = 0, maxz = -1e9; const wx = [], wy = [];
+          for (let i = 0; i < pos.count; i++) {
+            if (col && col.getX(i) > 0.5) {
+              const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+              sx += x; sy += y; n++; wx.push(x); wy.push(y);
+              if (z > maxz) maxz = z;
+            }
+          }
+          if (n > 0) {
+            divotCx = sx / n; divotCy = sy / n; divotFaceZ = maxz;
+            for (let k = 0; k < wx.length; k++) {
+              const d = Math.hypot(wx[k] - divotCx, wy[k] - divotCy);
+              if (d > divotDiscR) divotDiscR = d;
+            }
+          }
+        }
         // Wrap ball+decal in a Group so throw-mode translates and
         // rotates the whole assembly together. The mesh's recentering
         // offset lives INSIDE the group so the group's origin is the
@@ -972,9 +1015,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // Apply the dev-settings default rotation so the print sits
         // at whatever orientation the team has dialed in. Drag-to-
         // rotate during use can override this freely.
-        // Chip already faces the camera after its geometry stand-up rotation, so
-        // it starts face-on; the ball uses the team's dialed-in dev rotation.
-        if (isChip) {
+        // Chip + divot already face the camera after their geometry stand-up
+        // rotation, so they start face-on; the ball uses the team's dev rotation.
+        if (flat) {
           ballGroup.rotation.set(0, 0, 0);
         } else {
           ballGroup.rotation.set(
@@ -1051,6 +1094,12 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             decalPosition = new THREE.Vector3(0, 0, sign * chipFaceZ * 1.2);
             const w = chipDiscR * chipPrintScale;
             decalSize = new THREE.Vector3(w, w, chipFaceZ * 1.8);
+          } else if (isDivot) {
+            // Project onto the off-center marker disc (located from the mask),
+            // not the tool centroid. Logo fills ~90% of the disc.
+            decalPosition = new THREE.Vector3(divotCx, divotCy, sign * divotFaceZ * 1.2);
+            const w = divotDiscR * 1.8;
+            decalSize = new THREE.Vector3(w, w, divotFaceZ * 1.8);
           } else {
             decalPosition = new THREE.Vector3(0, 0, sign * targetRadius * 0.999);
             decalSize = new THREE.Vector3(targetRadius * printAreaScale, targetRadius * printAreaScale, targetRadius * 2);
@@ -1086,7 +1135,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // Lift the decal a hair off the surface along its own pole so it wins
           // the depth test by REAL depth separation rather than polygonOffset
           // (Mac GL honors polygonOffset; ANGLE/D3D11 on Adreno does not).
-          mesh.position.z += sign * (isChip ? chipFaceZ * scale * 0.08 : targetRadius * 0.015);
+          mesh.position.z += sign * (isChip ? chipFaceZ * scale * 0.08 : isDivot ? divotFaceZ * scale * 0.08 : targetRadius * 0.015);
           objectsToDispose.push(decalGeo, decalMat);
           return { mesh, params: { position: decalPosition.clone(), orientation: decalOrientation.clone(), size: decalSize.clone(), texture: decalTexture } };
         }
