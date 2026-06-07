@@ -57,7 +57,9 @@ export const SIX_BALL_LEVER = {
   ballRadius: 0.86,
   ballSlots: BALL_SLOTS,
   kitItems: [
-    { shape: 'divot', x: 3.05, y: 1.70, z: -0.05, rz: -50, scale: 0.5, decal: true },
+    // Matched to the reference photo via render-overlay; the foam recess is cut with
+    // the SAME viewer-frame tool at these exact params, so the tool sits in its slot.
+    { shape: 'divot', x: 3.0, y: 1.3, z: -0.05, rz: -35, scale: 0.58, decal: true },
   ],
 };
 export const SIX_BALL_BARTENDER = {
@@ -65,7 +67,7 @@ export const SIX_BALL_BARTENDER = {
   ballRadius: 0.86,
   ballSlots: BALL_SLOTS,
   kitItems: [
-    { shape: 'bartender', x: 3.05, y: 1.70, z: -0.05, rz: -50, scale: 0.55, decal: true },
+    { shape: 'bartender', x: 3.0, y: 1.3, z: -0.05, rz: -35, scale: 0.62, decal: true },
   ],
 };
 

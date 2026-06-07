@@ -12,7 +12,7 @@ import {
 } from '../ui/components/ImageColorSwap.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { GolfballViewer } from './GolfballViewer.jsx';
-import { SIX_BALL_POKER_CHIP } from '../lib/giftSetLayout.js';
+import { SIX_BALL_POKER_CHIP, SIX_BALL_LEVER, SIX_BALL_BARTENDER } from '../lib/giftSetLayout.js';
 import { GrassMockupComposer } from './GrassMockupComposer.jsx';
 import { LiquidDrawer } from '../ui/components/LiquidDrawer.jsx';
 import { ColorPickerPopover } from '../ui/components/ColorPicker.jsx';
@@ -268,23 +268,30 @@ export function ImagePreview({
   const [ballTint, setBallTint] = useState(null);
   const [chipTint, setChipTint] = useState(null);
   const giftSetScale = Number(useDevSetting('golfballViewer.giftSetScale') ?? 0.9) || 0.9;
+  // The three assembled gift sets selectable in the model dropdown. All render via
+  // shape="giftset"; only the poker-chip set has chips (the others = a divot/bartender
+  // tool + empty marker spots).
+  const GIFTSETS = { giftsetPoker: SIX_BALL_POKER_CHIP, giftsetLever: SIX_BALL_LEVER, giftsetBartender: SIX_BALL_BARTENDER };
+  const viewerGiftSet = GIFTSETS[viewerShape];
+  const isGiftset = !!viewerGiftSet;
+  const hasChips = viewerShape === 'giftsetPoker';
+  const effShape = isGiftset ? 'giftset' : viewerShape;
   // Smart color control: which body colors the active model exposes.
-  //   ball → ball color · chip → chip color · gift set → both · metal tools → none.
+  //   ball → ball · chip → chip · poker set → both · lever/bartender set → ball only
+  //   (tool is fixed steel) · metal tools → none.
+  const ballCtl = { key: 'ball', label: 'Ball color', value: ballTint, set: setBallTint, def: '#f6f6f6' };
+  const chipCtl = { key: 'chip', label: 'Chip color', value: chipTint, set: setChipTint, def: '#1c1c1c' };
   const TINT_CONTROLS = {
-    ball:    [{ key: 'ball', label: 'Ball color', value: ballTint, set: setBallTint, def: '#f6f6f6' }],
-    chip:    [{ key: 'chip', label: 'Chip color', value: chipTint, set: setChipTint, def: '#1c1c1c' }],
-    giftset: [{ key: 'ball', label: 'Ball color', value: ballTint, set: setBallTint, def: '#f6f6f6' },
-              { key: 'chip', label: 'Chip color', value: chipTint, set: setChipTint, def: '#1c1c1c' }],
-    divot: [], bartender: [],
+    ball: [ballCtl], chip: [chipCtl], divot: [], bartender: [],
+    giftsetPoker: [ballCtl, chipCtl], giftsetLever: [ballCtl], giftsetBartender: [ballCtl],
   };
   const tintControls = TINT_CONTROLS[viewerShape] || [];
   // Viewer tint props: ball uses `tint` as its body, chip uses `tint` as its clay,
-  // the gift set uses `tint` for the balls + `chipTint` for the chips; metal tools
-  // take no tint (fixed steel).
+  // a gift set uses `tint` for its balls + `chipTint` for chips (poker only); metal
+  // tools take no tint (fixed steel).
   const viewerTint = viewerShape === 'chip' ? chipTint
-    : (viewerShape === 'ball' || viewerShape === 'giftset') ? ballTint : undefined;
-  const viewerChipTint = viewerShape === 'giftset' ? chipTint : undefined;
-  const viewerGiftSet = viewerShape === 'giftset' ? SIX_BALL_POKER_CHIP : undefined;
+    : (viewerShape === 'ball' || isGiftset) ? ballTint : undefined;
+  const viewerChipTint = hasChips ? chipTint : undefined;
   // Gravity/physics is ball-only — turn throw mode off if we switch off the ball.
   useEffect(() => { if (viewerShape !== 'ball') setViewerThrowMode(false); }, [viewerShape]);
 
@@ -1009,11 +1016,11 @@ export function ImagePreview({
                 <GolfballViewer
                   ref={viewerRef}
                   decalDataUrl={decalDataUrl}
-                  shape={viewerShape}
+                  shape={effShape}
                   tint={viewerTint}
                   chipTint={viewerChipTint}
                   giftSet={viewerGiftSet}
-                  initialScale={viewerShape === 'giftset' ? giftSetScale : undefined}
+                  initialScale={isGiftset ? giftSetScale : undefined}
                   onSceneChange={setViewerSceneKey}
                   onThrowChange={setViewerThrowMode}
                   onError={() => {
@@ -2014,7 +2021,9 @@ const MODEL_OPTIONS = [
   { id: 'chip', label: 'Poker Chip' },
   { id: 'divot', label: 'Divot Tool' },
   { id: 'bartender', label: 'Bartender Tool' },
-  { id: 'giftset', label: 'Gift Set' },
+  { id: 'giftsetPoker', label: 'Gift Set · Poker Chip' },
+  { id: 'giftsetLever', label: 'Gift Set · Lever Divot' },
+  { id: 'giftsetBartender', label: 'Gift Set · Bartender' },
 ];
 
 /* One body-color control: a glass swatch button that opens the design-system
