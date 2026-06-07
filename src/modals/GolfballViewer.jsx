@@ -56,7 +56,7 @@ const MODEL_URLS = {
 // Cache-bust token appended to every model URL. Chrome can serve a stale cached
 // .obj across extension reloads (the URL is otherwise constant), which masks a
 // re-exported model. Bump this whenever a model file changes to force a refetch.
-const MODEL_VERSION = '20250607-2';
+const MODEL_VERSION = '20250607-3-tri';
 
 async function loadThreeAndModel(shape = 'ball') {
   // Parallel-load engine + helpers once so first-mount latency is dominated by
