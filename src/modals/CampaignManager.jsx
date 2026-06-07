@@ -1069,7 +1069,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
           vw/vh) so the modal-scale `zoom` on the mount host scales it
           cleanly; the inline 1.2 zoom is the default size bump and composes
           on top of whatever the modal scaler is set to. */}
-      <ModalShell width={1180} height={760} style={{ maxWidth: '94vw', maxHeight: '90vh', zoom: 1.2, color: 'var(--gb-text-secondary)' }}>
+      <ModalShell width={1280} height={760} style={{ maxWidth: '94vw', maxHeight: '90vh', zoom: 1.2, color: 'var(--gb-text-secondary)' }}>
         <TopBar campaign={campaign} onChange={patchCampaign} sim={sim} onSimStart={startSim} onSimStop={stopSim} onSimReset={resetSim}
           dirty={dirty} audienceCount={contacts.length} onRun={startRun} onClose={onClose}
           dryRun={dryRun} onDryRunChange={setDryRun} />
@@ -1089,7 +1089,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid var(--gb-border-default)' }}>
             <Timeline steps={steps} selectedId={selectedId} sim={sim} templateLib={templateLib} onSelect={setSelectedId} onAdd={addStep} onDelete={deleteStep} onDuplicate={duplicateStep} />
           </div>
-          <div style={{ width: 420, flexShrink: 0, background: 'var(--gb-surface-modal)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+          <div style={{ width: 500, flexShrink: 0, background: 'var(--gb-surface-modal)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             {selected
               ? <StepInspector step={selected} allSteps={steps} templateLib={templateLib} onChange={updateStep} onDelete={deleteStep} />
               : <CampaignInspector campaign={campaign} onChange={patchCampaign} />}

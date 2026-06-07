@@ -45,6 +45,12 @@ const MODEL_URLS = {
   chip: 'assets/poker_chip_model/PokerChip.obj',
   divot: 'assets/divot_tool_model/DivotTool.obj',
   bartender: 'assets/bartender_tool_model/BartenderTool.obj',
+  // Gift-set assembly: the presentation box (foam + cut slots) and a single tee.
+  // Both export Blender Z-up with NO axis conversion, so their coords match the
+  // slot table in giftSetLayout.js directly. Loaded raw (NOT rotateX-stood like
+  // the chip/divot) — the giftset branch orients the whole assembly itself.
+  giftbox: 'assets/giftbox_model/GiftBox.obj',
+  tee: 'assets/tee_model/Tee.obj',
 };
 
 async function loadThreeAndModel(shape = 'ball') {

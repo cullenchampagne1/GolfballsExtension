@@ -2,7 +2,7 @@ import React from 'react';
 import { VariableSchemaPicker } from '../VariableSchemaPicker.jsx';
 import { CodeVarEditor } from '../CodeVarEditor.jsx';
 import { Dropdown } from '../Dropdown.jsx';
-import { RuleGroups, NotPill } from './RuleGroups.jsx';
+import { RuleGroups } from './RuleGroups.jsx';
 import { OPS_BY_TYPE } from '../../../lib/matchEngine.js';
 import { listPaths } from '../../../lib/page-engine/resolve.js';
 import { contactSchema } from '../../../lib/page-schemas/contact.js';
@@ -88,7 +88,7 @@ export function opsForCampaignCondition(c) {
 /* Small Schema / Code source switch. */
 function SourceToggle({ source, onPick }) {
   return (
-    <div style={{ display: 'flex', gap: 4, marginBottom: 5 }}>
+    <div style={{ display: 'flex', gap: 4 }}>
       {[['schema', 'Schema field'], ['var', 'Code']].map(([id, label]) => {
         const on = source === id;
         return (
@@ -100,64 +100,64 @@ function SourceToggle({ source, onPick }) {
   );
 }
 
-function CampaignSubjectCell({ condition, patch }) {
+/* The campaign subject uses RuleGroups' split contract: { header, body }.
+   header = the Schema/Code source toggle; body = the schema picker, or the
+   Returns-type row + code editor. NOT + delete are supplied by ConditionRow's
+   header line, so they're not rendered here. */
+function renderCampaignSubject(condition, patch) {
   const isCode = condition.source === 'var';
   const pickSource = (src) => {
     if (src === 'var') patch({ source: 'var', ref: '', type: 'string', op: DEFAULT_OP.string, value: '' });
     else patch({ source: 'schema', ref: '', type: 'string', op: DEFAULT_OP.string, value: '' });
   };
-  return (
-    <div style={{ width: '100%' }}>
-      <SourceToggle source={isCode ? 'var' : 'schema'} onPick={pickSource} />
-      {!isCode ? (
-        <VariableSchemaPicker
-          value={condition.ref || ''}
-          varNames={[]}
-          allowQuantifiers
-          overlay
-          embedArrayRow={false}
-          placeholder="Pick a contact / account field…"
-          onChange={(val) => patch({ source: 'schema', ref: val, type: engineTypeForRef(val) })}
-        />
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Returns</span>
-            <div style={{ width: 120 }}>
-              <Dropdown size="sm" value={condition.type || 'string'} options={CODE_RETURN_TYPES}
-                onChange={(t) => patch({ type: t, op: DEFAULT_OP[t] || 'contains', value: '', arrayMode: t === 'array' ? (condition.arrayMode || 'any') : undefined, arrayIndex: undefined })} />
-            </div>
-            {/* Array item-mode (first/last/any/none/index) — same format as
-                schema array types. */}
-            {condition.type === 'array' && (
-              <>
-                <div style={{ width: 110 }}>
-                  <Dropdown size="sm" value={condition.arrayMode || 'any'} options={ARRAY_MODES}
-                    onChange={(m) => patch({ arrayMode: m })} />
-                </div>
-                {condition.arrayMode === 'index' && (
-                  <input type="number" min={0} value={String(condition.arrayIndex ?? 0)}
-                    onChange={(e) => patch({ arrayIndex: Math.max(0, parseInt(e.target.value, 10) || 0) })}
-                    style={{ width: 52, height: 26, padding: '0 8px', boxSizing: 'border-box', background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', borderRadius: 4, color: 'var(--gb-text-primary)', fontSize: 11.5, outline: 'none' }} />
-                )}
-              </>
-            )}
-            <div style={{ flex: 1 }} />
-            {/* NOT lives here on the right so it doesn't shove the editor. */}
-            <NotPill on={condition.not} onClick={() => patch({ not: !condition.not })} />
-          </div>
-          <CodeVarEditor
-            value={condition.ref || ''}
-            onChange={(body) => patch({ ref: body })}
-            typeId="account"
-            varNames={[]}
-            hideActions
-            placeholder="return a value · ctx = contact/account data · h = helpers"
-          />
+
+  const header = <SourceToggle source={isCode ? 'var' : 'schema'} onPick={pickSource} />;
+
+  const body = !isCode ? (
+    <VariableSchemaPicker
+      value={condition.ref || ''}
+      varNames={[]}
+      allowQuantifiers
+      overlay
+      embedArrayRow={false}
+      placeholder="Pick a contact / account field…"
+      onChange={(val) => patch({ source: 'schema', ref: val, type: engineTypeForRef(val) })}
+    />
+  ) : (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Returns</span>
+        <div style={{ width: 132 }}>
+          <Dropdown size="sm" value={condition.type || 'string'} options={CODE_RETURN_TYPES}
+            onChange={(t) => patch({ type: t, op: DEFAULT_OP[t] || 'contains', value: '', arrayMode: t === 'array' ? (condition.arrayMode || 'any') : undefined, arrayIndex: undefined })} />
         </div>
-      )}
+        {/* Array item-mode (first/last/any/none/index) — same format as schema array types. */}
+        {condition.type === 'array' && (
+          <>
+            <div style={{ width: 110 }}>
+              <Dropdown size="sm" value={condition.arrayMode || 'any'} options={ARRAY_MODES}
+                onChange={(m) => patch({ arrayMode: m })} />
+            </div>
+            {condition.arrayMode === 'index' && (
+              <input type="number" min={0} value={String(condition.arrayIndex ?? 0)}
+                onChange={(e) => patch({ arrayIndex: Math.max(0, parseInt(e.target.value, 10) || 0) })}
+                style={{ width: 52, height: 26, padding: '0 8px', boxSizing: 'border-box', background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', borderRadius: 4, color: 'var(--gb-text-primary)', fontSize: 11.5, outline: 'none' }} />
+            )}
+          </>
+        )}
+      </div>
+      <CodeVarEditor
+        value={condition.ref || ''}
+        onChange={(body) => patch({ ref: body })}
+        typeId="account"
+        varNames={[]}
+        hideActions
+        placeholder="return a value · ctx = contact/account data · h = helpers"
+      />
     </div>
   );
+
+  return { header, body };
 }
 
 export function CampaignConditions({ initial, onChange }) {
@@ -165,9 +165,8 @@ export function CampaignConditions({ initial, onChange }) {
     <RuleGroups
       initial={initial}
       defaultSource="schema"
-      renderSubject={(condition, patch) => <CampaignSubjectCell condition={condition} patch={patch} />}
+      renderSubject={renderCampaignSubject}
       opsFor={opsForCampaignCondition}
-      shouldHideNot={(c) => c.source === 'var'}
       allowEmpty
       onChange={onChange}
       label="Run conditions"

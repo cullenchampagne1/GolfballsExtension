@@ -214,68 +214,85 @@ function GroupCard({ group, index, canRemove, allowEmpty, renderSubject, opsFor,
   );
 }
 
+const conditionCardStyle = (notOn) => ({
+  padding: 10,
+  background: 'var(--gb-surface-2)',
+  border: '1px solid ' + (notOn ? 'var(--gb-error-tint-border)' : 'var(--gb-border-subtle)'),
+  borderRadius: 'var(--gb-r-sm)', transition: 'border-color .2s',
+});
+
 function ConditionRow({ condition, renderSubject, opsFor, onPatch, onRemove, canRemove, hideNot }) {
   const ops = (opsFor ? opsFor(condition) : []) || [];
   const valueless = isValuelessOp(condition.op);
   const vKind = valueKind(condition.op, valueless);
-  /* When the subject is an array path, the array-mode control moves to a
-     second row next to the value; the operator stays pinned on the top
-     row beside the field. */
-  const arrayInfo = parseArrayRef(condition.ref);
+  /* A code condition stores arbitrary JS in `ref` (e.g. ctx.orders[0]) —
+     don't let parseArrayRef mistake it for a schema array path. Only real
+     schema refs get the array-mode control. */
+  const arrayInfo = condition.source === 'var' ? null : parseArrayRef(condition.ref);
 
+  const patch = (p) => onPatch(p);
+  const notControl = !hideNot ? <NotPill on={condition.not} onClick={() => onPatch({ not: !condition.not })} /> : null;
+  const removeControl = (
+    <IconBtn size="xs" variant="ghost" danger icon={<I.trash size={10} />} disabled={!canRemove} onClick={onRemove} tooltip={canRemove ? 'Remove condition' : 'At least one condition is required'} />
+  );
   const opCell = (
-    <div style={{ width: 150, flexShrink: 0 }}>
-      <Dropdown
-        size="sm"
-        value={condition.op}
-        options={ops}
-        onChange={(v) => {
-          const patch = { op: v };
-          if (isValuelessOp(v)) patch.value = '';
-          onPatch(patch);
-        }}
-      />
+    <div style={{ width: 156, flexShrink: 0 }}>
+      <Dropdown size="sm" value={condition.op} options={ops}
+        onChange={(v) => { const p = { op: v }; if (isValuelessOp(v)) p.value = ''; onPatch(p); }} />
     </div>
   );
   const valueCell = !valueless
     ? <ValueCell kind={vKind} value={condition.value} onChange={(v) => onPatch({ value: v })} />
     : null;
+  const arrayControl = arrayInfo
+    ? <ArrayModeControl arrayInfo={arrayInfo} path={condition.ref} onChange={(nextRef) => onPatch({ ref: nextRef })} />
+    : null;
 
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'flex-start', gap: 8, padding: 10,
-      background: 'var(--gb-surface-2)',
-      border: '1px solid ' + (condition.not ? 'var(--gb-error-tint-border)' : 'var(--gb-border-subtle)'),
-      borderRadius: 'var(--gb-r-sm)', transition: 'border-color .2s',
-    }}>
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {/* Row 1 — NOT · subject · operator (· value when there's no array row).
-            flexWrap so a wide value (e.g. the native date input, which can't
-            shrink) drops to the next line instead of overflowing the card and
-            pushing the delete button outside its bounds. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          {!hideNot && <NotPill on={condition.not} onClick={() => onPatch({ not: !condition.not })} />}
-          <div style={{ flex: '1 1 150px', minWidth: 140 }}>
-            {renderSubject?.(condition, (patch) => onPatch(patch))}
-          </div>
-          {opCell}
-          {!arrayInfo && valueCell}
+  const subject = renderSubject ? renderSubject(condition, patch) : null;
+  const isSplit = subject && typeof subject === 'object' && !React.isValidElement(subject)
+    && ('header' in subject || 'body' in subject);
+
+  /* ── Split layout — stacked zones (header / selection / predicate). The
+     subject (e.g. a full-width code editor or schema picker) gets the whole
+     row; NOT + delete ride the header line. ── */
+  if (isSplit) {
+    return (
+      <div style={conditionCardStyle(condition.not)}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {notControl}
+          <div style={{ flex: 1, minWidth: 0 }}>{subject.header}</div>
+          <div style={{ flexShrink: 0 }}>{removeControl}</div>
         </div>
-        {/* Row 2 — array mode + value, aligned under the subject. */}
-        {arrayInfo && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 34, flexWrap: 'wrap' }}>
-            <ArrayModeControl
-              arrayInfo={arrayInfo}
-              path={condition.ref}
-              onChange={(nextRef) => onPatch({ ref: nextRef })}
-            />
+        {subject.body && <div style={{ marginTop: 7 }}>{subject.body}</div>}
+        {(arrayControl || opCell || valueCell) && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 7 }}>
+            {arrayControl}
+            {opCell}
             {valueCell}
           </div>
         )}
       </div>
-      <div style={{ flexShrink: 0 }}>
-        <IconBtn size="xs" variant="ghost" danger icon={<I.trash size={10} />} disabled={!canRemove} onClick={onRemove} tooltip={canRemove ? 'Remove condition' : 'At least one condition is required'} />
+    );
+  }
+
+  /* ── Legacy inline layout — unchanged for Account / Order / Case rules. ── */
+  return (
+    <div style={{ ...conditionCardStyle(condition.not), display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {notControl}
+          <div style={{ flex: '1 1 150px', minWidth: 140 }}>{subject}</div>
+          {opCell}
+          {!arrayInfo && valueCell}
+        </div>
+        {arrayInfo && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 34, flexWrap: 'wrap' }}>
+            {arrayControl}
+            {valueCell}
+          </div>
+        )}
       </div>
+      <div style={{ flexShrink: 0 }}>{removeControl}</div>
     </div>
   );
 }
