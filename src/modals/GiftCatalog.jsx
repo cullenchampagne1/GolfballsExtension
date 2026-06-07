@@ -1101,7 +1101,7 @@ function ImprintDetail({ chip }) {
    by clicking a saved card or the current-proposal card. */
 function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose, onLoad, onOpenProposal }) {
   const M = useMemo(() => marginReport(entries), [entries]);
-  const decorated = M.lines.filter((l) => decoImprints(l.decoration).length > 0);
+  const decorated = M.lines.filter((l) => decoImprints(l.decoration).length > 0 || (l.decoration && l.decoration.giftSet));
   return (
     <motion.div
       initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24 }}
@@ -1159,6 +1159,13 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
                     <MiniThumb src={e.product.img} size={22} />
                     <div style={{ minWidth: 0, fontSize: 11, fontWeight: 700, color: 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.product.title}</div>
                   </div>
+                  {e.decoration && e.decoration.giftSet && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)' }}>
+                      <I.sparkle size={11} style={{ color: 'var(--gb-brand-label)', flexShrink: 0 }} />
+                      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--gb-brand-label)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.decoration.giftSet.name}</span>
+                      <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--gb-text-tertiary)', flexShrink: 0 }}>· {giftSetSizeLabel(e.decoration.giftSet)}</span>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 6 }}>
                     {decoImprints(e.decoration).map((c) => <ImprintDetail key={c.slot} chip={c} />)}
                   </div>
