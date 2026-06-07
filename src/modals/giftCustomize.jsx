@@ -1899,16 +1899,16 @@ function LivePreview3D({ shape = 'ball', p }) {
             onClick={() => setSpin((s) => !s)}
             title={spin ? 'Stop rotating' : `Auto-rotate to see both ${isChip ? 'sides' : 'poles'}`}
             style={{
-              position: 'absolute', right: 8, bottom: 8, width: 30, height: 30,
+              position: 'absolute', right: 8, bottom: 8, width: 28, height: 28,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               borderRadius: '50%', cursor: 'pointer', fontFamily: 'inherit',
-              background: spin ? 'var(--gb-brand-label)' : 'rgba(0,0,0,.5)',
-              color: spin ? 'var(--gb-surface-deep)' : '#fff',
-              border: '1px solid ' + (spin ? 'var(--gb-brand-label)' : 'rgba(255,255,255,.25)'),
-              backdropFilter: 'blur(4px)',
+              // Opaque in both states; active = primary outline + icon (not a fill).
+              background: 'var(--gb-surface-float)',
+              color: spin ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
+              border: '1px solid ' + (spin ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
             }}
           >
-            <I.refresh size={14} />
+            <I.refresh size={11} />
           </button>
         )}
       </div>
