@@ -942,6 +942,18 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             loadThreeAndModel('giftbox'), loadThreeAndModel('ball'), loadThreeAndModel('chip'),
           ]);
           if (disposed) return;
+          // Loud diagnostic so we can see in DevTools EXACTLY what's loaded:
+          //   boxVerts 7062 + boxHasColors true = the new baked box (holes+tees);
+          //   3722 = older (holes, no tees); missing log entirely = stale bundle.
+          try {
+            console.log('[GIFTSET]', {
+              modelVersion: MODEL_VERSION,
+              boxVerts: boxRes.model.geometry.attributes.position.count,
+              boxHasColors: !!boxRes.model.geometry.attributes.color,
+              balls: giftSet.ballSlots.length,
+              chips: giftSet.chipSlots.length,
+            });
+          } catch (e) { /* noop */ }
 
           // Center a cloned geometry on its own origin; report radius + half-extents.
           const centeredGeo = (srcGeo) => {
