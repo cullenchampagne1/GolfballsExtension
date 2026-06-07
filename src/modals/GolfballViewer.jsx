@@ -45,12 +45,12 @@ const MODEL_URLS = {
   chip: 'assets/poker_chip_model/PokerChip.obj',
   divot: 'assets/divot_tool_model/DivotTool.obj',
   bartender: 'assets/bartender_tool_model/BartenderTool.obj',
-  // Gift-set assembly: the presentation box (foam + cut slots) and a single tee.
-  // Both export Blender Z-up with NO axis conversion, so their coords match the
-  // slot table in giftSetLayout.js directly. Loaded raw (NOT rotateX-stood like
-  // the chip/divot) — the giftset branch orients the whole assembly itself.
+  // Gift-set box: one baked model — tray walls + foam (with ball bowls + chip
+  // recesses + tee well cut in) + the white tee pile, carrying per-vertex colors
+  // (dark box / white tees). Exported Blender Z-up with NO axis conversion, so its
+  // coords match the slot table in giftSetLayout.js directly; loaded raw (NOT
+  // rotateX-stood like the chip) — the giftset branch orients the assembly itself.
   giftbox: 'assets/giftbox_model/GiftBox.obj',
-  tee: 'assets/tee_model/Tee.obj',
 };
 
 async function loadThreeAndModel(shape = 'ball') {
@@ -87,12 +87,17 @@ async function loadThreeAndModel(shape = 'ball') {
           group.traverse((child) => { if (!foundMesh && child.isMesh) foundMesh = child; });
           if (!foundMesh) { reject(new Error('OBJ contains no mesh')); return; }
           const geo = foundMesh.geometry;
-          // The chip + divot OBJs are exported Y-up (flat face = Y) with a baked
-          // per-vertex color mask. Stand them up so the face points at the camera
-          // (±Z, like the ball's print poles), and convert the sRGB-encoded
-          // vertex colors to linear so the masks compare correctly in-shader.
+          // The chip + divot OBJs are exported Y-up (flat face = Y); stand them up
+          // so the face points at the camera (±Z, like the ball's print poles).
+          // The giftbox is already Z-up (no axis conversion on export) — don't rotate.
           if (shape === 'chip' || shape === 'divot' || shape === 'bartender') {
             geo.rotateX(Math.PI / 2);
+          }
+          // Convert the sRGB-encoded baked vertex colors to linear so masks compare
+          // correctly in-shader (chip/divot clay+marker masks) and the giftbox reads
+          // as intended (dark foam/box ~0.07, white baked tees ~0.82) rather than
+          // the washed-out values the OBJ exporter writes (sRGB-encoded).
+          if (shape === 'chip' || shape === 'divot' || shape === 'bartender' || shape === 'giftbox') {
             const col = geo.getAttribute('color');
             if (col) {
               const s2l = (v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
@@ -347,7 +352,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   // Stable rebuild key for the gift-set assembly — re-runs the scene-build effect
   // only when the SET's structure changes (box / item counts), not on every
   // re-render of the (freshly-built) giftSet object. Logo + colors update without it.
-  const giftKey = giftSet ? `${giftSet.boxModel}:${(giftSet.ballSlots || []).length}:${(giftSet.chipSlots || []).length}:${(giftSet.teeInstances || []).length}` : '';
+  const giftKey = giftSet ? `${giftSet.boxModel}:${(giftSet.ballSlots || []).length}:${(giftSet.chipSlots || []).length}` : '';
   useEffect(() => {
     if (shape !== 'giftset' || !giftViewRef.current) return;
     giftViewRef.current.rotation.set((giftRotX * Math.PI) / 180, (giftRotY * Math.PI) / 180, 0);
@@ -924,9 +929,11 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // single-item ball / physics / walls / water machinery below — those stay
         // byte-identical, so the ball/chip/divot/bartender previews can't regress.
         if (isGiftSet && giftSet) {
-          const [boxRes, ballRes, chipRes, teeRes] = await Promise.all([
-            loadThreeAndModel('giftbox'), loadThreeAndModel('ball'),
-            loadThreeAndModel('chip'), loadThreeAndModel('tee'),
+          // Box model is baked: tray walls + foam (with all cut slots) + the white
+          // tee pile, carrying per-vertex colors (dark box / white tees). Only the
+          // customized balls + chips are placed dynamically into the foam holes.
+          const [boxRes, ballRes, chipRes] = await Promise.all([
+            loadThreeAndModel('giftbox'), loadThreeAndModel('ball'), loadThreeAndModel('chip'),
           ]);
           if (disposed) return;
 
@@ -984,8 +991,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
 
           const contentGroup = new THREE.Group();
 
-          // Box (foam + cut slots) — one dark material (foam/box not split here).
-          const boxMat = new THREE.MeshStandardMaterial({ color: 0x1b1c22, roughness: 0.5, metalness: 0.0, emissive: 0x0b0c10, emissiveIntensity: 0.55 });
+          // Box (tray walls + foam-with-holes + baked tees) — one material driven by
+          // the baked per-vertex colors: dark foam/box, white tees. color=white so the
+          // vertex colors show 1:1; small emissive lifts the deep-shadow slots.
+          const boxMat = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, roughness: 0.62, metalness: 0.0, emissive: 0x0a0a0c, emissiveIntensity: 0.35 });
           const boxMesh = new THREE.Mesh(boxRes.model.geometry.clone(), boxMat);
           contentGroup.add(boxMesh);
           objectsToDispose.push(boxMat, boxMesh.geometry);
@@ -1029,20 +1038,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             objectsToDispose.push(mat, m.geometry);
           }
 
-          // Tees — plain white, no print; exact baked pile transforms. Tee + box
-          // both exported at Blender scale, so the tee needs no rescale (scale 1).
-          if (giftSet.teeInstances && giftSet.teeInstances.length) {
-            const teeCG = centeredGeo(teeRes.model.geometry);
-            const teeMat = new THREE.MeshStandardMaterial({ color: 0xe9e9ec, roughness: 0.5, metalness: 0.0, emissive: 0x101012, emissiveIntensity: 0.25 });
-            objectsToDispose.push(teeMat);
-            for (const t of giftSet.teeInstances) {
-              const m = new THREE.Mesh(teeCG.geo.clone(), teeMat);
-              m.rotation.set(t.rx, t.ry, t.rz);
-              m.position.set(t.x, t.y, t.z);
-              contentGroup.add(m);
-              objectsToDispose.push(m.geometry);
-            }
-          }
+          // (Tees are baked into the box model above — no separate instances.)
 
           // Recenter the assembly on its bounding center and fit it to the camera
           // framing (single-ball preview = radius 100 → diameter 200; box a touch

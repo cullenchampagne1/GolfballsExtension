@@ -22,16 +22,17 @@
  */
 
 export const BOX_MODELS = {
+  // The box model bakes in the tray walls, the cut foam (ball bowls + chip
+  // recesses + tee well), AND the white tee pile — so the whole container is one
+  // mesh and only the customized balls/chips get placed at runtime.
   sixBallPokerChip: 'assets/giftbox_model/GiftBox.obj',
 };
-export const TEE_MODEL = 'assets/tee_model/Tee.obj';
 
 /* The 6-ball poker-chip presentation box. Slot centers are where each item's
    CENTER sits (ball center, chip center). Radii are the target box-local radius
    each model is scaled to fill (ball ~0.86, chip ~0.82). */
 export const SIX_BALL_POKER_CHIP = {
   boxModel: BOX_MODELS.sixBallPokerChip,
-  teeModel: TEE_MODEL,
   ballRadius: 0.86,
   chipRadius: 0.82,
   // 2 cols × 3 rows, left side. Order: top-left, top-right, mid-left, mid-right,
@@ -46,26 +47,10 @@ export const SIX_BALL_POKER_CHIP = {
     { x: 1.26, y: 1.84, z: -0.02 },
     { x: 3.28, y: 0.27, z: -0.02 },
   ],
-  // Inset tee well, lower-right. The pack: long tees lying straight along the
-  // well's long axis (ry ≈ ±π/2), heads alternating, 2 stacked layers. Baked
-  // verbatim from Blender so the preview matches the rendered box.
-  teeInstances: [
-    { x: 2.4357, y: -2.90, z: -0.3282, rx: 0.01039, ry: 1.5708, rz: -0.02601 },
-    { x: 2.5753, y: -2.64, z: -0.3474, rx: 0.03375, ry: -1.5708, rz: -0.09737 },
-    { x: 2.4434, y: -2.39, z: -0.3406, rx: -0.00297, ry: 1.5708, rz: 0.09913 },
-    { x: 2.6511, y: -2.13, z: -0.3309, rx: -0.03494, ry: -1.5708, rz: 0.02781 },
-    { x: 2.5785, y: -1.87, z: -0.3153, rx: 0.02413, ry: 1.5708, rz: 0.00464 },
-    { x: 2.5917, y: -1.61, z: -0.3474, rx: 0.00911, ry: -1.5708, rz: 0.05165 },
-    { x: 2.4585, y: -1.36, z: -0.3488, rx: -0.00273, ry: 1.5708, rz: 0.07311 },
-    { x: 2.6088, y: -1.10, z: -0.3148, rx: 0.04211, ry: -1.5708, rz: 0.04283 },
-    { x: 2.4838, y: -2.77, z: -0.1300, rx: 0.04356, ry: -1.5708, rz: -0.01108 },
-    { x: 2.6967, y: -2.51, z: -0.1651, rx: -0.02830, ry: 1.5708, rz: -0.07281 },
-    { x: 2.7348, y: -2.26, z: -0.1482, rx: -0.01990, ry: -1.5708, rz: 0.02533 },
-    { x: 2.5332, y: -2.00, z: -0.1507, rx: 0.00851, ry: 1.5708, rz: -0.02982 },
-    { x: 2.5671, y: -1.74, z: -0.1248, rx: 0.04289, ry: -1.5708, rz: 0.03640 },
-    { x: 2.6868, y: -1.49, z: -0.1205, rx: -0.03369, ry: 1.5708, rz: 0.03425 },
-    { x: 2.6887, y: -1.23, z: -0.1218, rx: 0.00691, ry: -1.5708, rz: 0.08094 },
-  ],
+  // NOTE: the tee pile + its inset well are BAKED into GiftBox.obj (white-tinted
+  // vertices), not placed at runtime — tees are never customized, so baking them
+  // into the one box model is simpler and guarantees the well/holes can't go
+  // missing on export. Only the balls + chips are placed into the foam holes.
 };
 
 /* What's physically in the set, parsed from a normalized gift-set option
@@ -88,7 +73,7 @@ export function parseGiftSetContents(option) {
 }
 
 /* Resolve the 3D layout for a chosen gift-set option. Returns
-   { boxModel, teeModel, ballRadius, chipRadius, ballSlots, chipSlots, teeInstances }
+   { boxModel, ballRadius, chipRadius, ballSlots, chipSlots }
    sliced to the set's actual contents, or null if unsupported (→ plain preview). */
 export function giftSetLayout(option) {
   const contents = parseGiftSetContents(option);
@@ -98,11 +83,9 @@ export function giftSetLayout(option) {
   const L = SIX_BALL_POKER_CHIP;
   return {
     boxModel: L.boxModel,
-    teeModel: L.teeModel,
     ballRadius: L.ballRadius,
     chipRadius: L.chipRadius,
     ballSlots: L.ballSlots.slice(0, contents.balls),
     chipSlots: L.chipSlots.slice(0, contents.chips),
-    teeInstances: contents.tees ? L.teeInstances : [],
   };
 }
