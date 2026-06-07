@@ -60,7 +60,7 @@ const MODEL_URLS = {
 // Cache-bust token appended to every model URL. Chrome can serve a stale cached
 // .obj across extension reloads (the URL is otherwise constant), which masks a
 // re-exported model. Bump this whenever a model file changes to force a refetch.
-const MODEL_VERSION = '20250607-6-pocket';
+const MODEL_VERSION = '20250607-7-center';
 
 async function loadThreeAndModel(shape = 'ball') {
   // Parallel-load engine + helpers once so first-mount latency is dominated by
@@ -948,6 +948,20 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           ]);
           if (disposed) return;
           try {
+            // Pocket diagnostic: does the LOADED box geometry actually have a recess
+            // where we place the tool? below>0 + pmin deep = box has the pocket (so a
+            // missing-recess look is the placed tool covering it, not a stale OBJ).
+            let pocket = null;
+            const ti = (giftSet.kitItems || []).find((k) => k.shape === 'divot' || k.shape === 'bartender');
+            if (ti) {
+              const bp = boxRes.model.geometry.attributes.position;
+              let below = 0, pmin = 9;
+              for (let i = 0; i < bp.count; i++) {
+                const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
+                if (Math.hypot(x - ti.x, y - ti.y) < 1.0) { if (z < -0.1) below++; if (z < pmin) pmin = z; }
+              }
+              pocket = { at: `${ti.x},${ti.y}`, below, pmin: +pmin.toFixed(2) };
+            }
             console.log('[GIFTSET]', {
               modelVersion: MODEL_VERSION,
               boxModel: giftSet.boxModel,
@@ -955,6 +969,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               boxHasColors: !!boxRes.model.geometry.attributes.color,
               balls: giftSet.ballSlots.length,
               kit: (giftSet.kitItems || []).map((k) => k.shape).join(','),
+              toolPocket: pocket,
             });
           } catch (e) { /* noop */ }
 
