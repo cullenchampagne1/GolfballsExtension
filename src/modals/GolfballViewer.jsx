@@ -119,7 +119,7 @@ export const SCENES = [
   { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'assets/moonlit_golf_4k.exr',     icon: 'moon' },
 ];
 
-export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, secondDecalDataUrl, onError, onSceneChange, onThrowChange, minimal = false, initialScale, autoRotate = false, shape = 'ball' }, ref) {
+export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, secondDecalDataUrl, onError, onSceneChange, onThrowChange, minimal = false, initialScale, autoRotate = false, shape = 'ball', chipColor }, ref) {
   const containerRef = useRef(null);
   // Imperative snapshot handle — set by the WebGL effect once the
   // scene is ready. Parent calls snapshotRef.current() to capture a
@@ -843,6 +843,26 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         );
         ballMesh.castShadow = true;
         ballMesh.receiveShadow = false;
+        if (isChip) {
+          // The baked vertex colors are a clay(dark)/pattern(light) mask. Recolor
+          // ONLY the clay to the chosen colorway and keep the molded dashes /
+          // spots / center inlay white — so one model serves every color and the
+          // logo still reads on the white center. Default = near-black clay.
+          const clay = new THREE.Color(chipColor || '#1c1c1c');
+          ballMesh.material.onBeforeCompile = (shader) => {
+            shader.uniforms.uClay = { value: clay };
+            shader.fragmentShader = 'uniform vec3 uClay;\n' + shader.fragmentShader.replace(
+              '#include <color_fragment>',
+              [
+                '#ifdef USE_COLOR',
+                // vColor is linear: clay ~0.02, pattern ~0.90 → mask 0 vs 1.
+                '  float _pat = smoothstep(0.22, 0.6, max(vColor.r, max(vColor.g, vColor.b)));',
+                '  diffuseColor.rgb *= mix(uClay, vec3(1.0), _pat);',
+                '#endif',
+              ].join('\n'),
+            );
+          };
+        }
         // The OBJ ships at an arbitrary size; rescale so its bounding-
         // box diameter is ~100 units (matches our camera framing).
         ballMesh.geometry.computeBoundingSphere();
@@ -898,7 +918,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // through the ball and stays fixed. Shared by both poles.
         const printAreaScale = initialBallRef.current.printAreaScale ?? 0.7;
         // Chip print fills most of the white center inlay (~0.9 of disc radius).
-        const chipPrintScale = 0.9;
+        const chipPrintScale = 0.95;
         /* Build one projected decal. `back=false` is the camera-facing +Z pole
            (front print); `back=true` is the opposite -Z pole (dual-pole second
            imprint — visible when the ball is rotated 180°). Returns the mesh +
@@ -3246,7 +3266,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
     // Re-running on decalDataUrl change is desired so swapping the
     // alignment image rebuilds the decal projection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [decalDataUrl, secondDecalDataUrl, shape]);
+  }, [decalDataUrl, secondDecalDataUrl, shape, chipColor]);
 
   // cleanupRef holds the dispose closure across the async boundary so
   // strict-mode double-mount + teardown still releases GPU resources.

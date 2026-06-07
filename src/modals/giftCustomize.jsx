@@ -194,6 +194,18 @@ export function isPokerChipProduct(p) {
   return /poker\s*chip/i.test(`${p.title || ''} ${p.url || ''}`);
 }
 
+/* The buyer's base-color pick (stored in the __base slot as a color name, e.g.
+   "Green") → hex for the 3D chip's clay. The model's white pattern/center is
+   left untouched; only the clay recolors. Falls back to black. */
+function chipClayHex(data) {
+  const base = (data && data.__base) || {};
+  for (const v of Object.values(base)) {
+    const m = BASE_COLORS.find((b) => b.name === v);
+    if (m) return m.hex;
+  }
+  return '#1c1c1c';
+}
+
 
 const UploadI = (props) => <Icon {...props}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" /></Icon>;
 const SparkI = (props) => <Icon {...props}><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /></Icon>;
@@ -1822,6 +1834,7 @@ function PrintTypeGrid({ p, mods, config }) {
 function LivePreview3D({ shape = 'ball' }) {
   const ctx = usePT();
   const isChip = shape === 'chip';
+  const chipColor = isChip ? chipClayHex(ctx.data) : undefined;
   const decalUrl = useDecalUrl();
   const secondUrl = useSecondDecalUrl(decalUrl);
   // Ball uses the larger catalog preview scale; the chip is a small ball-marker,
@@ -1856,7 +1869,7 @@ function LivePreview3D({ shape = 'ball' }) {
       <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Live preview</div>
       <div style={{ position: 'relative', width: '100%', height: 200, borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)' }}>
         {showViewer ? (
-          <GolfballViewer minimal shape={shape} initialScale={previewScale} autoRotate={spin} decalDataUrl={decalUrl} secondDecalDataUrl={secondUrl} />
+          <GolfballViewer minimal shape={shape} chipColor={chipColor} initialScale={previewScale} autoRotate={spin} decalDataUrl={decalUrl} secondDecalDataUrl={secondUrl} />
         ) : (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, textAlign: 'center' }}>
             <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', lineHeight: 1.4 }}>{emptyMsg}</div>
