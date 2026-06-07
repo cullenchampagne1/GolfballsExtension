@@ -25,6 +25,9 @@ import { submitCallLog } from '../submitCallLog.js';
 import { submitQuickTask } from '../submitQuickTask.js';
 import { renderTemplate } from '../variableResolution.js';
 import { pickFromAddress } from '../sender.js';
+import { buildCustomTemplate } from '../callLog.js';
+import { buildCustomTaskTemplate } from '../quickTask.js';
+import { completeContactTasks } from '../crmTasks.js';
 
 /* Weighted random pick — same algorithm EmailRunner's variation
    picker uses. `weightOf(item)` returns the item's weight; zero/missing
@@ -116,18 +119,42 @@ async function runEmail(step, template, ctx, { dryRun }) {
 }
 
 async function runCall(step, template, ctx, { dryRun }) {
-  if (dryRun) return { ok: true, transport: 'dry', detail: `Would log call · ${template.name || 'template'}` };
+  // Custom = a one-off call log built inline; otherwise the saved template.
+  const tpl = step.useCustom
+    ? buildCustomTemplate({
+        subject: step.custom?.subject, body: step.custom?.body,
+        callDirection: step.custom?.callDirection, callCategory: step.custom?.callCategory,
+        callVoicemail: step.custom?.callVoicemail,
+      })
+    : template;
+  if (!tpl) return { ok: false, error: 'No call template' };
+  if (dryRun) return { ok: true, transport: 'dry', detail: `Would log call · ${tpl.name || 'custom'}` };
   const res = await submitCallLog({
-    template,
+    template: tpl,
     context: { contactId: ctx.contactId, phone: ctx.phone, employeeId: ctx.employeeId, contactName: ctx.contactName },
   });
   return res.ok ? { ok: true, detail: 'Call logged' } : { ok: false, error: res.error };
 }
 
 async function runTask(step, template, ctx, { dryRun }) {
-  if (dryRun) return { ok: true, transport: 'dry', detail: `Would create task · ${template.name || 'template'}` };
+  const mode = step.taskMode || 'create';
+  // Complete an existing task instead of creating a new one.
+  if (mode === 'completeAll' || mode === 'completeLatest') {
+    if (dryRun) return { ok: true, transport: 'dry', detail: mode === 'completeLatest' ? 'Would complete latest open task' : 'Would complete all open tasks' };
+    const res = await completeContactTasks(ctx.contactId, { mode });
+    return res.ok ? { ok: true, detail: res.detail } : { ok: false, error: res.error };
+  }
+  // Create — custom (inline) or the saved template.
+  const tpl = step.useCustom
+    ? buildCustomTaskTemplate({
+        subject: step.custom?.subject, body: step.custom?.body, daysOut: step.custom?.daysOut,
+        priority: step.custom?.priority, categoryId: step.custom?.categoryId,
+      })
+    : template;
+  if (!tpl) return { ok: false, error: 'No task template' };
+  if (dryRun) return { ok: true, transport: 'dry', detail: `Would create task · ${tpl.name || 'custom'}` };
   const res = await submitQuickTask({
-    template,
+    template: tpl,
     context: { contactId: ctx.contactId, employeeId: ctx.employeeId, contactName: ctx.contactName, accountId: ctx.accountId },
   });
   return res.ok ? { ok: true, detail: res.taskId ? `Task #${res.taskId}` : 'Task created' } : { ok: false, error: res.error };
@@ -148,10 +175,14 @@ async function runTask(step, template, ctx, { dryRun }) {
  * @returns {Promise<{ ok, transport?, detail?, error? }>}
  */
 export async function runStepAction(step, template, ctx, opts = {}) {
-  if (!template) return { ok: false, error: 'No template selected for this step' };
   const kind = actionKind(step);
   try {
-    if (kind === 'email') return await runEmail(step, template, ctx, opts);
+    // Email always needs a template; call/task resolve their own (custom or
+    // complete-mode), so don't bail globally on a missing template.
+    if (kind === 'email') {
+      if (!template) return { ok: false, error: 'No template selected for this step' };
+      return await runEmail(step, template, ctx, opts);
+    }
     if (kind === 'call') return await runCall(step, template, ctx, opts);
     if (kind === 'task') return await runTask(step, template, ctx, opts);
     return { ok: false, error: `Unknown step kind: ${step.kind}` };

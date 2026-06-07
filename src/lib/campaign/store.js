@@ -92,6 +92,9 @@ export function newStep(kind = 'email') {
     branch: isBranch,         // a branch is any step that stops the flow + gates children
     templateId: '',           // the single template this step sends/runs
     variationWeights: {},     // email only: { varId|'__original': pct } over the template's variations
+    taskMode: 'create',       // task only: 'create' | 'completeAll' | 'completeLatest'
+    useCustom: false,         // call/task: build a one-off inline instead of a saved template
+    custom: {},               // call/task custom fields (see actions.js)
     conditions: emptyTree(),
   };
 }
@@ -123,6 +126,9 @@ function normalizeStep(raw) {
     branch: isBranch,
     templateId,
     variationWeights,
+    taskMode: ['create', 'completeAll', 'completeLatest'].includes(raw.taskMode) ? raw.taskMode : 'create',
+    useCustom: !!raw.useCustom,
+    custom: (raw.custom && typeof raw.custom === 'object') ? raw.custom : {},
     conditions,
   };
 }

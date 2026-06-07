@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Btn, IconBtn, Tag, Dot, Input, Field, Dropdown, Switch, Slider, RangeSlider,
+  Btn, IconBtn, Tag, Dot, Input, Textarea, Checkbox, Field, Dropdown, Switch, Slider, RangeSlider,
   Callout, SectionLabel, PillTag, TemplateSplits, equalWeights, ModalShell,
   TemplatePicker, parseTemplateValue, I, Icon,
 } from '../ui/index.js';
@@ -10,8 +10,8 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 import {
   loadCampaigns, saveCampaign, removeCampaign, newCampaign, newStep, uid, subscribeCampaigns,
 } from '../lib/campaign/store.js';
-import { loadCallTemplates } from '../lib/callLog.js';
-import { loadTaskTemplates } from '../lib/quickTask.js';
+import { loadCallTemplates, CALL_CATEGORY_OPTIONS } from '../lib/callLog.js';
+import { loadTaskTemplates, PRIORITY_OPTIONS, DEFAULT_PRIORITY } from '../lib/quickTask.js';
 import { runCampaign } from '../lib/campaign/engine.js';
 import { readEmailConfig } from '../lib/emailSender.js';
 import { pickFromAddress } from '../lib/sender.js';
@@ -29,6 +29,14 @@ import { pickFromAddress } from '../lib/sender.js';
 ─────────────────────────────────────────────────────────────── */
 
 const sumPct = (templates) => (templates || []).reduce((a, t) => a + (t.pct || 0), 0);
+
+/* A step is "ready" (has something to do) if it has a template, a custom
+   inline build, or is a task in a complete-open mode (no template needed). */
+function stepHasAction(s) {
+  if (s.kind === 'task' && (s.taskMode === 'completeAll' || s.taskMode === 'completeLatest')) return true;
+  if (s.useCustom) return true;
+  return !!s.templateId;
+}
 
 /* Branch is a flag, not a kind — these are the three real actions. */
 const STEP_KIND_META = {
@@ -81,8 +89,15 @@ function StepCard({ step, displayIdx, indent, branchChild, selected, simState, t
   const KIcon = step.branch ? I.branch : meta.icon;
   const live = simState === 'running';
   const done = simState === 'done';
-  const tpl = (templateLib[step.kind] || []).find((t) => t.id === step.templateId);
-  const tplName = tpl?.name || (step.templateId ? 'template' : 'no template');
+  const tplName = (() => {
+    if (step.kind === 'task' && (step.taskMode === 'completeAll' || step.taskMode === 'completeLatest')) {
+      return step.taskMode === 'completeLatest' ? 'complete latest task' : 'complete open tasks';
+    }
+    if (step.useCustom) return step.kind === 'call' ? 'custom call' : 'custom task';
+    const tpl = (templateLib[step.kind] || []).find((t) => t.id === step.templateId);
+    return tpl?.name || (step.templateId ? 'template' : 'no template');
+  })();
+  const hasAction = stepHasAction(step);
   const varWeights = Object.entries(step.variationWeights || {});
   const tone = branchChild
     ? { bg: 'var(--gb-warning-tint-soft)', bd: 'var(--gb-warning-tint-border)', bdSel: 'var(--gb-warning-fg)', ring: 'var(--gb-warning-tint-soft)', badgeBg: 'var(--gb-warning-tint-medium)', badgeFg: 'var(--gb-warning-fg)', run: 'var(--gb-warning-fg)' }
@@ -124,7 +139,7 @@ function StepCard({ step, displayIdx, indent, branchChild, selected, simState, t
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--gb-text-muted)', minWidth: 0, overflow: 'hidden' }}>
             <span style={{ color: 'var(--gb-text-ghost)', flexShrink: 0 }}>{meta.label.toLowerCase()}</span>
             <span style={{ color: 'var(--gb-text-ghost)', flexShrink: 0 }}>·</span>
-            <span style={{ color: step.templateId ? 'var(--gb-text-tertiary)' : 'var(--gb-text-ghost)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, fontStyle: step.templateId ? 'normal' : 'italic' }}>
+            <span style={{ color: hasAction ? 'var(--gb-text-tertiary)' : 'var(--gb-text-ghost)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, fontStyle: hasAction ? 'normal' : 'italic' }}>
               {tplName}{varWeights.length > 1 ? ` · ${varWeights.length} variations` : ''}
             </span>
             {condCount > 0 && (
@@ -271,6 +286,97 @@ function BranchVisualizer({ step }) {
   );
 }
 
+/* ── Custom call / task inline forms ── */
+function CustomCallForm({ c, setCustom }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <Field label="Category">
+        <Dropdown size="sm" value={String(c.callCategory || '')} placeholder="Pick a category…"
+          options={CALL_CATEGORY_OPTIONS.filter((o) => o.id !== '0')} onChange={(v) => setCustom({ callCategory: v })} />
+      </Field>
+      <Field label="Direction">
+        <div style={{ display: 'flex', gap: 5 }}>
+          {[[0, 'Outbound'], [1, 'Inbound']].map(([id, label]) => (
+            <PillTag key={id} on={(c.callDirection | 0) === id} onClick={() => setCustom({ callDirection: id })}>{label}</PillTag>
+          ))}
+        </div>
+      </Field>
+      <Field label="Subject"><Input value={c.subject || ''} placeholder="Call subject" onChange={(v) => setCustom({ subject: v })} /></Field>
+      <Field label="Notes"><Textarea value={c.body || ''} rows={3} placeholder="What was discussed…" onChange={(v) => setCustom({ body: v })} /></Field>
+      <Checkbox checked={!!c.callVoicemail} label="Left a voicemail" onChange={(v) => setCustom({ callVoicemail: v })} />
+    </div>
+  );
+}
+function CustomTaskForm({ c, setCustom }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <Field label="Subject"><Input value={c.subject || ''} placeholder="Task subject" onChange={(v) => setCustom({ subject: v })} /></Field>
+      <Field label="Notes"><Textarea value={c.body || ''} rows={3} placeholder="Task details…" onChange={(v) => setCustom({ body: v })} /></Field>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Field label="Due in (days)" style={{ flex: 1 }}>
+          <Input value={c.daysOut == null ? '' : String(c.daysOut)} mono placeholder="0 = today" onChange={(v) => setCustom({ daysOut: v.replace(/[^0-9]/g, '') })} />
+        </Field>
+        <Field label="Priority" style={{ flex: 1 }}>
+          <Dropdown size="sm" value={String(c.priority || DEFAULT_PRIORITY)} options={PRIORITY_OPTIONS} onChange={(v) => setCustom({ priority: v })} />
+        </Field>
+      </div>
+    </div>
+  );
+}
+
+/* Call / Task config: saved-template vs custom inline, plus the task
+   create / complete-open modes. */
+function CallTaskConfig({ step, templateLib, upd }) {
+  const isCall = step.kind === 'call';
+  const tplOptions = (templateLib[step.kind] || []).map((t) => ({ id: t.id, label: t.name }));
+  const c = step.custom || {};
+  const setCustom = (patch) => upd({ custom: { ...c, ...patch } });
+  const taskMode = step.taskMode || 'create';
+  const completing = !isCall && taskMode !== 'create';
+
+  return (
+    <div>
+      {!isCall && (
+        <div style={{ marginBottom: 12 }}>
+          <SectionLabel>Task action</SectionLabel>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+            {[['create', 'Create new'], ['completeAll', 'Complete all open'], ['completeLatest', 'Complete latest open']].map(([id, label]) => (
+              <PillTag key={id} on={taskMode === id} onClick={() => upd({ taskMode: id })}>{label}</PillTag>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {completing ? (
+        <Callout tone="info" icon={<I.check />} title="Completes existing tasks">
+          {taskMode === 'completeLatest'
+            ? "Marks the contact's most recent open task complete."
+            : "Marks every open task on the contact complete."} No template needed.
+        </Callout>
+      ) : (
+        <>
+          <SectionLabel>{isCall ? 'Call log' : 'New task'}</SectionLabel>
+          <div style={{ display: 'flex', gap: 5, marginBottom: 8 }}>
+            <PillTag on={!step.useCustom} onClick={() => upd({ useCustom: false })}>Saved template</PillTag>
+            <PillTag on={!!step.useCustom} onClick={() => upd({ useCustom: true })}>Custom</PillTag>
+          </div>
+          {!step.useCustom ? (
+            tplOptions.length ? (
+              <Dropdown size="sm" value={step.templateId} placeholder="Choose template…" searchable options={tplOptions} onChange={(tid) => upd({ templateId: tid })} />
+            ) : (
+              <div style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>No saved {isCall ? 'call' : 'task'} templates — switch to Custom to build one.</div>
+            )
+          ) : isCall ? (
+            <CustomCallForm c={c} setCustom={setCustom} />
+          ) : (
+            <CustomTaskForm c={c} setCustom={setCustom} />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ── Step inspector ── */
 function StepInspector({ step, allSteps, templateLib, onChange, onDelete }) {
   const meta = STEP_KIND_META[step.kind] || STEP_KIND_META.email;
@@ -373,39 +479,40 @@ function StepInspector({ step, allSteps, templateLib, onChange, onDelete }) {
           </div>
         )}
 
-        <div>
-          <SectionLabel>Template</SectionLabel>
-          {tplOptions.length === 0 ? (
-            <div style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>No {meta.label.toLowerCase()} templates saved yet.</div>
-          ) : isEmailKind ? (
-            /* Same rich picker as the Quick Send popover — shows each
-               template's variation count + expandable variations. We only
-               use the parent selection here; the weighting lives in the
-               variation split below. */
-            <TemplatePicker
-              mode="random"
-              templates={templateLib.email || []}
-              value={step.templateId}
-              onChange={(composite) => { const [pid] = parseTemplateValue(composite); onPickTemplate(pid); }}
-              placeholder="Choose email template…"
-              floating={false}
-              listMaxHeight={320}
-            />
-          ) : (
-            <Dropdown size="sm" value={step.templateId} placeholder="Choose template…" searchable
-              options={tplOptions} onChange={onPickTemplate} />
-          )}
-          {/* Variation split — only when the chosen email template has
-              variations; weights always sum to 100 and break down live as
-              you drag, same as the Quick Send popover. */}
-          {variationItems.length > 0 && (
-            <div style={{ marginTop: 10 }}>
-              <Field label="Variation split" hint="Each contact rolls one variation, weighted by these.">
-                <TemplateSplits items={variationItems} weights={variationWeights} onChange={(w) => upd({ variationWeights: w })} />
-              </Field>
-            </div>
-          )}
-        </div>
+        {isEmailKind ? (
+          <div>
+            <SectionLabel>Template</SectionLabel>
+            {tplOptions.length === 0 ? (
+              <div style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>No email templates saved yet.</div>
+            ) : (
+              /* Same rich picker as the Quick Send popover — shows each
+                 template's variation count + expandable variations. We only
+                 use the parent selection here; the weighting lives in the
+                 variation split below. */
+              <TemplatePicker
+                mode="random"
+                templates={templateLib.email || []}
+                value={step.templateId}
+                onChange={(composite) => { const [pid] = parseTemplateValue(composite); onPickTemplate(pid); }}
+                placeholder="Choose email template…"
+                floating={false}
+                listMaxHeight={320}
+              />
+            )}
+            {/* Variation split — only when the chosen email template has
+                variations; weights always sum to 100 and break down live as
+                you drag, same as the Quick Send popover. */}
+            {variationItems.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                <Field label="Variation split" hint="Each contact rolls one variation, weighted by these.">
+                  <TemplateSplits items={variationItems} weights={variationWeights} onChange={(w) => upd({ variationWeights: w })} />
+                </Field>
+              </div>
+            )}
+          </div>
+        ) : (
+          <CallTaskConfig step={step} templateLib={templateLib} upd={upd} />
+        )}
 
         <div>
           <CampaignConditions key={step.id} initial={step.conditions} onChange={(tree) => upd({ conditions: tree })} />
@@ -517,7 +624,7 @@ function CampaignSidebar({ library, currentId, onSelect, onNew }) {
 function StatsStrip({ steps, campaign, selectedId, onClearSelection, dirty, onSave }) {
   const branches = steps.filter((s) => s.branch).length;
   const totalConditions = steps.reduce((a, s) => a + (s.conditions?.groups || []).reduce((x, g) => x + (g.conditions?.length || 0), 0), 0);
-  const invalid = steps.filter((s) => !s.templateId);
+  const invalid = steps.filter((s) => !stepHasAction(s));
   const isValid = invalid.length === 0 && steps.length > 0;
   const selected = steps.find((s) => s.id === selectedId);
   const selectedIdx = selected ? steps.findIndex((s) => s.id === selectedId) + 1 : null;
