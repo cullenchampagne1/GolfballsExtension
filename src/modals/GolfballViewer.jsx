@@ -320,6 +320,20 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
     }
   }, [tint, shape]);
 
+  // Live scale — `initialScale` (e.g. the catalog's chip/ball preview-scale dev
+  // setting) is otherwise read once into initialBallRef on mount. Mirror changes
+  // into the live render state so tuning the dev slider reframes the model
+  // immediately, without remounting the viewer.
+  const renderStateRef = useRef(null);
+  useEffect(() => {
+    const s = Number(initialScale ?? dev['golfballViewer.ballScale'] ?? 1);
+    if (initialBallRef.current) initialBallRef.current.scale = s;
+    if (renderStateRef.current) renderStateRef.current.scale = s;
+    // Driven by initialScale (the catalog's preview-scale dev setting flows in
+    // through it); dev fallback only matters at mount when no initialScale set.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialScale]);
+
   useEffect(() => {
     let disposed = false;
     let renderer, scene, camera, ballMesh, decalMesh, decalMesh2, ballGroup, animationId;
@@ -376,6 +390,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
       //          toQuat, toScale }. null when no tween is in flight.
       returnTween: null,
     };
+    renderStateRef.current = state;   // let the live-scale effect reframe it
 
     (async () => {
       try {
@@ -3321,6 +3336,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
       disposed = true;
       tintMatRef.current = null;
       tintClayRef.current = null;
+      renderStateRef.current = null;
       snapshotRef.current = null;
       dropBombRef.current = null;
       containsPointRef.current = null;
