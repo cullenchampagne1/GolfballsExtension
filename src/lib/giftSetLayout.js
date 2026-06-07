@@ -24,6 +24,10 @@ export const BOX_MODELS = {
   sixBallPokerChip: 'giftbox',
   sixBallLever: 'giftboxLever',
   sixBallBartender: 'giftboxBartender',
+  // Premium-wood frames — SAME foam inserts + slot layout, only the outer tray
+  // is a baked walnut-grain wood instead of the black box.
+  premiumWoodPoker: 'giftboxWoodPoker',
+  premiumWoodLever: 'giftboxWoodLever',
 };
 
 // Shared 6-ball grid (2 cols × 3 rows, left side). Order: TL, TR, ML, MR, BL, BR.
@@ -71,6 +75,11 @@ export const SIX_BALL_BARTENDER = {
   ],
 };
 
+/* Premium-wood variants — byte-identical foam layout to the black-box sets above
+   (same balls, tees, kit recesses), only the box model swaps to the wood-frame OBJ. */
+export const PREMIUM_WOOD_POKER_CHIP = { ...SIX_BALL_POKER_CHIP, boxModel: BOX_MODELS.premiumWoodPoker };
+export const PREMIUM_WOOD_LEVER = { ...SIX_BALL_LEVER, boxModel: BOX_MODELS.premiumWoodLever };
+
 /* What's physically in the set, parsed from a normalized gift-set option (see
    normalizeBundleOption in giftSets.js). Returns the set KIND or null for sets this
    module can't lay out yet (so callers fall back to the single-item preview). */
@@ -81,12 +90,13 @@ export function parseGiftSetContents(option) {
     ...((option.descriptions || []).flatMap((d) => [d && d.text, ...((d && d.subtext) || [])])),
   ].filter(Boolean).join(' ').toLowerCase();
   const balls = option.ballsPerSet || Math.round((option.oiq || 0) * 12) || 0;
+  const wood = /\bwood\b|premium\s*wood|walnut|wooden/.test(hay);
   let kind = null;
   if (/poker[\s-]?chip/.test(hay)) kind = 'pokerChip';
   else if (/bartender/.test(hay)) kind = 'bartender';   // bartender divot tool
   else if (/lever/.test(hay) || /divot/.test(hay)) kind = 'lever';
   if (!kind) return null;
-  return { balls, kind };
+  return { balls, kind, wood };
 }
 
 /* Resolve the 3D layout for a chosen gift-set option, or null if unsupported
@@ -94,6 +104,13 @@ export function parseGiftSetContents(option) {
 export function giftSetLayout(option) {
   const c = parseGiftSetContents(option);
   if (!c || c.balls !== 6) return null;
+  // Premium-wood SKUs reuse the same foam layouts with a wood-frame box. (Only
+  // poker + lever/divot wood frames are modeled; a wood bartender maps to the
+  // wood lever-divot frame since they share the tool recess.)
+  if (c.wood) {
+    if (c.kind === 'pokerChip') return PREMIUM_WOOD_POKER_CHIP;
+    if (c.kind === 'lever' || c.kind === 'bartender') return PREMIUM_WOOD_LEVER;
+  }
   if (c.kind === 'pokerChip') return SIX_BALL_POKER_CHIP;
   if (c.kind === 'lever') return SIX_BALL_LEVER;
   if (c.kind === 'bartender') return SIX_BALL_BARTENDER;

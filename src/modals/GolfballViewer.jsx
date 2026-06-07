@@ -55,12 +55,16 @@ const MODEL_URLS = {
   // swap the upper-right kit (a divot/bartender tool recess + 2 empty marker spots).
   giftboxLever: 'assets/giftbox_model/GiftBox_Lever.obj',
   giftboxBartender: 'assets/giftbox_model/GiftBox_Bartender.obj',
+  // Premium-wood sets: SAME foam inserts + slot layout, only the outer frame is
+  // a baked walnut-grain wood (vs the black tray). Poker-chip + lever-divot kits.
+  giftboxWoodPoker: 'assets/giftbox_model/GiftBox_WoodPoker.obj',
+  giftboxWoodLever: 'assets/giftbox_model/GiftBox_WoodLever.obj',
 };
 
 // Cache-bust token appended to every model URL. Chrome can serve a stale cached
 // .obj across extension reloads (the URL is otherwise constant), which masks a
 // re-exported model. Bump this whenever a model file changes to force a refetch.
-const MODEL_VERSION = '20250607-10-toolpocket';
+const MODEL_VERSION = '20250607-11-woodtex';
 
 async function loadThreeAndModel(shape = 'ball') {
   // Parallel-load engine + helpers once so first-mount latency is dominated by
@@ -1041,10 +1045,32 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
 
           const contentGroup = new THREE.Group();
 
+          // Premium-wood frames carry a real wood photo on the shell. The OBJ bakes the
+          // shell verts WHITE with UVs over the wood region of the texture, while the
+          // foam/tees sit on a white strip in the same texture — so a single material
+          // `map × vertexColor` yields wood on the frame + dark foam + white tees with
+          // no second material (the loader only keeps one mesh). Black-box sets pass no
+          // map and stay pure vertex-color.
+          let woodTex = null;
+          if ((giftSet.boxModel || '').startsWith('giftboxWood')) {
+            const wbase = (typeof chrome !== 'undefined' && chrome.runtime?.getURL)
+              ? chrome.runtime.getURL('assets/giftbox_model/wood_diff.jpg') : 'assets/giftbox_model/wood_diff.jpg';
+            const tl = new THREE.TextureLoader();
+            woodTex = await new Promise((res) => tl.load(`${wbase}?v=${MODEL_VERSION}`, res, undefined, () => res(null)));
+            if (disposed) return;
+            if (woodTex) {
+              woodTex.colorSpace = THREE.SRGBColorSpace;
+              woodTex.wrapS = THREE.ClampToEdgeWrapping; woodTex.wrapT = THREE.ClampToEdgeWrapping;
+              woodTex.minFilter = THREE.LinearMipmapLinearFilter; woodTex.anisotropy = 4;
+              objectsToDispose.push(woodTex);
+            }
+          }
+
           // Box (tray walls + foam-with-holes + baked tees) — one material driven by
-          // the baked per-vertex colors: dark foam/box, white tees. color=white so the
-          // vertex colors show 1:1; small emissive lifts the deep-shadow slots.
-          const boxMat = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, roughness: 0.62, metalness: 0.0, emissive: 0x0a0a0c, emissiveIntensity: 0.35 });
+          // the baked per-vertex colors: dark foam/box, white tees (+ wood map on the
+          // shell for premium sets). color=white so the vertex colors show 1:1; small
+          // emissive lifts the deep-shadow slots.
+          const boxMat = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, map: woodTex || null, roughness: woodTex ? 0.52 : 0.62, metalness: 0.0, emissive: 0x0a0a0c, emissiveIntensity: 0.35 });
           const boxMesh = new THREE.Mesh(boxRes.model.geometry.clone(), boxMat);
           contentGroup.add(boxMesh);
           objectsToDispose.push(boxMat, boxMesh.geometry);
@@ -1054,10 +1080,14 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           const ballMats = [];
           const ballCG = centeredGeo(ballRes.model.geometry);
           const ballColor = tint ? new THREE.Color(tint) : new THREE.Color(0xf6f6f6);
+          // Match the single-ball 3D view EXACTLY: same print-area extent driven by
+          // the `golfballViewer.printAreaScale` dev setting (was hardcoded 0.62, so
+          // the gift-set logo was smaller than the standalone ball + ignored the knob).
+          const gsPrintAreaScale = initialBallRef.current.printAreaScale ?? 0.7;
           for (const s of giftSet.ballSlots) {
             const mat = new THREE.MeshStandardMaterial({ color: ballColor.clone(), emissive: 0x101418, emissiveIntensity: 0.4, roughness: 0.28, metalness: 0.02 });
             const m = new THREE.Mesh(ballCG.geo.clone(), mat);
-            addDecal(m, 0, 0, ballCG.radius * 0.999, ballCG.radius * 0.62, ballCG.radius * 2);
+            addDecal(m, 0, 0, ballCG.radius * 0.999, ballCG.radius * gsPrintAreaScale, ballCG.radius * 2);
             m.scale.setScalar(giftSet.ballRadius / ballCG.radius);
             m.position.set(s.x, s.y, s.z);
             contentGroup.add(m); ballMats.push(mat);
@@ -1140,8 +1170,24 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // ── Render loop (zoom + turntable + render + debug HUD) ──
           const gsRad2deg = (r) => (r * 180) / Math.PI;
           let gsLastDebugTs = 0;
+          // Track the active HDRI key so picking a scene swaps the gift set into
+          // that environment too (the bug was: this loop ignored sceneKeyRef, so
+          // the switcher "wouldn't pop up" for gift sets even though it works for
+          // the ball). loadEnvironment + applySceneMode are defined above, in scope.
+          let gsLastSceneKey = null;
           const gsRender = () => {
             if (disposed) return;
+            if (sceneKeyRef.current !== gsLastSceneKey) {
+              gsLastSceneKey = sceneKeyRef.current;
+              if (sceneKeyRef.current) {
+                const target = sceneKeyRef.current;
+                loadEnvironment(target)
+                  .then(() => { if (!disposed && sceneKeyRef.current === target) applySceneMode(target); })
+                  .catch((e) => { console.warn('GolfballViewer: failed to load HDRI', target, e); });
+              } else {
+                applySceneMode(null);
+              }
+            }
             ballGroup.scale.setScalar(state.scale);
             if (autoRotateRef.current) ballGroup.rotation.y += spinSpeedRef.current;
             renderer.render(scene, camera);

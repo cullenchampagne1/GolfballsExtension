@@ -12,7 +12,10 @@ import {
 } from '../ui/components/ImageColorSwap.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { GolfballViewer } from './GolfballViewer.jsx';
-import { SIX_BALL_POKER_CHIP, SIX_BALL_LEVER, SIX_BALL_BARTENDER } from '../lib/giftSetLayout.js';
+import {
+  SIX_BALL_POKER_CHIP, SIX_BALL_LEVER, SIX_BALL_BARTENDER,
+  PREMIUM_WOOD_POKER_CHIP, PREMIUM_WOOD_LEVER,
+} from '../lib/giftSetLayout.js';
 import { GrassMockupComposer } from './GrassMockupComposer.jsx';
 import { LiquidDrawer } from '../ui/components/LiquidDrawer.jsx';
 import { ColorPickerPopover } from '../ui/components/ColorPicker.jsx';
@@ -271,19 +274,24 @@ export function ImagePreview({
   // The three assembled gift sets selectable in the model dropdown. All render via
   // shape="giftset"; only the poker-chip set has chips (the others = a divot/bartender
   // tool + empty marker spots).
-  const GIFTSETS = { giftsetPoker: SIX_BALL_POKER_CHIP, giftsetLever: SIX_BALL_LEVER, giftsetBartender: SIX_BALL_BARTENDER };
+  const GIFTSETS = {
+    giftsetPoker: SIX_BALL_POKER_CHIP, giftsetLever: SIX_BALL_LEVER, giftsetBartender: SIX_BALL_BARTENDER,
+    giftsetWoodPoker: PREMIUM_WOOD_POKER_CHIP, giftsetWoodLever: PREMIUM_WOOD_LEVER,
+  };
   const viewerGiftSet = GIFTSETS[viewerShape];
   const isGiftset = !!viewerGiftSet;
-  const hasChips = viewerShape === 'giftsetPoker';
+  const hasChips = viewerShape === 'giftsetPoker' || viewerShape === 'giftsetWoodPoker';
   const effShape = isGiftset ? 'giftset' : viewerShape;
   // Smart color control: which body colors the active model exposes.
-  //   ball → ball · chip → chip · poker set → both · lever/bartender set → ball only
-  //   (tool is fixed steel) · metal tools → none.
+  //   ball → ball · chip → chip · metal tools → none · ANY gift set → ball color only
+  //   (per request: gift sets expose just the golf-ball color; chips/tools keep their
+  //   own fixed colorway).
   const ballCtl = { key: 'ball', label: 'Ball color', value: ballTint, set: setBallTint, def: '#f6f6f6' };
   const chipCtl = { key: 'chip', label: 'Chip color', value: chipTint, set: setChipTint, def: '#1c1c1c' };
   const TINT_CONTROLS = {
     ball: [ballCtl], chip: [chipCtl], divot: [], bartender: [],
-    giftsetPoker: [ballCtl, chipCtl], giftsetLever: [ballCtl], giftsetBartender: [ballCtl],
+    giftsetPoker: [ballCtl], giftsetLever: [ballCtl], giftsetBartender: [ballCtl],
+    giftsetWoodPoker: [ballCtl], giftsetWoodLever: [ballCtl],
   };
   const tintControls = TINT_CONTROLS[viewerShape] || [];
   // Viewer tint props: ball uses `tint` as its body, chip uses `tint` as its clay,
@@ -2024,6 +2032,8 @@ const MODEL_OPTIONS = [
   { id: 'giftsetPoker', label: 'Gift Set · Poker Chip' },
   { id: 'giftsetLever', label: 'Gift Set · Lever Divot' },
   { id: 'giftsetBartender', label: 'Gift Set · Bartender' },
+  { id: 'giftsetWoodPoker', label: 'Premium Wood · Poker Chip' },
+  { id: 'giftsetWoodLever', label: 'Premium Wood · Lever Divot' },
 ];
 
 /* One body-color control: a glass swatch button that opens the design-system
