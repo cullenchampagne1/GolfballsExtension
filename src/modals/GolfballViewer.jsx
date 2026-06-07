@@ -897,9 +897,13 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // Divot: brushed steel body + a non-metallic white marker disc. The
           // OBJ's vertex-color mask (white disc vs black metal) drives both the
           // base color and the metalness in the shader below.
+          // metalness kept moderate (not 1.0): a pure metal reflects the dark
+          // preview environment and reads BLACK. Half-metal lets the gray base
+          // show as satin steel under the lights; emissive lifts the shadow side.
           ? new THREE.MeshStandardMaterial({
               vertexColors: true, color: 0xffffff,
-              metalness: 1.0, roughness: 0.45,
+              metalness: 0.5, roughness: 0.5,
+              emissive: 0x15171b, emissiveIntensity: 0.3,
             })
           : new THREE.MeshStandardMaterial({
               // Body color: off-white by default, or the product's colorway
@@ -921,7 +925,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // Vertex-color mask: white(~0.93) = marker disc, black(~0.02) = metal.
           // Paint the metal a brushed-steel color and force the disc to a
           // non-metallic white (so the projected logo reads on it like paper).
-          const steel = new THREE.Color('#9a9da3');
+          const steel = new THREE.Color('#c2c6cc');
           ballMesh.material.onBeforeCompile = (shader) => {
             shader.uniforms.uMetal = { value: steel };
             shader.fragmentShader = 'uniform vec3 uMetal;\n' + shader.fragmentShader
@@ -967,43 +971,48 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         const targetRadius = 100;
         const scale = targetRadius / bsphere.radius;
         ballMesh.scale.setScalar(scale);
-        // Recenter the geometry on the origin so OrbitControls rotates
-        // around the ball's middle, not its model-space center.
-        ballMesh.position.set(-bsphere.center.x * scale, -bsphere.center.y * scale, -bsphere.center.z * scale);
+
+        // Divot: the logo prints on the OFF-CENTER white marker disc (top of the
+        // tool). Locate it from the vertex-color mask (white = disc) — used both
+        // to target the decal AND as the recenter pivot below.
+        let divotCx = 0, divotCy = 0, divotCz = 0, divotFaceZ = 0, divotDiscR = 0;
+        if (isDivot) {
+          const pos = ballMesh.geometry.getAttribute('position');
+          const col = ballMesh.geometry.getAttribute('color');
+          let sx = 0, sy = 0, sz = 0, n = 0, maxz = -1e9; const wx = [], wy = [];
+          for (let i = 0; i < pos.count; i++) {
+            if (col && col.getX(i) > 0.5) {
+              const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+              sx += x; sy += y; sz += z; n++; wx.push(x); wy.push(y);
+              if (z > maxz) maxz = z;
+            }
+          }
+          if (n > 0) {
+            divotCx = sx / n; divotCy = sy / n; divotCz = sz / n; divotFaceZ = maxz;
+            for (let k = 0; k < wx.length; k++) {
+              const d = Math.hypot(wx[k] - divotCx, wy[k] - divotCy);
+              if (d > divotDiscR) divotDiscR = d;
+            }
+          }
+        }
+
+        // Recenter so the zoom/rotate pivot is the model's focal point — the
+        // ball/chip center, or for the divot the LOGO disc, so scaling zooms
+        // toward the logo and the tool hangs below it in the scene.
+        const pivot = (isDivot && divotDiscR > 0)
+          ? { x: divotCx, y: divotCy, z: divotCz }
+          : { x: bsphere.center.x, y: bsphere.center.y, z: bsphere.center.z };
+        ballMesh.position.set(-pivot.x * scale, -pivot.y * scale, -pivot.z * scale);
+
         // Chip prints land flat on the face (±chipFaceZ) and fill the recessed
-        // white center inlay. These are in LOCAL geometry units (the chip's
-        // world scale rides on ballMesh.scale, which DecalGeometry bakes via the
-        // decal mesh's own scale) — so the projector must be sized in local
-        // units, not world units, or its box misses the thin disc entirely.
+        // white center inlay. LOCAL geometry units (the world scale rides on
+        // ballMesh.scale, which DecalGeometry bakes via the decal mesh's scale).
         let chipFaceZ = 0, chipDiscR = 0;
         if (isChip) {
           ballMesh.geometry.computeBoundingBox();
           const cbb = ballMesh.geometry.boundingBox;
           chipFaceZ = Math.max(Math.abs(cbb.min.z), Math.abs(cbb.max.z));
           chipDiscR = Math.max(Math.abs(cbb.min.x), Math.abs(cbb.max.x), Math.abs(cbb.min.y), Math.abs(cbb.max.y));
-        }
-        // Divot: the logo prints on the OFF-CENTER white marker disc (top of the
-        // tool), not the tool's centroid. Locate that disc from the vertex-color
-        // mask (white = disc) so the decal projector can target it.
-        let divotCx = 0, divotCy = 0, divotFaceZ = 0, divotDiscR = 0;
-        if (isDivot) {
-          const pos = ballMesh.geometry.getAttribute('position');
-          const col = ballMesh.geometry.getAttribute('color');
-          let sx = 0, sy = 0, n = 0, maxz = -1e9; const wx = [], wy = [];
-          for (let i = 0; i < pos.count; i++) {
-            if (col && col.getX(i) > 0.5) {
-              const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-              sx += x; sy += y; n++; wx.push(x); wy.push(y);
-              if (z > maxz) maxz = z;
-            }
-          }
-          if (n > 0) {
-            divotCx = sx / n; divotCy = sy / n; divotFaceZ = maxz;
-            for (let k = 0; k < wx.length; k++) {
-              const d = Math.hypot(wx[k] - divotCx, wy[k] - divotCy);
-              if (d > divotDiscR) divotDiscR = d;
-            }
-          }
         }
         // Wrap ball+decal in a Group so throw-mode translates and
         // rotates the whole assembly together. The mesh's recentering
