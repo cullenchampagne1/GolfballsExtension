@@ -3732,8 +3732,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           active (no room to fall in). Lives ABOVE the canvas; the
           bomb listener excludes any element marked
           data-viewer-ui="true" so this can't trigger a drop.
-          Suppressed in `minimal` mode (e.g. the Customize sidebar). */}
-      {status === 'ready' && !sceneKey && !minimal && (
+          Suppressed in `minimal` mode (e.g. the Customize sidebar).
+          BALL-ONLY: physics/throw is only set up for the golf ball, so the
+          gravity toggle is hidden for the chip / divot / bartender / gift set. */}
+      {status === 'ready' && !sceneKey && !minimal && shape === 'ball' && (
         <button
           type="button"
           data-viewer-ui="true"

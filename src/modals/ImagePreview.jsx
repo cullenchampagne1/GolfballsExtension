@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   FloatingPanel, ModalHeader, IconBtn, Btn, Callout, Spinner,
-  I, T, Slider, Input, DraggablePopup,
+  I, T, Slider, Input, DraggablePopup, Dropdown,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import {
@@ -12,6 +12,7 @@ import {
 } from '../ui/components/ImageColorSwap.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { GolfballViewer } from './GolfballViewer.jsx';
+import { SIX_BALL_POKER_CHIP } from '../lib/giftSetLayout.js';
 import { GrassMockupComposer } from './GrassMockupComposer.jsx';
 import { LiquidDrawer } from '../ui/components/LiquidDrawer.jsx';
 import { ColorPickerPopover } from '../ui/components/ColorPicker.jsx';
@@ -260,22 +261,32 @@ export function ImagePreview({
   // when gravity is on — bombs only do something meaningful when
   // physics is running.
   const [viewerThrowMode, setViewerThrowMode] = useState(false);
-  // 3D shape (golf ball vs poker chip) + per-shape body tint, driven by the two
-  // in-view controls (gravity-off). Separate tints so the ball and chip keep
-  // their own colorway when you toggle between them.
+  // 3D model shown in the viewer — switched from the model dropdown in the 3D
+  // strip. Ball + chip + the metal tools + the assembled gift set. Separate ball
+  // and chip tints so each keeps its colorway as you switch models.
   const [viewerShape, setViewerShape] = useState('ball');
   const [ballTint, setBallTint] = useState(null);
   const [chipTint, setChipTint] = useState(null);
-  const [tintPickerOpen, setTintPickerOpen] = useState(false);
-  const tintBtnRef = useRef(null);
-  const isChipShape = viewerShape === 'chip';
-  const activeTint = isChipShape ? chipTint : ballTint;
-  const setActiveTint = isChipShape ? setChipTint : setBallTint;
-  // Swatch shown on the color button / fed to the picker: the live tint, or the
-  // shape's default body color when none is set yet.
-  const tintSwatch = activeTint || (isChipShape ? '#1c1c1c' : '#f6f6f6');
-  // Close the tint picker when its control can't be shown (gravity on / left 3D).
-  useEffect(() => { if (viewerThrowMode || view !== '3d') setTintPickerOpen(false); }, [viewerThrowMode, view]);
+  const giftSetScale = Number(useDevSetting('golfballViewer.giftSetScale') ?? 0.9) || 0.9;
+  // Smart color control: which body colors the active model exposes.
+  //   ball → ball color · chip → chip color · gift set → both · metal tools → none.
+  const TINT_CONTROLS = {
+    ball:    [{ key: 'ball', label: 'Ball color', value: ballTint, set: setBallTint, def: '#f6f6f6' }],
+    chip:    [{ key: 'chip', label: 'Chip color', value: chipTint, set: setChipTint, def: '#1c1c1c' }],
+    giftset: [{ key: 'ball', label: 'Ball color', value: ballTint, set: setBallTint, def: '#f6f6f6' },
+              { key: 'chip', label: 'Chip color', value: chipTint, set: setChipTint, def: '#1c1c1c' }],
+    divot: [], bartender: [],
+  };
+  const tintControls = TINT_CONTROLS[viewerShape] || [];
+  // Viewer tint props: ball uses `tint` as its body, chip uses `tint` as its clay,
+  // the gift set uses `tint` for the balls + `chipTint` for the chips; metal tools
+  // take no tint (fixed steel).
+  const viewerTint = viewerShape === 'chip' ? chipTint
+    : (viewerShape === 'ball' || viewerShape === 'giftset') ? ballTint : undefined;
+  const viewerChipTint = viewerShape === 'giftset' ? chipTint : undefined;
+  const viewerGiftSet = viewerShape === 'giftset' ? SIX_BALL_POKER_CHIP : undefined;
+  // Gravity/physics is ball-only — turn throw mode off if we switch off the ball.
+  useEffect(() => { if (viewerShape !== 'ball') setViewerThrowMode(false); }, [viewerShape]);
 
   // Image load wiring. The <img>'s onLoad/onError flips status. We
   // pre-resolve URLs that are already cached so the spinner doesn't
@@ -999,7 +1010,10 @@ export function ImagePreview({
                   ref={viewerRef}
                   decalDataUrl={decalDataUrl}
                   shape={viewerShape}
-                  tint={activeTint}
+                  tint={viewerTint}
+                  chipTint={viewerChipTint}
+                  giftSet={viewerGiftSet}
+                  initialScale={viewerShape === 'giftset' ? giftSetScale : undefined}
                   onSceneChange={setViewerSceneKey}
                   onThrowChange={setViewerThrowMode}
                   onError={() => {
@@ -1333,7 +1347,7 @@ export function ImagePreview({
               entry/exit so it doesn't pop in/out when the user
               toggles gravity. */}
           <AnimatePresence>
-            {view === '3d' && viewerThrowMode && !viewerSceneKey && (
+            {view === '3d' && viewerThrowMode && !viewerSceneKey && viewerShape === 'ball' && (
               <motion.div
                 key="fun-menu"
                 initial={{ opacity: 0, y: 8 }}
@@ -1347,43 +1361,23 @@ export function ImagePreview({
             )}
           </AnimatePresence>
 
-          {/* Shape toggle (ball ⇄ poker chip) + body-tint picker — bottom-right,
-              the gravity-OFF mirror of the fun menu. They fade out as gravity
-              turns on so the bomb toolbox can take this corner. */}
+          {/* Smart body-color controls — bottom-right, the gravity-OFF mirror of
+              the fun menu. The model dropdown (in the 3D strip) picks the shape;
+              this shows one color button per body the model exposes: ball → ball
+              color, chip → chip color, gift set → both, metal tools → none. */}
           <AnimatePresence>
-            {view === '3d' && status === 'ready' && !viewerThrowMode && (
+            {view === '3d' && status === 'ready' && !viewerThrowMode && tintControls.length > 0 && (
               <motion.div
-                key="shape-tint-controls"
+                key="tint-controls"
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
                 transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.7 }}
                 style={{ position: 'absolute', bottom: 8, right: 8, display: 'flex', gap: 4, zIndex: 6 }}
               >
-                <GlassIconBtn
-                  icon={isChipShape ? <ChipIcon size={13} /> : <BallIcon size={13} />}
-                  title={isChipShape ? 'Show golf ball' : 'Show poker chip'}
-                  onClick={() => { setTintPickerOpen(false); setViewerShape((s) => (s === 'ball' ? 'chip' : 'ball')); }}
-                />
-                <div ref={tintBtnRef} data-viewer-ui="true" style={{ position: 'relative', display: 'inline-flex' }}>
-                  <GlassIconBtn
-                    icon={<ColorCircleIcon size={14} color={tintSwatch} />}
-                    active={tintPickerOpen}
-                    title={isChipShape ? 'Chip color' : 'Ball tint'}
-                    onClick={() => setTintPickerOpen((o) => !o)}
-                  />
-                  <AnimatePresence>
-                    {tintPickerOpen && (
-                      <ColorPickerPopover
-                        value={tintSwatch}
-                        onChange={(hex) => setActiveTint(hex)}
-                        anchorRef={tintBtnRef}
-                        onClose={() => setTintPickerOpen(false)}
-                        align="right"
-                      />
-                    )}
-                  </AnimatePresence>
-                </div>
+                {tintControls.map((c) => (
+                  <TintControl key={c.key} label={c.label} value={c.value} defColor={c.def} onChange={c.set} />
+                ))}
               </motion.div>
             )}
           </AnimatePresence>
@@ -1516,6 +1510,17 @@ export function ImagePreview({
                 >
                   Image
                 </Btn>
+                <span style={{ flex: 1 }} />
+                {/* Model switcher — every 3D model we support. Replaces the old
+                    ball/chip icon toggle. Its menu portals to <body>, so the
+                    strip's overflow:hidden doesn't clip it. */}
+                <Dropdown
+                  size="sm"
+                  value={viewerShape}
+                  options={MODEL_OPTIONS}
+                  onChange={setViewerShape}
+                  style={{ minWidth: 150 }}
+                />
                 <span style={{ flex: 1 }} />
                 <Btn
                   size="sm"
@@ -2003,6 +2008,45 @@ const ColorCircleIcon = (p) => (
       stroke="currentColor" strokeWidth="1.6" strokeOpacity="0.55" />
   </svg>
 );
+
+/* The models the 3D viewer can show — drives the model dropdown in the 3D strip. */
+const MODEL_OPTIONS = [
+  { id: 'ball', label: 'Golf Ball' },
+  { id: 'chip', label: 'Poker Chip' },
+  { id: 'divot', label: 'Divot Tool' },
+  { id: 'bartender', label: 'Bartender Tool' },
+  { id: 'giftset', label: 'Gift Set' },
+];
+
+/* One body-color control: a glass swatch button that opens the design-system
+   color picker. Self-contained (own open state + anchor ref) so a model can show
+   zero (metal tools), one (ball / chip), or two (gift set = ball + chip) of them. */
+function TintControl({ label, value, defColor, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const swatch = value || defColor;
+  return (
+    <div ref={ref} data-viewer-ui="true" style={{ position: 'relative', display: 'inline-flex' }}>
+      <GlassIconBtn
+        icon={<ColorCircleIcon size={14} color={swatch} />}
+        active={open}
+        title={label}
+        onClick={() => setOpen((o) => !o)}
+      />
+      <AnimatePresence>
+        {open && (
+          <ColorPickerPopover
+            value={swatch}
+            onChange={onChange}
+            anchorRef={ref}
+            onClose={() => setOpen(false)}
+            align="right"
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 /* Toolbox glyph for the 3D-mode drawer toggle. A simple briefcase
    shape with a handle reads instantly as "tools / stuff to play

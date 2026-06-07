@@ -85,6 +85,14 @@ export const DEV_SETTINGS = [
     min:     0.4, max: 2.5, step: 0.05,
   },
   {
+    key:     'golfballViewer.giftSetScale',
+    label:   'Golfball viewer: default gift-set scale',
+    desc:    'Initial scale of the assembled gift box (balls + chips + tees) when shown in the Image Viewer 3D mode. The box frames larger than a ball, so this defaults below 1. Wheel zoom still overrides.',
+    type:    'number',
+    default: 0.9,
+    min:     0.3, max: 2.5, step: 0.05,
+  },
+  {
     key:     'golfballViewer.ballRotX',
     label:   'Golfball viewer: default ball rotation X (deg)',
     desc:    'Initial pitch rotation of the ball around the X axis at first 3D open. Drag-to-rotate still overrides during use.',
