@@ -50,8 +50,14 @@ const _textImprint = (slot, engine, p) => {
 const _monoImprint = (slot, engine, m) => ({ slot, engine, kind: 'monogram', text: (m && m.text) || '', view: m && m.view,
   color: (m && m.color) || '#000000', color2: (m && m.color2) || '#FFFFFF', overlay: (m && m.overlay) || String((m && m.view) || 'circle').replace(/\d+$/, ''),
   label: `Monogram — ${String((m && m.text) || '').toUpperCase()}`, image: null });
-const _logoImprint = (slot, engine, src) => ({ slot, engine, kind: 'logo', logo: (src && src.logo) || null, _localImageDataUrl: (src && src._localImageDataUrl) || null,
-  label: 'Custom logo', image: (src && src._localImageDataUrl) || (src && src.logo && (src.logo.dataUrl || src.logo.preview)) || null });
+const _logoImprint = (slot, engine, src) => {
+  const icon = (src && src.icon) || null;                 // a pre-made Icon graphic (vs an uploaded logo)
+  const fileName = (src && src.logo && src.logo.fileName) || null;
+  return { slot, engine, kind: 'logo', logo: (src && src.logo) || null, _localImageDataUrl: (src && src._localImageDataUrl) || null,
+    icon, iconName: icon, fileName,
+    label: icon ? `Icon · ${icon}` : 'Custom logo',
+    image: (src && src.iconImage) || (src && src._localImageDataUrl) || (src && src.logo && (src.logo.dataUrl || src.logo.preview)) || null };
+};
 
 // The FRONT imprint of a decoration as a portable descriptor (or null).
 export function frontImprint(deco) {

@@ -837,8 +837,10 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove,
                   color: second ? 'var(--gb-success-fg, #2e9e5b)' : 'var(--gb-brand-label)',
                   fontSize: 9.5, fontWeight: second ? 800 : 700, maxWidth: 220, overflow: 'hidden', whiteSpace: 'nowrap', cursor: 'grab' }}>
                 {chip.image
-                  ? <img src={chip.image} alt="" draggable={false} style={{ width: 14, height: 14, borderRadius: 3, objectFit: 'cover', background: '#f4f4f1', flexShrink: 0 }} />
-                  : (chip.kind === 'monogram' ? <Layers size={9} /> : <I.edit size={9} />)}
+                  ? <img src={chip.image} alt="" draggable={false} style={{ width: 14, height: 14, borderRadius: 3, objectFit: chip.iconName ? 'contain' : 'cover', background: '#f4f4f1', flexShrink: 0 }} />
+                  : (chip.kind === 'text' || chip.kind === 'monogram')
+                    ? <span title={chip.color} style={{ width: 9, height: 9, borderRadius: '50%', background: chip.color || 'currentColor', border: '1px solid var(--gb-border-default)', flexShrink: 0 }} />
+                    : <I.edit size={9} />}
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{chip.label}</span>
                 <TagX onClick={() => (second ? onRemoveSecond() : onRemoveFront())}
                   title={second ? 'Remove second imprint' : (chips.length > 1 ? 'Remove front imprint (the second pole becomes the only imprint)' : 'Remove imprint')} />
@@ -1024,6 +1026,58 @@ function MarginLineRow({ e, first }) {
   );
 }
 
+/* A color chip — swatch + hex (or a named label). */
+function Swatch({ color, label }) {
+  if (!color) return null;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+      <span style={{ width: 12, height: 12, borderRadius: 3, background: color, border: '1px solid var(--gb-border-default)', flexShrink: 0 }} />
+      <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 9.5, color: 'var(--gb-text-muted)', textTransform: 'uppercase' }}>{label || color}</span>
+    </span>
+  );
+}
+
+/* A detailed customization row for one imprint chip (front or 2nd pole): the art
+   (logo / icon image or a typed glyph), the type + which pole, the actual content
+   (text + font · initials + style · filename · icon name), and color swatch(es). */
+function ImprintDetail({ chip }) {
+  const slotLabel = chip.slot === 'second' ? 'Back' : 'Front';
+  const typeLabel = chip.iconName ? 'Icon' : chip.kind === 'text' ? 'Personalized' : chip.kind === 'monogram' ? 'Monogram' : 'Custom Logo';
+  const lines = (chip.lines || []).filter((l) => l != null && String(l).trim() !== '');
+  const monoStyle = chip.kind === 'monogram' ? String(chip.view || chip.overlay || '').replace(/(\d)/, ' $1').trim() : '';
+  // The little square of "art" on the left.
+  const art = chip.image
+    ? <img src={chip.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 3, boxSizing: 'border-box' }} />
+    : chip.kind === 'monogram'
+      ? <span style={{ fontSize: 13, fontWeight: 800, color: chip.color || '#000', fontFamily: 'var(--gb-font-mono)' }}>{String(chip.text || '').toUpperCase().slice(0, 3) || 'AB'}</span>
+      : chip.kind === 'text'
+        ? <span style={{ fontSize: 14, fontWeight: 700, color: chip.color || '#000' }}>Aa</span>
+        : <I.edit size={15} style={{ color: 'var(--gb-text-tertiary)' }} />;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)' }}>
+      <div style={{ width: 38, height: 38, flexShrink: 0, borderRadius: 'var(--gb-r-sm)', background: '#fff', border: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>{art}</div>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{typeLabel}</span>
+          <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: .4, textTransform: 'uppercase', color: chip.slot === 'second' ? 'var(--gb-success-fg, #2e9e5b)' : 'var(--gb-brand-label)', background: chip.slot === 'second' ? 'var(--gb-success-tint, rgba(46,158,91,.12))' : 'var(--gb-brand-tint-soft)', border: '1px solid ' + (chip.slot === 'second' ? 'var(--gb-success-border, rgba(46,158,91,.32))' : 'var(--gb-brand-tint-border)'), borderRadius: 'var(--gb-r-pill)', padding: '1px 6px' }}>{slotLabel} pole</span>
+        </div>
+        <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {chip.kind === 'text' && (lines.length ? <>“{lines.join(' / ')}” · <span style={{ color: 'var(--gb-text-muted)' }}>{chip.font}</span></> : <span style={{ fontStyle: 'italic', color: 'var(--gb-text-muted)' }}>No text entered</span>)}
+          {chip.kind === 'monogram' && <>{String(chip.text || '').toUpperCase() || '—'}{monoStyle ? <> · <span style={{ color: 'var(--gb-text-muted)', textTransform: 'capitalize' }}>{monoStyle}</span></> : null}</>}
+          {chip.kind === 'logo' && (chip.iconName || chip.fileName || <span style={{ fontStyle: 'italic', color: 'var(--gb-text-muted)' }}>Uploaded logo</span>)}
+        </div>
+      </div>
+      <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+        {chip.kind === 'text' && <Swatch color={chip.color} />}
+        {chip.kind === 'monogram' && <>
+          <Swatch color={chip.color} label="C1" />
+          {chip.color2 && chip.color2 !== '#FFFFFF' && <Swatch color={chip.color2} label="C2" />}
+        </>}
+      </div>
+    </div>
+  );
+}
+
 /* The proposal-breakdown drill-in: revenue, cost, gross profit, blended margin,
    the line items + per-line margin, the imprints, and a margin summary. Opened
    by clicking a saved card or the current-proposal card. */
@@ -1079,15 +1133,16 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
 
         {decorated.length > 0 && (
           <div>
-            <SectionTitle icon={<Gift />}>Customization</SectionTitle>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <SectionTitle icon={<Gift />} right={<span style={{ fontSize: 10, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{decorated.length} decorated</span>}>Customization</SectionTitle>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {decorated.map((e, i) => (
-                <div key={e.id || i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)' }}>
-                  <div style={{ minWidth: 0, flex: '0 0 42%', fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.product.title}</div>
-                  <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                    {decoImprints(e.decoration).map((c) => (
-                      <span key={c.slot} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 9.5, fontWeight: 700 }}>{c.label}</span>
-                    ))}
+                <div key={e.id || i} style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <MiniThumb src={e.product.img} size={22} />
+                    <div style={{ minWidth: 0, fontSize: 11, fontWeight: 700, color: 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.product.title}</div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingLeft: 6 }}>
+                    {decoImprints(e.decoration).map((c) => <ImprintDetail key={c.slot} chip={c} />)}
                   </div>
                 </div>
               ))}

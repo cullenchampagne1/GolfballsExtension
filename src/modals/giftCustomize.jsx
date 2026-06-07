@@ -1998,7 +1998,10 @@ function deriveBallDecoration(p, sel, data) {
       ...extra,
     };
   }
-  if (sel === 'Icons') return { engine: 'ballLogo', baseColor, finish, logo: null, ...extra };
+  if (sel === 'Icons') {
+    const iconName = (data.Icons || {}).icon || null;   // capture WHICH icon (+ its art) so the proposal can show it
+    return { engine: 'ballLogo', baseColor, finish, logo: null, icon: iconName, iconImage: iconSrc(iconName), ...extra };
+  }
   return { engine: 'none', ...extra };
 }
 
