@@ -602,11 +602,6 @@ function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, di
             style={{ marginTop: 2, width: '100%', height: 24, background: 'transparent', border: 'none', outline: 'none', padding: 0, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 16, fontWeight: 800, letterSpacing: -.3 }} />
         </div>
       </div>
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 11px', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-pill)' }}>
-        <Dot tone={campaign.status === 'Active' ? 'brand' : campaign.status === 'Paused' ? 'warning' : 'muted'} glow={campaign.status === 'Active'} size={6} />
-        <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, color: campaign.status === 'Active' ? 'var(--gb-brand-label)' : campaign.status === 'Paused' ? 'var(--gb-warning-fg)' : 'var(--gb-text-tertiary)' }}>{campaign.status}</span>
-        {dirty && <span style={{ marginLeft: 4, fontSize: 9, color: 'var(--gb-warning-fg)', fontWeight: 700, animation: 'cm-twinkle 1.6s ease-in-out infinite' }}>UNSAVED</span>}
-      </div>
       <div style={{ flex: 1 }} />
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 11px 5px 7px', background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-pill)' }}>
         <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.users size={12} /></div>
