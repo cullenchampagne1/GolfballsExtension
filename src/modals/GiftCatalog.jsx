@@ -505,7 +505,15 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
   // Headline: a chosen variant (Tee Count, …) wins; otherwise custom-logo items
   // show their "from" (first-ladder) imprint price and everything else retail.
   // The proposal re-prices accurately on add (retail / ladder + 2nd-pole).
-  const unitPrice = (variant && variant.price != null) ? variant.price : (p.customLogo ? netTop(p) : p.price);
+  // A gift set re-prices the whole line per set (ball custom-logo ladder ×size +
+  // kit), so the header + tier table preview the gift-set ladder, not the ball's.
+  const giftSet = decoration && decoration.giftSet;
+  const giftBreaks = (giftSet && p.customLogo && p.breaks && p.breaks.length) ? giftSetLadder(p.breaks, giftSet) : null;
+  const priceLadder = giftBreaks || p.breaks;
+  const isGiftPricing = !!giftBreaks;
+  const unitPrice = giftBreaks
+    ? priceAtBreaks(giftBreaks, (giftBreaks[0] && giftBreaks[0].q) || 1)
+    : (variant && variant.price != null) ? variant.price : (p.customLogo ? netTop(p) : p.price);
   const openProduct = () => {
     if (!p.url) return;
     // p.url is a complete URL now, but an older cached catalog may still hold a
@@ -550,7 +558,7 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
               self-hides when the product has no price-varying options. */}
           <ProductOptions p={p} onChange={setVariant} />
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-            <PriceStat label="Per unit" value={usd(unitPrice)} accent was={onSale(p) ? usd(p.orig) : null} />
+            <PriceStat label={isGiftPricing ? 'Per set' : 'Per unit'} value={usd(unitPrice)} accent was={(!isGiftPricing && onSale(p)) ? usd(p.orig) : null} />
           </div>
           {hasPromo(p) && (
             <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint, rgba(46,158,91,.12))', border: '1px solid var(--gb-success-border, rgba(46,158,91,.3))' }}>
@@ -560,27 +568,28 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
               </span>
             </div>
           )}
-          {p.breaks && p.breaks.length > 1 && (
+          {priceLadder && priceLadder.length > 1 && (
             <div style={{ marginTop: 18 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                <Gift size={12} style={{ color: 'var(--gb-brand-label)' }} />
-                <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-secondary)' }}>Custom-logo quantity pricing</span>
+                {isGiftPricing ? <I.sparkle size={12} style={{ color: 'var(--gb-brand-label)' }} /> : <Gift size={12} style={{ color: 'var(--gb-brand-label)' }} />}
+                <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-secondary)' }}>{isGiftPricing ? 'Gift-set quantity pricing' : 'Custom-logo quantity pricing'}</span>
               </div>
               <div style={{ border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden' }}>
-                {p.breaks.map((b, i) => {
-                  const best = i === p.breaks.length - 1;
-                  const save = p.breaks[0].p - b.p;
+                {priceLadder.map((b, i) => {
+                  const best = i === priceLadder.length - 1;
+                  const unit = isGiftPricing ? b.p : netP(p, b.p);
+                  const save = (isGiftPricing ? priceLadder[0].p : netP(p, priceLadder[0].p)) - unit;
                   return (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: best ? 'var(--gb-brand-tint-soft)' : i % 2 ? 'var(--gb-fill-faint)' : 'transparent', borderTop: i ? '1px solid var(--gb-border-subtle)' : 'none' }}>
-                      <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-secondary)', fontFamily: 'var(--gb-font-mono)', minWidth: 64 }}>{b.q}+ qty</span>
+                      <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-secondary)', fontFamily: 'var(--gb-font-mono)', minWidth: 64 }}>{b.q}+ {isGiftPricing ? 'sets' : 'qty'}</span>
                       <div style={{ flex: 1 }} />
                       {save > 0 && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--gb-success-fg)' }}>−{usd(save)}</span>}
-                      <span style={{ fontSize: 13, fontWeight: 800, color: best ? 'var(--gb-brand-label)' : 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', minWidth: 58, textAlign: 'right' }}>{usd(netP(p, b.p))}</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: best ? 'var(--gb-brand-label)' : 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', minWidth: 58, textAlign: 'right' }}>{usd(unit)}</span>
                     </div>
                   );
                 })}
               </div>
-              <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 6, lineHeight: 1.4 }}>Per-unit price drops with order volume — quote the tier that matches the gift run.</div>
+              <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 6, lineHeight: 1.4 }}>{isGiftPricing ? 'Per-set price drops with order volume — quote the tier that matches the gift run.' : 'Per-unit price drops with order volume — quote the tier that matches the gift run.'}</div>
             </div>
           )}
           {/* Show the customization UI for ANY customizable product (custom

@@ -2092,7 +2092,9 @@ function GiftSetPicker() {
   const selId = (ctx.data.__giftSet && ctx.data.__giftSet.id) || '';
   const pick = (id) => {
     const option = opts.find((o) => o.id === id) || null;
-    ctx.update('__giftSet', option ? { id, option } : {});
+    // update() MERGES, so clearing must set explicit nulls (not {}) or the prior
+    // pick would linger — picking "Standard packaging" sets option:null to clear.
+    ctx.update('__giftSet', { id: option ? id : '', option });
   };
   if (!opts.length) return null;
   const ddOptions = [

@@ -76,15 +76,16 @@ export async function runCampaign({ campaign, audience, lookupTemplate, deps = {
 
   const results = [];
   const total = audience.length;
-  let sentSomethingForPrev = false; // pace only between contacts that did work
+  let prevDidWork = false; // pace only between contacts that actually ran a step
 
   for (let i = 0; i < total; i++) {
     if (control.isStopped?.()) break;
     await waitWhilePaused(control);
     if (control.isStopped?.()) break;
 
-    // Pace between contacts that actually performed a send.
-    if (i > 0 && sentSomethingForPrev && !deps.dryRun) {
+    // Pace between contacts that actually ran a step (dry-run paces too so
+    // the run view's cascade stays watchable as a preview).
+    if (i > 0 && prevDidWork) {
       const r = await sleep(paceMs(campaign), control);
       if (r === 'stopped') break;
     }
@@ -98,7 +99,7 @@ export async function runCampaign({ campaign, audience, lookupTemplate, deps = {
     const firedGroups = new Set();
     const stepLog = [];
     let stopMain = false;
-    let didSend = false;
+    let didWork = false;
 
     for (const step of steps) {
       if (control.isStopped?.()) break;
@@ -129,7 +130,7 @@ export async function runCampaign({ campaign, audience, lookupTemplate, deps = {
         emit('ran', { transport: res.transport, detail: res.detail, templateId: row?.templateId });
         if (step.group) firedGroups.add(step.group);
         if (step.branch) { firedBranches.add(step.id); stopMain = true; }
-        if (!deps.dryRun) didSend = true;
+        didWork = true;
       } else {
         emit('failed', { error: res.error, templateId: row?.templateId });
       }
@@ -141,7 +142,7 @@ export async function runCampaign({ campaign, audience, lookupTemplate, deps = {
     const summary = { contact, contactId: ctx.contactId, ran, skipped, failed, stoppedAtBranch: stopMain, error: ctx.error, steps: stepLog };
     results.push(summary);
     onContactDone(summary);
-    sentSomethingForPrev = didSend;
+    prevDidWork = didWork;
     onProgress({ done: i + 1, total });
   }
 
