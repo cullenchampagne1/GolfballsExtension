@@ -6,6 +6,7 @@ import {
   TemplatePicker, parseTemplateValue, I, Icon,
 } from '../ui/index.js';
 import { CampaignConditions } from '../ui/components/template-rules/CampaignConditions.jsx';
+import { CodeVarEditor } from '../ui/components/CodeVarEditor.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import {
   loadCampaigns, saveCampaign, removeCampaign, newCampaign, newStep, uid, subscribeCampaigns,
