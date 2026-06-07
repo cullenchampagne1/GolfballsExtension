@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Btn, IconBtn, Tag, Dot, Input, Field, Dropdown, Switch, Slider,
+  Btn, IconBtn, Tag, Dot, Input, Field, Dropdown, Switch, Slider, RangeSlider,
   Callout, SectionLabel, PillTag, TemplateSplits, equalWeights, ModalShell,
   TemplatePicker, parseTemplateValue, I, Icon,
 } from '../ui/index.js';
@@ -465,6 +465,9 @@ function StepInspector({ step, allSteps, templateLib, onChange, onDelete }) {
 function CampaignInspector({ campaign, onChange }) {
   const upd = (patch) => onChange({ ...campaign, ...patch });
   const ratePerMin = Math.round(60 / Math.max(campaign.paceDelay, 1));
+  // base ± jitter  ↔  [lo, hi] for the dual-handle slider
+  const paceLo = Math.max(1, (campaign.paceDelay || 0) - (campaign.paceJitter || 0));
+  const paceHi = (campaign.paceDelay || 0) + (campaign.paceJitter || 0);
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, animation: 'cm-inspector-in .22s ease-out' }}>
       <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-surface-modal)', flexShrink: 0 }}>
@@ -493,12 +496,11 @@ function CampaignInspector({ campaign, onChange }) {
             <span style={{ fontSize: 22, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-brand-label)' }}>~{ratePerMin}</span>
             <span style={{ fontSize: 11.5, color: 'var(--gb-text-tertiary)' }}>sends per minute · runs only while the tab is open</span>
           </div>
-          <Field label={<span>Delay between sends · {campaign.paceDelay}s</span>}>
-            <Slider value={campaign.paceDelay} min={1} max={60} unit="s" showValue={false} ticks={[5, 15, 30, 60]} onChange={(v) => upd({ paceDelay: v })} />
-          </Field>
-          <div style={{ height: 12 }} />
-          <Field label={<span>Jitter ± · {campaign.paceJitter === 0 ? 'none' : campaign.paceJitter + 's'}</span>} hint="Random offset so sends don't fire on the exact same beat">
-            <Slider value={campaign.paceJitter} min={0} max={15} unit="s" showValue={false} onChange={(v) => upd({ paceJitter: v })} />
+          {/* Dual-handle delay range (same control as the Quick Send popover).
+              The low/high bounds map to the engine's base ± jitter: base is
+              the midpoint, jitter is the half-width. */}
+          <Field label={<span>Delay between sends · {paceLo}–{paceHi}s</span>} hint="Each send waits a random time in this range — keeps the run looking human.">
+            <RangeSlider values={[paceLo, paceHi]} min={1} max={90} step={1} unit="s" onChange={([a, b]) => upd({ paceDelay: Math.round((a + b) / 2), paceJitter: Math.round((b - a) / 2) })} />
           </Field>
         </div>
         <Callout tone="info" icon={<I.sparkle />} title="Branch behavior">
