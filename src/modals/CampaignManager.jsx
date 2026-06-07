@@ -33,16 +33,18 @@ const sumPct = (templates) => (templates || []).reduce((a, t) => a + (t.pct || 0
 /* A step is "ready" (has something to do) if it has a template, a custom
    inline build, or is a task in a complete-open mode (no template needed). */
 function stepHasAction(s) {
+  if (s.kind === 'custom') return !!(s.code && s.code.trim());
   if (s.kind === 'task' && (s.taskMode === 'completeAll' || s.taskMode === 'completeLatest')) return true;
   if (s.useCustom) return true;
   return !!s.templateId;
 }
 
-/* Branch is a flag, not a kind — these are the three real actions. */
+/* Branch is a flag, not a kind — these are the real actions. */
 const STEP_KIND_META = {
   email:  { label: 'Email',  icon: I.mail,   color: 'var(--gb-brand-tint-medium)',   fg: 'var(--gb-brand-label)' },
   call:   { label: 'Call',   icon: I.phone,  color: 'var(--gb-info-tint-medium, var(--gb-fill-subtle))', fg: 'var(--gb-info-fg, var(--gb-text-secondary))' },
   task:   { label: 'Task',   icon: I.task,   color: 'var(--gb-info-tint-medium, var(--gb-fill-subtle))', fg: 'var(--gb-info-fg, var(--gb-text-secondary))' },
+  custom: { label: 'Custom', icon: I.code,   color: 'var(--gb-fill-strong)', fg: 'var(--gb-text-primary)' },
 };
 
 const KF_ID = '__gb-campaign-kf';
@@ -90,6 +92,7 @@ function StepCard({ step, displayIdx, indent, branchChild, selected, simState, t
   const live = simState === 'running';
   const done = simState === 'done';
   const tplName = (() => {
+    if (step.kind === 'custom') return (step.code || '').trim() ? (step.kill ? 'code · kill flow' : 'code') : 'no code';
     if (step.kind === 'task' && (step.taskMode === 'completeAll' || step.taskMode === 'completeLatest')) {
       return step.taskMode === 'completeLatest' ? 'complete latest task' : 'complete open tasks';
     }
@@ -324,6 +327,36 @@ function CustomTaskForm({ c, setCustom }) {
   );
 }
 
+/* Custom step config — a full code box (ctx + h + window/document) plus
+   flow-control toggles (kill). */
+function CustomConfig({ step, upd }) {
+  return (
+    <div>
+      <SectionLabel>Custom code</SectionLabel>
+      <CodeVarEditor
+        value={step.code || ''}
+        onChange={(v) => upd({ code: v })}
+        typeId="account"
+        varNames={[]}
+        hideActions
+        placeholder="ctx = contact/account data · h = fetch/send/dom · window.open(url) opens a tab"
+      />
+      <div style={{ marginTop: 6, fontSize: 10, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>
+        Runs once per contact for side effects. Use <b>h.fetchJson / h.fetchText</b> for requests, <b>h.send(action, payload)</b> for background actions, <b>h.dom / document</b> for the page, and <b>window.open(url)</b> to open a tab.
+      </div>
+      <div style={{ height: 14 }} />
+      <SectionLabel>Flow control</SectionLabel>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+        <div style={{ paddingRight: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>Kill the flow after this step</div>
+          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>Stops everything for this contact — no later steps (or branch children) run. The code can also <code>return 'kill'</code>.</div>
+        </div>
+        <Switch on={!!step.kill} tone="warning" onChange={(on) => upd({ kill: on })} />
+      </div>
+    </div>
+  );
+}
+
 /* Call / Task config: saved-template vs custom inline, plus the task
    create / complete-open modes. */
 function CallTaskConfig({ step, templateLib, upd }) {
@@ -427,7 +460,7 @@ function StepInspector({ step, allSteps, templateLib, onChange, onDelete }) {
 
         <div>
           <SectionLabel>Step type</SectionLabel>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6 }}>
             {Object.entries(STEP_KIND_META).map(([k, m]) => {
               const On = k === step.kind;
               const KIcon = m.icon;
@@ -510,6 +543,8 @@ function StepInspector({ step, allSteps, templateLib, onChange, onDelete }) {
               </div>
             )}
           </div>
+        ) : step.kind === 'custom' ? (
+          <CustomConfig step={step} upd={upd} />
         ) : (
           <CallTaskConfig step={step} templateLib={templateLib} upd={upd} />
         )}

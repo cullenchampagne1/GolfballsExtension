@@ -95,6 +95,8 @@ export function newStep(kind = 'email') {
     taskMode: 'create',       // task only: 'create' | 'completeAll' | 'completeLatest'
     useCustom: false,         // call/task: build a one-off inline instead of a saved template
     custom: {},               // call/task custom fields (see actions.js)
+    code: '',                 // custom step: the code body (ctx + h + window/document)
+    kill: false,              // custom step: stop the contact's whole flow after running
     conditions: emptyTree(),
   };
 }
@@ -104,7 +106,7 @@ function normalizeStep(raw) {
   const rawKind = raw.kind || mapLegacyKind(raw.type);
   // Collapse the old 'branch' KIND into a flag on an email step.
   const isBranch = raw.branch != null ? !!raw.branch : (rawKind === 'branch');
-  const kind = rawKind === 'branch' ? 'email' : rawKind;
+  const kind = rawKind === 'branch' ? 'email' : (['email', 'call', 'task', 'custom'].includes(rawKind) ? rawKind : 'email');
 
   // One template per step (was a templates[]/splits[] array in the old shape).
   const templateId = raw.templateId
@@ -129,6 +131,8 @@ function normalizeStep(raw) {
     taskMode: ['create', 'completeAll', 'completeLatest'].includes(raw.taskMode) ? raw.taskMode : 'create',
     useCustom: !!raw.useCustom,
     custom: (raw.custom && typeof raw.custom === 'object') ? raw.custom : {},
+    code: raw.code || '',
+    kill: !!raw.kill,
     conditions,
   };
 }

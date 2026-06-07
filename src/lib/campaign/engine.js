@@ -137,6 +137,7 @@ export async function runCampaign({ campaign, audience, lookupTemplate, deps = {
     const firedGroups = new Set();
     const stepLog = [];
     let stopMain = false;
+    let killed = false;
     let didWork = false;
 
     for (const step of steps) {
@@ -171,6 +172,9 @@ export async function runCampaign({ campaign, audience, lookupTemplate, deps = {
         if (step.branch) { firedBranches.add(step.id); stopMain = true; }
         didWork = true;
         sentCount += 1;
+        // A custom step can kill the contact's whole flow (no later steps,
+        // children included).
+        if (res.kill) { killed = true; break; }
       } else {
         emit('failed', { error: res.error, templateId: step.templateId });
       }
@@ -179,7 +183,7 @@ export async function runCampaign({ campaign, audience, lookupTemplate, deps = {
     const ran = stepLog.filter((s) => s.status === 'ran').length;
     const skipped = stepLog.filter((s) => s.status === 'skipped').length;
     const failed = stepLog.filter((s) => s.status === 'failed').length;
-    const summary = { contact, contactId: ctx.contactId, ran, skipped, failed, stoppedAtBranch: stopMain, error: ctx.error, steps: stepLog };
+    const summary = { contact, contactId: ctx.contactId, ran, skipped, failed, killed, stoppedAtBranch: stopMain || killed, error: ctx.error, steps: stepLog };
     results.push(summary);
     onContactDone(summary);
     prevDidWork = didWork;
