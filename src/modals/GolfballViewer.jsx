@@ -975,20 +975,20 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // Divot: the logo prints on the OFF-CENTER white marker disc (top of the
         // tool). Locate it from the vertex-color mask (white = disc) — used both
         // to target the decal AND as the recenter pivot below.
-        let divotCx = 0, divotCy = 0, divotCz = 0, divotFaceZ = 0, divotDiscR = 0;
+        let divotCx = 0, divotCy = 0, divotFaceZ = 0, divotDiscR = 0;
         if (isDivot) {
           const pos = ballMesh.geometry.getAttribute('position');
           const col = ballMesh.geometry.getAttribute('color');
-          let sx = 0, sy = 0, sz = 0, n = 0, maxz = -1e9; const wx = [], wy = [];
+          let sx = 0, sy = 0, n = 0, maxz = -1e9; const wx = [], wy = [];
           for (let i = 0; i < pos.count; i++) {
             if (col && col.getX(i) > 0.5) {
               const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-              sx += x; sy += y; sz += z; n++; wx.push(x); wy.push(y);
+              sx += x; sy += y; n++; wx.push(x); wy.push(y);
               if (z > maxz) maxz = z;
             }
           }
           if (n > 0) {
-            divotCx = sx / n; divotCy = sy / n; divotCz = sz / n; divotFaceZ = maxz;
+            divotCx = sx / n; divotCy = sy / n; divotFaceZ = maxz;
             for (let k = 0; k < wx.length; k++) {
               const d = Math.hypot(wx[k] - divotCx, wy[k] - divotCy);
               if (d > divotDiscR) divotDiscR = d;
@@ -996,13 +996,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           }
         }
 
-        // Recenter so the zoom/rotate pivot is the model's focal point — the
-        // ball/chip center, or for the divot the LOGO disc, so scaling zooms
-        // toward the logo and the tool hangs below it in the scene.
-        const pivot = (isDivot && divotDiscR > 0)
-          ? { x: divotCx, y: divotCy, z: divotCz }
-          : { x: bsphere.center.x, y: bsphere.center.y, z: bsphere.center.z };
-        ballMesh.position.set(-pivot.x * scale, -pivot.y * scale, -pivot.z * scale);
+        // Recenter the geometry on the origin so zoom/rotate pivots on the
+        // model's center (same for ball, chip, and divot).
+        ballMesh.position.set(-bsphere.center.x * scale, -bsphere.center.y * scale, -bsphere.center.z * scale);
 
         // Chip prints land flat on the face (±chipFaceZ) and fill the recessed
         // white center inlay. LOCAL geometry units (the world scale rides on
