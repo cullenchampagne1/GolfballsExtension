@@ -29,6 +29,8 @@
    This module only BUILDS the payloads — it performs no I/O.
    ─────────────────────────────────────────────────────────────────────────── */
 
+import { giftSetLadder, buildBundleBlock } from './giftSets.js';
+
 const ICU = 'https://master.api.icustomize.com/user';
 export const SAVE_CART_URL = `${ICU}/saveCart`;
 export const getCartUrl = (cartNumber) => `${ICU}/getCart/${encodeURIComponent(cartNumber)}`;
@@ -612,7 +614,13 @@ export function decoratedPricingForLine(product, decoration, selection) {
     const { block } = buildDecoration(product, bg ? { ...deco, _childBgHex: bg } : deco);
     pm = block && block.ProductModification;
   }
-  return computeDecoratedPricing(product, pm, child);
+  const computed = computeDecoratedPricing(product, pm, child);
+  // Gift set: re-wrap the ball's custom-logo ladder as a per-set gift-set ladder.
+  if (computed && deco.giftSet) {
+    const breaks = giftSetLadder(computed.breaks, deco.giftSet);
+    if (breaks) return { breaks, setupBreaks: null };
+  }
+  return computed;
 }
 
 export function assembleLine({ product, pricing = {}, selection = {}, decoration, qty = 1, itemGuid, url } = {}) {
@@ -630,11 +638,18 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
   // prompt. Falls back to the catalog ladder only when the page has no fee data.
   const atQ = (bks, q) => { let p = 0; for (const b of (bks || [])) if (b.q <= q) p = b.p; return p; };
   const computed = decoBlock ? computeDecoratedPricing(product, decoBlock.ProductModification, child) : null;
-  const breaks = computed ? computed.breaks
+  // Gift set wraps the ball line: a per-set price ladder (ball custom-logo ladder
+  // ×OriginalItemQty + the kit ladder) plus a `bundle` + a kit child in childList.
+  const giftSet = decoForBuild.giftSet || null;
+  const giftBreaks = (giftSet && computed) ? giftSetLadder(computed.breaks, giftSet) : null;
+  const bundleBlock = giftBreaks ? buildBundleBlock(giftSet) : null;
+  const breaks = giftBreaks ? giftBreaks
+    : computed ? computed.breaks
     : ((pricing.breaks && pricing.breaks.length) ? pricing.breaks : [{ q: 1, p: pricing.price || 0 }]);
-  const unit = computed ? atQ(breaks, qty) : (pricing.price != null ? pricing.price : (breaks[0] && breaks[0].p) || 0);
-  const setupBreaks = (computed && computed.setupBreaks) || null;
+  const unit = (computed || giftBreaks) ? atQ(breaks, qty) : (pricing.price != null ? pricing.price : (breaks[0] && breaks[0].p) || 0);
+  const setupBreaks = giftSet ? null : ((computed && computed.setupBreaks) || null);
   const setupUnit = setupBreaks ? atQ(setupBreaks, qty) : 0;
+  const childList = bundleBlock ? [child, bundleBlock.kitChild] : [child];
 
   // Resolve the cart name the way the site does: substitute the decoration's
   // FriendlyName into NameFormat's "{Decoration}" slot (→ "… Custom Logo …";
@@ -645,15 +660,18 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
   const baseName = nameFmt.includes('{Decoration}')
     ? nameFmt.replace('{Decoration}', decoFriendly).replace(/\s{2,}/g, ' ').trim()
     : (product.Name || '');
+  // A gift-set line reads "<gift set name> with <Brand> <ball name>".
+  const ballTitle = [product.Brand && product.Brand.Name, baseName].filter(Boolean).join(' ').trim();
+  const productTitle = giftSet ? `${giftSet.name} with ${ballTitle}` : ballTitle;
 
   return {
     nameFormat: product.NameFormat || product.Name || '',
-    productTitle: [product.Brand && product.Brand.Name, baseName].filter(Boolean).join(' ').trim(),
+    productTitle,
     qtyFields: [],
     ShortCode: product.ShortCode,
     brand: (product.Brand && product.Brand.Name) || '',
     totalQty: qty,
-    childList: [child],
+    childList,
     ModificationGroupDetail: product.ModificationGroupDetail || null,
     ItemPriceBreak: { priceBreakHeaderID: 0, PriceBreak: breaks.map((b) => ({ Quantity: b.q, Price: b.p, Cost: 0 })), ProductionTime: 0, minimumQty: 1 },
     SetupPriceBreak: setupBreaks
@@ -683,7 +701,7 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
     preorder: { show: false, date: null },
     customUserImage: customUserImage || { firstPole: emptyPole(), secondPole: emptyPole() },
     CustomData: product.CustomData || {},
-    bundle: null,
+    bundle: bundleBlock ? bundleBlock.bundle : null,
     hasQtyParam: false,
     itemType: (product.ItemType && product.ItemType.Name) || (product.itemType_s || '').split('-').pop() || 'Golf Balls',
     images: product.ProductImage || product.images || [],

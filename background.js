@@ -436,6 +436,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // ── Gift-set / packaging upsell templates (PUT /user/getPackageUpsellData) ──
+  // No body, public sitekey. Returns { expiryDate, bundleOptions:[…] } — the gift-
+  // set bundle templates (sleeve / 6-ball / wooden + their kit price ladders) that
+  // a custom-logo ball can be wrapped into. Ball-independent; the modal filters to
+  // upsellOptions.showCustom and prices each per ball (src/lib/giftSets.js).
+  if (msg.action === 'fetchPackageUpsell') {
+    fetch('https://master.api.icustomize.com/user/getPackageUpsellData', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'sitekey': 'golfballs' },
+      cache: 'no-store',
+    })
+      .then(async r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        const data = (j && j.d !== undefined) ? (typeof j.d === 'string' ? JSON.parse(j.d) : j.d) : j;
+        sendResponse({ ok: true, bundleOptions: (data && data.bundleOptions) || [], expiryDate: data && data.expiryDate });
+      })
+      .catch(err => {
+        console.warn('[GB] fetchPackageUpsell error:', err.message);
+        sendResponse({ ok: false, error: String(err), bundleOptions: [] });
+      });
+    return true;
+  }
+
   // ── Load a saved cart / proposal (GET /user/getCart/<number>) ───────
   // Returns the stored cartData (the `d` field is a JSON string or object).
   if (msg.action === 'giftLoadCart' && msg.cartNumber != null) {
