@@ -97,6 +97,12 @@ export function normalizeCustomItem(rec = {}) {
     name: (rec.name || '').trim(),
     extraDetails: (rec.extraDetails || '').trim(),
     itemID: (rec.itemID || '').trim(),
+    // Source product link (e.g. the hpgbrands.com page) — a button surfaces it
+    // later. `source` tags where the item came from (e.g. 'hpg'); `sku` is the
+    // supplier SKU (used to dedupe imports).
+    link: (rec.link || '').trim(),
+    sku: (rec.sku || '').trim(),
+    source: (rec.source || '').trim(),
     // Never persist a raw data: URL (would bloat storage + won't load in the
     // cart) — only keep an uploaded/pasted http(s) thumbnail.
     thumbnail: /^data:/i.test(rec.thumbnail || '') ? '' : (rec.thumbnail || '').trim(),
@@ -121,6 +127,25 @@ export async function saveCustomItem(rec) {
   else next = [entry, ...list];
   await _writeCustomItems(next);
   return { entry, list: next };
+}
+
+/* Bulk insert/update (one storage read + write). Dedupes against existing items
+   by `sku` (when present) so re-running an import updates rather than duplicates.
+   Returns { added, updated, list }. */
+export async function addCustomItems(records) {
+  const incoming = (records || []).map(normalizeCustomItem);
+  const list = await loadCustomItems();
+  const bySku = new Map();
+  list.forEach((c, i) => { if (c.sku) bySku.set(c.sku, i); });
+  let added = 0, updated = 0;
+  const next = list.slice();
+  for (const rec of incoming) {
+    const idx = rec.sku ? bySku.get(rec.sku) : undefined;
+    if (idx != null) { next[idx] = { ...rec, id: next[idx].id }; updated++; }
+    else { next.unshift(rec); added++; }
+  }
+  await _writeCustomItems(next);
+  return { added, updated, list: next };
 }
 
 export async function removeCustomItem(id) {
@@ -158,6 +183,8 @@ export function customItemToProduct(rec) {
     styleOptions: ci.styleOptions,
     cost: ci.cost,
     setup: ci.setup,
+    link: ci.link,
+    source: ci.source,
     tags: [],
   };
 }

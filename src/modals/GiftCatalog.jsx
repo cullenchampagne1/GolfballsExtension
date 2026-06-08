@@ -9,6 +9,7 @@ import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount } from '../lib/saveProposal.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest } from '../lib/customItems.js';
 import { getInventory, cachedCostForSku, primeCostCache } from '../lib/inventory.js';
+import { importHpgCatalog } from '../lib/hpgImport.js';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
 import { decoratedPricingForLine, giftSetPreviewUrl } from '../lib/cartSerializer.js';
@@ -1837,7 +1838,7 @@ function CustomAddTile({ onNew, minH }) {
   );
 }
 
-function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, onOpen, onDelete }) {
+function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, onOpen, onDelete, onImportHpg, hpgImporting, hpgProgress }) {
   const minH = compact ? 232 : 262;
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
@@ -1849,6 +1850,11 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Custom Items</div>
           <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, fontWeight: 500 }}>One-off items not in the catalog — add them to a proposal like any product</div>
         </div>
+        {onImportHpg && (
+          <Btn variant="secondary" size="sm" icon={<I.refresh />} state={hpgImporting ? 'loading' : 'idle'} onClick={onImportHpg}>
+            {hpgImporting ? (hpgProgress && hpgProgress.total ? `Importing ${hpgProgress.count}/${hpgProgress.total}…` : 'Importing…') : 'Import HPG'}
+          </Btn>
+        )}
         <Btn variant="primary" size="sm" icon={<I.plus />} onClick={onNew}>Add custom item</Btn>
       </div>
       <div className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 16 }}>
@@ -2265,6 +2271,18 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const deleteCustom = (id) => removeCustomItem(id).then((next) => setCustomItems(next));
   // Add a custom item to the live proposal (as a synthetic product) + open it.
   const addCustomToProposal = (ci) => { addToProposal(customItemToProduct(ci)); setProposalOpen(true); };
+  // Bulk import the hpgbrands.com catalog as custom items (paged Searchspring
+  // pull). Shows live progress; dedupes by SKU so re-running just refreshes.
+  const [hpgImporting, setHpgImporting] = useState(false);
+  const [hpgProgress, setHpgProgress] = useState(null);   // { count, total }
+  const importHpg = () => {
+    if (hpgImporting) return;
+    setHpgImporting(true); setHpgProgress({ count: 0, total: 0 });
+    importHpgCatalog({ onProgress: ({ count, total }) => setHpgProgress({ count, total }) })
+      .then((r) => { toast?.success?.(`Imported ${r.fetched} HPG products (${r.added} new, ${r.updated} updated)`); })
+      .catch((e) => { toast?.error?.('HPG import failed — ' + ((e && e.message) || 'unknown error')); })
+      .finally(() => { setHpgImporting(false); setHpgProgress(null); });
+  };
 
   /* One shared live pull, with progress. `force` clears the cache first
      (manual rebuild — stale items/sales can't survive as a fallback);
@@ -2496,7 +2514,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             <motion.div key="custom" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
             <CustomItemsGallery items={customItems} compact={compact} colMin={colMin}
               inProposal={inProposal} onAdd={addCustomToProposal}
-              onNew={() => setEditingCustom({})} onOpen={(ci) => setSelected(customItemToProduct(ci))} onDelete={deleteCustom} />
+              onNew={() => setEditingCustom({})} onOpen={(ci) => setSelected(customItemToProduct(ci))} onDelete={deleteCustom}
+              onImportHpg={importHpg} hpgImporting={hpgImporting} hpgProgress={hpgProgress} />
           </motion.div>
           ) : (
           <motion.div key="catalog" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
