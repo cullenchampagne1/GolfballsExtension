@@ -574,6 +574,71 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           dpr: window.devicePixelRatio,
         };
 
+        /* ── Texture load + black-mip diagnostics ─────────────────
+           Records every material texture (wood / metal / decal) so a
+           remote Windows-ARM machine can show EXACTLY how it's failing:
+             • loaded:false        → asset/CORS/web-accessible problem
+             • loaded:true + a top mip that reads BLACK while the base
+               does not → the Adreno/ANGLE/D3D11 mip-generation bug
+               (geometry is fine, the minified texels go black)
+           Probe is WebGL2-only (needs mip-level FBO attach) and runs
+           only when the golfballViewer.renderDebug dev setting is on,
+           since it pokes raw GL state. */
+        const texDiag = [];
+        const isPOT = (n) => n > 0 && (n & (n - 1)) === 0;
+        const probeMipBlack = (tex) => {
+          try {
+            if (!renderer.capabilities.isWebGL2 || !tex || !tex.image) return null;
+            renderer.initTexture(tex);                 // force GL upload + mipgen
+            const glTex = renderer.properties.get(tex).__webglTexture;
+            if (!glTex) return null;
+            const gl = renderer.getContext();
+            const w = tex.image.width || tex.image.videoWidth || 0;
+            const h = tex.image.height || tex.image.videoHeight || 0;
+            if (!w || !h) return null;
+            const readLevel = (level) => {
+              const fb = gl.createFramebuffer();
+              gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+              gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, glTex, level);
+              let px = null;
+              if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE) {
+                const buf = new Uint8Array(4);
+                gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+                px = [buf[0], buf[1], buf[2], buf[3]];
+              }
+              gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+              gl.deleteFramebuffer(fb);
+              return px;
+            };
+            const maxLevel = Math.floor(Math.log2(Math.max(w, h)));
+            const out = {
+              base: readLevel(0),                                  // full-res corner texel
+              topMip: tex.generateMipmaps ? readLevel(maxLevel) : null, // 1×1 smallest mip
+            };
+            renderer.setRenderTarget(null);
+            renderer.resetState();                     // resync three's GL state cache
+            return out;
+          } catch (e) { return { error: String((e && e.message) || e) }; }
+        };
+        const recordTex = (name, tex, requested) => {
+          if (texDiag.some((t) => t.name === name)) return; // shared maps cached — record once
+          const w = tex && tex.image ? (tex.image.width || tex.image.videoWidth || 0) : 0;
+          const h = tex && tex.image ? (tex.image.height || tex.image.videoHeight || 0) : 0;
+          const entry = {
+            name,
+            requested: requested || null,
+            loaded: !!(tex && tex.image),
+            w, h,
+            pot: tex ? (isPOT(w) && isPOT(h)) : null,
+            colorSpace: tex ? tex.colorSpace : null,
+            mipmaps: tex ? !!tex.generateMipmaps : null,
+            mipProbe: (tex && renderDebugRef.current) ? probeMipBlack(tex) : null,
+          };
+          texDiag.push(entry);
+          // eslint-disable-next-line no-console
+          if (renderDebugRef.current) console.log('[GBTEX]', name, entry);
+        };
+
         // ── Lighting ───────────────────────────────────────────
         // Four-light rig sized for the ball:
         //   • hemisphere — sky/ground fill so shadowed dimples never
@@ -1129,6 +1194,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               woodTex.minFilter = THREE.LinearMipmapLinearFilter; woodTex.anisotropy = 4;
               objectsToDispose.push(woodTex);
             }
+            recordTex('wood_diff', woodTex, 'assets/giftbox_model/wood_diff.jpg');
           }
 
           // Box (tray walls + foam-with-holes + baked tees) — one material driven by
@@ -1216,6 +1282,8 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               mat = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, metalness: 0.5, roughness: 0.5, emissive: 0x15171b, emissiveIntensity: 0.3 });
               const mm = await loadMetalMaps(THREE);
               if (disposed) return;
+              recordTex('metal_rough', mm.rough, 'assets/metal_texture/worn_metal_rough.jpg');
+              recordTex('metal_normal', mm.normal, 'assets/metal_texture/worn_metal_normal.png');
               if (mm.rough) mat.roughnessMap = mm.rough;
               if (mm.normal) { mat.normalMap = mm.normal; mat.normalScale.set(0.55, 0.55); }
               mat.onBeforeCompile = makeDivotOBC(steel);
@@ -1397,6 +1465,8 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           const steel = new THREE.Color('#c2c6cc');
           const mm = await loadMetalMaps(THREE);
           if (disposed) return;
+          recordTex('metal_rough', mm.rough, 'assets/metal_texture/worn_metal_rough.jpg');
+          recordTex('metal_normal', mm.normal, 'assets/metal_texture/worn_metal_normal.png');
           if (mm.rough) ballMesh.material.roughnessMap = mm.rough;
           if (mm.normal) { ballMesh.material.normalMap = mm.normal; ballMesh.material.normalScale.set(0.55, 0.55); }
           ballMesh.material.onBeforeCompile = makeDivotOBC(steel);
@@ -1541,6 +1611,11 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           decalTexture.generateMipmaps = false;
           decalTexture.needsUpdate = true;
           objectsToDispose.push(decalTexture);
+          // Record the print decal too: it's NPOT + mipmaps-off (the current
+          // pixelation tradeoff). The probe reports its base texel; topMip is
+          // null here by design (no mip chain) so we can confirm mips really
+          // are disabled on the failing machine.
+          recordTex('decal', decalTexture, koCanvas ? 'canvas' : url);
 
           // Front: camera at +Z, identity Euler aims the projector box's -Z at
           // the origin → print lands flat on the camera-facing face. Back: same
@@ -3596,6 +3671,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 textures: renderer.info.memory.textures,
                 glError: _glCtx.getError(),
                 shaderErrors: shaderErrors.slice(0, 5),
+                texDiag,
                 decal: decalMesh ? {
                   exists: true,
                   meshVisible: decalMesh.visible,
@@ -4092,6 +4168,19 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               ].join('\n')
             : 'decal mesh does NOT exist (never created — projection produced no geometry?)',
           '',
+          '-- Textures (wood / metal / decal) --',
+          (rd.texDiag && rd.texDiag.length)
+            ? rd.texDiag.map((t) => {
+                const dims = t.loaded ? `${t.w}x${t.h} ${t.pot ? 'POT' : 'NPOT'}` : 'NOT LOADED';
+                const mp = t.mipProbe
+                  ? (t.mipProbe.error
+                      ? ` probe:err(${t.mipProbe.error})`
+                      : ` base:[${(t.mipProbe.base || []).join(',')}] topMip:[${t.mipProbe.topMip ? t.mipProbe.topMip.join(',') : 'none'}]`)
+                  : '';
+                return `${t.name}: ${dims} mips:${t.mipmaps} cs:${t.colorSpace}${mp}`;
+              }).join('\n')
+            : 'none recorded (no wood/metal/decal in this scene)',
+          '',
           '-- Shader errors --',
           (rd.shaderErrors && rd.shaderErrors.length) ? rd.shaderErrors.join('\n----\n') : 'none',
           '',
@@ -4171,6 +4260,22 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             ] : (
               <div style={{ color: danger, fontWeight: 700 }}>decal mesh missing</div>
             )}
+            {rd.texDiag && rd.texDiag.length > 0 && (() => {
+              const blackPx = (p) => Array.isArray(p) && p[0] < 8 && p[1] < 8 && p[2] < 8;
+              return [
+                sep,
+                <span key="th" style={{ fontWeight: 700, fontSize: 8.5, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--gb-text-muted)', marginTop: 2 }}>Textures</span>,
+                ...rd.texDiag.map((t) => {
+                  const mipBug = t.loaded && t.mipProbe && !t.mipProbe.error
+                    && blackPx(t.mipProbe.topMip) && !blackPx(t.mipProbe.base);
+                  const warn = !t.loaded || mipBug;
+                  const val = !t.loaded
+                    ? 'NOT LOADED'
+                    : `${t.w}x${t.h} ${t.pot ? 'POT' : 'NPOT'} mip:${t.mipmaps ? 'on' : 'off'}${mipBug ? ' BLACK-MIP' : ''}`;
+                  return row(t.name, val, warn);
+                }),
+              ];
+            })()}
             {sep}
             {row('drawCalls', rd.calls)}
             {row('triangles', rd.triangles)}
