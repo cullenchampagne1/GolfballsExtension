@@ -6,7 +6,7 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, DEPT_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
-import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount } from '../lib/saveProposal.js';
+import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal } from '../lib/saveProposal.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty } from '../lib/customItems.js';
 import { getInventory, cachedCostForSku, primeCostCache } from '../lib/inventory.js';
 import { ProposalEmailModal, ProposalEmailComposer } from './ProposalEmail.jsx';
@@ -2209,6 +2209,22 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const [selected, setSelected] = useState(null);
   const [special, setSpecial] = useState(null); // 'sale' | 'logo' | null
   const [proposal, setProposal] = useState([]);
+  // The working proposal persists across closes/sessions: hydrate from storage on
+  // mount, then mirror every change back. `propHydrated` gates the save so the
+  // initial empty state can't clobber a stored draft before the load resolves.
+  const propHydrated = useRef(false);
+  useEffect(() => {
+    let alive = true;
+    loadCurrentProposal().then((saved) => {
+      if (alive && Array.isArray(saved) && saved.length) setProposal(saved);
+      propHydrated.current = true;
+    });
+    return () => { alive = false; };
+  }, []);
+  useEffect(() => {
+    if (!propHydrated.current) return;
+    saveCurrentProposal(proposal);
+  }, [proposal]);
   const [proposalOpen, setProposalOpen] = useState(false);
   const [detail, setDetail] = useState(null);   // proposal-breakdown drill-in: { kind:'saved'|'current', item? }
   // ── Verified DISPLAY pricing ───────────────────────────────────────────────

@@ -334,6 +334,40 @@ export async function removeSavedProposal(id) {
   return next;
 }
 
+/* ───────────────────────────────────────────────────────────────────────────
+   Working proposal — the rep's live, unsaved draft. Persisted to its own key so
+   it survives closing the catalog, navigating, and restarting the browser. It is
+   only wiped when the rep clears it manually (Clear → setProposal([]) → []).
+   Snapshots id + product + decoration + variant + splits, the shape the live
+   proposal operations read, so restoring it == the in-memory state.
+   ─────────────────────────────────────────────────────────────────────────── */
+const CURRENT_KEY = 'gbCurrentProposal';
+
+export function loadCurrentProposal() {
+  return new Promise((resolve) => {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) { resolve([]); return; }
+      chrome.storage.local.get(CURRENT_KEY, (d) => resolve((d && Array.isArray(d[CURRENT_KEY])) ? d[CURRENT_KEY] : []));
+    } catch { resolve([]); }
+  });
+}
+
+export function saveCurrentProposal(lines) {
+  const snap = (Array.isArray(lines) ? lines : []).map((l) => ({
+    id: l.id,
+    product: l.product,
+    decoration: l.decoration || null,
+    variant: l.variant || null,
+    splits: (l.splits || []).map((s) => ({ ...s })),
+  }));
+  return new Promise((resolve) => {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) { resolve(); return; }
+      chrome.storage.local.set({ [CURRENT_KEY]: snap }, () => resolve());
+    } catch { resolve(); }
+  });
+}
+
 /* Rebuild live proposal lines (with fresh ids) from a saved entry's snapshot. */
 export function linesFromSaved(entry, ridFn) {
   const mk = ridFn || _rid;
