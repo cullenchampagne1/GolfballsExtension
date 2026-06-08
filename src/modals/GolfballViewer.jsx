@@ -64,7 +64,7 @@ const MODEL_URLS = {
 // Cache-bust token appended to every model URL. Chrome can serve a stale cached
 // .obj across extension reloads (the URL is otherwise constant), which masks a
 // re-exported model. Bump this whenever a model file changes to force a refetch.
-const MODEL_VERSION = '20250607-11-woodtex';
+const MODEL_VERSION = '20250607-12-metalfoam';
 
 async function loadThreeAndModel(shape = 'ball') {
   // Parallel-load engine + helpers once so first-mount latency is dominated by
@@ -132,6 +132,58 @@ async function loadThreeAndModel(shape = 'ball') {
   }
   const model = await cache.models[shape];
   return { ...cache.three, model };
+}
+
+/* Worn-metal maps for the divot / bartender tools (user-supplied PolyHaven
+   "worn shiny metal"). The tool OBJs now carry cube-projected UVs, so we use
+   three.js' BUILT-IN roughnessMap + normalMap (robust, no custom sampling GLSL)
+   to scuff the steel. Cached once + kept alive (small, shared across mounts). */
+let _metalMapsPromise = null;
+function loadMetalMaps(THREE) {
+  if (_metalMapsPromise) return _metalMapsPromise;
+  const u = (rel) => `${(typeof chrome !== 'undefined' && chrome.runtime?.getURL) ? chrome.runtime.getURL(rel) : rel}?v=${MODEL_VERSION}`;
+  const tl = new THREE.TextureLoader();
+  const load1 = (rel) => new Promise((res) => tl.load(u(rel), (t) => {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.colorSpace = THREE.NoColorSpace;   // roughness/normal are linear data, not sRGB
+    res(t);
+  }, undefined, () => res(null)));
+  _metalMapsPromise = Promise.all([
+    load1('assets/metal_texture/worn_metal_rough.jpg'),
+    load1('assets/metal_texture/worn_metal_normal.png'),
+  ]).then(([rough, normal]) => ({ rough, normal }));
+  return _metalMapsPromise;
+}
+/* The divot/bartender onBeforeCompile: the baked vColor mask drives steel vs the
+   non-metallic white marker disc (so the printed logo reads on it); the disc is
+   also forced smooth so the worn roughness map doesn't scuff the print area. */
+function makeDivotOBC(steelColor) {
+  return (shader) => {
+    shader.uniforms.uMetal = { value: steelColor };
+    shader.fragmentShader = 'uniform vec3 uMetal;\n' + shader.fragmentShader
+      .replace('#include <color_fragment>', [
+        '#ifdef USE_COLOR',
+        '  float _wm = step(0.5, vColor.r);   // 1 = white marker disc, 0 = metal',
+        '  diffuseColor.rgb = mix(uMetal, vec3(1.0), _wm);',
+        '#endif',
+      ].join('\n'))
+      .replace('#include <roughnessmap_fragment>', [
+        '#include <roughnessmap_fragment>',
+        '#ifdef USE_COLOR',
+        // The worn-metal map is very shiny (low roughness); left raw it goes mirror +
+        // reflects the dim room as BLACK. Floor it into a worn-satin range so the
+        // steel reads as scuffed metal, keeping the map\'s matte-speckle variation.
+        '  float _mr = clamp(0.36 + roughnessFactor, 0.40, 0.72);',
+        '  roughnessFactor = mix(_mr, 0.42, step(0.5, vColor.r));   // marker disc stays smooth',
+        '#endif',
+      ].join('\n'))
+      .replace('#include <metalnessmap_fragment>', [
+        '#include <metalnessmap_fragment>',
+        '#ifdef USE_COLOR',
+        '  metalnessFactor *= (1.0 - step(0.5, vColor.r));   // disc = non-metallic',
+        '#endif',
+      ].join('\n'));
+  };
 }
 
 /* Printers don't print white — white ink simply isn't laid down, so the ball /
@@ -1071,6 +1123,26 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // shell for premium sets). color=white so the vertex colors show 1:1; small
           // emissive lifts the deep-shadow slots.
           const boxMat = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, map: woodTex || null, roughness: woodTex ? 0.52 : 0.62, metalness: 0.0, emissive: 0x0a0a0c, emissiveIntensity: 0.35 });
+          // Foam finish: the dark foam verts read as MATTE, lightly-mottled die-cut
+          // foam instead of glossy plastic. Scalar roughness only (safe) — high + a
+          // little position-based grit; the wood shell (white vColor + map) + the
+          // white tees keep their own roughness untouched.
+          boxMat.onBeforeCompile = (sh) => {
+            sh.vertexShader = sh.vertexShader
+              .replace('#include <common>', '#include <common>\nvarying vec3 vFoamP;')
+              .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFoamP = position;');
+            sh.fragmentShader = ('varying vec3 vFoamP;\n'
+              + 'float _fgrit(vec3 p){ p = fract(p * 0.3183 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }\n'
+              + sh.fragmentShader)
+              .replace('#include <roughnessmap_fragment>', [
+                '#include <roughnessmap_fragment>',
+                '#ifdef USE_COLOR',
+                '  float _foam = 1.0 - smoothstep(0.10, 0.32, max(vColor.r, max(vColor.g, vColor.b)));',
+                '  float _g = _fgrit(floor(vFoamP * 46.0));',
+                '  roughnessFactor = mix(roughnessFactor, 0.90 + 0.08 * _g, _foam);',
+                '#endif',
+              ].join('\n'));
+          };
           const boxMesh = new THREE.Mesh(boxRes.model.geometry.clone(), boxMat);
           contentGroup.add(boxMesh);
           objectsToDispose.push(boxMat, boxMesh.geometry);
@@ -1123,14 +1195,14 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               if (item.decal) addDecal(m, 0, 0, cg.hz * 1.2, cg.hx * 0.85, cg.hz * 1.8);   // +Z disc face
               m.scale.setScalar((item.radius || 0.82) / cg.hx);
             } else {
-              // divot / bartender — same steel + marker-mask recipe as the single tool.
+              // divot / bartender — steel + marker-mask + worn-metal maps (same
+              // recipe as the single tool, via makeDivotOBC).
               mat = new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, metalness: 0.5, roughness: 0.5, emissive: 0x15171b, emissiveIntensity: 0.3 });
-              mat.onBeforeCompile = (sh) => {
-                sh.uniforms.uMetal = { value: steel };
-                sh.fragmentShader = 'uniform vec3 uMetal;\n' + sh.fragmentShader
-                  .replace('#include <color_fragment>', ['#ifdef USE_COLOR', '  float _wm = step(0.5, vColor.r);', '  diffuseColor.rgb = mix(uMetal, vec3(1.0), _wm);', '#endif'].join('\n'))
-                  .replace('#include <metalnessmap_fragment>', ['#include <metalnessmap_fragment>', '#ifdef USE_COLOR', '  metalnessFactor *= (1.0 - step(0.5, vColor.r));', '#endif'].join('\n'));
-              };
+              const mm = await loadMetalMaps(THREE);
+              if (disposed) return;
+              if (mm.rough) mat.roughnessMap = mm.rough;
+              if (mm.normal) { mat.normalMap = mm.normal; mat.normalScale.set(0.55, 0.55); }
+              mat.onBeforeCompile = makeDivotOBC(steel);
               m = new THREE.Mesh(cg.geo.clone(), mat);
               if (item.decal) { const mk = locateMarker(cg.geo); addDecal(m, mk.cx, mk.cy, mk.faceZ * 1.2, mk.discR * 1.8, mk.faceZ * 1.8); }
               m.scale.setScalar(item.scale || 0.5);
@@ -1302,25 +1374,14 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         tintClayRef.current = null;
         if (isDivot) {
           // Vertex-color mask: white(~0.93) = marker disc, black(~0.02) = metal.
-          // Paint the metal a brushed-steel color and force the disc to a
-          // non-metallic white (so the projected logo reads on it like paper).
+          // Paint the metal a brushed-steel color (disc forced non-metallic white so
+          // the logo reads) + scuff the steel with the user's worn-metal maps.
           const steel = new THREE.Color('#c2c6cc');
-          ballMesh.material.onBeforeCompile = (shader) => {
-            shader.uniforms.uMetal = { value: steel };
-            shader.fragmentShader = 'uniform vec3 uMetal;\n' + shader.fragmentShader
-              .replace('#include <color_fragment>', [
-                '#ifdef USE_COLOR',
-                '  float _wm = step(0.5, vColor.r);   // 1 = white marker disc, 0 = metal',
-                '  diffuseColor.rgb = mix(uMetal, vec3(1.0), _wm);',
-                '#endif',
-              ].join('\n'))
-              .replace('#include <metalnessmap_fragment>', [
-                '#include <metalnessmap_fragment>',
-                '#ifdef USE_COLOR',
-                '  metalnessFactor *= (1.0 - step(0.5, vColor.r));   // disc = non-metallic',
-                '#endif',
-              ].join('\n'));
-          };
+          const mm = await loadMetalMaps(THREE);
+          if (disposed) return;
+          if (mm.rough) ballMesh.material.roughnessMap = mm.rough;
+          if (mm.normal) { ballMesh.material.normalMap = mm.normal; ballMesh.material.normalScale.set(0.55, 0.55); }
+          ballMesh.material.onBeforeCompile = makeDivotOBC(steel);
         }
         if (isChip) {
           // The baked vertex colors are a clay(dark)/pattern(light) mask. Recolor
