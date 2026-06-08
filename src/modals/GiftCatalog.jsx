@@ -1424,7 +1424,7 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onCopy,
     : copied ? <I.check size={14} strokeWidth={3} /> : <I.copy size={14} />;
   return (
     <motion.div ref={cardRef}
-      initial={{ opacity: 0, scale: .97, x: pos.x + 26, y: pos.y }}
+      initial={{ opacity: 0, scale: .95, x: pos.x, y: pos.y }}
       animate={{ opacity: 1, scale: 1, x: pos.x, y: pos.y }}
       exit={{ opacity: 0, scale: .9 }}
       transition={{ x: { type: 'spring', stiffness: 520, damping: 44, mass: .9 }, y: { type: 'spring', stiffness: 520, damping: 44, mass: .9 }, opacity: { duration: .18 }, scale: { duration: .18 } }}
@@ -2557,7 +2557,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     {/* Proposal-HTML composer — animates in over the catalog (opaque backdrop
         hides it), animates out on close. */}
     <AnimatePresence>
-      {emailSource && <ProposalEmailModal key="email" source={emailSource} onClose={() => setEmailSource(null)} />}
+      {emailSource && <ProposalEmailModal key="email" source={emailSource} scale={scale} onClose={() => setEmailSource(null)} />}
     </AnimatePresence>
     <AnimatePresence onExitComplete={onClose}>
       {open && (

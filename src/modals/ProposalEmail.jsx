@@ -226,7 +226,7 @@ function OptionToggle({ checked, label, hint, onClick }) {
 /* ════════════════════════════════════════════════════════════
    THE COMPOSER MODAL — settings · live preview · copy
 ════════════════════════════════════════════════════════════ */
-export function ProposalEmailModal({ source, onClose }) {
+export function ProposalEmailModal({ source, onClose, scale = 1.8 }) {
   const [groupName, setGroupName] = useState(source.groupName || 'Your Custom Order');
   const [optionName, setOptionName] = useState(source.optionName || 'Option 1');
   const [message, setMessage] = useState('');
@@ -267,9 +267,13 @@ export function ProposalEmailModal({ source, onClose }) {
   return (
     <motion.div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .2 }}
-      style={{ position: 'fixed', inset: 0, zIndex: 999995, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-surface-canvas)' }}>
+      style={{ position: 'fixed', inset: 0, zIndex: 999995, padding: 24, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', overflow: 'auto' }}>
+      {/* Match the catalog: a transform-scaled container (NOT viewport units) so
+          the modal — and its text — render at the same on-screen size as the
+          scaled catalog it replaces. Base size mirrors CARD_W×CARD_H. */}
+      <div style={{ margin: 'auto', flexShrink: 0, transform: `scale(${scale})`, transformOrigin: 'center center' }}>
       <motion.div initial={{ opacity: 0, scale: .96, y: 14 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97, y: 10 }} transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-        style={{ width: 'min(1320px, 97vw)', height: 'min(900px, 95vh)', display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)' }}>
+        style={{ width: 1180, height: 760, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)' }}>
         {/* header */}
         <div style={{ padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 11, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
           <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -341,6 +345,7 @@ export function ProposalEmailModal({ source, onClose }) {
           <Btn variant="primary" size="md" icon={copied ? <I.check /> : <I.copy />} onClick={copyRich}>{copied ? 'Copied' : 'Copy'}</Btn>
         </div>
       </motion.div>
+      </div>
     </motion.div>
   );
 }
