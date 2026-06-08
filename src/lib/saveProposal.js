@@ -16,6 +16,7 @@
 
 import { assembleLine, buildSaveCartBody, buildSaveProposalBody, buildCustomItemLine, buildCartData, buildAsCartContents } from './cartSerializer.js';
 import { runEngine } from './page-engine/index.js';
+import { needsIngest, ingestImageUrl, saveCustomItem } from './customItems.js';
 
 // golfballs.com second-pole upcharge per dozen (Logo / Text), added on top of
 // the custom-logo ladder for a dual-pole imprint. Mirrors the modal's pricing.
@@ -116,7 +117,18 @@ export async function buildProposalLines(proposal) {
     // Custom items (SERVICEITEM) have no product page — build the cart line
     // straight from the saved fields, one per split.
     if (cat.isCustom && cat.custom) {
-      const ci = cat.custom;
+      let ci = cat.custom;
+      // Bulk-imported items keep the SUPPLIER image URL (we can't upload thousands
+      // up front). Convert THIS item's thumbnail to our S3 now — only the few
+      // items actually in the proposal — and persist it so it's not redone.
+      if (ci.thumbnail && needsIngest(ci.thumbnail)) {
+        try {
+          const s3 = await ingestImageUrl(ci.thumbnail);
+          ci = { ...ci, thumbnail: s3 };
+          saveCustomItem(ci).catch(() => {});           // cache the hosted URL
+          if (line.product) line.product.custom = ci;   // reflect in the live line
+        } catch (e) { skipped.push({ title: ci.name || ci.sku || 'custom item', reason: 'image upload failed (' + ((e && e.message) || 'error') + ')' }); }
+      }
       const style = (line.variant && line.variant.values && line.variant.values.style)
         || (Array.isArray(ci.styleOptions) && ci.styleOptions[0]) || ci.style || '';
       for (const split of (line.splits || [])) {

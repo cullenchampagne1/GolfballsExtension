@@ -41,7 +41,11 @@ export async function uploadCustomItemImage(dataUrl, fileName = 'custom-item.png
    S3 bucket (i.e. it's a link, not already a static.golfballs.com URL or a
    data: URL we'll upload anyway). */
 export function needsIngest(url) {
-  return /^https?:\/\//i.test(url || '') && !/(^|\.)static\.golfballs\.com\//i.test(url || '');
+  const u = url || '';
+  // http(s) AND not already on our S3 bucket. (The old `(^|\.)` anchor failed to
+  // match `https://static.golfballs.com/…` because "static" is preceded by "/",
+  // so already-hosted images got needlessly re-downloaded/re-uploaded on edit.)
+  return /^https?:\/\//i.test(u) && !/static\.golfballs\.com\//i.test(u);
 }
 
 /* Download an external image link (via the background proxy, CORS-safe) and
@@ -170,6 +174,15 @@ export async function addCustomItems(records) {
 export async function removeCustomItem(id) {
   const list = await loadCustomItems();
   const next = list.filter((c) => c.id !== id);
+  await _writeCustomItems(next);
+  return next;
+}
+
+/* Remove many custom items by id (one read + write). Returns the new list. */
+export async function removeCustomItems(ids) {
+  const set = new Set(ids || []);
+  const list = await loadCustomItems();
+  const next = list.filter((c) => !set.has(c.id));
   await _writeCustomItems(next);
   return next;
 }

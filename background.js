@@ -249,114 +249,6 @@ async function gbUploadCustomLogo({ dataUrl, fileName = 'logo.png' }) {
   return { filePath, fileName, cropFilePath, userImage };
 }
 
-/* Parse an hpgbrands.com product detail page → the main product's net-cost
-   ladder, public ladder, options (colors/flavors), MOQ, weight, lead time. The
-   page prerenders the main product AND related products in a base64 blob; we
-   bound parsing to the FIRST product region (the main one) by slicing up to the
-   2nd net-ladder field. All regex (runs in the service worker — no DOMParser). */
-function gbParseHpgDetail(html) {
-  let blob = '';
-  const runs = html.match(/[A-Za-z0-9+/]{300,}={0,2}/g) || [];
-  for (const r of runs) {
-    try {
-      const dec = new TextDecoder().decode(Uint8Array.from(atob(r), (c) => c.charCodeAt(0)));
-      if (dec.includes('bulkgrp')) { blob = dec; break; }
-    } catch (e) { /* not valid base64 */ }
-  }
-  if (!blob && html.includes('bulkgrp')) blob = html;       // some pages embed it directly
-  if (!blob) return null;
-  const b = blob.replace(/\\"/g, '"');                       // unescape JSON-in-string
-  const KEY = '"name":"__bulkgrp-internal-net_net-standard-usd"';
-  const first = b.indexOf(KEY);
-  if (first < 0) return null;
-  const second = b.indexOf(KEY, first + KEY.length);
-  const region = b.slice(0, second > 0 ? second : b.length); // main product only
-  const fieldVal = (name) => {
-    const i = region.indexOf('"name":"' + name + '"');
-    if (i < 0) return null;
-    const m = region.slice(i, i + 4000).match(/"value":"([^"]*)"/);
-    return m ? m[1] : null;
-  };
-  const ladder = (v, netOnly) => {
-    const out = []; if (!v) return out;
-    const rx = netOnly ? /\{(\d+)\|\|([\d.]+)\s*NET/g : /\{(\d+)\|\|\$?([\d.]+)/g;
-    let m; while ((m = rx.exec(v))) out.push({ q: parseInt(m[1], 10), v: parseFloat(m[2]) });
-    return out;
-  };
-  const opts = []; const seen = new Set();
-  let m; const lr = /"label":"([^"]+)","selected"/g;
-  while ((m = lr.exec(region))) { const l = m[1].trim(); if (l && !seen.has(l)) { seen.add(l); opts.push(l); } }
-  return {
-    net: ladder(fieldVal('__bulkgrp-internal-net_net-standard-usd'), true),
-    pub: ladder(fieldVal('__bulk-Standard-usd'), false),
-    eqp: parseFloat(fieldVal('search_EQP-Price-usd') || '') || null,
-    moq: parseInt(fieldVal('search_MOQ') || '', 10) || null,
-    weight: parseFloat(fieldVal('shipest_individual-weight') || '') || null,
-    leadTime: fieldVal('search_production-time') || '',
-    options: opts,
-  };
-}
-
-/* ── SnugZ import helpers (injected into a hidden snugzusa.com iframe) ─────────
-   SnugZ pricing is behind login and the site returns no CORS for credentialed
-   cross-origin requests, so we drop a hidden snugzusa.com iframe in the page and
-   run these IN that frame (MAIN world) — same-origin fetches that carry the SnugZ
-   session. They take no outer-scope refs (chrome.scripting serializes them). */
-function gbEnsureSnugzFrame(origin) {
-  return new Promise((res) => {
-    try {
-      if (document.getElementById('__gb_snugz_frame')) { res(true); return; }
-      const f = document.createElement('iframe');
-      f.id = '__gb_snugz_frame';
-      f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1200px;height:900px;opacity:0;border:0;pointer-events:none';
-      f.addEventListener('load', () => res(true));
-      f.src = origin + '/';
-      document.body.appendChild(f);
-      setTimeout(() => res(true), 12000);
-    } catch (e) { res(false); }
-  });
-}
-function gbSnugzCats(origin) {
-  if (location.origin !== origin) return null;
-  const set = new Set();
-  document.querySelectorAll('a[href]').forEach((a) => {
-    const m = (a.getAttribute('href') || '').match(/\/category\/([a-z0-9_-]+)/i);
-    if (m) set.add('/category/' + m[1].toLowerCase());
-  });
-  return [...set];
-}
-async function gbSnugzFetchParse(origin, urls, kind) {
-  if (location.origin !== origin) return null;
-  const parseList = (html) => {
-    const slugs = []; const seen = new Set(); const rx = /\/product\/([a-z0-9_.\-]+)/gi; let m;
-    while ((m = rx.exec(html))) { const s = m[1].toLowerCase(); if (!seen.has(s)) { seen.add(s); slugs.push(s); } }
-    return slugs;
-  };
-  const parseDetail = (html) => {
-    const name = ((html.match(/<h1[^>]*>([^<]{2,160})<\/h1>/i) || [])[1] || '').replace(/\s+/g, ' ').trim();
-    const sku = (html.match(/data-sku="([^"]+)"/i) || [])[1] || '';
-    const image = (html.match(/https:\/\/media\.snugzusa\.com\/asset\/[A-Za-z0-9\-]+\/thumbnail\/webimage[^"' ,]+/i) || [])[0] || '';
-    const tiers = []; const trx = /<strong>\s*([\d,]+)\s*<\/strong>[\s\S]{0,400}?tier_currency_price_USD"[^>]*>\s*\$?([\d.]+)/gi; let t;
-    while ((t = trx.exec(html))) tiers.push([parseInt(t[1].replace(/,/g, ''), 10), parseFloat(t[2])]);
-    let setup = 0; const srx = /data-setup="([\d.]+)"/gi; let s2;
-    while ((s2 = srx.exec(html))) { const v = parseFloat(s2[1]); if (v > setup) setup = v; }
-    const zipit = /data-zipit="1"/i.test(html);
-    const opts = []; const oseen = new Set(); const orx = /data-sku_adj="([^"]+)"/gi; let o;
-    while ((o = orx.exec(html))) { const l = o[1].trim(); if (l && !oseen.has(l)) { oseen.add(l); opts.push(l); } }
-    return { name, sku, image, tiers, setup, zipit, options: opts };
-  };
-  const out = [];
-  for (const u of urls) {
-    try {
-      const r = await fetch(u, { credentials: 'include' });
-      const html = await r.text();
-      out.push(kind === 'list' ? { url: u, slugs: parseList(html) } : { url: u, detail: parseDetail(html) });
-    } catch (e) { out.push({ url: u, error: String((e && e.message) || e) }); }
-    await new Promise((z) => setTimeout(z, 120));
-  }
-  return out;
-}
-
 // ── Seed default state on first install ──────────────────────────────────────
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   if (reason !== 'install') return; // skip updates and browser_update
@@ -443,21 +335,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  // ── HPG product detail → parsed pricing ladder + options ──────────────────
-  // Fetches an hpgbrands.com product page and parses the main product's net-cost
-  // ladder, options, MOQ, weight, lead time IN the worker (returns a small object,
-  // so we never ship the ~540KB page to the content script). Public page → no auth.
-  if (msg.action === 'hpgDetail' && msg.url) {
-    fetch(msg.url, { credentials: 'omit', headers: { Accept: 'text/html,*/*' } })
-      .then(async r => {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const html = await r.text();
-        sendResponse({ ok: true, data: gbParseHpgDetail(html) });
-      })
-      .catch(err => sendResponse({ ok: false, error: String(err.message || err) }));
-    return true;
-  }
-
   // ── Inventory (office.gbcadmin.com) — MUST be SAME-ORIGIN to gbcadmin ──────
   // The Dynamics Inventory endpoint needs the gbcadmin session cookie AND returns
   // Access-Control-Allow-Origin:* — which the browser rejects for any credentialed
@@ -516,37 +393,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         console.warn('[GB] fetchInventory error:', err.message);
         sendResponse({ ok: false, error: String((err && err.message) || err) });
       }
-    })();
-    return true;
-  }
-
-  // ── SnugZ: ensure the authed iframe + scrape nav categories ────────────────
-  if (msg.action === 'snugzInit') {
-    const tabId = sender && sender.tab && sender.tab.id;
-    if (!tabId) { sendResponse({ ok: false, error: 'No tab context' }); return true; }
-    (async () => {
-      try {
-        await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: gbEnsureSnugzFrame, args: ['https://snugzusa.com'] });
-        const r = await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, world: 'MAIN', func: gbSnugzCats, args: ['https://snugzusa.com'] });
-        const hit = (r || []).map((x) => x && x.result).find(Boolean);
-        if (!hit || !hit.length) { sendResponse({ ok: false, error: 'snugzusa.com frame did not load / no categories — sign in to SnugZ in a tab (it may also block embedding).' }); return; }
-        sendResponse({ ok: true, categories: hit });
-      } catch (e) { sendResponse({ ok: false, error: String((e && e.message) || e) }); }
-    })();
-    return true;
-  }
-
-  // ── SnugZ: fetch + parse a batch of URLs inside the authed iframe ──────────
-  if (msg.action === 'snugzFetch' && Array.isArray(msg.urls)) {
-    const tabId = sender && sender.tab && sender.tab.id;
-    if (!tabId) { sendResponse({ ok: false, error: 'No tab context' }); return true; }
-    (async () => {
-      try {
-        await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: gbEnsureSnugzFrame, args: ['https://snugzusa.com'] });
-        const r = await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, world: 'MAIN', func: gbSnugzFetchParse, args: ['https://snugzusa.com', msg.urls, msg.kind || 'detail'] });
-        const hit = (r || []).map((x) => x && x.result).find((v) => v != null);
-        sendResponse({ ok: true, results: hit || [] });
-      } catch (e) { sendResponse({ ok: false, error: String((e && e.message) || e) }); }
     })();
     return true;
   }

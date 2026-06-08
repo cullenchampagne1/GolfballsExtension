@@ -7,9 +7,8 @@ import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CA
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount } from '../lib/saveProposal.js';
-import { loadCustomItems, saveCustomItem, removeCustomItem, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, clearCustomItems } from '../lib/customItems.js';
+import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty } from '../lib/customItems.js';
 import { getInventory, cachedCostForSku, primeCostCache } from '../lib/inventory.js';
-import { importSnugzCatalog } from '../lib/snugzImport.js';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
 import { decoratedPricingForLine, giftSetPreviewUrl } from '../lib/cartSerializer.js';
@@ -573,6 +572,7 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) 
   // Selected base-product variant (e.g. Tee Count) → drives the displayed price
   // for products whose options change the price. Reset when the product changes.
   const [variant, setVariant] = useState(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   useEffect(() => {
     setDecoration(null);
     // Custom items default to their first Style option so an un-touched add still
@@ -701,10 +701,15 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) 
               <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 6, lineHeight: 1.4 }}>{isGiftPricing ? 'Per-set price drops with order volume — quote the tier that matches the gift run.' : 'Per-unit price drops with order volume — quote the tier that matches the gift run.'}</div>
             </div>
           )}
-          {/* View product — opens the saved supplier link (custom items only). */}
+          {/* View product — opens the saved supplier link (custom items only),
+              with a copy-to-clipboard icon beside it. */}
           {p.isCustom && p.link && (
-            <Btn variant="secondary" size="sm" icon={<I.eye />} style={{ marginTop: 14 }}
-              onClick={() => { try { window.open(p.link, '_blank', 'noopener'); } catch { /* */ } }}>View product</Btn>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 14 }}>
+              <Btn variant="secondary" size="sm" icon={<I.eye />}
+                onClick={() => { try { window.open(p.link, '_blank', 'noopener'); } catch { /* */ } }}>View product</Btn>
+              <IconBtn size="sm" variant="secondary" active={linkCopied} icon={linkCopied ? <I.check size={14} /> : <I.copy size={14} />}
+                title="Copy product URL" onClick={() => { copyToClipboard(p.link).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1400); }).catch(() => {}); }} />
+            </div>
           )}
           {/* Show the customization UI for ANY customizable product (custom
               logo, personalized, monogram, photo, ball-marker, …), not just
@@ -1847,14 +1852,15 @@ function CustomAddTile({ onNew, minH }) {
   );
 }
 
-function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, onOpen, onDelete, onImportHpg, hpgImporting, hpgProgress, onClearAll }) {
+function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, onOpen, onDelete, onDeleteMany }) {
   const minH = compact ? 232 : 262;
   const INIT = 60, CHUNK = 48;
   const [q, setQ] = useState('');
   const [visible, setVisible] = useState(INIT);
-  const [confirmClear, setConfirmClear] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [sel, setSel] = useState(() => new Set());
+  const lastIdx = useRef(null);
   const scrollRef = useRef(null);
-  useEffect(() => { if (!confirmClear) return; const t = setTimeout(() => setConfirmClear(false), 3500); return () => clearTimeout(t); }, [confirmClear]);
   // Search across name / SKU / brand (extraDetails) / description.
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -1866,8 +1872,8 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
       || (ci.extraDetails || '').toLowerCase().includes(s)
       || (ci.description || '').toLowerCase().includes(s));
   }, [items, q]);
-  // Reset the window when the query (or the underlying list) changes.
   useEffect(() => { setVisible(INIT); if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [q, items.length]);
+  const exitSelect = () => { setSelectMode(false); setSel(new Set()); lastIdx.current = null; };
   const onScroll = (e) => {
     const el = e.currentTarget;
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 600) {
@@ -1876,8 +1882,25 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
   };
   const shown = filtered.slice(0, visible);
   const atEnd = visible >= filtered.length;
+  // Click in select mode: shift extends a range (over the shown order); plain
+  // click toggles one. Out of select mode: open the item.
+  const onCardClick = (ci, idx, e) => {
+    if (!selectMode) { onOpen(ci); return; }
+    setSel((prev) => {
+      const next = new Set(prev);
+      if (e && e.shiftKey && lastIdx.current != null) {
+        const [a, b] = [lastIdx.current, idx].sort((x, y) => x - y);
+        for (let i = a; i <= b; i++) { const it = shown[i]; if (it) next.add(it.id); }
+      } else {
+        if (next.has(ci.id)) next.delete(ci.id); else next.add(ci.id);
+        lastIdx.current = idx;
+      }
+      return next;
+    });
+  };
+  const bulkDelete = () => { const ids = [...sel]; if (!ids.length) return; Promise.resolve(onDeleteMany(ids)).finally(exitSelect); };
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 16px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
         <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <I.sparkle size={16} />
@@ -1885,19 +1908,15 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Custom Items</div>
           <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, fontWeight: 500 }}>
-            {q.trim() ? `${nfmt(filtered.length)} of ${nfmt(items.length)} match` : `${nfmt(items.length)} item${items.length === 1 ? '' : 's'} — add them to a proposal like any product`}
+            {selectMode ? `${nfmt(sel.size)} selected · click to pick, shift-click for a range`
+              : q.trim() ? `${nfmt(filtered.length)} of ${nfmt(items.length)} match`
+              : `${nfmt(items.length)} item${items.length === 1 ? '' : 's'} — add them to a proposal like any product`}
           </div>
         </div>
-        {onClearAll && items.length > 0 && (
-          <Btn variant={confirmClear ? 'danger' : 'ghost'} size="sm" icon={<I.trash />}
-            onClick={() => { if (confirmClear) { setConfirmClear(false); onClearAll(); } else setConfirmClear(true); }}>
-            {confirmClear ? `Clear ${nfmt(items.length)}? Confirm` : 'Clear all'}
-          </Btn>
-        )}
-        {onImportHpg && (
-          <Btn variant="secondary" size="sm" icon={<I.refresh />} state={hpgImporting ? 'loading' : 'idle'} onClick={onImportHpg}>
-            {hpgImporting ? (hpgProgress && hpgProgress.label ? hpgProgress.label : 'Importing…') : 'Import SnugZ'}
-          </Btn>
+        {selectMode ? (
+          <Btn variant="ghost" size="sm" icon={<I.close />} onClick={exitSelect}>Cancel</Btn>
+        ) : (
+          items.length > 0 && <Btn variant="secondary" size="sm" icon={<I.check />} onClick={() => setSelectMode(true)}>Select</Btn>
         )}
         <Btn variant="primary" size="sm" icon={<I.plus />} onClick={onNew}>Add custom item</Btn>
       </div>
@@ -1916,20 +1935,27 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
         ) : (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${colMin}px, 1fr))`, gap: compact ? 10 : 12 }}>
-              {shown.map((ci) => {
+              {shown.map((ci, idx) => {
                 const p = customItemToProduct(ci);
+                const picked = sel.has(ci.id);
                 return (
-                  <div key={ci.id} style={{ position: 'relative' }}>
+                  <div key={ci.id} style={{ position: 'relative', borderRadius: 'var(--gb-r-lg)', outline: picked ? '2px solid var(--gb-brand-label)' : 'none', outlineOffset: 2 }}>
                     <ProductCard p={p} compact={compact} showRating={false}
-                      inProposal={inProposal(p.id)} onAdd={() => onAdd(ci)} onClick={() => onOpen(ci)} />
-                    <IconBtn size="sm" danger icon={<I.trash size={13} />} title="Delete custom item"
-                      onClick={(e) => { e.stopPropagation(); onDelete(ci.id); }}
-                      style={{ position: 'absolute', top: 8, right: 8, background: 'var(--gb-surface-modal)', boxShadow: '0 1px 4px rgba(0,0,0,.12)' }} />
+                      inProposal={inProposal(p.id)} onAdd={() => onAdd(ci)} onClick={(e) => onCardClick(ci, idx, e)} />
+                    {selectMode ? (
+                      <div style={{ position: 'absolute', top: 8, right: 8, width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: picked ? 'var(--gb-brand-label)' : 'var(--gb-surface-modal)', border: '1px solid ' + (picked ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.12)', pointerEvents: 'none' }}>
+                        {picked && <I.check size={13} strokeWidth={3} />}
+                      </div>
+                    ) : (
+                      <IconBtn size="sm" danger icon={<I.trash size={13} />} title="Delete custom item"
+                        onClick={(e) => { e.stopPropagation(); onDelete(ci.id); }}
+                        style={{ position: 'absolute', top: 8, right: 8, background: 'var(--gb-surface-modal)', boxShadow: '0 1px 4px rgba(0,0,0,.12)' }} />
+                    )}
                   </div>
                 );
               })}
               {/* Add tile sits at the end only when the whole (unfiltered) list fits. */}
-              {!q.trim() && atEnd && <CustomAddTile onNew={onNew} minH={minH} />}
+              {!selectMode && !q.trim() && atEnd && <CustomAddTile onNew={onNew} minH={minH} />}
             </div>
             {!atEnd && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '18px 0 6px', color: 'var(--gb-text-ghost)' }}>
@@ -1940,6 +1966,15 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
           </>
         )}
       </div>
+      {/* Bulk-delete — floats bottom-right while selecting. */}
+      <AnimatePresence>
+        {selectMode && sel.size > 0 && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} transition={{ duration: .16 }}
+            style={{ position: 'absolute', right: 18, bottom: 18, zIndex: 6 }}>
+            <Btn variant="danger" size="md" icon={<I.trash />} onClick={bulkDelete}>Delete {nfmt(sel.size)}</Btn>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -2335,24 +2370,10 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     .then((r) => { setCustomItems(r.list); setEditingCustom(null); toast?.success?.(`Saved “${r.entry.name || 'custom item'}”`); })
     .catch((e) => { toast?.error?.('Couldn’t save custom item — ' + ((e && e.message) || 'unknown error')); throw e; });
   const deleteCustom = (id) => removeCustomItem(id).then((next) => setCustomItems(next));
-  const clearCustom = () => clearCustomItems().then((n) => { setCustomItems([]); toast?.success?.(`Cleared ${n} custom item${n === 1 ? '' : 's'}`); });
   // Add a custom item to the live proposal (as a synthetic product) + open it.
   const addCustomToProposal = (ci) => { addToProposal(customItemToProduct(ci)); setProposalOpen(true); };
-  // Bulk import the hpgbrands.com catalog as custom items (paged Searchspring
-  // pull). Shows live progress; dedupes by SKU so re-running just refreshes.
-  const [hpgImporting, setHpgImporting] = useState(false);
-  const [hpgProgress, setHpgProgress] = useState(null);   // { label }
-  const importHpg = () => {
-    if (hpgImporting) return;
-    setHpgImporting(true); setHpgProgress({ label: 'Connecting…' });
-    importSnugzCatalog({ onProgress: (p) => {
-      if (p.phase === 'list') setHpgProgress({ label: `Categories ${p.cat}/${p.cats} · ${nfmt(p.found)} found` });
-      else setHpgProgress({ label: `Pulling ${nfmt(p.count)}/${nfmt(p.total)}` });
-    } })
-      .then((r) => { toast?.success?.(`Imported ${r.fetched} SnugZ products (${r.added} new, ${r.updated} updated)`); })
-      .catch((e) => { toast?.error?.('SnugZ import failed — ' + ((e && e.message) || 'unknown error')); })
-      .finally(() => { setHpgImporting(false); setHpgProgress(null); });
-  };
+  // Bulk-delete custom items by id (select mode).
+  const deleteCustomMany = (ids) => removeCustomItems(ids).then((next) => setCustomItems(next));
 
   /* One shared live pull, with progress. `force` clears the cache first
      (manual rebuild — stale items/sales can't survive as a fallback);
@@ -2584,8 +2605,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             <motion.div key="custom" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
             <CustomItemsGallery items={customItems} compact={compact} colMin={colMin}
               inProposal={inProposal} onAdd={addCustomToProposal}
-              onNew={() => setEditingCustom({})} onOpen={(ci) => setSelected(customItemToProduct(ci))} onDelete={deleteCustom}
-              onImportHpg={importHpg} hpgImporting={hpgImporting} hpgProgress={hpgProgress} onClearAll={clearCustom} />
+              onNew={() => setEditingCustom({})} onOpen={(ci) => setSelected(customItemToProduct(ci))} onDelete={deleteCustom} onDeleteMany={deleteCustomMany} />
           </motion.div>
           ) : (
           <motion.div key="catalog" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
