@@ -9,6 +9,7 @@ import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount } from '../lib/saveProposal.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty } from '../lib/customItems.js';
 import { getInventory, cachedCostForSku, primeCostCache } from '../lib/inventory.js';
+import { ProposalEmailModal } from './ProposalEmail.jsx';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
 import { decoratedPricingForLine, giftSetPreviewUrl } from '../lib/cartSerializer.js';
@@ -1388,7 +1389,7 @@ function CardIconBtn({ icon, title, danger, active, onClick }) {
   );
 }
 
-function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onCopy, onDelete, onSaveToAccount }) {
+function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onCopy, onDelete, onSaveToAccount, onEmail }) {
   const [hover, setHover] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copying, setCopying] = useState(false);
@@ -1465,6 +1466,9 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onCopy,
           style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 30, borderRadius: 'var(--gb-r-md)', cursor: 'pointer', background: hover ? 'var(--gb-brand-tint-medium)' : 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 11.5, fontWeight: 700, fontFamily: 'inherit', transition: 'background var(--gb-anim)' }}>
           <I.plus size={13} /> Load into proposal
         </button>
+        {onEmail && (
+          <CardIconBtn title="Generate proposal HTML" onClick={(e) => { e.stopPropagation(); onEmail(item); }} icon={<I.card size={14} />} />
+        )}
         {onSaveToAccount && (
           <CardIconBtn title="Save to a CRM account / opportunity" onClick={(e) => { e.stopPropagation(); onSaveToAccount(item); }} icon={<I.send size={14} />} />
         )}
@@ -1522,7 +1526,7 @@ function CurrentProposalCard({ entries, onOpen }) {
   );
 }
 
-function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad, onCopy, onDelete, onSaveToAccount }) {
+function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad, onCopy, onDelete, onSaveToAccount, onEmail }) {
   const scrollRef = useRef(null);
   const [width, setWidth] = useState(0);
   const [heights, setHeights] = useState({});
@@ -1579,7 +1583,7 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
               {items.map((it) => (
                 <SavedCard key={it.id} item={it} loaded={loadedId === it.id}
                   pos={positions[it.id] || { x: 0, y: 0 }} colW={colW} onMeasure={setHeight}
-                  onOpen={onOpen} onLoad={onLoad} onCopy={onCopy} onDelete={onDelete} onSaveToAccount={onSaveToAccount} />
+                  onOpen={onOpen} onLoad={onLoad} onCopy={onCopy} onDelete={onDelete} onSaveToAccount={onSaveToAccount} onEmail={onEmail} />
               ))}
             </AnimatePresence>
           </div>
@@ -1589,7 +1593,7 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
   );
 }
 
-function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onMergeImprint, onRemoveFront, onRemoveSecond, pageContext = {}, onSaveToAccount, onAddOpportunity, accountSaveSeq = 0 }) {
+function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onMergeImprint, onRemoveFront, onRemoveSecond, pageContext = {}, onSaveToAccount, onAddOpportunity, accountSaveSeq = 0, onEmail }) {
   const total = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
   const units = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty, 0), 0);
   // Drag-to-copy imprints between lines. `drag` holds the in-flight source so
@@ -1681,6 +1685,7 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
             <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Proposal</div>
             <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>{proposal.length} {proposal.length === 1 ? 'product' : 'products'} · {units} units</div>
           </div>
+          {proposal.length > 0 && onEmail && <Btn variant="ghost" size="sm" icon={<I.card />} onClick={onEmail}>HTML</Btn>}
           {proposal.length > 0 && <Btn variant="ghost" size="sm" onClick={onClear}>Clear</Btn>}
           <IconBtn size="sm" icon={<I.close />} onClick={onClose} />
         </div>
@@ -2375,6 +2380,24 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // Bulk-delete custom items by id (select mode).
   const deleteCustomMany = (ids) => removeCustomItems(ids).then((next) => setCustomItems(next));
 
+  // Generate proposal HTML — maps proposal lines → the email composer's source
+  // (one row per split) and opens the HTML modal (which hides the catalog).
+  const [emailSource, setEmailSource] = useState(null);
+  const proposalToEmailSource = (lines, name) => {
+    const rows = []; let total = 0;
+    for (const l of (lines || [])) {
+      const p = l.product || {};
+      const sub = (l.variant && l.variant.values && l.variant.values.style) || '';
+      for (const s of (l.splits || [])) {
+        const qty = s.qty || 0, unitPrice = s.price || 0, lineTotal = Math.round(qty * unitPrice * 100) / 100;
+        total += lineTotal;
+        rows.push({ brand: (p.brand && p.brand !== 'Custom') ? p.brand : '', title: p.title || '', subtitle: sub, img: p.img || '', qty, unitPrice, lineTotal });
+      }
+    }
+    return { groupName: 'Your Custom Order', optionName: name || 'Option 1', lines: rows, total: Math.round(total * 100) / 100 };
+  };
+  const openProposalEmail = (lines, name) => { if (lines && lines.length) setEmailSource(proposalToEmailSource(lines, name)); };
+
   /* One shared live pull, with progress. `force` clears the cache first
      (manual rebuild — stale items/sales can't survive as a fallback);
      `silent` keeps the grid painted and suppresses the error toast (a
@@ -2529,6 +2552,10 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // Hold the first paint until the scale is known (avoids a size snap).
   if (scale == null) return null;
 
+  // Proposal-HTML composer takes over the whole surface: hide the catalog while
+  // it's open; closing returns here and the catalog re-renders.
+  if (emailSource) return <ProposalEmailModal source={emailSource} onClose={() => setEmailSource(null)} />;
+
   return (
     <AnimatePresence onExitComplete={onClose}>
       {open && (
@@ -2599,7 +2626,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             <motion.div key="gallery" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <SavedGallery items={savedProposals} loadedId={loadedId}
               current={proposal} onOpen={(item) => setDetail({ kind: 'saved', item })} onOpenCurrent={() => setDetail({ kind: 'current' })}
-              onLoad={loadSaved} onCopy={copySaved} onDelete={deleteSaved} onSaveToAccount={loadSavedToAccount} />
+              onLoad={loadSaved} onCopy={copySaved} onDelete={deleteSaved} onSaveToAccount={loadSavedToAccount}
+              onEmail={(entry) => openProposalEmail(linesFromSaved(entry, rid), entry.name)} />
           </motion.div>
           ) : view === 'custom' ? (
             <motion.div key="custom" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
@@ -2731,6 +2759,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               onRemoveLine={removeLine} onSaveDraft={saveDraft} onMergeImprint={mergeImprintOnLine}
               onRemoveFront={removeFrontImprint} onRemoveSecond={removeSecondPole}
               pageContext={pageContext} onSaveToAccount={saveToAccount} onAddOpportunity={addOpportunity} accountSaveSeq={accountSaveSeq}
+              onEmail={() => openProposalEmail(proposal, '')}
               onClear={() => { setProposal([]); setProposalOpen(false); }} />
           </div>
         </div>
