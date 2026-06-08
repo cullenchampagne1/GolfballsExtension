@@ -814,6 +814,9 @@ function CategoryRail({ sel, onSelect, depts, deptCounts, total, dock, view, onS
         <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', padding: '12px 11px 4px', flexShrink: 0 }}>Saved</div>
         <SavedNavRow label="Saved Proposals" icon={<I.bookmark size={14} />} count={savedCount}
           active={view === 'proposals'} onClick={() => onSetView('proposals')} />
+        {/* Coming soon: proposals already applied to the opportunity (pulled from
+            the CRM), distinct from local saved drafts. */}
+        <SavedStub label="Current Proposals" icon={<I.card size={14} />} />
         <SavedStub label="Previous orders" icon={<I.refresh size={14} />} />
       </div>
       {/* AnimatePresence so the dock plays its exit when the proposal opens
