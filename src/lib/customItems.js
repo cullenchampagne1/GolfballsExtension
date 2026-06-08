@@ -37,6 +37,22 @@ export async function uploadCustomItemImage(dataUrl, fileName = 'custom-item.png
   return 'https://static.golfballs.com/' + up.filePath;
 }
 
+/* True when `url` is an external http(s) image that should be re-hosted on our
+   S3 bucket (i.e. it's a link, not already a static.golfballs.com URL or a
+   data: URL we'll upload anyway). */
+export function needsIngest(url) {
+  return /^https?:\/\//i.test(url || '') && !/(^|\.)static\.golfballs\.com\//i.test(url || '');
+}
+
+/* Download an external image link (via the background proxy, CORS-safe) and
+   re-upload it to the icustomize S3 bucket. Returns the stable S3 URL. */
+export async function ingestImageUrl(url) {
+  const r = await _sendBg('proxyFetchImage', { url });
+  if (!r.dataUrl) throw new Error('could not fetch image');
+  const name = ((url.split('/').pop() || 'custom-item').split('?')[0]) || 'custom-item.png';
+  return uploadCustomItemImage(r.dataUrl, /\.[a-z0-9]+$/i.test(name) ? name : name + '.png');
+}
+
 export function loadCustomItems() {
   return new Promise((resolve) => {
     try {

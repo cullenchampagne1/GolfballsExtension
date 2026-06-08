@@ -7,7 +7,7 @@ import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CA
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount } from '../lib/saveProposal.js';
-import { loadCustomItems, saveCustomItem, removeCustomItem, customItemToProduct, uploadCustomItemImage } from '../lib/customItems.js';
+import { loadCustomItems, saveCustomItem, removeCustomItem, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest } from '../lib/customItems.js';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
 import { decoratedPricingForLine, giftSetPreviewUrl } from '../lib/cartSerializer.js';
@@ -1806,11 +1806,31 @@ function CustomItemForm({ initial, onCancel, onSave }) {
     reader.onerror = () => setUploadErr('could not read file');
     reader.readAsDataURL(file);
   };
+  // A pasted external link → download + re-host on S3 (so it persists and loads
+  // in the cart). Runs on blur of the URL field for instant feedback.
+  const ingestUrl = (url) => {
+    if (!needsIngest(url)) return;
+    setUploadErr('');
+    setUploading(true);
+    ingestImageUrl(url)
+      .then((s3) => setF((prev) => (prev.thumbnail === url ? { ...prev, thumbnail: s3 } : prev)))
+      .catch((err) => setUploadErr((err && err.message) || 'couldn’t fetch that link'))
+      .finally(() => setUploading(false));
+  };
   const canSave = !!f.name.trim() && !saving && !uploading;
-  const submit = () => {
+  const submit = async () => {
     if (!canSave) return;
     setSaving(true);
-    Promise.resolve(onSave(f)).catch(() => setSaving(false));
+    try {
+      let rec = f;
+      // Safety net: if a link is still un-hosted at save time, ingest it first.
+      if (needsIngest(f.thumbnail)) {
+        const s3 = await ingestImageUrl(f.thumbnail);
+        rec = { ...f, thumbnail: s3 };
+        setF(rec);
+      }
+      await onSave(rec);
+    } catch (e) { setUploadErr((e && e.message) || 'couldn’t save'); setSaving(false); }
   };
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14 }}
@@ -1843,7 +1863,7 @@ function CustomItemForm({ initial, onCancel, onSave }) {
                 {uploading && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.35)' }}><span style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #fff', borderTopColor: 'transparent', animation: 'gb-spin .7s linear infinite' }} /></div>}
               </div>
               <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <Input size="sm" value={f.thumbnail.startsWith('data:') ? '' : f.thumbnail} onChange={set('thumbnail')} placeholder="Paste a URL or upload" />
+                <Input size="sm" value={f.thumbnail.startsWith('data:') ? '' : f.thumbnail} onChange={set('thumbnail')} onBlur={() => ingestUrl(f.thumbnail)} placeholder="Paste a link (auto-uploads) or upload a file" />
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <Btn variant="secondary" size="sm" icon={<I.plus />} state={uploading ? 'loading' : 'idle'} onClick={() => fileRef.current && fileRef.current.click()}>{uploading ? 'Uploading…' : 'Upload image'}</Btn>
                   {uploadErr && <span style={{ fontSize: 10.5, color: 'var(--gb-danger, #e5484d)', fontWeight: 600 }}>{uploadErr}</span>}
