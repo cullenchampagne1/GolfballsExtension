@@ -802,13 +802,17 @@ function CategoryRail({ sel, onSelect, depts, deptCounts, total, dock, view, onS
           </>
         )}
 
+        {/* Custom items — rep-defined, deliberately kept OUT of "All Items".
+            Sits at the foot of Departments behind a thin divider. */}
+        <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '8px 11px', flexShrink: 0 }} />
+        <SavedNavRow label="Custom Items" icon={<I.sparkle size={14} />} count={customCount}
+          active={view === 'custom'} onClick={() => onSetView('custom')} />
+
         {/* ── Saved — lives inside the scroll list, anchored to the categories
             so it never shifts when the proposal dock animates in/out below. ── */}
         <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', padding: '12px 11px 4px', flexShrink: 0 }}>Saved</div>
         <SavedNavRow label="Saved Proposals" icon={<I.bookmark size={14} />} count={savedCount}
           active={view === 'proposals'} onClick={() => onSetView('proposals')} />
-        <SavedNavRow label="Custom Items" icon={<I.sparkle size={14} />} count={customCount}
-          active={view === 'custom'} onClick={() => onSetView('custom')} />
         <SavedStub label="Previous orders" icon={<I.refresh size={14} />} />
       </div>
       {/* AnimatePresence so the dock plays its exit when the proposal opens
@@ -1867,27 +1871,28 @@ function CustomAddTile({ onNew, minH }) {
   );
 }
 
-function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, onOpen, onDelete, onDeleteMany }) {
+function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, onOpen, onDelete, onDeleteMany, search = '' }) {
   const minH = compact ? 232 : 262;
   const INIT = 60, CHUNK = 48;
-  const [q, setQ] = useState('');
   const [visible, setVisible] = useState(INIT);
   const [selectMode, setSelectMode] = useState(false);
   const [sel, setSel] = useState(() => new Set());
   const lastIdx = useRef(null);
   const scrollRef = useRef(null);
+  // Driven by the shared catalog search bar — a leading "/" is a catalog command,
+  // so it filters nothing here.
+  const term = useMemo(() => { const s = (search || '').trim(); return s.startsWith('/') ? '' : s.toLowerCase(); }, [search]);
   // Search across name / SKU / brand (extraDetails) / description.
   const filtered = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (!s) return items;
+    if (!term) return items;
     return items.filter((ci) =>
-      (ci.name || '').toLowerCase().includes(s)
-      || (ci.sku || '').toLowerCase().includes(s)
-      || (ci.itemID || '').toLowerCase().includes(s)
-      || (ci.extraDetails || '').toLowerCase().includes(s)
-      || (ci.description || '').toLowerCase().includes(s));
-  }, [items, q]);
-  useEffect(() => { setVisible(INIT); if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [q, items.length]);
+      (ci.name || '').toLowerCase().includes(term)
+      || (ci.sku || '').toLowerCase().includes(term)
+      || (ci.itemID || '').toLowerCase().includes(term)
+      || (ci.extraDetails || '').toLowerCase().includes(term)
+      || (ci.description || '').toLowerCase().includes(term));
+  }, [items, term]);
+  useEffect(() => { setVisible(INIT); if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [term, items.length]);
   const exitSelect = () => { setSelectMode(false); setSel(new Set()); lastIdx.current = null; };
   const onScroll = (e) => {
     const el = e.currentTarget;
@@ -1924,7 +1929,7 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Custom Items</div>
           <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, fontWeight: 500 }}>
             {selectMode ? `${nfmt(sel.size)} selected · click to pick, shift-click for a range`
-              : q.trim() ? `${nfmt(filtered.length)} of ${nfmt(items.length)} match`
+              : term ? `${nfmt(filtered.length)} of ${nfmt(items.length)} match`
               : `${nfmt(items.length)} item${items.length === 1 ? '' : 's'} — add them to a proposal like any product`}
           </div>
         </div>
@@ -1935,17 +1940,12 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
         )}
         <Btn variant="primary" size="sm" icon={<I.plus />} onClick={onNew}>Add custom item</Btn>
       </div>
-      {/* Search bar */}
-      <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
-        <Input size="sm" value={q} onChange={setQ} placeholder="Search custom items…" leading={<I.search size={14} />}
-          trailing={q ? <button type="button" onClick={() => setQ('')} title="Clear" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--gb-text-muted)', display: 'flex', padding: 0 }}><I.close size={13} /></button> : null} />
-      </div>
       <div ref={scrollRef} onScroll={onScroll} className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 16 }}>
         {filtered.length === 0 ? (
           <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--gb-text-muted)', textAlign: 'center', padding: 24 }}>
             <div style={{ width: 46, height: 46, borderRadius: 'var(--gb-r-lg)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.sparkle size={20} /></div>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>{q.trim() ? 'No custom items match' : 'No custom items yet'}</div>
-            {!q.trim() && <Btn variant="primary" size="sm" icon={<I.plus />} onClick={onNew}>Add custom item</Btn>}
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>{term ? 'No custom items match' : 'No custom items yet'}</div>
+            {!term && <Btn variant="primary" size="sm" icon={<I.plus />} onClick={onNew}>Add custom item</Btn>}
           </div>
         ) : (
           <>
@@ -1970,7 +1970,7 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
                 );
               })}
               {/* Add tile sits at the end only when the whole (unfiltered) list fits. */}
-              {!selectMode && !q.trim() && atEnd && <CustomAddTile onNew={onNew} minH={minH} />}
+              {!selectMode && !term && atEnd && <CustomAddTile onNew={onNew} minH={minH} />}
             </div>
             {!atEnd && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '18px 0 6px', color: 'var(--gb-text-ghost)' }}>
@@ -2643,7 +2643,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           </motion.div>
           ) : view === 'custom' ? (
             <motion.div key="custom" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
-            <CustomItemsGallery items={customItems} compact={compact} colMin={colMin}
+            <CustomItemsGallery items={customItems} compact={compact} colMin={colMin} search={query}
               inProposal={inProposal} onAdd={addCustomToProposal}
               onNew={() => setEditingCustom({})} onOpen={(ci) => setSelected(customItemToProduct(ci))} onDelete={deleteCustom} onDeleteMany={deleteCustomMany} />
           </motion.div>
