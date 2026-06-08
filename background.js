@@ -335,6 +335,43 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // ── Inventory (office.gbcadmin.com) — MUST run in the PAGE context ─────────
+  // The Dynamics Inventory endpoint is gated by the gbcadmin session cookie. A
+  // background (service-worker) fetch is a 3rd-party context with no session →
+  // it gets 302'd to the error page. So we run the fetch in the MAIN world of the
+  // requesting tab (the golfballs.com page), exactly like the site's own admin
+  // tooling does — same origin + cookies. Returns { ok, status, text }.
+  if (msg.action === 'fetchInventory' && msg.sku) {
+    const tabId = sender && sender.tab && sender.tab.id;
+    if (!tabId) { sendResponse({ ok: false, error: 'No tab context for inventory request' }); return true; }
+    const url = 'https://office.gbcadmin.com/office/Dynamics/Inventory.aspx?sku=' + encodeURIComponent(msg.sku);
+    chrome.scripting.executeScript({
+      target: { tabId },              // top frame of the page (golfballs.com)
+      world: 'MAIN',                  // page context → carries the gbcadmin session
+      func: async (u) => {
+        try {
+          const r = await fetch(u, { credentials: 'include', headers: { Accept: 'text/html,*/*' } });
+          const text = await r.text();
+          return { ok: r.ok, status: r.status, redirected: r.redirected, finalUrl: r.url, text };
+        } catch (e) { return { ok: false, status: 0, error: String((e && e.message) || e), text: '' }; }
+      },
+      args: [url],
+    })
+      .then((results) => {
+        const res = (results && results[0] && results[0].result) || null;
+        if (!res) { sendResponse({ ok: false, error: 'No result from page context' }); return; }
+        if (res.error) { sendResponse({ ok: false, error: res.error }); return; }
+        if (res.redirected && /GenericErrorPage|aspxerrorpath/i.test(res.finalUrl || '')) {
+          sendResponse({ ok: false, error: 'Not signed in to office.gbcadmin.com — open it in a tab and sign in.' });
+          return;
+        }
+        if (!res.ok) { sendResponse({ ok: false, error: 'HTTP ' + res.status }); return; }
+        sendResponse({ ok: true, status: res.status, text: res.text || '' });
+      })
+      .catch((err) => { console.warn('[GB] fetchInventory error:', err.message); sendResponse({ ok: false, error: String(err.message || err) }); });
+    return true;
+  }
+
   // ── 2. Brand product catalog fetch (for recommended_replacement) ──
   // Loads /Golf-Balls/{slug}.html, extracts __NEXT_DATA__, returns Solr docs.
   if (msg.action === 'fetchBrandProducts' && msg.slug) {

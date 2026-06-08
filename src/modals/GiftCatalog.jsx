@@ -529,7 +529,15 @@ function InventoryPanel({ sku }) {
       </div>
       {state === 'idle' && <Btn variant="secondary" size="sm" icon={<Layers size={13} />} onClick={() => load(false)}>Check inventory</Btn>}
       {state === 'loading' && <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 11.5, padding: '6px 0' }}><span style={{ width: 13, height: 13, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} /> Loading inventory…</div>}
-      {state === 'error' && <div style={{ fontSize: 11, color: 'var(--gb-danger, #e5484d)', fontWeight: 600 }}>{err} · <button type="button" onClick={() => load(true)} style={{ border: 'none', background: 'transparent', color: 'var(--gb-brand-label)', cursor: 'pointer', fontWeight: 700, padding: 0 }}>retry</button></div>}
+      {state === 'error' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-danger-tint, rgba(229,72,77,.1))', border: '1px solid var(--gb-danger-tint-border, rgba(229,72,77,.28))' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 11, color: 'var(--gb-text-secondary)', fontWeight: 500, lineHeight: 1.4 }}>
+            <I.alert size={13} style={{ color: 'var(--gb-danger, #e5484d)', flexShrink: 0, marginTop: 1 }} />
+            <span>{err}</span>
+          </div>
+          <Btn variant="secondary" size="sm" icon={<I.refresh size={13} />} onClick={() => load(true)} style={{ alignSelf: 'flex-start' }}>Retry</Btn>
+        </div>
+      )}
       {state === 'done' && data && (data.rows.length ? (
         <div style={{ border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>

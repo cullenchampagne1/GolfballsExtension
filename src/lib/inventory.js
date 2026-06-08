@@ -140,7 +140,10 @@ export async function getInventory(sku, { force = false } = {}) {
     if (hit.parsed.cost != null) _costMap.set(key, hit.parsed.cost);
     return hit.parsed;
   }
-  const r = await _sendBg('fetchRaw', { url: INV_URL + encodeURIComponent(key) });
+  // Fetch in the page (golfballs.com) context — it carries the gbcadmin session
+  // cookie. A background service-worker fetch is a 3rd-party context and gets
+  // bounced to the auth error page (see background.js `fetchInventory`).
+  const r = await _sendBg('fetchInventory', { sku: key });
   const parsed = parseInventoryHtml(r.text || '', key);
   map[key] = { ts: Date.now(), parsed };
   _writeCache(map);
