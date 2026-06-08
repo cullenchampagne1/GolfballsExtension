@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { motion } from 'motion/react';
 import { Btn, IconBtn } from '../ui/index.js';
 import { I } from '../ui/icons.jsx';
 
@@ -240,15 +241,35 @@ export function ProposalEmailModal({ source, onClose }) {
   const emailHtml = useMemo(() => tpl.build(model), [tpl, model]);
   const doc = useMemo(() => previewDocument(emailHtml), [emailHtml]);
 
-  const copyHtml = async () => {
-    try { await navigator.clipboard.writeText(emailHtml); } catch (e) { /* no-op */ }
-    setCopied(true); setTimeout(() => setCopied(false), 1800);
+  const flash = () => { setCopied(true); setTimeout(() => setCopied(false), 1800); };
+  // Copy RICH — write the HTML to the clipboard as `text/html` so pasting into a
+  // mail client / doc renders the FORMATTING (writeText only copies the raw markup
+  // string, which is what pasted as literal HTML before). text/plain carries the
+  // source as a fallback for plain-text fields.
+  const copyRich = async () => {
+    try {
+      if (navigator.clipboard && window.ClipboardItem) {
+        await navigator.clipboard.write([new window.ClipboardItem({
+          'text/html': new Blob([emailHtml], { type: 'text/html' }),
+          'text/plain': new Blob([emailHtml], { type: 'text/plain' }),
+        })]);
+      } else {
+        await navigator.clipboard.writeText(emailHtml);
+      }
+    } catch (e) {
+      try { await navigator.clipboard.writeText(emailHtml); } catch (e2) { /* no-op */ }
+    }
+    flash();
   };
+  // Copy the raw HTML source (for pasting into an HTML editor / code field).
+  const copySource = async () => { try { await navigator.clipboard.writeText(emailHtml); } catch (e) { /* */ } };
 
   return (
-    <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{ position: 'fixed', inset: 0, zIndex: 999995, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(20,16,8,.34)' }}>
-      <div style={{ width: 'min(1060px, 96vw)', height: 'min(760px, 94vh)', display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)' }}>
+    <motion.div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .2 }}
+      style={{ position: 'fixed', inset: 0, zIndex: 999995, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-surface-canvas)' }}>
+      <motion.div initial={{ opacity: 0, scale: .96, y: 14 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97, y: 10 }} transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+        style={{ width: 'min(1320px, 97vw)', height: 'min(900px, 95vh)', display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)' }}>
         {/* header */}
         <div style={{ padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 11, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
           <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -316,9 +337,10 @@ export function ProposalEmailModal({ source, onClose }) {
             <I.alert size={12} /> Cart link <code style={{ fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-tertiary)' }}>{'{{CART_LINK}}'}</code> is injected server-side.
           </span>
           <div style={{ flex: 1 }} />
-          <Btn variant="primary" size="md" icon={copied ? <I.check /> : <I.copy />} onClick={copyHtml}>{copied ? 'Copied' : 'Copy HTML'}</Btn>
+          <Btn variant="ghost" size="md" icon={<I.copy />} onClick={copySource}>Copy source</Btn>
+          <Btn variant="primary" size="md" icon={copied ? <I.check /> : <I.copy />} onClick={copyRich}>{copied ? 'Copied' : 'Copy'}</Btn>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

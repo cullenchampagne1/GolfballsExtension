@@ -1352,7 +1352,7 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
         ) : (
           <>
             <Btn variant="secondary" size="md" onClick={onClose}>Back</Btn>
-            <Btn variant="primary" size="md" icon={loaded ? <I.check /> : <I.plus />} onClick={onLoad}>{loaded ? 'Loaded — open proposal' : 'Load into proposal'}</Btn>
+            <Btn variant="primary" size="md" icon={loaded ? <I.check /> : <I.plus />} onClick={onLoad}>{loaded ? 'Loaded' : 'Load'}</Btn>
           </>
         )}
       </div>
@@ -1464,7 +1464,7 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onCopy,
       <div style={{ display: 'flex', gap: 7 }} onClick={(e) => e.stopPropagation()}>
         <button onClick={(e) => { e.stopPropagation(); onLoad(item); }} title="Load these items into the proposal"
           style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 30, borderRadius: 'var(--gb-r-md)', cursor: 'pointer', background: hover ? 'var(--gb-brand-tint-medium)' : 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 11.5, fontWeight: 700, fontFamily: 'inherit', transition: 'background var(--gb-anim)' }}>
-          <I.plus size={13} /> Load into proposal
+          <I.plus size={13} /> Load
         </button>
         {onEmail && (
           <CardIconBtn title="Generate proposal HTML" onClick={(e) => { e.stopPropagation(); onEmail(item); }} icon={<I.card size={14} />} />
@@ -2552,11 +2552,13 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // Hold the first paint until the scale is known (avoids a size snap).
   if (scale == null) return null;
 
-  // Proposal-HTML composer takes over the whole surface: hide the catalog while
-  // it's open; closing returns here and the catalog re-renders.
-  if (emailSource) return <ProposalEmailModal source={emailSource} onClose={() => setEmailSource(null)} />;
-
   return (
+    <>
+    {/* Proposal-HTML composer — animates in over the catalog (opaque backdrop
+        hides it), animates out on close. */}
+    <AnimatePresence>
+      {emailSource && <ProposalEmailModal key="email" source={emailSource} onClose={() => setEmailSource(null)} />}
+    </AnimatePresence>
     <AnimatePresence onExitComplete={onClose}>
       {open && (
       <motion.div key="gc-overlay" onClick={(e) => { if (e.target === e.currentTarget) doClose(); }}
@@ -2768,5 +2770,6 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
       </motion.div>
       )}
     </AnimatePresence>
+    </>
   );
 }
