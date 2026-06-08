@@ -249,6 +249,54 @@ async function gbUploadCustomLogo({ dataUrl, fileName = 'logo.png' }) {
   return { filePath, fileName, cropFilePath, userImage };
 }
 
+/* Parse an hpgbrands.com product detail page → the main product's net-cost
+   ladder, public ladder, options (colors/flavors), MOQ, weight, lead time. The
+   page prerenders the main product AND related products in a base64 blob; we
+   bound parsing to the FIRST product region (the main one) by slicing up to the
+   2nd net-ladder field. All regex (runs in the service worker — no DOMParser). */
+function gbParseHpgDetail(html) {
+  let blob = '';
+  const runs = html.match(/[A-Za-z0-9+/]{300,}={0,2}/g) || [];
+  for (const r of runs) {
+    try {
+      const dec = new TextDecoder().decode(Uint8Array.from(atob(r), (c) => c.charCodeAt(0)));
+      if (dec.includes('bulkgrp')) { blob = dec; break; }
+    } catch (e) { /* not valid base64 */ }
+  }
+  if (!blob && html.includes('bulkgrp')) blob = html;       // some pages embed it directly
+  if (!blob) return null;
+  const b = blob.replace(/\\"/g, '"');                       // unescape JSON-in-string
+  const KEY = '"name":"__bulkgrp-internal-net_net-standard-usd"';
+  const first = b.indexOf(KEY);
+  if (first < 0) return null;
+  const second = b.indexOf(KEY, first + KEY.length);
+  const region = b.slice(0, second > 0 ? second : b.length); // main product only
+  const fieldVal = (name) => {
+    const i = region.indexOf('"name":"' + name + '"');
+    if (i < 0) return null;
+    const m = region.slice(i, i + 4000).match(/"value":"([^"]*)"/);
+    return m ? m[1] : null;
+  };
+  const ladder = (v, netOnly) => {
+    const out = []; if (!v) return out;
+    const rx = netOnly ? /\{(\d+)\|\|([\d.]+)\s*NET/g : /\{(\d+)\|\|\$?([\d.]+)/g;
+    let m; while ((m = rx.exec(v))) out.push({ q: parseInt(m[1], 10), v: parseFloat(m[2]) });
+    return out;
+  };
+  const opts = []; const seen = new Set();
+  let m; const lr = /"label":"([^"]+)","selected"/g;
+  while ((m = lr.exec(region))) { const l = m[1].trim(); if (l && !seen.has(l)) { seen.add(l); opts.push(l); } }
+  return {
+    net: ladder(fieldVal('__bulkgrp-internal-net_net-standard-usd'), true),
+    pub: ladder(fieldVal('__bulk-Standard-usd'), false),
+    eqp: parseFloat(fieldVal('search_EQP-Price-usd') || '') || null,
+    moq: parseInt(fieldVal('search_MOQ') || '', 10) || null,
+    weight: parseFloat(fieldVal('shipest_individual-weight') || '') || null,
+    leadTime: fieldVal('search_production-time') || '',
+    options: opts,
+  };
+}
+
 // ── Seed default state on first install ──────────────────────────────────────
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   if (reason !== 'install') return; // skip updates and browser_update
@@ -332,6 +380,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: r.ok, status: r.status, text });
       })
       .catch(err => sendResponse({ ok: false, error: String(err), text: '' }));
+    return true;
+  }
+
+  // ── HPG product detail → parsed pricing ladder + options ──────────────────
+  // Fetches an hpgbrands.com product page and parses the main product's net-cost
+  // ladder, options, MOQ, weight, lead time IN the worker (returns a small object,
+  // so we never ship the ~540KB page to the content script). Public page → no auth.
+  if (msg.action === 'hpgDetail' && msg.url) {
+    fetch(msg.url, { credentials: 'omit', headers: { Accept: 'text/html,*/*' } })
+      .then(async r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const html = await r.text();
+        sendResponse({ ok: true, data: gbParseHpgDetail(html) });
+      })
+      .catch(err => sendResponse({ ok: false, error: String(err.message || err) }));
     return true;
   }
 

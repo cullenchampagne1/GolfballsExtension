@@ -79,6 +79,23 @@ function normBreaks(breaks, legacyPrice, legacyQty) {
   return rows;
 }
 
+/* Per-tier net cost ladder [{q,c}] (parallel to breaks) — drives accurate margin
+   at each volume. Empty when not supplied. */
+function normCostBreaks(costBreaks) {
+  let rows = Array.isArray(costBreaks) ? costBreaks : [];
+  return rows
+    .map((b) => ({ q: num(b && b.q) || 0, c: num(b && b.c) }))
+    .filter((b) => b.q > 0)
+    .sort((a, b) => a.q - b.q);
+}
+
+/* Largest-tier cost ≤ qty from a [{q,c}] ladder (falls back to the single cost). */
+export function costAtQty(costBreaks, qty, fallback = 0) {
+  let c = null;
+  for (const b of (costBreaks || [])) if (b.q <= qty) c = b.c;
+  return c != null ? c : fallback;
+}
+
 /* Style options: an array of non-empty labels. Falls back to a single legacy
    `style` string so old items keep their value. */
 function normStyleOptions(styleOptions, legacyStyle) {
@@ -109,7 +126,9 @@ export function normalizeCustomItem(rec = {}) {
     description: (rec.description || '').trim(),
     styleOptions: normStyleOptions(rec.styleOptions, rec.style),
     breaks: normBreaks(rec.breaks, rec.price, rec.qty),
+    costBreaks: normCostBreaks(rec.costBreaks),
     cost: num(rec.cost),
+    leadTime: (rec.leadTime || '').toString().trim(),
     setup: num(rec.setup),
     weight: num(rec.weight),
     dropship: !!rec.dropship,
@@ -155,6 +174,13 @@ export async function removeCustomItem(id) {
   return next;
 }
 
+/* Wipe the entire custom-items library. Returns the number cleared. */
+export async function clearCustomItems() {
+  const list = await loadCustomItems();
+  await _writeCustomItems([]);
+  return list.length;
+}
+
 /* Map a stored custom item → a synthetic catalog product the modal's ProductCard
    and addToProposal understand. `isCustom` + `custom` let the cart serializer
    route it to buildCustomItemLine instead of fetching a (non-existent) page. */
@@ -180,11 +206,13 @@ export function customItemToProduct(rec) {
     reviews: 0,
     minQty: breaks[0].q,
     breaks,
+    costBreaks: ci.costBreaks,
     styleOptions: ci.styleOptions,
     cost: ci.cost,
     setup: ci.setup,
     link: ci.link,
     source: ci.source,
+    leadTime: ci.leadTime,
     tags: [],
   };
 }

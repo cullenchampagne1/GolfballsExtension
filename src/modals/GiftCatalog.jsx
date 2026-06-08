@@ -7,7 +7,7 @@ import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CA
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount } from '../lib/saveProposal.js';
-import { loadCustomItems, saveCustomItem, removeCustomItem, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest } from '../lib/customItems.js';
+import { loadCustomItems, saveCustomItem, removeCustomItem, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty } from '../lib/customItems.js';
 import { getInventory, cachedCostForSku, primeCostCache } from '../lib/inventory.js';
 import { importHpgCatalog } from '../lib/hpgImport.js';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
@@ -1071,9 +1071,13 @@ function resolveSavedEntry(entry) {
      • otherwise fall back to 60%-of-sell. */
 const COST_RATIO = 0.60;            // assumed cost as a fraction of sell price → 40% margin
 const ASSUMED_MARGIN = 1 - COST_RATIO;
-const unitCostOf = (product, unitPrice) => {
+const unitCostOf = (product, unitPrice, qty) => {
   const p = product || {};
   if (p.isCustom) {
+    // Per-qty cost from the net-cost ladder when present (most accurate), else the
+    // single cost.
+    const cb = p.costBreaks || (p.custom && p.custom.costBreaks);
+    if (cb && cb.length) { const c = costAtQty(cb, qty || p.minQty || 1, null); if (c != null && c > 0) return Math.round(c * 100) / 100; }
     const c = p.cost != null ? p.cost : (p.custom && p.custom.cost);
     if (c != null && c > 0) return Math.round(c * 100) / 100;
   } else {
@@ -1090,7 +1094,7 @@ function marginReport(entries) {
   let rev = 0, cost = 0, units = 0;
   const lines = (entries || []).map((e) => {
     let lr = 0, lc = 0, u = 0;
-    (e.splits || []).forEach((s) => { const q = s.qty || 0, p = s.price || 0; lr += q * p; lc += q * unitCostOf(e.product, p); u += q; });
+    (e.splits || []).forEach((s) => { const q = s.qty || 0, p = s.price || 0; lr += q * p; lc += q * unitCostOf(e.product, p, q); u += q; });
     rev += lr; cost += lc; units += u;
     return { ...e, units: u, lineRev: lr, lineCost: lc, profit: lr - lc, margin: lr ? (lr - lc) / lr : 0 };
   });
@@ -1879,7 +1883,7 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
         </div>
         {onImportHpg && (
           <Btn variant="secondary" size="sm" icon={<I.refresh />} state={hpgImporting ? 'loading' : 'idle'} onClick={onImportHpg}>
-            {hpgImporting ? (hpgProgress && hpgProgress.total ? `Importing ${hpgProgress.count}/${hpgProgress.total}…` : 'Importing…') : 'Import HPG'}
+            {hpgImporting ? (hpgProgress && hpgProgress.label ? hpgProgress.label : 'Importing…') : 'Import HPG'}
           </Btn>
         )}
         <Btn variant="primary" size="sm" icon={<I.plus />} onClick={onNew}>Add custom item</Btn>
@@ -2323,11 +2327,14 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // Bulk import the hpgbrands.com catalog as custom items (paged Searchspring
   // pull). Shows live progress; dedupes by SKU so re-running just refreshes.
   const [hpgImporting, setHpgImporting] = useState(false);
-  const [hpgProgress, setHpgProgress] = useState(null);   // { count, total }
+  const [hpgProgress, setHpgProgress] = useState(null);   // { label }
   const importHpg = () => {
     if (hpgImporting) return;
-    setHpgImporting(true); setHpgProgress({ count: 0, total: 0 });
-    importHpgCatalog({ onProgress: ({ count, total }) => setHpgProgress({ count, total }) })
+    setHpgImporting(true); setHpgProgress({ label: 'Scanning…' });
+    importHpgCatalog({ onProgress: (p) => {
+      if (p.phase === 'list') setHpgProgress({ label: `Scanning ${nfmt(p.kept)} customizable…` });
+      else setHpgProgress({ label: `Pulling ${nfmt(p.count)}/${nfmt(p.total)}` });
+    } })
       .then((r) => { toast?.success?.(`Imported ${r.fetched} HPG products (${r.added} new, ${r.updated} updated)`); })
       .catch((e) => { toast?.error?.('HPG import failed — ' + ((e && e.message) || 'unknown error')); })
       .finally(() => { setHpgImporting(false); setHpgProgress(null); });
