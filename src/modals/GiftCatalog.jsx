@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Btn, IconBtn, Tag, Dot } from '../ui/index.js';
+import { Btn, IconBtn, Tag, Dot, Input, Dropdown } from '../ui/index.js';
 import { Icon, I } from '../ui/icons.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, DEPT_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
@@ -1456,7 +1456,7 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
   );
 }
 
-function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onMergeImprint, onRemoveFront, onRemoveSecond, pageContext = {}, onSaveToAccount, accountSaveSeq = 0 }) {
+function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onMergeImprint, onRemoveFront, onRemoveSecond, pageContext = {}, onSaveToAccount, onAddOpportunity, accountSaveSeq = 0 }) {
   const total = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
   const units = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty, 0), 0);
   // Drag-to-copy imprints between lines. `drag` holds the in-flight source so
@@ -1613,34 +1613,33 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
                       Account{pageContext.accountName ? ` · ${pageContext.accountName}` : ''}
                     </label>
                     <div style={{ display: 'flex', gap: 6 }}>
-                      <input value={accountId} onChange={(e) => setAccountId(e.target.value.trim())}
+                      <Input size="sm" mono value={accountId} placeholder="Account ID"
+                        onChange={(v) => setAccountId(v.trim())}
                         onKeyDown={(e) => { if (e.key === 'Enter') loadOpps(accountId); }}
-                        placeholder="Account ID"
-                        style={{ flex: 1, height: 32, padding: '0 10px', boxSizing: 'border-box', background: 'var(--gb-fill-inverse-medium)', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', outline: 'none', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 12.5, fontWeight: 600 }} />
-                      <Btn variant="secondary" size="md" onClick={() => loadOpps(accountId)} state={loadingOpps ? 'loading' : 'idle'} disabled={!accountId}>Find</Btn>
+                        style={{ flex: 1 }} />
+                      <Btn variant="secondary" size="sm" onClick={() => loadOpps(accountId)} state={loadingOpps ? 'loading' : 'idle'} disabled={!accountId}>Find</Btn>
                     </div>
                   </div>
-                  {/* Opportunity dropdown */}
+                  {/* Opportunity dropdown (+ new-opportunity button) */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                     <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .7, color: 'var(--gb-text-muted)' }}>
                       Opportunity{loadingOpps ? ' · loading…' : opps.length ? ` · ${opps.length}` : ''}
                     </label>
-                    <select value={oppId} onChange={(e) => setOppId(e.target.value)}
-                      disabled={loadingOpps || !opps.length}
-                      style={{ width: '100%', height: 32, padding: '0 8px', boxSizing: 'border-box', background: 'var(--gb-fill-inverse-medium)', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', outline: 'none', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 12, fontWeight: 500, cursor: opps.length ? 'pointer' : 'default' }}>
-                      <option value="">{loadingOpps ? 'Loading…' : opps.length ? 'Select an opportunity' : (accountId ? 'No opportunities found' : 'Enter an account first')}</option>
-                      {opps.map((o) => (
-                        <option key={o.id} value={o.id}>{o.id} — {o.subject || 'Untitled'}{o.estimatedValue ? ` · ${money(o.estimatedValue)}` : ''}</option>
-                      ))}
-                    </select>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'stretch' }}>
+                      <Dropdown size="sm" value={oppId} onChange={setOppId} searchable maxHeight={200}
+                        disabled={loadingOpps || !opps.length}
+                        placeholder={loadingOpps ? 'Loading…' : opps.length ? 'Select an opportunity' : (accountId ? 'No opportunities found' : 'Enter an account first')}
+                        options={opps.map((o) => ({ id: String(o.id), label: `${o.id} — ${o.subject || 'Untitled'}${o.estimatedValue ? ` · ${money(o.estimatedValue)}` : ''}` }))}
+                        style={{ flex: 1, minWidth: 0 }} />
+                      <IconBtn size="sm" variant="secondary" icon={<I.plus />} title="New opportunity" onClick={() => onAddOpportunity && onAddOpportunity(accountId)} />
+                    </div>
                   </div>
                   {/* Proposal name */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                     <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .7, color: 'var(--gb-text-muted)' }}>Proposal name</label>
-                    <input ref={nameRef2} value={name} onChange={(e) => setName(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') confirmAccountSave(); if (e.key === 'Escape') setAcctMode(false); }}
-                      placeholder="e.g. ProV1 Gift Sets"
-                      style={{ width: '100%', height: 32, padding: '0 10px', boxSizing: 'border-box', background: 'var(--gb-fill-inverse-medium)', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', outline: 'none', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 12.5, fontWeight: 500 }} />
+                    <Input size="sm" nativeRef={nameRef2} value={name} placeholder="e.g. ProV1 Gift Sets"
+                      onChange={setName}
+                      onKeyDown={(e) => { if (e.key === 'Enter') confirmAccountSave(); if (e.key === 'Escape') setAcctMode(false); }} />
                   </div>
                 </div>
               </div>
@@ -1895,6 +1894,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // Draft → account: load the draft into the proposal, open it, and pop the
   // account form so the rep can edit then publish.
   const loadSavedToAccount = (entry) => { loadSaved(entry); setAccountSaveSeq((n) => n + 1); };
+  // New-opportunity (future) — the "+" beside the opportunity dropdown. Fields TBD;
+  // stub for now so the button is in place to wire once the create form is defined.
+  const addOpportunity = (accountId) => { /* TODO: open new-opportunity form (fields pending) */ };
 
   /* One shared live pull, with progress. `force` clears the cache first
      (manual rebuild — stale items/sales can't survive as a fallback);
@@ -2236,7 +2238,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               onPatchSplit={patchSplit} onAddSplit={addSplit} onRemoveSplit={removeSplit}
               onRemoveLine={removeLine} onSaveDraft={saveDraft} onMergeImprint={mergeImprintOnLine}
               onRemoveFront={removeFrontImprint} onRemoveSecond={removeSecondPole}
-              pageContext={pageContext} onSaveToAccount={saveToAccount} accountSaveSeq={accountSaveSeq}
+              pageContext={pageContext} onSaveToAccount={saveToAccount} onAddOpportunity={addOpportunity} accountSaveSeq={accountSaveSeq}
               onClear={() => { setProposal([]); setProposalOpen(false); }} />
           </div>
         </div>
