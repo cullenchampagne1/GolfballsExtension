@@ -1450,13 +1450,20 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelet
         <button onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
           onMouseEnter={() => setTagHover(true)} onMouseLeave={() => setTagHover(false)}
           title={tagHover ? 'Delete this draft' : 'Saved draft'}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 20, padding: '0 9px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: .2,
+          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 20, padding: '0 9px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: .2, overflow: 'hidden',
             background: tagHover ? 'var(--gb-danger-tint, rgba(229,72,77,.12))' : 'var(--gb-fill-subtle)',
             border: '1px solid ' + (tagHover ? 'var(--gb-danger-tint-border, rgba(229,72,77,.4))' : 'var(--gb-border-default)'),
             color: tagHover ? 'var(--gb-danger, #e5484d)' : 'var(--gb-text-tertiary)',
             transition: 'background var(--gb-anim), border-color var(--gb-anim), color var(--gb-anim)' }}>
-          {tagHover ? <I.trash size={10} /> : <I.bookmark size={9} />}
-          {tagHover ? 'Delete' : 'Draft'}
+          {/* Crossfade the label/icon as it flips Draft → Delete on hover. */}
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.span key={tagHover ? 'del' : 'draft'}
+              initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: .13, ease: 'easeOut' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              {tagHover ? <><I.trash size={10} /> Delete</> : <><I.bookmark size={9} /> Draft</>}
+            </motion.span>
+          </AnimatePresence>
         </button>
       </div>
       <div>
