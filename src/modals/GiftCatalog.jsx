@@ -638,11 +638,23 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) 
               that change price (Tee Count, …), which self-hide when none. */}
           {p.isCustom ? (
             (p.styleOptions && p.styleOptions.length > 1) ? (
-              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 5 }}>
+              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 7 }}>
                 <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .7, color: 'var(--gb-text-muted)' }}>Style</label>
-                <Dropdown size="sm" value={(variant && variant.values && variant.values.style) || p.styleOptions[0]}
-                  options={p.styleOptions.map((s) => ({ id: s, label: s }))}
-                  onChange={(s) => setVariant({ values: { style: s }, price: null })} />
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {p.styleOptions.map((s) => {
+                    const on = ((variant && variant.values && variant.values.style) || p.styleOptions[0]) === s;
+                    return (
+                      <button key={s} onClick={() => setVariant({ values: { style: s }, price: null })}
+                        style={{
+                          padding: '5px 11px', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', fontFamily: 'inherit',
+                          fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap',
+                          background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-inverse-medium)',
+                          border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
+                          color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', transition: 'all var(--gb-anim)',
+                        }}>{s}</button>
+                    );
+                  })}
+                </div>
               </div>
             ) : null
           ) : (p.customizable || p.customLogo) ? (
