@@ -1414,7 +1414,7 @@ function ThumbStack({ entries, max = 4, size = 44 }) {
   );
 }
 
-function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelete }) {
+function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelete, moveAnim }) {
   const [hover, setHover] = useState(false);
   const [tagHover, setTagHover] = useState(false);
   const cardRef = useRef(null);
@@ -1440,7 +1440,7 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelet
       transition={{ duration: .2, ease: [.34, 1.4, .64, 1] }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       onClick={() => onOpen && onOpen(item)} title="View margin breakdown"
-      style={{ position: 'absolute', top: pos.y, left: pos.x, width: colW, display: 'flex', flexDirection: 'column', gap: 11, padding: 13, boxSizing: 'border-box', cursor: 'pointer', background: 'var(--gb-surface-1)', border: '1px solid ' + (loaded ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'), borderRadius: 'var(--gb-r-lg)', boxShadow: hover ? '0 2px 7px rgba(0,0,0,.07)' : 'none', transition: 'top .42s cubic-bezier(.4,0,.2,1), left .42s cubic-bezier(.4,0,.2,1), border-color var(--gb-anim), box-shadow var(--gb-anim)' }}>
+      style={{ position: 'absolute', top: pos.y, left: pos.x, width: colW, display: 'flex', flexDirection: 'column', gap: 11, padding: 13, boxSizing: 'border-box', cursor: 'pointer', background: 'var(--gb-surface-1)', border: '1px solid ' + (loaded ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'), borderRadius: 'var(--gb-r-lg)', boxShadow: hover ? '0 2px 7px rgba(0,0,0,.07)' : 'none', transition: (moveAnim ? 'top .42s cubic-bezier(.4,0,.2,1), left .42s cubic-bezier(.4,0,.2,1), ' : '') + 'border-color var(--gb-anim), box-shadow var(--gb-anim)' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <ThumbStack entries={r.entries} />
         <div style={{ flex: 1 }} />
@@ -1568,6 +1568,14 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
     });
   }, [items]);
   const { positions, height, colW } = useMemo(() => computeMasonry(items, width, heights), [items, width, heights]);
+  // Don't transition card left/top until the masonry has measured the width AND
+  // every card's height. Otherwise the first settle — where all cards momentarily
+  // sit at {0,0} before positions resolve — animates, and they "float" out of the
+  // top-left corner. Once settled the flag stays on, so deleting a card still
+  // animates the rest into the gap.
+  const settled = width > 0 && items.length > 0 && items.every((it) => heights[it.id] != null);
+  const [moveAnim, setMoveAnim] = useState(false);
+  useEffect(() => { if (settled && !moveAnim) setMoveAnim(true); }, [settled, moveAnim]);
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 16px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
@@ -1598,7 +1606,7 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
             <AnimatePresence>
               {items.map((it) => (
                 <SavedCard key={it.id} item={it} loaded={loadedId === it.id}
-                  pos={positions[it.id] || { x: 0, y: 0 }} colW={colW} onMeasure={setHeight}
+                  pos={positions[it.id] || { x: 0, y: 0 }} colW={colW} onMeasure={setHeight} moveAnim={moveAnim}
                   onOpen={onOpen} onLoad={onLoad} onDelete={onDelete} />
               ))}
             </AnimatePresence>
