@@ -788,8 +788,9 @@ function CategoryRail({ sel, onSelect, depts, deptCounts, total, dock, view, onS
       <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px', flexShrink: 0 }}>Browse</div>
       {/* Capped, scrollable list with a soft fade at the top/bottom edges. */}
       <div className="gb-gc-norail" style={{ flex: 1, minHeight: 60, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, padding: '14px 0', WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%)', maskImage: 'linear-gradient(to bottom, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%)' }}>
-        <CatRow glyph="all" label="All Items" count={total} active={view === 'catalog' && sel === 'all'} onClick={() => onSelect('all')} />
-
+        {/* No "All Items" row — the catalog defaults to the full golfballs.com
+            set, and a plain search spans everything. Pick a department to browse
+            one (click it again to clear); /category scopes a search. ── */}
         {/* ── Departments — custom-logo items are folded into their depts; use
             the /Commissionable filter to scope to commissionable products. ── */}
         {depts.length > 0 && (
@@ -2194,6 +2195,10 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const toggleBrand = (b) => setSelBrands((s) => { const n = new Set(s); n.has(b) ? n.delete(b) : n.add(b); return n; });
   // Sidebar selection: 'all' | 'cl' (all custom-logo) | 'cl:<category>' | 'dept:<department>'.
   const [sel, setSel] = useState('all');
+  // Whether the active department scope came from a "/category" command rather
+  // than a sidebar click. A plain-text search spans the WHOLE catalog and ignores
+  // a sidebar-selected department, but still respects a /category scope.
+  const [selFromCmd, setSelFromCmd] = useState(false);
   const [sort, setSort] = useState('popular');
   // Seed sort/density from dev settings (giftCatalog.defaultSort / .density);
   // re-applies only when the setting itself changes, so a user's in-session
@@ -2513,16 +2518,19 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // narrows to both brands on sale.
   const onPickCommand = (c) => {
     if (!c) return;
-    if (c.type === 'cat') setSel(c.id);
+    if (c.type === 'cat') { setSel(c.id); setSelFromCmd(true); }
     else if (c.type === 'brand') toggleBrand(c.id);
     else if (c.type === 'special') setSpecial((cur) => (cur === c.id ? null : c.id));
     setQuery('');
   };
   const filtersActive = sel !== 'all' || selBrands.size > 0 || !!special || !!query;
-  const clearAll = () => { setSel('all'); setSelBrands(new Set()); setSpecial(null); setQuery(''); };
+  const clearAll = () => { setSel('all'); setSelFromCmd(false); setSelBrands(new Set()); setSpecial(null); setQuery(''); };
 
+  // A plain-text search spans every item in the catalog UNLESS the scope was set
+  // by a /category command — sidebar department selection is for browsing only.
+  const searchingAll = !!(query.trim() && !query.startsWith('/') && !selFromCmd);
   const results = useMemo(() => {
-    let r = inCat;
+    let r = searchingAll ? catalog : inCat;
     if (selBrands.size > 0) r = r.filter((p) => selBrands.has(p.brand));
     if (special) { const sc = SPECIAL_CMDS.find((s) => s.id === special); if (sc) r = r.filter(sc.match); }
     if (query.trim() && !query.startsWith('/')) {
@@ -2540,7 +2548,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     else if (sort === 'priceHigh') r.sort((a, b) => (b.price || 0) - (a.price || 0));
     else if (sort === 'name') r.sort((a, b) => a.title.localeCompare(b.title));
     return r;
-  }, [inCat, selBrands, query, sort, special]);
+  }, [inCat, catalog, searchingAll, selBrands, query, sort, special]);
 
   /* Incremental rendering — the full catalog is ~3,100 items; mounting that
      many cards at once janks the open animation and lags scroll. Render an
@@ -2639,7 +2647,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         {/* Body — also the positioning context for the slide-over panels,
             so they span the sidebar's height (header + footer stay visible). */}
         <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative', overflow: 'hidden', boxShadow: 'inset 0 7px 7px -7px rgba(0,0,0,.16), inset 0 -7px 7px -7px rgba(0,0,0,.16)' }}>
-          <CategoryRail sel={sel} onSelect={(s) => { setView('catalog'); setSel(s); }} total={catalog.length}
+          <CategoryRail sel={sel} onSelect={(s) => { setView('catalog'); setSelFromCmd(false); setSel((cur) => (cur === s ? 'all' : s)); }} total={catalog.length}
             depts={depts} deptCounts={deptCounts}
             view={view} onSetView={setView} savedCount={savedProposals.length} customCount={customItems.length}
             dock={proposal.length > 0 && !proposalOpen ? <ProposalDock key="dock" count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} /> : null} />
@@ -2760,7 +2768,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           <Layers size={13} style={{ color: 'var(--gb-text-muted)' }} />
           <span style={{ fontSize: 11.5, color: 'var(--gb-text-tertiary)', fontWeight: 500 }}>
             Showing <b style={{ color: 'var(--gb-text-primary)' }}>{nfmt(results.length)}</b> of {nfmt(catalog.length)}
-            {selLabel && <> in <b style={{ color: 'var(--gb-text-secondary)' }}>{selLabel}</b></>}
+            {!searchingAll && selLabel && <> in <b style={{ color: 'var(--gb-text-secondary)' }}>{selLabel}</b></>}
             {selBrands.size > 0 && <> · <b style={{ color: 'var(--gb-text-secondary)' }}>{[...selBrands].join(', ')}</b></>}
             {special && <> · <b style={{ color: 'var(--gb-success-fg, #2e9e5b)' }}>{(SPECIAL_CMDS.find((s) => s.id === special) || {}).label}</b></>}
           </span>
