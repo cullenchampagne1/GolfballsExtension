@@ -9,7 +9,7 @@ import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount } from '../lib/saveProposal.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty } from '../lib/customItems.js';
 import { getInventory, cachedCostForSku, primeCostCache } from '../lib/inventory.js';
-import { ProposalEmailModal } from './ProposalEmail.jsx';
+import { ProposalEmailModal, ProposalEmailComposer } from './ProposalEmail.jsx';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
 import { decoratedPricingForLine, giftSetPreviewUrl } from '../lib/cartSerializer.js';
@@ -1252,28 +1252,53 @@ function ImprintDetail({ chip }) {
 /* The proposal-breakdown drill-in: revenue, cost, gross profit, blended margin,
    the line items + per-line margin, the imprints, and a margin summary. Opened
    by clicking a saved card or the current-proposal card. */
-function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose, onLoad, onOpenProposal }) {
+function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose, onLoad, onOpenProposal, onCopy, onSaveToAccount, buildEmailSource }) {
   const M = useMemo(() => marginReport(entries), [entries]);
   const decorated = M.lines.filter((l) => decoImprints(l.decoration).length > 0 || (l.decoration && l.decoration.giftSet));
+  // Email composer lives INLINE here (replacing the breakdown) rather than in a
+  // separate modal — a smoother single-surface flow. Built lazily on demand.
+  const [emailMode, setEmailMode] = useState(false);
+  const emailSource = useMemo(() => (emailMode && buildEmailSource) ? buildEmailSource() : null, [emailMode, buildEmailSource]);
+  const canEmail = !!buildEmailSource && M.count > 0;
+  // Copy-as-command spins while artwork uploads, mirroring the card behaviour.
+  const [copying, setCopying] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const doCopy = () => {
+    if (!onCopy || copying) return;
+    setCopying(true);
+    Promise.resolve(onCopy()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); }).catch(() => {}).finally(() => setCopying(false));
+  };
+  const copyIcon = copying
+    ? <span style={{ width: 13, height: 13, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', display: 'inline-block', animation: 'gb-spin .7s linear infinite' }} />
+    : copied ? <I.check /> : <I.copy />;
   return (
     <motion.div
       initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 24 }}
       transition={{ type: 'spring', stiffness: 420, damping: 34 }}
       style={{ position: 'absolute', inset: 0, zIndex: 25, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-canvas)' }}>
-      {/* header */}
+      {/* header — morphs to an email-composer header in emailMode */}
       <div style={{ padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 11, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
-        <IconBtn size="sm" variant="ghost" icon={<ArrowL />} onClick={onClose} />
-        <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {current ? <I.card size={16} /> : <I.bookmark size={16} />}
+        <IconBtn size="sm" variant="ghost" icon={<ArrowL />} onClick={emailMode ? () => setEmailMode(false) : onClose} />
+        <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: emailMode ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)', border: '1px solid ' + (emailMode ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'), color: emailMode ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background var(--gb-anim), border-color var(--gb-anim), color var(--gb-anim)' }}>
+          {emailMode ? <I.mail size={16} /> : current ? <I.card size={16} /> : <I.bookmark size={16} />}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
-          {subtitle && <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subtitle}</div>}
+          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{emailMode ? `Compose proposal email · ${M.count} ${M.count === 1 ? 'item' : 'items'}` : subtitle}</div>
         </div>
-        {badge}
+        {!emailMode && badge}
         <IconBtn size="sm" icon={<I.close />} onClick={onClose} />
       </div>
 
+      <AnimatePresence mode="wait" initial={false}>
+      {emailMode && emailSource ? (
+      <motion.div key="email" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+        initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 18 }} transition={{ duration: .2 }}>
+        <ProposalEmailComposer source={emailSource} onBack={() => setEmailMode(false)} backLabel="Back to breakdown" />
+      </motion.div>
+      ) : (
+      <motion.div key="breakdown" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+        initial={{ opacity: 0, x: -18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -18 }} transition={{ duration: .2 }}>
       {/* stat strip */}
       <div style={{ display: 'flex', gap: 10, padding: '14px 16px 6px', flexShrink: 0 }}>
         <StatTile label="Revenue" value={money(M.rev)} sub={`${M.units} units · ${M.count} ${M.count === 1 ? 'item' : 'items'}`} />
@@ -1348,14 +1373,22 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
         </span>
         <div style={{ flex: 1 }} />
         {current ? (
-          <Btn variant="primary" size="md" icon={<I.card />} onClick={onOpenProposal}>Open proposal</Btn>
+          <>
+            <Btn variant="ghost" size="md" icon={<I.card />} onClick={onOpenProposal}>Open proposal</Btn>
+            {canEmail && <Btn variant="primary" size="md" icon={<I.mail />} onClick={() => setEmailMode(true)}>Generate email</Btn>}
+          </>
         ) : (
           <>
-            <Btn variant="secondary" size="md" onClick={onClose}>Back</Btn>
-            <Btn variant="primary" size="md" icon={loaded ? <I.check /> : <I.plus />} onClick={onLoad}>{loaded ? 'Loaded' : 'Load'}</Btn>
+            {onCopy && <Btn variant="ghost" size="md" icon={copyIcon} onClick={doCopy}>{copied ? 'Copied' : 'Copy command'}</Btn>}
+            {onSaveToAccount && <Btn variant="ghost" size="md" icon={<I.send />} onClick={onSaveToAccount}>Save to account</Btn>}
+            <Btn variant="secondary" size="md" icon={loaded ? <I.check /> : <I.plus />} onClick={onLoad}>{loaded ? 'Loaded' : 'Load'}</Btn>
+            {canEmail && <Btn variant="primary" size="md" icon={<I.mail />} onClick={() => setEmailMode(true)}>Generate email</Btn>}
           </>
         )}
       </div>
+      </motion.div>
+      )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -1377,22 +1410,9 @@ function ThumbStack({ entries, max = 4, size = 44 }) {
   );
 }
 
-/* Square icon action used on a saved card (copy / delete) — its own hover. */
-function CardIconBtn({ icon, title, danger, active, onClick }) {
-  const [h, setH] = useState(false);
-  const col = active ? 'var(--gb-success-fg, #2e9e5b)' : (danger && h) ? 'var(--gb-danger, #e5484d)' : h ? 'var(--gb-text-primary)' : 'var(--gb-text-tertiary)';
-  return (
-    <button onClick={onClick} title={title} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
-      style={{ width: 34, height: 30, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', background: h ? 'var(--gb-fill-strong)' : 'var(--gb-fill-subtle)', border: '1px solid ' + ((danger && h) ? 'var(--gb-danger-tint-border, rgba(229,72,77,.4))' : h ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'), color: col, transition: 'background var(--gb-anim), border-color var(--gb-anim), color var(--gb-anim)', fontFamily: 'inherit' }}>
-      {icon}
-    </button>
-  );
-}
-
-function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onCopy, onDelete, onSaveToAccount, onEmail }) {
+function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelete }) {
   const [hover, setHover] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [copying, setCopying] = useState(false);
+  const [tagHover, setTagHover] = useState(false);
   const cardRef = useRef(null);
   // Report natural height up so the masonry can pack columns and animate
   // neighbors into the gap when a card is removed. Re-measure when the column
@@ -1408,20 +1428,6 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onCopy,
   const r = useMemo(() => resolveSavedEntry(item), [item]);
   const lines = r.entries.map((e) => ({ qty: e.splits.reduce((a, x) => a + (x.qty || 0), 0), title: (e.product.title || e.product.brand || 'Item') }));
   const shownLines = lines.slice(0, 3);
-  // Copying isn't instant — it uploads each line's artwork before building the
-  // cart command — so the button spins until that round-trip finishes.
-  const doCopy = (e) => {
-    e.stopPropagation();
-    if (copying) return;
-    setCopying(true);
-    Promise.resolve(onCopy(item))
-      .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); })
-      .catch(() => {})
-      .finally(() => setCopying(false));
-  };
-  const copyIcon = copying
-    ? <span style={{ width: 13, height: 13, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', display: 'inline-block', animation: 'gb-spin .7s linear infinite' }} />
-    : copied ? <I.check size={14} strokeWidth={3} /> : <I.copy size={14} />;
   return (
     <motion.div ref={cardRef}
       initial={{ opacity: 0, scale: .95, x: pos.x, y: pos.y }}
@@ -1434,7 +1440,19 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onCopy,
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <ThumbStack entries={r.entries} />
         <div style={{ flex: 1 }} />
-        <Tag tone="neutral" size="sm" icon={<I.bookmark size={9} />}>Draft</Tag>
+        {/* The "Draft" tag IS the delete control — hovering it turns it red and
+            clicking removes the draft (keeps the card otherwise button-free). */}
+        <button onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
+          onMouseEnter={() => setTagHover(true)} onMouseLeave={() => setTagHover(false)}
+          title={tagHover ? 'Delete this draft' : 'Saved draft'}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 20, padding: '0 9px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: .2,
+            background: tagHover ? 'var(--gb-danger-tint, rgba(229,72,77,.12))' : 'var(--gb-fill-subtle)',
+            border: '1px solid ' + (tagHover ? 'var(--gb-danger-tint-border, rgba(229,72,77,.4))' : 'var(--gb-border-default)'),
+            color: tagHover ? 'var(--gb-danger, #e5484d)' : 'var(--gb-text-tertiary)',
+            transition: 'background var(--gb-anim), border-color var(--gb-anim), color var(--gb-anim)' }}>
+          {tagHover ? <I.trash size={10} /> : <I.bookmark size={9} />}
+          {tagHover ? 'Delete' : 'Draft'}
+        </button>
       </div>
       <div>
         <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
@@ -1461,19 +1479,11 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onCopy,
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600, color: hover ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)', transition: 'color var(--gb-anim)' }}>
         <I.eye size={12} /> View margin breakdown
       </div>
-      <div style={{ display: 'flex', gap: 7 }} onClick={(e) => e.stopPropagation()}>
+      <div onClick={(e) => e.stopPropagation()}>
         <button onClick={(e) => { e.stopPropagation(); onLoad(item); }} title="Load these items into the proposal"
-          style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 30, borderRadius: 'var(--gb-r-md)', cursor: 'pointer', background: hover ? 'var(--gb-brand-tint-medium)' : 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 11.5, fontWeight: 700, fontFamily: 'inherit', transition: 'background var(--gb-anim)' }}>
+          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 30, borderRadius: 'var(--gb-r-md)', cursor: 'pointer', background: hover ? 'var(--gb-brand-tint-medium)' : 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 11.5, fontWeight: 700, fontFamily: 'inherit', transition: 'background var(--gb-anim)' }}>
           <I.plus size={13} /> Load
         </button>
-        {onEmail && (
-          <CardIconBtn title="Generate proposal HTML" onClick={(e) => { e.stopPropagation(); onEmail(item); }} icon={<I.card size={14} />} />
-        )}
-        {onSaveToAccount && (
-          <CardIconBtn title="Save to a CRM account / opportunity" onClick={(e) => { e.stopPropagation(); onSaveToAccount(item); }} icon={<I.send size={14} />} />
-        )}
-        <CardIconBtn title={copying ? 'Preparing command…' : 'Copy as a console command'} active={copied} onClick={doCopy} icon={copyIcon} />
-        <CardIconBtn title="Delete draft" danger onClick={(e) => { e.stopPropagation(); onDelete(item.id); }} icon={<I.trash size={14} />} />
       </div>
     </motion.div>
   );
@@ -1583,7 +1593,7 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
               {items.map((it) => (
                 <SavedCard key={it.id} item={it} loaded={loadedId === it.id}
                   pos={positions[it.id] || { x: 0, y: 0 }} colW={colW} onMeasure={setHeight}
-                  onOpen={onOpen} onLoad={onLoad} onCopy={onCopy} onDelete={onDelete} onSaveToAccount={onSaveToAccount} onEmail={onEmail} />
+                  onOpen={onOpen} onLoad={onLoad} onDelete={onDelete} />
               ))}
             </AnimatePresence>
           </div>
@@ -2700,6 +2710,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                   <SavedDetail key="bd-current" current title="Current proposal" subtitle="Live working set · unsaved"
                     badge={<Tag tone="brand" size="sm" icon={<Dot tone="brand" size={5} />}>Unsaved</Tag>}
                     entries={proposal} onClose={close}
+                    buildEmailSource={() => proposalToEmailSource(proposal, '')}
                     onOpenProposal={() => { close(); setProposalOpen(true); }} />
                 );
               }
@@ -2708,6 +2719,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                 <SavedDetail key={'bd-' + it.id} title={it.name} subtitle={`${fmtSavedDate(it.date)} · ${r.units} units`}
                   badge={<Tag tone="neutral" size="sm" icon={<I.bookmark size={9} />}>Draft</Tag>}
                   entries={r.entries} loaded={loadedId === it.id} onClose={close}
+                  buildEmailSource={() => proposalToEmailSource(linesFromSaved(it, rid), it.name)}
+                  onCopy={() => copySaved(it)} onSaveToAccount={() => { close(); loadSavedToAccount(it); }}
                   onLoad={() => { close(); loadSaved(it); }} />
               );
             })()}

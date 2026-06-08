@@ -226,7 +226,12 @@ function OptionToggle({ checked, label, hint, onClick }) {
 /* ════════════════════════════════════════════════════════════
    THE COMPOSER MODAL — settings · live preview · copy
 ════════════════════════════════════════════════════════════ */
-export function ProposalEmailModal({ source, onClose, scale = 1.8 }) {
+/* The embeddable composer — settings rail | live preview + a copy footer. Fills
+   its parent (no modal shell / header of its own) so it drops straight into the
+   saved-proposal breakdown panel in place of the margin view, or sits inside the
+   ProposalEmailModal wrapper below. `onBack` (optional) renders a back button in
+   the footer for the inline use. */
+export function ProposalEmailComposer({ source, onBack, backLabel }) {
   const [groupName, setGroupName] = useState(source.groupName || 'Your Custom Order');
   const [optionName, setOptionName] = useState(source.optionName || 'Option 1');
   const [message, setMessage] = useState('');
@@ -265,27 +270,7 @@ export function ProposalEmailModal({ source, onClose, scale = 1.8 }) {
   const copySource = async () => { try { await navigator.clipboard.writeText(emailHtml); } catch (e) { /* */ } };
 
   return (
-    <motion.div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .2 }}
-      style={{ position: 'fixed', inset: 0, zIndex: 999995, padding: 24, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', overflow: 'auto' }}>
-      {/* Match the catalog: a transform-scaled container (NOT viewport units) so
-          the modal — and its text — render at the same on-screen size as the
-          scaled catalog it replaces. Base size mirrors CARD_W×CARD_H. */}
-      <div style={{ margin: 'auto', flexShrink: 0, transform: `scale(${scale})`, transformOrigin: 'center center' }}>
-      <motion.div initial={{ opacity: 0, scale: .96, y: 14 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97, y: 10 }} transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-        style={{ width: 1180, height: 760, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)' }}>
-        {/* header */}
-        <div style={{ padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 11, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <I.card size={16} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Proposal HTML</div>
-            <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1 }}>{source.lines.length} items · {_money(source.total)} · built locally, cart link added on send</div>
-          </div>
-          <IconBtn size="sm" icon={<I.close />} onClick={onClose} />
-        </div>
-
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {/* body: settings | preview */}
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           <div className="gb-thin-scroll" style={{ width: 340, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -337,6 +322,7 @@ export function ProposalEmailModal({ source, onClose, scale = 1.8 }) {
 
         {/* footer */}
         <div style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--gb-fill-inverse-strong)', borderTop: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
+          {onBack && <Btn variant="ghost" size="md" icon={<I.chevr style={{ transform: 'rotate(180deg)' }} />} onClick={onBack}>{backLabel || 'Back'}</Btn>}
           <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <I.alert size={12} /> Cart link <code style={{ fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-tertiary)' }}>{'{{CART_LINK}}'}</code> is injected server-side.
           </span>
@@ -344,6 +330,35 @@ export function ProposalEmailModal({ source, onClose, scale = 1.8 }) {
           <Btn variant="ghost" size="md" icon={<I.copy />} onClick={copySource}>Copy source</Btn>
           <Btn variant="primary" size="md" icon={copied ? <I.check /> : <I.copy />} onClick={copyRich}>{copied ? 'Copied' : 'Copy'}</Btn>
         </div>
+    </div>
+  );
+}
+
+/* Modal wrapper — full-screen overlay used by the working-proposal "Generate
+   email" entry point. Scales to match the catalog it animates in over. The
+   saved-proposal flow uses ProposalEmailComposer inline instead (no modal). */
+export function ProposalEmailModal({ source, onClose, scale = 1.8 }) {
+  return (
+    <motion.div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .2 }}
+      style={{ position: 'fixed', inset: 0, zIndex: 999995, padding: 24, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', overflow: 'auto' }}>
+      {/* Transform-scaled container (NOT viewport units) so the modal — and its
+          text — render at the same on-screen size as the scaled catalog. */}
+      <div style={{ margin: 'auto', flexShrink: 0, transform: `scale(${scale})`, transformOrigin: 'center center' }}>
+      <motion.div initial={{ opacity: 0, scale: .96, y: 14 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97, y: 10 }} transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+        style={{ width: 1180, height: 760, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)' }}>
+        {/* header */}
+        <div style={{ padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 11, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <I.card size={16} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Proposal HTML</div>
+            <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1 }}>{source.lines.length} items · {_money(source.total)} · built locally, cart link added on send</div>
+          </div>
+          <IconBtn size="sm" icon={<I.close />} onClick={onClose} />
+        </div>
+        <ProposalEmailComposer source={source} />
       </motion.div>
       </div>
     </motion.div>
