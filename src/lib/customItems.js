@@ -68,21 +68,43 @@ function _writeCustomItems(list) {
   });
 }
 
-/* Normalize a form record into the stored shape (coerce numerics, trim). */
+/* Clean + sort a price ladder; drop empty rows; ensure at least one tier. */
+function normBreaks(breaks, legacyPrice, legacyQty) {
+  let rows = Array.isArray(breaks) ? breaks : [];
+  rows = rows
+    .map((b) => ({ q: num(b && b.q) || 0, p: num(b && b.p) }))
+    .filter((b) => b.q > 0)
+    .sort((a, b) => a.q - b.q);
+  if (!rows.length) rows = [{ q: num(legacyQty) || 1, p: num(legacyPrice) }];
+  return rows;
+}
+
+/* Style options: an array of non-empty labels. Falls back to a single legacy
+   `style` string so old items keep their value. */
+function normStyleOptions(styleOptions, legacyStyle) {
+  let opts = Array.isArray(styleOptions) ? styleOptions : [];
+  opts = opts.map((s) => (s == null ? '' : String(s).trim())).filter(Boolean);
+  if (!opts.length && legacyStyle && String(legacyStyle).trim()) opts = [String(legacyStyle).trim()];
+  return opts;
+}
+
+/* Normalize a form/stored record into the spec shape. Migrates the legacy flat
+   shape ({style, price, qty}) → ({styleOptions, breaks}) so old items keep
+   working. `qty` is no longer a field (the ladder's first tier is the min qty). */
 export function normalizeCustomItem(rec = {}) {
   return {
     id: rec.id || 'ci-' + _rid(),
     name: (rec.name || '').trim(),
-    style: (rec.style || '').trim(),
     extraDetails: (rec.extraDetails || '').trim(),
     itemID: (rec.itemID || '').trim(),
     // Never persist a raw data: URL (would bloat storage + won't load in the
     // cart) — only keep an uploaded/pasted http(s) thumbnail.
     thumbnail: /^data:/i.test(rec.thumbnail || '') ? '' : (rec.thumbnail || '').trim(),
     description: (rec.description || '').trim(),
-    price: num(rec.price),
+    styleOptions: normStyleOptions(rec.styleOptions, rec.style),
+    breaks: normBreaks(rec.breaks, rec.price, rec.qty),
+    cost: num(rec.cost),
     setup: num(rec.setup),
-    qty: num(rec.qty) || 1,
     weight: num(rec.weight),
     dropship: !!rec.dropship,
     date: rec.date || new Date().toISOString().slice(0, 10),
@@ -111,18 +133,17 @@ export async function removeCustomItem(id) {
 /* Map a stored custom item → a synthetic catalog product the modal's ProductCard
    and addToProposal understand. `isCustom` + `custom` let the cart serializer
    route it to buildCustomItemLine instead of fetching a (non-existent) page. */
-export function customItemToProduct(ci) {
-  const title = (ci.name || 'Custom item') + (ci.style ? ' ' + ci.style : '');
-  const qty = num(ci.qty) || 1;
-  const price = num(ci.price);
+export function customItemToProduct(rec) {
+  const ci = normalizeCustomItem(rec);     // migrate legacy on the fly
+  const breaks = ci.breaks;
   return {
     id: 'custom-' + ci.id,
     isCustom: true,
     custom: ci,
     brand: 'Custom',
-    title,
+    title: ci.name || 'Custom item',
     sku: ci.itemID || '',
-    price,
+    price: breaks[0].p,
     orig: null,
     logo: null,
     customLogo: false,
@@ -132,9 +153,11 @@ export function customItemToProduct(ci) {
     urlPath: '',
     rating: null,
     reviews: 0,
-    minQty: qty,
-    breaks: [{ q: qty, p: price }],
-    setup: num(ci.setup),
+    minQty: breaks[0].q,
+    breaks,
+    styleOptions: ci.styleOptions,
+    cost: ci.cost,
+    setup: ci.setup,
     tags: [],
   };
 }

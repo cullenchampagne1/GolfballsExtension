@@ -8,6 +8,7 @@ import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '
 import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount } from '../lib/saveProposal.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest } from '../lib/customItems.js';
+import { getInventory, cachedCostForSku, primeCostCache } from '../lib/inventory.js';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
 import { decoratedPricingForLine, giftSetPreviewUrl } from '../lib/cartSerializer.js';
@@ -121,6 +122,7 @@ function linePriceAt(line, qty) {
   }
   let base;
   if (line && line.variant && line.variant.price != null) base = line.variant.price;          // tee count etc.
+  else if (p.isCustom && p.breaks && p.breaks.length) base = priceAtQty(p, qty);               // custom item ladder
   else if (lineHasImprint(line) && p.customLogo) base = priceAtQty(p, qty);                    // custom-logo ladder
   else base = p.price || 0;                                                                     // no imprint → retail
   return Math.round((base + lineSecondPoleFee(line)) * 100) / 100;
@@ -504,7 +506,57 @@ function PriceStat({ label, value, accent, was }) {
   );
 }
 
-function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
+/* Lazy inventory table for a catalog SKU — loads on press from the Dynamics
+   endpoint (cached per SKU; the Cost also feeds the margin calculator). */
+function InventoryPanel({ sku }) {
+  const [state, setState] = useState('idle');     // idle | loading | done | error
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState('');
+  const load = (force) => {
+    setState('loading'); setErr('');
+    getInventory(sku, { force })
+      .then((d) => { setData(d); setState('done'); })
+      .catch((e) => { setErr((e && e.message) || 'failed'); setState('error'); });
+  };
+  const numCell = (v) => <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--gb-font-mono)', fontSize: 11, color: 'var(--gb-text-secondary)', borderTop: '1px solid var(--gb-border-subtle)' }}>{(v || 0).toLocaleString('en-US')}</td>;
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+        <Layers size={12} style={{ color: 'var(--gb-brand-label)' }} />
+        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-secondary)' }}>Inventory</span>
+        <div style={{ flex: 1 }} />
+        {state === 'done' && <button type="button" onClick={() => load(true)} title="Refresh" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--gb-text-muted)', display: 'flex', padding: 2 }}><I.refresh size={12} /></button>}
+      </div>
+      {state === 'idle' && <Btn variant="secondary" size="sm" icon={<Layers size={13} />} onClick={() => load(false)}>Check inventory</Btn>}
+      {state === 'loading' && <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 11.5, padding: '6px 0' }}><span style={{ width: 13, height: 13, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} /> Loading inventory…</div>}
+      {state === 'error' && <div style={{ fontSize: 11, color: 'var(--gb-danger, #e5484d)', fontWeight: 600 }}>{err} · <button type="button" onClick={() => load(true)} style={{ border: 'none', background: 'transparent', color: 'var(--gb-brand-label)', cursor: 'pointer', fontWeight: 700, padding: 0 }}>retry</button></div>}
+      {state === 'done' && data && (data.rows.length ? (
+        <div style={{ border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: 'var(--gb-fill-inverse-strong)' }}>
+                {['Item', 'Avail', 'OnHand', 'Alloc', 'OnOrdr', 'Cost'].map((h, i) => (
+                  <th key={h} style={{ padding: '6px 8px', textAlign: i === 0 ? 'left' : 'right', fontSize: 8.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.rows.map((r, i) => (
+                <tr key={i} title={r.description || ''}>
+                  <td style={{ padding: '6px 8px', fontFamily: 'var(--gb-font-mono)', fontSize: 10.5, fontWeight: 700, color: 'var(--gb-text-primary)', borderTop: '1px solid var(--gb-border-subtle)', whiteSpace: 'nowrap' }}>{r.itemNumber}</td>
+                  {numCell(r.available)}{numCell(r.onHand)}{numCell(r.alloc)}{numCell(r.onOrder)}
+                  <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--gb-font-mono)', fontSize: 11, fontWeight: 700, color: r.cost ? 'var(--gb-text-primary)' : 'var(--gb-text-ghost)', borderTop: '1px solid var(--gb-border-subtle)' }}>{r.cost != null ? usd(r.cost) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : <div style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>No inventory rows for this SKU.</div>)}
+    </div>
+  );
+}
+
+function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) {
   // The live decoration the buyer is building (emitted by CustomizeBlock); it
   // rides along when the product is added so the saved cart carries the real
   // imprint. Reset when the panel switches to a different product.
@@ -512,7 +564,13 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
   // Selected base-product variant (e.g. Tee Count) → drives the displayed price
   // for products whose options change the price. Reset when the product changes.
   const [variant, setVariant] = useState(null);
-  useEffect(() => { setDecoration(null); setVariant(null); }, [p.id]);
+  useEffect(() => {
+    setDecoration(null);
+    // Custom items default to their first Style option so an un-touched add still
+    // carries a style; catalog products start with no variant.
+    const opts = p.isCustom && Array.isArray(p.styleOptions) ? p.styleOptions : [];
+    setVariant(opts.length ? { values: { style: opts[0] }, price: null } : null);
+  }, [p.id]);
   // Headline: a chosen variant (Tee Count, …) wins; otherwise custom-logo items
   // show their "from" (first-ladder) imprint price and everything else retail.
   // The proposal re-prices accurately on add (retail / ladder + 2nd-pole).
@@ -553,7 +611,8 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, marginBottom: 6, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-brand-label)', fontFamily: 'var(--gb-font-mono)' }}>{p.brand}</span>
-            <Tag tone="neutral" size="sm" icon={<CatGlyph id={p.dept || p.cat} size={12} />}>{p.dept || p.cat}</Tag>
+            {(p.dept || p.cat) && <Tag tone="neutral" size="sm" icon={<CatGlyph id={p.dept || p.cat} size={12} />}>{p.dept || p.cat}</Tag>}
+            {p.isCustom && <Tag tone="brand" size="sm" icon={<I.sparkle size={10} />}>Custom item</Tag>}
             {onSale(p) && <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 'var(--gb-r-pill)', fontSize: 9.5, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-danger, #e5484d)' }}>Sale −{usd(p.orig - p.price)}</span>}
           </div>
           <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--gb-text-primary)', lineHeight: 1.25, letterSpacing: -.2 }}>{p.title}</div>
@@ -566,9 +625,21 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
               </span>
             )}
           </div>
-          {/* Base options that change the price (Tee Count, pack size, …) —
-              self-hides when the product has no price-varying options. */}
-          <ProductOptions p={p} onChange={setVariant} />
+          {/* Custom items: a rep-defined Style selector (the chosen option rides
+              into the cart's SERVICEITEM 'style'). Catalog items: base options
+              that change price (Tee Count, …), which self-hide when none. */}
+          {p.isCustom ? (
+            (p.styleOptions && p.styleOptions.length > 1) ? (
+              <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .7, color: 'var(--gb-text-muted)' }}>Style</label>
+                <Dropdown size="sm" value={(variant && variant.values && variant.values.style) || p.styleOptions[0]}
+                  options={p.styleOptions.map((s) => ({ id: s, label: s }))}
+                  onChange={(s) => setVariant({ values: { style: s }, price: null })} />
+              </div>
+            ) : null
+          ) : (
+            <ProductOptions p={p} onChange={setVariant} />
+          )}
           <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
             <PriceStat label={isGiftPricing ? 'Per set' : 'Per unit'} value={usd(unitPrice)} accent was={(!isGiftPricing && onSale(p)) ? usd(p.orig) : null} />
           </div>
@@ -584,7 +655,7 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
             <div style={{ marginTop: 18 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                 {isGiftPricing ? <I.sparkle size={12} style={{ color: 'var(--gb-brand-label)' }} /> : <Gift size={12} style={{ color: 'var(--gb-brand-label)' }} />}
-                <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-secondary)' }}>{isGiftPricing ? 'Gift-set quantity pricing' : 'Custom-logo quantity pricing'}</span>
+                <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-secondary)' }}>{isGiftPricing ? 'Gift-set quantity pricing' : p.isCustom ? 'Quantity pricing' : 'Custom-logo quantity pricing'}</span>
               </div>
               <div style={{ border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden' }}>
                 {priceLadder.map((b, i) => {
@@ -607,10 +678,17 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose }) {
           {/* Show the customization UI for ANY customizable product (custom
               logo, personalized, monogram, photo, ball-marker, …), not just
               custom-logo — e.g. a "Personalized Ball Marker" hat clip. */}
-          {(p.customizable || p.customLogo) && <CustomizeBlock p={p} onChange={setDecoration} />}
+          {!p.isCustom && (p.customizable || p.customLogo) && <CustomizeBlock p={p} onChange={setDecoration} />}
+          {/* Inventory + cost for a catalog SKU (loads on press). */}
+          {!p.isCustom && p.sku && <InventoryPanel sku={p.parentCode || p.sku} />}
+          {p.isCustom && p.custom && p.custom.cost > 0 && (
+            <div style={{ marginTop: 16, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>Cost <b style={{ color: 'var(--gb-text-secondary)', fontFamily: 'var(--gb-font-mono)' }}>{usd(p.custom.cost)}</b>/unit · used for margin</div>
+          )}
         </div>
         <div style={{ padding: 12, borderTop: '1px solid var(--gb-border-subtle)', display: 'flex', gap: 8, flexShrink: 0, background: 'var(--gb-fill-inverse-strong)' }}>
-          <Btn variant="secondary" size="md" icon={<I.eye />} style={{ flex: 1 }} onClick={openProduct}>View product</Btn>
+          {p.isCustom
+            ? <Btn variant="secondary" size="md" icon={<I.edit />} style={{ flex: 1 }} onClick={() => onEdit && onEdit(p.custom)}>Edit</Btn>
+            : <Btn variant="secondary" size="md" icon={<I.eye />} style={{ flex: 1 }} onClick={openProduct}>View product</Btn>}
           {/* Always allow adding — a product can sit on multiple proposal
               lines (different customizations/quantities). */}
           <Btn variant="primary" size="md" icon={<I.plus />} style={{ flex: 1.2 }} onClick={() => onAdd && onAdd(p, decoration, variant)}>{inProposal ? 'Add another' : 'Add to proposal'}</Btn>
@@ -960,13 +1038,24 @@ function resolveSavedEntry(entry) {
 }
 
 /* ── Margin / cost model ──────────────────────────────────────────────────────
-   PLACEHOLDER until real wholesale costs land: every item is assumed at a flat
-   40% margin (cost = 60% of the sell price). When real per-product cost arrives,
-   replace ONLY unitCostOf() (e.g. look the cost up by product/SKU) — marginReport
-   and the whole breakdown UI are cost-source-agnostic and need no other change. */
+   Real cost when we have it, else a flat-40% placeholder:
+     • custom items carry their own per-unit `cost`,
+     • catalog products use the per-SKU Cost cached from the inventory endpoint
+       (populated when a rep checks inventory; primed on modal mount),
+     • otherwise fall back to 60%-of-sell. */
 const COST_RATIO = 0.60;            // assumed cost as a fraction of sell price → 40% margin
 const ASSUMED_MARGIN = 1 - COST_RATIO;
-const unitCostOf = (_product, unitPrice) => Math.round((unitPrice || 0) * COST_RATIO * 100) / 100;
+const unitCostOf = (product, unitPrice) => {
+  const p = product || {};
+  if (p.isCustom) {
+    const c = p.cost != null ? p.cost : (p.custom && p.custom.cost);
+    if (c != null && c > 0) return Math.round(c * 100) / 100;
+  } else {
+    const c = cachedCostForSku(p.parentCode || p.sku);
+    if (c != null && c > 0) return Math.round(c * 100) / 100;
+  }
+  return Math.round((unitPrice || 0) * COST_RATIO * 100) / 100;
+};
 
 /* Per-line + blended margin for resolved entries
    ([{ product, decoration, splits:[{qty,price}] }]). Setup/decoration fees fold
@@ -1723,7 +1812,7 @@ function CustomAddTile({ onNew, minH }) {
   );
 }
 
-function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, onEdit, onDelete }) {
+function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, onOpen, onDelete }) {
   const minH = compact ? 232 : 262;
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
@@ -1744,7 +1833,7 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
             return (
               <div key={ci.id} style={{ position: 'relative' }}>
                 <ProductCard p={p} compact={compact} showRating={false}
-                  inProposal={inProposal(p.id)} onAdd={() => onAdd(ci)} onClick={() => onEdit(ci)} />
+                  inProposal={inProposal(p.id)} onAdd={() => onAdd(ci)} onClick={() => onOpen(ci)} />
                 <IconBtn size="sm" danger icon={<I.trash size={13} />} title="Delete custom item"
                   onClick={(e) => { e.stopPropagation(); onDelete(ci.id); }}
                   style={{ position: 'absolute', top: 8, right: 8, background: 'var(--gb-surface-modal)', boxShadow: '0 1px 4px rgba(0,0,0,.12)' }} />
@@ -1776,13 +1865,33 @@ function CIField({ label, full, children }) {
 function CustomItemForm({ initial, onCancel, onSave }) {
   const isEdit = !!(initial && initial.id);
   const s = (v) => (v == null ? '' : String(v));
+  // Seed style options + price ladder from the spec shape, migrating the legacy
+  // flat shape ({style, price, qty}) so old items open correctly.
+  const seedStyles = () => {
+    if (Array.isArray(initial.styleOptions) && initial.styleOptions.length) return initial.styleOptions.slice();
+    if (initial.style) return [String(initial.style)];
+    return [''];
+  };
+  const seedBreaks = () => {
+    if (Array.isArray(initial.breaks) && initial.breaks.length) return initial.breaks.map((b) => ({ q: s(b.q), p: s(b.p) }));
+    if (initial.price != null || initial.qty != null) return [{ q: s(initial.qty || 1), p: s(initial.price != null ? initial.price : '') }];
+    return [{ q: '', p: '' }];
+  };
   const [f, setF] = useState({
-    id: initial.id, name: s(initial.name), style: s(initial.style), extraDetails: s(initial.extraDetails),
+    id: initial.id, name: s(initial.name), extraDetails: s(initial.extraDetails),
     itemID: s(initial.itemID), thumbnail: s(initial.thumbnail), description: s(initial.description),
-    price: initial.price != null ? String(initial.price) : '', setup: initial.setup != null ? String(initial.setup) : '',
-    weight: initial.weight != null ? String(initial.weight) : '', qty: initial.qty != null ? String(initial.qty) : '',
-    dropship: !!initial.dropship,
+    cost: initial.cost != null ? String(initial.cost) : '', setup: initial.setup != null ? String(initial.setup) : '',
+    weight: initial.weight != null ? String(initial.weight) : '', dropship: !!initial.dropship,
+    styleOptions: seedStyles(), breaks: seedBreaks(),
   });
+  // Style-option list editors
+  const setStyleAt = (i, v) => setF((prev) => { const a = prev.styleOptions.slice(); a[i] = v; return { ...prev, styleOptions: a }; });
+  const addStyle = () => setF((prev) => ({ ...prev, styleOptions: [...prev.styleOptions, ''] }));
+  const removeStyle = (i) => setF((prev) => { const a = prev.styleOptions.filter((_, j) => j !== i); return { ...prev, styleOptions: a.length ? a : [''] }; });
+  // Price-ladder editors
+  const setBreakAt = (i, k, v) => setF((prev) => { const a = prev.breaks.map((b) => ({ ...b })); a[i][k] = v; return { ...prev, breaks: a }; });
+  const addBreak = () => setF((prev) => ({ ...prev, breaks: [...prev.breaks, { q: '', p: '' }] }));
+  const removeBreak = (i) => setF((prev) => { const a = prev.breaks.filter((_, j) => j !== i); return { ...prev, breaks: a.length ? a : [{ q: '', p: '' }] }; });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
@@ -1847,11 +1956,9 @@ function CustomItemForm({ initial, onCancel, onSave }) {
         </div>
         <div className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
           <CIField label="Brand / Product" full><Input size="sm" value={f.name} onChange={set('name')} placeholder="e.g. GB44 | Golf Ball Mint Container" /></CIField>
-          <CIField label="Style"><Input size="sm" value={f.style} onChange={set('style')} placeholder="e.g. TEST" /></CIField>
-          <CIField label="Extra Details"><Input size="sm" value={f.extraDetails} onChange={set('extraDetails')} placeholder="" /></CIField>
           <CIField label="ItemID"><Input size="sm" value={f.itemID} onChange={set('itemID')} placeholder="00000" /></CIField>
-          <CIField label="Qty"><Input size="sm" type="number" value={f.qty} onChange={set('qty')} placeholder="1" /></CIField>
-          <CIField label="Price"><Input size="sm" type="number" value={f.price} onChange={set('price')} leading={<span style={{ fontSize: 12 }}>$</span>} placeholder="0.00" /></CIField>
+          <CIField label="Extra Details"><Input size="sm" value={f.extraDetails} onChange={set('extraDetails')} placeholder="" /></CIField>
+          <CIField label="Cost / unit"><Input size="sm" type="number" value={f.cost} onChange={set('cost')} leading={<span style={{ fontSize: 12 }}>$</span>} placeholder="0.00" /></CIField>
           <CIField label="Setup"><Input size="sm" type="number" value={f.setup} onChange={set('setup')} leading={<span style={{ fontSize: 12 }}>$</span>} placeholder="0.00" /></CIField>
           <CIField label="Weight"><Input size="sm" type="number" value={f.weight} onChange={set('weight')} placeholder="0" /></CIField>
           <CIField label="Thumbnail Image" full>
@@ -1870,6 +1977,34 @@ function CustomItemForm({ initial, onCancel, onSave }) {
                 </div>
                 <input ref={fileRef} type="file" accept="image/*" onChange={onPickFile} style={{ display: 'none' }} />
               </div>
+            </div>
+          </CIField>
+          {/* Style options — selectable choices; the rep picks one when adding. */}
+          <CIField label="Style options" full>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {f.styleOptions.map((opt, i) => (
+                <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <Input size="sm" value={opt} onChange={(v) => setStyleAt(i, v)} placeholder={i === 0 ? 'e.g. White' : 'Another option'} style={{ flex: 1 }} />
+                  <IconBtn size="sm" variant="ghost" icon={<I.close size={13} />} title="Remove option" onClick={() => removeStyle(i)} />
+                </div>
+              ))}
+              <button type="button" onClick={addStyle} style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 5, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--gb-brand-label)', fontSize: 11, fontWeight: 700, fontFamily: 'inherit', padding: '2px 0' }}><I.plus size={12} /> Add style option</button>
+            </div>
+          </CIField>
+          {/* Price ladder — qty tier → unit price. First tier sets the min qty. */}
+          <CIField label="Price ladder" full>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', gap: 6, fontSize: 8.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', paddingLeft: 2 }}>
+                <span style={{ flex: 1 }}>Qty (min)</span><span style={{ flex: 1 }}>Unit price</span><span style={{ width: 28 }} />
+              </div>
+              {f.breaks.map((b, i) => (
+                <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <Input size="sm" type="number" value={b.q} onChange={(v) => setBreakAt(i, 'q', v)} placeholder="1" style={{ flex: 1 }} />
+                  <Input size="sm" type="number" value={b.p} onChange={(v) => setBreakAt(i, 'p', v)} leading={<span style={{ fontSize: 12 }}>$</span>} placeholder="0.00" style={{ flex: 1 }} />
+                  <IconBtn size="sm" variant="ghost" icon={<I.close size={13} />} title="Remove tier" onClick={() => removeBreak(i)} />
+                </div>
+              ))}
+              <button type="button" onClick={addBreak} style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 5, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--gb-brand-label)', fontSize: 11, fontWeight: 700, fontFamily: 'inherit', padding: '2px 0' }}><I.plus size={12} /> Add tier</button>
             </div>
           </CIField>
           <CIField label="Description" full><Input size="sm" value={f.description} onChange={set('description')} placeholder="Optional" /></CIField>
@@ -1970,6 +2105,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     let alive = true;
     loadSavedProposals().then((l) => { if (alive) setSavedProposals(l); });
     loadCustomItems().then((l) => { if (alive) setCustomItems(l); });
+    primeCostCache().catch(() => {});      // hydrate per-SKU inventory costs for margin math
     const onCh = (changes) => {
       if (changes && changes.gbSavedProposals) setSavedProposals(changes.gbSavedProposals.newValue || []);
       if (changes && changes.gbCustomItems) setCustomItems(changes.gbCustomItems.newValue || []);
@@ -2335,7 +2471,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             <motion.div key="custom" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
             <CustomItemsGallery items={customItems} compact={compact} colMin={colMin}
               inProposal={inProposal} onAdd={addCustomToProposal}
-              onNew={() => setEditingCustom({})} onEdit={(ci) => setEditingCustom(ci)} onDelete={deleteCustom} />
+              onNew={() => setEditingCustom({})} onOpen={(ci) => setSelected(customItemToProduct(ci))} onDelete={deleteCustom} />
           </motion.div>
           ) : (
           <motion.div key="catalog" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -2416,9 +2552,10 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           {/* Item details stay an overlay INSIDE the catalog card, so they
               coexist with the proposal side card (both visible at once). */}
           <AnimatePresence>
-            {selected && view !== 'proposals' && view !== 'custom' && (
+            {selected && view !== 'proposals' && (
               <DetailPanel key="detail" p={selected} inProposal={inProposal(selected.id)} onAdd={addToProposal}
-                onOpenProposal={() => { setSelected(null); setProposalOpen(true); }} onClose={() => setSelected(null)} />
+                onOpenProposal={() => { setSelected(null); setProposalOpen(true); }} onClose={() => setSelected(null)}
+                onEdit={(ci) => { setSelected(null); setEditingCustom(ci); }} />
             )}
           </AnimatePresence>
 

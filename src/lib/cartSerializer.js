@@ -783,13 +783,16 @@ const _ciModOption = (name, value) => ({
   NotAvailableToSelect: false, CustomerNote: '', setupFee_priceBreakHeaderID: 0, itemFee_priceBreakHeaderID: 0,
 });
 
-export function buildCustomItemLine({ ci = {}, qty, price } = {}) {
+export function buildCustomItemLine({ ci = {}, qty, price, style } = {}) {
   const q = _ciNum(qty != null ? qty : ci.qty) || 1;
   const itemPrice = round2(price != null ? price : _ciNum(ci.price));
   const setup = round2(_ciNum(ci.setup));
   const name = (ci.name || 'Custom item').toString();
-  const style = (ci.style || '').toString();
-  const title = name + (style ? ' ' + style : '');
+  // Selected style option (falls back to a legacy single style or the first option).
+  const styleVal = (style != null ? style
+    : (ci.style != null ? ci.style : (Array.isArray(ci.styleOptions) ? ci.styleOptions[0] : '')) || '');
+  const styleStr = (styleVal || '').toString();
+  const title = name + (styleStr ? ' ' + styleStr : '');
   const thumb = (ci.thumbnail || '').toString();
   return {
     nameFormat: '',
@@ -857,7 +860,7 @@ export function buildCustomItemLine({ ci = {}, qty, price } = {}) {
         Modification: {
           ModificationOption: [
             _ciModOption('name', name),
-            _ciModOption('style', style),
+            _ciModOption('style', styleStr),
             _ciModOption('extraDetails', ci.extraDetails || ''),
             _ciModOption('itemID', ci.itemID || ''),
             _ciModOption('thumbnail', thumb),

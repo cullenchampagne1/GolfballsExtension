@@ -116,8 +116,11 @@ export async function buildProposalLines(proposal) {
     // Custom items (SERVICEITEM) have no product page — build the cart line
     // straight from the saved fields, one per split.
     if (cat.isCustom && cat.custom) {
+      const ci = cat.custom;
+      const style = (line.variant && line.variant.values && line.variant.values.style)
+        || (Array.isArray(ci.styleOptions) && ci.styleOptions[0]) || ci.style || '';
       for (const split of (line.splits || [])) {
-        items.push(buildCustomItemLine({ ci: cat.custom, qty: split.qty, price: split.price }));
+        items.push(buildCustomItemLine({ ci, qty: split.qty, price: split.price, style }));
       }
       continue;
     }
