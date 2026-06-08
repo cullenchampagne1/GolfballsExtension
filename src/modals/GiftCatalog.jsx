@@ -9,7 +9,7 @@ import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount } from '../lib/saveProposal.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, clearCustomItems } from '../lib/customItems.js';
 import { getInventory, cachedCostForSku, primeCostCache } from '../lib/inventory.js';
-import { importHpgCatalog } from '../lib/hpgImport.js';
+import { importSnugzCatalog } from '../lib/snugzImport.js';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
 import { decoratedPricingForLine, giftSetPreviewUrl } from '../lib/cartSerializer.js';
@@ -700,6 +700,11 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) 
               </div>
               <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 6, lineHeight: 1.4 }}>{isGiftPricing ? 'Per-set price drops with order volume — quote the tier that matches the gift run.' : 'Per-unit price drops with order volume — quote the tier that matches the gift run.'}</div>
             </div>
+          )}
+          {/* View product — opens the saved supplier link (custom items only). */}
+          {p.isCustom && p.link && (
+            <Btn variant="secondary" size="sm" icon={<I.eye />} style={{ marginTop: 14 }}
+              onClick={() => { try { window.open(p.link, '_blank', 'noopener'); } catch { /* */ } }}>View product</Btn>
           )}
           {/* Show the customization UI for ANY customizable product (custom
               logo, personalized, monogram, photo, ball-marker, …), not just
@@ -1891,7 +1896,7 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
         )}
         {onImportHpg && (
           <Btn variant="secondary" size="sm" icon={<I.refresh />} state={hpgImporting ? 'loading' : 'idle'} onClick={onImportHpg}>
-            {hpgImporting ? (hpgProgress && hpgProgress.label ? hpgProgress.label : 'Importing…') : 'Import HPG'}
+            {hpgImporting ? (hpgProgress && hpgProgress.label ? hpgProgress.label : 'Importing…') : 'Import SnugZ'}
           </Btn>
         )}
         <Btn variant="primary" size="sm" icon={<I.plus />} onClick={onNew}>Add custom item</Btn>
@@ -2339,13 +2344,13 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const [hpgProgress, setHpgProgress] = useState(null);   // { label }
   const importHpg = () => {
     if (hpgImporting) return;
-    setHpgImporting(true); setHpgProgress({ label: 'Scanning…' });
-    importHpgCatalog({ onProgress: (p) => {
-      if (p.phase === 'list') setHpgProgress({ label: `Scanning ${nfmt(p.kept)} customizable…` });
+    setHpgImporting(true); setHpgProgress({ label: 'Connecting…' });
+    importSnugzCatalog({ onProgress: (p) => {
+      if (p.phase === 'list') setHpgProgress({ label: `Categories ${p.cat}/${p.cats} · ${nfmt(p.found)} found` });
       else setHpgProgress({ label: `Pulling ${nfmt(p.count)}/${nfmt(p.total)}` });
     } })
-      .then((r) => { toast?.success?.(`Imported ${r.fetched} HPG products (${r.added} new, ${r.updated} updated)`); })
-      .catch((e) => { toast?.error?.('HPG import failed — ' + ((e && e.message) || 'unknown error')); })
+      .then((r) => { toast?.success?.(`Imported ${r.fetched} SnugZ products (${r.added} new, ${r.updated} updated)`); })
+      .catch((e) => { toast?.error?.('SnugZ import failed — ' + ((e && e.message) || 'unknown error')); })
       .finally(() => { setHpgImporting(false); setHpgProgress(null); });
   };
 

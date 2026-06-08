@@ -297,6 +297,66 @@ function gbParseHpgDetail(html) {
   };
 }
 
+/* ── SnugZ import helpers (injected into a hidden snugzusa.com iframe) ─────────
+   SnugZ pricing is behind login and the site returns no CORS for credentialed
+   cross-origin requests, so we drop a hidden snugzusa.com iframe in the page and
+   run these IN that frame (MAIN world) — same-origin fetches that carry the SnugZ
+   session. They take no outer-scope refs (chrome.scripting serializes them). */
+function gbEnsureSnugzFrame(origin) {
+  return new Promise((res) => {
+    try {
+      if (document.getElementById('__gb_snugz_frame')) { res(true); return; }
+      const f = document.createElement('iframe');
+      f.id = '__gb_snugz_frame';
+      f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1200px;height:900px;opacity:0;border:0;pointer-events:none';
+      f.addEventListener('load', () => res(true));
+      f.src = origin + '/';
+      document.body.appendChild(f);
+      setTimeout(() => res(true), 12000);
+    } catch (e) { res(false); }
+  });
+}
+function gbSnugzCats(origin) {
+  if (location.origin !== origin) return null;
+  const set = new Set();
+  document.querySelectorAll('a[href]').forEach((a) => {
+    const m = (a.getAttribute('href') || '').match(/\/category\/([a-z0-9_-]+)/i);
+    if (m) set.add('/category/' + m[1].toLowerCase());
+  });
+  return [...set];
+}
+async function gbSnugzFetchParse(origin, urls, kind) {
+  if (location.origin !== origin) return null;
+  const parseList = (html) => {
+    const slugs = []; const seen = new Set(); const rx = /\/product\/([a-z0-9_.\-]+)/gi; let m;
+    while ((m = rx.exec(html))) { const s = m[1].toLowerCase(); if (!seen.has(s)) { seen.add(s); slugs.push(s); } }
+    return slugs;
+  };
+  const parseDetail = (html) => {
+    const name = ((html.match(/<h1[^>]*>([^<]{2,160})<\/h1>/i) || [])[1] || '').replace(/\s+/g, ' ').trim();
+    const sku = (html.match(/data-sku="([^"]+)"/i) || [])[1] || '';
+    const image = (html.match(/https:\/\/media\.snugzusa\.com\/asset\/[A-Za-z0-9\-]+\/thumbnail\/webimage[^"' ,]+/i) || [])[0] || '';
+    const tiers = []; const trx = /<strong>\s*([\d,]+)\s*<\/strong>[\s\S]{0,400}?tier_currency_price_USD"[^>]*>\s*\$?([\d.]+)/gi; let t;
+    while ((t = trx.exec(html))) tiers.push([parseInt(t[1].replace(/,/g, ''), 10), parseFloat(t[2])]);
+    let setup = 0; const srx = /data-setup="([\d.]+)"/gi; let s2;
+    while ((s2 = srx.exec(html))) { const v = parseFloat(s2[1]); if (v > setup) setup = v; }
+    const zipit = /data-zipit="1"/i.test(html);
+    const opts = []; const oseen = new Set(); const orx = /data-sku_adj="([^"]+)"/gi; let o;
+    while ((o = orx.exec(html))) { const l = o[1].trim(); if (l && !oseen.has(l)) { oseen.add(l); opts.push(l); } }
+    return { name, sku, image, tiers, setup, zipit, options: opts };
+  };
+  const out = [];
+  for (const u of urls) {
+    try {
+      const r = await fetch(u, { credentials: 'include' });
+      const html = await r.text();
+      out.push(kind === 'list' ? { url: u, slugs: parseList(html) } : { url: u, detail: parseDetail(html) });
+    } catch (e) { out.push({ url: u, error: String((e && e.message) || e) }); }
+    await new Promise((z) => setTimeout(z, 120));
+  }
+  return out;
+}
+
 // ── Seed default state on first install ──────────────────────────────────────
 chrome.runtime.onInstalled.addListener(({ reason }) => {
   if (reason !== 'install') return; // skip updates and browser_update
@@ -456,6 +516,37 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         console.warn('[GB] fetchInventory error:', err.message);
         sendResponse({ ok: false, error: String((err && err.message) || err) });
       }
+    })();
+    return true;
+  }
+
+  // ── SnugZ: ensure the authed iframe + scrape nav categories ────────────────
+  if (msg.action === 'snugzInit') {
+    const tabId = sender && sender.tab && sender.tab.id;
+    if (!tabId) { sendResponse({ ok: false, error: 'No tab context' }); return true; }
+    (async () => {
+      try {
+        await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: gbEnsureSnugzFrame, args: ['https://snugzusa.com'] });
+        const r = await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, world: 'MAIN', func: gbSnugzCats, args: ['https://snugzusa.com'] });
+        const hit = (r || []).map((x) => x && x.result).find(Boolean);
+        if (!hit || !hit.length) { sendResponse({ ok: false, error: 'snugzusa.com frame did not load / no categories — sign in to SnugZ in a tab (it may also block embedding).' }); return; }
+        sendResponse({ ok: true, categories: hit });
+      } catch (e) { sendResponse({ ok: false, error: String((e && e.message) || e) }); }
+    })();
+    return true;
+  }
+
+  // ── SnugZ: fetch + parse a batch of URLs inside the authed iframe ──────────
+  if (msg.action === 'snugzFetch' && Array.isArray(msg.urls)) {
+    const tabId = sender && sender.tab && sender.tab.id;
+    if (!tabId) { sendResponse({ ok: false, error: 'No tab context' }); return true; }
+    (async () => {
+      try {
+        await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: gbEnsureSnugzFrame, args: ['https://snugzusa.com'] });
+        const r = await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, world: 'MAIN', func: gbSnugzFetchParse, args: ['https://snugzusa.com', msg.urls, msg.kind || 'detail'] });
+        const hit = (r || []).map((x) => x && x.result).find((v) => v != null);
+        sendResponse({ ok: true, results: hit || [] });
+      } catch (e) { sendResponse({ ok: false, error: String((e && e.message) || e) }); }
     })();
     return true;
   }
