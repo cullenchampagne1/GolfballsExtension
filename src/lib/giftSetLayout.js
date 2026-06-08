@@ -58,9 +58,11 @@ export const SIX_BALL_POKER_CHIP = {
 };
 // The 2 round recesses next to the tool hold customized chrome ball markers
 // (steel rim + white center print). Positions match the MARK slots cut in the box.
+// z = -0.01 so the disc sits slightly PROUD of the foam (top above the surface);
+// any deeper and the near foam-rim occludes the lower half of the printed logo.
 const MARKER_SLOTS = [
-  { shape: 'marker', x: 1.30, y: 2.00, z: -0.04, radius: 0.40, decal: true },
-  { shape: 'marker', x: 4.10, y: 0.60, z: -0.04, radius: 0.40, decal: true },
+  { shape: 'marker', x: 1.30, y: 2.00, z: -0.01, radius: 0.40, decal: true },
+  { shape: 'marker', x: 4.10, y: 0.60, z: -0.01, radius: 0.40, decal: true },
 ];
 export const SIX_BALL_LEVER = {
   boxModel: BOX_MODELS.sixBallLever,
