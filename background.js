@@ -335,40 +335,65 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  // ── Inventory (office.gbcadmin.com) — MUST run in the PAGE context ─────────
-  // The Dynamics Inventory endpoint is gated by the gbcadmin session cookie. A
-  // background (service-worker) fetch is a 3rd-party context with no session →
-  // it gets 302'd to the error page. So we run the fetch in the MAIN world of the
-  // requesting tab (the golfballs.com page), exactly like the site's own admin
-  // tooling does — same origin + cookies. Returns { ok, status, text }.
+  // ── Inventory (office.gbcadmin.com) — MUST be SAME-ORIGIN to gbcadmin ──────
+  // The Dynamics Inventory endpoint needs the gbcadmin session cookie AND returns
+  // Access-Control-Allow-Origin:* — which the browser rejects for any credentialed
+  // CORS request. So a background fetch (no session) and a page fetch from
+  // api/www.golfballs.com (CORS-blocked) both fail. The only context that works is
+  // SAME-ORIGIN to office.gbcadmin.com: we drop a hidden iframe pointed at the
+  // Inventory URL (the iframe nav carries the session cookie), then read that
+  // frame's own DOM via executeScript (same-origin → no CORS). Returns {ok,text}.
   if (msg.action === 'fetchInventory' && msg.sku) {
     const tabId = sender && sender.tab && sender.tab.id;
     if (!tabId) { sendResponse({ ok: false, error: 'No tab context for inventory request' }); return true; }
     const url = 'https://office.gbcadmin.com/office/Dynamics/Inventory.aspx?sku=' + encodeURIComponent(msg.sku);
-    chrome.scripting.executeScript({
-      target: { tabId },              // top frame of the page (golfballs.com)
-      world: 'MAIN',                  // page context → carries the gbcadmin session
-      func: async (u) => {
-        try {
-          const r = await fetch(u, { credentials: 'include', headers: { Accept: 'text/html,*/*' } });
-          const text = await r.text();
-          return { ok: r.ok, status: r.status, redirected: r.redirected, finalUrl: r.url, text };
-        } catch (e) { return { ok: false, status: 0, error: String((e && e.message) || e), text: '' }; }
-      },
-      args: [url],
-    })
-      .then((results) => {
-        const res = (results && results[0] && results[0].result) || null;
-        if (!res) { sendResponse({ ok: false, error: 'No result from page context' }); return; }
-        if (res.error) { sendResponse({ ok: false, error: res.error }); return; }
-        if (res.redirected && /GenericErrorPage|aspxerrorpath/i.test(res.finalUrl || '')) {
-          sendResponse({ ok: false, error: 'Not signed in to office.gbcadmin.com — open it in a tab and sign in.' });
-          return;
-        }
-        if (!res.ok) { sendResponse({ ok: false, error: 'HTTP ' + res.status }); return; }
-        sendResponse({ ok: true, status: res.status, text: res.text || '' });
-      })
-      .catch((err) => { console.warn('[GB] fetchInventory error:', err.message); sendResponse({ ok: false, error: String(err.message || err) }); });
+    (async () => {
+      try {
+        // 1. Create the hidden gbcadmin iframe in the page and wait for it to load.
+        await chrome.scripting.executeScript({
+          target: { tabId }, world: 'MAIN',
+          func: (u) => new Promise((res) => {
+            try {
+              const old = document.getElementById('__gb_inv_frame'); if (old) old.remove();
+              const f = document.createElement('iframe');
+              f.id = '__gb_inv_frame';
+              f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1100px;height:760px;opacity:0;border:0;pointer-events:none';
+              f.addEventListener('load', () => setTimeout(() => res(true), 200));
+              f.src = u;
+              document.body.appendChild(f);
+              setTimeout(() => res(true), 9000);   // safety if load never fires
+            } catch (e) { res(false); }
+          }),
+          args: [url],
+        });
+        // 2. Read the gbcadmin frame's DOM (runs in every frame; only the
+        //    office.gbcadmin.com one returns data — same-origin, no CORS).
+        const results = await chrome.scripting.executeScript({
+          target: { tabId, allFrames: true }, world: 'MAIN',
+          func: () => {
+            try {
+              if (location.hostname && location.hostname.endsWith('gbcadmin.com')) {
+                return { href: location.href, html: document.documentElement.outerHTML };
+              }
+            } catch (e) { /* cross-origin guard */ }
+            return null;
+          },
+        });
+        // 3. Clean up the iframe.
+        chrome.scripting.executeScript({
+          target: { tabId }, world: 'MAIN',
+          func: () => { const f = document.getElementById('__gb_inv_frame'); if (f) f.remove(); },
+        }).catch(() => {});
+
+        const hit = (results || []).map((r) => r && r.result).find(Boolean);
+        if (!hit) { sendResponse({ ok: false, error: 'Inventory frame did not load (it may block embedding). Open office.gbcadmin.com in a tab and sign in, then retry.' }); return; }
+        if (/GenericErrorPage|aspxerrorpath/i.test(hit.href || '')) { sendResponse({ ok: false, error: 'Not signed in to office.gbcadmin.com — open it in a tab and sign in.' }); return; }
+        sendResponse({ ok: true, text: hit.html || '' });
+      } catch (err) {
+        console.warn('[GB] fetchInventory error:', err.message);
+        sendResponse({ ok: false, error: String((err && err.message) || err) });
+      }
+    })();
     return true;
   }
 
