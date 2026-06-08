@@ -761,6 +761,125 @@ export function lineTotal(line) {
   return round2((line.ItemPrice || 0) * (line.totalQty || 0) + (line.SetupPrice || 0));
 }
 
+/* ── custom items (ShortCode "SERVICEITEM") ──────────────────────────────────
+   A sales-rep custom item has no product page; this builds the cart line
+   directly from the saved fields, templated EXACTLY on a captured SERVICEITEM
+   line (name/style/extraDetails/itemID/thumbnail ride in the modification
+   options; price/setup/qty drive the price breaks; weight/dropship ride in the
+   child). See src/lib/customItems.js for the stored shape. */
+const _ciNum = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const _pbHeader = (price, qty) => ({
+  HashValue: 0, ProductionTime: 0, priceBreakHeaderID: 0,
+  PriceBreak: [{ Price: round2(price), Quantity: qty, Cost: 0, priceBreakHeaderID: 0, CostPercentage: 0 }],
+  minimumQty: 1,
+});
+const _ciModOption = (name, value) => ({
+  ModificationOptionValue: [{
+    itemFee_priceBreakHeader: _pbHeader(0, 1),
+    setupFee_priceBreakHeader: _pbHeader(0, 1),
+    modificationOptionID: 0, modificationOptionValueID: 0, Name: value == null ? '' : String(value), selected: true,
+  }],
+  modificationOptionID: 0, modificationID: 0, Name: name, Description: '',
+  NotAvailableToSelect: false, CustomerNote: '', setupFee_priceBreakHeaderID: 0, itemFee_priceBreakHeaderID: 0,
+});
+
+export function buildCustomItemLine({ ci = {}, qty, price } = {}) {
+  const q = _ciNum(qty != null ? qty : ci.qty) || 1;
+  const itemPrice = round2(price != null ? price : _ciNum(ci.price));
+  const setup = round2(_ciNum(ci.setup));
+  const name = (ci.name || 'Custom item').toString();
+  const style = (ci.style || '').toString();
+  const title = name + (style ? ' ' + style : '');
+  const thumb = (ci.thumbnail || '').toString();
+  return {
+    nameFormat: '',
+    productTitle: title,
+    qtyFields: [],
+    ShortCode: 'SERVICEITEM',
+    totalQty: q,
+    childList: [{
+      ShortCode: name,
+      OriginalPriceLabel: null,
+      originalPrice_priceBreakHeader: null,
+      itemFeeModifier_priceBreakHeaderID: 0,
+      QtyPerPack: 1,
+      DescriptionData: {},
+      productChildID: 0,
+      itemFeeModifier_priceBreakHeader: {
+        HashValue: null, ProductionTime: 0, priceBreakHeaderID: 0,
+        PriceBreak: [{ Price: 0, Quantity: 1, Cost: 0, priceBreakHeaderID: 0, CostPercentage: 0 }],
+        Quantity: q, Price: itemPrice, Cost: 0, CostPercentage: 0,
+      },
+      AvailableForSale: true,
+      setupFeeModifier_priceBreakHeaderID: null,
+      Name: name,
+      ManufacturerSku: '',
+      setupFeeModifier_priceBreakHeader: null,
+      originalPrice_priceBreakHeaderID: null,
+      CustomData: { legacySku: (ci.legacySku || '').toString(), itemID: (ci.itemID || '').toString(), isDropship: !!ci.dropship },
+      ModuleData: {},
+      PropertyValueProduct: [],
+      LastUpdated: '',
+      ShippingData: { weight: _ciNum(ci.weight), dimensionalWeight: 0 },
+      ProductTagDetail: [],
+      productParentID: 0,
+    }],
+    ModificationGroupDetail: {},
+    ItemPriceBreak: { priceBreakHeaderID: 0, PriceBreak: [{ Quantity: q, Price: itemPrice, Cost: 0 }], ProductionTime: 0, minimumQty: 1 },
+    SetupPriceBreak: { priceBreakHeaderID: 0, PriceBreak: [{ Quantity: 1, Price: setup, Cost: 0 }], ProductionTime: 0 },
+    ItemPrice: itemPrice,
+    SetupPrice: setup,
+    originalPrice_priceBreakHeader: null,
+    originalPrice_priceBreakHeaderID: 0,
+    disableGiftWrap: false,
+    OriginalPriceLabel: '',
+    ProductParentSetupFee: null,
+    ProductParentItemFee: {
+      HashValue: 0, ProductionTime: 0, priceBreakHeaderID: 0,
+      PriceBreak: [{ Price: 0, Quantity: 0, Cost: 0, priceBreakHeaderID: 0, CostPercentage: 0 }],
+      minimumQty: 1,
+    },
+    SelectedItemPriceBreakQty: q,
+    childFilters: [],
+    widgetSelections: [],
+    widgetApplicationOrder: [],
+    selectionWidgets: [],
+    images: thumb ? [{ PropertyValueProduct: [], productImageID: 0, URL: thumb, ProductImageConditionSpecial: [], productParentID: 0, SortValue: 1 }] : [],
+    inventory: [],
+    subscription: {},
+    customUserImage: {
+      firstPole: { fileName: '', filePath: '', userImage: null, fileSupported: false },
+      secondPole: { fileName: '', filePath: '', userImage: null, fileSupported: false },
+    },
+    itemGuid: (globalThis.crypto && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2)),
+    modification: {
+      ProductModification: {
+        Modification: {
+          ModificationOption: [
+            _ciModOption('name', name),
+            _ciModOption('style', style),
+            _ciModOption('extraDetails', ci.extraDetails || ''),
+            _ciModOption('itemID', ci.itemID || ''),
+            _ciModOption('thumbnail', thumb),
+          ],
+          setupFee_priceBreakHeaderID: 0,
+          Description: 'Service Item',
+          modificationID: 0,
+          FriendlyName: 'Service Item',
+          itemFee_priceBreakHeaderID: 0,
+          setupFee_priceBreakHeader: _pbHeader(setup, 1),
+          itemFee_priceBreakHeader: _pbHeader(itemPrice, q),
+          Name: 'Service Item',
+        },
+        PriceAdjustment: 0,
+        modificationID: 0,
+        productModificationID: 0,
+        productParentID: 0,
+      },
+    },
+  };
+}
+
 /* Assemble the cartData object (the localStorage.shoppingCart shape) from an
    array of fully-built itemsInCart lines. Totals reconcile with real captures. */
 export function buildCartData(itemsInCart, { proposalID = null } = {}) {

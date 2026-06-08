@@ -7,6 +7,8 @@ import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CA
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount } from '../lib/saveProposal.js';
+import { loadCustomItems, saveCustomItem, removeCustomItem, customItemToProduct } from '../lib/customItems.js';
+import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
 import { decoratedPricingForLine, giftSetPreviewUrl } from '../lib/cartSerializer.js';
 import { giftSetLadder, giftSetSizeLabel } from '../lib/giftSets.js';
@@ -665,7 +667,7 @@ function SavedNavRow({ label, icon, count, active, onClick }) {
   );
 }
 
-function CategoryRail({ sel, onSelect, depts, deptCounts, total, dock, view, onSetView, savedCount }) {
+function CategoryRail({ sel, onSelect, depts, deptCounts, total, dock, view, onSetView, savedCount, customCount }) {
   return (
     <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: 12, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px', flexShrink: 0 }}>Browse</div>
@@ -690,6 +692,8 @@ function CategoryRail({ sel, onSelect, depts, deptCounts, total, dock, view, onS
         <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', padding: '12px 11px 4px', flexShrink: 0 }}>Saved</div>
         <SavedNavRow label="Saved Proposals" icon={<I.bookmark size={14} />} count={savedCount}
           active={view === 'proposals'} onClick={() => onSetView('proposals')} />
+        <SavedNavRow label="Custom Items" icon={<I.sparkle size={14} />} count={customCount}
+          active={view === 'custom'} onClick={() => onSetView('custom')} />
         <SavedStub label="Previous orders" icon={<I.refresh size={14} />} />
       </div>
       {/* AnimatePresence so the dock plays its exit when the proposal opens
@@ -1696,6 +1700,134 @@ function useCatalogScale() {
   return scale;
 }
 
+/* ── Custom Items view ───────────────────────────────────────────────────────
+   A grid of rep-defined custom items rendered with the standard ProductCard
+   (via customItemToProduct), an "add" tile as the last cell, and a top-right
+   "Add custom item" button. Clicking a card edits it; the round + adds it to the
+   proposal; the trash overlay deletes it. */
+function CustomAddTile({ onNew, minH }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button type="button" onClick={onNew} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{
+        minHeight: minH, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
+        background: hover ? 'var(--gb-brand-tint-soft)' : 'transparent', cursor: 'pointer', fontFamily: 'inherit',
+        border: '1.5px dashed ' + (hover ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'), borderRadius: 'var(--gb-r-lg)',
+        color: hover ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)', transition: 'all var(--gb-anim)',
+      }}>
+      <div style={{ width: 38, height: 38, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: hover ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)', border: '1px solid ' + (hover ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)') }}>
+        <I.plus size={18} />
+      </div>
+      <span style={{ fontSize: 12, fontWeight: 700 }}>New custom item</span>
+    </button>
+  );
+}
+
+function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, onEdit, onDelete }) {
+  const minH = compact ? 232 : 262;
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 16px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
+        <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <I.sparkle size={16} />
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Custom Items</div>
+          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, fontWeight: 500 }}>One-off items not in the catalog — add them to a proposal like any product</div>
+        </div>
+        <Btn variant="primary" size="sm" icon={<I.plus />} onClick={onNew}>Add custom item</Btn>
+      </div>
+      <div className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${colMin}px, 1fr))`, gap: compact ? 10 : 12 }}>
+          {items.map((ci) => {
+            const p = customItemToProduct(ci);
+            return (
+              <div key={ci.id} style={{ position: 'relative' }}>
+                <ProductCard p={p} compact={compact} showRating={false}
+                  inProposal={inProposal(p.id)} onAdd={() => onAdd(ci)} onClick={() => onEdit(ci)} />
+                <IconBtn size="sm" danger icon={<I.trash size={13} />} title="Delete custom item"
+                  onClick={(e) => { e.stopPropagation(); onDelete(ci.id); }}
+                  style={{ position: 'absolute', top: 8, right: 8, background: 'var(--gb-surface-modal)', boxShadow: '0 1px 4px rgba(0,0,0,.12)' }} />
+              </div>
+            );
+          })}
+          <CustomAddTile onNew={onNew} minH={minH} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Labeled field row for the custom-item form. Module-level so it keeps a stable
+   component identity across renders (an inner component would remount the input
+   on every keystroke and steal focus). */
+function CIField({ label, full, children }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 5, gridColumn: full ? '1 / -1' : 'auto' }}>
+      <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .7, color: 'var(--gb-text-muted)' }}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+/* Custom-item create/edit form — overlays the modal body. Fields mirror the
+   golfballs.com cart "custom item" form (name/style/extraDetails/itemID/price/
+   setup/weight/qty/thumbnail/dropship + optional description). */
+function CustomItemForm({ initial, onCancel, onSave }) {
+  const isEdit = !!(initial && initial.id);
+  const s = (v) => (v == null ? '' : String(v));
+  const [f, setF] = useState({
+    id: initial.id, name: s(initial.name), style: s(initial.style), extraDetails: s(initial.extraDetails),
+    itemID: s(initial.itemID), thumbnail: s(initial.thumbnail), description: s(initial.description),
+    price: initial.price != null ? String(initial.price) : '', setup: initial.setup != null ? String(initial.setup) : '',
+    weight: initial.weight != null ? String(initial.weight) : '', qty: initial.qty != null ? String(initial.qty) : '',
+    dropship: !!initial.dropship,
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k) => (v) => setF((prev) => ({ ...prev, [k]: v }));
+  const canSave = !!f.name.trim() && !saving;
+  const submit = () => {
+    if (!canSave) return;
+    setSaving(true);
+    Promise.resolve(onSave(f)).catch(() => setSaving(false));
+  };
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14 }}
+      style={{ position: 'absolute', inset: 0, zIndex: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.32)', padding: 18 }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
+      <motion.div initial={{ opacity: 0, y: 10, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: .98 }} transition={{ duration: .18, ease: [0.32, 0.72, 0, 1] }}
+        style={{ width: 440, maxWidth: '100%', maxHeight: '100%', display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden' }}>
+        <div style={{ padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-inverse-strong)', flexShrink: 0 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <I.sparkle size={15} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{isEdit ? 'Edit custom item' : 'New custom item'}</div>
+          <IconBtn size="sm" icon={<I.close />} onClick={onCancel} />
+        </div>
+        <div className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <CIField label="Brand / Product" full><Input size="sm" value={f.name} onChange={set('name')} placeholder="e.g. GB44 | Golf Ball Mint Container" /></CIField>
+          <CIField label="Style"><Input size="sm" value={f.style} onChange={set('style')} placeholder="e.g. TEST" /></CIField>
+          <CIField label="Extra Details"><Input size="sm" value={f.extraDetails} onChange={set('extraDetails')} placeholder="" /></CIField>
+          <CIField label="ItemID"><Input size="sm" value={f.itemID} onChange={set('itemID')} placeholder="00000" /></CIField>
+          <CIField label="Qty"><Input size="sm" type="number" value={f.qty} onChange={set('qty')} placeholder="1" /></CIField>
+          <CIField label="Price"><Input size="sm" type="number" value={f.price} onChange={set('price')} leading={<span style={{ fontSize: 12 }}>$</span>} placeholder="0.00" /></CIField>
+          <CIField label="Setup"><Input size="sm" type="number" value={f.setup} onChange={set('setup')} leading={<span style={{ fontSize: 12 }}>$</span>} placeholder="0.00" /></CIField>
+          <CIField label="Weight"><Input size="sm" type="number" value={f.weight} onChange={set('weight')} placeholder="0" /></CIField>
+          <CIField label="Thumbnail Image" full><Input size="sm" value={f.thumbnail} onChange={set('thumbnail')} placeholder="https://…" /></CIField>
+          <CIField label="Description" full><Input size="sm" value={f.description} onChange={set('description')} placeholder="Optional" /></CIField>
+          <div style={{ gridColumn: '1 / -1', paddingTop: 2 }}>
+            <Checkbox checked={f.dropship} onChange={(v) => setF((prev) => ({ ...prev, dropship: typeof v === 'boolean' ? v : !prev.dropship }))} label="Dropship" />
+          </div>
+        </div>
+        <div style={{ padding: '10px 16px', display: 'flex', gap: 8, borderTop: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-inverse-strong)', flexShrink: 0 }}>
+          <Btn variant="ghost" size="md" style={{ flex: 1 }} onClick={onCancel}>Cancel</Btn>
+          <Btn variant="primary" size="md" icon={<I.check />} style={{ flex: 1.4 }} state={saving ? 'loading' : 'idle'} disabled={!canSave} onClick={submit}>{isEdit ? 'Save changes' : 'Save custom item'}</Btn>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 export function GiftCatalog({ onClose, density = 'comfortable', showRating = true, priceFocus = 'retail', pageContext = {} }) {
   ensureCatalogKeyframes();
   const scale = useCatalogScale(); // loaded before first paint to avoid a resize snap
@@ -1768,14 +1900,22 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   }, [proposal]);
   // Saved Proposals library (chrome.storage). `view` swaps the catalog grid
   // for the gallery; `loadedId` flags the last draft copied into the proposal.
-  const [view, setView] = useState('catalog');        // 'catalog' | 'proposals'
+  const [view, setView] = useState('catalog');        // 'catalog' | 'proposals' | 'custom'
   useEffect(() => { if (view !== 'proposals') setDetail(null); }, [view]);  // close breakdown on view change
   const [savedProposals, setSavedProposals] = useState([]);
   const [loadedId, setLoadedId] = useState(null);
+  // Custom items (SERVICEITEM) — rep-defined products in chrome.storage; editingCustom
+  // holds the record being created/edited in the form ({} = new, null = closed).
+  const [customItems, setCustomItems] = useState([]);
+  const [editingCustom, setEditingCustom] = useState(null);
   useEffect(() => {
     let alive = true;
     loadSavedProposals().then((l) => { if (alive) setSavedProposals(l); });
-    const onCh = (changes) => { if (changes && changes.gbSavedProposals) setSavedProposals(changes.gbSavedProposals.newValue || []); };
+    loadCustomItems().then((l) => { if (alive) setCustomItems(l); });
+    const onCh = (changes) => {
+      if (changes && changes.gbSavedProposals) setSavedProposals(changes.gbSavedProposals.newValue || []);
+      if (changes && changes.gbCustomItems) setCustomItems(changes.gbCustomItems.newValue || []);
+    };
     try { chrome.storage.onChanged.addListener(onCh); } catch { /* */ }
     return () => { alive = false; try { chrome.storage.onChanged.removeListener(onCh); } catch { /* */ } };
   }, []);
@@ -1897,6 +2037,15 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // New-opportunity (future) — the "+" beside the opportunity dropdown. Fields TBD;
   // stub for now so the button is in place to wire once the create form is defined.
   const addOpportunity = (accountId) => { /* TODO: open new-opportunity form (fields pending) */ };
+
+  // ── Custom items ──────────────────────────────────────────────────────────
+  // Save (create/edit) → storage; the onChanged listener refreshes the grid.
+  const saveCustom = (rec) => saveCustomItem(rec)
+    .then((r) => { setCustomItems(r.list); setEditingCustom(null); toast?.success?.(`Saved “${r.entry.name || 'custom item'}”`); })
+    .catch((e) => { toast?.error?.('Couldn’t save custom item — ' + ((e && e.message) || 'unknown error')); throw e; });
+  const deleteCustom = (id) => removeCustomItem(id).then((next) => setCustomItems(next));
+  // Add a custom item to the live proposal (as a synthetic product) + open it.
+  const addCustomToProposal = (ci) => { addToProposal(customItemToProduct(ci)); setProposalOpen(true); };
 
   /* One shared live pull, with progress. `force` clears the cache first
      (manual rebuild — stale items/sales can't survive as a fallback);
@@ -2115,7 +2264,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative', overflow: 'hidden', boxShadow: 'inset 0 7px 7px -7px rgba(0,0,0,.16), inset 0 -7px 7px -7px rgba(0,0,0,.16)' }}>
           <CategoryRail sel={sel} onSelect={(s) => { setView('catalog'); setSel(s); }} total={catalog.length}
             depts={depts} deptCounts={deptCounts}
-            view={view} onSetView={setView} savedCount={savedProposals.length}
+            view={view} onSetView={setView} savedCount={savedProposals.length} customCount={customItems.length}
             dock={proposal.length > 0 && !proposalOpen ? <ProposalDock key="dock" count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} /> : null} />
           <AnimatePresence mode="wait" initial={false}>
           {view === 'proposals' ? (
@@ -2123,6 +2272,12 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             <SavedGallery items={savedProposals} loadedId={loadedId}
               current={proposal} onOpen={(item) => setDetail({ kind: 'saved', item })} onOpenCurrent={() => setDetail({ kind: 'current' })}
               onLoad={loadSaved} onCopy={copySaved} onDelete={deleteSaved} onSaveToAccount={loadSavedToAccount} />
+          </motion.div>
+          ) : view === 'custom' ? (
+            <motion.div key="custom" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <CustomItemsGallery items={customItems} compact={compact} colMin={colMin}
+              inProposal={inProposal} onAdd={addCustomToProposal}
+              onNew={() => setEditingCustom({})} onEdit={(ci) => setEditingCustom(ci)} onDelete={deleteCustom} />
           </motion.div>
           ) : (
           <motion.div key="catalog" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -2203,9 +2358,17 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           {/* Item details stay an overlay INSIDE the catalog card, so they
               coexist with the proposal side card (both visible at once). */}
           <AnimatePresence>
-            {selected && view !== 'proposals' && (
+            {selected && view !== 'proposals' && view !== 'custom' && (
               <DetailPanel key="detail" p={selected} inProposal={inProposal(selected.id)} onAdd={addToProposal}
                 onOpenProposal={() => { setSelected(null); setProposalOpen(true); }} onClose={() => setSelected(null)} />
+            )}
+          </AnimatePresence>
+
+          {/* Custom-item create/edit form — overlays the body. */}
+          <AnimatePresence>
+            {editingCustom && (
+              <CustomItemForm key="custom-form" initial={editingCustom}
+                onCancel={() => setEditingCustom(null)} onSave={saveCustom} />
             )}
           </AnimatePresence>
         </div>

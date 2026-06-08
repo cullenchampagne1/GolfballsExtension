@@ -14,7 +14,7 @@
    and PUT it through the giftSaveCart relay.
    ─────────────────────────────────────────────────────────────────────────── */
 
-import { assembleLine, buildSaveCartBody, buildSaveProposalBody, buildCartData, buildAsCartContents } from './cartSerializer.js';
+import { assembleLine, buildSaveCartBody, buildSaveProposalBody, buildCustomItemLine, buildCartData, buildAsCartContents } from './cartSerializer.js';
 import { runEngine } from './page-engine/index.js';
 
 // golfballs.com second-pole upcharge per dozen (Logo / Text), added on top of
@@ -113,6 +113,14 @@ export async function buildProposalLines(proposal) {
   const skipped = [];
   for (const line of (proposal || [])) {
     const cat = line.product || {};
+    // Custom items (SERVICEITEM) have no product page — build the cart line
+    // straight from the saved fields, one per split.
+    if (cat.isCustom && cat.custom) {
+      for (const split of (line.splits || [])) {
+        items.push(buildCustomItemLine({ ci: cat.custom, qty: split.qty, price: split.price }));
+      }
+      continue;
+    }
     const raw = rawByUrl.get(cat.url);
     if (!raw) { skipped.push({ title: cat.title || cat.sku || 'item', reason: 'product page unavailable' }); continue; }
     const breaks = cat.breaks || [];
