@@ -39,7 +39,20 @@ import { detectPageType as sharedDetectPageType, getPageContext } from '../lib/p
      window.__gbActionsShelfLoaded   single-execution guard
 ─────────────────────────────────────────────────────────────── */
 
-if (!window.__gbActionsShelfLoaded) {
+/* Skip the whole shelf when the document IS a PDF (an invoice/order PDF opened
+   in the browser's native viewer). The content script still injects there, but
+   a floating overlay gets in the way of printing — and there's no CRM context
+   to act on anyway. `contentType` catches extension-less endpoints that stream a
+   PDF (e.g. ViewInvoice.aspx); the path check is a belt-and-suspenders fallback. */
+function __gbIsPdfDocument() {
+  try {
+    if ((document.contentType || '').toLowerCase() === 'application/pdf') return true;
+    if (/\.pdf(?:[?#]|$)/i.test(location.pathname)) return true;
+  } catch { /* */ }
+  return false;
+}
+
+if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
   window.__gbActionsShelfLoaded = true;
   ensureTheme();
 
