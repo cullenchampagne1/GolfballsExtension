@@ -5,7 +5,6 @@ import { ensureScales } from '../lib/scales.js';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 import { GiftCatalog } from '../modals/GiftCatalog.jsx';
 import { runEngine } from '../lib/page-engine/index.js';
-import { clearCustomItems } from '../lib/customItems.js';
 
 /* Resolve the CRM page context (account/contact/order ids + opportunities) so a
    proposal can be saved straight to the right account/opportunity. The catalog
@@ -54,11 +53,5 @@ if (!window.__gbGiftCatalogLoaded) {
         <GiftCatalog onClose={onClosed} pageContext={pageContext} />
       </ToastHost>
     ));
-  };
-
-  // Console command to wipe all saved custom items (e.g. before a fresh import):
-  //   __gbClearCustomItems()
-  window.__gbClearCustomItems = function () {
-    return clearCustomItems().then((n) => { console.log(`%c[GB] Cleared ${n} custom item(s).`, 'color:#e5484d;font-weight:bold'); return n; });
   };
 }

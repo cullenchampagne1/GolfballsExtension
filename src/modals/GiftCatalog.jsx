@@ -7,7 +7,7 @@ import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CA
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount } from '../lib/saveProposal.js';
-import { loadCustomItems, saveCustomItem, removeCustomItem, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty } from '../lib/customItems.js';
+import { loadCustomItems, saveCustomItem, removeCustomItem, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, clearCustomItems } from '../lib/customItems.js';
 import { getInventory, cachedCostForSku, primeCostCache } from '../lib/inventory.js';
 import { importHpgCatalog } from '../lib/hpgImport.js';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
@@ -1842,12 +1842,14 @@ function CustomAddTile({ onNew, minH }) {
   );
 }
 
-function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, onOpen, onDelete, onImportHpg, hpgImporting, hpgProgress }) {
+function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, onOpen, onDelete, onImportHpg, hpgImporting, hpgProgress, onClearAll }) {
   const minH = compact ? 232 : 262;
   const INIT = 60, CHUNK = 48;
   const [q, setQ] = useState('');
   const [visible, setVisible] = useState(INIT);
+  const [confirmClear, setConfirmClear] = useState(false);
   const scrollRef = useRef(null);
+  useEffect(() => { if (!confirmClear) return; const t = setTimeout(() => setConfirmClear(false), 3500); return () => clearTimeout(t); }, [confirmClear]);
   // Search across name / SKU / brand (extraDetails) / description.
   const filtered = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -1881,6 +1883,12 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
             {q.trim() ? `${nfmt(filtered.length)} of ${nfmt(items.length)} match` : `${nfmt(items.length)} item${items.length === 1 ? '' : 's'} — add them to a proposal like any product`}
           </div>
         </div>
+        {onClearAll && items.length > 0 && (
+          <Btn variant={confirmClear ? 'danger' : 'ghost'} size="sm" icon={<I.trash />}
+            onClick={() => { if (confirmClear) { setConfirmClear(false); onClearAll(); } else setConfirmClear(true); }}>
+            {confirmClear ? `Clear ${nfmt(items.length)}? Confirm` : 'Clear all'}
+          </Btn>
+        )}
         {onImportHpg && (
           <Btn variant="secondary" size="sm" icon={<I.refresh />} state={hpgImporting ? 'loading' : 'idle'} onClick={onImportHpg}>
             {hpgImporting ? (hpgProgress && hpgProgress.label ? hpgProgress.label : 'Importing…') : 'Import HPG'}
@@ -2322,6 +2330,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     .then((r) => { setCustomItems(r.list); setEditingCustom(null); toast?.success?.(`Saved “${r.entry.name || 'custom item'}”`); })
     .catch((e) => { toast?.error?.('Couldn’t save custom item — ' + ((e && e.message) || 'unknown error')); throw e; });
   const deleteCustom = (id) => removeCustomItem(id).then((next) => setCustomItems(next));
+  const clearCustom = () => clearCustomItems().then((n) => { setCustomItems([]); toast?.success?.(`Cleared ${n} custom item${n === 1 ? '' : 's'}`); });
   // Add a custom item to the live proposal (as a synthetic product) + open it.
   const addCustomToProposal = (ci) => { addToProposal(customItemToProduct(ci)); setProposalOpen(true); };
   // Bulk import the hpgbrands.com catalog as custom items (paged Searchspring
@@ -2571,7 +2580,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             <CustomItemsGallery items={customItems} compact={compact} colMin={colMin}
               inProposal={inProposal} onAdd={addCustomToProposal}
               onNew={() => setEditingCustom({})} onOpen={(ci) => setSelected(customItemToProduct(ci))} onDelete={deleteCustom}
-              onImportHpg={importHpg} hpgImporting={hpgImporting} hpgProgress={hpgProgress} />
+              onImportHpg={importHpg} hpgImporting={hpgImporting} hpgProgress={hpgProgress} onClearAll={clearCustom} />
           </motion.div>
           ) : (
           <motion.div key="catalog" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
