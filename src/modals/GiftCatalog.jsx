@@ -1840,6 +1840,31 @@ function CustomAddTile({ onNew, minH }) {
 
 function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, onOpen, onDelete, onImportHpg, hpgImporting, hpgProgress }) {
   const minH = compact ? 232 : 262;
+  const INIT = 60, CHUNK = 48;
+  const [q, setQ] = useState('');
+  const [visible, setVisible] = useState(INIT);
+  const scrollRef = useRef(null);
+  // Search across name / SKU / brand (extraDetails) / description.
+  const filtered = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    if (!s) return items;
+    return items.filter((ci) =>
+      (ci.name || '').toLowerCase().includes(s)
+      || (ci.sku || '').toLowerCase().includes(s)
+      || (ci.itemID || '').toLowerCase().includes(s)
+      || (ci.extraDetails || '').toLowerCase().includes(s)
+      || (ci.description || '').toLowerCase().includes(s));
+  }, [items, q]);
+  // Reset the window when the query (or the underlying list) changes.
+  useEffect(() => { setVisible(INIT); if (scrollRef.current) scrollRef.current.scrollTop = 0; }, [q, items.length]);
+  const onScroll = (e) => {
+    const el = e.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 600) {
+      setVisible((c) => (c < filtered.length ? Math.min(filtered.length, c + CHUNK) : c));
+    }
+  };
+  const shown = filtered.slice(0, visible);
+  const atEnd = visible >= filtered.length;
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 16px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
@@ -1848,7 +1873,9 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Custom Items</div>
-          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, fontWeight: 500 }}>One-off items not in the catalog — add them to a proposal like any product</div>
+          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, fontWeight: 500 }}>
+            {q.trim() ? `${nfmt(filtered.length)} of ${nfmt(items.length)} match` : `${nfmt(items.length)} item${items.length === 1 ? '' : 's'} — add them to a proposal like any product`}
+          </div>
         </div>
         {onImportHpg && (
           <Btn variant="secondary" size="sm" icon={<I.refresh />} state={hpgImporting ? 'loading' : 'idle'} onClick={onImportHpg}>
@@ -1857,22 +1884,44 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
         )}
         <Btn variant="primary" size="sm" icon={<I.plus />} onClick={onNew}>Add custom item</Btn>
       </div>
-      <div className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 16 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${colMin}px, 1fr))`, gap: compact ? 10 : 12 }}>
-          {items.map((ci) => {
-            const p = customItemToProduct(ci);
-            return (
-              <div key={ci.id} style={{ position: 'relative' }}>
-                <ProductCard p={p} compact={compact} showRating={false}
-                  inProposal={inProposal(p.id)} onAdd={() => onAdd(ci)} onClick={() => onOpen(ci)} />
-                <IconBtn size="sm" danger icon={<I.trash size={13} />} title="Delete custom item"
-                  onClick={(e) => { e.stopPropagation(); onDelete(ci.id); }}
-                  style={{ position: 'absolute', top: 8, right: 8, background: 'var(--gb-surface-modal)', boxShadow: '0 1px 4px rgba(0,0,0,.12)' }} />
+      {/* Search bar */}
+      <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
+        <Input size="sm" value={q} onChange={setQ} placeholder="Search custom items…" leading={<I.search size={14} />}
+          trailing={q ? <button type="button" onClick={() => setQ('')} title="Clear" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--gb-text-muted)', display: 'flex', padding: 0 }}><I.close size={13} /></button> : null} />
+      </div>
+      <div ref={scrollRef} onScroll={onScroll} className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 16 }}>
+        {filtered.length === 0 ? (
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--gb-text-muted)', textAlign: 'center', padding: 24 }}>
+            <div style={{ width: 46, height: 46, borderRadius: 'var(--gb-r-lg)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.sparkle size={20} /></div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>{q.trim() ? 'No custom items match' : 'No custom items yet'}</div>
+            {!q.trim() && <Btn variant="primary" size="sm" icon={<I.plus />} onClick={onNew}>Add custom item</Btn>}
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${colMin}px, 1fr))`, gap: compact ? 10 : 12 }}>
+              {shown.map((ci) => {
+                const p = customItemToProduct(ci);
+                return (
+                  <div key={ci.id} style={{ position: 'relative' }}>
+                    <ProductCard p={p} compact={compact} showRating={false}
+                      inProposal={inProposal(p.id)} onAdd={() => onAdd(ci)} onClick={() => onOpen(ci)} />
+                    <IconBtn size="sm" danger icon={<I.trash size={13} />} title="Delete custom item"
+                      onClick={(e) => { e.stopPropagation(); onDelete(ci.id); }}
+                      style={{ position: 'absolute', top: 8, right: 8, background: 'var(--gb-surface-modal)', boxShadow: '0 1px 4px rgba(0,0,0,.12)' }} />
+                  </div>
+                );
+              })}
+              {/* Add tile sits at the end only when the whole (unfiltered) list fits. */}
+              {!q.trim() && atEnd && <CustomAddTile onNew={onNew} minH={minH} />}
+            </div>
+            {!atEnd && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '18px 0 6px', color: 'var(--gb-text-ghost)' }}>
+                <span style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} />
+                <span style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: .3 }}>Showing {nfmt(visible)} of {nfmt(filtered.length)}</span>
               </div>
-            );
-          })}
-          <CustomAddTile onNew={onNew} minH={minH} />
-        </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
