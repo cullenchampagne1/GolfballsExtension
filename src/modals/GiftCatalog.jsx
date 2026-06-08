@@ -6,7 +6,7 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, DEPT_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
-import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct } from '../lib/saveProposal.js';
+import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount } from '../lib/saveProposal.js';
 import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
 import { decoratedPricingForLine, giftSetPreviewUrl } from '../lib/cartSerializer.js';
 import { giftSetLadder, giftSetSizeLabel } from '../lib/giftSets.js';
@@ -1255,7 +1255,7 @@ function CardIconBtn({ icon, title, danger, active, onClick }) {
   );
 }
 
-function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onCopy, onDelete }) {
+function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onCopy, onDelete, onSaveToAccount }) {
   const [hover, setHover] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copying, setCopying] = useState(false);
@@ -1332,6 +1332,9 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onCopy,
           style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 30, borderRadius: 'var(--gb-r-md)', cursor: 'pointer', background: hover ? 'var(--gb-brand-tint-medium)' : 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 11.5, fontWeight: 700, fontFamily: 'inherit', transition: 'background var(--gb-anim)' }}>
           <I.plus size={13} /> Load into proposal
         </button>
+        {onSaveToAccount && (
+          <CardIconBtn title="Save to a CRM account / opportunity" onClick={(e) => { e.stopPropagation(); onSaveToAccount(item); }} icon={<I.send size={14} />} />
+        )}
         <CardIconBtn title={copying ? 'Preparing command…' : 'Copy as a console command'} active={copied} onClick={doCopy} icon={copyIcon} />
         <CardIconBtn title="Delete draft" danger onClick={(e) => { e.stopPropagation(); onDelete(item.id); }} icon={<I.trash size={14} />} />
       </div>
@@ -1386,7 +1389,7 @@ function CurrentProposalCard({ entries, onOpen }) {
   );
 }
 
-function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad, onCopy, onDelete }) {
+function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad, onCopy, onDelete, onSaveToAccount }) {
   const scrollRef = useRef(null);
   const [width, setWidth] = useState(0);
   const [heights, setHeights] = useState({});
@@ -1443,7 +1446,7 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
               {items.map((it) => (
                 <SavedCard key={it.id} item={it} loaded={loadedId === it.id}
                   pos={positions[it.id] || { x: 0, y: 0 }} colW={colW} onMeasure={setHeight}
-                  onOpen={onOpen} onLoad={onLoad} onCopy={onCopy} onDelete={onDelete} />
+                  onOpen={onOpen} onLoad={onLoad} onCopy={onCopy} onDelete={onDelete} onSaveToAccount={onSaveToAccount} />
               ))}
             </AnimatePresence>
           </div>
@@ -1453,7 +1456,7 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
   );
 }
 
-function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onMergeImprint, onRemoveFront, onRemoveSecond }) {
+function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onMergeImprint, onRemoveFront, onRemoveSecond, pageContext = {}, onSaveToAccount, accountSaveSeq = 0 }) {
   const total = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
   const units = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty, 0), 0);
   // Drag-to-copy imprints between lines. `drag` holds the in-flight source so
@@ -1471,9 +1474,42 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
   const [saving, setSaving] = useState(false);
   const nameRef = useRef(null);
   const savedTimer = useRef(null);
+  // Save-to-account (publish) flow — pick an account + opportunity, then PUT the
+  // proposal. The account is prefilled from the CRM page context when the catalog
+  // was opened on an account/contact/order page; otherwise the rep types one.
+  const [acctMode, setAcctMode] = useState(false);
+  const [acctSaved, setAcctSaved] = useState(false);
+  const [savingAcct, setSavingAcct] = useState(false);
+  const [accountId, setAccountId] = useState(pageContext.accountId || '');
+  const [opps, setOpps] = useState(pageContext.opportunities || []);
+  const [oppId, setOppId] = useState('');
+  const [loadingOpps, setLoadingOpps] = useState(false);
+  const loadOpps = useCallback((id) => {
+    if (!id) { setOpps([]); return; }
+    setLoadingOpps(true);
+    fetchOpportunitiesForAccount(id)
+      .then((list) => setOpps(list || []))
+      .catch(() => setOpps([]))
+      .finally(() => setLoadingOpps(false));
+  }, []);
+  const openAccountMode = useCallback(() => {
+    setSaved(false); setAcctSaved(false); setSaveMode(false);
+    const pcAcct = pageContext.accountId || '';
+    setAccountId(pcAcct);
+    setOppId('');
+    if (pageContext.opportunities && pageContext.opportunities.length) setOpps(pageContext.opportunities);
+    else if (pcAcct) loadOpps(pcAcct);
+    else setOpps([]);
+    setAcctMode(true);
+  }, [pageContext.accountId, pageContext.opportunities, loadOpps]);
+  const nameRef2 = useRef(null);
+  const seqRef = useRef(accountSaveSeq);
   useEffect(() => () => clearTimeout(savedTimer.current), []);
-  useEffect(() => { if (proposal.length === 0) { setSaveMode(false); setSaved(false); } }, [proposal.length]);
+  useEffect(() => { if (proposal.length === 0) { setSaveMode(false); setSaved(false); setAcctMode(false); setAcctSaved(false); } }, [proposal.length]);
   useEffect(() => { if (!saveMode) return; const id = setTimeout(() => nameRef.current && nameRef.current.focus(), 60); return () => clearTimeout(id); }, [saveMode]);
+  useEffect(() => { if (!acctMode) return; const id = setTimeout(() => nameRef2.current && nameRef2.current.focus(), 60); return () => clearTimeout(id); }, [acctMode]);
+  // Draft "Save to account" shortcut bumps accountSaveSeq → open the account form.
+  useEffect(() => { if (accountSaveSeq === seqRef.current) return; seqRef.current = accountSaveSeq; openAccountMode(); }, [accountSaveSeq, openAccountMode]);
   const confirmSave = () => {
     if (saving) return;
     setSaving(true);
@@ -1481,6 +1517,18 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
       setSaving(false); setSaveMode(false); setName(''); setSaved(true);
       clearTimeout(savedTimer.current); savedTimer.current = setTimeout(() => setSaved(false), 1600);
     }).catch(() => setSaving(false));
+  };
+  const confirmAccountSave = () => {
+    if (savingAcct || !oppId || !name.trim()) return;
+    setSavingAcct(true);
+    Promise.resolve(onSaveToAccount && onSaveToAccount({
+      opportunityID: oppId,
+      customerID: pageContext.customerId || 0,
+      name: name.trim(),
+    })).then(() => {
+      setSavingAcct(false); setAcctMode(false); setName(''); setAcctSaved(true);
+      clearTimeout(savedTimer.current); savedTimer.current = setTimeout(() => setAcctSaved(false), 1800);
+    }).catch(() => setSavingAcct(false));
   };
   return (
     /* In-flow side card (not an overlay) — sits BESIDE the catalog so the
@@ -1553,17 +1601,65 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
                 </div>
               </div>
             </div>
-            {/* Action row — morphs between idle / name-entry / saved flash. All
-                three states are the same height and the slot has a fixed
-                min-height, so the footer never jumps: the content crossfades in
-                place instead of the surrounding section snapping to a new size. */}
+            {/* Account + opportunity form — collapses in for "Save to account".
+                Account prefills from the CRM page context; opportunities come
+                from that page or are fetched for a typed account id. */}
+            <div style={{ overflow: 'hidden', maxHeight: acctMode ? 280 : 0, opacity: acctMode ? 1 : 0, transition: 'max-height .32s cubic-bezier(.4,0,.2,1), opacity .22s ease' }}>
+              <div style={{ padding: '2px 12px 4px' }}>
+                <div style={{ borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', padding: '9px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {/* Account id (+ name hint when known) */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .7, color: 'var(--gb-text-muted)' }}>
+                      Account{pageContext.accountName ? ` · ${pageContext.accountName}` : ''}
+                    </label>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input value={accountId} onChange={(e) => setAccountId(e.target.value.trim())}
+                        onKeyDown={(e) => { if (e.key === 'Enter') loadOpps(accountId); }}
+                        placeholder="Account ID"
+                        style={{ flex: 1, height: 32, padding: '0 10px', boxSizing: 'border-box', background: 'var(--gb-fill-inverse-medium)', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', outline: 'none', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 12.5, fontWeight: 600 }} />
+                      <Btn variant="secondary" size="md" onClick={() => loadOpps(accountId)} state={loadingOpps ? 'loading' : 'idle'} disabled={!accountId}>Find</Btn>
+                    </div>
+                  </div>
+                  {/* Opportunity dropdown */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .7, color: 'var(--gb-text-muted)' }}>
+                      Opportunity{loadingOpps ? ' · loading…' : opps.length ? ` · ${opps.length}` : ''}
+                    </label>
+                    <select value={oppId} onChange={(e) => setOppId(e.target.value)}
+                      disabled={loadingOpps || !opps.length}
+                      style={{ width: '100%', height: 32, padding: '0 8px', boxSizing: 'border-box', background: 'var(--gb-fill-inverse-medium)', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', outline: 'none', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 12, fontWeight: 500, cursor: opps.length ? 'pointer' : 'default' }}>
+                      <option value="">{loadingOpps ? 'Loading…' : opps.length ? 'Select an opportunity' : (accountId ? 'No opportunities found' : 'Enter an account first')}</option>
+                      {opps.map((o) => (
+                        <option key={o.id} value={o.id}>{o.id} — {o.subject || 'Untitled'}{o.estimatedValue ? ` · ${money(o.estimatedValue)}` : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                  {/* Proposal name */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .7, color: 'var(--gb-text-muted)' }}>Proposal name</label>
+                    <input ref={nameRef2} value={name} onChange={(e) => setName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') confirmAccountSave(); if (e.key === 'Escape') setAcctMode(false); }}
+                      placeholder="e.g. ProV1 Gift Sets"
+                      style={{ width: '100%', height: 32, padding: '0 10px', boxSizing: 'border-box', background: 'var(--gb-fill-inverse-medium)', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', outline: 'none', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 12.5, fontWeight: 500 }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* Action row — morphs between idle / name-entry / account / saved
+                flash. The slot has a fixed min-height so the footer never jumps:
+                the content crossfades in place. */}
             <div style={{ minHeight: 48 }}>
             <AnimatePresence mode="wait" initial={false}>
-            {saved ? (
+            {(saved || acctSaved) ? (
               <motion.div key="flash" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: .18, ease: 'easeOut' }} style={{ padding: '4px 12px 12px' }}>
                 <div style={{ height: 32, borderRadius: 'var(--gb-r-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'var(--gb-success-tint-medium, rgba(46,158,91,.16))', border: '1px solid var(--gb-success-tint-border, rgba(46,158,91,.35))', color: 'var(--gb-success-fg, #2e9e5b)', fontSize: 12.5, fontWeight: 700 }}>
-                  <I.check size={15} strokeWidth={3} /> Saved to Saved Proposals
+                  <I.check size={15} strokeWidth={3} /> {acctSaved ? 'Saved to opportunity' : 'Saved to Saved Proposals'}
                 </div>
+              </motion.div>
+            ) : acctMode ? (
+              <motion.div key="acct" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14 }} style={{ padding: '4px 12px 12px', display: 'flex', gap: 8 }}>
+                <Btn variant="ghost" size="md" style={{ flex: 1 }} onClick={() => { setAcctMode(false); }}>Cancel</Btn>
+                <Btn variant="primary" size="md" icon={<I.send />} style={{ flex: 1.4 }} state={savingAcct ? 'loading' : 'idle'} disabled={!oppId || !name.trim()} onClick={confirmAccountSave}>Save to account</Btn>
               </motion.div>
             ) : saveMode ? (
               <motion.div key="namebox" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14 }} style={{ padding: '4px 12px 12px', display: 'flex', gap: 8 }}>
@@ -1573,7 +1669,7 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
             ) : (
               <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14 }} style={{ padding: '4px 12px 12px', display: 'flex', gap: 8 }}>
                 <Btn variant="secondary" size="md" icon={<I.bookmark />} style={{ flex: 1 }} onClick={() => { setSaved(false); setName(''); setSaveMode(true); }}>Save draft</Btn>
-                <Btn variant="primary" size="md" icon={<I.send />} style={{ flex: 1.4 }}>Send proposal</Btn>
+                <Btn variant="primary" size="md" icon={<I.send />} style={{ flex: 1.4 }} onClick={openAccountMode}>Save to account</Btn>
               </motion.div>
             )}
             </AnimatePresence>
@@ -1601,7 +1697,7 @@ function useCatalogScale() {
   return scale;
 }
 
-export function GiftCatalog({ onClose, density = 'comfortable', showRating = true, priceFocus = 'retail' }) {
+export function GiftCatalog({ onClose, density = 'comfortable', showRating = true, priceFocus = 'retail', pageContext = {} }) {
   ensureCatalogKeyframes();
   const scale = useCatalogScale(); // loaded before first paint to avoid a resize snap
   const toast = useToast();
@@ -1781,6 +1877,24 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     .catch((e) => { toast?.error?.('Couldn’t build the command — ' + ((e && e.message) || 'unknown error')); throw e; });
 
   const deleteSaved = (id) => removeSavedProposal(id).then((next) => setSavedProposals(next));
+
+  // Save-to-account (publish) — push the current proposal to a CRM opportunity.
+  // Resolves so the panel can drive its success flash; surfaces failures as a
+  // toast (errors-only). `accountSaveSeq` bumps to tell ProposalPanel to open its
+  // account form (used by the draft "Save to account" shortcut).
+  const [accountSaveSeq, setAccountSaveSeq] = useState(0);
+  const saveToAccount = (opts) => {
+    if (!proposal.length) return Promise.reject(new Error('Proposal is empty'));
+    return saveProposalToOpportunity(proposal, opts)
+      .then((r) => {
+        toast?.success?.(`Saved “${opts.name}” to opportunity ${opts.opportunityID}`);
+        return r;
+      })
+      .catch((e) => { toast?.error?.('Couldn’t save to account — ' + ((e && e.message) || 'unknown error')); throw e; });
+  };
+  // Draft → account: load the draft into the proposal, open it, and pop the
+  // account form so the rep can edit then publish.
+  const loadSavedToAccount = (entry) => { loadSaved(entry); setAccountSaveSeq((n) => n + 1); };
 
   /* One shared live pull, with progress. `force` clears the cache first
      (manual rebuild — stale items/sales can't survive as a fallback);
@@ -2006,7 +2120,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             <motion.div key="gallery" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <SavedGallery items={savedProposals} loadedId={loadedId}
               current={proposal} onOpen={(item) => setDetail({ kind: 'saved', item })} onOpenCurrent={() => setDetail({ kind: 'current' })}
-              onLoad={loadSaved} onCopy={copySaved} onDelete={deleteSaved} />
+              onLoad={loadSaved} onCopy={copySaved} onDelete={deleteSaved} onSaveToAccount={loadSavedToAccount} />
           </motion.div>
           ) : (
           <motion.div key="catalog" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
@@ -2122,6 +2236,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               onPatchSplit={patchSplit} onAddSplit={addSplit} onRemoveSplit={removeSplit}
               onRemoveLine={removeLine} onSaveDraft={saveDraft} onMergeImprint={mergeImprintOnLine}
               onRemoveFront={removeFrontImprint} onRemoveSecond={removeSecondPole}
+              pageContext={pageContext} onSaveToAccount={saveToAccount} accountSaveSeq={accountSaveSeq}
               onClear={() => { setProposal([]); setProposalOpen(false); }} />
           </div>
         </div>

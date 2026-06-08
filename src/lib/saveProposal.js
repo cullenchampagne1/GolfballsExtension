@@ -14,7 +14,8 @@
    and PUT it through the giftSaveCart relay.
    ─────────────────────────────────────────────────────────────────────────── */
 
-import { assembleLine, buildSaveCartBody, buildCartData, buildAsCartContents } from './cartSerializer.js';
+import { assembleLine, buildSaveCartBody, buildSaveProposalBody, buildCartData, buildAsCartContents } from './cartSerializer.js';
+import { runEngine } from './page-engine/index.js';
 
 // golfballs.com second-pole upcharge per dozen (Logo / Text), added on top of
 // the custom-logo ladder for a dual-pole imprint. Mirrors the modal's pricing.
@@ -190,6 +191,72 @@ export async function saveProposalToServer(proposal, { proposalID = null, custom
   const body = buildSaveCartBody(items, { proposalID, customerID, salesRepID });
   const resp = await sendBg('giftSaveCart', { body });
   return { cartNumber: resp.cartNumber, cartID: resp.cartID, message: resp.message, savedLines: items.length, skipped };
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Save to a CRM account / opportunity (PUT /user/saveProposal).
+
+   The proposal is saved server-side AND linked to a CRM opportunity, where it
+   surfaces under the opportunity's MetaData.Proposals[]. The opportunity list for
+   an account is read off the account detail page (Page=271, #TableOpportunities)
+   via the existing page-engine extraction — no dedicated JSON endpoint needed.
+   ─────────────────────────────────────────────────────────────────────────── */
+const CRM_ADMIN = 'https://api.golfballs.com/golfballs/adminnew/';
+
+/* Account detail page URL. NOTE: the account-id query param is reverse-engineered
+   (AccountID, matching the page's #AccountID field) — verify live; some CRM pages
+   key off customerID instead. */
+export function accountPageUrl(accountId) {
+  return `${CRM_ADMIN}Default.aspx?Page=271&AccountID=${encodeURIComponent(accountId)}`;
+}
+
+/* Proposal expiration default — the cart page stamps save-date + ~45 days
+   (HAR: 6/1→7/16, 6/8→7/23). Formatted M/D/YYYY like the stored MetaData. */
+export function defaultProposalExpiration(days = 45) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+}
+
+/* Fetch + parse the opportunities for an account id. Returns
+   [{ id, subject, estimatedValue, estimatedCloseDate, stage }] (the account
+   schema's opportunities shape) or [] on failure. */
+export async function fetchOpportunitiesForAccount(accountId) {
+  if (accountId == null || accountId === '') return [];
+  const url = accountPageUrl(accountId);
+  let html = '';
+  try { const r = await sendBg('fetchRaw', { url }); html = r.text || ''; }
+  catch { return []; }
+  if (!html) return [];
+  let doc;
+  try { doc = new DOMParser().parseFromString(html, 'text/html'); }
+  catch { return []; }
+  // Stamp the source URL so the engine detects the ACCOUNT schema (not the page
+  // the rep is currently on — getDocUrl reads body.dataset.gbSourceUrl first).
+  try { if (doc.body) doc.body.dataset.gbSourceUrl = url; } catch { /* */ }
+  const ctx = runEngine(doc);
+  return (ctx && ctx.data && Array.isArray(ctx.data.opportunities)) ? ctx.data.opportunities : [];
+}
+
+/* Save the proposal to a chosen opportunity. Resolves to { cartID, raw,
+   savedLines, skipped }. Throws with a user-facing message on bad input. */
+export async function saveProposalToOpportunity(proposal, {
+  opportunityID, customerID = 0, name, expiration, proposalID = null,
+} = {}) {
+  if (!proposal || !proposal.length) throw new Error('Proposal is empty');
+  if (opportunityID == null || opportunityID === '') throw new Error('Pick an opportunity to save to');
+  if (!name || !name.trim()) throw new Error('Name the proposal');
+  const { items, skipped } = await buildProposalLines(proposal);
+  if (!items.length) throw new Error('Could not load product data for any line — try again');
+  const body = buildSaveProposalBody(items, {
+    opportunityID,
+    proposalName: name.trim(),
+    proposalExpiration: expiration || defaultProposalExpiration(),
+    customerID,
+    proposalID,
+  });
+  const resp = await sendBg('giftSaveProposal', { body });
+  return { cartID: resp.cartID, raw: resp.raw, savedLines: items.length, skipped };
 }
 
 /* ───────────────────────────────────────────────────────────────────────────

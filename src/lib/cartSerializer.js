@@ -804,6 +804,27 @@ export function buildSaveCartBody(itemsInCart, { customerID = 0, salesRepID = 0,
   };
 }
 
+/* The PUT /user/saveProposal request body — saves a cart AND links it to a CRM
+   opportunity (the proposal then shows under that opportunity's
+   MetaData.Proposals[]). Built on the verified saveCart shape (`cartData` MUST be
+   a JSON string) plus the proposal metadata the cart page sends in proposal mode.
+   NOTE: the exact wrapper field names are reverse-engineered (the real 205KB body
+   was dropped from the capture) — verify live and adjust here if the backend 500s. */
+export function buildSaveProposalBody(itemsInCart, {
+  opportunityID, proposalName, proposalExpiration,
+  customerID = 0, salesRepID = 0, proposalID = null,
+} = {}) {
+  return {
+    cartData: JSON.stringify(buildSaveCartData(itemsInCart, { proposalID })),
+    customerID,
+    salesRepID,
+    opportunityID,
+    proposalName,
+    proposalExpiration,
+    proposalID,
+  };
+}
+
 /* Parse a GET /user/getCart/<n> response → cartData (the `d` field is a JSON
    string OR an object, per the bundle: typeof d === 'string' ? JSON.parse : d). */
 export function parseGetCart(resp) {

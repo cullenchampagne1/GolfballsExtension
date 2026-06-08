@@ -436,6 +436,32 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // ── Save a proposal to a CRM opportunity (PUT /user/saveProposal) ──────
+  // Like saveCart, but the body also carries opportunityID + proposalName so the
+  // saved cart is attached to the opportunity's MetaData.Proposals[]. sitekey-only
+  // (no auth), msg.body built by src/lib/cartSerializer.buildSaveProposalBody.
+  // Returns the raw parsed response (the saved cart GUID) so the caller can verify.
+  if (msg.action === 'giftSaveProposal' && msg.body) {
+    fetch('https://master.api.icustomize.com/user/saveProposal', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'sitekey': 'golfballs' },
+      body: JSON.stringify(msg.body),
+    })
+      .then(async r => {
+        const text = await r.text();
+        if (!r.ok) throw new Error('HTTP ' + r.status + (text ? ' — ' + text.slice(0, 200) : ''));
+        let j = null; try { j = text ? JSON.parse(text) : null; } catch { j = text; }
+        const d = (j && typeof j === 'object' && j.d !== undefined) ? j.d : j;
+        const cartID = (d && typeof d === 'object') ? (d.cartID || d.ProposalCartID || d.id) : d;
+        sendResponse({ ok: true, cartID, raw: j });
+      })
+      .catch(err => {
+        console.warn('[GB] giftSaveProposal error:', err.message);
+        sendResponse({ ok: false, error: String(err.message || err) });
+      });
+    return true;
+  }
+
   // ── Gift-set / packaging upsell templates (PUT /user/getPackageUpsellData) ──
   // No body, public sitekey. Returns { expiryDate, bundleOptions:[…] } — the gift-
   // set bundle templates (sleeve / 6-ball / wooden + their kit price ladders) that
