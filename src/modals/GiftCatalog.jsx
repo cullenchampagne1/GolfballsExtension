@@ -7,7 +7,7 @@ import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CA
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount } from '../lib/saveProposal.js';
-import { loadCustomItems, saveCustomItem, removeCustomItem, customItemToProduct } from '../lib/customItems.js';
+import { loadCustomItems, saveCustomItem, removeCustomItem, customItemToProduct, uploadCustomItemImage } from '../lib/customItems.js';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
 import { decoratedPricingForLine, giftSetPreviewUrl } from '../lib/cartSerializer.js';
@@ -1726,7 +1726,7 @@ function CustomAddTile({ onNew, minH }) {
 function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, onEdit, onDelete }) {
   const minH = compact ? 232 : 262;
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 16px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
         <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <I.sparkle size={16} />
@@ -1784,8 +1784,29 @@ function CustomItemForm({ initial, onCancel, onSave }) {
     dropship: !!initial.dropship,
   });
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState('');
+  const fileRef = useRef(null);
   const set = (k) => (v) => setF((prev) => ({ ...prev, [k]: v }));
-  const canSave = !!f.name.trim() && !saving;
+  const onPickFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';                       // allow re-picking the same file
+    if (!file) return;
+    setUploadErr('');
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      setF((prev) => ({ ...prev, thumbnail: dataUrl }));   // instant local preview
+      setUploading(true);
+      uploadCustomItemImage(dataUrl, file.name || 'custom-item.png')
+        .then((url) => setF((prev) => ({ ...prev, thumbnail: url })))
+        .catch((err) => { setUploadErr((err && err.message) || 'upload failed'); })
+        .finally(() => setUploading(false));
+    };
+    reader.onerror = () => setUploadErr('could not read file');
+    reader.readAsDataURL(file);
+  };
+  const canSave = !!f.name.trim() && !saving && !uploading;
   const submit = () => {
     if (!canSave) return;
     setSaving(true);
@@ -1813,7 +1834,24 @@ function CustomItemForm({ initial, onCancel, onSave }) {
           <CIField label="Price"><Input size="sm" type="number" value={f.price} onChange={set('price')} leading={<span style={{ fontSize: 12 }}>$</span>} placeholder="0.00" /></CIField>
           <CIField label="Setup"><Input size="sm" type="number" value={f.setup} onChange={set('setup')} leading={<span style={{ fontSize: 12 }}>$</span>} placeholder="0.00" /></CIField>
           <CIField label="Weight"><Input size="sm" type="number" value={f.weight} onChange={set('weight')} placeholder="0" /></CIField>
-          <CIField label="Thumbnail Image" full><Input size="sm" value={f.thumbnail} onChange={set('thumbnail')} placeholder="https://…" /></CIField>
+          <CIField label="Thumbnail Image" full>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <div style={{ width: 56, height: 56, flexShrink: 0, borderRadius: 'var(--gb-r-md)', border: '1px solid var(--gb-border-default)', background: 'var(--gb-fill-subtle)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                {f.thumbnail
+                  ? <img src={f.thumbnail} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                  : <I.sparkle size={18} style={{ color: 'var(--gb-text-ghost)' }} />}
+                {uploading && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,.35)' }}><span style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #fff', borderTopColor: 'transparent', animation: 'gb-spin .7s linear infinite' }} /></div>}
+              </div>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <Input size="sm" value={f.thumbnail.startsWith('data:') ? '' : f.thumbnail} onChange={set('thumbnail')} placeholder="Paste a URL or upload" />
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <Btn variant="secondary" size="sm" icon={<I.plus />} state={uploading ? 'loading' : 'idle'} onClick={() => fileRef.current && fileRef.current.click()}>{uploading ? 'Uploading…' : 'Upload image'}</Btn>
+                  {uploadErr && <span style={{ fontSize: 10.5, color: 'var(--gb-danger, #e5484d)', fontWeight: 600 }}>{uploadErr}</span>}
+                </div>
+                <input ref={fileRef} type="file" accept="image/*" onChange={onPickFile} style={{ display: 'none' }} />
+              </div>
+            </div>
+          </CIField>
           <CIField label="Description" full><Input size="sm" value={f.description} onChange={set('description')} placeholder="Optional" /></CIField>
           <div style={{ gridColumn: '1 / -1', paddingTop: 2 }}>
             <Checkbox checked={f.dropship} onChange={(v) => setF((prev) => ({ ...prev, dropship: typeof v === 'boolean' ? v : !prev.dropship }))} label="Dropship" />
@@ -2274,7 +2312,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               onLoad={loadSaved} onCopy={copySaved} onDelete={deleteSaved} onSaveToAccount={loadSavedToAccount} />
           </motion.div>
           ) : view === 'custom' ? (
-            <motion.div key="custom" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <motion.div key="custom" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
             <CustomItemsGallery items={customItems} compact={compact} colMin={colMin}
               inProposal={inProposal} onAdd={addCustomToProposal}
               onNew={() => setEditingCustom({})} onEdit={(ci) => setEditingCustom(ci)} onDelete={deleteCustom} />

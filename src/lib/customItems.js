@@ -15,6 +15,28 @@ const STORAGE_KEY = 'gbCustomItems';
 const _rid = () => Math.random().toString(36).slice(2, 9);
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 
+function _sendBg(action, payload = {}) {
+  return new Promise((resolve, reject) => {
+    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) { reject(new Error('Not in an extension context')); return; }
+    try {
+      chrome.runtime.sendMessage({ action, ...payload }, (resp) => {
+        if (chrome.runtime.lastError) { reject(new Error(chrome.runtime.lastError.message)); return; }
+        if (!resp || !resp.ok) { reject(new Error((resp && resp.error) || (action + ' failed'))); return; }
+        resolve(resp);
+      });
+    } catch (e) { reject(e); }
+  });
+}
+
+/* Upload a custom-item thumbnail to the icustomize S3 bucket (same flow as logo
+   uploads) and return a stable public URL so the image persists across sessions
+   and renders in the cart. `dataUrl` is a base64 data: URL (from a file input). */
+export async function uploadCustomItemImage(dataUrl, fileName = 'custom-item.png') {
+  const up = await _sendBg('uploadCustomLogo', { dataUrl, fileName });
+  if (!up.filePath) throw new Error('upload returned no path');
+  return 'https://static.golfballs.com/' + up.filePath;
+}
+
 export function loadCustomItems() {
   return new Promise((resolve) => {
     try {
@@ -38,7 +60,9 @@ export function normalizeCustomItem(rec = {}) {
     style: (rec.style || '').trim(),
     extraDetails: (rec.extraDetails || '').trim(),
     itemID: (rec.itemID || '').trim(),
-    thumbnail: (rec.thumbnail || '').trim(),
+    // Never persist a raw data: URL (would bloat storage + won't load in the
+    // cart) — only keep an uploaded/pasted http(s) thumbnail.
+    thumbnail: /^data:/i.test(rec.thumbnail || '') ? '' : (rec.thumbnail || '').trim(),
     description: (rec.description || '').trim(),
     price: num(rec.price),
     setup: num(rec.setup),
