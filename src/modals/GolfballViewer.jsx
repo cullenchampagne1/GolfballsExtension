@@ -64,7 +64,15 @@ const MODEL_URLS = {
 // Cache-bust token appended to every model URL. Chrome can serve a stale cached
 // .obj across extension reloads (the URL is otherwise constant), which masks a
 // re-exported model. Bump this whenever a model file changes to force a refetch.
-const MODEL_VERSION = '20250607-12-metalfoam';
+const MODEL_VERSION = '20250607-13-giftlogo';
+
+// The single-ball path normalizes every ball to this radius for framing, but its
+// decal projects with `this * printAreaScale` as the box width on the UN-normalized
+// geo (DecalGeometry runs before matrixWorld picks up the scale). So the print's
+// real size is `this * printAreaScale / nativeBallRadius`. The gift-set balls MUST
+// use this same absolute box width (not their own radius) or their logos come out
+// smaller than the 3D-view ball whenever the OBJ's native radius != this value.
+const BALL_NORMALIZE_RADIUS = 100;
 
 async function loadThreeAndModel(shape = 'ball') {
   // Parallel-load engine + helpers once so first-mount latency is dominated by
@@ -1159,7 +1167,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           for (const s of giftSet.ballSlots) {
             const mat = new THREE.MeshStandardMaterial({ color: ballColor.clone(), emissive: 0x101418, emissiveIntensity: 0.4, roughness: 0.28, metalness: 0.02 });
             const m = new THREE.Mesh(ballCG.geo.clone(), mat);
-            addDecal(m, 0, 0, ballCG.radius * 0.999, ballCG.radius * gsPrintAreaScale, ballCG.radius * 2);
+            // Box WIDTH = BALL_NORMALIZE_RADIUS * printAreaScale (the SAME absolute
+            // size the single-ball path uses) so the logo matches the 3D-view ball;
+            // posZ/depth stay relative to this geo's own radius (projection origin).
+            addDecal(m, 0, 0, ballCG.radius * 0.999, BALL_NORMALIZE_RADIUS * gsPrintAreaScale, ballCG.radius * 2);
             m.scale.setScalar(giftSet.ballRadius / ballCG.radius);
             m.position.set(s.x, s.y, s.z);
             contentGroup.add(m); ballMats.push(mat);
@@ -1408,7 +1419,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // box diameter is ~100 units (matches our camera framing).
         ballMesh.geometry.computeBoundingSphere();
         const bsphere = ballMesh.geometry.boundingSphere;
-        const targetRadius = 100;
+        const targetRadius = BALL_NORMALIZE_RADIUS;
         const scale = targetRadius / bsphere.radius;
         ballMesh.scale.setScalar(scale);
 
