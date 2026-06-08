@@ -212,6 +212,16 @@ export function isBartenderProduct(p) {
   return hay.includes('bartender') && hay.includes('divot tool');
 }
 
+/* The standalone Custom Logo Ball Marker (a chrome disc with a personalization
+   center) — SKUs M3466 / M4509. Match those SKUs, or a "ball marker" title that
+   ISN'T a poker chip / divot tool / gift set (all of which also carry markers). */
+export function isBallMarkerProduct(p) {
+  if (!p) return false;
+  const hay = `${p.title || ''} ${p.url || ''}`.toLowerCase();
+  if (/\bm3466\b|\bm4509\b/.test(hay)) return true;
+  return /ball\s*marker/.test(hay) && !/divot|tool|gift\s*set|poker/.test(hay);
+}
+
 /* The buyer's base-color pick (stored in the __base slot as a color name, e.g.
    "Green") → hex for the 3D chip's clay. The model's white pattern/center is
    left untouched; only the clay recolors. Falls back to black. */
@@ -1653,6 +1663,7 @@ function AccessoryCustomizer({ p, config, loading }) {
   const isChip = isPokerChipProduct(p);
   const isDivot = isDivotProduct(p);
   const isBartender = isBartenderProduct(p);
+  const isMarker = isBallMarkerProduct(p);
   const dualPole = (p.dualPole || (config && config.dualPole) || isChip || false) && !excludeDualPole;
   const bundleItems = (p.bundleItems && p.bundleItems.length) ? p.bundleItems : ((config && config.bundleItems) || null);
   return (
@@ -1661,6 +1672,7 @@ function AccessoryCustomizer({ p, config, loading }) {
       {isChip && !bundleItems && <LivePreview3D shape="chip" p={p} />}
       {isDivot && !bundleItems && <LivePreview3D shape="divot" p={p} />}
       {isBartender && !bundleItems && <LivePreview3D shape="bartender" p={p} />}
+      {isMarker && !bundleItems && <LivePreview3D shape="marker" p={p} />}
       <BaseProperties p={p} config={config} />
       {bundleItems && bundleItems.length
         ? <BundleSections items={bundleItems} p={p} config={config} dualPole={dualPole} />
@@ -1886,8 +1898,9 @@ function LivePreview3D({ shape = 'ball', p }) {
   const isChip = shape === 'chip';
   const isDivot = shape === 'divot';
   const isBartender = shape === 'bartender';
-  const isMetalTool = isDivot || isBartender;   // steel divot tools (fixed steel, marker disc)
-  const flat = isChip || isMetalTool;   // flat markers (chip + divot tools)
+  const isMarker = shape === 'marker';
+  const isMetalTool = isDivot || isBartender || isMarker;   // steel rim + white-disc print
+  const flat = isChip || isMetalTool;   // flat face-on items (chip + tools + marker)
   // Body tint: chip clay from the buyer's color pick; divot tools are fixed
   // steel; ball from the product's colorway in its title ("Pro V1 Yellow").
   const tint = isChip ? chipClayHex(ctx.data) : (isMetalTool ? undefined : ballTitleTint(p && p.title));
@@ -1898,8 +1911,9 @@ function LivePreview3D({ shape = 'ball', p }) {
   const chipScale = Number(useDevSetting('giftCatalog.chipPreviewScale') ?? 1.58) || 1.58;
   const divotScale = Number(useDevSetting('giftCatalog.divotPreviewScale') ?? 1.0) || 1.0;
   const bartenderScale = Number(useDevSetting('giftCatalog.bartenderPreviewScale') ?? 1.1) || 1.1;
+  const markerScale = Number(useDevSetting('giftCatalog.markerPreviewScale') ?? 1.35) || 1.35;
   const catalogScale = Number(useDevSetting('giftCatalog.previewScale') ?? 2) || 2;
-  const previewScale = isChip ? chipScale : isDivot ? divotScale : isBartender ? bartenderScale : catalogScale;
+  const previewScale = isChip ? chipScale : isDivot ? divotScale : isBartender ? bartenderScale : isMarker ? markerScale : catalogScale;
   // Gift set: when a set is picked on the ball AND there's a logo to print, upgrade
   // the ball preview to the assembled box (balls + chips + tees in their slots).
   // The ball `tint` (product colorway) recolors the balls; the chip clay recolors

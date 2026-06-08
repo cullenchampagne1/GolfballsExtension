@@ -56,6 +56,12 @@ export const SIX_BALL_POKER_CHIP = {
     { shape: 'chip', x: 3.28, y: 0.27, z: -0.02, radius: 0.82, decal: true },
   ],
 };
+// The 2 round recesses next to the tool hold customized chrome ball markers
+// (steel rim + white center print). Positions match the MARK slots cut in the box.
+const MARKER_SLOTS = [
+  { shape: 'marker', x: 1.30, y: 2.00, z: -0.04, radius: 0.40, decal: true },
+  { shape: 'marker', x: 4.10, y: 0.60, z: -0.04, radius: 0.40, decal: true },
+];
 export const SIX_BALL_LEVER = {
   boxModel: BOX_MODELS.sixBallLever,
   ballRadius: 0.86,
@@ -64,6 +70,7 @@ export const SIX_BALL_LEVER = {
     // Matched to the reference photo via render-overlay; the foam recess is cut with
     // the SAME viewer-frame tool at these exact params, so the tool sits in its slot.
     { shape: 'divot', x: 2.7, y: 1.3, z: -0.13, rz: -35, scale: 0.58, decal: true },
+    ...MARKER_SLOTS,
   ],
 };
 export const SIX_BALL_BARTENDER = {
@@ -72,6 +79,7 @@ export const SIX_BALL_BARTENDER = {
   ballSlots: BALL_SLOTS,
   kitItems: [
     { shape: 'bartender', x: 2.7, y: 1.3, z: -0.13, rz: -35, scale: 0.62, decal: true },
+    ...MARKER_SLOTS,
   ],
 };
 

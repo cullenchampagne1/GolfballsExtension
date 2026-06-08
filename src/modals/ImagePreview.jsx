@@ -289,7 +289,7 @@ export function ImagePreview({
   const ballCtl = { key: 'ball', label: 'Ball color', value: ballTint, set: setBallTint, def: '#f6f6f6' };
   const chipCtl = { key: 'chip', label: 'Chip color', value: chipTint, set: setChipTint, def: '#1c1c1c' };
   const TINT_CONTROLS = {
-    ball: [ballCtl], chip: [chipCtl], divot: [], bartender: [],
+    ball: [ballCtl], chip: [chipCtl], divot: [], bartender: [], marker: [],
     giftsetPoker: [ballCtl], giftsetLever: [ballCtl], giftsetBartender: [ballCtl],
     giftsetWoodPoker: [ballCtl], giftsetWoodLever: [ballCtl],
   };
@@ -2029,6 +2029,7 @@ const MODEL_OPTIONS = [
   { id: 'chip', label: 'Poker Chip' },
   { id: 'divot', label: 'Divot Tool' },
   { id: 'bartender', label: 'Bartender Tool' },
+  { id: 'marker', label: 'Ball Marker' },
   { id: 'giftsetPoker', label: 'Gift Set · Poker Chip' },
   { id: 'giftsetLever', label: 'Gift Set · Lever Divot' },
   { id: 'giftsetBartender', label: 'Gift Set · Bartender' },

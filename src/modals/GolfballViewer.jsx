@@ -45,6 +45,9 @@ const MODEL_URLS = {
   chip: 'assets/poker_chip_model/PokerChip.obj',
   divot: 'assets/divot_tool_model/DivotTool.obj',
   bartender: 'assets/bartender_tool_model/BartenderTool.obj',
+  // Chrome ball marker — polished steel rim + recessed white center (the print area).
+  // Same white-disc/steel vertex mask as the divot, so it reuses that material recipe.
+  marker: 'assets/marker_model/BallMarker.obj',
   // Gift-set box: one baked model — tray walls + foam (with ball bowls + chip
   // recesses + tee well cut in) + the white tee pile, carrying per-vertex colors
   // (dark box / white tees). Exported Blender Z-up with NO axis conversion, so its
@@ -64,7 +67,7 @@ const MODEL_URLS = {
 // Cache-bust token appended to every model URL. Chrome can serve a stale cached
 // .obj across extension reloads (the URL is otherwise constant), which masks a
 // re-exported model. Bump this whenever a model file changes to force a refetch.
-const MODEL_VERSION = '20250607-13-giftlogo';
+const MODEL_VERSION = '20250607-14-marker';
 
 // The single-ball path normalizes every ball to this radius for framing, but its
 // decal projects with `this * printAreaScale` as the box width on the UN-normalized
@@ -112,14 +115,14 @@ async function loadThreeAndModel(shape = 'ball') {
           // The chip + divot OBJs are exported Y-up (flat face = Y); stand them up
           // so the face points at the camera (±Z, like the ball's print poles).
           // The giftbox is already Z-up (no axis conversion on export) — don't rotate.
-          if (shape === 'chip' || shape === 'divot' || shape === 'bartender') {
+          if (shape === 'chip' || shape === 'divot' || shape === 'bartender' || shape === 'marker') {
             geo.rotateX(Math.PI / 2);
           }
           // Convert the sRGB-encoded baked vertex colors to linear so masks compare
           // correctly in-shader (chip/divot clay+marker masks) and the giftbox reads
           // as intended (dark foam/box ~0.07, white baked tees ~0.82) rather than
           // the washed-out values the OBJ exporter writes (sRGB-encoded).
-          if (shape === 'chip' || shape === 'divot' || shape === 'bartender' || shape.startsWith('giftbox')) {
+          if (shape === 'chip' || shape === 'divot' || shape === 'bartender' || shape === 'marker' || shape.startsWith('giftbox')) {
             const col = geo.getAttribute('color');
             if (col) {
               const s2l = (v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
@@ -510,7 +513,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         const isChip = shape === 'chip';
         // Divot + bartender are the same in the viewer: steel body + white marker
         // disc, decal projected onto the disc (located from the mask).
-        const isDivot = shape === 'divot' || shape === 'bartender';
+        // 'marker' (chrome ball marker) shares the divot's steel + white-disc recipe:
+        // steel rim, white center located from the mask, logo projected onto it.
+        const isDivot = shape === 'divot' || shape === 'bartender' || shape === 'marker';
         const flat = isChip || isDivot;   // flat vertex-colored markers (face-on, local decal)
         const isGiftSet = shape === 'giftset';
         if (disposed) return;
@@ -1216,7 +1221,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               mat.onBeforeCompile = makeDivotOBC(steel);
               m = new THREE.Mesh(cg.geo.clone(), mat);
               if (item.decal) { const mk = locateMarker(cg.geo); addDecal(m, mk.cx, mk.cy, mk.faceZ * 1.2, mk.discR * 1.8, mk.faceZ * 1.8); }
-              m.scale.setScalar(item.scale || 0.5);
+              // Disc-shaped kit items (the ball marker) scale by target radius like the
+              // chip; the irregular tools scale by their direct factor.
+              m.scale.setScalar(item.radius ? item.radius / cg.hx : (item.scale || 0.5));
               m.rotation.z = ((item.rz || 0) * Math.PI) / 180;
             }
             m.position.set(item.x, item.y, item.z);
