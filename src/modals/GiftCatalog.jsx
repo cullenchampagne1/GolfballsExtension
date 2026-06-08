@@ -1434,13 +1434,13 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelet
   const shownLines = lines.slice(0, 3);
   return (
     <motion.div ref={cardRef}
-      initial={{ opacity: 0, scale: .95, x: pos.x, y: pos.y }}
-      animate={{ opacity: 1, scale: 1, x: pos.x, y: pos.y }}
-      exit={{ opacity: 0, scale: .9 }}
-      transition={{ x: { type: 'spring', stiffness: 520, damping: 44, mass: .9 }, y: { type: 'spring', stiffness: 520, damping: 44, mass: .9 }, opacity: { duration: .18 }, scale: { duration: .18 } }}
+      initial={{ opacity: 0, scale: .97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: .92 }}
+      transition={{ duration: .2, ease: [.34, 1.4, .64, 1] }}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       onClick={() => onOpen && onOpen(item)} title="View margin breakdown"
-      style={{ position: 'absolute', top: 0, left: 0, width: colW, display: 'flex', flexDirection: 'column', gap: 11, padding: 13, boxSizing: 'border-box', cursor: 'pointer', background: 'var(--gb-surface-1)', border: '1px solid ' + (loaded ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'), borderRadius: 'var(--gb-r-lg)', boxShadow: hover ? '0 2px 7px rgba(0,0,0,.07)' : 'none', transition: 'border-color var(--gb-anim), box-shadow var(--gb-anim)' }}>
+      style={{ position: 'absolute', top: pos.y, left: pos.x, width: colW, display: 'flex', flexDirection: 'column', gap: 11, padding: 13, boxSizing: 'border-box', cursor: 'pointer', background: 'var(--gb-surface-1)', border: '1px solid ' + (loaded ? 'var(--gb-brand-label)' : hover ? 'var(--gb-border-strong)' : 'var(--gb-border-default)'), borderRadius: 'var(--gb-r-lg)', boxShadow: hover ? '0 2px 7px rgba(0,0,0,.07)' : 'none', transition: 'top .42s cubic-bezier(.4,0,.2,1), left .42s cubic-bezier(.4,0,.2,1), border-color var(--gb-anim), box-shadow var(--gb-anim)' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <ThumbStack entries={r.entries} />
         <div style={{ flex: 1 }} />
@@ -1480,13 +1480,15 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelet
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 14, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)', letterSpacing: -.4 }}>{money(r.total)}</span>
       </div>
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600, color: hover ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)', transition: 'color var(--gb-anim)' }}>
-        <I.eye size={12} /> View margin breakdown
-      </div>
-      <div onClick={(e) => e.stopPropagation()}>
-        <button onClick={(e) => { e.stopPropagation(); onLoad(item); }} title="Load these items into the proposal"
-          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 30, borderRadius: 'var(--gb-r-md)', cursor: 'pointer', background: hover ? 'var(--gb-brand-tint-medium)' : 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 11.5, fontWeight: 700, fontFamily: 'inherit', transition: 'background var(--gb-anim)' }}>
-          <I.plus size={13} /> Load
+      {/* View-breakdown hint and Load sit on ONE aligned row (design parity). */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600, color: hover ? 'var(--gb-text-secondary)' : 'var(--gb-text-muted)', transition: 'color var(--gb-anim)' }}>
+          <I.eye size={12} /> View breakdown
+        </span>
+        <div style={{ flex: 1 }} />
+        <button onClick={(e) => { e.stopPropagation(); onLoad(item); }} title={loaded ? 'Added to proposal' : 'Load these items into the proposal'}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 28, padding: '0 11px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, flexShrink: 0, background: loaded ? 'var(--gb-brand-label)' : 'var(--gb-brand-tint-medium)', color: loaded ? 'var(--gb-surface-deep)' : 'var(--gb-brand-label)', border: '1px solid var(--gb-brand-tint-border)', transition: 'all var(--gb-anim)' }}>
+          {loaded ? <><I.check size={12} strokeWidth={3} /> Added</> : <><I.plus size={12} /> Load</>}
         </button>
       </div>
     </motion.div>
@@ -1934,9 +1936,9 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
           </div>
         </div>
         {selectMode ? (
-          <Btn variant="ghost" size="sm" icon={<I.close />} onClick={exitSelect}>Cancel</Btn>
+          <IconBtn size="sm" variant="ghost" title="Cancel selection" icon={<I.close />} onClick={exitSelect} />
         ) : (
-          items.length > 0 && <Btn variant="secondary" size="sm" icon={<I.check />} onClick={() => setSelectMode(true)}>Select</Btn>
+          items.length > 0 && <IconBtn size="sm" variant="secondary" title="Select items" icon={<I.check />} onClick={() => setSelectMode(true)} />
         )}
         <Btn variant="primary" size="sm" icon={<I.plus />} onClick={onNew}>Add custom item</Btn>
       </div>
