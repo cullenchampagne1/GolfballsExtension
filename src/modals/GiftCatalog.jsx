@@ -637,6 +637,11 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) 
                   onChange={(s) => setVariant({ values: { style: s }, price: null })} />
               </div>
             ) : null
+          ) : (p.customizable || p.customLogo) ? (
+            // Customizable products show their base options (Color, etc.) inside
+            // CustomizeBlock's BaseProperties below — don't render ProductOptions
+            // too, or the Color picker appears twice.
+            null
           ) : (
             <ProductOptions p={p} onChange={setVariant} />
           )}

@@ -657,7 +657,18 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
   // Towel/hat embroidery needs the chosen child's background color for the BC
   // overlay — fold it in so buildDecoration can reach it.
   const childBg = child && child.CustomData && child.CustomData.backgroundHex;
-  const decoForBuild = childBg ? { ...(decoration || { engine: 'none' }), _childBgHex: childBg } : (decoration || { engine: 'none' });
+  let decoForBuild = childBg ? { ...(decoration || { engine: 'none' }), _childBgHex: childBg } : (decoration || { engine: 'none' });
+  // "Custom Logo" overlay apparel (modID 25 outsource / 84 inhouse) ALWAYS carries
+  // the custom-logo modification on the site — even with no uploaded artwork — which
+  // is what supplies the $ setup fee + the full price ladder + marks the line
+  // imprinted. A plain add gives us engine 'none', so default it to logoOverlay for
+  // these products (NOT balls, modID 1008, which use the ballLogo flow).
+  if (!decoForBuild.engine || decoForBuild.engine === 'none') {
+    const m = product.ProductModification || [];
+    const hasOverlay = m.some((x) => x.Modification && (x.Modification.modificationID === 25 || x.Modification.modificationID === 84));
+    const hasBall = m.some((x) => x.Modification && x.Modification.modificationID === 1008);
+    if (hasOverlay && !hasBall) decoForBuild = { ...decoForBuild, engine: 'logoOverlay' };
+  }
   const { block: decoBlock, customUserImage } = buildDecoration(product, decoForBuild);
 
   // Price the way golfballs.com recomputes it on cart load: from the product's
@@ -716,7 +727,9 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
     originalPrice_priceBreakHeader: null,
     originalPrice_priceBreakHeaderID: 0,
     disableGiftWrap: false,
-    ignoreMinimumQty: false,
+    // Decorated/dropship lines bypass the per-product minimum-qty gate, matching
+    // the site's saved cart for custom-logo items.
+    ignoreMinimumQty: product.ignoreMinimumQty != null ? product.ignoreMinimumQty : !!decoBlock,
     OriginalPriceLabel: '',
     ProductParentSetupFee: product.setupFee_priceBreakHeader || null,
     ProductParentItemFee: product.itemFee_priceBreakHeader || null,
@@ -744,8 +757,24 @@ export function assembleLine({ product, pricing = {}, selection = {}, decoration
     // canonical (base) URL is the fallback for plain/retail lines.
     url: url || canonicalUrl(product),
     OrderQtyMultiple: null,
-    dropship: { active: false, dropshipTime: 0, dropshipDate: '' },
+    // Carry the product's real dropship config when present (the page's product
+    // object already has it). Fall back to the DropShipOnly tag, else inactive.
+    dropship: dropshipBlock(product),
   };
+}
+
+/* Resolve a line's dropship block from the raw product. Prefers the product's own
+   `dropship` object; otherwise infers from a `DropShipOnly` ProductTagDetail. */
+function dropshipBlock(product) {
+  const d = product && product.dropship;
+  if (d && typeof d === 'object' && ('active' in d || 'dropshipTime' in d || 'dropshipDate' in d)) {
+    return { active: !!d.active, dropshipTime: d.dropshipTime || 0, dropshipDate: d.dropshipDate || '' };
+  }
+  const tags = (product && product.ProductTagDetail) || [];
+  const isDropship = tags.some((t) => t && /DropShipOnly/i.test(t.Name || ''));
+  return isDropship
+    ? { active: true, dropshipTime: (d && d.dropshipTime) || 20, dropshipDate: (d && d.dropshipDate) || '' }
+    : { active: false, dropshipTime: 0, dropshipDate: '' };
 }
 
 /* Back-compat alias — assembleLine now handles every item type, not just balls. */
