@@ -1263,9 +1263,10 @@ function EditablePrice({ value, onCommit }) {
 /* One product row in the line-items + margin table. When `onEditPrice` is
    provided, each split's unit price is inline-editable (writes back to the
    proposal). */
-function MarginLineRow({ e, first, onEditPrice }) {
+function MarginLineRow({ e, first, onEditPrice, estimated }) {
   const chips = decoImprints(e.decoration);
   const editable = typeof onEditPrice === 'function';
+  const star = estimated ? <sup title="No cost on file — estimated" style={{ color: 'var(--gb-warning-fg, #b6830a)', fontWeight: 800, marginLeft: 1 }}>*</sup> : null;
   return (
     <div style={{ padding: '9px 12px', borderTop: first ? 'none' : '1px solid var(--gb-border-subtle)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1276,7 +1277,7 @@ function MarginLineRow({ e, first, onEditPrice }) {
         </div>
         <span style={{ width: 50, textAlign: 'right', fontSize: 11.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-secondary)' }}>{e.units}</span>
         <span style={{ width: 80, textAlign: 'right', fontSize: 12.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)' }}>{money(e.lineRev)}</span>
-        <span style={{ width: 74, textAlign: 'right', fontSize: 11.5, fontWeight: 600, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)' }}>{money(e.lineCost)}</span>
+        <span style={{ width: 74, textAlign: 'right', fontSize: 11.5, fontWeight: 600, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)' }}>{money(e.lineCost)}{star}</span>
         <span style={{ width: 56, display: 'flex', justifyContent: 'flex-end' }}><MarginBadge m={e.margin} /></span>
       </div>
       {/* Per-split detail — always shown when editable (so every price can be
@@ -1365,7 +1366,32 @@ function ImprintDetail({ chip }) {
    the line items + per-line margin, the imprints, and a margin summary. Opened
    by clicking a saved card or the current-proposal card. */
 function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose, onLoad, onOpenProposal, onCopy, onSaveToAccount, buildEmailSource, onPatchSplit }) {
-  const M = useMemo(() => marginReport(entries), [entries]);
+  // Proactively fetch a cost for any catalog line that has none yet, so the
+  // breakdown fills in real numbers on open. `costTick` re-renders once the cost
+  // map updates; `costFailed` records SKUs we tried and couldn't price (→ they
+  // get an asterisk and keep the 40% assumption). Custom items can't be fetched.
+  const [costTick, setCostTick] = useState(0);
+  const [costFailed, setCostFailed] = useState(() => new Set());
+  const toFetch = Array.from(new Set(
+    (entries || [])
+      .filter((e) => e && e.product && !e.product.isCustom && !hasRealCost(e.product))
+      .map((e) => invSkuOf(e.product))
+      .filter((s) => s && !costFailed.has(s))
+  )).sort();
+  const fetchKey = toFetch.join(',');
+  useEffect(() => {
+    if (!fetchKey) return undefined;
+    const skus = fetchKey.split(',');
+    let alive = true;
+    importCosts(skus, {})
+      .then(() => { if (!alive) return; setCostTick((t) => t + 1); setCostFailed((prev) => { const n = new Set(prev); skus.forEach((s) => { if (!(cachedCostForSku(s) > 0)) n.add(s); }); return n; }); })
+      .catch(() => { if (!alive) return; setCostFailed((prev) => { const n = new Set(prev); skus.forEach((s) => n.add(s)); return n; }); });
+    return () => { alive = false; };
+  }, [fetchKey]);
+  // A line gets a "couldn't price" asterisk when it has no real cost and either
+  // it's a custom item (nothing to fetch) or the fetch failed.
+  const starLine = (e) => !!e && !hasRealCost(e.product) && (!!(e.product && e.product.isCustom) || costFailed.has(invSkuOf(e.product)));
+  const M = useMemo(() => marginReport(entries), [entries, costTick]);
   const decorated = M.lines.filter((l) => decoImprints(l.decoration).length > 0 || (l.decoration && l.decoration.giftSet));
   // Email composer lives INLINE here (replacing the breakdown) rather than in a
   // separate modal — a smoother single-surface flow. Built lazily on demand.
@@ -1434,8 +1460,13 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
                 <span style={{ width: 74, textAlign: 'right' }}>Cost</span>
                 <span style={{ width: 56, textAlign: 'right' }}>Margin</span>
               </div>
-              {M.lines.map((e, i) => <MarginLineRow key={e.id || i} e={e} first={i === 0}
+              {M.lines.map((e, i) => <MarginLineRow key={e.id || i} e={e} first={i === 0} estimated={starLine(e)}
                 onEditPrice={onPatchSplit ? (splitIndex, price) => onPatchSplit(i, e.srcIndex, splitIndex, price) : undefined} />)}
+            </div>
+          )}
+          {M.lines.some(starLine) && (
+            <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 6, lineHeight: 1.4 }}>
+              <span style={{ color: 'var(--gb-warning-fg, #b6830a)', fontWeight: 800 }}>*</span> no cost on file — couldn’t load one, using a {pctOf(ASSUMED_MARGIN)} margin estimate.
             </div>
           )}
         </div>
