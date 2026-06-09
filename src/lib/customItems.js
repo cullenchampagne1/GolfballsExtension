@@ -11,6 +11,8 @@
    cartSerializer.buildCustomItemLine).
    ─────────────────────────────────────────────────────────────────────────── */
 
+import { decodeEntities } from './giftCatalog.js';
+
 const STORAGE_KEY = 'gbCustomItems';
 
 /* Supplier "repos" a custom item can be imported from. `label` is the short tag
@@ -132,8 +134,8 @@ function normStyleOptions(styleOptions, legacyStyle) {
 export function normalizeCustomItem(rec = {}) {
   return {
     id: rec.id || 'ci-' + _rid(),
-    name: (rec.name || '').trim(),
-    extraDetails: (rec.extraDetails || '').trim(),
+    name: decodeEntities((rec.name || '').trim()),
+    extraDetails: decodeEntities((rec.extraDetails || '').trim()),
     itemID: (rec.itemID || '').trim(),
     // Source product link (e.g. the hpgbrands.com page) — a button surfaces it
     // later. `source` tags where the item came from (e.g. 'hpg'); `sku` is the

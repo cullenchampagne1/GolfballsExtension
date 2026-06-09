@@ -42,13 +42,18 @@ const _swatch = (hex, light) => `<span style="display:inline-block; width:10px; 
 const _star = (m) => m.show.disclaimer ? '*' : '';
 const _qtyLine = (l, show) => show.cost ? `${l.qty} &times; ${_money(l.unitPrice)}` : `Qty ${l.qty}`;
 
+// No-imprint-color default: a faint brand-green wash (was a navy blue).
+const _NOCOLOR_BG = 'rgba(51, 153, 0, 0.12)';
 /* synthetic imprint chip — fallback visual when there's no 3D render yet */
 function _chip(imp, size, square) {
-  const light = _LIGHT_IMPRINT[imp.color];
-  const fg = light ? '#1f2937' : '#ffffff';
+  const noColor = !imp.colorHex;
+  const light = _LIGHT_IMPRINT[imp.color] || noColor;   // green wash reads as a light chip
+  const bg = imp.colorHex || _NOCOLOR_BG;
+  const fg = noColor ? '#236b00' : (_LIGHT_IMPRINT[imp.color] ? '#1f2937' : '#ffffff');
   const label = imp.text ? (imp.text.split(' · ')[0] || '') : 'LOGO';
   const fs = imp.text ? Math.max(8, Math.round(size * 0.15)) : Math.round(size * 0.17);
-  return `<table border="0" cellpadding="0" cellspacing="0" width="${size}" height="${size}" style="width:${size}px; height:${size}px; background:${imp.colorHex || '#1f2f5b'}; border-radius:${square ? 0 : Math.round(size * 0.22)}px;${light ? ' border:1px solid #d6d6cf;' : ''}"><tbody><tr><td align="center" valign="middle" style="text-align:center; padding:4px;"><span style="font-family:${SANS}; font-size:${fs}px; font-weight:800; letter-spacing:.5px; color:${fg}; line-height:1.12;">${_esc(label).slice(0, 16)}</span></td></tr></tbody></table>`;
+  const bd = light ? (noColor ? '#cfe3c0' : '#d6d6cf') : null;
+  return `<table border="0" cellpadding="0" cellspacing="0" width="${size}" height="${size}" style="width:${size}px; height:${size}px; background:${bg}; border-radius:${square ? 0 : Math.round(size * 0.22)}px;${bd ? ` border:1px solid ${bd};` : ''}"><tbody><tr><td align="center" valign="middle" style="text-align:center; padding:4px;"><span style="font-family:${SANS}; font-size:${fs}px; font-weight:800; letter-spacing:.5px; color:${fg}; line-height:1.12;">${_esc(label).slice(0, 16)}</span></td></tr></tbody></table>`;
 }
 /* a real 3D-render tile (transparent PNG on a soft plate) */
 function _renderTile(src, size, square) {
@@ -78,7 +83,7 @@ function _proof(l, withPhoto, square) {
   const typeLabel = (imp && imp.typeLabel) || 'Personalization';
   const light = imp && _LIGHT_IMPRINT[imp.color];
   const colorRow = (imp && imp.color)
-    ? `<div style="font-size:11px; line-height:1.5; color:${T.mut}; padding-top:5px; white-space:nowrap;">${_swatch(imp.colorHex || '#1f2f5b', light)} <span style="vertical-align:middle;">${_esc(imp.color)}</span></div>` : '';
+    ? `<div style="font-size:11px; line-height:1.5; color:${T.mut}; padding-top:5px; white-space:nowrap;">${_swatch(imp.colorHex || '#98c379', light)} <span style="vertical-align:middle;">${_esc(imp.color)}</span></div>` : '';
   // Per-pole detail line(s) — never wrap (truncated upstream + ellipsis here).
   const detail = (imp && imp.detailLines && imp.detailLines.length)
     ? imp.detailLines.map((d) => `<div style="font-size:11px; line-height:1.5; color:${T.mut}; padding-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:300px;">${_esc(d)}</div>`).join('')

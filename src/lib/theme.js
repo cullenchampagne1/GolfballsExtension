@@ -22,8 +22,9 @@ const STORAGE_KEY = 'gbTheme';
 
 /** The 4 shell variants. */
 export const THEME_VARIANTS = [
-  { id: 'dark', name: 'Dark' },
-  { id: 'midnight', name: 'Midnight' },
+  // ids kept stable (stored settings reference them); only display names changed.
+  { id: 'dark', name: 'Slate' },
+  { id: 'midnight', name: 'Atom One Dark' },
   { id: 'light', name: 'Light' },
   { id: 'cream', name: 'Cream' },
 ];

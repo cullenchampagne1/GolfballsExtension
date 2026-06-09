@@ -87,7 +87,21 @@ function parsePromo(tags) {
 /* Strip the "(Decoration)" / "{Decoration}" / "(Custom Logo)" qualifier the feed
    appends to custom-logo product names (in either parens or braces) — every
    catalog item is decorated. */
-const cleanTitle = (t) => String(t || '').replace(/\s*[({](?:decorat(?:ion|ed)|custom logo)[)}]/ig, '').replace(/\s{2,}/g, ' ').trim();
+/* Decode HTML entities the Solr feed leaves in titles/brands (&amp;, &#39;,
+   &quot;, numeric, even double-encoded) so a product never reads "Tees &amp; …". */
+export function decodeEntities(s) {
+  let t = String(s || '');
+  for (let i = 0; i < 3 && /&[#a-z0-9]+;/i.test(t); i++) {
+    t = t
+      .replace(/&#x([0-9a-f]+);/gi, (_, h) => { try { return String.fromCodePoint(parseInt(h, 16)); } catch { return _; } })
+      .replace(/&#(\d+);/g, (_, d) => { try { return String.fromCodePoint(parseInt(d, 10)); } catch { return _; } })
+      .replace(/&quot;/gi, '"').replace(/&apos;/gi, "'")
+      .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&');
+  }
+  return t;
+}
+const cleanTitle = (t) => decodeEntities(String(t || '')).replace(/\s*[({](?:decorat(?:ion|ed)|custom logo)[)}]/ig, '').replace(/\s{2,}/g, ' ').trim();
 
 /* Bucket a Solr doc into a canonical "Shop by Type" category by its
    itemType_ss (the field the live category pages filter on), with a
@@ -228,7 +242,7 @@ export function normalizeDoc(doc) {
     parentCode: doc.parentCode_s || '',                 // order line items reference this; keep it for by-id matching
     sku:     customData.parentSku || doc.parentCode_s || '', // human SKU (parentSku, e.g. "M6594"); falls back to the product code
     title:   cleanTitle(doc.title_s || doc.title_txt_en || ''),
-    brand:   doc.brand_s || '',
+    brand:   decodeEntities(doc.brand_s || ''),
     cat:     deriveCat(doc),                             // custom-logo "Shop by Type" bucket
     dept:    deriveDept(doc),                            // full-catalog department bucket
     customLogo: isCustomLogo(doc),                       // in the old custom-logo catalog? (drives the $ badge)

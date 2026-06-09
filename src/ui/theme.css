@@ -116,35 +116,37 @@
    Deeper blacks, punchier green. Demonstrates how a "shade
    variant" needs only the surfaces + brand swapped.
 ════════════════════════════════════════════════════════════ */
+/* Atom One Dark — the signature blue-grey surfaces (#282c34 family) + soft
+   foreground, with Atom's syntax palette for status colors. Brand stays green. */
 [data-theme="midnight"] {
   --gb-mode-fill-base:    255, 255, 255;
   --gb-mode-fill-inverse: 0, 0, 0;
 
-  --gb-surface-deep:    #000000;
-  --gb-surface-canvas:  #050507;
-  --gb-surface-1:       #0d0f12;
-  --gb-surface-2:       #14171b;
-  --gb-surface-3:       #1c2026;
-  --gb-surface-modal:   #0a0c0f;
+  --gb-surface-deep:    #16181d;
+  --gb-surface-canvas:  #1b1e24;
+  --gb-surface-1:       #21252b;
+  --gb-surface-2:       #282c34;
+  --gb-surface-3:       #2f343d;
+  --gb-surface-modal:   #21252b;
 
-  --gb-text-primary:    #ffffff;
-  --gb-text-secondary:  #c9ccd1;
-  --gb-text-tertiary:   #8a8f97;
-  --gb-text-muted:      #5b6068;
-  --gb-text-ghost:      #34383e;
+  --gb-text-primary:    #d7dae0;
+  --gb-text-secondary:  #abb2bf;
+  --gb-text-tertiary:   #828997;
+  --gb-text-muted:      #5c6370;
+  --gb-text-ghost:      #3e4451;
 
-  --gb-border-subtle:   #14171b;
-  --gb-border-default:  #22262c;
-  --gb-border-strong:   #3a3f47;
+  --gb-border-subtle:   #21252b;
+  --gb-border-default:  #3a4049;
+  --gb-border-strong:   #4b5263;
 
-  --gb-brand-label:     #a3e030;   /* punchier */
-  --gb-error:           #ff5e5e;
-  --gb-warning:         #ffb84a;
-  --gb-success:         #5cd99a;
-  --gb-info:            #6ab0f3;
+  --gb-brand-label:     #a3e030;   /* golf green stays the accent */
+  --gb-error:           #e06c75;   /* Atom red */
+  --gb-warning:         #e5c07b;   /* Atom yellow */
+  --gb-success:         #98c379;   /* Atom green */
+  --gb-info:            #61afef;   /* Atom blue */
 
   --gb-text-on-brand:   #ffffff;   /* white text on the brand fill (Send / Import / primary buttons) */
-  --gb-backdrop:        rgba(0, 0, 0, 0.75);
+  --gb-backdrop:        rgba(0, 0, 0, 0.7);
 }
 
 /* ════════════════════════════════════════════════════════════
