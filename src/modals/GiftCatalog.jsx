@@ -1991,8 +1991,9 @@ function CurrentProposalsView({ proposals, loading, error, hasAccount, accountNa
   );
 }
 
-function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onMergeImprint, onRemoveFront, onRemoveSecond, pageContext = {}, onSaveToAccount, onAddOpportunity, accountSaveSeq = 0, onEmail }) {
+function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onMergeImprint, onRemoveFront, onRemoveSecond, pageContext = {}, onSaveToAccount, onAddOpportunity, accountSaveSeq = 0, onEmail, promo, onApplyPromo, onClearPromo, onCheckPromo }) {
   const total = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
+  const promoDisc = (promo && promo.promotion) ? promoDiscount(promo.promotion) : 0;
   const units = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty, 0), 0);
   // Drag-to-copy imprints between lines. `drag` holds the in-flight source so
   // every line can light up (or stay dim) based on whether it can take it.
@@ -2118,11 +2119,18 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
         </div>
         {proposal.length > 0 && (
           <div style={{ flexShrink: 0, borderTop: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-inverse-strong)' }}>
+            {/* Promo code — same type-or-select picker as the breakdown. */}
+            {onApplyPromo && (
+              <div style={{ padding: '11px 16px 2px' }}>
+                <PromoBlock promo={promo} onApply={onApplyPromo} onClear={onClearPromo} onCheck={onCheckPromo} />
+              </div>
+            )}
             <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'baseline', gap: 10 }}>
               <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Estimated total</span>
               <span style={{ fontSize: 10.5, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)' }}>{units} units</span>
               <div style={{ flex: 1 }} />
-              <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', letterSpacing: -.6 }}>{money(total)}</span>
+              {promoDisc > 0 && <span style={{ fontSize: 12, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)', textDecoration: 'line-through' }}>{money(total)}</span>}
+              <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', letterSpacing: -.6 }}>{money(total - promoDisc)}</span>
             </div>
             {/* Name box — collapses in between the total and the buttons. */}
             <div style={{ overflow: 'hidden', maxHeight: saveMode ? 110 : 0, opacity: saveMode ? 1 : 0, transition: 'max-height .3s cubic-bezier(.4,0,.2,1), opacity .22s ease' }}>
@@ -3454,6 +3462,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               onRemoveFront={removeFrontImprint} onRemoveSecond={removeSecondPole}
               pageContext={pageContext} onSaveToAccount={saveToAccount} onAddOpportunity={addOpportunity} accountSaveSeq={accountSaveSeq}
               onEmail={() => openProposalEmail(proposal, '')}
+              promo={proposalPromo} onApplyPromo={applyPromo} onClearPromo={clearPromo} onCheckPromo={checkPromo}
               onClear={() => { setProposal([]); setProposalOpen(false); }} />
           </div>
         </div>
