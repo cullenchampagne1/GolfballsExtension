@@ -20,16 +20,16 @@ import { useEffect, useState, useCallback } from 'react';
    live viewport, and ready to drop into a proposal. Keys must match
    snapKeyForModel() in GolfballViewer.jsx (gift sets keyed by box model). */
 const SNAP_MODELS = [
-  { key: 'ball',                     label: 'Ball',                  scale: 1.35 },
-  { key: 'chip',                     label: 'Poker chip',            scale: 1.35 },
-  { key: 'divot',                    label: 'Divot tool',            scale: 1.35 },
-  { key: 'bartender',                label: 'Bartender tool',        scale: 1.35 },
-  { key: 'marker',                   label: 'Ball marker',           scale: 1.35 },
-  { key: 'giftset.giftbox',          label: 'Gift set — poker chip', scale: 1 },
-  { key: 'giftset.giftboxLever',     label: 'Gift set — lever',      scale: 1 },
-  { key: 'giftset.giftboxBartender', label: 'Gift set — bartender',  scale: 1 },
-  { key: 'giftset.giftboxWoodPoker', label: 'Gift set — wood poker', scale: 1 },
-  { key: 'giftset.giftboxWoodLever', label: 'Gift set — wood lever', scale: 1 },
+  { key: 'ball',                     label: 'Ball',                  scale: 1.7 },
+  { key: 'chip',                     label: 'Poker chip',            scale: 1.65 },
+  { key: 'divot',                    label: 'Divot tool',            scale: 1.6,  rx: -10, ry: 20, rz: 30 },
+  { key: 'bartender',                label: 'Bartender tool',        scale: 1.8,  rx: -10, ry: 20, rz: 30 },
+  { key: 'marker',                   label: 'Ball marker',           scale: 1.65 },
+  { key: 'giftset.giftbox',          label: 'Gift set — poker chip', scale: 1.8,  rx: 22 },
+  { key: 'giftset.giftboxLever',     label: 'Gift set — lever',      scale: 1.8,  rx: 22 },
+  { key: 'giftset.giftboxBartender', label: 'Gift set — bartender',  scale: 1.8,  rx: 22 },
+  { key: 'giftset.giftboxWoodPoker', label: 'Gift set — wood poker', scale: 1.8,  rx: 22 },
+  { key: 'giftset.giftboxWoodLever', label: 'Gift set — wood lever', scale: 1.8,  rx: 22 },
 ];
 const SNAP_SETTINGS = SNAP_MODELS.flatMap((m) => {
   const base = `golfballViewer.snap.${m.key}`;
@@ -39,20 +39,20 @@ const SNAP_SETTINGS = SNAP_MODELS.flatMap((m) => {
     desc: `Export-photo ${lbl} for the ${m.label} render (transparent copy/download). Fixed, so every export frames identically.`,
     type: 'number', default: 0, min: -300, max: 300, step: 1,
   });
-  const rot = (ax, lbl) => ({
+  const rot = (ax, defVal, lbl) => ({
     key: `${base}.${ax}`,
     label: `Snapshot ${m.label}: ${lbl}`,
     desc: `Export-photo ${lbl} (degrees) for the ${m.label} render — layered on its initial pose.`,
-    type: 'number', default: 0, min: -180, max: 180, step: 1, unit: '°',
+    type: 'number', default: defVal || 0, min: -180, max: 180, step: 1, unit: '°',
   });
   return [
     axis('x', 'position X'),
     axis('y', 'position Y'),
     axis('z', 'position Z'),
     { key: `${base}.scale`, label: `Snapshot ${m.label}: scale`, desc: `Export-photo scale for the ${m.label} render.`, type: 'number', default: m.scale, min: 0.2, max: 12, step: 0.05, unit: '×' },
-    rot('rotX', 'rotation X'),
-    rot('rotY', 'rotation Y'),
-    rot('rotZ', 'rotation Z'),
+    rot('rotX', m.rx, 'rotation X'),
+    rot('rotY', m.ry, 'rotation Y'),
+    rot('rotZ', m.rz, 'rotation Z'),
   ];
 });
 

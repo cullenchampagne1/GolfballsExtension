@@ -305,11 +305,12 @@ function captureModelSnapshot({ THREE, RoomEnvironment, renderer, scene, camera,
   snapRenderer.setSize(size, size, false);
   snapRenderer.setClearColor(0x000000, 0);
   snapRenderer.outputColorSpace = renderer.outputColorSpace;
-  // Filmic tone mapping + a touch of exposure makes highlights/metal pop without
-  // clipping (the live room view leaned on the box walls for reflections, which
-  // are hidden here — so the export looked flat/dull).
+  // Filmic tone mapping gives metals a clean specular roll-off without clipping
+  // (the live room view leaned on the box walls for reflections, hidden here).
+  // Exposure stays neutral — the IBL alone adds the shine; pushing exposure on
+  // top washed everything white.
   snapRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-  snapRenderer.toneMappingExposure = 1.15;
+  snapRenderer.toneMappingExposure = 1.0;
 
   // Studio IBL: the transparent export hides the room walls, so PBR metals had
   // nothing to reflect (dull tees/tools) and balls caught no specular. Light it
@@ -323,7 +324,9 @@ function captureModelSnapshot({ THREE, RoomEnvironment, renderer, scene, camera,
       roomEnv = new RoomEnvironment();
       envRT = pmrem.fromScene(roomEnv, 0.04);
       scene.environment = envRT.texture;
-      if ('environmentIntensity' in scene) scene.environmentIntensity = 1.25;
+      // Keep the IBL subtle — it ADDS to the scene's existing key/fill/rim lights,
+      // so a high intensity washed everything white. Just enough for reflections.
+      if ('environmentIntensity' in scene) scene.environmentIntensity = 0.5;
     } catch (e) { /* fall back to the scene's own lights */ }
   }
 
@@ -1411,10 +1414,15 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 const mk = locateMarker(res.model.geometry);
                 const cx = mk.cx - cg.offset.x + (item.decalDX || 0);
                 const cy = mk.cy - cg.offset.y + (item.decalDY || 0);
-                const faceZc = mk.faceZ - cg.offset.z;
-                const projZ = Math.max(faceZc, cg.hz * 0.5);   // guard a tiny/degenerate disc Z
+                const faceZc = mk.faceZ - cg.offset.z;   // disc top in centered space
                 const sz = mk.discR * 1.8 * (item.decalScale || 1);
-                addDecal(m, cx, cy, projZ * 1.2, sz, projZ * 1.8);
+                // Project a GENEROUSLY deep box centered on the disc top. The
+                // previous thin (≈half-thickness) box didn't reliably straddle
+                // the bartender's disc → its logo didn't land. Depth scales with
+                // the disc radius so it always reaches the print face. DecalGeometry
+                // only keeps front-facing tris, so over-deep is safe.
+                const projDepth = Math.max(cg.hz, mk.discR) * 2.5;
+                addDecal(m, cx, cy, faceZc, sz, projDepth);
               }
               // Disc-shaped kit items (the ball marker) scale by target radius like the
               // chip; the irregular tools scale by their direct factor.
