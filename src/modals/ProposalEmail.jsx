@@ -51,7 +51,7 @@ function _chip(imp, size) {
 }
 /* a real 3D-render tile (transparent PNG on a soft plate) */
 function _renderTile(src, size) {
-  return `<table border="0" cellpadding="0" cellspacing="0" width="${size}" height="${size}" style="width:${size}px; height:${size}px; background:${T.card}; border:1px solid ${T.line}; border-radius:${Math.round(size * 0.18)}px;"><tbody><tr><td align="center" valign="middle" height="${size}" style="text-align:center;"><img src="${_esc(src)}" width="${size - 6}" height="${size - 6}" border="0" alt="proof" style="display:inline-block; width:${size - 6}px; height:${size - 6}px;" /></td></tr></tbody></table>`;
+  return `<table border="0" cellpadding="0" cellspacing="0" width="${size}" height="${size}" style="width:${size}px; height:${size}px; background:${T.card}; border:1px solid ${T.line}; border-radius:${Math.round(size * 0.18)}px;"><tbody><tr><td align="center" valign="middle" height="${size}" style="text-align:center;"><img src="${_esc(src)}" width="${size - 6}" height="${size - 6}" border="0" alt="preview" style="display:inline-block; width:${size - 6}px; height:${size - 6}px;" /></td></tr></tbody></table>`;
 }
 /* product photo on a soft plate */
 function _photoPlate(img, plate) {
@@ -82,7 +82,7 @@ function _proof(l, withPhoto) {
   const photoCell = withPhoto ? `<td valign="middle" width="74" style="padding-right:14px;">${_photoPlate(l.img, 74)}</td>` : '';
   const visual = _proofVisual(l, imp, 56);
   return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:12px; background:${T.plate}; margin-top:12px;"><tbody>
-    <tr><td style="padding:10px 14px 0;"><span style="font-family:${SANS}; font-size:9px; letter-spacing:.9px; text-transform:uppercase; color:${T.acc}; font-weight:800;">Imprint proof</span></td></tr>
+    <tr><td style="padding:10px 14px 0;"><span style="font-family:${SANS}; font-size:9px; letter-spacing:.9px; text-transform:uppercase; color:${T.acc}; font-weight:800;">Imprint preview</span></td></tr>
     <tr><td style="padding:9px 14px 13px;"><table border="0" cellpadding="0" cellspacing="0"><tbody><tr>${photoCell}${visual}<td valign="middle"><div style="font-size:12px; line-height:1.4; font-weight:700; color:${T.ink};">${_esc(typeLabel)}</div>${colorRow}${detail}</td></tr></tbody></table></td></tr>
   </tbody></table>`;
 }
@@ -135,7 +135,7 @@ function tplMinimal(m) {
   </td></tr></tbody></table>`;
 }
 
-/* ── TEMPLATE 3 — CATALOG CARDS — header band, proof per card ── */
+/* ── TEMPLATE 3 — CATALOG CARDS — header band, preview per card ── */
 function tplCatalog(m) {
   const { groupName, optionName, lines, total, show } = m;
   const cards = lines.map((l) => {
@@ -179,7 +179,7 @@ function tplQuote(m) {
   </td></tr></tbody></table>`;
 }
 
-/* ── TEMPLATE 5 — LOOKBOOK — image-top cards, proof under each ── */
+/* ── TEMPLATE 5 — LOOKBOOK — image-top cards, preview under each ── */
 function tplLookbook(m) {
   const { groupName, optionName, lines, total, show } = m;
   const cards = lines.map((l) => {
@@ -202,11 +202,11 @@ function tplLookbook(m) {
 }
 
 export const PROPOSAL_TEMPLATES = [
-  { id: 'classic', name: 'Classic', sub: 'Formal letter · imprint proofs', accent: '#339900', build: tplClassic },
+  { id: 'classic', name: 'Classic', sub: 'Formal letter · imprint previews', accent: '#339900', build: tplClassic },
   { id: 'minimal', name: 'Minimal', sub: 'Editorial · borderless', accent: '#339900', build: tplMinimal },
-  { id: 'catalog', name: 'Catalog cards', sub: 'Header band · proof per card', accent: '#339900', build: tplCatalog },
-  { id: 'quote', name: 'Quote', sub: 'Total panel · imprint chips', accent: '#339900', build: tplQuote },
-  { id: 'lookbook', name: 'Lookbook', sub: 'Image-top · proof under each', accent: '#339900', build: tplLookbook },
+  { id: 'catalog', name: 'Catalog cards', sub: 'Header band · preview per card', accent: '#339900', build: tplCatalog },
+  { id: 'quote', name: 'Quote', sub: 'Total panel · imprint previews', accent: '#339900', build: tplQuote },
+  { id: 'lookbook', name: 'Lookbook', sub: 'Image-top · preview under each', accent: '#339900', build: tplLookbook },
 ];
 const tplById = (id) => PROPOSAL_TEMPLATES.find((t) => t.id === id) || PROPOSAL_TEMPLATES[0];
 
@@ -439,7 +439,7 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
             <ConfigGroup title="Display options">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <OptionToggle checked={show.images} label="Product images" onClick={() => toggle('images')} />
-                <OptionToggle checked={show.previews} label="Imprint proofs" hint={busy ? `Rendering 3D proofs ${prog.n}/${prog.t || '…'}` : 'Show how each logo / personalization is applied'} onClick={() => toggle('previews')} />
+                <OptionToggle checked={show.previews} label="Imprint previews" hint={busy ? `Rendering 3D previews ${prog.n}/${prog.t || '…'}` : 'Show how each logo / personalization is applied'} onClick={() => toggle('previews')} />
                 <OptionToggle checked={show.cost} label="Unit cost / qty detail" onClick={() => toggle('cost')} />
                 <OptionToggle checked={show.total} label="Estimated total" hint="Uncheck to hide the subtotal" onClick={() => toggle('total')} />
                 <OptionToggle checked={show.expiration} label="Expiration date" onClick={() => toggle('expiration')} />
@@ -459,20 +459,42 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
                 <span style={{ width: 8, height: 8, borderRadius: 2, background: tpl.accent }} />
                 <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>{tpl.name}</span>
               </span>
-              {busy && show.previews && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px', borderRadius: 999, background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)' }}>
-                  <span style={{ width: 11, height: 11, borderRadius: '50%', border: '2px solid var(--gb-brand-tint-border)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} />
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--gb-brand-label)' }}>Rendering proofs {prog.t ? `${prog.n}/${prog.t}` : '…'}</span>
-                </span>
-              )}
               <div style={{ flex: 1 }} />
               <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>600px · HTML</span>
             </div>
             <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-              {/* The proof cards show instantly (synthetic chip + spec); the 3D
-                  renders swap in as the background batch completes — a tiny pill in
-                  the bar above reports progress, so no blocking veil is needed. */}
               <iframe title="proposal-preview" srcDoc={doc} style={{ width: '100%', height: '100%', border: 'none', background: '#eef0f2' }} />
+              {/* Blocking render-progress overlay — wait for the full batch before
+                  revealing the email so the proofs land with real renders, not a
+                  half-rendered/synthetic state. */}
+              {busy && show.previews && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .18 }}
+                  style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'color-mix(in srgb, var(--gb-surface-deep) 82%, transparent)', backdropFilter: 'blur(5px)', WebkitBackdropFilter: 'blur(5px)' }}>
+                  <motion.div initial={{ opacity: 0, scale: .96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ type: 'spring', stiffness: 340, damping: 28 }}
+                    style={{ width: 320, maxWidth: '88%', padding: '24px 24px 20px', borderRadius: 'var(--gb-r-xl)', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                    <div style={{ position: 'relative', width: 48, height: 48, flexShrink: 0 }}>
+                      <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '3px solid var(--gb-brand-tint-soft)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .85s linear infinite' }} />
+                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gb-brand-label)' }}><I.card size={19} /></div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Rendering imprint previews</div>
+                      <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', marginTop: 3 }}>{prog.t ? 'Snapshotting each personalization on its model' : 'Preparing personalizations…'}</div>
+                    </div>
+                    {prog.t > 0 && prog.t <= 24 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', maxWidth: 252 }}>
+                        {Array.from({ length: prog.t }).map((_, idx) => {
+                          const done = idx < prog.n, active = idx === prog.n;
+                          return <div key={idx} style={{ width: 24, height: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', transition: 'background .3s, border-color .3s', background: done ? 'var(--gb-brand-label)' : 'var(--gb-fill-subtle)', border: '1px solid ' + (done ? 'var(--gb-brand-label)' : active ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'), animation: (!done && active) ? 'gb-pulse 1s ease-in-out infinite' : 'none' }}>{done && <I.check size={13} strokeWidth={3} />}</div>;
+                        })}
+                      </div>
+                    )}
+                    <div style={{ width: '100%', height: 7, borderRadius: 4, background: 'var(--gb-fill-subtle)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', borderRadius: 4, background: 'var(--gb-brand-label)', width: prog.t ? `${Math.max(4, Math.round((prog.n / prog.t) * 100))}%` : '24%', animation: prog.t ? 'none' : 'gb-pulse 1s ease-in-out infinite', transition: 'width .35s cubic-bezier(.4,0,.2,1)' }} />
+                    </div>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-secondary)' }}>{prog.t ? `${prog.n} of ${prog.t}` : 'Loading…'}</div>
+                  </motion.div>
+                </motion.div>
+              )}
             </div>
           </div>
         </div>
