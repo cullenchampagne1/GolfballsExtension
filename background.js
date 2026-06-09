@@ -442,7 +442,7 @@ async function gbInvFetchCosts(origin, skus) {
       if (c === undefined) return { __auth: false };   // bounced to login — abort batch
       out[sku] = c;
     } catch (e) { out[sku] = null; }
-    await new Promise((z) => setTimeout(z, 60));
+    await new Promise((z) => setTimeout(z, 25));
   }
   return out;
 }

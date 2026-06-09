@@ -146,35 +146,34 @@ export async function primeCostCache() {
    already have unless `force`, and merges into gbCostMap. `onProgress({done,
    total, found})` fires per chunk; `signal` (AbortSignal) cancels between chunks.
    Returns { found, missing, total, map }. */
-export async function importCosts(skus, { onProgress, signal, force = false, chunk = 20 } = {}) {
+export async function importCosts(skus, { onProgress, signal, force = false, chunk = 5 } = {}) {
   const uniq = Array.from(new Set((skus || []).map((s) => String(s || '').trim()).filter(Boolean)));
   const existing = await _readCostMap();
-  const todo = force ? uniq : uniq.filter((s) => existing[s] == null);
-  const total = todo.length;
-  let done = 0, found = 0;
   const merged = { ...existing };
+  const total = uniq.length;                          // progress spans ALL requested SKUs…
+  let done = 0, found = 0;
+  const todo = [];
+  for (const s of uniq) {                             // …pre-cached ones count as instantly done
+    if (!force && existing[s] != null) { done++; if (existing[s] > 0) found++; if (existing[s] != null) _costMap.set(s, existing[s]); }
+    else todo.push(s);
+  }
+  const report = () => { if (typeof onProgress === 'function') onProgress({ done, total, found }); };
+  report();
   for (let i = 0; i < todo.length; i += chunk) {
     if (signal && signal.aborted) break;
     const batch = todo.slice(i, i + chunk);
-    let costs;
-    try {
-      const r = await _sendBg('fetchCosts', { skus: batch });
-      costs = r.costs || {};
-    } catch (e) {
-      // Surface auth/embedding failures immediately rather than silently zeroing.
-      throw e;
-    }
+    const r = await _sendBg('fetchCosts', { skus: batch });   // throws on auth/embed failure → caller toasts
+    const costs = r.costs || {};
     for (const sku of batch) {
       const c = costs[sku];
-      if (c != null) { merged[sku] = c; _costMap.set(sku, c); found++; }
+      if (c != null) { merged[sku] = c; _costMap.set(sku, c); if (c > 0) found++; }
       done++;
     }
     _writeCostMap(merged);                            // persist incrementally (survives cancel)
-    if (typeof onProgress === 'function') onProgress({ done, total, found });
+    report();                                         // small chunk → the bar moves every few SKUs
   }
-  // Count how many of the requested SKUs now have a cost (incl. pre-existing).
   const haveCost = uniq.filter((s) => merged[s] != null && merged[s] > 0).length;
-  return { found, missing: uniq.length - haveCost, total: uniq.length, map: merged };
+  return { found, missing: uniq.length - haveCost, total, map: merged };
 }
 
 /* Synchronous per-unit cost lookup for margin math (null if not fetched yet). */

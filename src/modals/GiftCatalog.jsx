@@ -533,12 +533,17 @@ function InventoryPanel({ sku }) {
       .then((d) => { setData(d); setState('done'); })
       .catch((e) => { setErr((e && e.message) || 'failed'); setState('error'); });
   };
-  // Show last-known inventory instantly on open (cache-first); only the refresh
-  // button (or a never-fetched SKU) hits the network.
+  // Show last-known inventory instantly on open (cache-first), then auto-fetch
+  // when there's no cache yet — no manual "Check inventory" press needed. The
+  // refresh button re-pulls; a never-reachable SKU surfaces an error+retry.
   useEffect(() => {
     let alive = true;
-    setState('idle'); setData(null); setErr('');
-    peekInventory(sku).then((d) => { if (alive && d) { setData(d); setState('done'); } });
+    setState('loading'); setData(null); setErr('');
+    peekInventory(sku).then((d) => {
+      if (!alive) return;
+      if (d) { setData(d); setState('done'); }       // cached → show instantly
+      else load(false);                               // first time → fetch automatically
+    });
     return () => { alive = false; };
   }, [sku]);
   const COLS = [['available', 'Avail'], ['onHand', 'OnHand'], ['alloc', 'Alloc'], ['onOrder', 'OnOrdr']];
