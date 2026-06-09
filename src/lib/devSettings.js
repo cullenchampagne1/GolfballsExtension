@@ -39,11 +39,20 @@ const SNAP_SETTINGS = SNAP_MODELS.flatMap((m) => {
     desc: `Export-photo ${lbl} for the ${m.label} render (transparent copy/download). Fixed, so every export frames identically.`,
     type: 'number', default: 0, min: -300, max: 300, step: 1,
   });
+  const rot = (ax, lbl) => ({
+    key: `${base}.${ax}`,
+    label: `Snapshot ${m.label}: ${lbl}`,
+    desc: `Export-photo ${lbl} (degrees) for the ${m.label} render — layered on its initial pose.`,
+    type: 'number', default: 0, min: -180, max: 180, step: 1, unit: '°',
+  });
   return [
     axis('x', 'position X'),
     axis('y', 'position Y'),
     axis('z', 'position Z'),
-    { key: `${base}.scale`, label: `Snapshot ${m.label}: scale`, desc: `Export-photo scale for the ${m.label} render.`, type: 'number', default: m.scale, min: 0.2, max: 4, step: 0.05 },
+    { key: `${base}.scale`, label: `Snapshot ${m.label}: scale`, desc: `Export-photo scale for the ${m.label} render.`, type: 'number', default: m.scale, min: 0.2, max: 4, step: 0.05, unit: '×' },
+    rot('rotX', 'rotation X'),
+    rot('rotY', 'rotation Y'),
+    rot('rotZ', 'rotation Z'),
   ];
 });
 
@@ -164,6 +173,13 @@ export const DEV_SETTINGS = [
     type:    'number',
     default: 0.01,
     min:     0, max: 0.1, step: 0.005,
+  },
+  {
+    key:     'golfballViewer.snapPreview',
+    label:   'Golfball viewer: preview export pose',
+    desc:    'Lock the live 3D view to the export-photo pose (the per-model Snapshot position/scale/rotation below) so you can see and dial in exactly how Copy/Download will frame each model. Disables drag/zoom/spin while on.',
+    type:    'bool',
+    default: false,
   },
   /* ── Per-modal draggable mode ─────────────────────────────────
      Each wired modal exposes a `<name>.draggable` flag. When ON, the

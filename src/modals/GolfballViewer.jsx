@@ -259,10 +259,23 @@ function snapKeyForModel(shape, giftSet) {
 function snapPoseFromDev(dev, key, fallbackScale = 1) {
   const num = (k, fb) => { const v = Number(dev?.[k]); return Number.isFinite(v) ? v : fb; };
   const base = `golfballViewer.snap.${key}`;
+  const d2r = Math.PI / 180;
   return {
     x: num(`${base}.x`, 0), y: num(`${base}.y`, 0), z: num(`${base}.z`, 0),
     scale: num(`${base}.scale`, fallbackScale),
+    // Rotation knobs are deltas (deg→rad) layered on the model's initial pose.
+    rotX: num(`${base}.rotX`, 0) * d2r,
+    rotY: num(`${base}.rotY`, 0) * d2r,
+    rotZ: num(`${base}.rotZ`, 0) * d2r,
   };
+}
+/* Apply a snapshot pose to `ballGroup`: absolute position + scale, rotation =
+   the model's initial pose (`baseRot`) plus the dev rotation deltas. */
+function applySnapPose(ballGroup, pose, baseRot) {
+  ballGroup.position.set(pose.x, pose.y, pose.z);
+  ballGroup.scale.setScalar(pose.scale);
+  const br = baseRot || { x: 0, y: 0, z: 0 };
+  ballGroup.rotation.set(br.x + pose.rotX, br.y + pose.rotY, br.z + pose.rotZ);
 }
 /* Render `ballGroup` (the single root for every model) to an offscreen,
    transparent square canvas at a fixed pose, restoring the live transform after.
@@ -273,9 +286,7 @@ function captureModelSnapshot({ THREE, renderer, scene, camera, ballGroup, wallM
   const savedPos = ballGroup.position.clone();
   const savedScl = ballGroup.scale.clone();
   const savedRot = ballGroup.rotation.clone();
-  ballGroup.position.set(pose.x, pose.y, pose.z);
-  ballGroup.scale.setScalar(pose.scale);
-  if (baseRot) ballGroup.rotation.copy(baseRot);
+  applySnapPose(ballGroup, pose, baseRot);
 
   const snapCam = camera.clone();
   snapCam.position.set(0, 0, 520);   // matches the live camera's fixed distance
@@ -443,6 +454,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   // doesn't re-run on dev changes, so it can't close over a fresh `dev`).
   const devRef = useRef(dev);
   devRef.current = dev;
+  // When on, the LIVE viewer locks to the export-photo pose so you can debug
+  // exactly how the snapshot will frame (read each frame in the render loops).
+  const snapPreviewRef = useRef(false);
+  snapPreviewRef.current = !!dev['golfballViewer.snapPreview'];
   const initialBallRef = useRef(null);
   if (!initialBallRef.current) {
     const deg = (k, fallback) => (Number(dev[k] ?? fallback) * Math.PI) / 180;
@@ -1390,6 +1405,11 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           renderStateRef.current = state;
           tintMatRef.current = null; tintClayRef.current = null;
 
+          // Snapshot/export-photo pose key + base orientation (defined before the
+          // loop so the snap-preview branch can read them every frame).
+          const gsSnapKey = snapKeyForModel('giftset', giftSet);
+          const gsBaseRot = ballGroup.rotation.clone();
+
           // ── Render loop (zoom + turntable + render + debug HUD) ──
           const gsRad2deg = (r) => (r * 180) / Math.PI;
           let gsLastDebugTs = 0;
@@ -1411,8 +1431,12 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 applySceneMode(null);
               }
             }
-            ballGroup.scale.setScalar(state.scale);
-            if (autoRotateRef.current) ballGroup.rotation.y += spinSpeedRef.current;
+            if (snapPreviewRef.current) {
+              applySnapPose(ballGroup, snapPoseFromDev(devRef.current, gsSnapKey, 1), gsBaseRot);
+            } else {
+              ballGroup.scale.setScalar(state.scale);
+              if (autoRotateRef.current) ballGroup.rotation.y += spinSpeedRef.current;
+            }
             renderer.render(scene, camera);
             const now = performance.now();
             if (debugEnabledRef.current && now - gsLastDebugTs > 100) {
@@ -1444,11 +1468,9 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           renderer.domElement.addEventListener('pointerup', gsOnPUp);
           renderer.domElement.addEventListener('pointercancel', gsOnPUp);
 
-          // Snapshot — fixed per-model pose (dev-settings x/y/z/scale), walls
-          // hidden, transparent background. Independent of the live viewport so
-          // every export of this gift set frames identically.
-          const gsSnapKey = snapKeyForModel('giftset', giftSet);
-          const gsBaseRot = ballGroup.rotation.clone();
+          // Snapshot — fixed per-model pose (dev-settings x/y/z/scale/rotation),
+          // walls hidden, transparent background. Independent of the live
+          // viewport so every export of this gift set frames identically.
           snapshotRef.current = (size = 1024) => captureModelSnapshot({
             THREE, renderer, scene, camera, ballGroup, wallMeshes,
             pose: snapPoseFromDev(devRef.current, gsSnapKey, 1),
@@ -3648,13 +3670,18 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             }
           }
 
-          // Scale is independent of mode — wheel-driven only.
-          ballGroup.scale.setScalar(state.scale);
+          if (snapPreviewRef.current) {
+            // Debug: lock the live view to the export-photo pose.
+            applySnapPose(ballGroup, snapPoseFromDev(devRef.current, ballSnapKey, 1.35), ballBaseRot);
+          } else {
+            // Scale is independent of mode — wheel-driven only.
+            ballGroup.scale.setScalar(state.scale);
 
-          // Slow auto-spin around Y so both poles come into view (dual-pole
-          // preview). Disabled during throw/explode so it doesn't fight physics.
-          if (autoRotateRef.current && !throwModeRef.current && !ballExploded) {
-            ballGroup.rotation.y += spinSpeedRef.current;
+            // Slow auto-spin around Y so both poles come into view (dual-pole
+            // preview). Disabled during throw/explode so it doesn't fight physics.
+            if (autoRotateRef.current && !throwModeRef.current && !ballExploded) {
+              ballGroup.rotation.y += spinSpeedRef.current;
+            }
           }
 
           /* ── Two-pass render for refraction ────────────────────
