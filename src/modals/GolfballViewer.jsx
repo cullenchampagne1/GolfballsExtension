@@ -4044,6 +4044,21 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         </div>
       )}
 
+      {/* Export-pose preview frame — when the snapPreview dev toggle is on, mark
+          the square the snapshot actually captures (camera is square at the
+          viewport's vertical FOV → a centered square the full height tall) and
+          blur everything outside it, so what falls inside the box is exactly
+          what Copy/Download will export. */}
+      {status === 'ready' && !!dev['golfballViewer.snapPreview'] && (
+        <div data-viewer-ui="true" style={{ position: 'absolute', inset: 0, zIndex: 5, display: 'flex', flexDirection: 'row', pointerEvents: 'none' }}>
+          <div style={{ flex: 1, backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', background: 'color-mix(in srgb, var(--gb-surface-canvas) 42%, transparent)' }} />
+          <div style={{ height: '100%', aspectRatio: '1 / 1', maxWidth: '100%', flexShrink: 0, boxSizing: 'border-box', position: 'relative', border: '1.5px solid var(--gb-brand-label)', boxShadow: '0 0 0 1px rgba(0,0,0,.25)' }}>
+            <span style={{ position: 'absolute', top: 7, left: '50%', transform: 'translateX(-50%)', fontFamily: 'var(--gb-font-mono)', fontSize: 9, fontWeight: 700, letterSpacing: .6, color: '#fff', background: 'var(--gb-brand-label)', padding: '2px 8px', borderRadius: 999, whiteSpace: 'nowrap' }}>EXPORT FRAME</span>
+          </div>
+          <div style={{ flex: 1, backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', background: 'color-mix(in srgb, var(--gb-surface-canvas) 42%, transparent)' }} />
+        </div>
+      )}
+
       {/* Top-right chip — gravity toggle. Hidden while a scene is
           active (no room to fall in). Lives ABOVE the canvas; the
           bomb listener excludes any element marked
