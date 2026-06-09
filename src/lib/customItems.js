@@ -217,11 +217,14 @@ export async function clearCustomItems() {
 export function customItemToProduct(rec) {
   const ci = normalizeCustomItem(rec);     // migrate legacy on the fly
   const breaks = ci.breaks;
+  const repo = repoOf(ci);
   return {
     id: 'custom-' + ci.id,
     isCustom: true,
     custom: ci,
     brand: 'Custom',
+    // Short repo tag (HPG / SnugZ) shown beside the brand when imported.
+    repoTag: repo ? REPOS[repo].label : null,
     title: ci.name || 'Custom item',
     sku: ci.itemID || '',
     price: breaks[0].p,

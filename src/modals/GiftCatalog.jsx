@@ -475,7 +475,12 @@ function ProductCard({ p, compact, showRating, active, inProposal, onAdd, onClic
       </div>
       <div style={{ paddingTop: compact ? 8 : 10, display: 'flex', flexDirection: 'column', gap: compact ? 4 : 5, flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.brand}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.brand}</span>
+            {p.repoTag && (
+              <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 999, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', fontSize: 8, fontWeight: 800, letterSpacing: .3, textTransform: 'uppercase', color: 'var(--gb-text-tertiary)' }}><I.download size={8} /> {p.repoTag}</span>
+            )}
+          </span>
           {showRating && p.rating && <Rating value={p.rating} count={p.reviews} size={10} />}
         </div>
         <div style={{ fontSize: compact ? 12 : 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.32, letterSpacing: -.1, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: compact ? undefined : '2.6em' }}>{p.title}</div>
@@ -714,8 +719,8 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) 
           {/* View product — opens the saved supplier link (custom items only),
               with a copy-to-clipboard icon beside it. */}
           {p.isCustom && p.link && (
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 14 }}>
-              <Btn variant="secondary" size="sm" icon={<I.eye />}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'stretch', marginTop: 14 }}>
+              <Btn variant="secondary" size="sm" icon={<I.eye />} style={{ flex: 1 }}
                 onClick={() => { try { window.open(p.link, '_blank', 'noopener'); } catch { /* */ } }}>View product</Btn>
               <IconBtn size="sm" variant="secondary" active={linkCopied} icon={linkCopied ? <I.check size={14} /> : <I.copy size={14} />}
                 title="Copy product URL" onClick={() => { copyToClipboard(p.link).then(() => { setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1400); }).catch(() => {}); }} />
@@ -2086,25 +2091,15 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
               {shown.map((ci, idx) => {
                 const p = customItemToProduct(ci);
                 const picked = sel.has(ci.id);
-                const repo = repoOf(ci);
                 return (
                   <div key={ci.id} style={{ position: 'relative', borderRadius: 'var(--gb-r-lg)', outline: picked ? '2px solid var(--gb-brand-label)' : 'none', outlineOffset: 2 }}>
                     <ProductCard p={p} compact={compact} showRating={false}
                       inProposal={inProposal(p.id)} onAdd={() => onAdd(ci)} onClick={(e) => onCardClick(ci, idx, e)} />
-                    {/* Where this item came from (repo import), incl. migrated items. */}
-                    {repo && (
-                      <span style={{ position: 'absolute', top: 8, left: 8, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 999, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', boxShadow: '0 1px 4px rgba(0,0,0,.1)', fontSize: 9, fontWeight: 800, letterSpacing: .3, color: 'var(--gb-text-secondary)', pointerEvents: 'none' }}>
-                        <I.download size={9} /> {REPOS[repo].label}
-                      </span>
-                    )}
-                    {selectMode ? (
-                      <div style={{ position: 'absolute', top: 8, right: 8, width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: picked ? 'var(--gb-brand-label)' : 'var(--gb-surface-modal)', border: '1px solid ' + (picked ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.12)', pointerEvents: 'none' }}>
+                    {/* Select-mode check — a rounded square (not a circle), filled when picked. */}
+                    {selectMode && (
+                      <div style={{ position: 'absolute', top: 8, right: 8, width: 22, height: 22, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', background: picked ? 'var(--gb-brand-label)' : 'var(--gb-surface-modal)', border: '1px solid ' + (picked ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.12)', pointerEvents: 'none' }}>
                         {picked && <I.check size={13} strokeWidth={3} />}
                       </div>
-                    ) : (
-                      <IconBtn size="sm" danger icon={<I.trash size={13} />} title="Delete custom item"
-                        onClick={(e) => { e.stopPropagation(); onDelete(ci.id); }}
-                        style={{ position: 'absolute', top: 8, right: 8, background: 'var(--gb-surface-modal)', boxShadow: '0 1px 4px rgba(0,0,0,.12)' }} />
                     )}
                   </div>
                 );
@@ -2126,7 +2121,8 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
         {selectMode && sel.size > 0 && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} transition={{ duration: .16 }}
             style={{ position: 'absolute', right: 18, bottom: 18, zIndex: 6 }}>
-            <Btn variant="danger" size="md" icon={<I.trash />} onClick={bulkDelete}>Delete {nfmt(sel.size)}</Btn>
+            <Btn variant="danger" size="md" icon={<I.trash />} onClick={bulkDelete}
+              style={{ background: 'var(--gb-danger, #e5484d)', color: '#fff', border: '1px solid var(--gb-danger, #e5484d)', boxShadow: '0 6px 18px -6px rgba(0,0,0,.45)' }}>Delete {nfmt(sel.size)}</Btn>
           </motion.div>
         )}
       </AnimatePresence>
@@ -2149,7 +2145,7 @@ function CIField({ label, full, children }) {
 /* Custom-item create/edit form — overlays the modal body. Fields mirror the
    golfballs.com cart "custom item" form (name/style/extraDetails/itemID/price/
    setup/weight/qty/thumbnail/dropship + optional description). */
-function CustomItemForm({ initial, onCancel, onSave }) {
+function CustomItemForm({ initial, onCancel, onSave, onDelete }) {
   const isEdit = !!(initial && initial.id);
   const s = (v) => (v == null ? '' : String(v));
   // Seed style options + price ladder from the spec shape, migrating the legacy
@@ -2299,7 +2295,9 @@ function CustomItemForm({ initial, onCancel, onSave }) {
             <Checkbox checked={f.dropship} onChange={(v) => setF((prev) => ({ ...prev, dropship: typeof v === 'boolean' ? v : !prev.dropship }))} label="Dropship" />
           </div>
         </div>
-        <div style={{ padding: '10px 16px', display: 'flex', gap: 8, borderTop: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-inverse-strong)', flexShrink: 0 }}>
+        <div style={{ padding: '10px 16px', display: 'flex', gap: 8, alignItems: 'center', borderTop: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-inverse-strong)', flexShrink: 0 }}>
+          {/* Delete lives here now (moved off the card) — edit an item to remove it. */}
+          {isEdit && onDelete && <IconBtn size="md" variant="ghost" danger title="Delete this custom item" icon={<I.trash />} onClick={() => { Promise.resolve(onDelete(initial.id)).then(() => onCancel()); }} />}
           <Btn variant="ghost" size="md" style={{ flex: 1 }} onClick={onCancel}>Cancel</Btn>
           <Btn variant="primary" size="md" icon={<I.check />} style={{ flex: 1.4 }} state={saving ? 'loading' : 'idle'} disabled={!canSave} onClick={submit}>{isEdit ? 'Save changes' : 'Save custom item'}</Btn>
         </div>
@@ -2951,7 +2949,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           <AnimatePresence>
             {editingCustom && (
               <CustomItemForm key="custom-form" initial={editingCustom}
-                onCancel={() => setEditingCustom(null)} onSave={saveCustom} />
+                onCancel={() => setEditingCustom(null)} onSave={saveCustom} onDelete={deleteCustom} />
             )}
           </AnimatePresence>
         </div>
