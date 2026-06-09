@@ -735,7 +735,7 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) 
               custom-logo — e.g. a "Personalized Ball Marker" hat clip. */}
           {!p.isCustom && (p.customizable || p.customLogo) && <CustomizeBlock p={p} onChange={setDecoration} />}
           {/* Inventory + cost for a catalog SKU (loads on press). */}
-          {!p.isCustom && p.sku && <InventoryPanel sku={p.parentCode || p.sku} />}
+          {!p.isCustom && p.sku && <InventoryPanel sku={invSkuOf(p)} />}
           {p.isCustom && p.custom && p.custom.cost > 0 && (
             <div style={{ marginTop: 16, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>Cost <b style={{ color: 'var(--gb-text-secondary)', fontFamily: 'var(--gb-font-mono)' }}>{usd(p.custom.cost)}</b>/unit · used for margin</div>
           )}
@@ -1108,6 +1108,10 @@ function resolveSavedEntry(entry) {
      • otherwise fall back to 60%-of-sell. */
 const COST_RATIO = 0.60;            // assumed cost as a fraction of sell price → 40% margin
 const ASSUMED_MARGIN = 1 - COST_RATIO;
+/* The SKU the Dynamics inventory endpoint keys on = the human parentSku
+   (customData.parentSku, e.g. "B3273") — NOT parentCode_s, which is an internal
+   product code ("P00G6B") the endpoint 404s on. Prefer sku, fall back to code. */
+const invSkuOf = (p) => (p && (p.sku || p.parentCode)) || '';
 const unitCostOf = (product, unitPrice, qty) => {
   const p = product || {};
   if (p.isCustom) {
@@ -1118,7 +1122,7 @@ const unitCostOf = (product, unitPrice, qty) => {
     const c = p.cost != null ? p.cost : (p.custom && p.custom.cost);
     if (c != null && c > 0) return Math.round(c * 100) / 100;
   } else {
-    const c = cachedCostForSku(p.parentCode || p.sku);
+    const c = cachedCostForSku(invSkuOf(p));
     if (c != null && c > 0) return Math.round(c * 100) / 100;
   }
   return Math.round((unitPrice || 0) * COST_RATIO * 100) / 100;
@@ -2669,7 +2673,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     if (costSync) { try { costAbortRef.current && costAbortRef.current.abort(); } catch {} return; }
     // Unique inventory SKUs across the loaded catalog (parentCode is the base
     // product code the endpoint keys on; fall back to sku).
-    const skus = Array.from(new Set(catalog.map((p) => p.parentCode || p.sku).filter(Boolean)));
+    const skus = Array.from(new Set(catalog.map(invSkuOf).filter(Boolean)));
     if (!skus.length) { toast && toast.error && toast.error('No catalog SKUs to sync yet — let the index load first.'); return; }
     const ctrl = new AbortController();
     costAbortRef.current = ctrl;
