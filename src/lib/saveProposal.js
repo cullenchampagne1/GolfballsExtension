@@ -334,6 +334,16 @@ export async function removeSavedProposal(id) {
   return next;
 }
 
+/* Replace a saved draft (matched by id) with an edited copy — used when a price
+   is hand-edited in the breakdown. Persists + returns the new list. */
+export async function updateSavedProposal(entry) {
+  if (!entry || !entry.id) throw new Error('No proposal id');
+  const list = await loadSavedProposals();
+  const next = list.map((p) => (p.id === entry.id ? entry : p));
+  await _writeSaved(next);
+  return next;
+}
+
 /* ───────────────────────────────────────────────────────────────────────────
    Working proposal — the rep's live, unsaved draft. Persisted to its own key so
    it survives closing the catalog, navigating, and restarting the browser. It is

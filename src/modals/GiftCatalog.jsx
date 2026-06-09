@@ -6,7 +6,7 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, DEPT_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions, colorNameOf } from './giftCustomize.jsx';
-import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal } from '../lib/saveProposal.js';
+import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal } from '../lib/saveProposal.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS } from '../lib/customItems.js';
 import { importHpgCatalog } from '../lib/hpgImport.js';
 import { importSnugzCatalog } from '../lib/snugzImport.js';
@@ -1112,9 +1112,13 @@ function fmtSavedDate(iso) {
 }
 
 function resolveSavedEntry(entry) {
-  const entries = (entry.lines || []).filter((l) => l && l.product).map((l) => ({
-    product: l.product, decoration: l.decoration, splits: l.splits || [],
-  }));
+  // srcIndex = position in the stored `entry.lines` (kept so a price edited in the
+  // breakdown can be written back to the right line even though product-less
+  // lines are filtered out here).
+  const entries = [];
+  (entry.lines || []).forEach((l, srcIndex) => {
+    if (l && l.product) entries.push({ product: l.product, decoration: l.decoration, splits: l.splits || [], srcIndex });
+  });
   const units = entries.reduce((s, e) => s + e.splits.reduce((a, x) => a + (x.qty || 0), 0), 0);
   const total = entries.reduce((s, e) => s + e.splits.reduce((a, x) => a + (x.qty || 0) * (x.price || 0), 0), 0);
   return { entries, units, total };
@@ -1147,19 +1151,37 @@ const unitCostOf = (product, unitPrice, qty) => {
   }
   return Math.round((unitPrice || 0) * COST_RATIO * 100) / 100;
 };
+/* True when we have a real (synced / custom) cost for this product — i.e. the
+   margin isn't the 40% placeholder. Drives the breakdown's "actual vs assumed". */
+const hasRealCost = (product) => {
+  const p = product || {};
+  if (p.isCustom) {
+    const cb = p.costBreaks || (p.custom && p.custom.costBreaks);
+    if (cb && cb.length) return true;
+    const c = p.cost != null ? p.cost : (p.custom && p.custom.cost);
+    return c != null && c > 0;
+  }
+  const c = cachedCostForSku(invSkuOf(p));
+  return c != null && c > 0;
+};
 
 /* Per-line + blended margin for resolved entries
    ([{ product, decoration, splits:[{qty,price}] }]). Setup/decoration fees fold
    in here later (they're already in each split's price for the cart). */
 function marginReport(entries) {
-  let rev = 0, cost = 0, units = 0;
+  let rev = 0, cost = 0, units = 0, real = 0;
   const lines = (entries || []).map((e) => {
     let lr = 0, lc = 0, u = 0;
     (e.splits || []).forEach((s) => { const q = s.qty || 0, p = s.price || 0; lr += q * p; lc += q * unitCostOf(e.product, p, q); u += q; });
     rev += lr; cost += lc; units += u;
-    return { ...e, units: u, lineRev: lr, lineCost: lc, profit: lr - lc, margin: lr ? (lr - lc) / lr : 0 };
+    const known = hasRealCost(e.product);
+    if (known) real++;
+    return { ...e, units: u, lineRev: lr, lineCost: lc, profit: lr - lc, margin: lr ? (lr - lc) / lr : 0, costKnown: known };
   });
-  return { lines, units, count: lines.length, rev, cost, profit: rev - cost, margin: rev ? (rev - cost) / rev : 0 };
+  // How the cost figure was sourced: actual (all lines have synced/custom cost),
+  // assumed (none do → 40% placeholder), or mixed.
+  const costBasis = lines.length === 0 ? 'assumed' : real === lines.length ? 'actual' : real === 0 ? 'assumed' : 'mixed';
+  return { lines, units, count: lines.length, rev, cost, profit: rev - cost, margin: rev ? (rev - cost) / rev : 0, costBasis, realCount: real };
 }
 
 const marginTone = (m) => (m >= 0.45 ? 'success' : m >= 0.32 ? 'warning' : 'error');
@@ -1207,9 +1229,43 @@ function SummaryRow({ label, value, strong, tone, badge }) {
   );
 }
 
-/* One product row in the line-items + margin table. */
-function MarginLineRow({ e, first }) {
+/* Inline-editable unit price. Click the price → type → Enter/blur commits;
+   Escape cancels. Renders as a quiet, dashed-underline value so it reads as
+   editable without shouting. */
+function EditablePrice({ value, onCommit }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const start = () => { setDraft(value != null ? String(value) : ''); setEditing(true); };
+  const commit = () => {
+    setEditing(false);
+    const n = parseFloat(String(draft).replace(/[^0-9.]/g, ''));
+    if (Number.isFinite(n) && n >= 0 && Math.abs(n - (value || 0)) > 0.005) onCommit(Math.round(n * 100) / 100);
+  };
+  if (editing) {
+    return (
+      <input
+        autoFocus type="text" inputMode="decimal" value={draft}
+        onChange={(ev) => setDraft(ev.target.value)}
+        onBlur={commit}
+        onKeyDown={(ev) => { if (ev.key === 'Enter') { ev.preventDefault(); commit(); } else if (ev.key === 'Escape') { ev.preventDefault(); setEditing(false); } }}
+        onClick={(ev) => ev.stopPropagation()}
+        style={{ width: 58, textAlign: 'right', fontFamily: 'var(--gb-font-mono)', fontSize: 10.5, fontWeight: 700, color: 'var(--gb-text-primary)', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-brand-border)', borderRadius: 'var(--gb-r-sm)', padding: '1px 4px', outline: 'none' }} />
+    );
+  }
+  return (
+    <button type="button" onClick={(ev) => { ev.stopPropagation(); start(); }} title="Edit price"
+      style={{ border: 'none', background: 'transparent', cursor: 'text', font: 'inherit', fontFamily: 'var(--gb-font-mono)', color: 'inherit', padding: 0, borderBottom: '1px dashed var(--gb-border-strong, var(--gb-border-default))' }}>
+      {usd(value)}
+    </button>
+  );
+}
+
+/* One product row in the line-items + margin table. When `onEditPrice` is
+   provided, each split's unit price is inline-editable (writes back to the
+   proposal). */
+function MarginLineRow({ e, first, onEditPrice }) {
   const chips = decoImprints(e.decoration);
+  const editable = typeof onEditPrice === 'function';
   return (
     <div style={{ padding: '9px 12px', borderTop: first ? 'none' : '1px solid var(--gb-border-subtle)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1223,19 +1279,25 @@ function MarginLineRow({ e, first }) {
         <span style={{ width: 74, textAlign: 'right', fontSize: 11.5, fontWeight: 600, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)' }}>{money(e.lineCost)}</span>
         <span style={{ width: 56, display: 'flex', justifyContent: 'flex-end' }}><MarginBadge m={e.margin} /></span>
       </div>
-      {(e.splits.length > 1 || chips.length > 0) && (
+      {/* Per-split detail — always shown when editable (so every price can be
+          edited) or when there are multiple splits / imprints. */}
+      {(editable || e.splits.length > 1 || chips.length > 0) && (
         <div style={{ marginTop: 7, paddingLeft: 46, display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {e.splits.length > 1 && e.splits.map((s, i) => (
+          {(editable || e.splits.length > 1) && e.splits.map((s, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', fontSize: 10.5, color: 'var(--gb-text-tertiary)', fontFamily: 'var(--gb-font-mono)' }}>
-              <span>{s.qty} × {usd(s.price)}</span>
+              <span>{s.qty} × </span>
+              {editable
+                ? <EditablePrice value={s.price} onCommit={(v) => onEditPrice(i, v)} />
+                : <span>{usd(s.price)}</span>}
+              {s.priceEdited && <span title="Price edited" style={{ color: 'var(--gb-brand-label)', marginLeft: 4, fontSize: 9 }}>✎</span>}
               <span style={{ color: 'var(--gb-text-ghost)', margin: '0 7px' }}>·</span>
-              <span style={{ color: 'var(--gb-text-muted)' }}>cost {usd(unitCostOf(e.product, s.price))}</span>
+              <span style={{ color: 'var(--gb-text-muted)' }}>cost {usd(unitCostOf(e.product, s.price, s.qty))}</span>
               <div style={{ flex: 1 }} />
               <span style={{ color: 'var(--gb-text-secondary)', fontWeight: 600 }}>{money((s.qty || 0) * (s.price || 0))}</span>
             </div>
           ))}
           {chips.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: e.splits.length > 1 ? 3 : 0 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: (editable || e.splits.length > 1) ? 3 : 0 }}>
               {chips.map((c) => (
                 <span key={c.slot} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 9, fontWeight: 700 }}>{c.label}</span>
               ))}
@@ -1302,7 +1364,7 @@ function ImprintDetail({ chip }) {
 /* The proposal-breakdown drill-in: revenue, cost, gross profit, blended margin,
    the line items + per-line margin, the imprints, and a margin summary. Opened
    by clicking a saved card or the current-proposal card. */
-function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose, onLoad, onOpenProposal, onCopy, onSaveToAccount, buildEmailSource }) {
+function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose, onLoad, onOpenProposal, onCopy, onSaveToAccount, buildEmailSource, onPatchSplit }) {
   const M = useMemo(() => marginReport(entries), [entries]);
   const decorated = M.lines.filter((l) => decoImprints(l.decoration).length > 0 || (l.decoration && l.decoration.giftSet));
   // Email composer lives INLINE here (replacing the breakdown) rather than in a
@@ -1352,7 +1414,7 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
       {/* stat strip */}
       <div style={{ display: 'flex', gap: 10, padding: '14px 16px 6px', flexShrink: 0 }}>
         <StatTile label="Revenue" value={money(M.rev)} sub={`${M.units} units · ${M.count} ${M.count === 1 ? 'item' : 'items'}`} />
-        <StatTile label="Est. cost" value={money(M.cost)} sub="assumed" />
+        <StatTile label={M.costBasis === 'actual' ? 'Cost' : 'Est. cost'} value={money(M.cost)} sub={M.costBasis === 'actual' ? 'actual' : M.costBasis === 'mixed' ? 'part actual' : 'assumed'} />
         <StatTile label="Gross profit" value={money(M.profit)} accent />
         <StatTile label="Blended margin" value={pctOf(M.margin)} tone={TONE_FG[marginTone(M.margin)]} sub="all-in" />
       </div>
@@ -1372,7 +1434,8 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
                 <span style={{ width: 74, textAlign: 'right' }}>Cost</span>
                 <span style={{ width: 56, textAlign: 'right' }}>Margin</span>
               </div>
-              {M.lines.map((e, i) => <MarginLineRow key={e.id || i} e={e} first={i === 0} />)}
+              {M.lines.map((e, i) => <MarginLineRow key={e.id || i} e={e} first={i === 0}
+                onEditPrice={onPatchSplit ? (splitIndex, price) => onPatchSplit(i, e.srcIndex, splitIndex, price) : undefined} />)}
             </div>
           )}
         </div>
@@ -1407,7 +1470,7 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
           <SectionTitle icon={<Layers />}>Margin summary</SectionTitle>
           <div style={{ borderRadius: 'var(--gb-r-md)', border: '1px solid var(--gb-border-subtle)', padding: '11px 14px', display: 'flex', flexDirection: 'column', gap: 2 }}>
             <SummaryRow label={`Revenue · ${M.units} units`} value={money(M.rev)} />
-            <SummaryRow label={`Est. cost · ${pctOf(COST_RATIO)} of sell`} value={'−' + money(M.cost)} tone="var(--gb-text-muted)" />
+            <SummaryRow label={M.costBasis === 'actual' ? 'Cost · actual' : M.costBasis === 'mixed' ? `Cost · ${M.realCount}/${M.count} actual, rest ${pctOf(COST_RATIO)} of sell` : `Est. cost · ${pctOf(COST_RATIO)} of sell`} value={'−' + money(M.cost)} tone="var(--gb-text-muted)" />
             <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '7px 0' }} />
             <SummaryRow label="Gross profit" value={money(M.profit)} strong tone="var(--gb-brand-label)" />
             <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '7px 0' }} />
@@ -1419,7 +1482,11 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
       {/* footer */}
       <div style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--gb-fill-inverse-strong)', borderTop: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
         <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <I.alert size={12} /> Costs &amp; margins are estimates ({pctOf(ASSUMED_MARGIN)} assumed) for quoting.
+          <I.alert size={12} /> {M.costBasis === 'actual'
+            ? 'Costs from synced inventory; prices editable. Click a price to override.'
+            : M.costBasis === 'mixed'
+              ? `${M.realCount}/${M.count} use synced cost; the rest assume ${pctOf(ASSUMED_MARGIN)} margin. Click a price to override.`
+              : `Costs assume ${pctOf(ASSUMED_MARGIN)} margin (no synced cost). Click a price to override.`}
         </span>
         <div style={{ flex: 1 }} />
         {current ? (
@@ -2414,6 +2481,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         if (!pr || !pr.breaks || !pr.breaks.length) return l;
         let lineChanged = false;
         const splits = l.splits.map((s) => {
+          if (s.priceEdited) return s;                 // respect a hand-edited price
           const unit = priceAtBreaks(pr.breaks, s.qty);
           if (unit != null && Math.abs(unit - s.price) > 0.005) { lineChanged = true; return { ...s, price: unit }; }
           return s;
@@ -2546,6 +2614,17 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     .catch((e) => { toast?.error?.('Couldn’t build the command — ' + ((e && e.message) || 'unknown error')); throw e; });
 
   const deleteSaved = (id) => removeSavedProposal(id).then((next) => setSavedProposals(next));
+
+  // Hand-edit a split's unit price inside a SAVED draft's breakdown → persist back
+  // to storage and re-render the open breakdown with the new numbers.
+  const editSavedSplitPrice = (entry, srcIndex, splitIndex, price) => {
+    const nextLines = (entry.lines || []).map((l, li) => li !== srcIndex ? l
+      : { ...l, splits: (l.splits || []).map((s, si) => si !== splitIndex ? s : { ...s, price, priceEdited: true }) });
+    const nextItem = { ...entry, lines: nextLines };
+    setSavedProposals((prev) => prev.map((p) => (p.id === nextItem.id ? nextItem : p)));
+    setDetail((d) => (d && d.kind === 'saved' && d.item && d.item.id === nextItem.id) ? { ...d, item: nextItem } : d);
+    updateSavedProposal(nextItem).catch((e) => toast?.error?.('Couldn’t save price — ' + ((e && e.message) || 'unknown error')));
+  };
 
   // Save-to-account (publish) — push the current proposal to a CRM opportunity.
   // Resolves so the panel can drive its success flash; surfaces failures as a
@@ -3002,6 +3081,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                   <SavedDetail key="bd-current" current title="Current proposal" subtitle="Live working set · unsaved"
                     badge={<Tag tone="brand" size="sm" icon={<Dot tone="brand" size={5} />}>Unsaved</Tag>}
                     entries={proposal} onClose={close}
+                    onPatchSplit={(entryIndex, _src, splitIndex, price) => setProposal((prev) => prev.map((pl, li) => li !== entryIndex ? pl
+                      : { ...pl, splits: pl.splits.map((s, si) => si !== splitIndex ? s : { ...s, price, priceEdited: true }) }))}
                     buildEmailSource={() => proposalToEmailSource(proposal, '')}
                     onOpenProposal={() => { close(); setProposalOpen(true); }} />
                 );
@@ -3011,6 +3092,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                 <SavedDetail key={'bd-' + it.id} title={it.name} subtitle={`${fmtSavedDate(it.date)} · ${r.units} units`}
                   badge={<Tag tone="neutral" size="sm" icon={<I.bookmark size={9} />}>Draft</Tag>}
                   entries={r.entries} loaded={loadedId === it.id} onClose={close}
+                  onPatchSplit={(_entryIndex, srcIndex, splitIndex, price) => editSavedSplitPrice(it, srcIndex, splitIndex, price)}
                   buildEmailSource={() => proposalToEmailSource(linesFromSaved(it, rid), it.name)}
                   onCopy={() => copySaved(it)} onSaveToAccount={() => { close(); loadSavedToAccount(it); }}
                   onLoad={() => { close(); loadSaved(it); }} />
