@@ -1192,11 +1192,15 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             const g = srcGeo.clone();
             g.computeBoundingBox();
             const bb = g.boundingBox;
-            g.translate(-(bb.min.x + bb.max.x) / 2, -(bb.min.y + bb.max.y) / 2, -(bb.min.z + bb.max.z) / 2);
+            // The translation applied to center the geo on its bbox — returned as
+            // `offset` so decal targeting computed in ORIGINAL geo space (matching
+            // the standalone tool path) can be converted into this centered space.
+            const offset = { x: (bb.min.x + bb.max.x) / 2, y: (bb.min.y + bb.max.y) / 2, z: (bb.min.z + bb.max.z) / 2 };
+            g.translate(-offset.x, -offset.y, -offset.z);
             g.computeBoundingBox(); g.computeBoundingSphere();
             const b = g.boundingBox;
             return {
-              geo: g, radius: g.boundingSphere.radius,
+              geo: g, radius: g.boundingSphere.radius, offset,
               hx: (b.max.x - b.min.x) / 2, hy: (b.max.y - b.min.y) / 2, hz: (b.max.z - b.min.z) / 2,
             };
           };
@@ -1368,7 +1372,22 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
               if (mm.normal) { mat.normalMap = mm.normal; mat.normalScale.set(0.55, 0.55); }
               mat.onBeforeCompile = makeDivotOBC(steel);
               m = new THREE.Mesh(cg.geo.clone(), mat);
-              if (item.decal) { const mk = locateMarker(cg.geo); addDecal(m, mk.cx, mk.cy, mk.faceZ * 1.2, mk.discR * 1.8, mk.faceZ * 1.8); }
+              if (item.decal) {
+                // Target the marker disc from the ORIGINAL geometry (identical to
+                // the standalone tool path) and convert into centered space via
+                // the offset. The old code ran locateMarker on the CENTERED geo,
+                // whose no-mask fallback (0,0) is the bbox center — fine-ish for
+                // the divot but it lands between the bartender's head and handle,
+                // so the bartender logo missed the disc entirely. decalDX/DY/Scale
+                // allow per-item fine-tuning.
+                const mk = locateMarker(res.model.geometry);
+                const cx = mk.cx - cg.offset.x + (item.decalDX || 0);
+                const cy = mk.cy - cg.offset.y + (item.decalDY || 0);
+                const faceZc = mk.faceZ - cg.offset.z;
+                const projZ = Math.max(faceZc, cg.hz * 0.5);   // guard a tiny/degenerate disc Z
+                const sz = mk.discR * 1.8 * (item.decalScale || 1);
+                addDecal(m, cx, cy, projZ * 1.2, sz, projZ * 1.8);
+              }
               // Disc-shaped kit items (the ball marker) scale by target radius like the
               // chip; the irregular tools scale by their direct factor.
               m.scale.setScalar(item.radius ? item.radius / cg.hx : (item.scale || 0.5));

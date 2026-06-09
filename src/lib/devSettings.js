@@ -49,7 +49,7 @@ const SNAP_SETTINGS = SNAP_MODELS.flatMap((m) => {
     axis('x', 'position X'),
     axis('y', 'position Y'),
     axis('z', 'position Z'),
-    { key: `${base}.scale`, label: `Snapshot ${m.label}: scale`, desc: `Export-photo scale for the ${m.label} render.`, type: 'number', default: m.scale, min: 0.2, max: 4, step: 0.05, unit: '×' },
+    { key: `${base}.scale`, label: `Snapshot ${m.label}: scale`, desc: `Export-photo scale for the ${m.label} render.`, type: 'number', default: m.scale, min: 0.2, max: 12, step: 0.05, unit: '×' },
     rot('rotX', 'rotation X'),
     rot('rotY', 'rotation Y'),
     rot('rotZ', 'rotation Z'),
