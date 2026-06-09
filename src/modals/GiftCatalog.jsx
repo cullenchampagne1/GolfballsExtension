@@ -2969,7 +2969,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     // first personalization, e.g. Quote, use this instead of the combined label).
     return { type: deco.engine, typeLabel, frontLabel, color, colorHex: colorHex || null, detailLines, text };
   };
-  const proposalToEmailSource = (lines, name) => {
+  const proposalToEmailSource = (lines, name, opts = {}) => {
     const rows = []; let total = 0;
     for (const l of (lines || [])) {
       const p = l.product || {};
@@ -2980,20 +2980,30 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
       const subtitle = gs ? [giftSetSizeLabel(gs), p.title].filter(Boolean).join(' · ') : ((l.variant && l.variant.values && l.variant.values.style) || '');
       const img = (gs ? lineGiftImg(l) : null) || p.img || '';
       const imprint = lineImprint(l.decoration);
+      const isFree = !!l.free;
+      // Retail/"was" unit = the higher of MSRP, the 1-qty ladder price, and the
+      // base price — used to show a red strike when the quoted price is below it
+      // (a sale or a volume break).
+      const brks = p.breaks || [];
+      const retailUnit = Math.max(Number(p.orig) || 0, (brks[0] && Number(brks[0].p)) || 0, Number(p.price) || 0);
       for (const s of (l.splits || [])) {
-        const qty = s.qty || 0, unitPrice = s.price || 0, lineTotal = Math.round(qty * unitPrice * 100) / 100;
+        const qty = s.qty || 0, unitPrice = isFree ? 0 : (s.price || 0), lineTotal = Math.round(qty * unitPrice * 100) / 100;
         total += lineTotal;
+        const origUnit = (!isFree && retailUnit > unitPrice + 0.005) ? Math.round(retailUnit * 100) / 100 : null;
         // `lineId` lets the email composer attach 3D snapshot previews back to the
         // right rows (one line can span multiple split rows). `imprint` drives the
         // preview card's spec line.
-        rows.push({ lineId: l.id, brand: (p.brand && p.brand !== 'Custom') ? p.brand : '', title, subtitle, img, qty, unitPrice, lineTotal, imprint });
+        rows.push({ lineId: l.id, brand: (p.brand && p.brand !== 'Custom') ? p.brand : '', title, subtitle, img, qty, unitPrice, lineTotal,
+          origUnit, origTotal: origUnit != null ? Math.round(qty * origUnit * 100) / 100 : null, free: isFree, imprint });
       }
     }
+    const discount = opts.promotion ? promoDiscount(opts.promotion) : 0;
     // `rawLines` carries the product + decoration so the composer can render the
     // personalization snapshots; `lines` stays the flat display rows.
-    return { groupName: 'Your Custom Order', optionName: name || 'Option 1', lines: rows, rawLines: lines || [], total: Math.round(total * 100) / 100 };
+    return { groupName: 'Your Custom Order', optionName: name || 'Option 1', lines: rows, rawLines: lines || [],
+      total: Math.round(total * 100) / 100, discount, promoCode: (opts.promotion && opts.promotion.promo) || '', cartLink: opts.cartLink || null };
   };
-  const openProposalEmail = (lines, name) => { if (lines && lines.length) setEmailSource(proposalToEmailSource(lines, name)); };
+  const openProposalEmail = (lines, name, opts) => { if (lines && lines.length) setEmailSource(proposalToEmailSource(lines, name, opts)); };
 
   /* One shared live pull, with progress. `force` clears the cache first
      (manual rebuild — stale items/sales can't survive as a fallback);
@@ -3366,7 +3376,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                     badge={<Tag tone="brand" size="sm" icon={<I.card size={9} />}>Current</Tag>}
                     entries={r.entries} loaded={loadedId === it.id} onClose={close}
                     promo={it.promotion && it.promotion.promo ? { code: it.promotion.promo, promotion: it.promotion } : null}
-                    buildEmailSource={() => proposalToEmailSource(linesFromSaved(it, rid), it.name)}
+                    buildEmailSource={() => proposalToEmailSource(linesFromSaved(it, rid), it.name, { promotion: it.promotion, cartLink: it.cartID ? `https://www.golfballs.com/cart?cartID=${it.cartID}&utm_medium=Proposal&utm_source=Proposal-${it.cartID}` : null })}
                     onCopy={() => copySaved(it)} onSaveToAccount={() => { close(); loadSavedToAccount(it); }}
                     onLoad={() => { close(); loadSaved(it); }} />
                 );
@@ -3379,7 +3389,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                     promo={proposalPromo} onApplyPromo={applyPromo} onClearPromo={clearPromo} onCheckPromo={checkPromo}
                     onPatchSplit={(entryIndex, _src, splitIndex, price) => setProposal((prev) => prev.map((pl, li) => li !== entryIndex ? pl
                       : { ...pl, splits: pl.splits.map((s, si) => si !== splitIndex ? s : { ...s, price, priceEdited: true }) }))}
-                    buildEmailSource={() => proposalToEmailSource(proposalWithFree, '')}
+                    buildEmailSource={() => proposalToEmailSource(proposalWithFree, '', { promotion: proposalPromo && proposalPromo.promotion })}
                     onOpenProposal={() => { close(); setProposalOpen(true); }} />
                 );
               }
@@ -3444,7 +3454,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               onRemoveLine={removeLine} onSaveDraft={saveDraft} onMergeImprint={mergeImprintOnLine}
               onRemoveFront={removeFrontImprint} onRemoveSecond={removeSecondPole}
               pageContext={pageContext} onSaveToAccount={saveToAccount} onAddOpportunity={addOpportunity} accountSaveSeq={accountSaveSeq}
-              onEmail={() => openProposalEmail(proposal, '')}
+              onEmail={() => openProposalEmail(proposalWithFree, '', { promotion: proposalPromo && proposalPromo.promotion })}
               promo={proposalPromo} onApplyPromo={applyPromo} onClearPromo={clearPromo} onCheckPromo={checkPromo}
               onClear={() => { setProposal([]); setProposalOpen(false); }} />
           </div>
