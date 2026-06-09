@@ -6,7 +6,7 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, DEPT_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions, colorNameOf } from './giftCustomize.jsx';
-import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposalEntries, proposalCartUrl, loadKnownPromos, addKnownPromo } from '../lib/saveProposal.js';
+import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposalEntries, proposalCartUrl, loadKnownPromos, addKnownPromo, submitProposalEmail } from '../lib/saveProposal.js';
 import { promoDiscount, freeLinesFromPromo } from '../lib/cartSerializer.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS } from '../lib/customItems.js';
 import { importHpgCatalog } from '../lib/hpgImport.js';
@@ -3001,7 +3001,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     // `rawLines` carries the product + decoration so the composer can render the
     // personalization snapshots; `lines` stays the flat display rows.
     return { groupName: 'Your Custom Order', optionName: name || 'Option 1', lines: rows, rawLines: lines || [],
-      total: Math.round(total * 100) / 100, discount, promoCode: (opts.promotion && opts.promotion.promo) || '', cartLink: opts.cartLink || null };
+      total: Math.round(total * 100) / 100, discount, promoCode: (opts.promotion && opts.promotion.promo) || '', cartLink: opts.cartLink || null, onSubmit: opts.onSubmit || null };
   };
   const openProposalEmail = (lines, name, opts) => { if (lines && lines.length) setEmailSource(proposalToEmailSource(lines, name, opts)); };
 
@@ -3376,7 +3376,16 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                     badge={<Tag tone="brand" size="sm" icon={<I.card size={9} />}>Current</Tag>}
                     entries={r.entries} loaded={loadedId === it.id} onClose={close}
                     promo={it.promotion && it.promotion.promo ? { code: it.promotion.promo, promotion: it.promotion } : null}
-                    buildEmailSource={() => proposalToEmailSource(linesFromSaved(it, rid), it.name, { promotion: it.promotion, cartLink: it.cartID ? `https://www.golfballs.com/cart?cartID=${it.cartID}&utm_medium=Proposal&utm_source=Proposal-${it.cartID}` : null })}
+                    buildEmailSource={() => proposalToEmailSource(linesFromSaved(it, rid), it.name, {
+                      promotion: it.promotion,
+                      cartLink: it.cartID ? `https://www.golfballs.com/cart?cartID=${it.cartID}&utm_medium=Proposal&utm_source=Proposal-${it.cartID}` : null,
+                      onSubmit: async ({ message, expiration } = {}) => {
+                        try {
+                          await submitProposalEmail({ opportunityID: it.opportunityID, cartID: it.cartID, name: it.name, expiration: expiration || it.expiration, total: r.total, adminId: it.adminId, contactId: it.contactId, subject: it.opportunitySubject, message });
+                          toast?.success?.('Proposal tracked to opportunity ' + it.opportunityID);
+                        } catch (e) { toast?.error?.('Couldn’t track proposal — ' + ((e && e.message) || 'unknown error')); throw e; }
+                      },
+                    })}
                     onCopy={() => copySaved(it)} onSaveToAccount={() => { close(); loadSavedToAccount(it); }}
                     onLoad={() => { close(); loadSaved(it); }} />
                 );

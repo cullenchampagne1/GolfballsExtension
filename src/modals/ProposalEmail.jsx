@@ -468,6 +468,7 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
   const [show, setShow] = useState({ images: true, previews: false, cost: true, total: true, expiration: true, disclaimer: true, cta: true, message: false });
   const [copied, setCopied] = useState(false);
   const [submitted, setSubmitted] = useState(false);   // current-proposal: Submit → Copy once generated
+  const [submitting, setSubmitting] = useState(false);  // server track in flight
 
   // ── 3D personalization previews ──────────────────────────────────────────
   // When the toggle turns on we (1) resolve each line's decoration into shot
@@ -549,10 +550,17 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
   };
   // Copy the raw HTML source (for pasting into an HTML editor / code field).
   const copySource = async () => { try { await navigator.clipboard.writeText(emailHtml); } catch (e) { /* */ } };
-  // Current Proposals: "Submit" finalizes (optionally tracks server-side via
-  // source.onSubmit) then copies; the button then stays "Copy".
+  // Current Proposals: "Submit" tracks the proposal server-side (just like
+  // creating it on the web) via source.onSubmit, then copies. If tracking fails
+  // it stays on "Submit" (the caller surfaces the error) and does NOT copy.
   const submit = async () => {
-    if (source.onSubmit) { try { await source.onSubmit({ html: emailHtml, message, expiration }); } catch (e) { /* */ } }
+    if (submitting) return;
+    if (source.onSubmit) {
+      setSubmitting(true);
+      try { await source.onSubmit({ html: emailHtml, message, expiration }); }
+      catch (e) { setSubmitting(false); return; }
+      setSubmitting(false);
+    }
     setSubmitted(true);
     await copyRich();
   };
@@ -653,7 +661,7 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
           <div style={{ flex: 1 }} />
           <Btn variant="ghost" size="md" icon={<I.copy />} onClick={copySource}>Copy source</Btn>
           {hasLink && !submitted
-            ? <Btn variant="primary" size="md" icon={<I.send />} onClick={submit}>Submit</Btn>
+            ? <Btn variant="primary" size="md" icon={submitting ? <span style={{ width: 13, height: 13, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', display: 'inline-block', animation: 'gb-spin .7s linear infinite' }} /> : <I.send />} onClick={submit}>{submitting ? 'Submitting…' : 'Submit'}</Btn>
             : <Btn variant="primary" size="md" icon={copied ? <I.check /> : <I.copy />} onClick={copyRich}>{copied ? 'Copied' : 'Copy'}</Btn>}
         </div>
     </div>

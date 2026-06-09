@@ -331,13 +331,17 @@ export function parseProposalsHtml(html) {
   return out;
 }
 
-/* Fetch + parse the proposals attached to one opportunity. */
+/* Fetch + parse the proposals attached to one opportunity. Also scrapes the
+   page's server-injected AdminID + ContactId (needed to TRACK a proposal email
+   exactly like the web flow) and tags every row with them. */
 export async function fetchProposalsForOpportunity(opportunityID) {
   if (opportunityID == null || opportunityID === '') return [];
   let html = '';
   try { const r = await sendBg('fetchRaw', { url: OPP_PAGE(opportunityID) }); html = r.text || ''; }
   catch { return []; }
-  return parseProposalsHtml(html).map((p) => ({ ...p, opportunityID: String(opportunityID) }));
+  const adminId = (html.match(/AdminID\s*=\s*['"]?(\d+)/) || [])[1] || '';
+  const contactId = (html.match(/[Cc]ontact[Ii][dD]\s*[:=]\s*['"](\d+)['"]/) || [])[1] || '';
+  return parseProposalsHtml(html).map((p) => ({ ...p, opportunityID: String(opportunityID), adminId, contactId }));
 }
 
 /* All current proposals for an account: each ACTIVE (non-closed) opportunity's
@@ -436,10 +440,61 @@ export function cartToEntry(cartData, meta = {}) {
     cartID: meta.cartID || '',
     opportunityID: meta.opportunityID || '',
     opportunitySubject: meta.opportunitySubject || '',
+    adminId: meta.adminId || '',
+    contactId: meta.contactId || '',
     promotion,
     source: 'crm',
     lines: items.map(cartItemToLine),
   };
+}
+
+/* Submit a proposal email exactly like the web flow: generate/register it
+   (CreateProposalEmail), TRACK it against the opportunity (TrackProposal), and
+   update the opportunity's estimated value (Opportunity Get→Update, preserving
+   subject/description/lead/stage). All credentialed via the CRM relay. Throws if
+   the track step fails; the opp-value update is best-effort. */
+const _crmBase = 'https://api.golfballs.com/golfballs/crm/Admin/';
+function _crmAjax(url, opts = {}) { return sendBg('crmAjax', { url, method: opts.method || 'GET', body: opts.body, contentType: opts.contentType }); }
+function _toISODate(s) {
+  const m = /(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(s || ''));
+  if (!m) return '';
+  return `${m[3]}-${String(m[1]).padStart(2, '0')}-${String(m[2]).padStart(2, '0')}`;
+}
+
+export async function submitProposalEmail(p = {}) {
+  if (!p.opportunityID || !p.cartID) throw new Error('Missing opportunity / cart');
+  if (!p.adminId) throw new Error('Couldn’t read the rep AdminID from the opportunity page');
+  // 1) Generate/register the proposal email (server returns the HTML).
+  const createObj = {
+    ProposalGroupName: p.groupName || 'Custom Order',
+    ContactEmail: p.contactEmail || '', ContactName: p.contactName || '', EmailCC: '',
+    ProposalMessage: p.message || '',
+    CartIds: [p.cartID], ProposalNames: [p.name || 'Proposal'], ProposalExpirations: [p.expiration || ''],
+    ContactId: String(p.contactId || ''), OpportunityID: String(p.opportunityID), OpportunityStatus: String(p.stageId || ''),
+  };
+  await _crmAjax(_crmBase + 'ProposalEmailNewSite/CreateProposalEmail.ajax?' + encodeURIComponent(JSON.stringify(createObj)));
+  // 2) Track it against the opportunity (the explicit "proposal sent" log).
+  await _crmAjax(_crmBase + 'ProposalEmailNewSite/TrackProposal.ajax', {
+    method: 'POST', contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
+    body: JSON.stringify({ OpportunityID: String(p.opportunityID), AdminID: Number(p.adminId), ProposalsIncluded: [p.cartID] }),
+  });
+  // 3) Update the opportunity's estimated value — best-effort, preserving the
+  //    existing subject/description/lead/stage (read via Get) so we don't clobber.
+  try {
+    let cur = {};
+    try { const g = await _crmAjax(_crmBase + 'Opportunity/Get.ajax?' + encodeURIComponent(String(p.opportunityID))); cur = JSON.parse(g.text || '{}') || {}; } catch { cur = {}; }
+    const upd = {
+      OpportunityID: String(p.opportunityID),
+      Subject: cur.Subject != null ? cur.Subject : (p.subject || ''),
+      Description: cur.Description != null ? cur.Description : '',
+      EstimatedClosedDate: _toISODate(p.expiration) || cur.EstimatedClosedDate || '',
+      EstimatedValue: Math.round(Number(p.total) || 0),
+      OpportunityStageId: cur.OpportunityStageId || cur.OpportunityStageID || cur.Stage || 2,
+      LeadID: cur.LeadID != null ? cur.LeadID : null,
+    };
+    await _crmAjax(_crmBase + 'Opportunity/Update.ajax?' + encodeURIComponent(JSON.stringify(upd)));
+  } catch { /* value update is best-effort */ }
+  return { ok: true };
 }
 
 /* Full Current Proposals pull: list each active opportunity's proposals, load
@@ -448,7 +503,7 @@ export function cartToEntry(cartData, meta = {}) {
 export async function fetchActiveProposalEntries(opts = {}) {
   const list = await fetchActiveProposals(opts);
   return Promise.all(list.map(async (p) => {
-    const meta = { cartID: p.cartID, name: p.name, date: p.date, expiration: p.expiration, opportunityID: p.opportunityID, opportunitySubject: p.opportunitySubject };
+    const meta = { cartID: p.cartID, name: p.name, date: p.date, expiration: p.expiration, opportunityID: p.opportunityID, opportunitySubject: p.opportunitySubject, adminId: p.adminId, contactId: p.contactId };
     try { return cartToEntry(await loadProposalCart(p.cartID), meta); }
     catch { return cartToEntry(null, meta); }
   }));

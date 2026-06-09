@@ -577,6 +577,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // ── CRM relay — credentialed GET/POST to api.golfballs.com admin endpoints ──
+  // Drives the real proposal-email flow (CreateProposalEmail / TrackProposal /
+  // Opportunity Get+Update) so an extension-generated proposal tracks exactly like
+  // one made on the web. Host-locked to api.golfballs.com; cookies flow via
+  // credentials:'include' (the rep is signed into the CRM). Returns raw text.
+  if (msg.action === 'crmAjax' && msg.url) {
+    if (!/^https:\/\/api\.golfballs\.com\//i.test(msg.url)) { sendResponse({ ok: false, error: 'Blocked host' }); return true; }
+    const opt = { method: msg.method || 'GET', credentials: 'include', headers: { Accept: 'application/json, text/html, */*' } };
+    if (msg.body != null) { opt.body = msg.body; opt.headers['Content-Type'] = msg.contentType || 'application/json'; }
+    fetch(msg.url, opt)
+      .then(async (r) => { const text = await r.text(); if (!r.ok) throw new Error('HTTP ' + r.status + (text ? ' — ' + text.slice(0, 200) : '')); sendResponse({ ok: true, text }); })
+      .catch((err) => { console.warn('[GB] crmAjax error:', err.message); sendResponse({ ok: false, error: String((err && err.message) || err) }); });
+    return true;
+  }
+
   // ── Bulk cost sync: fetch per-unit cost for a batch of SKUs ────────────────
   // Ensures the persistent authed gbcadmin iframe, then in-frame credentialed-
   // fetches Inventory.aspx for each SKU and returns { sku: cost|null }. The lib
