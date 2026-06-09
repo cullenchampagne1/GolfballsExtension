@@ -1,0 +1,170 @@
+{
+  "tree": [
+    {
+      "title": "Getting Started",
+      "icon": "zap",
+      "items": [
+        { "article": "what-this-extension-does" },
+        { "article": "first-launch" },
+        { "article": "initial-configuration" },
+        { "article": "actions-shelf" },
+        { "article": "keyboard-shortcuts" }
+      ]
+    },
+    {
+      "title": "Core Features",
+      "icon": "sparkle",
+      "groups": [
+        {
+          "title": "Email",
+          "icon": "mail",
+          "items": [
+            { "article": "email-templates-popup" },
+            { "article": "email-thread-preview" },
+            { "article": "text-note-preview" },
+            { "article": "how-email-sending-works" }
+          ]
+        },
+        {
+          "title": "Orders & Pricing",
+          "icon": "calc",
+          "items": [
+            { "article": "margin-calculator" },
+            { "article": "charge-refund" },
+            { "article": "order-edit" },
+            { "article": "order-date-manager" },
+            { "article": "watch-list" },
+            { "article": "copy-order-ids" },
+            { "article": "signifyd-glow" }
+          ]
+        },
+        {
+          "title": "CRM & Contacts",
+          "icon": "users",
+          "items": [
+            { "article": "crm-search" },
+            { "article": "query-builder" },
+            { "article": "new-contact" },
+            { "article": "quick-task" },
+            { "article": "task-list" },
+            { "article": "call-log" },
+            { "article": "phone-finder" }
+          ]
+        },
+        {
+          "title": "Gifting & Proposals",
+          "icon": "card",
+          "items": [
+            { "article": "gift-catalog" },
+            { "article": "customizing-item" },
+            { "article": "gift-sets" },
+            { "article": "custom-service-items" },
+            { "article": "supplier-import" },
+            { "article": "promo-codes" },
+            { "article": "build-email-proposal" }
+          ]
+        },
+        {
+          "title": "Art & Proofs",
+          "icon": "eye",
+          "items": [
+            { "article": "image-viewer" },
+            { "article": "mockup-composer" },
+            { "article": "3d-product-viewer" },
+            { "article": "submit-proof" }
+          ]
+        },
+        {
+          "title": "Campaigns",
+          "icon": "megaphone",
+          "items": [
+            { "article": "bulk-email-selection" },
+            { "article": "campaign-manager" },
+            { "article": "campaign-conditions" }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Settings Reference",
+      "icon": "cog",
+      "items": [
+        { "article": "theme-appearance" },
+        { "article": "feature-toggles" },
+        { "article": "shortcuts-settings" },
+        { "article": "custom-crm-pages" },
+        { "article": "email-integrations" },
+        { "article": "developer-settings" },
+        { "article": "presets" }
+      ]
+    },
+    {
+      "title": "Workflows",
+      "icon": "flow",
+      "groups": [
+        {
+          "title": "Beginner",
+          "items": [
+            { "tutorial": "initial-configuration" },
+            { "tutorial": "send-first-email" },
+            { "tutorial": "log-call-task" },
+            { "tutorial": "watch-order" }
+          ]
+        },
+        {
+          "title": "Intermediate",
+          "items": [
+            { "tutorial": "build-proposal" },
+            { "tutorial": "triage-case-email" },
+            { "tutorial": "set-order-dates" },
+            { "tutorial": "verify-logo" },
+            { "tutorial": "share-config" }
+          ]
+        },
+        {
+          "title": "Advanced",
+          "items": [
+            { "tutorial": "run-campaign" },
+            { "tutorial": "import-supplier" },
+            { "tutorial": "query-builder-tutorial" }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Troubleshooting",
+      "icon": "alert",
+      "items": [
+        { "article": "ts-outlook-opened" },
+        { "article": "ts-variable-unresolved" },
+        { "article": "ts-catalog-stale" },
+        { "article": "ts-modal-not-appearing" },
+        { "article": "ts-no-cost" },
+        { "article": "ts-date-update-failed" },
+        { "article": "ts-3d-blank" },
+        { "article": "ts-settings-vanished" }
+      ]
+    },
+    {
+      "title": "FAQ",
+      "icon": "more",
+      "items": [ { "article": "faq" } ]
+    },
+    {
+      "title": "Power User Corner",
+      "icon": "bolt",
+      "items": [
+        { "article": "code-variables" },
+        { "article": "console-commands" },
+        { "article": "modal-playground" },
+        { "article": "hidden-settings" },
+        { "article": "debug-storage" }
+      ]
+    },
+    {
+      "title": "What's New",
+      "icon": "sparkle",
+      "items": [ { "article": "whats-new" } ]
+    }
+  ]
+}

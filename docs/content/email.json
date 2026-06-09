@@ -1,0 +1,116 @@
+{
+  "section": "Core Features / Email",
+  "articles": [
+    {
+      "slug": "email-templates-popup",
+      "title": "Email Templates & the Popup",
+      "icon": "mail",
+      "tiers": ["beginner", "intermediate", "advanced"],
+      "keywords": ["template", "send", "variables", "popup", "resolved", "email"],
+      "summary": "Pick a template matched to the page you're on, watch its variables fill in live from the page, and send in one click.",
+      "feature": "email-templates",
+      "flag": "emailTemplatesEnabled",
+      "covers": ["popup", "email-templates"],
+      "tutorial": "send-first-email",
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "Click the extension icon while on any CRM page (order, case, contact, or account). The popup shows email templates that match that page type — pick one and the RESOLVED section fills in live values pulled straight from the page: the customer's name, order totals, tracking numbers, and so on." },
+          { "type": "p", "text": "When everything you need has resolved, click Send. With Power Automate enabled the email sends silently with your signature; otherwise a pre-filled Outlook window opens." }
+        ],
+        "intermediate": [
+          { "type": "heading", "text": "How templates are matched" },
+          { "type": "p", "text": "Templates have a type (order, case, account, contact) and optional rules. The popup only offers templates whose type matches the current page and whose rules pass — for example a 'shipping delay' template can require the order to actually have a late ship date." },
+          { "type": "p", "text": "Templates are authored in the Template Editor (popup → edit, or the editor window's sidebar tabs). Each template carries a subject, a rich-text body with variable chips, and its matching rules." }
+        ],
+        "advanced": [
+          { "type": "heading", "text": "Variable syntax" },
+          { "type": "table", "headers": ["Syntax", "Resolves to"], "rows": [
+            ["{{name}}, {{email}}, {{phone}}", "Contact fields scraped from the page"],
+            ["{{companyName}}", "Account / company name"],
+            ["{{ytd}}, {{orderCount}}, {{lastOrderDate}}", "Order-history stats"],
+            ["{{orders[any].total}}", "Array quantifiers over order history: any / none / [0] / [-1]"],
+            ["{{repName}}", "The logged-in sales rep"],
+            ["{{a|b|c}}", "OR-block — first non-empty candidate wins"],
+            ["code variables", "Sandboxed JavaScript expressions — see Code Variables & Recipes"]
+          ] },
+          { "type": "callout", "kind": "proTip", "text": "Conditional blocks let a paragraph drop out entirely when its variable is empty — no more 'Dear ,' emails." }
+        ]
+      },
+      "related": ["how-email-sending-works", "code-variables", "ts-variable-unresolved"],
+      "faq": [
+        { "q": "Why does the popup say no templates match?", "a": "Templates are filtered by page type and rules. Check that you have templates of the right type (order/case/account/contact) and that their rules pass for this page." }
+      ]
+    },
+    {
+      "slug": "email-thread-preview",
+      "title": "Email Thread Preview",
+      "icon": "eye",
+      "tiers": ["beginner", "intermediate"],
+      "keywords": ["preview", "case", "categorize", "thread", "email history", "triage"],
+      "summary": "Read full email threads inline from Case Email History, with auto-recommended case categories and a suggested reply template.",
+      "feature": "email-preview",
+      "flag": "emailPreviewEnabled",
+      "covers": ["email-preview"],
+      "tutorial": "triage-case-email",
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "On a contact's Case Email History, each email row gets a preview button. Click it to read the entire thread in place — messages in order, inline images included, quoted replies collapsed until you expand them." }
+        ],
+        "intermediate": [
+          { "type": "heading", "text": "Categorize as you read" },
+          { "type": "p", "text": "A categorize rail on the side recommends case categories (Order Status, Returns, Charge Error, …) based on the email's content. Click a chip — or press 1–9 — to apply category and subcategory to the case." },
+          { "type": "p", "text": "Below the thread, the extension recommends the best-matching reply template and can open a draft reply with it." },
+          { "type": "callout", "kind": "info", "text": "Recommendations come from the same rule engine that matches templates in the popup — improve your template rules and the recommendations improve too." }
+        ]
+      },
+      "related": ["text-note-preview", "email-templates-popup", "how-email-sending-works"]
+    },
+    {
+      "slug": "text-note-preview",
+      "title": "Text & Note Preview",
+      "icon": "eye",
+      "tiers": ["beginner"],
+      "keywords": ["sms", "chat", "note preview", "text", "transcript"],
+      "summary": "Inline preview of case notes, SMS, and chat transcripts with a recommended reply.",
+      "feature": "text-preview",
+      "flag": "textPreviewEnabled",
+      "covers": ["text-preview"],
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "The same idea as Email Thread Preview, for text rows: hover a case note, SMS, or chat transcript row and click the preview button to read the full conversation without opening it." },
+          { "type": "p", "text": "The extension parses the transcript into a readable message thread and recommends a reply template when one matches." }
+        ]
+      },
+      "related": ["email-thread-preview"]
+    },
+    {
+      "slug": "how-email-sending-works",
+      "title": "How Email Sending Works",
+      "icon": "send",
+      "tiers": ["intermediate", "advanced"],
+      "keywords": ["power automate", "outlook", "mailto", "signature", "images", "graph", "draft", "transport", "send"],
+      "summary": "Three transports — Power Automate (silent send), Outlook fallback (pre-filled window), and Microsoft Graph (draft-only) — and exactly when each is used.",
+      "feature": "email-templates",
+      "covers": ["graph-replies"],
+      "coversFlags": ["powerAutomateEnabled"],
+      "body": {
+        "intermediate": [
+          { "type": "table", "headers": ["Transport", "When it's used", "What happens"], "rows": [
+            ["Power Automate", "powerAutomateEnabled is ON and a flow URL is set", "Email sends silently through your Power Automate flow. Signature auto-appended. Inline images delivered as proper attachments."],
+            ["Outlook (mailto)", "Power Automate is OFF — the default", "A pre-filled Outlook window opens. Formatting is stripped to plain text and no signature is added. In bulk sends, one window opens per email."],
+            ["Microsoft Graph", "Reply-with-template after signing in with Microsoft", "Creates a DRAFT in your mailbox. It never sends automatically — you review and send from Outlook."]
+          ] },
+          { "type": "callout", "kind": "warning", "title": "The most common surprise", "text": "Power Automate ships OFF. If Send keeps opening Outlook windows, that's the fallback working as designed — enable Power Automate and paste your flow URL in Settings to get silent sends." }
+        ],
+        "advanced": [
+          { "type": "heading", "text": "Inline images" },
+          { "type": "p", "text": "When sending through Power Automate, images inside the email body are converted to inline CID attachments (up to 3 MB each) so Outlook renders them reliably. Your Power Automate flow must forward the attachments array to its Outlook send action." },
+          { "type": "heading", "text": "Microsoft sign-in" },
+          { "type": "p", "text": "Graph drafts use a standard Microsoft OAuth sign-in (one browser prompt; the token refreshes silently afterwards). Sign out any time from Settings." },
+          { "type": "callout", "kind": "warning", "text": "Graph mode is draft-only by design. Creating a draft does NOT send the email — check your Outlook Drafts folder." }
+        ]
+      },
+      "related": ["email-integrations", "ts-outlook-opened", "bulk-email-selection"]
+    }
+  ]
+}

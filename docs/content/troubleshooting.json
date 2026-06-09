@@ -1,0 +1,170 @@
+{
+  "section": "Troubleshooting",
+  "articles": [
+    {
+      "slug": "ts-outlook-opened",
+      "title": "\"Send opened Outlook instead of sending\"",
+      "icon": "alert",
+      "tiers": ["beginner"],
+      "keywords": ["outlook opened", "mailto", "didn't send", "window opened", "no signature"],
+      "summary": "That's the fallback transport: Power Automate is off or has no flow URL.",
+      "covers": [],
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "When Power Automate is disabled (the default) or its flow URL is empty, every Send falls back to opening a pre-filled Outlook window — with formatting stripped and no signature. This is by design, not a failure." },
+          { "type": "list", "items": [
+            "Fix: Settings → enable Power Automate and paste your flow URL.",
+            "Verify: send a test email — it should go silently with your signature attached.",
+            "Bulk warning: with the fallback active, a bulk send opens one Outlook window per recipient."
+          ] }
+        ]
+      },
+      "related": ["how-email-sending-works", "email-integrations"]
+    },
+    {
+      "slug": "ts-variable-unresolved",
+      "title": "\"A variable shows as {{unresolved}}\"",
+      "icon": "alert",
+      "tiers": ["intermediate"],
+      "keywords": ["variable not resolving", "unresolved", "blank variable", "{{", "empty value"],
+      "summary": "The page doesn't contain that data, the page type doesn't match, or a code variable failed.",
+      "covers": [],
+      "body": {
+        "intermediate": [
+          { "type": "list", "items": [
+            "Wrong page type — order variables only resolve on order pages, contact variables on contact pages. Check the template's type matches where you're using it.",
+            "Data genuinely missing — if the contact has no phone, {{phone}} stays empty. Use an OR-block ({{phone|email}}) or a conditional block so the sentence drops out cleanly.",
+            "Page not finished loading — variables scrape the live page; let it render, then reopen the popup.",
+            "Code variable error — open the template in the editor and test the expression; a thrown error resolves to empty."
+          ] },
+          { "type": "callout", "kind": "tip", "text": "The popup highlights unresolved variables before you send — treat any highlight as a stop sign for that email." }
+        ]
+      },
+      "related": ["email-templates-popup", "code-variables"]
+    },
+    {
+      "slug": "ts-catalog-stale",
+      "title": "\"The Gift Catalog looks stale or is missing items\"",
+      "icon": "alert",
+      "tiers": ["beginner"],
+      "keywords": ["catalog stale", "missing items", "old prices", "rebuild index", "refresh catalog"],
+      "summary": "The catalog is a local index that refreshes every 24 hours — force a rebuild or shorten the interval.",
+      "covers": [],
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "The catalog indexes the whole site and caches the result locally for speed. New products or price changes appear after the next re-index — every 24 hours by default." },
+          { "type": "list", "items": [
+            "Force it now: use the catalog's rebuild/refresh control and give it a few seconds.",
+            "Refresh more often: Developer Settings → 'Gifting Catalog: re-index interval (hours)'. Setting 0 re-indexes on every open (slow first paint)."
+          ] }
+        ]
+      },
+      "related": ["gift-catalog", "developer-settings"]
+    },
+    {
+      "slug": "ts-modal-not-appearing",
+      "title": "\"A modal or button isn't appearing\"",
+      "icon": "alert",
+      "tiers": ["beginner", "advanced"],
+      "keywords": ["missing button", "not showing", "shortcut not working", "shelf missing", "modal gone"],
+      "summary": "Usually a feature toggle, the wrong page type, or (for admins) a hidden setting.",
+      "covers": [],
+      "body": {
+        "beginner": [
+          { "type": "list", "items": [
+            "Check the feature toggle — Settings → Features. Off means no buttons, no shortcut, no shelf action.",
+            "Check the page type — most tools are context-aware: Margin Calc lives on order pages, Call Log on contact/account pages. The shelf only shows actions valid here.",
+            "Reload the page — the extension injects on load; a page open since before an update may miss UI.",
+            "Right site — tools appear on golfballs.com CRM pages (and the order-notes iframe), nowhere else."
+          ] }
+        ],
+        "advanced": [
+          { "type": "callout", "kind": "info", "text": "If the toggle itself is missing from Settings, an admin hid it via secret settings. Run __gbSecret.list() in the Settings page console to see what's hidden, and __gbSecret.show('key') to restore it." }
+        ]
+      },
+      "related": ["feature-toggles", "hidden-settings", "actions-shelf"]
+    },
+    {
+      "slug": "ts-no-cost",
+      "title": "\"Margin calculator shows no cost\"",
+      "icon": "alert",
+      "tiers": ["intermediate"],
+      "keywords": ["no cost", "cost missing", "inventory", "dynamics", "cost won't load"],
+      "summary": "Cost lookups need an active session on the office portal; cached costs can also be stale.",
+      "covers": [],
+      "body": {
+        "intermediate": [
+          { "type": "list", "items": [
+            "Sign in: cost and inventory data come from the office portal (gbcadmin) using your session. Open it in another tab, sign in, retry.",
+            "Third-party cookies: lookups run in a first-party context for exactly this reason — if it still fails, reload the order page to restart the fetch frame.",
+            "SKU mismatch: costs key on the human SKU (e.g. B3273). Items asterisked in a breakdown couldn't be priced — run a cost sync to fill the gaps.",
+            "Stale cache: inventory caches for ~6 hours; a fresh sync forces an update."
+          ] }
+        ]
+      },
+      "related": ["margin-calculator", "build-email-proposal"]
+    },
+    {
+      "slug": "ts-date-update-failed",
+      "title": "\"Date update failed mid-way\"",
+      "icon": "alert",
+      "tiers": ["intermediate"],
+      "keywords": ["date failed", "calendar error", "update dates stuck", "step failed"],
+      "summary": "The save is a multi-step form chain; the step toast names where it stopped — re-open and retry.",
+      "covers": [],
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "Saving order dates walks a multi-step form sequence on the admin site (load calendar → select approval → select commitment → submit). If a step fails — usually an expired admin session or a slow response — the progress toast names the failing step and the chain stops." },
+          { "type": "list", "items": [
+            "Retry: re-open the Order Date Manager and run the update again; the chain restarts from the beginning and is safe to repeat.",
+            "Still failing at step one: your admin.icustomize.com session likely expired — reload the order page so the iframe re-authenticates.",
+            "Verify: after a success toast, the dates are on the order record; spot-check the first few times."
+          ] }
+        ]
+      },
+      "related": ["order-date-manager"]
+    },
+    {
+      "slug": "ts-3d-blank",
+      "title": "\"3D preview is black or blank\"",
+      "icon": "alert",
+      "tiers": ["intermediate"],
+      "keywords": ["3d black", "blank ball", "logo invisible", "render broken", "black ball"],
+      "summary": "Almost always a graphics-driver quirk — known on Windows-on-ARM machines — not missing artwork.",
+      "covers": [],
+      "body": {
+        "intermediate": [
+          { "type": "list", "items": [
+            "Known hardware case: some Windows-on-ARM machines (Snapdragon GPUs) rendered the logo decal black. Current builds work around it — update the extension first.",
+            "GPU acceleration: check chrome://gpu for 'Hardware accelerated' WebGL; reset chrome://settings/system if disabled.",
+            "Transient context loss: close the modal and reopen — the 3D context rebuilds.",
+            "Diagnostics: Developer Settings → 'Golfball viewer: render diagnostics' prints render info to the console for a bug report."
+          ] }
+        ]
+      },
+      "related": ["3d-product-viewer", "developer-settings"]
+    },
+    {
+      "slug": "ts-settings-vanished",
+      "title": "\"My settings vanished\"",
+      "icon": "alert",
+      "tiers": ["intermediate", "advanced"],
+      "keywords": ["settings gone", "toggle missing", "reset", "disappeared", "lost settings"],
+      "summary": "Three suspects: an imported preset overwrote them, an admin hid them, or the dev section was collapsed via console command.",
+      "covers": [],
+      "body": {
+        "intermediate": [
+          { "type": "list", "items": [
+            "Imported a preset recently? Settings scopes overwrite on import. Re-apply your own preset if you saved one — exporting a personal backup preset first is the habit that prevents this.",
+            "A specific toggle is gone (not just off)? It was hidden via secret settings — ask your admin, or see below.",
+            "The whole Developer Settings section is gone? Someone ran __gbSecret.hideDev(), which also resets dev values to defaults."
+          ] }
+        ],
+        "advanced": [
+          { "type": "callout", "kind": "info", "text": "From the Settings page console: __gbSecret.list() shows hidden keys, __gbSecret.show('key') restores one, __gbSecret.clear() restores everything, __gbSecret.showDev() brings the dev section back." }
+        ]
+      },
+      "related": ["presets", "hidden-settings", "console-commands"]
+    }
+  ]
+}

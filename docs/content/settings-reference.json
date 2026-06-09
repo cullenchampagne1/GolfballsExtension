@@ -1,0 +1,137 @@
+{
+  "section": "Settings Reference",
+  "articles": [
+    {
+      "slug": "theme-appearance",
+      "title": "Theme & Appearance",
+      "icon": "sun",
+      "tiers": ["beginner"],
+      "keywords": ["theme", "dark", "light", "slate", "cream", "color", "scale", "zoom", "appearance"],
+      "summary": "Four theme variants, eight customizable accent colors, and independent zoom for every UI surface.",
+      "covers": ["settings"],
+      "body": {
+        "beginner": [
+          { "type": "heading", "text": "Theme variants" },
+          { "type": "p", "text": "Settings → Theme offers Dark (default), Slate, Light, and Cream. Switching applies live to every surface — modals, popup, editor, shelf — no reload needed." },
+          { "type": "p", "text": "Color pickers let you override the brand accent, action-button colors, and the four status colors (error, warning, success, info). All tinted backgrounds and borders derive from these automatically." },
+          { "type": "heading", "text": "UI Scales" },
+          { "type": "p", "text": "Each surface has its own zoom slider (50–150%): modals, popovers, toasts, the shelf, the popup, the editor, and the playground. Scale just the things you find small without blowing up the whole browser." }
+        ]
+      },
+      "related": ["initial-configuration", "developer-settings"]
+    },
+    {
+      "slug": "feature-toggles",
+      "title": "Feature Toggles",
+      "icon": "sliders",
+      "tiers": ["beginner"],
+      "keywords": ["enable", "disable", "toggle", "flag", "feature", "turn off", "turn on"],
+      "summary": "Every feature can be switched on or off independently. This reference is generated from the live registry, so it always matches your build.",
+      "covers": [],
+      "coversAllFlags": true,
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "Settings → Features lists a switch per feature, grouped by area. Turning one off removes its buttons, shortcuts, and shelf actions everywhere — instantly. Everything defaults to ON except Power Automate." },
+          { "type": "generated", "source": "featureFlags" },
+          { "type": "callout", "kind": "info", "text": "Missing a toggle from this list in your Settings? An admin may have hidden it — see \"Hidden Settings\" in the Power User Corner." }
+        ]
+      },
+      "related": ["hidden-settings", "ts-modal-not-appearing"]
+    },
+    {
+      "slug": "shortcuts-settings",
+      "title": "Keyboard Shortcuts (Settings)",
+      "icon": "code",
+      "tiers": ["beginner"],
+      "keywords": ["rebind", "change shortcut", "keybinding", "customize keys"],
+      "summary": "Rebind the four global shortcut letters — Task List, Margin Calculator, CRM Search, and New Contact.",
+      "covers": [],
+      "body": {
+        "beginner": [
+          { "type": "generated", "source": "keyboardShortcuts" },
+          { "type": "p", "text": "Change the letter under Settings → Keyboard Shortcuts. The modifier is always Ctrl (Cmd on Mac). A shortcut only works while its feature toggle is on." }
+        ]
+      },
+      "related": ["keyboard-shortcuts", "feature-toggles"]
+    },
+    {
+      "slug": "custom-crm-pages",
+      "title": "Custom CRM Pages",
+      "icon": "flag",
+      "tiers": ["advanced"],
+      "keywords": ["custom page", "override", "dashboard", "replace page"],
+      "summary": "Replace selected CRM pages (dashboard, search, task list, …) with the extension's own UI.",
+      "covers": [],
+      "body": {
+        "advanced": [
+          { "type": "p", "text": "Settings → Custom Pages lists CRM pages the extension can take over — dashboard, search, task list, case index, contact details, and more. Toggle a page on and navigating to it loads the extension's interface instead of the stock CRM page." },
+          { "type": "callout", "kind": "warning", "text": "Page overrides change what teammates see if you share a preset that includes them. Keep overrides out of shared presets unless the whole team wants them." }
+        ]
+      },
+      "related": ["presets", "feature-toggles"]
+    },
+    {
+      "slug": "email-integrations",
+      "title": "Email & Integrations",
+      "icon": "flow",
+      "tiers": ["intermediate", "advanced"],
+      "keywords": ["signature", "power automate url", "microsoft", "sign in", "integration", "flow url"],
+      "summary": "Your signature, the Power Automate flow that powers silent sending, and the Microsoft sign-in behind draft replies.",
+      "covers": [],
+      "body": {
+        "intermediate": [
+          { "type": "table", "headers": ["Setting", "What it does"], "rows": [
+            ["Email signature", "HTML signature appended automatically to every Power Automate send (not to Outlook-fallback emails)."],
+            ["Power Automate (toggle + URL)", "Master switch for silent sending. ON + a valid flow URL = emails send in the background. OFF = pre-filled Outlook windows."],
+            ["Email account host", "The local-part of your From address (Developer Settings). Set it to your own account on day one."],
+            ["Microsoft sign-in", "Authorizes draft creation in your mailbox for reply-with-template. Drafts only — never auto-sends."]
+          ] }
+        ],
+        "advanced": [
+          { "type": "p", "text": "The Power Automate flow receives a JSON payload with the email list and an attachments array of inline images; the flow forwards both to its Outlook send action. If images arrive broken in recipients' clients, the flow is likely dropping the attachments array." }
+        ]
+      },
+      "related": ["how-email-sending-works", "initial-configuration", "ts-outlook-opened"]
+    },
+    {
+      "slug": "developer-settings",
+      "title": "Developer Settings",
+      "icon": "cog",
+      "tiers": ["advanced"],
+      "keywords": ["dev settings", "draggable", "cache hours", "debug", "tuning", "advanced settings"],
+      "summary": "Every fine-tuning knob in one generated table: animation timing, draggable modals, catalog cache, 3D viewer tuning, and snapshot poses.",
+      "covers": ["playground", "sandbox"],
+      "coversAllDevSettings": true,
+      "body": {
+        "advanced": [
+          { "type": "p", "text": "Developer Settings holds the low-stakes knobs that don't deserve a top-level toggle. They're grouped below exactly as registered in the build you're running — defaults, ranges, and descriptions come straight from the code." },
+          { "type": "callout", "kind": "info", "text": "Admins can hide this entire section (and reset it to defaults) with the __gbSecret.hideDev() console command — see the Power User Corner." },
+          { "type": "generated", "source": "devSettings" }
+        ]
+      },
+      "related": ["hidden-settings", "console-commands", "modal-playground"]
+    },
+    {
+      "slug": "presets",
+      "title": "Presets: Import / Export / Share",
+      "icon": "save",
+      "tiers": ["intermediate", "advanced"],
+      "keywords": ["preset", "export", "import", "team", "share config", "backup"],
+      "summary": "Bundle settings and templates into named presets, export them as JSON, and import a teammate's — with scope-by-scope control over what's included.",
+      "covers": [],
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "Settings → User Presets saves the current state under a name. When saving (or importing) you choose scopes — which slices of configuration the preset carries:" },
+          { "type": "generated", "source": "importExportScopes" },
+          { "type": "p", "text": "Export writes the preset to a JSON file; a teammate imports it from the same panel. This is how teams distribute a standard template library and house style." }
+        ],
+        "advanced": [
+          { "type": "heading", "text": "Merge behavior" },
+          { "type": "p", "text": "Settings scopes overwrite on import. Template scopes merge by id: a template with the same id replaces yours, a new id appends. Importing never deletes templates that only exist on your side." },
+          { "type": "callout", "kind": "warning", "text": "The 'Hidden-setting config' scope carries which toggles are locked and hidden. Importing it applies those locks to you — only include it deliberately." }
+        ]
+      },
+      "related": ["initial-configuration", "hidden-settings", "ts-settings-vanished"]
+    }
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "section": "Core Features / Art & Proofs",
+  "articles": [
+    {
+      "slug": "image-viewer",
+      "title": "Image Viewer & Logo Extraction",
+      "icon": "eye",
+      "tiers": ["beginner", "intermediate"],
+      "keywords": ["logo", "image", "artwork", "download", "original", "extract", "viewer"],
+      "summary": "Hover any order image to open a zoomable viewer that resolves the customer's original artwork from wherever it lives — then download, recolor, or submit it as a proof.",
+      "feature": "image-viewer",
+      "flag": "imagePreviewEnabled",
+      "covers": ["image-preview", "image-viewer"],
+      "tutorial": "verify-logo",
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "Hover a product or render image on an order page and an expand button appears. Click it and the Image Viewer opens with the best-quality version of the customer's artwork it can find — zoom, pan, copy the URL, or download." },
+          { "type": "callout", "kind": "proTip", "text": "Shift+click the expand button to skip the viewer and download the logo immediately." }
+        ],
+        "intermediate": [
+          { "type": "heading", "text": "How resolution works" },
+          { "type": "p", "text": "The image on the page is often a cropped, composited render — not the customer's file. The viewer chases the original through several sources in order: a directly linked file, the raw upload from the express order, CDN candidates, and finally the page render as a fallback. You get the most original version available." },
+          { "type": "p", "text": "From the viewer you can also extract colors with the eyedropper, jump into the Mockup Composer to recolor, or hand the image to Submit Proof." }
+        ]
+      },
+      "related": ["mockup-composer", "submit-proof", "3d-product-viewer"]
+    },
+    {
+      "slug": "mockup-composer",
+      "title": "Mockup Composer",
+      "icon": "shuffle",
+      "tiers": ["intermediate"],
+      "keywords": ["recolor", "mockup", "grass", "render", "color swap"],
+      "summary": "Swap colors in a logo and render it on a 3D ball in a grass scene — a client-ready mockup in under a minute.",
+      "feature": "mockup-composer",
+      "flag": "imagePreviewEnabled",
+      "covers": ["grass-mockup"],
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "From the Image Viewer's color-swap popover, open the Mockup Composer. Pick the source color in the logo and the target color to replace it with — the recolored preview updates live, and the 3D ball render updates with it." },
+          { "type": "p", "text": "Use it when a customer asks 'what would this look like in our navy?' — recolor, render, download, and attach to your reply." }
+        ]
+      },
+      "related": ["image-viewer", "3d-product-viewer"]
+    },
+    {
+      "slug": "3d-product-viewer",
+      "title": "3D Product Viewer",
+      "icon": "target",
+      "tiers": ["intermediate"],
+      "keywords": ["3d", "ball", "rotate", "preview", "gift box", "render", "export"],
+      "summary": "Interactive 3D preview of balls, poker chips, divot tools, markers, and assembled gift boxes — with your decorations projected on, and consistent export photos.",
+      "feature": "3d-viewer",
+      "flag": "imagePreviewEnabled",
+      "covers": ["3d-viewer"],
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "The 3D viewer appears inside the Image Viewer, the Gift Catalog customizer, and proposal renders. Drag to rotate, scroll to zoom. It shows logos, personalized text, and monograms exactly where production prints them — including dual-pole decorations on opposite sides of the ball." },
+          { "type": "p", "text": "Beyond balls it renders poker chips, divot tools, bartender tools, ball markers, and the assembled gift boxes with every piece seated in its foam slot." },
+          { "type": "callout", "kind": "info", "text": "Copy/download exports use a fixed pose per model, so every exported photo frames identically — ready to drop into a proposal. Admins can tune poses in Developer Settings under 'Snapshot'." }
+        ]
+      },
+      "related": ["customizing-item", "gift-sets", "ts-3d-blank"]
+    },
+    {
+      "slug": "submit-proof",
+      "title": "Submit Proof",
+      "icon": "send",
+      "tiers": ["beginner", "intermediate"],
+      "keywords": ["proof", "artist", "submit", "art approval", "decoration proof"],
+      "summary": "Submit decoration proof art to the CRM with order and customer IDs pre-filled, item and artist pickers, notes, and a gallery of the customer's previous proofs.",
+      "feature": "submit-proof",
+      "flag": "submitProofEnabled",
+      "covers": ["submit-proof"],
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "Open Submit Proof from the popup, the Actions Shelf on an order page, or directly from the Image Viewer (which carries the image across). Order ID and customer ID pre-fill from the page; pick the item and artist from the dropdowns, add notes, and submit." },
+          { "type": "p", "text": "A gallery below shows the customer's previous proofs, so you can check what's already been sent before submitting a new one." }
+        ],
+        "intermediate": [
+          { "type": "callout", "kind": "tip", "text": "The default order type (Live Order / Potential Order / Jardine Order) is configurable in Developer Settings → 'Submit Proof: default order type'." }
+        ]
+      },
+      "related": ["image-viewer", "order-date-manager"]
+    }
+  ]
+}

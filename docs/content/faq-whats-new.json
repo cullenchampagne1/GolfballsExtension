@@ -1,0 +1,52 @@
+{
+  "section": "FAQ & What's New",
+  "articles": [
+    {
+      "slug": "faq",
+      "title": "Frequently Asked Questions",
+      "icon": "more",
+      "tiers": ["beginner"],
+      "keywords": ["faq", "questions", "common questions"],
+      "summary": "Quick answers to the questions every new user asks.",
+      "covers": [],
+      "body": { "beginner": [ { "type": "p", "text": "Quick answers, with links to the full articles." } ] },
+      "faq": [
+        { "q": "Why don't I see a confirmation when something succeeds?", "a": "Deliberate design: the extension only notifies on errors. No toast means it worked. The exceptions are flows that show explicit progress, like date saves and bulk sends." },
+        { "q": "Why did Send open an Outlook window?", "a": "Power Automate is off (the default) or has no flow URL, so sending falls back to a pre-filled Outlook window. See 'How Email Sending Works'." },
+        { "q": "Does anyone else see my Watch List, templates, or settings?", "a": "No — everything is stored locally in your browser profile. Sharing happens only when you export a preset and someone imports it." },
+        { "q": "Are 3D previews accurate enough to send to customers?", "a": "Yes — decorations render through the same production services the website uses, and exports use a fixed pose so every shot frames identically." },
+        { "q": "What's the difference between the Watch List and Quick Tasks?", "a": "Watch List is your private local to-do list; nothing reaches the CRM. Quick Task creates a real CRM task attached to the contact, visible to the team." },
+        { "q": "Why does the Gift Catalog take a few seconds sometimes?", "a": "It's re-indexing the full site catalog — happens when the local cache (24h) expires. Subsequent opens are instant." },
+        { "q": "Will a campaign email people twice if I run it again?", "a": "A campaign processes the audience you select per run. Re-running on the same selection sends again — use saved queries to define audiences precisely, and dry-run first." },
+        { "q": "Did 'reply with template' send my email?", "a": "If you used the Microsoft (Graph) path, it created a draft in your mailbox — review and send it from Outlook. Only Power Automate sends directly." },
+        { "q": "A toggle disappeared from my Settings — am I losing my mind?", "a": "No — an admin hid it via secret settings. The feature keeps working in its locked state. See 'Hidden Settings'." },
+        { "q": "Where do saved proposals live?", "a": "Both locally (your saved proposals list) and server-side as a real cart tied to the CRM opportunity — which is why you can reload one later or send the customer a live cart link." }
+      ],
+      "related": ["how-email-sending-works", "hidden-settings", "watch-list", "build-email-proposal"]
+    },
+    {
+      "slug": "whats-new",
+      "title": "What's New",
+      "icon": "sparkle",
+      "tiers": ["beginner"],
+      "keywords": ["release", "changelog", "version", "new", "updates"],
+      "summary": "Recent changes, newest first.",
+      "covers": [],
+      "body": { "beginner": [ { "type": "p", "text": "Highlights from recent updates. Minor fixes are omitted." } ] },
+      "releases": [
+        {
+          "version": "3.3",
+          "highlights": [
+            "Proposals are now tracked server-side exactly like web quotes — sending creates the proposal email record, registers tracking, and updates the opportunity value.",
+            "Promo codes: apply real promotions to proposals, including free-quantity promos with genuine free-item lines; the picker only offers codes that apply to your cart.",
+            "Current Proposals sidebar: see a contact's existing proposals live from the CRM — open the breakdown, load one back into the builder, or re-email it.",
+            "Costs & inventory: bulk cost sync, auto-loading costs in breakdowns, editable per-split prices, and real-cost labels.",
+            "Proposal emails are now Outlook-desktop safe (solid colors, no dropped styling).",
+            "Themes: new Slate variant (Atom One Dark) alongside Dark, Light, and Cream."
+          ]
+        }
+      ],
+      "related": ["build-email-proposal", "promo-codes", "theme-appearance"]
+    }
+  ]
+}

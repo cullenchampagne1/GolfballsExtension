@@ -1,0 +1,144 @@
+{
+  "section": "Core Features / Orders & Pricing",
+  "articles": [
+    {
+      "slug": "margin-calculator",
+      "title": "Margin Calculator",
+      "icon": "calc",
+      "tiers": ["beginner", "intermediate"],
+      "keywords": ["margin", "markup", "profit", "cost", "ctrl m", "price", "calculator"],
+      "summary": "Cost, price, margin, markup, and profit math on any order page — with real per-unit costs pulled from inventory and a minimum-margin guardrail.",
+      "feature": "margin-calc",
+      "flag": "marginCalcEnabled",
+      "shortcut": "Ctrl+M",
+      "covers": ["margin-calc", "inventory-costs"],
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "Press Ctrl+M on an order page (or use the Actions Shelf). Enter any two of cost, price, margin, markup, or profit and the rest compute instantly, with an animated total-profit display." },
+          { "type": "callout", "kind": "warning", "title": "Minimum margin guardrail", "text": "If the margin falls below your minimum (default 30%), the calculator flags it in red. Adjust the threshold under Settings → Developer Settings → 'Minimum allowed margin'." }
+        ],
+        "intermediate": [
+          { "type": "heading", "text": "Real costs from inventory" },
+          { "type": "p", "text": "The calculator can pull live per-unit costs and stock levels for a SKU from the company inventory system. Costs are cached after the first lookup, and a bulk cost sync keeps the cost map warm." },
+          { "type": "callout", "kind": "tip", "text": "Costs key on the human SKU (e.g. B3273). If a cost won't load, you may need an active session on the office portal — see the troubleshooting article." }
+        ]
+      },
+      "related": ["ts-no-cost", "build-email-proposal"]
+    },
+    {
+      "slug": "charge-refund",
+      "title": "Charge / Refund",
+      "icon": "card",
+      "tiers": ["intermediate"],
+      "keywords": ["charge", "refund", "card", "adjustment", "payment"],
+      "summary": "Run a credit-card charge or refund adjustment against an order without leaving the page.",
+      "feature": "charge",
+      "flag": "chargeEnabled",
+      "covers": ["charge-window", "charge-modal", "charge"],
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "From the popup's ACTIONS section or the Actions Shelf on an order page, Charge opens a modal pre-loaded with the order's charge rows and the difference between the page total and what's been captured." },
+          { "type": "p", "text": "Review the rows, confirm or adjust the amount, and Run Charge. A spinner shows progress and a toast reports the result. Refunds use the same flow with a negative adjustment." },
+          { "type": "callout", "kind": "warning", "text": "Charges are real money movements. The amount field pre-fills with the computed difference — always verify it against the order before running." }
+        ]
+      },
+      "related": ["order-edit", "ts-modal-not-appearing"]
+    },
+    {
+      "slug": "order-edit",
+      "title": "Order Edit",
+      "icon": "edit",
+      "tiers": ["intermediate"],
+      "keywords": ["edit order", "dates", "totals", "order edit"],
+      "summary": "Edit order details — dates, totals, notes — inline from the popup.",
+      "feature": "order-edit",
+      "flag": "orderEditEnabled",
+      "covers": ["order-edit-modal", "order-edit"],
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "The Order Edit button in the popup opens an in-page modal for adjusting order details and posting them back to the CRM in one step — useful for quick corrections that don't warrant opening the full order editor." }
+        ]
+      },
+      "related": ["order-date-manager", "charge-refund"]
+    },
+    {
+      "slug": "order-date-manager",
+      "title": "Order Date Manager",
+      "icon": "clock",
+      "tiers": ["beginner", "intermediate"],
+      "keywords": ["approval date", "commitment", "calendar", "push", "dates", "ship date"],
+      "summary": "Pick approval and commitment dates on two mini-calendars; saving runs the multi-step form chain for you with progress toasts.",
+      "feature": "order-dates",
+      "flag": "calendarEnabled",
+      "covers": ["calendar", "order-dates", "quick-notes", "toolbar", "calendar-bridge"],
+      "coversFlags": ["autoPushEnabled"],
+      "tutorial": "set-order-dates",
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "On an order page, the notes-area toolbar has a calendar button. It opens the Order Date Manager: two mini-calendars side by side — approval date on the left, commitment date on the right." },
+          { "type": "p", "text": "Pick both dates and click Update Dates. The save runs a multi-step process on the admin site; a step-by-step toast shows exactly where it is, and confirms when both dates are committed." }
+        ],
+        "intermediate": [
+          { "type": "heading", "text": "Quick Notes and Auto Push" },
+          { "type": "p", "text": "The same toolbar has a one-click note-save button. With Auto Push enabled (Settings → Features), date and note updates push to the order automatically as part of the save chain." },
+          { "type": "callout", "kind": "tip", "text": "If a save fails mid-chain, the toast names the failing step. Nothing half-saves silently — re-open the calendar and retry." }
+        ]
+      },
+      "related": ["ts-date-update-failed", "order-edit"]
+    },
+    {
+      "slug": "watch-list",
+      "title": "Watch List",
+      "icon": "eye",
+      "tiers": ["beginner"],
+      "keywords": ["watch", "todo", "track order", "remind", "follow", "watchlist"],
+      "summary": "Your personal cross-session list of orders and contacts to keep an eye on, with priorities, due dates, and links back to each item.",
+      "feature": "watch-list",
+      "flag": "watchListEnabled",
+      "covers": ["watch-list"],
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "Watch an order or contact from the popup's TRACKING section or the Actions Shelf — it lands on your Watch List with a link back to where it came from. Open the list any time to see everything you're tracking." },
+          { "type": "p", "text": "Each item takes a title, priority, due date, and a done checkbox. Filter chips (All / Active / High Priority / Completed) show live counts." },
+          { "type": "callout", "kind": "info", "text": "Completed items clean themselves up after 5 days (configurable in Developer Settings). The list is personal and stored locally — it isn't shared with the CRM or teammates." }
+        ]
+      },
+      "related": ["quick-task", "task-list"]
+    },
+    {
+      "slug": "copy-order-ids",
+      "title": "Copy Order IDs",
+      "icon": "copy",
+      "tiers": ["beginner"],
+      "keywords": ["copy ids", "clipboard", "order index", "bulk copy"],
+      "summary": "Copy every order ID on the order index page to your clipboard in one click.",
+      "feature": "copy-ids",
+      "flag": "copyIdsEnabled",
+      "covers": ["copy-ids"],
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "On the order index page, the Actions Shelf offers Copy Order IDs — one click puts every listed order ID on your clipboard, ready to paste into a report or spreadsheet." }
+        ]
+      },
+      "related": ["signifyd-glow", "actions-shelf"]
+    },
+    {
+      "slug": "signifyd-glow",
+      "title": "Signifyd Glow",
+      "icon": "alert",
+      "tiers": ["beginner"],
+      "keywords": ["fraud", "glow", "red", "score", "color", "signifyd", "risk"],
+      "summary": "Order rows on the index page glow according to their Signifyd fraud score, so risky orders stand out at a glance.",
+      "feature": "signifyd-glow",
+      "flag": "signifydGlowEnabled",
+      "covers": ["signifyd-glow"],
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "On the order index, the extension tints each row by its Signifyd fraud score — the stronger the warning color, the lower the score. The glow re-applies automatically as rows load, so it stays accurate while you scroll and filter." },
+          { "type": "callout", "kind": "tip", "text": "Use the glow as a triage cue, not a verdict: open the order and check the actual Signifyd case before holding or canceling." }
+        ]
+      },
+      "related": ["copy-order-ids"]
+    }
+  ]
+}

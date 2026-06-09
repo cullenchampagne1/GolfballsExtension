@@ -1,0 +1,120 @@
+{
+  "section": "Power User Corner",
+  "articles": [
+    {
+      "slug": "code-variables",
+      "title": "Code Variables & Recipes",
+      "icon": "code",
+      "tiers": ["advanced"],
+      "keywords": ["code variable", "javascript", "recipe", "oos", "expression", "custom logic"],
+      "summary": "Sandboxed JavaScript expressions inside templates and campaign conditions — with prebuilt recipes for the common cases.",
+      "feature": "code-variables",
+      "covers": ["code-variables", "sandbox"],
+      "body": {
+        "advanced": [
+          { "type": "p", "text": "When a built-in variable or signal isn't enough, a code variable runs a JavaScript expression in a locked-down sandbox. Expressions get generic helpers — DOM queries against the current page, text fetches, catalog lookups — and return a value that drops into the template or decides a campaign condition." },
+          { "type": "heading", "text": "Prebuilt recipes" },
+          { "type": "table", "headers": ["Recipe", "What it computes"], "rows": [
+            ["Out-of-stock scanner", "Scans the order page for items that are now out of stock — drives win-back campaigns"],
+            ["Recommended replacement", "Finds the closest in-stock product to a discontinued item, brand-aware and similarity-scored"]
+          ] },
+          { "type": "p", "text": "Insert a recipe from the condition editor's picker, then edit its body if you need a variant. Test the expression in the editor before relying on it — a thrown error resolves to empty." },
+          { "type": "callout", "kind": "warning", "text": "Code variables run per-contact during campaigns. An expression that fetches pages adds time for every contact in the audience — keep them lean." }
+        ]
+      },
+      "related": ["email-templates-popup", "campaign-conditions"]
+    },
+    {
+      "slug": "console-commands",
+      "title": "Console Commands",
+      "icon": "code",
+      "tiers": ["advanced"],
+      "keywords": ["__gbSecret", "__gbScan", "hide setting", "console", "admin commands"],
+      "summary": "Two admin command objects available in the Settings page console: __gbSecret (hidden settings) and __gbScan (recent-orders scan clock).",
+      "covers": [],
+      "body": {
+        "advanced": [
+          { "type": "p", "text": "Open DevTools on the Settings/editor page. Two helper objects are installed:" },
+          { "type": "heading", "text": "__gbSecret — hidden-setting manager" },
+          { "type": "table", "headers": ["Command", "Effect"], "rows": [
+            ["__gbSecret.hide('key', …)", "Hide setting(s) from the Settings UI — values keep working, the switch disappears"],
+            ["__gbSecret.show('key', …)", "Un-hide setting(s)"],
+            ["__gbSecret.list()", "List currently hidden keys"],
+            ["__gbSecret.clear()", "Show everything again"],
+            ["__gbSecret.hideDev()", "Hide the entire Developer Settings section AND reset dev values to defaults"],
+            ["__gbSecret.showDev()", "Bring the Developer Settings section back"],
+            ["__gbSecret.help()", "Print this reference"]
+          ] },
+          { "type": "heading", "text": "__gbScan — recent-orders scan" },
+          { "type": "table", "headers": ["Command", "Effect"], "rows": [
+            ["__gbScan.status()", "Show when the recent-orders scan last ran"],
+            ["__gbScan.reset()", "Clear the scan clock — the next scan covers the last 7 days"],
+            ["__gbScan.help()", "Print this reference"]
+          ] },
+          { "type": "callout", "kind": "warning", "text": "There is deliberately no UI for these. Hidden settings are how an admin locks a feature on or off for a teammate's profile — document what you hide, or future-you will file the bug." }
+        ]
+      },
+      "related": ["hidden-settings", "ts-settings-vanished"]
+    },
+    {
+      "slug": "modal-playground",
+      "title": "The Modal Playground",
+      "icon": "bolt",
+      "tiers": ["advanced"],
+      "keywords": ["playground", "mock", "test", "demo", "sandbox page"],
+      "summary": "Every modal rendered with mock data outside the CRM — for trying features, demos, and design checks.",
+      "covers": ["playground"],
+      "body": {
+        "advanced": [
+          { "type": "p", "text": "Developer Settings → 'Modal playground: Open' launches a standalone page where every modal renders with mock data — no CRM page, no live endpoints. Use it to explore a feature safely, demo the extension, or check how a theme variant looks across every surface." },
+          { "type": "callout", "kind": "info", "text": "The playground has its own CSS reset, so a layout that's fine there can still be off inside the CRM (host-page styles bleed into real modals). Verify real layouts on a real CRM page." }
+        ]
+      },
+      "related": ["developer-settings", "theme-appearance"]
+    },
+    {
+      "slug": "hidden-settings",
+      "title": "Hidden Settings",
+      "icon": "eye",
+      "tiers": ["advanced"],
+      "keywords": ["secret", "hidden", "locked", "secret settings", "admin lock"],
+      "summary": "How admins lock a feature on/off and remove its switch from the Settings UI — and how to see what's hidden.",
+      "covers": [],
+      "body": {
+        "advanced": [
+          { "type": "p", "text": "A hidden setting keeps its value but loses its switch: the feature stays in whatever state the admin set, and the toggle no longer appears in Settings. It's a soft lock for keeping team configurations consistent." },
+          { "type": "list", "items": [
+            "Hide/show is console-only by design: __gbSecret.hide('taskListEnabled') etc. — see Console Commands.",
+            "Hidden state travels in presets via the 'Hidden-setting config' scope, so an admin can distribute locks with the team preset.",
+            "Audit any profile with __gbSecret.list()."
+          ] }
+        ]
+      },
+      "related": ["console-commands", "presets", "feature-toggles"]
+    },
+    {
+      "slug": "debug-storage",
+      "title": "Debug Storage Keys",
+      "icon": "history",
+      "tiers": ["advanced"],
+      "keywords": ["storage", "debug", "gbVarsDebug", "inspect", "logs"],
+      "summary": "Where the extension keeps its state, and which keys hold debug snapshots when you're chasing a problem.",
+      "covers": [],
+      "body": {
+        "advanced": [
+          { "type": "p", "text": "All state lives in chrome.storage.local (inspect via the service-worker console: chrome.storage.local.get(null)). Useful keys when debugging:" },
+          { "type": "table", "headers": ["Key", "Holds"], "rows": [
+            ["gbVarsDebug", "The latest variable-resolution snapshot — what each {{variable}} resolved to and from where"],
+            ["gbBulkDebug", "Per-recipient logs from the last bulk email run"],
+            ["gbByUrlDebug", "URL-based debug logs"],
+            ["devSettings / featureFlags / secret_settings", "The three configuration maps"],
+            ["gbGiftCatalogCache_v5 / gbProductConfigCache / gbInventoryCache / gbCostMap", "The data caches (catalog, product config, inventory, costs)"]
+          ] },
+          { "type": "p", "text": "Contact search speed comes from an IndexedDB database (gb-crm-index) — visible under DevTools → Application → IndexedDB." },
+          { "type": "callout", "kind": "warning", "text": "Deleting cache keys is safe (they rebuild). Deleting templates, featureFlags, or devSettings is not — export a preset first if you're going to experiment." }
+        ]
+      },
+      "related": ["console-commands", "presets"]
+    }
+  ]
+}

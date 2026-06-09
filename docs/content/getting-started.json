@@ -1,0 +1,147 @@
+{
+  "section": "Getting Started",
+  "articles": [
+    {
+      "slug": "what-this-extension-does",
+      "title": "What This Extension Does",
+      "icon": "sparkle",
+      "tiers": ["beginner"],
+      "keywords": ["overview", "intro", "what is", "about", "features"],
+      "summary": "A sales and CRM productivity toolkit layered directly onto the golfballs.com admin — templates, tasks, proposals, proofs, and campaigns without switching tabs.",
+      "covers": [],
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "The Golfballs.com extension adds a layer of helper tools on top of the CRM pages you already use. Nothing about the CRM itself changes — the extension watches which page you're on and offers the right tools for it." },
+          { "type": "heading", "text": "The six feature areas" },
+          { "type": "table", "headers": ["Area", "What it gives you"], "rows": [
+            ["Email", "Smart templates with live variables, thread previews, case categorization, one-click sends"],
+            ["Orders & Pricing", "Margin calculator with real costs, charges/refunds, order dates, watch list, fraud-score glow"],
+            ["CRM & Contacts", "Instant search (Ctrl+K), quick tasks, call logging, contact creation, phone finder"],
+            ["Gifting & Proposals", "Full product catalog with logo/text/monogram customization, gift sets, tracked quote emails"],
+            ["Art & Proofs", "Logo extraction, recolor mockups, 3D ball previews, proof submission"],
+            ["Campaigns", "Bulk email from any selection, multi-step conditional outreach with pacing and dry-run"]
+          ] },
+          { "type": "callout", "kind": "tip", "text": "Everything is optional. Each feature has a toggle in Settings → Features, so your team can run as lean or as full a setup as it likes." }
+        ]
+      },
+      "related": ["first-launch", "initial-configuration", "feature-toggles"]
+    },
+    {
+      "slug": "first-launch",
+      "title": "First Launch",
+      "icon": "zap",
+      "tiers": ["beginner"],
+      "keywords": ["install", "popup", "shelf", "where", "start", "begin"],
+      "summary": "Where the extension's UI lives: the toolbar popup, the floating Actions Shelf, buttons injected into CRM pages, and the order-notes toolbar.",
+      "covers": ["popup"],
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "After installing, open any golfballs.com CRM page. The extension injects its UI automatically — there is no separate app to open. You'll meet it in four places:" },
+          { "type": "table", "headers": ["Surface", "Where", "What it does"], "rows": [
+            ["Popup", "Click the extension icon in Chrome's toolbar", "Pick an email template for the current page, see variables resolve live, and reach quick actions"],
+            ["Actions Shelf", "Floating pill, bottom-right of every CRM page (double-tap Shift)", "Context-aware launcher: the actions change based on whether you're on an order, contact, or account"],
+            ["Injected buttons", "Email rows, text rows, and product images on CRM pages", "Hover an email row for a thread preview; hover an order image for the Image Viewer"],
+            ["Order-notes toolbar", "Inside the notes area on order pages", "One-click note save and the Order Date Manager calendar"]
+          ] },
+          { "type": "callout", "kind": "info", "text": "If something listed here isn't visible, its feature toggle may be off — see Settings → Features, or the troubleshooting article \"A modal or button isn't appearing\"." }
+        ]
+      },
+      "related": ["actions-shelf", "initial-configuration", "ts-modal-not-appearing"]
+    },
+    {
+      "slug": "initial-configuration",
+      "title": "Initial Configuration",
+      "icon": "cog",
+      "tiers": ["beginner"],
+      "keywords": ["setup", "theme", "signature", "preset", "configure", "email account", "first time"],
+      "summary": "The five-minute setup: pick a theme, set your email identity and signature, review feature toggles, and optionally import your team's preset.",
+      "covers": ["editor"],
+      "tutorial": "initial-configuration",
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "Open the Settings page (extension popup → settings gear, or the Settings tab in the Template Editor). Five things are worth doing on day one:" },
+          { "type": "list", "items": [
+            "Pick a theme — Dark, Slate, Light, or Cream. Changes apply live everywhere.",
+            "Set your email account host — the 'Email account host' field under Developer Settings controls the From identity on sends. It ships with a default that is probably not you; change it first.",
+            "Write your email signature — Settings → signature editor. It's auto-appended to emails sent through Power Automate.",
+            "Review feature toggles — everything except Power Automate is on by default. Turn off what you won't use.",
+            "Import a team preset — if a teammate exported a preset JSON, Settings → User Presets → Import gives you their templates and settings in one step."
+          ] },
+          { "type": "callout", "kind": "warning", "title": "Check the From identity", "text": "Until you change 'Email account host', emails may go out under someone else's identity. This is the single most important first-run setting." },
+          { "type": "callout", "kind": "tip", "text": "Power Automate is off by default. Without it, Send opens a pre-filled Outlook window instead of sending silently. See \"How Email Sending Works\" before enabling it." }
+        ]
+      },
+      "related": ["theme-appearance", "email-integrations", "presets", "how-email-sending-works"]
+    },
+    {
+      "slug": "actions-shelf",
+      "title": "The Actions Shelf",
+      "icon": "bolt",
+      "tiers": ["beginner", "intermediate"],
+      "keywords": ["shelf", "shift shift", "quick actions", "floating", "pill", "launcher"],
+      "summary": "The floating bottom-right launcher on every CRM page. Double-tap Shift to toggle it; its actions adapt to the page you're on.",
+      "feature": "actions-shelf",
+      "flag": "actionsShelfEnabled",
+      "shortcut": "Shift Shift",
+      "covers": ["actions-shelf"],
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "The Actions Shelf is a small floating pill in the bottom-right corner of every golfballs.com CRM page. Click it — or double-tap Shift — and it expands into a vertical list of quick actions." },
+          { "type": "p", "text": "The list is context-aware: on an order page you'll see Margin Calc, Submit Proof, and Charge; on a contact page you'll see Log Call, Add Task, and Gift Catalog. General actions like Search CRM are always available." }
+        ],
+        "intermediate": [
+          { "type": "heading", "text": "Every shelf action" },
+          { "type": "table", "headers": ["Action", "Opens", "Appears on"], "rows": [
+            ["Add Task", "Quick Task", "contact, account"],
+            ["My Tasks", "Task List", "contact, account"],
+            ["Search CRM", "CRM Search", "everywhere"],
+            ["Log Call", "Call Log", "contact, account"],
+            ["Margin Calc", "Margin Calculator", "order"],
+            ["Gift Catalog", "Gift Catalog", "contact, account"],
+            ["Watch", "Watch-add form", "order, contact"],
+            ["Submit Proof", "Submit Proof", "order"],
+            ["Charge", "Charge modal", "order"],
+            ["Copy Order IDs", "clipboard action", "order index"],
+            ["New Contact", "New Contact", "contact, account"]
+          ] },
+          { "type": "callout", "kind": "proTip", "text": "Actions are ordered by relevance: modal-contextual first, then page-contextual, then general — destructive actions always sit at the bottom in red." }
+        ]
+      },
+      "related": ["keyboard-shortcuts", "crm-search", "gift-catalog"]
+    },
+    {
+      "slug": "keyboard-shortcuts",
+      "title": "Keyboard Shortcuts",
+      "icon": "code",
+      "tiers": ["beginner", "intermediate"],
+      "keywords": ["ctrl k", "shortcuts", "keybind", "rebind", "hotkey", "keyboard"],
+      "summary": "Four global shortcuts (all rebindable) plus the in-modal composer keys: '/', 1–9, arrows, and Enter.",
+      "covers": [],
+      "body": {
+        "beginner": [
+          { "type": "heading", "text": "Global shortcuts" },
+          { "type": "table", "headers": ["Keys", "Action", "Rebindable"], "rows": [
+            ["Ctrl/Cmd + K", "Toggle CRM Search", "yes"],
+            ["Ctrl/Cmd + X", "Toggle Task List", "yes"],
+            ["Ctrl/Cmd + M", "Toggle Margin Calculator", "yes"],
+            ["Ctrl/Cmd + Q", "Open New Contact", "yes"],
+            ["Shift, Shift (double-tap)", "Toggle Actions Shelf", "no"]
+          ] },
+          { "type": "p", "text": "Rebind the four letters under Settings → Keyboard Shortcuts. A shortcut only fires when its feature toggle is on." }
+        ],
+        "intermediate": [
+          { "type": "heading", "text": "Inside composer modals (Quick Task, Call Log)" },
+          { "type": "table", "headers": ["Keys", "Action"], "rows": [
+            ["type", "Filter the template list"],
+            ["1–9", "Pick the Nth filtered template (also picks category chips in Email Preview)"],
+            ["↑ ↓", "Walk the filtered list"],
+            ["Enter", "Select / advance to the next composer field"],
+            ["/", "Enter composer mode to fill fields without touching the mouse"]
+          ] },
+          { "type": "callout", "kind": "proTip", "text": "The '/' composer is the fastest way to log a call: '/' → category → direction → note → Enter, all without leaving the keyboard." }
+        ]
+      },
+      "related": ["shortcuts-settings", "call-log", "quick-task", "crm-search"]
+    }
+  ]
+}

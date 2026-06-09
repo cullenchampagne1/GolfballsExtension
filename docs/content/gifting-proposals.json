@@ -1,0 +1,153 @@
+{
+  "section": "Core Features / Gifting & Proposals",
+  "articles": [
+    {
+      "slug": "gift-catalog",
+      "title": "Gift Catalog",
+      "icon": "card",
+      "tiers": ["beginner", "intermediate"],
+      "keywords": ["catalog", "gift", "products", "browse", "index", "gifting"],
+      "summary": "Browse and search the entire golfballs.com product range — every item on the site, indexed locally for instant filtering by category, brand, and price.",
+      "feature": "gift-catalog",
+      "flag": "giftCatalogEnabled",
+      "covers": ["gift-catalog"],
+      "tutorial": "build-proposal",
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "Open the Gift Catalog from the Actions Shelf on a contact, account, or order page. You get a searchable grid of the full site catalog — over three thousand items — with a collapsible category sidebar and a Custom Logo group at the top." },
+          { "type": "p", "text": "Search by name, filter by category, brand, or price, and sort by popularity or price. Click Customize on any card to start decorating it, or add it straight to the quote." }
+        ],
+        "intermediate": [
+          { "type": "heading", "text": "The index and refresh" },
+          { "type": "p", "text": "The catalog indexes the whole site and caches the result locally, re-indexing automatically after 24 hours (configurable as 'Re-index interval' in Developer Settings). The first open after the cache expires takes a few extra seconds while it rebuilds — that's normal." },
+          { "type": "callout", "kind": "tip", "text": "Card density and default sort are configurable in Developer Settings if you prefer a tighter grid or price-first ordering." }
+        ]
+      },
+      "related": ["customizing-item", "gift-sets", "build-email-proposal", "ts-catalog-stale"]
+    },
+    {
+      "slug": "customizing-item",
+      "title": "Customizing an Item",
+      "icon": "edit",
+      "tiers": ["intermediate"],
+      "keywords": ["logo", "text", "monogram", "imprint", "dual pole", "customize", "personalize"],
+      "summary": "Add a logo, personalized text, or monogram to a product — with a live 3D preview and an optional second imprint on the opposite pole.",
+      "feature": "gift-catalog",
+      "flag": "giftCatalogEnabled",
+      "covers": ["gift-customize", "3d-viewer", "golfball-viewer"],
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "Click Customize on a catalog card. The panel shows the imprint types this specific product supports — products that can't take a monogram simply won't offer one. Choose:" },
+          { "type": "list", "items": [
+            "Logo — upload or pick the customer's artwork; it renders onto the live 3D preview.",
+            "Personalized text — real fonts rendered exactly as production will print them.",
+            "Monogram — live letter art in multiple styles, recolorable, laid out by letter count."
+          ] },
+          { "type": "p", "text": "Dual-pole decoration puts a second imprint on the opposite side of the ball — logo on one pole, personalization or monogram on the other. The 3D preview shows both; drag to rotate, scroll to zoom." },
+          { "type": "callout", "kind": "info", "text": "Previews use the real production rendering services, so what you see is what the customer gets — not an approximation." }
+        ]
+      },
+      "related": ["gift-catalog", "gift-sets", "3d-product-viewer"]
+    },
+    {
+      "slug": "gift-sets",
+      "title": "Gift Sets",
+      "icon": "card",
+      "tiers": ["intermediate"],
+      "keywords": ["gift set", "box", "sleeve", "packaging", "upsell", "bundle", "wooden"],
+      "summary": "Wrap custom-logo balls into boxed gift sets — sleeves, 6-ball boxes, premium wood — with an assembled 3D box preview and verified ladder pricing.",
+      "feature": "gift-catalog",
+      "flag": "giftCatalogEnabled",
+      "covers": ["gift-sets"],
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "While customizing a ball, the packaging section offers gift-set bundles: a 3-ball sleeve, a 6-ball box with accessories (divot tool, poker chip, ball marker variants), or premium wooden boxes." },
+          { "type": "p", "text": "Pick one and the 3D preview swaps to the assembled open box — balls and accessories seated in their foam slots, with your imprints visible on each piece." },
+          { "type": "callout", "kind": "info", "text": "Set pricing combines the ball's custom-logo volume ladder with the kit's own ladder, rounded to .95 — the same math the website uses, verified against production carts." }
+        ]
+      },
+      "related": ["customizing-item", "3d-product-viewer", "build-email-proposal"]
+    },
+    {
+      "slug": "custom-service-items",
+      "title": "Custom & Service Items",
+      "icon": "plus",
+      "tiers": ["intermediate"],
+      "keywords": ["service item", "custom item", "freight", "setup fee", "one-off"],
+      "summary": "Create one-off items — design setup, freight, consulting — with their own pricing ladders, and add them to any proposal like catalog products.",
+      "feature": "custom-items",
+      "flag": "giftCatalogEnabled",
+      "covers": ["custom-items"],
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "Not everything you quote is in the catalog. Custom items let you define service products — a setup fee, freight, a special-order item — with a name, description, thumbnail, price ladder, setup cost, and lead time." },
+          { "type": "p", "text": "Saved items live in your local library (deduped by SKU) and appear alongside catalog products when building a quote. Edit or remove them any time; bulk delete handles cleanup after big imports." }
+        ]
+      },
+      "related": ["supplier-import", "build-email-proposal"]
+    },
+    {
+      "slug": "supplier-import",
+      "title": "Supplier Import (HPG / SnugZ)",
+      "icon": "download",
+      "tiers": ["advanced"],
+      "keywords": ["import", "hpg", "snugz", "supplier", "markup", "third party"],
+      "summary": "Import customizable products from HPG Brands or SnugZ USA — costs, options, and minimums fetched automatically, markup computed, saved as custom items.",
+      "feature": "supplier-import",
+      "flag": "giftCatalogEnabled",
+      "covers": ["supplier-import"],
+      "tutorial": "import-supplier",
+      "body": {
+        "advanced": [
+          { "type": "p", "text": "From the custom items panel, start an HPG or SnugZ import. The extension pages the supplier's catalog, filters to customizable products, then fetches each detail page for cost ladders, decoration options, minimums, weight, and lead time." },
+          { "type": "p", "text": "A markup is computed on top of cost (margin + setup + shipping), and you preview the resulting price ladder before saving the items you want into your custom items library." },
+          { "type": "callout", "kind": "warning", "text": "SnugZ requires you to be signed in to snugzusa.com in another tab first. HPG is public. Large imports fetch many pages — let the progress finish before navigating away." }
+        ]
+      },
+      "related": ["custom-service-items", "build-email-proposal"]
+    },
+    {
+      "slug": "promo-codes",
+      "title": "Promo Codes",
+      "icon": "sparkle",
+      "tiers": ["intermediate"],
+      "keywords": ["promo", "coupon", "discount", "free quantity", "code"],
+      "summary": "Validate and apply real promotions to a proposal — discounts and free-item lines computed by the same engine the website uses.",
+      "feature": "promos",
+      "flag": "giftCatalogEnabled",
+      "covers": ["promos"],
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "In the proposal sidebar, type a promo code or pick from known promos — the picker only offers codes that actually apply to what's in your cart. Applying one recomputes the proposal: percentage discounts appear as discount lines, and free-quantity promos add real free-item lines." },
+          { "type": "callout", "kind": "info", "text": "Free promo lines are excluded from margin math, so the breakdown still tells you the truth about profitability." }
+        ]
+      },
+      "related": ["build-email-proposal", "margin-calculator"]
+    },
+    {
+      "slug": "build-email-proposal",
+      "title": "Building & Emailing a Proposal",
+      "icon": "send",
+      "tiers": ["intermediate", "advanced"],
+      "keywords": ["proposal", "quote", "email proposal", "cart link", "opportunity", "tracked"],
+      "summary": "Assemble line items into a priced quote, then email it as a tracked proposal — with 3D render snapshots, a live cart link, and automatic opportunity updates.",
+      "feature": "proposals",
+      "flag": "giftCatalogEnabled",
+      "covers": ["proposal-email", "proposals"],
+      "tutorial": "build-proposal",
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "As you add items from the catalog (customized or plain, plus custom items), the proposal sidebar tracks line items and a running total. You can split a quantity across price tiers, apply a promo, and review a margin breakdown per line." },
+          { "type": "p", "text": "Email Proposal opens a composer with the rendered quote: line items with pricing, automatic 3D snapshots of each customized product, and a link to a live cart the customer can check out from." },
+          { "type": "p", "text": "Sending does three things server-side: creates the proposal email record, registers it for tracking, and updates the opportunity's value — the same bookkeeping as quoting from the website." }
+        ],
+        "advanced": [
+          { "type": "heading", "text": "Saved and current proposals" },
+          { "type": "p", "text": "The Current Proposals sidebar pulls the contact's existing proposals live from the CRM — open one to see its breakdown, load it back into the builder, or re-email it. Each saved proposal maps back to a real cart, so 'load' restores the exact line items and decorations." },
+          { "type": "callout", "kind": "tip", "text": "The cart link only appears in the email when the cart saved successfully — if it's missing, re-save the proposal before sending." }
+        ]
+      },
+      "related": ["gift-catalog", "promo-codes", "how-email-sending-works", "margin-calculator"]
+    }
+  ]
+}

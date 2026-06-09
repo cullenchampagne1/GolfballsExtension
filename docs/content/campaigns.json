@@ -1,0 +1,72 @@
+{
+  "section": "Core Features / Campaigns",
+  "articles": [
+    {
+      "slug": "bulk-email-selection",
+      "title": "Bulk Email from a Selection",
+      "icon": "megaphone",
+      "tiers": ["intermediate"],
+      "keywords": ["bulk", "blast", "run campaign", "selected", "mass email"],
+      "summary": "Select rows in Task List or CRM Search, pick a template, and send to everyone — with per-recipient progress, personalization, and retry.",
+      "feature": "campaigns",
+      "flag": "campaignManagerEnabled",
+      "covers": ["email-runner"],
+      "tutorial": "run-campaign",
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "Tick rows in Task List or CRM Search and click Run Campaign. The Campaign Runner opens: pick a template, preview how it resolves for one recipient, then Send All." },
+          { "type": "p", "text": "Each contact is processed individually — their page opens in a background tab, variables resolve against their data, the email sends, and the tab closes — with a randomized delay between contacts. A progress bar tracks every recipient, and failed sends can be retried." },
+          { "type": "callout", "kind": "warning", "text": "Keep Chrome open until the run finishes. And note the transport rule: with Power Automate off, every send opens an Outlook window instead — for a 50-person list that's 50 windows. Enable Power Automate before any real bulk send." }
+        ]
+      },
+      "related": ["campaign-manager", "how-email-sending-works", "crm-search", "task-list"]
+    },
+    {
+      "slug": "campaign-manager",
+      "title": "Campaign Manager",
+      "icon": "flow",
+      "tiers": ["advanced"],
+      "keywords": ["campaign", "steps", "conditions", "pacing", "dry run", "sequence", "automation"],
+      "summary": "Design multi-step outreach sequences — email, task, call log, and code actions — with per-step conditions, audience ordering, pacing, and a zero-side-effect dry run.",
+      "feature": "campaigns",
+      "flag": "campaignManagerEnabled",
+      "covers": ["campaign-manager"],
+      "tutorial": "run-campaign",
+      "body": {
+        "advanced": [
+          { "type": "p", "text": "Where the Campaign Runner sends one template to a selection, Campaign Manager builds sequences: step 1 sends an email, step 2 creates a follow-up task, step 3 sends a second email only to contacts matching a condition." },
+          { "type": "heading", "text": "Building a campaign" },
+          { "type": "list", "items": [
+            "Steps — each is an action: send an email template, create a task, log a call, or run a code action.",
+            "Conditions — grouped AND/OR rules per step (order count, days since last order, YTD, …); contacts that don't match skip the step.",
+            "Audience ordering — process contacts in a chosen order, e.g. by YTD revenue.",
+            "Pacing — a delay plus random jitter between contacts keeps sends natural and avoids hammering the CRM."
+          ] },
+          { "type": "callout", "kind": "bestPractice", "title": "Always dry-run first", "text": "Dry-run mode executes the whole campaign logic — conditions, variable resolution, step routing — without sending anything or writing to the CRM. Read the per-contact simulation before going live." },
+          { "type": "p", "text": "Running campaigns can be paused, resumed, or stopped at any time. Campaign status (Draft / Active / Paused) shows in the campaign list." }
+        ]
+      },
+      "related": ["campaign-conditions", "bulk-email-selection", "query-builder", "code-variables"]
+    },
+    {
+      "slug": "campaign-conditions",
+      "title": "Campaign Conditions & Signals",
+      "icon": "branch",
+      "tiers": ["advanced"],
+      "keywords": ["condition", "signal", "rule", "and or", "criteria"],
+      "summary": "The data a campaign step can branch on: contact and order-history fields, with grouped AND/OR logic and code variables for anything custom.",
+      "feature": "campaigns",
+      "flag": "campaignManagerEnabled",
+      "covers": [],
+      "body": {
+        "advanced": [
+          { "type": "p", "text": "Step conditions are built from contact signals — fields the extension extracts from the contact's CRM data: name, company, email/phone presence, order count, last order date, YTD spend, and order-history queries like 'any order over $500'." },
+          { "type": "p", "text": "Conditions group with AND/OR nesting, the same rule trees used by template matching and the Query Builder — learn it once, use it in all three places." },
+          { "type": "p", "text": "When a built-in signal isn't enough, a code variable runs a sandboxed JavaScript expression per contact — prebuilt recipes cover common cases like 'ordered an item that is now out of stock'. See Code Variables & Recipes." },
+          { "type": "callout", "kind": "info", "text": "Email/call history signals (e.g. 'hasn't replied to my last email') are visible in the editor but not yet active — they'll light up in a future release." }
+        ]
+      },
+      "related": ["campaign-manager", "code-variables", "query-builder"]
+    }
+  ]
+}

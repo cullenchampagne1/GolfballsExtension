@@ -1,0 +1,159 @@
+{
+  "section": "Core Features / CRM & Contacts",
+  "articles": [
+    {
+      "slug": "crm-search",
+      "title": "CRM Search",
+      "icon": "search",
+      "tiers": ["beginner", "intermediate", "advanced"],
+      "keywords": ["search", "ctrl k", "find contact", "account", "lookup", "customer"],
+      "summary": "Instant search over contacts, accounts, and orders from anywhere — Ctrl+K, type, done. Select rows to launch bulk actions and campaigns.",
+      "feature": "crm-search",
+      "flag": "crmSearchEnabled",
+      "shortcut": "Ctrl+K",
+      "covers": ["crm-search"],
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "Press Ctrl+K on any CRM page. Type a name, email, or phone number and results appear immediately. A type filter narrows to Contacts or Accounts; clicking a result opens it." },
+          { "type": "callout", "kind": "tip", "text": "Your last search is remembered, so reopening the modal picks up where you left off." }
+        ],
+        "intermediate": [
+          { "type": "heading", "text": "Selections and bulk actions" },
+          { "type": "p", "text": "Tick rows to build a selection — a summary bar appears with bulk actions: open every selected record in tabs, create a Quick Task, or Run Campaign to email all of them (see Bulk Email from a Selection)." },
+          { "type": "p", "text": "Filter chips and saved quick presets sit above the results for one-click refinement." }
+        ],
+        "advanced": [
+          { "type": "p", "text": "The filter button opens the Query Builder for grouped AND/OR conditions with field-specific operators — see its dedicated article. Records you visit are also indexed locally, which is what makes repeat searches instant." }
+        ]
+      },
+      "related": ["query-builder", "bulk-email-selection", "new-contact"]
+    },
+    {
+      "slug": "query-builder",
+      "title": "Query Builder",
+      "icon": "filter",
+      "tiers": ["advanced"],
+      "keywords": ["query", "solr", "advanced search", "saved query", "filter", "conditions"],
+      "summary": "Grouped AND/OR condition builder for CRM Search — build precise audience queries and save them for reuse.",
+      "feature": "crm-search",
+      "flag": "crmSearchEnabled",
+      "covers": ["query-builder"],
+      "body": {
+        "advanced": [
+          { "type": "p", "text": "Open it from the filter button inside CRM Search. Add conditions (field, operator, value) and group them with AND/OR logic — for example: state is TX AND (order count > 5 OR YTD > $2,000)." },
+          { "type": "p", "text": "Apply runs the query immediately; Save stores it by name so you — or a campaign — can reuse the exact audience later." },
+          { "type": "callout", "kind": "proTip", "text": "Saved queries are the cleanest way to define campaign audiences: build once, verify the results visually, then select-all and Run Campaign." }
+        ]
+      },
+      "related": ["crm-search", "campaign-manager"]
+    },
+    {
+      "slug": "new-contact",
+      "title": "New Contact",
+      "icon": "user",
+      "tiers": ["beginner"],
+      "keywords": ["create contact", "ctrl q", "new customer", "add contact"],
+      "summary": "Quick-create a CRM contact from anywhere with Ctrl+Q — search for the account, fill in the basics, done.",
+      "feature": "crm-new-contact",
+      "flag": "crmNewContactEnabled",
+      "shortcut": "Ctrl+Q",
+      "covers": ["crm-create-contact", "crm-new-contact"],
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "Press Ctrl+Q (or use the Actions Shelf). Search for and attach the account, then fill first name, last name, email, phone, and company. Create posts the contact straight to the CRM." },
+          { "type": "callout", "kind": "info", "text": "By default a contact must be attached to an account. Admins can relax this under Developer Settings → 'New Contact requires an account'." }
+        ]
+      },
+      "related": ["crm-search", "phone-finder"]
+    },
+    {
+      "slug": "quick-task",
+      "title": "Quick Task",
+      "icon": "check",
+      "tiers": ["beginner", "intermediate"],
+      "keywords": ["task", "todo", "follow up", "due date", "create task"],
+      "summary": "Create a CRM task in seconds: pick a template, set priority and a due date like +1w, submit.",
+      "feature": "quick-task",
+      "flag": "quickTaskEnabled",
+      "covers": ["quick-task", "quick-task-popover"],
+      "tutorial": "log-call-task",
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "From a contact, account, or order page, open Quick Task (Actions Shelf → Add Task, or popup → Tools). The filter bar is focused — type to find a task template, press Enter, adjust, submit. The task attaches to the contact in the CRM." }
+        ],
+        "intermediate": [
+          { "type": "heading", "text": "Due dates and the composer" },
+          { "type": "table", "headers": ["Type", "Means"], "rows": [
+            ["+1d / +3d", "tomorrow / in three days"],
+            ["+1w / +2w", "in one / two weeks"],
+            ["mm/dd/yy", "a specific date"]
+          ] },
+          { "type": "p", "text": "Press '/' to enter composer mode and fill category, priority, subject, and description entirely from the keyboard, with a live preview alongside." },
+          { "type": "callout", "kind": "bestPractice", "text": "Save your recurring follow-ups as task templates (Template Editor → Task tab) — two keystrokes beats retyping the same task every day." }
+        ]
+      },
+      "related": ["task-list", "call-log", "watch-list"]
+    },
+    {
+      "slug": "task-list",
+      "title": "Task List",
+      "icon": "check",
+      "tiers": ["beginner", "intermediate"],
+      "keywords": ["my tasks", "ctrl x", "bulk", "open tabs", "task list"],
+      "summary": "Your CRM task list in a fast modal — search, filter by status and priority, sort, and act on many tasks at once.",
+      "feature": "task-list",
+      "flag": "taskListEnabled",
+      "shortcut": "Ctrl+X",
+      "covers": ["task-list"],
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "Press Ctrl+X to see your tasks without navigating to the CRM task page. Search, filter by status or priority, and click a task to open its record." }
+        ],
+        "intermediate": [
+          { "type": "p", "text": "Tick rows for bulk actions: open all in tabs, create a follow-up Quick Task, or Run Campaign to email every selected task's contact with one template." },
+          { "type": "callout", "kind": "info", "text": "The list reflects your CRM tasks page — if a task doesn't appear, confirm it exists in the CRM and that it's assigned to you." }
+        ]
+      },
+      "related": ["quick-task", "bulk-email-selection", "crm-search"]
+    },
+    {
+      "slug": "call-log",
+      "title": "Call Log",
+      "icon": "phone",
+      "tiers": ["beginner", "intermediate"],
+      "keywords": ["call", "log call", "voicemail", "activity", "phone call"],
+      "summary": "Keyboard-first call logging: filter to a template, '/' through category, direction, and notes, and submit to the CRM activity log.",
+      "feature": "call-log",
+      "flag": "callLogEnabled",
+      "covers": ["call-log"],
+      "tutorial": "log-call-task",
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "On a contact or account page, open Log Call from the Actions Shelf. The modal shows the contact's name and phone; type to filter call templates or press '/' to compose from scratch." },
+          { "type": "p", "text": "Set the category, direction (inbound/outbound), and voicemail flag, write the note, and submit — the call lands in the CRM activity log immediately." }
+        ],
+        "intermediate": [
+          { "type": "callout", "kind": "proTip", "text": "The whole flow is keyboard-driven: '/' enters the composer, Enter advances fields, and the preview pane shows exactly what will be logged. With templates for your common call outcomes, logging takes under ten seconds." }
+        ]
+      },
+      "related": ["quick-task", "phone-finder", "keyboard-shortcuts"]
+    },
+    {
+      "slug": "phone-finder",
+      "title": "Phone Finder",
+      "icon": "search",
+      "tiers": ["beginner"],
+      "keywords": ["phone", "find number", "missing phone", "lookup phone"],
+      "summary": "Scans a contact's order history for phone numbers and saves your pick to the contact record.",
+      "feature": "phone-finder",
+      "flag": "phoneFinderEnabled",
+      "covers": ["phone-finder"],
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "Contact missing a phone number? Run Phone Finder from the contact page. It scans the contact's orders, collects every phone number found (each labeled with the shipping name it came from), and shows a picker. Choose one and it saves to the contact automatically." }
+        ]
+      },
+      "related": ["new-contact", "call-log"]
+    }
+  ]
+}

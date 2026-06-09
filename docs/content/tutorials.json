@@ -1,0 +1,180 @@
+{
+  "tutorials": [
+    {
+      "id": "initial-configuration",
+      "title": "Set up the extension",
+      "tier": "beginner",
+      "estMinutes": 5,
+      "prerequisites": ["Extension installed"],
+      "steps": [
+        { "action": "Open Settings: click the extension icon, then the settings gear (or the Settings tab in the Template Editor window).", "expected": "The Settings panel opens with Theme at the top.", "visualCue": "Gear icon in the popup footer." },
+        { "action": "Pick a theme variant — Dark, Slate, Light, or Cream.", "expected": "Every extension surface re-colors instantly.", "visualCue": "Theme section, top of Settings." },
+        { "action": "Set 'Email account host' to your own account name.", "expected": "Your From identity is now yours.", "visualCue": "Developer Settings section.", "warning": "Skip this and your emails may go out under someone else's identity — it ships with a default that isn't you." },
+        { "action": "Write your email signature in the signature editor.", "expected": "Signature saves; it will auto-append to Power Automate sends.", "visualCue": "Signature section." },
+        { "action": "Review Settings → Features and switch off anything you won't use.", "expected": "Disabled features vanish from shelves, popups, and shortcuts immediately.", "visualCue": "Features section, grouped by area.", "tip": "Everything except Power Automate is on by default. Leaving it all on is fine." },
+        { "action": "(If your team shares config) Settings → User Presets → Import, and pick the team preset JSON.", "expected": "Team templates and settings merge in; a summary lists what was imported.", "visualCue": "User Presets section.", "commonMistake": "Importing the Settings scope overwrites your theme and toggles — untick scopes you want to keep your own." }
+      ],
+      "related": ["initial-configuration", "presets", "email-integrations"]
+    },
+    {
+      "id": "send-first-email",
+      "title": "Send your first templated email",
+      "tier": "beginner",
+      "estMinutes": 3,
+      "prerequisites": ["On a CRM page (order, case, contact, or account)", "emailTemplatesEnabled is on"],
+      "steps": [
+        { "action": "Click the extension icon in Chrome's toolbar.", "expected": "The popup opens showing templates matched to this page type.", "visualCue": "Template dropdown at the top.", "commonMistake": "'No templates' usually means no template of this page's type exists, or its rules don't match — check the Template Editor." },
+        { "action": "Pick a template from the dropdown.", "expected": "The RESOLVED section streams in live values from the page — name, order number, totals.", "visualCue": "RESOLVED list below the dropdown; unresolved variables stay highlighted." },
+        { "action": "Scan the resolved values, then click Send.", "expected": "With Power Automate on: sends silently with your signature. Otherwise: a pre-filled Outlook window opens.", "visualCue": "Send button in the popup footer.", "tip": "Treat a highlighted (unresolved) variable as a stop sign — fix it before sending." }
+      ],
+      "related": ["email-templates-popup", "how-email-sending-works"]
+    },
+    {
+      "id": "log-call-task",
+      "title": "Log a call and create a follow-up task",
+      "tier": "beginner",
+      "estMinutes": 4,
+      "prerequisites": ["On a contact or account page", "callLogEnabled and quickTaskEnabled are on"],
+      "steps": [
+        { "action": "Double-tap Shift and click Log Call.", "expected": "Call Log opens showing the contact's name and phone, with the template filter focused.", "visualCue": "Floating shelf, bottom-right." },
+        { "action": "Type to filter call templates; press a number key or Enter to pick one — or press '/' to compose from scratch.", "expected": "The composer pre-fills; '/' walks you through category → direction → voicemail → subject → note.", "visualCue": "Live preview pane updates as you type.", "tip": "The entire flow works without the mouse — Enter advances each field." },
+        { "action": "Submit the call log.", "expected": "Success confirmation; the call is in the CRM activity log.", "visualCue": "Toast on completion." },
+        { "action": "Open Quick Task (shelf → Add Task), pick a template, and set the due date.", "expected": "Due date accepts shorthand: +1d, +1w, or mm/dd/yy.", "visualCue": "Due field in the composer.", "commonMistake": "Typing 'next week' doesn't parse — use +1w." },
+        { "action": "Submit the task.", "expected": "Task attaches to the contact in the CRM with your category, priority, and due date.", "visualCue": "" }
+      ],
+      "related": ["call-log", "quick-task", "keyboard-shortcuts"]
+    },
+    {
+      "id": "build-proposal",
+      "title": "Build & send a product proposal",
+      "tier": "intermediate",
+      "estMinutes": 6,
+      "prerequisites": ["On a contact, account, or order page", "giftCatalogEnabled is on"],
+      "steps": [
+        { "action": "Double-tap Shift and click Gift Catalog.", "expected": "The catalog opens with the product grid and category sidebar.", "visualCue": "Floating shelf, bottom-right.", "commonMistake": "No shelf? Check actionsShelfEnabled in Settings → Features." },
+        { "action": "Search a product name or browse the category sidebar.", "expected": "The grid filters live; a Custom Logo group sits at the top.", "visualCue": "Search bar at the top.", "tip": "First open after 24 hours re-indexes the whole site — a short delay is normal." },
+        { "action": "Click Customize on an item.", "expected": "The customize panel opens with the imprint types this product actually supports.", "visualCue": "Button on the card footer." },
+        { "action": "Pick Logo, Text, or Monogram; optionally enable the second pole.", "expected": "The live 3D ball updates with your artwork.", "visualCue": "3D preview on the right — drag to rotate, scroll to zoom." },
+        { "action": "(Optional) choose a Gift Set package.", "expected": "The 3D preview swaps to the assembled open box; pricing recomputes with the gift-set ladder.", "visualCue": "Packaging section." },
+        { "action": "Set the quantity and review the price ladder.", "expected": "Per-unit price updates at volume breaks.", "visualCue": "Quantity stepper.", "warning": "The margin guardrail flags prices under your minimum margin (default 30%)." },
+        { "action": "Click Add to Quote; repeat for more items.", "expected": "The proposal sidebar fills with line items and a running total.", "visualCue": "Right sidebar." },
+        { "action": "(Optional) apply a promo code.", "expected": "Discount or free-item lines appear; only applicable promos are offered.", "visualCue": "Promo field in the sidebar." },
+        { "action": "Click Email Proposal.", "expected": "The composer opens with rendered line items and 3D snapshots of each customized product.", "visualCue": "Snapshots render automatically — give it a second." },
+        { "action": "Review recipient, subject, and body, then Send.", "expected": "Confirmation toast; the proposal is saved server-side, tracked, and the opportunity value updates.", "visualCue": "", "commonMistake": "If Outlook opened instead, Power Automate is off — see 'How Email Sending Works'." }
+      ],
+      "related": ["gift-catalog", "build-email-proposal", "promo-codes"]
+    },
+    {
+      "id": "triage-case-email",
+      "title": "Triage a case email",
+      "tier": "intermediate",
+      "estMinutes": 3,
+      "prerequisites": ["On a contact page with Case Email History", "emailPreviewEnabled is on"],
+      "steps": [
+        { "action": "Click the preview button on an email row.", "expected": "The full thread opens inline — messages in order, images included.", "visualCue": "Button appears on hover over the row." },
+        { "action": "Read the thread; expand any collapsed quoted sections.", "expected": "Quoted replies unfold in place.", "visualCue": "Collapsed sections marked in the thread." },
+        { "action": "Click the recommended category chip (or press 1–9).", "expected": "Category and subcategory apply to the case.", "visualCue": "Categorize rail beside the thread." },
+        { "action": "Use the recommended reply template to start a draft.", "expected": "A reply opens pre-filled with the best-matching template.", "visualCue": "Recommendation below the thread.", "tip": "Recommendations come from your template rules — better rules, better suggestions." }
+      ],
+      "related": ["email-thread-preview", "email-templates-popup"]
+    },
+    {
+      "id": "set-order-dates",
+      "title": "Set order approval & commitment dates",
+      "tier": "intermediate",
+      "estMinutes": 2,
+      "prerequisites": ["On an order page", "calendarEnabled is on"],
+      "steps": [
+        { "action": "Find the toolbar in the order-notes area and click the calendar button.", "expected": "The Order Date Manager opens with two mini-calendars.", "visualCue": "Toolbar inside the notes iframe." },
+        { "action": "Pick the approval date on the left calendar, the commitment date on the right.", "expected": "Selected dates show in the readouts under each calendar.", "visualCue": "Date readouts." },
+        { "action": "Click Update Dates.", "expected": "A step-by-step progress toast walks the save; it confirms when both dates are committed.", "visualCue": "Centered step notification.", "commonMistake": "If a step fails, the toast names it. Nothing half-saves — re-open and retry. Repeated failure at step one means your admin session expired; reload the page." }
+      ],
+      "related": ["order-date-manager", "ts-date-update-failed"]
+    },
+    {
+      "id": "verify-logo",
+      "title": "Extract a logo & submit a proof",
+      "tier": "intermediate",
+      "estMinutes": 4,
+      "prerequisites": ["On an order page with artwork", "imagePreviewEnabled and submitProofEnabled are on"],
+      "steps": [
+        { "action": "Hover the product/render image and click the expand button.", "expected": "The Image Viewer opens and resolves the best-quality original (direct file → express upload → CDN → render fallback).", "visualCue": "Floating button appears over the image on hover.", "tip": "Shift+click the button to download the logo immediately, skipping the viewer." },
+        { "action": "Zoom and pan to inspect the artwork; download or copy the URL if needed.", "expected": "Crisp original artwork, not the page's cropped render.", "visualCue": "Zoom controls in the viewer." },
+        { "action": "(Optional) open the color-swap popover → Mockup Composer to recolor and render a 3D grass-scene mockup.", "expected": "Recolored logo renders on a 3D ball, ready to download.", "visualCue": "Swap button in the viewer." },
+        { "action": "Click Submit Proof.", "expected": "The form opens with order and customer IDs pre-filled and the image carried over.", "visualCue": "" },
+        { "action": "Pick the item and artist, add notes, submit.", "expected": "The proof posts to the CRM and appears in the gallery of prior proofs.", "visualCue": "Gallery below the form." }
+      ],
+      "related": ["image-viewer", "submit-proof", "mockup-composer"]
+    },
+    {
+      "id": "run-campaign",
+      "title": "Run a bulk campaign",
+      "tier": "advanced",
+      "estMinutes": 8,
+      "prerequisites": ["campaignManagerEnabled is on", "Power Automate strongly recommended for real sends"],
+      "steps": [
+        { "action": "Press Ctrl+K, search or apply a saved query, and tick the rows you want.", "expected": "A selection summary bar appears with campaign actions.", "visualCue": "Summary bar above the results.", "tip": "Build the audience as a saved query first (Query Builder) so you can verify and reuse it." },
+        { "action": "Click Run Campaign.", "expected": "The Campaign Runner opens over your selection.", "visualCue": "" },
+        { "action": "Pick a template and Preview one recipient.", "expected": "Variables resolve against that contact's real data.", "visualCue": "Preview pane.", "commonMistake": "Skipping preview — one bad variable repeats across the whole list." },
+        { "action": "Click Send All and watch the progress bar.", "expected": "Each contact opens in a background tab, resolves, sends, closes — with randomized pacing. Failures collect for retry.", "visualCue": "Per-recipient progress list.", "warning": "Keep Chrome open until it finishes. With Power Automate off, every send opens an Outlook window instead." },
+        { "action": "For multi-step sequences, open Campaign Manager: add steps (email → task → conditional email), set grouped AND/OR conditions and pacing.", "expected": "The campaign saves as a draft you can run against any audience.", "visualCue": "Step editor with condition cards." },
+        { "action": "Dry-run the campaign before going live.", "expected": "Full simulation per contact — conditions, routing, resolved templates — with zero emails sent and zero CRM writes.", "visualCue": "Dry-run toggle.", "tip": "Read the simulation for at least a handful of contacts; it's the cheapest QA you'll ever do." }
+      ],
+      "related": ["bulk-email-selection", "campaign-manager", "query-builder"]
+    },
+    {
+      "id": "import-supplier",
+      "title": "Import supplier products",
+      "tier": "advanced",
+      "estMinutes": 10,
+      "prerequisites": ["giftCatalogEnabled is on", "For SnugZ: signed in to snugzusa.com in another tab"],
+      "steps": [
+        { "action": "Open the custom items panel and start an HPG or SnugZ import.", "expected": "The importer pages the supplier catalog and filters to customizable products.", "visualCue": "Import buttons in the custom items repo UI." },
+        { "action": "Let it fetch detail pages for the filtered products.", "expected": "Costs, options, minimums, and lead times populate with a progress indicator.", "visualCue": "Progress over the batch.", "warning": "Large imports fetch many pages — don't navigate away mid-run." },
+        { "action": "Review the computed markup and price ladders.", "expected": "Each product shows its cost ladder and your sell-price ladder.", "visualCue": "Pricing preview." },
+        { "action": "Select the items you want and save.", "expected": "They land in your custom items library (deduped by SKU), ready to add to proposals.", "visualCue": "Items appear with a source tag." }
+      ],
+      "related": ["supplier-import", "custom-service-items", "build-email-proposal"]
+    },
+    {
+      "id": "share-config",
+      "title": "Share your team's configuration",
+      "tier": "intermediate",
+      "estMinutes": 4,
+      "prerequisites": ["A configuration worth sharing"],
+      "steps": [
+        { "action": "Settings → User Presets → Save; name the preset and choose scopes.", "expected": "Scope checkboxes control what's bundled: settings, hidden-setting config, and each template type separately.", "visualCue": "Scope checklist in the save dialog.", "tip": "For a team template pack, tick only the template scopes and leave Settings out — people keep their own theme and toggles." },
+        { "action": "Export the preset to a JSON file and share it.", "expected": "A .json file downloads.", "visualCue": "Export button on the preset row." },
+        { "action": "Teammate: Settings → User Presets → Import, pick the file, confirm scopes.", "expected": "Templates merge by id (same id replaces, new id appends); settings scopes overwrite.", "visualCue": "Import summary.", "commonMistake": "Importing the Settings scope replaces the teammate's theme/toggles. Importing 'Hidden-setting config' applies the admin's locks — include it only on purpose." }
+      ],
+      "related": ["presets", "hidden-settings"]
+    },
+    {
+      "id": "watch-order",
+      "title": "Watch an order",
+      "tier": "beginner",
+      "estMinutes": 2,
+      "prerequisites": ["watchListEnabled is on"],
+      "steps": [
+        { "action": "On an order (or contact) page, open the popup's TRACKING section — or the shelf — and click Watch.", "expected": "A small add form appears with the order pre-linked.", "visualCue": "TRACKING section in the popup." },
+        { "action": "Give it a title, priority, and optional due date, then add.", "expected": "The item lands on your Watch List with a link back to the order.", "visualCue": "" },
+        { "action": "Open Watch List any time to review; tick items done as they resolve.", "expected": "Filter chips show live counts; completed items auto-clean after 5 days.", "visualCue": "Filter chips across the top.", "tip": "Watch List is local and private — use Quick Task instead when the team needs to see the follow-up in the CRM." }
+      ],
+      "related": ["watch-list", "quick-task"]
+    },
+    {
+      "id": "query-builder-tutorial",
+      "title": "Build an advanced search",
+      "tier": "advanced",
+      "estMinutes": 5,
+      "prerequisites": ["crmSearchEnabled is on"],
+      "steps": [
+        { "action": "Press Ctrl+K, then click the filter button.", "expected": "The Query Builder opens.", "visualCue": "Filter icon next to the search bar." },
+        { "action": "Add conditions: pick a field, an operator, a value. Group them with AND/OR.", "expected": "Example: state is TX AND (order count > 5 OR YTD > 2000).", "visualCue": "Condition rows with group brackets." },
+        { "action": "Click Apply.", "expected": "Results update to the matching contacts/accounts.", "visualCue": "" },
+        { "action": "Click Save and name the query.", "expected": "It appears in your saved queries for one-click reuse — and as a campaign audience.", "visualCue": "Saved queries list.", "tip": "Verify the audience visually here before ever pointing a campaign at it." }
+      ],
+      "related": ["query-builder", "crm-search", "run-campaign"]
+    }
+  ]
+}
