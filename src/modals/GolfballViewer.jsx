@@ -278,11 +278,30 @@ function applySnapPose(ballGroup, pose, baseRot) {
   const br = baseRot || { x: 0, y: 0, z: 0 };
   ballGroup.rotation.set(br.x + pose.rotX, br.y + pose.rotY, br.z + pose.rotZ);
 }
+/* Export-photo lighting: the user's preferred "scene 3" HDRI (Lilienstein).
+   Loaded once and reused as the snapshot's IBL so the transparent export is lit
+   exactly like that scene in the live viewer (HDRI reflections, artificial fills
+   dimmed) — just without the visible background. */
+const SNAP_ENV_FILE = SCENES[2].file;   // 3rd scene
+let _snapEnvTex = null, _snapEnvPromise = null;
+function loadSnapEnv(THREE, EXRLoader) {
+  if (_snapEnvTex) return Promise.resolve(_snapEnvTex);
+  if (_snapEnvPromise) return _snapEnvPromise;
+  const url = (typeof chrome !== 'undefined' && chrome.runtime?.getURL) ? chrome.runtime.getURL(SNAP_ENV_FILE) : SNAP_ENV_FILE;
+  _snapEnvPromise = new Promise((resolve) => {
+    try {
+      new EXRLoader().load(url, (tex) => { tex.mapping = THREE.EquirectangularReflectionMapping; _snapEnvTex = tex; resolve(tex); }, undefined, () => resolve(null));
+    } catch (e) { resolve(null); }
+  });
+  return _snapEnvPromise;
+}
+
 /* Render `ballGroup` (the single root for every model) to an offscreen,
    transparent square canvas at a fixed pose, restoring the live transform after.
    THREE comes from the build effect's closure. `wallMeshes` (box chrome) are
-   hidden for the shot. */
-function captureModelSnapshot({ THREE, RoomEnvironment, renderer, scene, camera, ballGroup, wallMeshes, pose, baseRot, size = 1024 }) {
+   hidden for the shot. `dimLights` (key/fill/rim) are zeroed during the shot so
+   the HDRI carries the lighting, matching live scene-3 mode. */
+function captureModelSnapshot({ THREE, RoomEnvironment, renderer, scene, camera, ballGroup, wallMeshes, dimLights, pose, baseRot, size = 1024 }) {
   if (!THREE || !renderer || !scene || !camera || !ballGroup) return null;
   const savedPos = ballGroup.position.clone();
   const savedScl = ballGroup.scale.clone();
@@ -305,36 +324,40 @@ function captureModelSnapshot({ THREE, RoomEnvironment, renderer, scene, camera,
   snapRenderer.setSize(size, size, false);
   snapRenderer.setClearColor(0x000000, 0);
   snapRenderer.outputColorSpace = renderer.outputColorSpace;
-  // Filmic tone mapping gives metals a clean specular roll-off without clipping
-  // (the live room view leaned on the box walls for reflections, hidden here).
-  // Exposure stays neutral — the IBL alone adds the shine; pushing exposure on
-  // top washed everything white.
+  // Filmic tone mapping gives metals a clean specular roll-off without clipping.
   snapRenderer.toneMapping = THREE.ACESFilmicToneMapping;
   snapRenderer.toneMappingExposure = 1.0;
 
-  // Studio IBL: the transparent export hides the room walls, so PBR metals had
-  // nothing to reflect (dull tees/tools) and balls caught no specular. Light it
-  // with a neutral RoomEnvironment IBL just for the shot, then restore the scene.
+  // Light the shot with the user's preferred "scene 3" HDRI (Lilienstein) as
+  // IBL — reflections + ambient just like that scene in the live viewer, but the
+  // background stays transparent. Dim the artificial key/fill/rim so the HDRI
+  // carries the lighting (matches live scene mode). Falls back to a neutral
+  // RoomEnvironment if the EXR hasn't finished loading.
   let pmrem = null, envRT = null, roomEnv = null;
   const prevEnv = scene.environment;
   const prevEnvInt = scene.environmentIntensity;
-  if (RoomEnvironment) {
-    try {
-      pmrem = new THREE.PMREMGenerator(snapRenderer);
+  const savedInts = (dimLights || []).map((l) => (l ? l.intensity : 0));
+  try {
+    pmrem = new THREE.PMREMGenerator(snapRenderer);
+    if (_snapEnvTex) {
+      envRT = pmrem.fromEquirectangular(_snapEnvTex);
+      scene.environment = envRT.texture;
+      if ('environmentIntensity' in scene) scene.environmentIntensity = 1.0;
+      (dimLights || []).forEach((l) => { if (l) l.intensity = 0; });   // HDRI lights the scene
+    } else if (RoomEnvironment) {
       roomEnv = new RoomEnvironment();
       envRT = pmrem.fromScene(roomEnv, 0.04);
       scene.environment = envRT.texture;
-      // Keep the IBL subtle — it ADDS to the scene's existing key/fill/rim lights,
-      // so a high intensity washed everything white. Just enough for reflections.
       if ('environmentIntensity' in scene) scene.environmentIntensity = 0.5;
-    } catch (e) { /* fall back to the scene's own lights */ }
-  }
+    }
+  } catch (e) { /* fall back to the scene's own lights */ }
 
   snapRenderer.render(scene, snapCam);
   const dataUrl = snapCanvas.toDataURL('image/png');
 
   scene.environment = prevEnv;
   if ('environmentIntensity' in scene) scene.environmentIntensity = prevEnvInt;
+  (dimLights || []).forEach((l, i) => { if (l) l.intensity = savedInts[i]; });
   try { envRT?.dispose(); } catch (e) { /* */ }
   try { pmrem?.dispose(); } catch (e) { /* */ }
   try { roomEnv?.dispose?.(); } catch (e) { /* */ }
@@ -621,6 +644,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
     (async () => {
       try {
         const { THREE, DecalGeometry, EXRLoader, RoomEnvironment, CANNON, model } = await loadThreeAndModel(shape);
+        loadSnapEnv(THREE, EXRLoader);   // preload the scene-3 HDRI used to light export photos
         const isChip = shape === 'chip';
         // Divot + bartender are the same in the viewer: steel body + white marker
         // disc, decal projected onto the disc (located from the mask).
@@ -1528,6 +1552,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // viewport so every export of this gift set frames identically.
           snapshotRef.current = (size = 1024) => captureModelSnapshot({
             THREE, RoomEnvironment, renderer, scene, camera, ballGroup, wallMeshes,
+            dimLights: [keyLight, fill, rim],
             pose: snapPoseFromDev(devRef.current, gsSnapKey, 1),
             baseRot: gsBaseRot, size,
           });
@@ -1857,6 +1882,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         const ballBaseRot = ballGroup.rotation.clone();
         snapshotRef.current = (size = 1024) => captureModelSnapshot({
           THREE, RoomEnvironment, renderer, scene, camera, ballGroup, wallMeshes,
+          dimLights: [keyLight, fill, rim],
           pose: snapPoseFromDev(devRef.current, ballSnapKey, 1.35),
           baseRot: ballBaseRot, size,
         });
