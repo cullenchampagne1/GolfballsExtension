@@ -1137,8 +1137,9 @@ export async function imprintToDecalUrl(chip) {
       return await extractTextDecal(lines, chip.font || 'Kabel Dm BT', _toHex(chip.color), SIZE_TO_MFS.Standard);
     }
     if (chip.kind === 'monogram') {
-      const letters = String(chip.text || '').toUpperCase().replace(/[^A-Z]/g, '').split('');
-      if (!letters.length || !chip.view) return null;
+      // getMonoMasks expects the initials as a STRING (it does letters.split('')).
+      const letters = String(chip.text || '').toUpperCase().replace(/[^A-Z]/g, '');
+      if (!letters || !chip.view) return null;
       const masks = await getMonoMasks(chip.view, letters);
       const c1 = _toHex(chip.color);
       const c2 = (chip.color2 && chip.color2 !== 'Transparent') ? _toHex(chip.color2) : null;

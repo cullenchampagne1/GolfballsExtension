@@ -51,22 +51,18 @@ function tplClassic(m) {
   const { groupName, optionName, expiration, message, lines, total, show } = m;
   const FONT = '&quot;Lato&quot;, &quot;Helvetica&quot;, &quot;Arial&quot;, sans-serif';
   const GREY = '#7f7f7f', ACC = '#339900', PRICE = '#ff6600';
-  // Left media column appears when there are product photos OR any rendered
-  // previews — the 3D preview box stacks under the main photo there, so the
-  // item text wraps cleanly beside it.
-  const anyPrev = lines.some(_hasPrev);
-  const hasMedia = show.images || anyPrev;
-  const cols = (hasMedia ? 1 : 0) + 1 + 1 + (show.cost ? 1 : 0) + 1;
+  const cols = (show.images ? 1 : 0) + 1 + 1 + (show.cost ? 1 : 0) + 1;
   const th = (label, extra, align) => `<th style="font-weight: normal; color: ${GREY}; border-bottom: 2px solid ${GREY}; padding: 5px 0; ${extra || ''}" align="${align || 'left'}">${label}</th>`;
-  const headerRow = `<tr>` + (hasMedia ? th('', 'width: 162px;') : '') + th('item', 'width: 198px;') + th('qty', 'width: 70px;') + (show.cost ? th('cost', '') : '') + th('total', 'width: 90px;', 'right') + `</tr>`;
+  const headerRow = `<tr>` + (show.images ? th('', 'width: 150px;') : '') + th('item', 'width: 210px;') + th('qty', 'width: 70px;') + (show.cost ? th('cost', '') : '') + th('total', 'width: 90px;', 'right') + `</tr>`;
   const rows = lines.map((l) => {
-    const box = _previewBox(l, { width: 150, accent: ACC, label: GREY });
-    const media = hasMedia
-      ? `<td width="162" valign="top" style="padding: 12px 14px 12px 0;">${show.images ? `<img src="${_esc(l.img)}" width="148" border="0" style="border-radius: 6px; display:block;" />` : ''}${box ? `<div style="margin-top:${show.images ? '8px' : '0'};">${box}</div>` : ''}</td>`
-      : '';
+    // Photo stays in the left column; the Previews box sits with the title on the
+    // right (under it), so the text reads alongside the photo.
+    const img = show.images ? `<td width="150" style="padding: 12px 0;" valign="top"><img src="${_esc(l.img)}" width="140" border="0" style="border-radius: 6px; display:block;" /></td>` : '';
     const sub = l.subtitle ? `<div style="font-size: 12px; color: ${GREY}; margin-top: 3px;">${_esc(l.subtitle)}</div>` : '';
     const cost = show.cost ? `<td style="padding: 12px 0; color: #333;" valign="top">${_money(l.unitPrice)}</td>` : '';
-    return `<tr>${media}<td style="padding: 12px 0;" valign="top">${_brandLine(l, GREY)}<div style="font-size: 14px; color: #222; font-weight: bold;">${_esc(l.title)}</div>${sub}</td><td style="padding: 12px 0; color: #333;" valign="top">${l.qty}</td>${cost}<td style="color: ${PRICE}; font-weight: bold; padding: 12px 0;" align="right" valign="top">${_money(l.lineTotal)}</td></tr><tr><td colspan="${cols}" style="border-bottom: 1px solid #e6e6e6; padding: 0; font-size: 0; line-height: 0;">&nbsp;</td></tr>`;
+    const box = _previewBox(l, { width: 200, accent: ACC, label: GREY });
+    const boxBlock = box ? `<div style="margin-top:10px;">${box}</div>` : '';
+    return `<tr>${img}<td style="padding: 12px 0 12px ${show.images ? '12px' : '0'};" valign="top">${_brandLine(l, GREY)}<div style="font-size: 14px; color: #222; font-weight: bold;">${_esc(l.title)}</div>${sub}${boxBlock}</td><td style="padding: 12px 0; color: #333;" valign="top">${l.qty}</td>${cost}<td style="color: ${PRICE}; font-weight: bold; padding: 12px 0;" align="right" valign="top">${_money(l.lineTotal)}</td></tr><tr><td colspan="${cols}" style="border-bottom: 1px solid #e6e6e6; padding: 0; font-size: 0; line-height: 0;">&nbsp;</td></tr>`;
   }).join('\n');
   const totalsRow = show.total ? `<tr style="font-weight: bold; font-size: 16.8px;"><td colspan="${cols - 1}" style="padding: 12px 0;" valign="top">Estimated total${show.disclaimer ? '*' : ''}</td><td style="color: ${PRICE}; font-weight: bold; padding: 12px 0;" align="right" valign="top">${_money(total)}</td></tr>` : '';
   const msg = (show.message && message) ? `<p style="color: #444; font-size: 14px; line-height: 1.5; margin: 0 0 1.3em;">${_esc(message).replace(/\n/g, '<br/>')}</p>` : '';
@@ -116,16 +112,13 @@ function tplCatalog(m) {
   const ACC = '#339900', ACC_BG = '#e9f4e2', INK = '#1f2937', MUT = '#6b7280', PRICE = '#ff6600', PRICE_BG = '#fff1e6';
   const msg = (show.message && message) ? `<p style="color:#374151; font-size:14px; line-height:1.55; margin:0 0 16px;">${_esc(message).replace(/\n/g, '<br/>')}</p>` : '';
   const cards = lines.map((l) => {
-    // Media column: product photo with the Previews box stacked beneath it, so
-    // the title/qty/price text wraps in the column beside it.
-    const box = _previewBox(l, { width: 142, accent: ACC, label: MUT, bg: '#f7faf4', border: '#dcebd1' });
-    const media = (show.images || _hasPrev(l))
-      ? `<td width="166" valign="top" style="padding:14px;">${show.images ? `<img src="${_esc(l.img)}" width="138" border="0" style="border-radius:8px; display:block;" />` : ''}${box ? `<div style="margin-top:${show.images ? '10px' : '0'};">${box}</div>` : ''}</td>`
-      : '';
+    // Photo on the left; title + Previews box together on the right.
+    const img = show.images ? `<td width="120" valign="top" style="padding:14px;"><img src="${_esc(l.img)}" width="104" border="0" style="border-radius:8px; display:block;" /></td>` : '';
     const sub = l.subtitle ? `<div style="font-size:12px; color:${MUT}; margin-top:4px;">${_esc(l.subtitle)}</div>` : '';
     const qtyLine = show.cost ? `Qty ${l.qty} &nbsp;·&nbsp; ${_money(l.unitPrice)} ea` : `Qty ${l.qty}`;
-    const contentPad = (show.images || _hasPrev(l)) ? '14px 0' : '14px 16px';
-    return `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:12px;"><tbody><tr>${media}<td valign="top" style="padding:${contentPad};">${_brandLine(l, ACC)}<div style="font-size:16px; color:${INK}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${MUT}; margin-top:7px;">${qtyLine}</div></td><td width="118" valign="top" align="right" style="padding:14px 16px;"><span style="display:inline-block; background:${PRICE_BG}; color:${PRICE}; font-size:15px; font-weight:800; padding:7px 12px; border-radius:7px;">${_money(l.lineTotal)}</span></td></tr></tbody></table>`;
+    const box = _previewBox(l, { width: 240, accent: ACC, label: MUT, bg: '#f7faf4', border: '#dcebd1' });
+    const boxBlock = box ? `<div style="margin-top:10px;">${box}</div>` : '';
+    return `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:12px;"><tbody><tr>${img}<td valign="top" style="padding:14px ${show.images ? '0' : '16px'};">${_brandLine(l, ACC)}<div style="font-size:16px; color:${INK}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${MUT}; margin-top:7px;">${qtyLine}</div>${boxBlock}</td><td width="118" valign="top" align="right" style="padding:14px 16px;"><span style="display:inline-block; background:${PRICE_BG}; color:${PRICE}; font-size:15px; font-weight:800; padding:7px 12px; border-radius:7px;">${_money(l.lineTotal)}</span></td></tr></tbody></table>`;
   }).join('\n');
   const totalBox = show.total ? `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; margin-top:4px;"><tbody><tr><td style="background:${ACC_BG}; border-left:4px solid ${ACC}; border-radius:6px; padding:14px 16px;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:13px; font-weight:700; color:${INK};">Estimated total${show.disclaimer ? '*' : ''}</span></td><td align="right" valign="middle"><span style="font-size:22px; font-weight:800; color:${PRICE};">${_money(total)}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
   const exp = show.expiration ? `<p style="font-size:13px; color:${MUT}; margin:16px 0 0;" align="right">This proposal expires on <strong style="color:${INK};">${_esc(expiration)}</strong></p>` : '';
@@ -175,12 +168,15 @@ function tplLookbook(m) {
   const head = `<div style="text-align:center;"><div style="font-size:12px; letter-spacing:1.4px; text-transform:uppercase; color:${ACC}; font-weight:800;">${_esc(groupName)}</div><div style="font-size:26px; font-weight:800; color:${INK}; margin:7px 0 0;">${_esc(optionName)}</div><div style="width:46px; height:4px; background:${ACC}; border-radius:2px; margin:14px auto 0;"></div></div>`;
   const msg = (show.message && message) ? `<p style="color:#374151; font-size:14px; line-height:1.55; margin:18px 0 0; text-align:center;">${_esc(message).replace(/\n/g, '<br/>')}</p>` : '';
   const cards = lines.map((l) => {
-    const imgRow = show.images ? `<tr><td align="center" style="padding:18px 18px 4px;"><img src="${_esc(l.img)}" width="220" border="0" style="border-radius:8px; display:block; margin:0 auto;" /></td></tr>` : '';
     const sub = l.subtitle ? `<div style="font-size:12px; color:${MUT}; margin-top:4px;">${_esc(l.subtitle)}</div>` : '';
     const qtyLine = show.cost ? `Qty ${l.qty} &nbsp;·&nbsp; ${_money(l.unitPrice)} ea` : `Qty ${l.qty}`;
-    const box = _previewBox(l, { width: 300, accent: ACC, label: MUT, align: 'center', bg: '#fafcf8' });
-    const prevRow = box ? `<tr><td align="center" style="padding:0 18px 16px;">${box}</td></tr>` : '';
-    return `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:14px;"><tbody>${imgRow}<tr><td style="padding:${show.images ? '6px' : '16px'} 18px 16px;"><table width="100%"><tbody><tr><td valign="middle">${_brandLine(l, ACC)}<div style="font-size:17px; color:${INK}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${MUT}; margin-top:6px;">${qtyLine}</div></td><td valign="middle" align="right" width="96"><span style="font-size:19px; font-weight:800; color:${PRICE};">${_money(l.lineTotal)}</span></td></tr></tbody></table></td></tr>${prevRow}</tbody></table>`;
+    // Photo and the Previews box sit SIDE BY SIDE (preview to the right of the
+    // item photo); the title/price block sits below.
+    const box = _previewBox(l, { width: 250, accent: ACC, label: MUT, bg: '#fafcf8' });
+    const mediaRow = (show.images || box)
+      ? `<tr><td style="padding:18px 18px 8px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tbody><tr>${show.images ? `<td valign="top" style="padding-right:${box ? '14px' : '0'};"><img src="${_esc(l.img)}" width="190" border="0" style="border-radius:8px; display:block;" /></td>` : ''}${box ? `<td valign="top">${box}</td>` : ''}</tr></tbody></table></td></tr>`
+      : '';
+    return `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:14px;"><tbody>${mediaRow}<tr><td style="padding:${mediaRow ? '6px' : '16px'} 18px 16px;"><table width="100%"><tbody><tr><td valign="middle">${_brandLine(l, ACC)}<div style="font-size:17px; color:${INK}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${MUT}; margin-top:6px;">${qtyLine}</div></td><td valign="middle" align="right" width="96"><span style="font-size:19px; font-weight:800; color:${PRICE};">${_money(l.lineTotal)}</span></td></tr></tbody></table></td></tr></tbody></table>`;
   }).join('\n');
   const totalBox = show.total ? `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT};"><tbody><tr><td style="border-top:2px solid ${ACC}; padding:16px 2px 0;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:12px; letter-spacing:.6px; text-transform:uppercase; color:${MUT}; font-weight:700;">Estimated total${show.disclaimer ? '*' : ''}</span></td><td align="right" valign="middle"><span style="font-size:25px; font-weight:800; color:${PRICE};">${_money(total)}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
   const exp = show.expiration ? `<p style="font-size:13px; color:${MUT}; margin:14px 0 0; text-align:center;">This proposal expires on <strong style="color:${INK};">${_esc(expiration)}</strong></p>` : '';
