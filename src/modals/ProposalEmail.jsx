@@ -209,12 +209,40 @@ function tplLookbook(m) {
   </td></tr></tbody></table>`;
 }
 
+/* ── TEMPLATE 6 — SEPARATED — detached option cards, per-price ──
+   Each option is a fully self-contained card (its own "Option A" header strip,
+   photo, imprint preview, bold price) — for pitching a menu of independent
+   options rather than one itemised order. Total is optional (for bundling). */
+function tplSeparated(m) {
+  const { groupName, optionName, lines, total, show } = m;
+  const cards = lines.map((l, i) => {
+    const photo = show.images ? `<td width="92" valign="top" style="padding-right:16px;">${_photoPlate(l.img, 92)}</td>` : '';
+    const sub = l.subtitle ? `<div style="font-size:12px; color:${T.mut}; margin-top:4px;">${_esc(l.subtitle)}</div>` : '';
+    const qtyLine = show.cost ? `Qty ${l.qty} &nbsp;&middot;&nbsp; ${_money(l.unitPrice)} ea` : `Qty ${l.qty}`;
+    const proof = show.previews ? _proof(l, false) : '';
+    return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:14px; margin-bottom:16px;"><tbody>
+      <tr><td style="background:${T.plate}; border-bottom:1px solid ${T.line}; border-radius:14px 14px 0 0; padding:11px 18px;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:${T.acc}; font-weight:800;">Option ${String.fromCharCode(65 + i)}</span></td><td align="right" valign="middle"><span style="font-size:11px; color:${T.mut}; font-weight:600;">${qtyLine}</span></td></tr></tbody></table></td></tr>
+      <tr><td style="padding:18px;"><table width="100%"><tbody><tr>${photo}<td valign="middle">${_brandLine(l, T.mut)}<div style="font-size:18px; color:${T.ink}; font-weight:800; letter-spacing:-.3px;">${_esc(l.title)}</div>${sub}</td><td valign="middle" align="right" width="118"><div style="font-size:10px; letter-spacing:.6px; text-transform:uppercase; color:${T.mut}; font-weight:700;">Price</div><div style="font-size:23px; font-weight:800; color:${T.price}; letter-spacing:-.6px; margin-top:2px;">${_money(l.lineTotal)}</div></td></tr></tbody></table>${proof}</td></tr>
+    </tbody></table>`;
+  }).join('\n');
+  const totalBox = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:2px;"><tbody><tr><td style="background:${T.accSoft}; border:1px solid #d6e8c9; border-radius:12px; padding:16px 20px;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:12px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:${T.ink};">Estimated total${_star(m)}</span><div style="font-size:11px; color:${T.mut}; margin-top:2px;">All options combined</div></td><td align="right" valign="middle"><span style="font-size:24px; font-weight:800; color:${T.price};">${_money(total)}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
+  return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="padding:8px 6px;">
+    ${_wordmark()}
+    <div style="font-size:12px; letter-spacing:1.6px; text-transform:uppercase; color:${T.acc}; font-weight:700; margin-top:18px;">${_esc(groupName)}</div>
+    <div style="font-size:28px; font-weight:800; color:${T.ink}; letter-spacing:-.6px; margin:7px 0 4px;">${_esc(optionName)}</div>
+    <div style="font-size:13px; color:${T.mut}; margin:0 0 22px;">${lines.length} option${lines.length === 1 ? '' : 's'} &middot; priced individually</div>
+    ${_msgBlock(m) ? _msgBlock(m) + '<div style="height:18px; line-height:18px; font-size:0;">&nbsp;</div>' : ''}
+    ${cards}${totalBox}${_expLine(m)}${_discLine(m)}${show.cta ? _ctaBar('View these options') : ''}${_foot()}
+  </td></tr></tbody></table>`;
+}
+
 export const PROPOSAL_TEMPLATES = [
   { id: 'classic', name: 'Classic', sub: 'Formal letter · imprint previews', accent: '#339900', build: tplClassic },
   { id: 'minimal', name: 'Minimal', sub: 'Editorial · borderless', accent: '#339900', build: tplMinimal },
   { id: 'catalog', name: 'Catalog cards', sub: 'Header band · preview per card', accent: '#339900', build: tplCatalog },
   { id: 'quote', name: 'Quote', sub: 'Total panel · imprint previews', accent: '#339900', build: tplQuote },
   { id: 'lookbook', name: 'Lookbook', sub: 'Image-top · preview under each', accent: '#339900', build: tplLookbook },
+  { id: 'separated', name: 'Separated', sub: 'Detached option cards · per-price', accent: '#339900', build: tplSeparated },
 ];
 const tplById = (id) => PROPOSAL_TEMPLATES.find((t) => t.id === id) || PROPOSAL_TEMPLATES[0];
 
@@ -230,6 +258,16 @@ function TemplateThumb({ id, accent }) {
   if (id === 'catalog') return <div style={{ ...wrap, padding: 0 }}><div style={{ ...bar('100%', accent, 9), borderRadius: '3px 3px 0 0' }} /><div style={{ padding: 4, display: 'flex', flexDirection: 'column', gap: 3 }}><div style={{ display: 'flex', gap: 2, alignItems: 'center', border: `1px solid ${G}`, borderRadius: 2, padding: 1 }}><div style={bar(7, G, 7)} /><div style={bar(14, '#e3e6ea', 2)} /><div style={{ ...bar(6, accent, 4), marginLeft: 'auto' }} /></div><div style={{ display: 'flex', gap: 2, alignItems: 'center', border: `1px solid ${G}`, borderRadius: 2, padding: 1 }}><div style={bar(7, G, 7)} /><div style={bar(14, '#e3e6ea', 2)} /><div style={{ ...bar(6, accent, 4), marginLeft: 'auto' }} /></div></div></div>;
   if (id === 'quote') return <div style={{ ...wrap, gap: 3 }}><div style={{ ...bar('100%', accent, 14), borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 2, boxSizing: 'border-box' }}><div style={bar(11, 'rgba(255,255,255,.8)', 6)} /></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 1 }}><div style={bar(18, '#e3e6ea', 2)} /><div style={bar(7, '#ff6600', 2)} /></div><div style={{ display: 'flex', justifyContent: 'space-between' }}><div style={bar(16, '#e3e6ea', 2)} /><div style={bar(7, '#ff6600', 2)} /></div></div>;
   if (id === 'lookbook') return <div style={{ ...wrap, alignItems: 'center', gap: 2 }}><div style={{ width: 9, height: 2, background: accent, borderRadius: 1, marginTop: 1 }} /><div style={{ width: '100%', border: `1px solid ${G}`, borderRadius: 2, padding: 2, display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'center', boxSizing: 'border-box' }}><div style={bar(16, G, 9)} /><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><div style={bar(12, '#e3e6ea', 2)} /><div style={bar(6, '#ff6600', 2)} /></div></div><div style={{ ...bar('100%', accent, 3), marginTop: 'auto' }} /></div>;
+  if (id === 'separated') return <div style={{ ...wrap, gap: 3, justifyContent: 'center' }}>
+    <div style={{ width: '100%', border: `1px solid ${G}`, borderRadius: 2, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#eef3ea', padding: '1px 2px' }}><div style={bar(6, accent, 2)} /><div style={bar(4, G, 2)} /></div>
+      <div style={{ display: 'flex', gap: 2, alignItems: 'center', padding: 2 }}><div style={bar(7, G, 7)} /><div style={bar(12, '#e3e6ea', 2)} /><div style={{ ...bar(7, '#ff6600', 4), marginLeft: 'auto' }} /></div>
+    </div>
+    <div style={{ width: '100%', border: `1px solid ${G}`, borderRadius: 2, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#eef3ea', padding: '1px 2px' }}><div style={bar(6, accent, 2)} /><div style={bar(4, G, 2)} /></div>
+      <div style={{ display: 'flex', gap: 2, alignItems: 'center', padding: 2 }}><div style={bar(7, G, 7)} /><div style={bar(12, '#e3e6ea', 2)} /><div style={{ ...bar(7, '#ff6600', 4), marginLeft: 'auto' }} /></div>
+    </div>
+  </div>;
   return <div style={{ ...wrap, gap: 3 }}><div style={bar(8, accent, 2)} /><div style={bar(24, '#2b2f36', 4)} /><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}><div style={bar(20, '#e3e6ea', 2)} /><div style={bar(8, accent, 2)} /></div><div style={{ display: 'flex', justifyContent: 'space-between' }}><div style={bar(18, '#e3e6ea', 2)} /><div style={bar(8, '#e3e6ea', 2)} /></div><div style={{ ...bar('100%', '#2b2f36', 5), marginTop: 'auto' }} /></div>;
 }
 
@@ -446,14 +484,14 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
 
             <ConfigGroup title="Display options">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                <OptionToggle checked={show.images} label="Product images" onClick={() => toggle('images')} />
+                <OptionToggle checked={show.images} label="Product images" hint="Show a photo for each line item" onClick={() => toggle('images')} />
                 <OptionToggle checked={show.previews} label="Imprint previews" hint={busy ? `Rendering 3D previews ${prog.n}/${prog.t || '…'}` : 'Show how each logo / personalization is applied'} onClick={() => toggle('previews')} />
-                <OptionToggle checked={show.cost} label="Unit cost / qty detail" onClick={() => toggle('cost')} />
+                <OptionToggle checked={show.cost} label="Unit cost / qty detail" hint="Show per-unit price beside each line" onClick={() => toggle('cost')} />
                 <OptionToggle checked={show.total} label="Estimated total" hint="Uncheck to hide the subtotal" onClick={() => toggle('total')} />
-                <OptionToggle checked={show.expiration} label="Expiration date" onClick={() => toggle('expiration')} />
-                <OptionToggle checked={show.disclaimer} label="Shipping &amp; tax disclaimer" onClick={() => toggle('disclaimer')} />
+                <OptionToggle checked={show.expiration} label="Expiration date" hint="Date the proposal is valid through" onClick={() => toggle('expiration')} />
+                <OptionToggle checked={show.disclaimer} label="Shipping &amp; tax disclaimer" hint="Note that shipping &amp; tax are added in cart" onClick={() => toggle('disclaimer')} />
                 <OptionToggle checked={show.cta} label="“View this option” button" hint="Links to the cart — added server-side" onClick={() => toggle('cta')} />
-                <OptionToggle checked={show.message} label="Show personal message" onClick={() => toggle('message')} />
+                <OptionToggle checked={show.message} label="Show personal message" hint="Include your note above the items" onClick={() => toggle('message')} />
               </div>
             </ConfigGroup>
           </div>
