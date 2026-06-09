@@ -94,7 +94,12 @@ function remapTextColor(v, isDark) {
    dark-on-green. */
 function bgKept(v) {
   if (!v) return false;
-  const c = parseColor(v); if (!c) return false;
+  const s = String(v).trim();
+  // A translucent TINT (low alpha) isn't a designed-for solid panel — let the
+  // text inside it re-theme normally (so a faint green card still reads on dark).
+  const am = s.match(/rgba?\([^)]*,\s*([\d.]+)\s*\)\s*$/i);
+  if (am && parseFloat(am[1]) < 0.6) return false;
+  const c = parseColor(s); if (!c) return false;
   const { lum, chroma } = lumChroma(c);
   return chroma > 40 || lum < 0.5;
 }

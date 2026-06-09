@@ -55,9 +55,14 @@ function _chip(imp, size, square) {
   const bd = light ? (noColor ? '#cfe3c0' : '#d6d6cf') : null;
   return `<table border="0" cellpadding="0" cellspacing="0" width="${size}" height="${size}" style="width:${size}px; height:${size}px; background:${bg}; border-radius:${square ? 0 : Math.round(size * 0.22)}px;${bd ? ` border:1px solid ${bd};` : ''}"><tbody><tr><td align="center" valign="middle" style="text-align:center; padding:4px;"><span style="font-family:${SANS}; font-size:${fs}px; font-weight:800; letter-spacing:.5px; color:${fg}; line-height:1.12;">${_esc(label).slice(0, 16)}</span></td></tr></tbody></table>`;
 }
-/* a real 3D-render tile (transparent PNG on a soft plate) */
+// Faint transparent green wash for the imprint-preview surfaces — fixed (not
+// theme-dependent) so the render reads on a green tint instead of showing the
+// dark/blue-grey theme surface through it. Low alpha → EmailHtmlView keeps it
+// but still re-themes the text inside.
+const _PREVIEW_BG = 'rgba(51, 153, 0, 0.10)';
+/* a real 3D-render tile (transparent PNG on a green wash) */
 function _renderTile(src, size, square) {
-  return `<table border="0" cellpadding="0" cellspacing="0" width="${size}" height="${size}" style="width:${size}px; height:${size}px; background:${T.card}; border:1px solid ${T.line}; border-radius:${square ? 0 : Math.round(size * 0.18)}px;"><tbody><tr><td align="center" valign="middle" height="${size}" style="text-align:center;"><img src="${_esc(src)}" width="${size - 6}" height="${size - 6}" border="0" alt="preview" style="display:inline-block; width:${size - 6}px; height:${size - 6}px;" /></td></tr></tbody></table>`;
+  return `<table border="0" cellpadding="0" cellspacing="0" width="${size}" height="${size}" style="width:${size}px; height:${size}px; background:${_PREVIEW_BG}; border:1px solid rgba(51,153,0,0.20); border-radius:${square ? 0 : Math.round(size * 0.18)}px;"><tbody><tr><td align="center" valign="middle" height="${size}" style="text-align:center;"><img src="${_esc(src)}" width="${size - 6}" height="${size - 6}" border="0" alt="preview" style="display:inline-block; width:${size - 6}px; height:${size - 6}px;" /></td></tr></tbody></table>`;
 }
 /* product photo on a soft plate */
 function _photoPlate(img, plate, square) {
@@ -90,7 +95,7 @@ function _proof(l, withPhoto, square) {
     : '';
   const photoCell = withPhoto ? `<td valign="middle" width="74" style="padding-right:14px;">${_photoPlate(l.img, 74, square)}</td>` : '';
   const visual = _proofVisual(l, imp, 56, square);
-  return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:${square ? 0 : 12}px; background:${T.plate}; margin-top:12px;"><tbody>
+  return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid rgba(51,153,0,0.18); border-radius:${square ? 0 : 12}px; background:rgba(51, 153, 0, 0.06); margin-top:12px;"><tbody>
     <tr><td style="padding:10px 14px 0;"><span style="font-family:${SANS}; font-size:9px; letter-spacing:.9px; text-transform:uppercase; color:${T.acc}; font-weight:800;">Imprint preview</span></td></tr>
     <tr><td style="padding:9px 14px 13px;"><table border="0" cellpadding="0" cellspacing="0"><tbody><tr>${photoCell}${visual}<td valign="middle"><div style="font-size:12px; line-height:1.4; font-weight:700; color:${T.ink};">${_esc(typeLabel)}</div>${colorRow}${detail}</td></tr></tbody></table></td></tr>
   </tbody></table>`;
