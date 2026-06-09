@@ -23,6 +23,13 @@ const lineGiftImg = (line) => {
   const p = line.product || {};
   return giftSetPreviewUrl(gs, { decoration: line.decoration, sleeveImage: p.giftSetSleeveImage, brand: p.brand }) || gs.thumbnail || null;
 };
+/* A gift-set line's display identity is the SET, not the bare ball — so the
+   saved-card list, margin table, and email all read "6-Ball … Gift Set" instead
+   of "a dozen balls". Null when the line isn't a gift set. */
+const lineGiftTitle = (line) => {
+  const gs = line && line.decoration && line.decoration.giftSet;
+  return gs ? (gs.name || 'Gift set') : null;
+};
 
 /* ───────────────────────────────────────────────────────────────
    GiftCatalog — Corporate Gifting Catalog modal.
@@ -1171,10 +1178,10 @@ function MarginLineRow({ e, first }) {
   return (
     <div style={{ padding: '9px 12px', borderTop: first ? 'none' : '1px solid var(--gb-border-subtle)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <MiniThumb src={e.product.img} size={36} />
+        <MiniThumb src={lineGiftImg(e) || e.product.img} size={36} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{e.product.brand}</div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.product.title}</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lineGiftTitle(e) || e.product.title}</div>
         </div>
         <span style={{ width: 50, textAlign: 'right', fontSize: 11.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-secondary)' }}>{e.units}</span>
         <span style={{ width: 80, textAlign: 'right', fontSize: 12.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)' }}>{money(e.lineRev)}</span>
@@ -1408,7 +1415,7 @@ function ThumbStack({ entries, max = 4, size = 44 }) {
     <div style={{ display: 'flex', alignItems: 'center' }}>
       {shown.map((e, i) => (
         <div key={i} style={{ marginLeft: i ? -13 : 0, zIndex: shown.length - i, width: size, height: size, flexShrink: 0, background: '#f4f4f1', borderRadius: 'var(--gb-r-md)', overflow: 'hidden', border: '1px solid var(--gb-border-default)', boxShadow: '0 0 0 2px var(--gb-surface-modal), 0 1px 5px rgba(0,0,0,.18)' }}>
-          {e.product.img && <img src={e.product.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 5, boxSizing: 'border-box' }} />}
+          {(lineGiftImg(e) || e.product.img) && <img src={lineGiftImg(e) || e.product.img} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', padding: 5, boxSizing: 'border-box' }} />}
         </div>
       ))}
       {extra > 0 && (
@@ -1434,7 +1441,7 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelet
     return () => ro.disconnect();
   }, [item.id, colW, onMeasure]);
   const r = useMemo(() => resolveSavedEntry(item), [item]);
-  const lines = r.entries.map((e) => ({ qty: e.splits.reduce((a, x) => a + (x.qty || 0), 0), title: (e.product.title || e.product.brand || 'Item') }));
+  const lines = r.entries.map((e) => ({ qty: e.splits.reduce((a, x) => a + (x.qty || 0), 0), title: (lineGiftTitle(e) || e.product.title || e.product.brand || 'Item') }));
   const shownLines = lines.slice(0, 3);
   return (
     <motion.div ref={cardRef}
@@ -2457,15 +2464,20 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     const rows = []; let total = 0;
     for (const l of (lines || [])) {
       const p = l.product || {};
-      const sub = (l.variant && l.variant.values && l.variant.values.style) || '';
+      const gs = l.decoration && l.decoration.giftSet;
+      // A gift-set line is identified by the SET (name + size + the ball it wraps)
+      // and shows the boxed gift-set render — not the bare ball.
+      const title = gs ? (gs.name || 'Gift set') : (p.title || '');
+      const subtitle = gs ? [giftSetSizeLabel(gs), p.title].filter(Boolean).join(' · ') : ((l.variant && l.variant.values && l.variant.values.style) || '');
+      const img = (gs ? lineGiftImg(l) : null) || p.img || '';
       const imprint = lineImprint(l.decoration);
       for (const s of (l.splits || [])) {
         const qty = s.qty || 0, unitPrice = s.price || 0, lineTotal = Math.round(qty * unitPrice * 100) / 100;
         total += lineTotal;
         // `lineId` lets the email composer attach 3D snapshot previews back to the
         // right rows (one line can span multiple split rows). `imprint` drives the
-        // proof card's spec line.
-        rows.push({ lineId: l.id, brand: (p.brand && p.brand !== 'Custom') ? p.brand : '', title: p.title || '', subtitle: sub, img: p.img || '', qty, unitPrice, lineTotal, imprint });
+        // preview card's spec line.
+        rows.push({ lineId: l.id, brand: (p.brand && p.brand !== 'Custom') ? p.brand : '', title, subtitle, img, qty, unitPrice, lineTotal, imprint });
       }
     }
     // `rawLines` carries the product + decoration so the composer can render the
