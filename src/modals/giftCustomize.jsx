@@ -1104,6 +1104,50 @@ async function extractTextDecal(lines, font, color, mfs) {
   out.getContext('2d').drawImage(crop, (SIZE - dw) / 2, (SIZE - dh) / 2, dw, dh);
   return out.toDataURL('image/png');
 }
+/* ── Non-hook resolvers (for off-screen proposal snapshots) ──────────────────
+   The proposal-email "generate previews" feature renders each line's 3D model
+   off-screen and snapshots it. These mirror what LivePreview3D + useDecalUrl do,
+   but as plain async functions driven by a stored proposal line (product +
+   decoration) instead of the live editor context. */
+
+/* Which 3D model a product uses. */
+export function shapeForProduct(p) {
+  if (isPokerChipProduct(p)) return 'chip';
+  if (isBartenderProduct(p)) return 'bartender';
+  if (isDivotProduct(p)) return 'divot';
+  if (isBallMarkerProduct(p)) return 'marker';
+  return 'ball';
+}
+/* Body tint for the model (ball colorway; metal tools + chip have none here). */
+export function tintForProduct(p, shape) {
+  if (shape === 'ball') return ballTitleTint(p && p.title);
+  return undefined;
+}
+const _toHex = (c) => (typeof c === 'string' && c.startsWith('#')) ? c : _hexOf(c);
+/* Resolve one imprint chip (from giftImprints.decoImprints) → a decal data URL,
+   reusing the same renderers the live editor uses. Returns null when there's
+   nothing to draw yet. */
+export async function imprintToDecalUrl(chip) {
+  if (!chip) return null;
+  try {
+    if (chip.kind === 'logo') return chip.image || chip._localImageDataUrl || (chip.logo && (chip.logo.dataUrl || chip.logo.preview)) || null;
+    if (chip.kind === 'text') {
+      const lines = (chip.lines || []).map((l) => String(l || '').trim()).filter(Boolean);
+      if (!lines.length) return null;
+      return await extractTextDecal(lines, chip.font || 'Kabel Dm BT', _toHex(chip.color), SIZE_TO_MFS.Standard);
+    }
+    if (chip.kind === 'monogram') {
+      const letters = String(chip.text || '').toUpperCase().replace(/[^A-Z]/g, '').split('');
+      if (!letters.length || !chip.view) return null;
+      const masks = await getMonoMasks(chip.view, letters);
+      const c1 = _toHex(chip.color);
+      const c2 = (chip.color2 && chip.color2 !== 'Transparent') ? _toHex(chip.color2) : null;
+      return composeMonoDecal(masks, c1, c2);
+    }
+  } catch (e) { return null; }
+  return null;
+}
+
 /* Hook: given the active print-type snapshot, return the decal URL the viewer
    should render. Personalized / uploads are local and resolve synchronously.
    Monogram + Icons are fetched cross-origin (via the background proxy):

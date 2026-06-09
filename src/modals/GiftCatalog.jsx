@@ -2442,10 +2442,14 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
       for (const s of (l.splits || [])) {
         const qty = s.qty || 0, unitPrice = s.price || 0, lineTotal = Math.round(qty * unitPrice * 100) / 100;
         total += lineTotal;
-        rows.push({ brand: (p.brand && p.brand !== 'Custom') ? p.brand : '', title: p.title || '', subtitle: sub, img: p.img || '', qty, unitPrice, lineTotal });
+        // `lineId` lets the email composer attach 3D snapshot previews back to the
+        // right rows (one line can span multiple split rows).
+        rows.push({ lineId: l.id, brand: (p.brand && p.brand !== 'Custom') ? p.brand : '', title: p.title || '', subtitle: sub, img: p.img || '', qty, unitPrice, lineTotal });
       }
     }
-    return { groupName: 'Your Custom Order', optionName: name || 'Option 1', lines: rows, total: Math.round(total * 100) / 100 };
+    // `rawLines` carries the product + decoration so the composer can render the
+    // personalization snapshots; `lines` stays the flat display rows.
+    return { groupName: 'Your Custom Order', optionName: name || 'Option 1', lines: rows, rawLines: lines || [], total: Math.round(total * 100) / 100 };
   };
   const openProposalEmail = (lines, name) => { if (lines && lines.length) setEmailSource(proposalToEmailSource(lines, name)); };
 

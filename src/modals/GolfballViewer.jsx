@@ -370,7 +370,7 @@ function captureModelSnapshot({ THREE, RoomEnvironment, renderer, scene, camera,
   return dataUrl;
 }
 
-export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, secondDecalDataUrl, onError, onSceneChange, onThrowChange, minimal = false, initialScale, autoRotate = false, shape = 'ball', tint, chipTint, giftSet }, ref) {
+export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, secondDecalDataUrl, onError, onReady, onSceneChange, onThrowChange, minimal = false, initialScale, autoRotate = false, shape = 'ball', tint, chipTint, giftSet }, ref) {
   const containerRef = useRef(null);
   // Imperative snapshot handle — set by the WebGL effect once the
   // scene is ready. Parent calls snapshotRef.current() to capture a
@@ -512,6 +512,11 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   // exactly how the snapshot will frame (read each frame in the render loops).
   const snapPreviewRef = useRef(false);
   snapPreviewRef.current = !!dev['golfballViewer.snapPreview'];
+  // Fired once per build when the scene + decals are assembled (before the
+  // loading splash lingers) — lets the off-screen snapshot harness know it can
+  // capture. Held in a ref so the build effect always sees the latest callback.
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
   const initialBallRef = useRef(null);
   if (!initialBallRef.current) {
     const deg = (k, fallback) => (Number(dev[k] ?? fallback) * Math.PI) / 180;
@@ -1582,6 +1587,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           };
 
           const gsElapsed = performance.now() - mountStart;
+          if (!disposed) { try { onReadyRef.current?.(); } catch (e) { /* */ } }
           setTimeout(() => { if (!disposed) setStatus('ready'); }, Math.max(0, MIN_LOADING_MS - gsElapsed));
           return;
         }
@@ -4051,6 +4057,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         // reveals a settled scene instead of a teleporting model.
         const elapsed = performance.now() - mountStart;
         const remaining = Math.max(0, MIN_LOADING_MS - elapsed);
+        if (!disposed) { try { onReadyRef.current?.(); } catch (e) { /* */ } }
         setTimeout(() => { if (!disposed) setStatus('ready'); }, remaining);
       } catch (e) {
         console.error('[GolfballViewer] load failed', e);

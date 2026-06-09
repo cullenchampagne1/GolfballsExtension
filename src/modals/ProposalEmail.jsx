@@ -1,7 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Btn, IconBtn } from '../ui/index.js';
 import { I } from '../ui/icons.jsx';
+import { GolfballViewer } from './GolfballViewer.jsx';
+import { linesToShots } from '../lib/proposalSnapshots.js';
 
 /* ─────────────────────────────────────────────────────────────
    Proposal HTML composer — generate customer-facing proposal HTML
@@ -15,6 +17,28 @@ const _esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/<
 const _money = (n) => '$' + (n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const _brandLine = (l, color) => l.brand ? `<div style="font-size: 11px; letter-spacing: .6px; text-transform: uppercase; color: ${color};">${_esc(l.brand)}</div>` : '';
 
+/* The 3D personalization snapshot strip for a line — one card per pole (a
+   dual-pole line shows Front + Reverse). Returns '' when the line has no
+   rendered previews. Themed per template via opts (card bg/border + caption
+   color + size + align). The snapshot PNGs are square + transparent, so they sit
+   cleanly on the card. */
+function _previewStrip(l, opt = {}) {
+  const imgs = (l && l.previews) || [];
+  if (!imgs.length) return '';
+  const size = opt.size || 120;
+  const bg = opt.bg || '#f5f6f4';
+  const border = opt.border || '#e3e5e1';
+  const labelColor = opt.label || '#9aa0a6';
+  const align = opt.align || 'left';
+  const cells = imgs.map((src, i) => {
+    const cap = imgs.length > 1
+      ? `<div style="font-size:9px; letter-spacing:.6px; text-transform:uppercase; color:${labelColor}; font-family:Arial,sans-serif; margin-top:5px; text-align:center;">${i === 0 ? 'Front' : 'Reverse'}</div>`
+      : '';
+    return `<td valign="top" style="padding:0 10px 0 0;"><div style="width:${size}px; height:${size}px; background:${bg}; border:1px solid ${border}; border-radius:12px;"><img src="${src}" width="${size}" height="${size}" border="0" alt="3D preview" style="display:block; width:${size}px; height:${size}px;" /></div>${cap}</td>`;
+  }).join('');
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${align}" style="margin:10px 0 2px;"><tbody><tr>${cells}</tr></tbody></table>`;
+}
+
 /* ── TEMPLATE 1 — CLASSIC ── */
 function tplClassic(m) {
   const { groupName, optionName, expiration, message, lines, total, show } = m;
@@ -27,7 +51,9 @@ function tplClassic(m) {
     const img = show.images ? `<td style="padding: 12px 0;" valign="top"><img src="${_esc(l.img)}" width="140" border="0" style="border-radius: 6px;" /></td>` : '';
     const sub = l.subtitle ? `<div style="font-size: 12px; color: ${GREY}; margin-top: 3px;">${_esc(l.subtitle)}</div>` : '';
     const cost = show.cost ? `<td style="padding: 12px 0; color: #333;" valign="top">${_money(l.unitPrice)}</td>` : '';
-    return `<tr>${img}<td style="padding: 12px 0 12px ${show.images ? '12px' : '0'};" valign="top">${_brandLine(l, GREY)}<div style="font-size: 14px; color: #222; font-weight: bold;">${_esc(l.title)}</div>${sub}</td><td style="padding: 12px 0; color: #333;" valign="top">${l.qty}</td>${cost}<td style="color: ${PRICE}; font-weight: bold; padding: 12px 0;" align="right" valign="top">${_money(l.lineTotal)}</td></tr><tr><td colspan="${cols}" style="border-bottom: 1px solid #e6e6e6; padding: 0; font-size: 0; line-height: 0;">&nbsp;</td></tr>`;
+    const prev = _previewStrip(l, { bg: '#f6f6f4', border: '#dcdcd6', label: GREY });
+    const prevRow = prev ? `<tr><td colspan="${cols}" style="padding: 2px 0 10px;">${prev}</td></tr>` : '';
+    return `<tr>${img}<td style="padding: 12px 0 12px ${show.images ? '12px' : '0'};" valign="top">${_brandLine(l, GREY)}<div style="font-size: 14px; color: #222; font-weight: bold;">${_esc(l.title)}</div>${sub}</td><td style="padding: 12px 0; color: #333;" valign="top">${l.qty}</td>${cost}<td style="color: ${PRICE}; font-weight: bold; padding: 12px 0;" align="right" valign="top">${_money(l.lineTotal)}</td></tr>${prevRow}<tr><td colspan="${cols}" style="border-bottom: 1px solid #e6e6e6; padding: 0; font-size: 0; line-height: 0;">&nbsp;</td></tr>`;
   }).join('\n');
   const totalsRow = show.total ? `<tr style="font-weight: bold; font-size: 16.8px;"><td colspan="${cols - 1}" style="padding: 12px 0;" valign="top">Estimated total${show.disclaimer ? '*' : ''}</td><td style="color: ${PRICE}; font-weight: bold; padding: 12px 0;" align="right" valign="top">${_money(total)}</td></tr>` : '';
   const msg = (show.message && message) ? `<p style="color: #444; font-size: 14px; line-height: 1.5; margin: 0 0 1.3em;">${_esc(message).replace(/\n/g, '<br/>')}</p>` : '';
@@ -53,7 +79,9 @@ function tplMinimal(m) {
     const img = show.images ? `<td width="68" valign="middle" style="padding:14px 14px 14px 0;"><img src="${_esc(l.img)}" width="56" border="0" style="border-radius:6px; display:block;" /></td>` : '';
     const sub = l.subtitle ? `<div style="font-size:12px; color:${MUT}; margin-top:3px;">${_esc(l.subtitle)}</div>` : '';
     const qtyLine = show.cost ? `${l.qty} &times; ${_money(l.unitPrice)}` : `Qty ${l.qty}`;
-    return `<tr style="border-top:1px solid ${LINE};">${img}<td valign="middle" style="padding:14px 0;">${_brandLine(l, MUT)}<div style="font-size:15px; color:${INK}; font-weight:600;">${_esc(l.title)}</div>${sub}</td><td valign="middle" align="right" style="padding:14px 0;"><div style="font-size:11px; color:${MUT};">${qtyLine}</div><div style="font-size:16px; color:${PRICE}; font-weight:700; margin-top:3px;">${_money(l.lineTotal)}</div></td></tr>`;
+    const prev = _previewStrip(l, { bg: '#f4f6f2', border: '#e2e7dc', label: MUT });
+    const prevRow = prev ? `<tr><td colspan="${show.images ? 3 : 2}" style="padding:0 0 14px;">${prev}</td></tr>` : '';
+    return `<tr style="border-top:1px solid ${LINE};">${img}<td valign="middle" style="padding:14px 0;">${_brandLine(l, MUT)}<div style="font-size:15px; color:${INK}; font-weight:600;">${_esc(l.title)}</div>${sub}</td><td valign="middle" align="right" style="padding:14px 0;"><div style="font-size:11px; color:${MUT};">${qtyLine}</div><div style="font-size:16px; color:${PRICE}; font-weight:700; margin-top:3px;">${_money(l.lineTotal)}</div></td></tr>${prevRow}`;
   }).join('\n');
   const totalsRow = show.total ? `<tr style="border-top:2px solid ${ACC};"><td colspan="${show.images ? 2 : 1}" valign="middle" style="padding:16px 0;"><span style="font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:${MUT};">Estimated total${show.disclaimer ? '*' : ''}</span></td><td align="right" valign="middle" style="padding:16px 0;"><span style="font-size:24px; font-weight:800; color:${PRICE}; letter-spacing:-.5px;">${_money(total)}</span></td></tr>` : '';
   const exp = show.expiration ? `<p style="font-size:13px; color:${MUT}; margin:18px 0 0;">Valid through <strong style="color:${INK};">${_esc(expiration)}</strong></p>` : '';
@@ -78,7 +106,9 @@ function tplCatalog(m) {
     const img = show.images ? `<td width="120" valign="top" style="padding:14px;"><img src="${_esc(l.img)}" width="104" border="0" style="border-radius:8px; display:block;" /></td>` : '';
     const sub = l.subtitle ? `<div style="font-size:12px; color:${MUT}; margin-top:4px;">${_esc(l.subtitle)}</div>` : '';
     const qtyLine = show.cost ? `Qty ${l.qty} &nbsp;·&nbsp; ${_money(l.unitPrice)} ea` : `Qty ${l.qty}`;
-    return `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:12px;"><tbody><tr>${img}<td valign="middle" style="padding:14px ${show.images ? '0' : '16px'};">${_brandLine(l, ACC)}<div style="font-size:16px; color:${INK}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${MUT}; margin-top:7px;">${qtyLine}</div></td><td width="118" valign="middle" align="right" style="padding:14px 16px;"><span style="display:inline-block; background:${PRICE_BG}; color:${PRICE}; font-size:15px; font-weight:800; padding:7px 12px; border-radius:7px;">${_money(l.lineTotal)}</span></td></tr></tbody></table>`;
+    const prev = _previewStrip(l, { bg: '#f3f7ef', border: '#dcebd1', label: MUT });
+    const prevRow = prev ? `<tr><td colspan="3" style="padding:0 16px 14px;">${prev}</td></tr>` : '';
+    return `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:12px;"><tbody><tr>${img}<td valign="middle" style="padding:14px ${show.images ? '0' : '16px'};">${_brandLine(l, ACC)}<div style="font-size:16px; color:${INK}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${MUT}; margin-top:7px;">${qtyLine}</div></td><td width="118" valign="middle" align="right" style="padding:14px 16px;"><span style="display:inline-block; background:${PRICE_BG}; color:${PRICE}; font-size:15px; font-weight:800; padding:7px 12px; border-radius:7px;">${_money(l.lineTotal)}</span></td></tr>${prevRow}</tbody></table>`;
   }).join('\n');
   const totalBox = show.total ? `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; margin-top:4px;"><tbody><tr><td style="background:${ACC_BG}; border-left:4px solid ${ACC}; border-radius:6px; padding:14px 16px;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:13px; font-weight:700; color:${INK};">Estimated total${show.disclaimer ? '*' : ''}</span></td><td align="right" valign="middle"><span style="font-size:22px; font-weight:800; color:${PRICE};">${_money(total)}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
   const exp = show.expiration ? `<p style="font-size:13px; color:${MUT}; margin:16px 0 0;" align="right">This proposal expires on <strong style="color:${INK};">${_esc(expiration)}</strong></p>` : '';
@@ -107,7 +137,9 @@ function tplQuote(m) {
   const rows = lines.map((l) => {
     const sub = l.subtitle ? `<div style="font-size:12px; color:${MUT}; margin-top:3px;">${_esc(l.subtitle)}</div>` : '';
     const cost = show.cost ? `<td valign="middle" align="right" style="padding:13px 0; font-size:13px; color:${INK};">${_money(l.unitPrice)}</td>` : '';
-    return `<tr><td valign="middle" style="padding:13px 0;">${_brandLine(l, MUT)}<div style="font-size:14px; color:${INK}; font-weight:700;">${_esc(l.title)}</div>${sub}</td><td valign="middle" style="padding:13px 0; font-size:13px; color:${INK};">${l.qty}</td>${cost}<td valign="middle" align="right" style="padding:13px 0; font-size:14px; font-weight:800; color:${PRICE};">${_money(l.lineTotal)}</td></tr><tr><td colspan="${cols}" style="border-bottom:1px solid ${LINE}; font-size:0; line-height:0;">&nbsp;</td></tr>`;
+    const prev = _previewStrip(l, { bg: '#f4f7f1', border: '#e1e8da', label: MUT });
+    const prevRow = prev ? `<tr><td colspan="${cols}" style="padding:0 0 12px;">${prev}</td></tr>` : '';
+    return `<tr><td valign="middle" style="padding:13px 0;">${_brandLine(l, MUT)}<div style="font-size:14px; color:${INK}; font-weight:700;">${_esc(l.title)}</div>${sub}</td><td valign="middle" style="padding:13px 0; font-size:13px; color:${INK};">${l.qty}</td>${cost}<td valign="middle" align="right" style="padding:13px 0; font-size:14px; font-weight:800; color:${PRICE};">${_money(l.lineTotal)}</td></tr>${prevRow}<tr><td colspan="${cols}" style="border-bottom:1px solid ${LINE}; font-size:0; line-height:0;">&nbsp;</td></tr>`;
   }).join('\n');
   const disc = show.disclaimer ? `<p style="font-style:italic; color:#9ca3af; font-size:12px; margin:14px 0 0;">*shipping and sales tax are calculated in the shopping cart</p>` : '';
   const cta = show.cta ? `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; margin-top:22px;"><tbody><tr><td><a href="{{CART_LINK}}" style="display:block; text-align:center; background:${ACC}; color:#fff; text-decoration:none; font-size:15px; font-weight:700; padding:15px; border-radius:8px;">Approve &amp; view in cart &rsaquo;</a></td></tr></tbody></table>` : '';
@@ -129,7 +161,9 @@ function tplLookbook(m) {
     const imgRow = show.images ? `<tr><td align="center" style="padding:18px 18px 4px;"><img src="${_esc(l.img)}" width="220" border="0" style="border-radius:8px; display:block; margin:0 auto;" /></td></tr>` : '';
     const sub = l.subtitle ? `<div style="font-size:12px; color:${MUT}; margin-top:4px;">${_esc(l.subtitle)}</div>` : '';
     const qtyLine = show.cost ? `Qty ${l.qty} &nbsp;·&nbsp; ${_money(l.unitPrice)} ea` : `Qty ${l.qty}`;
-    return `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:14px;"><tbody>${imgRow}<tr><td style="padding:${show.images ? '6px' : '16px'} 18px 16px;"><table width="100%"><tbody><tr><td valign="middle">${_brandLine(l, ACC)}<div style="font-size:17px; color:${INK}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${MUT}; margin-top:6px;">${qtyLine}</div></td><td valign="middle" align="right" width="96"><span style="font-size:19px; font-weight:800; color:${PRICE};">${_money(l.lineTotal)}</span></td></tr></tbody></table></td></tr></tbody></table>`;
+    const prev = _previewStrip(l, { bg: '#f4f7f1', border: '#e1e8da', label: MUT, align: 'center', size: 132 });
+    const prevRow = prev ? `<tr><td align="center" style="padding:0 18px 16px;">${prev}</td></tr>` : '';
+    return `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:14px;"><tbody>${imgRow}<tr><td style="padding:${show.images ? '6px' : '16px'} 18px 16px;"><table width="100%"><tbody><tr><td valign="middle">${_brandLine(l, ACC)}<div style="font-size:17px; color:${INK}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${MUT}; margin-top:6px;">${qtyLine}</div></td><td valign="middle" align="right" width="96"><span style="font-size:19px; font-weight:800; color:${PRICE};">${_money(l.lineTotal)}</span></td></tr></tbody></table></td></tr>${prevRow}</tbody></table>`;
   }).join('\n');
   const totalBox = show.total ? `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT};"><tbody><tr><td style="border-top:2px solid ${ACC}; padding:16px 2px 0;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:12px; letter-spacing:.6px; text-transform:uppercase; color:${MUT}; font-weight:700;">Estimated total${show.disclaimer ? '*' : ''}</span></td><td align="right" valign="middle"><span style="font-size:25px; font-weight:800; color:${PRICE};">${_money(total)}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
   const exp = show.expiration ? `<p style="font-size:13px; color:${MUT}; margin:14px 0 0; text-align:center;">This proposal expires on <strong style="color:${INK};">${_esc(expiration)}</strong></p>` : '';
@@ -226,6 +260,41 @@ function OptionToggle({ checked, label, hint, onClick }) {
 /* ════════════════════════════════════════════════════════════
    THE COMPOSER MODAL — settings · live preview · copy
 ════════════════════════════════════════════════════════════ */
+/* Off-screen snapshot harness — renders each shot's 3D model in a hidden viewer,
+   one at a time (sequential → only one WebGL context alive), and snapshots it on
+   ready. The viewer's own framing is irrelevant: snapshot() uses the fixed
+   per-model dev pose + scene-3 HDRI. Calls onProgress as it goes and onDone with
+   [{...shot, image}] when finished. */
+function SnapshotRenderer({ shots, size = 640, onProgress, onDone }) {
+  const [i, setI] = useState(0);
+  const viewerRef = useRef(null);
+  const results = useRef([]);
+  const finished = useRef(false);
+  const shot = shots[i];
+  const capture = () => {
+    // One frame after ready so the decal projection has painted.
+    setTimeout(() => {
+      let image = null;
+      try { image = viewerRef.current?.snapshot?.(size) || null; } catch (e) { /* */ }
+      results.current.push({ ...shot, image });
+      onProgress && onProgress(results.current.length, shots.length);
+      if (i + 1 < shots.length) setI(i + 1);
+      else if (!finished.current) { finished.current = true; onDone(results.current); }
+    }, 90);
+  };
+  if (!shot) return null;
+  return (
+    <div aria-hidden style={{ position: 'fixed', left: -99999, top: 0, width: 560, height: 560, opacity: 0, pointerEvents: 'none', zIndex: -1 }}>
+      <div style={{ position: 'relative', width: 560, height: 560 }}>
+        <GolfballViewer key={shot.key} ref={viewerRef} minimal
+          shape={shot.shape} tint={shot.tint} chipTint={shot.chipTint} giftSet={shot.giftSet}
+          decalDataUrl={shot.decalDataUrl} secondDecalDataUrl={shot.secondDecalDataUrl}
+          onReady={capture} onError={capture} />
+      </div>
+    </div>
+  );
+}
+
 /* The embeddable composer — settings rail | live preview + a copy footer. Fills
    its parent (no modal shell / header of its own) so it drops straight into the
    saved-proposal breakdown panel in place of the margin view, or sits inside the
@@ -237,12 +306,47 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
   const [message, setMessage] = useState('');
   const [expiration, setExpiration] = useState(() => { const d = new Date(); d.setDate(d.getDate() + 14); return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`; });
   const [templateId, setTemplateId] = useState('classic');
-  const [show, setShow] = useState({ images: true, cost: true, total: true, expiration: true, disclaimer: true, cta: true, message: false });
+  const [show, setShow] = useState({ images: true, previews: false, cost: true, total: true, expiration: true, disclaimer: true, cta: true, message: false });
   const [copied, setCopied] = useState(false);
+
+  // ── 3D personalization previews ──────────────────────────────────────────
+  // When the toggle turns on we (1) resolve each line's decoration into shot
+  // specs, (2) render them off-screen via SnapshotRenderer, (3) cache the images
+  // per line. Cached after the first run so re-toggling is instant.
+  const [shots, setShots] = useState(null);                 // specs queued for the renderer
+  const [previewsByLine, setPreviewsByLine] = useState(null); // lineId → [dataUrl]; null until rendered
+  const [busy, setBusy] = useState(false);
+  const [prog, setProg] = useState({ n: 0, t: 0 });
+  useEffect(() => {
+    if (!show.previews || previewsByLine || busy) return;
+    let cancelled = false;
+    setBusy(true); setProg({ n: 0, t: 0 });
+    linesToShots(source.rawLines || []).then((s) => {
+      if (cancelled) return;
+      if (!s.length) { setPreviewsByLine({}); setBusy(false); return; }
+      setProg({ n: 0, t: s.length });
+      setShots(s);   // mounts SnapshotRenderer
+    }).catch(() => { if (!cancelled) { setPreviewsByLine({}); setBusy(false); } });
+    return () => { cancelled = true; };
+  }, [show.previews, previewsByLine, busy, source.rawLines]);
+  const onShotsDone = (res) => {
+    const byLine = {};
+    for (const r of res) { if (!r.image) continue; (byLine[r.lineId] = byLine[r.lineId] || []).push(r.image); }
+    setPreviewsByLine(byLine);
+    setShots(null);   // unmount renderer
+    setBusy(false);
+  };
+  const previewsReady = show.previews && !busy && !!previewsByLine;
 
   const toggle = (k) => setShow((s) => ({ ...s, [k]: !s[k] }));
   const tpl = tplById(templateId);
-  const model = useMemo(() => ({ groupName, optionName, expiration, message, lines: source.lines, total: source.total, show }), [groupName, optionName, expiration, message, source.lines, source.total, show]);
+  // Attach rendered previews to the display rows (matched by lineId) so the
+  // templates can render them; null when previews are off / still rendering.
+  const modelLines = useMemo(
+    () => source.lines.map((r) => ({ ...r, previews: previewsReady ? (previewsByLine[r.lineId] || []) : null })),
+    [source.lines, previewsReady, previewsByLine],
+  );
+  const model = useMemo(() => ({ groupName, optionName, expiration, message, lines: modelLines, total: source.total, show }), [groupName, optionName, expiration, message, modelLines, source.total, show]);
   const emailHtml = useMemo(() => tpl.build(model), [tpl, model]);
   const doc = useMemo(() => previewDocument(emailHtml), [emailHtml]);
 
@@ -292,6 +396,7 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
             <ConfigGroup title="Display options">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <OptionToggle checked={show.images} label="Product images" onClick={() => toggle('images')} />
+                <OptionToggle checked={show.previews} label="3D personalization previews" hint={busy ? `Rendering ${prog.n}/${prog.t || '…'}` : 'Renders each item’s logo/text on the 3D model (2 photos for dual-pole)'} onClick={() => toggle('previews')} />
                 <OptionToggle checked={show.cost} label="Unit cost / qty detail" onClick={() => toggle('cost')} />
                 <OptionToggle checked={show.total} label="Estimated total" hint="Uncheck to hide the subtotal" onClick={() => toggle('total')} />
                 <OptionToggle checked={show.expiration} label="Expiration date" onClick={() => toggle('expiration')} />
@@ -314,11 +419,24 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
               <div style={{ flex: 1 }} />
               <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>600px · HTML</span>
             </div>
-            <div style={{ flex: 1, minHeight: 0 }}>
+            <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
               <iframe title="proposal-preview" srcDoc={doc} style={{ width: '100%', height: '100%', border: 'none', background: '#eef0f2' }} />
+              {/* Catalog-style loading veil while the 3D snapshots render. */}
+              {busy && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, background: 'color-mix(in srgb, var(--gb-surface-deep) 72%, transparent)', backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)' }}>
+                  <span style={{ width: 26, height: 26, borderRadius: '50%', border: '2.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} />
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>
+                    Rendering personalization previews{prog.t ? ` — ${prog.n}/${prog.t}` : '…'}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
+        {/* Hidden 3D snapshot renderer — only mounted while a batch is in flight. */}
+        {shots && shots.length > 0 && (
+          <SnapshotRenderer shots={shots} onProgress={(n, t) => setProg({ n, t })} onDone={onShotsDone} />
+        )}
 
         {/* footer */}
         <div style={{ padding: 12, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--gb-fill-inverse-strong)', borderTop: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
