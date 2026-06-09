@@ -82,14 +82,15 @@ async function loadThreeAndModel(shape = 'ball') {
   // whichever is slowest, not the sum. cannon-es is pulled in here too so throw
   // mode has zero extra wait when toggled.
   if (!cache.three) {
-    const [THREE, { OBJLoader }, { DecalGeometry }, { EXRLoader }, CANNON] = await Promise.all([
+    const [THREE, { OBJLoader }, { DecalGeometry }, { EXRLoader }, { RoomEnvironment }, CANNON] = await Promise.all([
       import('three'),
       import('three/examples/jsm/loaders/OBJLoader.js'),
       import('three/examples/jsm/geometries/DecalGeometry.js'),
       import('three/examples/jsm/loaders/EXRLoader.js'),
+      import('three/examples/jsm/environments/RoomEnvironment.js'),
       import('cannon-es'),
     ]);
-    cache.three = { THREE, OBJLoader, DecalGeometry, EXRLoader, CANNON };
+    cache.three = { THREE, OBJLoader, DecalGeometry, EXRLoader, RoomEnvironment, CANNON };
   }
   const { OBJLoader } = cache.three;
 
@@ -281,7 +282,7 @@ function applySnapPose(ballGroup, pose, baseRot) {
    transparent square canvas at a fixed pose, restoring the live transform after.
    THREE comes from the build effect's closure. `wallMeshes` (box chrome) are
    hidden for the shot. */
-function captureModelSnapshot({ THREE, renderer, scene, camera, ballGroup, wallMeshes, pose, baseRot, size = 1024 }) {
+function captureModelSnapshot({ THREE, RoomEnvironment, renderer, scene, camera, ballGroup, wallMeshes, pose, baseRot, size = 1024 }) {
   if (!THREE || !renderer || !scene || !camera || !ballGroup) return null;
   const savedPos = ballGroup.position.clone();
   const savedScl = ballGroup.scale.clone();
@@ -304,9 +305,36 @@ function captureModelSnapshot({ THREE, renderer, scene, camera, ballGroup, wallM
   snapRenderer.setSize(size, size, false);
   snapRenderer.setClearColor(0x000000, 0);
   snapRenderer.outputColorSpace = renderer.outputColorSpace;
-  snapRenderer.toneMapping = renderer.toneMapping;
+  // Filmic tone mapping + a touch of exposure makes highlights/metal pop without
+  // clipping (the live room view leaned on the box walls for reflections, which
+  // are hidden here — so the export looked flat/dull).
+  snapRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+  snapRenderer.toneMappingExposure = 1.15;
+
+  // Studio IBL: the transparent export hides the room walls, so PBR metals had
+  // nothing to reflect (dull tees/tools) and balls caught no specular. Light it
+  // with a neutral RoomEnvironment IBL just for the shot, then restore the scene.
+  let pmrem = null, envRT = null, roomEnv = null;
+  const prevEnv = scene.environment;
+  const prevEnvInt = scene.environmentIntensity;
+  if (RoomEnvironment) {
+    try {
+      pmrem = new THREE.PMREMGenerator(snapRenderer);
+      roomEnv = new RoomEnvironment();
+      envRT = pmrem.fromScene(roomEnv, 0.04);
+      scene.environment = envRT.texture;
+      if ('environmentIntensity' in scene) scene.environmentIntensity = 1.25;
+    } catch (e) { /* fall back to the scene's own lights */ }
+  }
+
   snapRenderer.render(scene, snapCam);
   const dataUrl = snapCanvas.toDataURL('image/png');
+
+  scene.environment = prevEnv;
+  if ('environmentIntensity' in scene) scene.environmentIntensity = prevEnvInt;
+  try { envRT?.dispose(); } catch (e) { /* */ }
+  try { pmrem?.dispose(); } catch (e) { /* */ }
+  try { roomEnv?.dispose?.(); } catch (e) { /* */ }
   snapRenderer.dispose();
 
   (wallMeshes || []).forEach((m, i) => { m.visible = prevVis[i]; });
@@ -589,7 +617,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
 
     (async () => {
       try {
-        const { THREE, DecalGeometry, EXRLoader, CANNON, model } = await loadThreeAndModel(shape);
+        const { THREE, DecalGeometry, EXRLoader, RoomEnvironment, CANNON, model } = await loadThreeAndModel(shape);
         const isChip = shape === 'chip';
         // Divot + bartender are the same in the viewer: steel body + white marker
         // disc, decal projected onto the disc (located from the mask).
@@ -1491,7 +1519,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           // walls hidden, transparent background. Independent of the live
           // viewport so every export of this gift set frames identically.
           snapshotRef.current = (size = 1024) => captureModelSnapshot({
-            THREE, renderer, scene, camera, ballGroup, wallMeshes,
+            THREE, RoomEnvironment, renderer, scene, camera, ballGroup, wallMeshes,
             pose: snapPoseFromDev(devRef.current, gsSnapKey, 1),
             baseRot: gsBaseRot, size,
           });
@@ -1820,7 +1848,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         const ballSnapKey = snapKeyForModel(shape, giftSet);
         const ballBaseRot = ballGroup.rotation.clone();
         snapshotRef.current = (size = 1024) => captureModelSnapshot({
-          THREE, renderer, scene, camera, ballGroup, wallMeshes,
+          THREE, RoomEnvironment, renderer, scene, camera, ballGroup, wallMeshes,
           pose: snapPoseFromDev(devRef.current, ballSnapKey, 1.35),
           baseRot: ballBaseRot, size,
         });
