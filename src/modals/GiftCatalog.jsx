@@ -249,8 +249,8 @@ function CommissionDollar({ size = 16 }) {
       width: size, height: size, borderRadius: '50%',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: 'transparent',
-      border: '1px solid var(--gb-success-fg, #2e9e5b)',
-      color: 'var(--gb-success-fg, #2e9e5b)',
+      border: '1px solid var(--gb-success-fg)',
+      color: 'var(--gb-success-fg)',
       fontSize: Math.round(size * 0.64), fontWeight: 800, fontFamily: 'var(--gb-font-mono)',
       lineHeight: 1, userSelect: 'none',
     }}>$</span>
@@ -470,7 +470,7 @@ function ProductCard({ p, compact, showRating, active, inProposal, onAdd, onClic
           <span style={{ position: 'absolute', top: 7, left: 7, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .3, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-success-solid, #2e9e5b)', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>{p.promo.label}</span>
         )}
         {onSale(p) && (
-          <span style={{ position: 'absolute', top: 7, right: 7, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-danger, #e5484d)', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>Sale</span>
+          <span style={{ position: 'absolute', top: 7, right: 7, display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', fontSize: 9, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-error-fg, var(--gb-error))', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>Sale</span>
         )}
         {p.customLogo && <CommissionDollar size={compact ? 14 : 16} />}
       </div>
@@ -561,9 +561,9 @@ function InventoryPanel({ sku }) {
       {state === 'idle' && <Btn variant="secondary" size="sm" icon={<Layers size={13} />} onClick={() => load(false)}>Check inventory</Btn>}
       {state === 'loading' && <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 11.5, padding: '6px 0' }}><span style={{ width: 13, height: 13, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} /> Loading inventory…</div>}
       {state === 'error' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-danger-tint, rgba(229,72,77,.1))', border: '1px solid var(--gb-danger-tint-border, rgba(229,72,77,.28))' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-error-tint-soft)', border: '1px solid var(--gb-error-tint-border)' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, fontSize: 11, color: 'var(--gb-text-secondary)', fontWeight: 500, lineHeight: 1.4 }}>
-            <I.alert size={13} style={{ color: 'var(--gb-danger, #e5484d)', flexShrink: 0, marginTop: 1 }} />
+            <I.alert size={13} style={{ color: 'var(--gb-error-fg, var(--gb-error))', flexShrink: 0, marginTop: 1 }} />
             <span>{err}</span>
           </div>
           <Btn variant="secondary" size="sm" icon={<I.refresh size={13} />} onClick={() => load(true)} style={{ alignSelf: 'flex-start' }}>Retry</Btn>
@@ -653,7 +653,7 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) 
             <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-brand-label)', fontFamily: 'var(--gb-font-mono)' }}>{p.brand}</span>
             {(p.dept || p.cat) && <Tag tone="neutral" size="sm" icon={<CatGlyph id={p.dept || p.cat} size={12} />}>{p.dept || p.cat}</Tag>}
             {p.isCustom && <Tag tone="brand" size="sm" icon={<I.sparkle size={10} />}>Custom item</Tag>}
-            {onSale(p) && <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 'var(--gb-r-pill)', fontSize: 9.5, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-danger, #e5484d)' }}>Sale −{usd(p.orig - p.price)}</span>}
+            {onSale(p) && <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 'var(--gb-r-pill)', fontSize: 9.5, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: '#fff', background: 'var(--gb-error-fg, var(--gb-error))' }}>Sale −{usd(p.orig - p.price)}</span>}
           </div>
           <div style={{ fontSize: 17, fontWeight: 700, color: 'var(--gb-text-primary)', lineHeight: 1.25, letterSpacing: -.2 }}>{p.title}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
@@ -705,10 +705,10 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) 
             <PriceStat label={isGiftPricing ? 'Per set' : 'Per unit'} value={usd(unitPrice)} accent was={(!isGiftPricing && onSale(p)) ? usd(p.orig) : null} />
           </div>
           {hasPromo(p) && (
-            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint, rgba(46,158,91,.12))', border: '1px solid var(--gb-success-border, rgba(46,158,91,.3))' }}>
-              <TagI size={14} style={{ color: 'var(--gb-success-fg, #2e9e5b)' }} />
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint-soft)', border: '1px solid var(--gb-success-tint-border)' }}>
+              <TagI size={14} style={{ color: 'var(--gb-success-fg)' }} />
               <span style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', fontWeight: 500 }}>
-                <b style={{ color: 'var(--gb-success-fg, #2e9e5b)' }}>{p.promo.label}</b> · code <span style={{ fontFamily: 'var(--gb-font-mono)' }}>{p.promo.code}</span>
+                <b style={{ color: 'var(--gb-success-fg)' }}>{p.promo.label}</b> · code <span style={{ fontFamily: 'var(--gb-font-mono)' }}>{p.promo.code}</span>
               </span>
             </div>
           )}
@@ -1036,9 +1036,9 @@ function ProposalLine({ line, onPatchSplit, onAddSplit, onRemoveSplit, onRemove,
             return (
               <span key={chip.slot} {...tagDrag(chip)} title="Drag onto another item to copy this imprint"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 5px 2px 7px', borderRadius: 'var(--gb-r-pill)',
-                  background: second ? 'var(--gb-success-tint, rgba(46,158,91,.14))' : 'var(--gb-brand-tint-soft)',
-                  border: '1px solid ' + (second ? 'var(--gb-success-border, rgba(46,158,91,.32))' : 'var(--gb-brand-tint-border)'),
-                  color: second ? 'var(--gb-success-fg, #2e9e5b)' : 'var(--gb-brand-label)',
+                  background: second ? 'var(--gb-success-tint-soft)' : 'var(--gb-brand-tint-soft)',
+                  border: '1px solid ' + (second ? 'var(--gb-success-tint-border)' : 'var(--gb-brand-tint-border)'),
+                  color: second ? 'var(--gb-success-fg)' : 'var(--gb-brand-label)',
                   fontSize: 9.5, fontWeight: second ? 800 : 700, maxWidth: 220, overflow: 'hidden', whiteSpace: 'nowrap', cursor: 'grab' }}>
                 {chip.image
                   ? <img src={chip.image} alt="" draggable={false} style={{ width: 14, height: 14, borderRadius: 3, objectFit: chip.iconName ? 'contain' : 'cover', background: '#f4f4f1', flexShrink: 0 }} />
@@ -1171,25 +1171,31 @@ const hasRealCost = (product) => {
    ([{ product, decoration, splits:[{qty,price}] }]). Setup/decoration fees fold
    in here later (they're already in each split's price for the cart). */
 function marginReport(entries) {
-  let rev = 0, cost = 0, units = 0, real = 0;
+  let rev = 0, cost = 0, units = 0, real = 0, paidCount = 0;
   const lines = (entries || []).map((e) => {
+    const isFree = !!e.free;
     let lr = 0, lc = 0, u = 0;
-    (e.splits || []).forEach((s) => { const q = s.qty || 0, p = s.price || 0; lr += q * p; lc += q * unitCostOf(e.product, p, q); u += q; });
-    rev += lr; cost += lc; units += u;
+    (e.splits || []).forEach((s) => { const q = s.qty || 0, p = s.price || 0; lr += q * p; if (!isFree) lc += q * unitCostOf(e.product, p, q); u += q; });
+    units += u;
+    // Free promotional giveaways don't count toward revenue, cost, or margin —
+    // they're a promo, not a 0%-margin sale. They still show as a line.
+    if (isFree) return { ...e, units: u, lineRev: 0, lineCost: 0, profit: 0, margin: null, free: true, costKnown: true };
+    rev += lr; cost += lc; paidCount++;
     const known = hasRealCost(e.product);
     if (known) real++;
     return { ...e, units: u, lineRev: lr, lineCost: lc, profit: lr - lc, margin: lr ? (lr - lc) / lr : 0, costKnown: known };
   });
-  // How the cost figure was sourced: actual (all lines have synced/custom cost),
-  // assumed (none do → 40% placeholder), or mixed.
-  const costBasis = lines.length === 0 ? 'assumed' : real === lines.length ? 'actual' : real === 0 ? 'assumed' : 'mixed';
-  return { lines, units, count: lines.length, rev, cost, profit: rev - cost, margin: rev ? (rev - cost) / rev : 0, costBasis, realCount: real };
+  // How the cost figure was sourced — over PAID lines only.
+  const costBasis = paidCount === 0 ? 'assumed' : real === paidCount ? 'actual' : real === 0 ? 'assumed' : 'mixed';
+  return { lines, units, count: lines.length, rev, cost, profit: rev - cost, margin: rev ? (rev - cost) / rev : 0, costBasis, realCount: real, paidCount };
 }
 
 const marginTone = (m) => (m >= 0.45 ? 'success' : m >= 0.32 ? 'warning' : 'error');
-const TONE_FG = { success: 'var(--gb-success-fg, #2e9e5b)', warning: 'var(--gb-warning-fg, #b6830a)', error: 'var(--gb-danger, #e5484d)' };
-const TONE_BG = { success: 'var(--gb-success-tint, rgba(46,158,91,.12))', warning: 'var(--gb-warning-tint, rgba(182,131,10,.12))', error: 'var(--gb-danger-tint, rgba(229,72,77,.12))' };
-const TONE_BD = { success: 'var(--gb-success-border, rgba(46,158,91,.32))', warning: 'var(--gb-warning-border, rgba(182,131,10,.32))', error: 'var(--gb-danger-tint-border, rgba(229,72,77,.32))' };
+// Use the real design-system tokens (color-mix off the theme's status color) —
+// NOT bare rgba, which renders muddy/dark on the dark themes.
+const TONE_FG = { success: 'var(--gb-success-fg)', warning: 'var(--gb-warning-fg)', error: 'var(--gb-error-fg, var(--gb-error))' };
+const TONE_BG = { success: 'var(--gb-success-tint-medium)', warning: 'var(--gb-warning-tint-medium)', error: 'var(--gb-error-tint-medium)' };
+const TONE_BD = { success: 'var(--gb-success-tint-border)', warning: 'var(--gb-warning-tint-border)', error: 'var(--gb-error-tint-border)' };
 const pctOf = (n) => (n * 100).toFixed(1) + '%';
 
 function MarginBadge({ m, lg }) {
@@ -1277,13 +1283,15 @@ function MarginLineRow({ e, first, onEditPrice, estimated }) {
           <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{e.product.brand}</div>
           <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{lineGiftTitle(e) || e.product.title}</span>
-            {e.free && <span style={{ flexShrink: 0, fontSize: 8.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-success-fg, #2e9e5b)', background: 'var(--gb-success-tint, rgba(46,158,91,.12))', border: '1px solid var(--gb-success-border, rgba(46,158,91,.32))', borderRadius: 'var(--gb-r-pill)', padding: '1px 6px' }}>Free</span>}
+            {e.free && <span style={{ flexShrink: 0, fontSize: 8.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-success-fg)', background: 'var(--gb-success-tint-soft)', border: '1px solid var(--gb-success-tint-border)', borderRadius: 'var(--gb-r-pill)', padding: '1px 6px' }}>Free</span>}
           </div>
         </div>
         <span style={{ width: 50, textAlign: 'right', fontSize: 11.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-secondary)' }}>{e.units}</span>
         <span style={{ width: 80, textAlign: 'right', fontSize: 12.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)' }}>{money(e.lineRev)}</span>
-        <span style={{ width: 74, textAlign: 'right', fontSize: 11.5, fontWeight: 600, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)' }}>{money(e.lineCost)}{star}</span>
-        <span style={{ width: 56, display: 'flex', justifyContent: 'flex-end' }}><MarginBadge m={e.margin} /></span>
+        <span style={{ width: 74, textAlign: 'right', fontSize: 11.5, fontWeight: 600, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)' }}>{e.free ? '—' : money(e.lineCost)}{star}</span>
+        <span style={{ width: 56, display: 'flex', justifyContent: 'flex-end' }}>{e.free
+          ? <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: .3, textTransform: 'uppercase', color: 'var(--gb-success-fg)', fontFamily: 'var(--gb-font-mono)' }}>Promo</span>
+          : <MarginBadge m={e.margin} />}</span>
       </div>
       {/* Per-split detail — always shown when editable (so every price can be
           edited) or when there are multiple splits / imprints. */}
@@ -1348,7 +1356,7 @@ function ImprintDetail({ chip }) {
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{typeLabel}</span>
-          <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: .4, textTransform: 'uppercase', color: chip.slot === 'second' ? 'var(--gb-success-fg, #2e9e5b)' : 'var(--gb-brand-label)', background: chip.slot === 'second' ? 'var(--gb-success-tint, rgba(46,158,91,.12))' : 'var(--gb-brand-tint-soft)', border: '1px solid ' + (chip.slot === 'second' ? 'var(--gb-success-border, rgba(46,158,91,.32))' : 'var(--gb-brand-tint-border)'), borderRadius: 'var(--gb-r-pill)', padding: '1px 6px' }}>{slotLabel} pole</span>
+          <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: .4, textTransform: 'uppercase', color: chip.slot === 'second' ? 'var(--gb-success-fg)' : 'var(--gb-brand-label)', background: chip.slot === 'second' ? 'var(--gb-success-tint-soft)' : 'var(--gb-brand-tint-soft)', border: '1px solid ' + (chip.slot === 'second' ? 'var(--gb-success-tint-border)' : 'var(--gb-brand-tint-border)'), borderRadius: 'var(--gb-r-pill)', padding: '1px 6px' }}>{slotLabel} pole</span>
         </div>
         <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {chip.kind === 'text' && (lines.length ? <>“{lines.join(' / ')}” · <span style={{ color: 'var(--gb-text-muted)' }}>{chip.font}</span></> : <span style={{ fontStyle: 'italic', color: 'var(--gb-text-muted)' }}>No text entered</span>)}
@@ -1427,8 +1435,8 @@ function PromoBlock({ promo, onApply, onClear, onCheck }) {
         <div style={{ borderRadius: 'var(--gb-r-md)', border: '1px solid var(--gb-brand-tint-border)', background: 'var(--gb-brand-tint-soft)', padding: '11px 13px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 12, fontWeight: 800, letterSpacing: .5, color: 'var(--gb-brand-label)', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-brand-tint-border)', borderRadius: 'var(--gb-r-sm)', padding: '2px 8px' }}>{promo.code}</span>
-            {disc > 0 && <span style={{ fontSize: 12, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-success-fg, #2e9e5b)' }}>−{usd(disc)}</span>}
-            {freeQty > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-success-fg, #2e9e5b)' }}>+{freeQty} dozen free</span>}
+            {disc > 0 && <span style={{ fontSize: 12, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-success-fg)' }}>−{usd(disc)}</span>}
+            {freeQty > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-success-fg)' }}>+{freeQty} dozen free</span>}
             <div style={{ flex: 1 }} />
             <button type="button" onClick={onClear} title="Remove promo" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--gb-text-muted)', display: 'flex', padding: 2 }}><I.close size={13} /></button>
           </div>
@@ -1473,7 +1481,7 @@ function PromoBlock({ promo, onApply, onClear, onCheck }) {
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 {ok && st.desc && <div style={{ fontSize: 10, color: 'var(--gb-text-tertiary)', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.desc}</div>}
                               </div>
-                              {ok ? <span style={{ fontSize: 10.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-success-fg, #2e9e5b)', flexShrink: 0 }}>{st.disc > 0 ? '−' + usd(st.disc) : st.freeQty > 0 ? '+' + st.freeQty + ' dz' : 'Applies'}</span>
+                              {ok ? <span style={{ fontSize: 10.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-success-fg)', flexShrink: 0 }}>{st.disc > 0 ? '−' + usd(st.disc) : st.freeQty > 0 ? '+' + st.freeQty + ' dz' : 'Applies'}</span>
                                 : <span style={{ width: 11, height: 11, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite', flexShrink: 0 }} />}
                             </button>
                           );
@@ -1488,7 +1496,7 @@ function PromoBlock({ promo, onApply, onClear, onCheck }) {
           </AnimatePresence>
         </div>
       )}
-      {err && <div style={{ fontSize: 10.5, color: 'var(--gb-danger, #e5484d)', marginTop: 6, lineHeight: 1.4 }}>{err}</div>}
+      {err && <div style={{ fontSize: 10.5, color: 'var(--gb-error-fg, var(--gb-error))', marginTop: 6, lineHeight: 1.4 }}>{err}</div>}
     </div>
   );
 }
@@ -1635,8 +1643,8 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
           <SectionTitle icon={<Layers />}>Margin summary</SectionTitle>
           <div style={{ borderRadius: 'var(--gb-r-md)', border: '1px solid var(--gb-border-subtle)', padding: '11px 14px', display: 'flex', flexDirection: 'column', gap: 2 }}>
             <SummaryRow label={`Revenue · ${M.units} units`} value={money(M.rev)} />
-            <SummaryRow label={M.costBasis === 'actual' ? 'Cost · actual' : M.costBasis === 'mixed' ? `Cost · ${M.realCount}/${M.count} actual, rest ${pctOf(COST_RATIO)} of sell` : `Est. cost · ${pctOf(COST_RATIO)} of sell`} value={'−' + money(M.cost)} tone="var(--gb-text-muted)" />
-            {_promoDisc > 0 && <SummaryRow label={`Promotion · ${promo.code}`} value={'−' + money(_promoDisc)} tone="var(--gb-success-fg, #2e9e5b)" />}
+            <SummaryRow label={M.costBasis === 'actual' ? 'Cost · actual' : M.costBasis === 'mixed' ? `Cost · ${M.realCount}/${M.paidCount} actual, rest ${pctOf(COST_RATIO)} of sell` : `Est. cost · ${pctOf(COST_RATIO)} of sell`} value={'−' + money(M.cost)} tone="var(--gb-text-muted)" />
+            {_promoDisc > 0 && <SummaryRow label={`Promotion · ${promo.code}`} value={'−' + money(_promoDisc)} tone="var(--gb-success-fg)" />}
             <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '7px 0' }} />
             <SummaryRow label={_promoDisc > 0 ? 'Gross profit (after promo)' : 'Gross profit'} value={money(M.profit - _promoDisc)} strong tone="var(--gb-brand-label)" />
             <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '7px 0' }} />
@@ -1651,7 +1659,7 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
           <I.alert size={12} /> {M.costBasis === 'actual'
             ? 'Costs from synced inventory; prices editable. Click a price to override.'
             : M.costBasis === 'mixed'
-              ? `${M.realCount}/${M.count} use synced cost; the rest assume ${pctOf(ASSUMED_MARGIN)} margin. Click a price to override.`
+              ? `${M.realCount}/${M.paidCount} use synced cost; the rest assume ${pctOf(ASSUMED_MARGIN)} margin. Click a price to override.`
               : `Costs assume ${pctOf(ASSUMED_MARGIN)} margin (no synced cost). Click a price to override.`}
         </span>
         <div style={{ flex: 1 }} />
@@ -1735,9 +1743,9 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelet
           onMouseEnter={() => setTagHover(true)} onMouseLeave={() => setTagHover(false)}
           title={tagHover ? 'Delete this draft' : 'Saved draft'}
           style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 20, padding: '0 9px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10, fontWeight: 700, letterSpacing: .2, overflow: 'hidden',
-            background: tagHover ? 'var(--gb-danger-tint, rgba(229,72,77,.12))' : 'var(--gb-fill-subtle)',
-            border: '1px solid ' + (tagHover ? 'var(--gb-danger-tint-border, rgba(229,72,77,.4))' : 'var(--gb-border-default)'),
-            color: tagHover ? 'var(--gb-danger, #e5484d)' : 'var(--gb-text-tertiary)',
+            background: tagHover ? 'var(--gb-error-tint-medium)' : 'var(--gb-fill-subtle)',
+            border: '1px solid ' + (tagHover ? 'var(--gb-error-tint-border)' : 'var(--gb-border-default)'),
+            color: tagHover ? 'var(--gb-error-fg, var(--gb-error))' : 'var(--gb-text-tertiary)',
             transition: 'background var(--gb-anim), border-color var(--gb-anim), color var(--gb-anim)' }}>
           {/* Crossfade the label/icon as it flips Draft → Delete on hover. */}
           <AnimatePresence mode="wait" initial={false}>
@@ -1891,7 +1899,7 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
           </div>
         ) : error ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '40px 16px' }}>
-            <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', textAlign: 'center' }}><I.alert size={14} style={{ color: 'var(--gb-danger, #e5484d)', verticalAlign: 'middle', marginRight: 6 }} />{error}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', textAlign: 'center' }}><I.alert size={14} style={{ color: 'var(--gb-error-fg, var(--gb-error))', verticalAlign: 'middle', marginRight: 6 }} />{error}</div>
             {onRefresh && <Btn variant="secondary" size="sm" icon={<I.refresh size={13} />} onClick={onRefresh}>Retry</Btn>}
           </div>
         ) : items.length === 0 ? (
@@ -2050,16 +2058,16 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
               </AnimatePresence>
               {/* Free giveaway lines from a FREE_QUANTITY coupon — read-only, $0. */}
               {freeLines.map((fl) => (
-                <div key={fl.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint, rgba(46,158,91,.10))', border: '1px solid var(--gb-success-border, rgba(46,158,91,.30))' }}>
+                <div key={fl.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint-soft)', border: '1px solid var(--gb-success-tint-border)' }}>
                   <MiniThumb src={lineGiftImg(fl) || (fl.product && fl.product.img)} size={30} />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(fl.product && fl.product.title) || 'Item'}</span>
-                      <span style={{ flexShrink: 0, fontSize: 8.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-success-fg, #2e9e5b)', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-success-border, rgba(46,158,91,.32))', borderRadius: 'var(--gb-r-pill)', padding: '1px 6px' }}>Free</span>
+                      <span style={{ flexShrink: 0, fontSize: 8.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-success-fg)', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-success-tint-border)', borderRadius: 'var(--gb-r-pill)', padding: '1px 6px' }}>Free</span>
                     </div>
                     <div style={{ fontSize: 10, color: 'var(--gb-text-tertiary)', marginTop: 1, fontFamily: 'var(--gb-font-mono)' }}>{fl.splits[0].qty} × $0.00 · promo</div>
                   </div>
-                  <span style={{ fontSize: 12.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-success-fg, #2e9e5b)', flexShrink: 0 }}>FREE</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-success-fg)', flexShrink: 0 }}>FREE</span>
                 </div>
               ))}
             </>
@@ -2143,7 +2151,7 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
             <AnimatePresence mode="wait" initial={false}>
             {(saved || acctSaved) ? (
               <motion.div key="flash" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: .18, ease: 'easeOut' }} style={{ padding: '4px 12px 12px' }}>
-                <div style={{ height: 32, borderRadius: 'var(--gb-r-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'var(--gb-success-tint-medium, rgba(46,158,91,.16))', border: '1px solid var(--gb-success-tint-border, rgba(46,158,91,.35))', color: 'var(--gb-success-fg, #2e9e5b)', fontSize: 12.5, fontWeight: 700 }}>
+                <div style={{ height: 32, borderRadius: 'var(--gb-r-md)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'var(--gb-success-tint-medium)', border: '1px solid var(--gb-success-tint-border)', color: 'var(--gb-success-fg)', fontSize: 12.5, fontWeight: 700 }}>
                   <I.check size={15} strokeWidth={3} /> {acctSaved ? 'Saved to opportunity' : 'Saved to Saved Proposals'}
                 </div>
               </motion.div>
@@ -2430,7 +2438,7 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
                 fill) — the `danger` variant's hover animates backgroundColor to a
                 tint, which made the button go transparent on hover. */}
             <Btn variant="primary" size="md" icon={<I.trash />} onClick={bulkDelete}
-              style={{ background: 'var(--gb-danger, #e5484d)', color: '#fff', border: '1px solid var(--gb-danger, #e5484d)', boxShadow: '0 6px 18px -6px rgba(0,0,0,.45)' }}>Delete {nfmt(sel.size)}</Btn>
+              style={{ background: 'var(--gb-error-fg, var(--gb-error))', color: '#fff', border: '1px solid var(--gb-error-fg, var(--gb-error))', boxShadow: '0 6px 18px -6px rgba(0,0,0,.45)' }}>Delete {nfmt(sel.size)}</Btn>
           </motion.div>
         )}
       </AnimatePresence>
@@ -2564,7 +2572,7 @@ function CustomItemForm({ initial, onCancel, onSave, onDelete }) {
                 <Input size="sm" value={f.thumbnail.startsWith('data:') ? '' : f.thumbnail} onChange={set('thumbnail')} onBlur={() => ingestUrl(f.thumbnail)} placeholder="Paste a link (auto-uploads) or upload a file" />
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <Btn variant="secondary" size="sm" icon={<I.plus />} state={uploading ? 'loading' : 'idle'} onClick={() => fileRef.current && fileRef.current.click()}>{uploading ? 'Uploading…' : 'Upload image'}</Btn>
-                  {uploadErr && <span style={{ fontSize: 10.5, color: 'var(--gb-danger, #e5484d)', fontWeight: 600 }}>{uploadErr}</span>}
+                  {uploadErr && <span style={{ fontSize: 10.5, color: 'var(--gb-error-fg, var(--gb-error))', fontWeight: 600 }}>{uploadErr}</span>}
                 </div>
                 <input ref={fileRef} type="file" accept="image/*" onChange={onPickFile} style={{ display: 'none' }} />
               </div>
@@ -3414,7 +3422,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             Showing <b style={{ color: 'var(--gb-text-primary)' }}>{nfmt(results.length)}</b> of {nfmt(catalog.length)}
             {!searchingAll && selLabel && <> in <b style={{ color: 'var(--gb-text-secondary)' }}>{selLabel}</b></>}
             {selBrands.size > 0 && <> · <b style={{ color: 'var(--gb-text-secondary)' }}>{[...selBrands].join(', ')}</b></>}
-            {special && <> · <b style={{ color: 'var(--gb-success-fg, #2e9e5b)' }}>{(SPECIAL_CMDS.find((s) => s.id === special) || {}).label}</b></>}
+            {special && <> · <b style={{ color: 'var(--gb-success-fg)' }}>{(SPECIAL_CMDS.find((s) => s.id === special) || {}).label}</b></>}
           </span>
           <div style={{ flex: 1 }} />
           <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
