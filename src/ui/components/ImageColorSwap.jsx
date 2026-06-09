@@ -192,7 +192,7 @@ export function SwapPopover({ pick, wrapRef, swapCount, onPreview, onCancel, onA
       onClose={onCancel}
       cursorAnchor={cursor}
       width={226}
-      maxHeight={170}
+      maxHeight={230}
       icon={<I.eye size={12} />}
       title={swapCount > 0 ? `Swap color · #${swapCount + 1}` : 'Swap color'}
       enterFrom="bottom"
