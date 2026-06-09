@@ -283,18 +283,30 @@ function SnapshotRenderer({ shots, size = 640, onProgress, onDone }) {
   const viewerRef = useRef(null);
   const results = useRef([]);
   const finished = useRef(false);
+  const lockRef = useRef(-1);   // index already being captured → ignore duplicate signals
   const shot = shots[i];
-  const capture = () => {
-    // One frame after ready so the decal projection has painted.
+  // Capture the current shot then advance. Guarded so onReady + onError + the
+  // watchdog can all point here without double-advancing.
+  const advance = () => {
+    if (lockRef.current >= i) return;
+    lockRef.current = i;
     setTimeout(() => {
       let image = null;
       try { image = viewerRef.current?.snapshot?.(size) || null; } catch (e) { /* */ }
-      results.current.push({ ...shot, image });
+      results.current.push({ ...shots[i], image });
       onProgress && onProgress(results.current.length, shots.length);
       if (i + 1 < shots.length) setI(i + 1);
       else if (!finished.current) { finished.current = true; onDone(results.current); }
     }, 90);
   };
+  // Watchdog: a viewer that never signals (model hang / lost WebGL context)
+  // would stall the whole batch — skip the shot after a grace period so it
+  // can't get stuck on "loading" forever.
+  useEffect(() => {
+    if (!shot) return undefined;
+    const t = setTimeout(advance, 12000);
+    return () => clearTimeout(t);
+  }, [i]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!shot) return null;
   return (
     <div aria-hidden style={{ position: 'fixed', left: -99999, top: 0, width: 560, height: 560, opacity: 0, pointerEvents: 'none', zIndex: -1 }}>
@@ -302,7 +314,7 @@ function SnapshotRenderer({ shots, size = 640, onProgress, onDone }) {
         <GolfballViewer key={shot.key} ref={viewerRef} minimal
           shape={shot.shape} tint={shot.tint} chipTint={shot.chipTint} giftSet={shot.giftSet}
           decalDataUrl={shot.decalDataUrl} secondDecalDataUrl={shot.secondDecalDataUrl}
-          onReady={capture} onError={capture} />
+          onReady={advance} onError={advance} />
       </div>
     </div>
   );
@@ -330,8 +342,14 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
   const [previewsByLine, setPreviewsByLine] = useState(null); // lineId → [dataUrl]; null until rendered
   const [busy, setBusy] = useState(false);
   const [prog, setProg] = useState({ n: 0, t: 0 });
+  // `startedRef` (not `busy`) guards re-entry — keeping `busy` out of the dep
+  // list is essential: depending on it made setBusy(true) re-run this effect,
+  // whose cleanup cancelled the in-flight linesToShots() before it could
+  // setShots → the renderer never mounted and it hung at "loading".
+  const startedRef = useRef(false);
   useEffect(() => {
-    if (!show.previews || previewsByLine || busy) return;
+    if (!show.previews || startedRef.current || previewsByLine) return;
+    startedRef.current = true;
     let cancelled = false;
     setBusy(true); setProg({ n: 0, t: 0 });
     linesToShots(source.rawLines || []).then((s) => {
@@ -341,7 +359,7 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
       setShots(s);   // mounts SnapshotRenderer
     }).catch(() => { if (!cancelled) { setPreviewsByLine({}); setBusy(false); } });
     return () => { cancelled = true; };
-  }, [show.previews, previewsByLine, busy, source.rawLines]);
+  }, [show.previews, previewsByLine, source.rawLines]);
   const onShotsDone = (res) => {
     const byLine = {};
     for (const r of res) { if (!r.image) continue; (byLine[r.lineId] = byLine[r.lineId] || []).push(r.image); }
@@ -437,7 +455,7 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
               {/* Polished render-progress overlay: an animated card with a tile
                   grid that fills with checks as each preview renders, plus a
                   determinate bar + count. */}
-              {busy && (
+              {busy && show.previews && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .18 }}
                   style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'color-mix(in srgb, var(--gb-surface-deep) 82%, transparent)', backdropFilter: 'blur(5px)', WebkitBackdropFilter: 'blur(5px)' }}>
                   <motion.div initial={{ opacity: 0, scale: .96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ type: 'spring', stiffness: 340, damping: 28 }}
