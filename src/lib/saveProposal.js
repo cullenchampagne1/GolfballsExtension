@@ -362,6 +362,87 @@ export async function fetchActiveProposals({ accountId, opportunities } = {}) {
   return lists.flat();
 }
 
+/* Load a saved cart's contents by cartID (GET /user/getCart/<id>). */
+export async function loadProposalCart(cartID) {
+  const resp = await sendBg('giftLoadCart', { cartNumber: cartID });
+  return resp && resp.cartData;
+}
+
+/* Absolute product page URL from a cart line's path (mirrors giftCatalog's
+   absoluteProductUrl) so a reloaded line can be re-fetched/re-priced. */
+function _absProductUrl(path) {
+  if (!path) return '';
+  if (/^https?:\/\//i.test(path)) return path;
+  const p = path.startsWith('/') ? path : '/' + path;
+  return 'https://www.golfballs.com' + p + (/\.html?$/i.test(p) ? '' : '.htm');
+}
+const _PROD_IMG = 'https://static.golfballs.com/C/300x300/';
+
+/* One cart line (itemsInCart[i]) → a proposal/saved line { product, decoration,
+   variant, splits }. The cart carries the real qty + price, so margin/totals are
+   exact; the imprint decoration isn't reverse-mapped (shown as a plain line). */
+function cartItemToLine(it, i) {
+  const breaks = (((it.ItemPriceBreak && it.ItemPriceBreak.PriceBreak) || [])
+    .map((b) => ({ q: Number(b.Quantity) || 0, p: Number(b.Price) || 0 })).filter((b) => b.q > 0));
+  const cd = it.CustomData || {};
+  const img0 = ((it.images || [])[0] || {}).URL || '';
+  const qty = Number(it.totalQty) || (breaks[0] && breaks[0].q) || 1;
+  let price = it.ItemPrice;
+  if (price == null) { let p = breaks[0] ? breaks[0].p : 0; for (const b of breaks) if (b.q <= qty) p = b.p; price = p; }
+  return {
+    id: 'crmln-' + (it.itemGuid || i),
+    productId: it.itemGuid || ('p' + i),
+    product: {
+      id: 'crmp-' + (it.ShortCode || it.itemGuid || i),
+      title: it.productTitle || it.nameFormat || 'Item',
+      brand: it.brand || '',
+      img: img0 ? (/^https?:/i.test(img0) ? img0 : _PROD_IMG + img0) : '',
+      url: it.url ? _absProductUrl(it.url) : '',
+      urlPath: it.url || '',
+      sku: cd.parentSku || it.ShortCode || '',
+      parentCode: it.ShortCode || '',
+      breaks: breaks.length ? breaks : [{ q: qty, p: price }],
+      customLogo: false,
+      price,
+      minQty: (breaks[0] && breaks[0].q) || qty,
+    },
+    decoration: null,
+    variant: null,
+    splits: [{ id: 'crms-' + (it.itemGuid || i), qty, price }],
+  };
+}
+
+/* A loaded cart → a saved-entry-shaped object so the Current Proposals view can
+   reuse the saved-proposal card, breakdown, load, copy, and email machinery. */
+export function cartToEntry(cartData, meta = {}) {
+  const items = (cartData && (cartData.itemsInCart || (cartData.shoppingCart && cartData.shoppingCart.itemsInCart))) || [];
+  const promotion = (cartData && cartData.promotion && cartData.promotion.promo) ? cartData.promotion : null;
+  return {
+    id: 'crm-' + (meta.cartID || _rid()),
+    name: meta.name || (cartData && cartData.proposalName) || 'Proposal',
+    date: meta.date || '',
+    expiration: meta.expiration || '',
+    cartID: meta.cartID || '',
+    opportunityID: meta.opportunityID || '',
+    opportunitySubject: meta.opportunitySubject || '',
+    promotion,
+    source: 'crm',
+    lines: items.map(cartItemToLine),
+  };
+}
+
+/* Full Current Proposals pull: list each active opportunity's proposals, load
+   each cart, and convert to saved-entry shape. Carts load in parallel; a cart
+   that fails to load still yields a (line-less) entry so the card shows. */
+export async function fetchActiveProposalEntries(opts = {}) {
+  const list = await fetchActiveProposals(opts);
+  return Promise.all(list.map(async (p) => {
+    const meta = { cartID: p.cartID, name: p.name, date: p.date, expiration: p.expiration, opportunityID: p.opportunityID, opportunitySubject: p.opportunitySubject };
+    try { return cartToEntry(await loadProposalCart(p.cartID), meta); }
+    catch { return cartToEntry(null, meta); }
+  }));
+}
+
 /* ── Known promo codes (rep-curated, persisted) ─────────────────────────────
    There's no "list all promos" endpoint, so we keep the codes the rep uses in
    storage (seeded with the known site promo) and validate each against the cart

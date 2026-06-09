@@ -6,7 +6,7 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, DEPT_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions, colorNameOf } from './giftCustomize.jsx';
-import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposals, proposalCartUrl, loadKnownPromos, addKnownPromo } from '../lib/saveProposal.js';
+import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposalEntries, proposalCartUrl, loadKnownPromos, addKnownPromo } from '../lib/saveProposal.js';
 import { promoDiscount } from '../lib/cartSerializer.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS } from '../lib/customItems.js';
 import { importHpgCatalog } from '../lib/hpgImport.js';
@@ -1682,7 +1682,7 @@ function ThumbStack({ entries, max = 4, size = 44 }) {
   );
 }
 
-function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelete, moveAnim }) {
+function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelete, moveAnim, readOnly, subtitle }) {
   const [hover, setHover] = useState(false);
   const [tagHover, setTagHover] = useState(false);
   const cardRef = useRef(null);
@@ -1712,8 +1712,14 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelet
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <ThumbStack entries={r.entries} />
         <div style={{ flex: 1 }} />
-        {/* The "Draft" tag IS the delete control — hovering it turns it red and
-            clicking removes the draft (keeps the card otherwise button-free). */}
+        {readOnly ? (
+          /* Live CRM proposal — a static "Current" tag (no delete). */
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 20, padding: '0 9px', borderRadius: 999, fontSize: 10, fontWeight: 700, letterSpacing: .2, background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)' }}>
+            <I.card size={9} /> Current
+          </span>
+        ) : (
+        /* The "Draft" tag IS the delete control — hovering it turns it red and
+            clicking removes the draft (keeps the card otherwise button-free). */
         <button onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
           onMouseEnter={() => setTagHover(true)} onMouseLeave={() => setTagHover(false)}
           title={tagHover ? 'Delete this draft' : 'Saved draft'}
@@ -1732,9 +1738,11 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelet
             </motion.span>
           </AnimatePresence>
         </button>
+        )}
       </div>
       <div>
         <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
+        {subtitle && <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 2, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subtitle}</div>}
         {/* A short, readable run-down of what's inside (qty × product). Each
             row truncates with an ellipsis, never a fade, so it stays legible. */}
         <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -1817,7 +1825,8 @@ function CurrentProposalCard({ entries, onOpen }) {
   );
 }
 
-function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad, onCopy, onDelete, onSaveToAccount, onEmail }) {
+function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad, onCopy, onDelete, onSaveToAccount, onEmail,
+  title = 'Saved Proposals', subtitleText, headerIcon, hideCurrent, readOnly, loading, error, onRefresh, emptyTitle, emptyText, subtitleOf }) {
   const scrollRef = useRef(null);
   const [width, setWidth] = useState(0);
   const [heights, setHeights] = useState({});
@@ -1855,25 +1864,35 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 16px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
         <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <I.bookmark size={16} />
+          {headerIcon || <I.bookmark size={16} />}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Saved Proposals</div>
-          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, fontWeight: 500 }}>Click any card to view its margin breakdown &amp; order items{items.length ? ' · or load / copy a draft' : ''}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>{title}</div>
+          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subtitleText || <>Click any card to view its margin breakdown &amp; order items{items.length ? ' · or load / copy a draft' : ''}</>}</div>
         </div>
+        {onRefresh && <IconBtn size="md" title="Refresh" icon={<I.refresh style={{ animation: loading ? 'gb-spin .8s linear infinite' : 'none' }} />} onClick={onRefresh} />}
       </div>
       <div ref={scrollRef} className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-        {current && current.length > 0 && <CurrentProposalCard entries={current} onOpen={onOpenCurrent} />}
-        {items.length === 0 ? (
-          (current && current.length > 0) ? (
+        {!hideCurrent && current && current.length > 0 && <CurrentProposalCard entries={current} onOpen={onOpenCurrent} />}
+        {loading && items.length === 0 ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, color: 'var(--gb-text-muted)', fontSize: 12, padding: '48px 0' }}>
+            <span style={{ width: 15, height: 15, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} /> Loading proposals…
+          </div>
+        ) : error ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '40px 16px' }}>
+            <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', textAlign: 'center' }}><I.alert size={14} style={{ color: 'var(--gb-danger, #e5484d)', verticalAlign: 'middle', marginRight: 6 }} />{error}</div>
+            {onRefresh && <Btn variant="secondary" size="sm" icon={<I.refresh size={13} />} onClick={onRefresh}>Retry</Btn>}
+          </div>
+        ) : items.length === 0 ? (
+          (!hideCurrent && current && current.length > 0) ? (
             <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', textAlign: 'center', padding: '18px 0', lineHeight: 1.5 }}>Saved drafts appear here — hit “Save draft” to keep one.</div>
           ) : (
             <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--gb-text-muted)' }}>
               <div style={{ width: 48, height: 48, borderRadius: 'var(--gb-r-lg)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <I.bookmark size={20} />
+                {headerIcon || <I.bookmark size={20} />}
               </div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>No saved proposals yet</div>
-              <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', textAlign: 'center', maxWidth: 240, lineHeight: 1.5 }}>Build a proposal and hit “Save draft” to keep it here for later.</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>{emptyTitle || 'No saved proposals yet'}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', textAlign: 'center', maxWidth: 260, lineHeight: 1.5 }}>{emptyText || 'Build a proposal and hit “Save draft” to keep it here for later.'}</div>
             </div>
           )
         ) : (
@@ -1882,108 +1901,10 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
               {items.map((it) => (
                 <SavedCard key={it.id} item={it} loaded={loadedId === it.id}
                   pos={positions[it.id] || { x: 0, y: 0 }} colW={colW} onMeasure={setHeight} moveAnim={moveAnim}
+                  readOnly={readOnly} subtitle={subtitleOf ? subtitleOf(it) : undefined}
                   onOpen={onOpen} onLoad={onLoad} onDelete={onDelete} />
               ))}
             </AnimatePresence>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* One live proposal card — name, opportunity, contact, dates + open/copy. */
-function CurrentProposalCardLive({ p, contactName, onOpen, onCopy }) {
-  const [hover, setHover] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const dateOnly = (p.date || '').split(/\s+/)[0] || '';
-  return (
-    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ position: 'relative', borderRadius: 'var(--gb-r-lg)', border: '1px solid var(--gb-border-default)', background: 'var(--gb-surface-1)', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: hover ? 'var(--gb-shadow-card-hover, 0 6px 18px rgba(0,0,0,.12))' : 'var(--gb-shadow-card, 0 1px 3px rgba(0,0,0,.06))', transform: hover ? 'translateY(-2px)' : 'none', transition: 'transform .16s ease, box-shadow .16s ease' }}>
-      <div style={{ height: 3, background: 'var(--gb-brand-label)', flexShrink: 0 }} />
-      <div style={{ padding: '13px 14px', display: 'flex', flexDirection: 'column', gap: 9, flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <I.card size={15} />
-          </div>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
-            {p.opportunitySubject && <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.opportunitySubject}</div>}
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {contactName && <Tag tone="neutral" size="sm" icon={<I.user size={9} />}>{contactName}</Tag>}
-          {p.stage && <Tag tone="brand" size="sm">{p.stage}</Tag>}
-        </div>
-        <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', display: 'flex', gap: 10, fontFamily: 'var(--gb-font-mono)' }}>
-          {dateOnly && <span>{dateOnly}</span>}
-          {p.expiration && <span style={{ color: 'var(--gb-text-muted)' }}>· exp {p.expiration}</span>}
-        </div>
-        <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', gap: 6, alignItems: 'stretch' }}>
-          <Btn variant="secondary" size="sm" icon={<I.eye size={13} />} style={{ flex: 1 }} onClick={() => onOpen(p)}>Open</Btn>
-          <IconBtn size="sm" variant="secondary" active={copied} icon={copied ? <I.check size={14} /> : <I.copy size={14} />}
-            title="Copy proposal link" onClick={() => { onCopy(p); setCopied(true); setTimeout(() => setCopied(false), 1400); }} />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* Current Proposals view — live proposals pulled from the CRM for the account in
-   context, grouped flat with their opportunity + contact. */
-function CurrentProposalsView({ proposals, loading, error, hasAccount, accountName, contactName, colMin, onRefresh, onOpen, onCopy }) {
-  const byOpp = useMemo(() => {
-    const m = new Map();
-    for (const p of proposals) {
-      const k = p.opportunityID || '—';
-      if (!m.has(k)) m.set(k, { subject: p.opportunitySubject || ('Opportunity ' + k), items: [] });
-      m.get(k).items.push(p);
-    }
-    return Array.from(m.values());
-  }, [proposals]);
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Current Proposals</div>
-          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {hasAccount ? <>Live from the CRM{accountName ? ` · ${accountName}` : ''}{proposals.length ? ` · ${proposals.length}` : ''}</> : 'Open the catalog from a CRM account to see its proposals'}
-          </div>
-        </div>
-        <div style={{ flex: 1 }} />
-        <IconBtn size="md" title="Refresh" icon={<I.refresh style={{ animation: loading ? 'gb-spin .8s linear infinite' : 'none' }} />} onClick={onRefresh} disabled={!hasAccount} />
-      </div>
-      <div className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-        {!hasAccount ? (
-          <div style={{ textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12, padding: '48px 16px', lineHeight: 1.5 }}>
-            <I.card size={26} style={{ opacity: .4, marginBottom: 10 }} /><br />
-            No account in context. Open the catalog from a golfballs.com CRM<br />account or opportunity page to list its current proposals.
-          </div>
-        ) : loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, color: 'var(--gb-text-muted)', fontSize: 12, padding: '48px 0' }}>
-            <span style={{ width: 15, height: 15, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} /> Loading proposals…
-          </div>
-        ) : error ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '40px 16px' }}>
-            <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', textAlign: 'center' }}><I.alert size={14} style={{ color: 'var(--gb-danger, #e5484d)', verticalAlign: 'middle', marginRight: 6 }} />{error}</div>
-            <Btn variant="secondary" size="sm" icon={<I.refresh size={13} />} onClick={onRefresh}>Retry</Btn>
-          </div>
-        ) : proposals.length === 0 ? (
-          <div style={{ textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12, padding: '48px 16px' }}>No active proposals on this account’s open opportunities.</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            {byOpp.map((g, gi) => (
-              <div key={gi}>
-                <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', marginBottom: 9, display: 'flex', alignItems: 'center', gap: 7 }}>
-                  <Gift size={11} style={{ color: 'var(--gb-brand-label)' }} />{g.subject}
-                  <span style={{ color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)' }}>{g.items.length}</span>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${colMin || 240}px, 1fr))`, gap: 12 }}>
-                  {g.items.map((p) => <CurrentProposalCardLive key={p.cartID} p={p} contactName={contactName} onOpen={onOpen} onCopy={onCopy} />)}
-                </div>
-              </div>
-            ))}
           </div>
         )}
       </div>
@@ -2788,7 +2709,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // Saved Proposals library (chrome.storage). `view` swaps the catalog grid
   // for the gallery; `loadedId` flags the last draft copied into the proposal.
   const [view, setView] = useState('catalog');        // 'catalog' | 'proposals' | 'custom' | 'current'
-  useEffect(() => { if (view !== 'proposals') setDetail(null); }, [view]);  // close breakdown on view change
+  useEffect(() => { if (view !== 'proposals' && view !== 'current') setDetail(null); }, [view]);  // close breakdown on view change
   const [savedProposals, setSavedProposals] = useState([]);
   const [loadedId, setLoadedId] = useState(null);
   // Current Proposals — live, pulled from the CRM for the account in context.
@@ -2799,7 +2720,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const [currentError, setCurrentError] = useState('');
   const loadCurrentProposals = useCallback(() => {
     setCurrentLoading(true); setCurrentError(''); setCurrentLoaded(true);
-    fetchActiveProposals({ accountId: pageContext.accountId, opportunities: pageContext.opportunities })
+    fetchActiveProposalEntries({ accountId: pageContext.accountId, opportunities: pageContext.opportunities })
       .then((list) => { if (aliveRef.current) setCurrentProposals(list); })
       .catch((e) => { if (aliveRef.current) setCurrentError((e && e.message) || 'Could not load proposals'); })
       .finally(() => { if (aliveRef.current) setCurrentLoading(false); });
@@ -3318,11 +3239,14 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           </motion.div>
           ) : view === 'current' ? (
             <motion.div key="current" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
-            <CurrentProposalsView proposals={currentProposals} loading={currentLoading} error={currentError}
-              hasAccount={!!pageContext.accountId} accountName={pageContext.accountName} contactName={pageContext.contactName} colMin={colMin}
-              onRefresh={loadCurrentProposals}
-              onOpen={(p) => { try { window.open(p.url || proposalCartUrl(p.opportunityID, p.cartID), '_blank', 'noopener'); } catch { /* */ } }}
-              onCopy={(p) => { copyToClipboard(p.url || proposalCartUrl(p.opportunityID, p.cartID)).catch(() => {}); }} />
+            <SavedGallery items={currentProposals} loadedId={loadedId} hideCurrent readOnly
+              title="Current Proposals" headerIcon={<I.card size={16} />}
+              subtitleText={pageContext.accountId ? <>Live from the CRM{pageContext.accountName ? ` · ${pageContext.accountName}` : ''} · click a card for its breakdown</> : 'Open from a CRM account to see its proposals'}
+              loading={currentLoading} error={pageContext.accountId ? currentError : 'No account in context — open the catalog from a golfballs.com CRM account or opportunity page.'}
+              onRefresh={pageContext.accountId ? loadCurrentProposals : undefined}
+              emptyTitle="No active proposals" emptyText="This account’s open opportunities have no saved proposals yet."
+              subtitleOf={(it) => it.opportunitySubject || (it.contactName) || ''}
+              onOpen={(item) => setDetail({ kind: 'crm', item })} onLoad={loadSaved} />
           </motion.div>
           ) : view === 'custom' ? (
             <motion.div key="custom" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
@@ -3386,8 +3310,20 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           {/* Proposal breakdown drill-in — margin + order items. Overlays the
               gallery when a saved card or the current-proposal card is clicked. */}
           <AnimatePresence>
-            {view === 'proposals' && detail && (() => {
+            {(view === 'proposals' || view === 'current') && detail && (() => {
               const close = () => setDetail(null);
+              if (detail.kind === 'crm') {
+                const it = detail.item; const r = resolveSavedEntry(it);
+                return (
+                  <SavedDetail key={'bd-' + it.id} title={it.name}
+                    subtitle={`${it.opportunitySubject || 'Opportunity ' + it.opportunityID} · ${r.units} units`}
+                    badge={<Tag tone="brand" size="sm" icon={<I.card size={9} />}>Current</Tag>}
+                    entries={r.entries} loaded={loadedId === it.id} onClose={close}
+                    buildEmailSource={() => proposalToEmailSource(linesFromSaved(it, rid), it.name)}
+                    onCopy={() => copySaved(it)} onSaveToAccount={() => { close(); loadSavedToAccount(it); }}
+                    onLoad={() => { close(); loadSaved(it); }} />
+                );
+              }
               if (detail.kind === 'current') {
                 return (
                   <SavedDetail key="bd-current" current title="Current proposal" subtitle="Live working set · unsaved"
