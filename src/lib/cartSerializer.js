@@ -914,22 +914,39 @@ export function buildCustomItemLine({ ci = {}, qty, price, style } = {}) {
 
 /* Assemble the cartData object (the localStorage.shoppingCart shape) from an
    array of fully-built itemsInCart lines. Totals reconcile with real captures. */
-export function buildCartData(itemsInCart, { proposalID = null } = {}) {
+/* Discount amount carried by a resolved promotion (the /user/promotion result
+   uses `totalDiscount`; the cart's stored promotion block uses
+   `totalPromoDiscount`). Returns 0 when there's no monetary discount (e.g. a
+   FREE_QUANTITY promo's value is in freeItems, not a $ off). */
+export function promoDiscount(promotion) {
+  if (!promotion || typeof promotion !== 'object') return 0;
+  const v = promotion.totalPromoDiscount != null ? promotion.totalPromoDiscount
+    : promotion.totalDiscount != null ? promotion.totalDiscount
+    : promotion.orderLevelDiscount != null ? promotion.orderLevelDiscount : 0;
+  return round2(Number(v) || 0);
+}
+
+export function buildCartData(itemsInCart, { proposalID = null, promotion = null } = {}) {
   const subTotal = round2(itemsInCart.reduce((s, l) => s + lineTotal(l), 0));
   const totalQty = itemsInCart.reduce((s, l) => s + (l.totalQty || 0), 0);
+  // A resolved promo (from /user/promotion) is stored on the cart so the site
+  // re-applies it on load; cartTotal nets the order-level discount. The empty
+  // sentinel keeps a no-coupon cart byte-identical to the verified capture.
+  const hasPromo = promotion && promotion.promo;
+  const discount = hasPromo ? promoDiscount(promotion) : 0;
   return {
     cartStateVersion: 5,
     stateProperty: 'test value',
     itemsInCart,
-    cartTotal: subTotal,
+    cartTotal: round2(subTotal - discount),
     cartSubTotal: subTotal,
     shippingPrice: 0,
     popupType: '',
     cartTotalQty: totalQty,
-    promotion: { type: 'PromotionEmpty' },
+    promotion: hasPromo ? promotion : { type: 'PromotionEmpty' },
     shippingEstimate: null,
     requestInProgress: false,
-    showPromoBanner: '',
+    showPromoBanner: hasPromo ? promotion.promo : '',
     vipSignup: false,
     proposalID,
     vipSignupPrice: 16.95,
@@ -939,8 +956,8 @@ export function buildCartData(itemsInCart, { proposalID = null } = {}) {
 /* The combined `cartData` blob the app actually saves: the cart slice spread
    at the top level, PLUS a nested `shoppingCart` copy, the `asCartContents`
    mirror, and `updated:true`. (Verified against the real saveCart payload.) */
-export function buildSaveCartData(itemsInCart, { proposalID = null } = {}) {
-  const cart = buildCartData(itemsInCart, { proposalID });
+export function buildSaveCartData(itemsInCart, { proposalID = null, promotion = null } = {}) {
+  const cart = buildCartData(itemsInCart, { proposalID, promotion });
   return { ...cart, shoppingCart: cart, asCartContents: buildAsCartContents(itemsInCart), updated: true };
 }
 
@@ -963,10 +980,10 @@ export function buildSaveCartBody(itemsInCart, { customerID = 0, salesRepID = 0,
    was dropped from the capture) — verify live and adjust here if the backend 500s. */
 export function buildSaveProposalBody(itemsInCart, {
   opportunityID, proposalName, proposalExpiration,
-  customerID = 0, salesRepID = 0, proposalID = null,
+  customerID = 0, salesRepID = 0, proposalID = null, promotion = null,
 } = {}) {
   return {
-    cartData: JSON.stringify(buildSaveCartData(itemsInCart, { proposalID })),
+    cartData: JSON.stringify(buildSaveCartData(itemsInCart, { proposalID, promotion })),
     customerID,
     salesRepID,
     opportunityID,

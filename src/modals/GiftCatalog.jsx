@@ -6,7 +6,8 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, DEPT_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions, colorNameOf } from './giftCustomize.jsx';
-import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal } from '../lib/saveProposal.js';
+import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo } from '../lib/saveProposal.js';
+import { promoDiscount } from '../lib/cartSerializer.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS } from '../lib/customItems.js';
 import { importHpgCatalog } from '../lib/hpgImport.js';
 import { importSnugzCatalog } from '../lib/snugzImport.js';
@@ -1365,7 +1366,55 @@ function ImprintDetail({ chip }) {
 /* The proposal-breakdown drill-in: revenue, cost, gross profit, blended margin,
    the line items + per-line margin, the imprints, and a margin summary. Opened
    by clicking a saved card or the current-proposal card. */
-function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose, onLoad, onOpenProposal, onCopy, onSaveToAccount, buildEmailSource, onPatchSplit }) {
+/* Promo-code block in the breakdown — apply/clear a coupon against the proposal.
+   Applying validates live via the icustomize promotion engine (same call the cart
+   page makes); the resolved promo is stored on the proposal + flows into the
+   saved/loaded cart so the discount is real. */
+function PromoBlock({ promo, onApply, onClear }) {
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const applied = promo && promo.promotion;
+  const disc = applied ? promoDiscount(promo.promotion) : 0;
+  const freeQty = applied && promo.promotion.promoType === 'FREE_QUANTITY'
+    ? (promo.promotion.freeItems || []).reduce((a, f) => a + (f.amount || 0), 0) : 0;
+  const unmet = (applied && (promo.promotion.unmetRequirements || []).length) ? promo.promotion.unmetRequirements : null;
+  const apply = async () => {
+    const c = code.trim(); if (!c || busy) return;
+    setBusy(true); setErr('');
+    try { await onApply(c); setCode(''); }
+    catch (e) { setErr((e && e.message) || 'Invalid code'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div>
+      <SectionTitle icon={<I.bolt />}>Promotion</SectionTitle>
+      {applied ? (
+        <div style={{ borderRadius: 'var(--gb-r-md)', border: '1px solid var(--gb-brand-tint-border)', background: 'var(--gb-brand-tint-soft)', padding: '11px 13px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 12, fontWeight: 800, letterSpacing: .5, color: 'var(--gb-brand-label)', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-brand-tint-border)', borderRadius: 'var(--gb-r-sm)', padding: '2px 8px' }}>{promo.code}</span>
+            {disc > 0 && <span style={{ fontSize: 12, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-success-fg, #2e9e5b)' }}>−{usd(disc)}</span>}
+            {freeQty > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-success-fg, #2e9e5b)' }}>+{freeQty} dozen free</span>}
+            <div style={{ flex: 1 }} />
+            <button type="button" onClick={onClear} title="Remove promo" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--gb-text-muted)', display: 'flex', padding: 2 }}><I.close size={13} /></button>
+          </div>
+          {promo.promotion.promoDescription && <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', lineHeight: 1.4 }}>{promo.promotion.promoDescription}</div>}
+          {unmet && <div style={{ fontSize: 10.5, color: 'var(--gb-warning-fg, #b6830a)', lineHeight: 1.4 }}>⚠ Requirements not yet met — the discount applies once the cart qualifies.</div>}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 7 }}>
+          <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="Promo code"
+            onKeyDown={(e) => { if (e.key === 'Enter') apply(); }}
+            style={{ flex: 1, fontFamily: 'var(--gb-font-mono)', fontSize: 12, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-primary)', background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', padding: '8px 11px', outline: 'none' }} />
+          <Btn variant="secondary" size="sm" icon={busy ? <span style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', display: 'inline-block', animation: 'gb-spin .7s linear infinite' }} /> : <I.check size={13} />} onClick={apply}>Apply</Btn>
+        </div>
+      )}
+      {err && <div style={{ fontSize: 10.5, color: 'var(--gb-danger, #e5484d)', marginTop: 6, lineHeight: 1.4 }}>{err}</div>}
+    </div>
+  );
+}
+
+function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose, onLoad, onOpenProposal, onCopy, onSaveToAccount, buildEmailSource, onPatchSplit, promo, onApplyPromo, onClearPromo }) {
   // Proactively fetch a cost for any catalog line that has none yet, so the
   // breakdown fills in real numbers on open. `costTick` re-renders once the cost
   // map updates; `costFailed` records SKUs we tried and couldn't price (→ they
@@ -1392,6 +1441,10 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
   // it's a custom item (nothing to fetch) or the fetch failed.
   const starLine = (e) => !!e && !hasRealCost(e.product) && (!!(e.product && e.product.isCustom) || costFailed.has(invSkuOf(e.product)));
   const M = useMemo(() => marginReport(entries), [entries, costTick]);
+  // Order-level promo discount (if a coupon is applied) → nets revenue/profit/margin.
+  const _promoDisc = (promo && promo.promotion) ? promoDiscount(promo.promotion) : 0;
+  const _netRev = M.rev - _promoDisc;
+  const _netMargin = _netRev > 0 ? (_netRev - M.cost) / _netRev : 0;
   const decorated = M.lines.filter((l) => decoImprints(l.decoration).length > 0 || (l.decoration && l.decoration.giftSet));
   // Email composer lives INLINE here (replacing the breakdown) rather than in a
   // separate modal — a smoother single-surface flow. Built lazily on demand.
@@ -1497,15 +1550,18 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
           </div>
         )}
 
+        {onApplyPromo && <PromoBlock promo={promo} onApply={onApplyPromo} onClear={onClearPromo} />}
+
         <div>
           <SectionTitle icon={<Layers />}>Margin summary</SectionTitle>
           <div style={{ borderRadius: 'var(--gb-r-md)', border: '1px solid var(--gb-border-subtle)', padding: '11px 14px', display: 'flex', flexDirection: 'column', gap: 2 }}>
             <SummaryRow label={`Revenue · ${M.units} units`} value={money(M.rev)} />
             <SummaryRow label={M.costBasis === 'actual' ? 'Cost · actual' : M.costBasis === 'mixed' ? `Cost · ${M.realCount}/${M.count} actual, rest ${pctOf(COST_RATIO)} of sell` : `Est. cost · ${pctOf(COST_RATIO)} of sell`} value={'−' + money(M.cost)} tone="var(--gb-text-muted)" />
+            {_promoDisc > 0 && <SummaryRow label={`Promotion · ${promo.code}`} value={'−' + money(_promoDisc)} tone="var(--gb-success-fg, #2e9e5b)" />}
             <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '7px 0' }} />
-            <SummaryRow label="Gross profit" value={money(M.profit)} strong tone="var(--gb-brand-label)" />
+            <SummaryRow label={_promoDisc > 0 ? 'Gross profit (after promo)' : 'Gross profit'} value={money(M.profit - _promoDisc)} strong tone="var(--gb-brand-label)" />
             <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '7px 0' }} />
-            <SummaryRow label="Blended margin" strong badge={<MarginBadge m={M.margin} lg />} />
+            <SummaryRow label="Blended margin" strong badge={<MarginBadge m={_netMargin} lg />} />
           </div>
         </div>
       </div>
@@ -2481,6 +2537,30 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     if (!propHydrated.current) return;
     saveCurrentProposal(proposal);
   }, [proposal]);
+  // Promo code applied to the current proposal — { code, promotion } (the resolved
+  // /user/promotion result). Persisted to its own key so the coupon survives a
+  // close like the working proposal does.
+  const [proposalPromo, setProposalPromo] = useState(null);
+  const promoHydrated = useRef(false);
+  useEffect(() => {
+    let alive = true;
+    try { chrome.storage.local.get('gbCurrentPromo', (d) => { if (alive) { if (d && d.gbCurrentPromo) setProposalPromo(d.gbCurrentPromo); promoHydrated.current = true; } }); }
+    catch { promoHydrated.current = true; }
+    return () => { alive = false; };
+  }, []);
+  useEffect(() => {
+    if (!promoHydrated.current) return;
+    try { chrome.storage.local.set({ gbCurrentPromo: proposalPromo || null }); } catch { /* */ }
+  }, [proposalPromo]);
+  // Validate + apply a promo against the current proposal (throws on invalid; the
+  // PromoBlock surfaces the error). The resolved promo is stored and flows into
+  // the saved/loaded cart; the site recomputes the exact discount on cart load.
+  const applyPromo = async (code) => {
+    const promotion = await validatePromo(proposal, code);
+    setProposalPromo({ code: code.trim(), promotion });
+    return promotion;
+  };
+  const clearPromo = () => setProposalPromo(null);
   const [proposalOpen, setProposalOpen] = useState(false);
   const [detail, setDetail] = useState(null);   // proposal-breakdown drill-in: { kind:'saved'|'current', item? }
   // ── Verified DISPLAY pricing ───────────────────────────────────────────────
@@ -2664,7 +2744,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const [accountSaveSeq, setAccountSaveSeq] = useState(0);
   const saveToAccount = (opts) => {
     if (!proposal.length) return Promise.reject(new Error('Proposal is empty'));
-    return saveProposalToOpportunity(proposal, opts)
+    return saveProposalToOpportunity(proposal, { ...opts, promotion: proposalPromo && proposalPromo.promotion })
       .then((r) => {
         toast?.success?.(`Saved “${opts.name}” to opportunity ${opts.opportunityID}`);
         return r;
@@ -3112,6 +3192,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                   <SavedDetail key="bd-current" current title="Current proposal" subtitle="Live working set · unsaved"
                     badge={<Tag tone="brand" size="sm" icon={<Dot tone="brand" size={5} />}>Unsaved</Tag>}
                     entries={proposal} onClose={close}
+                    promo={proposalPromo} onApplyPromo={applyPromo} onClearPromo={clearPromo}
                     onPatchSplit={(entryIndex, _src, splitIndex, price) => setProposal((prev) => prev.map((pl, li) => li !== entryIndex ? pl
                       : { ...pl, splits: pl.splits.map((s, si) => si !== splitIndex ? s : { ...s, price, priceEdited: true }) }))}
                     buildEmailSource={() => proposalToEmailSource(proposal, '')}

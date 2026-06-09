@@ -783,6 +783,31 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // ── Apply / validate a promo code (PUT /user/promotion) ───────────────────
+  // Given the cart items + a promo code, the icustomize promotion engine returns
+  // the resolved discount: { totalDiscount, promo, promoType, unmetRequirements,
+  // orderLevelDiscount, itemLevelDiscounts, freeItems, promoDescription, … }.
+  // sitekey-only (no auth). msg.body built by src/lib/saveProposal.validatePromo.
+  if (msg.action === 'applyPromotion' && msg.body) {
+    fetch('https://master.api.icustomize.com/user/promotion', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'sitekey': 'golfballs' },
+      body: JSON.stringify(msg.body),
+    })
+      .then(async r => {
+        const text = await r.text();
+        if (!r.ok) throw new Error('HTTP ' + r.status + (text ? ' — ' + text.slice(0, 200) : ''));
+        let j = null; try { j = text ? JSON.parse(text) : null; } catch { j = null; }
+        const data = (j && typeof j === 'object' && j.d !== undefined) ? (typeof j.d === 'string' ? JSON.parse(j.d) : j.d) : j;
+        sendResponse({ ok: true, promotion: data || null });
+      })
+      .catch(err => {
+        console.warn('[GB] applyPromotion error:', err.message);
+        sendResponse({ ok: false, error: String(err.message || err) });
+      });
+    return true;
+  }
+
   // ── Gift-set / packaging upsell templates (PUT /user/getPackageUpsellData) ──
   // No body, public sitekey. Returns { expiryDate, bundleOptions:[…] } — the gift-
   // set bundle templates (sleeve / 6-ball / wooden + their kit price ladders) that

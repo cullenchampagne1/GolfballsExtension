@@ -174,8 +174,8 @@ export async function buildProposalLines(proposal) {
 /* The localStorage shape golfballs.com hydrates its cart from — verified live
    against a real captured cart: the cartData object spread at top level WITH a
    nested shoppingCart copy, the asCartContents mirror, AND `updated:true`. */
-function buildLocalStorageCart(items, { proposalID = null } = {}) {
-  const cart = buildCartData(items, { proposalID });
+function buildLocalStorageCart(items, { proposalID = null, promotion = null } = {}) {
+  const cart = buildCartData(items, { proposalID, promotion });
   return { ...cart, shoppingCart: cart, asCartContents: buildAsCartContents(items), updated: true };
 }
 
@@ -197,12 +197,33 @@ function buildCartConsoleCommand(cartJson) {
    itemCount, skipped }. No network — the caller copies `command` to the
    clipboard so the rep can paste it into the site console to preview the cart.
    (A future version persists `json` to extension storage as a preset proposal.) */
-export async function buildProposalDraft(proposal, { proposalID = null } = {}) {
+export async function buildProposalDraft(proposal, { proposalID = null, promotion = null } = {}) {
   if (!proposal || !proposal.length) throw new Error('Proposal is empty');
   const { items, skipped } = await buildProposalLines(proposal);
   if (!items.length) throw new Error('Could not load product data for any line — try again');
-  const json = JSON.stringify(buildLocalStorageCart(items, { proposalID }));
+  const json = JSON.stringify(buildLocalStorageCart(items, { proposalID, promotion }));
   return { command: buildCartConsoleCommand(json), json, itemCount: items.length, skipped };
+}
+
+/* Validate / resolve a promo code against the proposal's items via the icustomize
+   promotion engine — the same PUT /user/promotion the cart page makes. Returns
+   the resolved promotion object ({ promo, promoType, totalDiscount, freeItems,
+   unmetRequirements, promoDescription, … }) or throws on a bad/empty code.
+   Pass the result back into buildProposalDraft/saveProposalToOpportunity as
+   `promotion` so the loaded/saved cart carries the coupon. */
+export async function validatePromo(proposal, promoCode, { country = null } = {}) {
+  const code = (promoCode || '').trim();
+  if (!code) throw new Error('Enter a promo code');
+  if (!proposal || !proposal.length) throw new Error('Proposal is empty');
+  const { items } = await buildProposalLines(proposal);
+  if (!items.length) throw new Error('Could not load product data — try again');
+  const body = { cartItems: items, country, promoCode: code, shippingMethods: [], isVip: false, vipSignup: false };
+  const resp = await sendBg('applyPromotion', { body });
+  const promotion = resp && resp.promotion;
+  if (!promotion || (!promotion.promo && !(promotion.unmetRequirements || []).length)) {
+    throw new Error('“' + code + '” isn’t a valid promo code for this cart');
+  }
+  return promotion;
 }
 
 /* Server save (PUT /user/saveCart) — kept for the future "Send proposal" flow;
@@ -264,7 +285,7 @@ export async function fetchOpportunitiesForAccount(accountId) {
 /* Save the proposal to a chosen opportunity. Resolves to { cartID, raw,
    savedLines, skipped }. Throws with a user-facing message on bad input. */
 export async function saveProposalToOpportunity(proposal, {
-  opportunityID, customerID = 0, name, expiration, proposalID = null,
+  opportunityID, customerID = 0, name, expiration, proposalID = null, promotion = null,
 } = {}) {
   if (!proposal || !proposal.length) throw new Error('Proposal is empty');
   if (opportunityID == null || opportunityID === '') throw new Error('Pick an opportunity to save to');
@@ -277,6 +298,7 @@ export async function saveProposalToOpportunity(proposal, {
     proposalExpiration: expiration || defaultProposalExpiration(),
     customerID,
     proposalID,
+    promotion,
   });
   const resp = await sendBg('giftSaveProposal', { body });
   return { cartID: resp.cartID, raw: resp.raw, savedLines: items.length, skipped };
