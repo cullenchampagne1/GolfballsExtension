@@ -51,7 +51,7 @@ const _qtyLine = (l, show) => {
 // discounted line, else the plain total.
 const _ltot = (l) => l.free
   ? `<span style="color:${T.acc}; font-weight:800;">FREE</span>`
-  : (l.origTotal ? `<span style="color:#d11; text-decoration:line-through; font-weight:600; font-size:.85em;">${_money(l.origTotal)}</span> ${_ltot(l)}` : _money(l.lineTotal));
+  : (l.origTotal ? `<span style="color:#d11; text-decoration:line-through; font-weight:600; font-size:.85em;">${_money(l.origTotal)}</span> ${_money(l.lineTotal)}` : _money(l.lineTotal));
 // Discount summary row (monetary order/item-level promos) — shown above the total.
 const _discRow = (m) => (m.discount > 0)
   ? `<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td style="padding:6px 0; font-size:13px; color:${T.body};">Promotion${m.promoCode ? ` (${_esc(m.promoCode)})` : ''}</td><td align="right" style="padding:6px 0; font-size:14px; font-weight:700; color:#2e9e5b;">&minus;${_money(m.discount)}</td></tr></tbody></table>`
