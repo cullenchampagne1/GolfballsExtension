@@ -17,26 +17,32 @@ const _esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/<
 const _money = (n) => '$' + (n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const _brandLine = (l, color) => l.brand ? `<div style="font-size: 11px; letter-spacing: .6px; text-transform: uppercase; color: ${color};">${_esc(l.brand)}</div>` : '';
 
-/* The 3D personalization snapshot strip for a line — one card per pole (a
-   dual-pole line shows Front + Reverse). Returns '' when the line has no
-   rendered previews. Themed per template via opts (card bg/border + caption
-   color + size + align). The snapshot PNGs are square + transparent, so they sit
-   cleanly on the card. */
-function _previewStrip(l, opt = {}) {
+/* A labeled "Previews" box for a line — the rendered 3D personalization photo(s)
+   (Front + Reverse for dual-pole) inside a small bordered, captioned card. Tile
+   size auto-fits the `width` budget so the box sits cleanly whether it's in a
+   narrow photo column or a wide full-width row. Returns '' when the line has no
+   rendered previews. Themed per template via opts. */
+function _previewBox(l, opt = {}) {
   const imgs = (l && l.previews) || [];
   if (!imgs.length) return '';
-  const size = opt.size || 120;
-  const bg = opt.bg || '#f5f6f4';
+  const width = opt.width || 300;
+  const bg = opt.bg || '#ffffff';
   const border = opt.border || '#e3e5e1';
+  const tileBg = opt.tileBg || '#f6f7f5';
   const labelColor = opt.label || '#9aa0a6';
+  const accent = opt.accent || '#339900';
   const align = opt.align || 'left';
+  const n = imgs.length, gap = 8, pad = 10;
+  const inner = Math.max(44, width - pad * 2);
+  const tile = Math.max(44, Math.min(opt.maxTile || 132, Math.floor((inner - gap * (n - 1)) / n)));
   const cells = imgs.map((src, i) => {
-    const cap = imgs.length > 1
-      ? `<div style="font-size:9px; letter-spacing:.6px; text-transform:uppercase; color:${labelColor}; font-family:Arial,sans-serif; margin-top:5px; text-align:center;">${i === 0 ? 'Front' : 'Reverse'}</div>`
-      : '';
-    return `<td valign="top" style="padding:0 10px 0 0;"><div style="width:${size}px; height:${size}px; background:${bg}; border:1px solid ${border}; border-radius:12px;"><img src="${src}" width="${size}" height="${size}" border="0" alt="3D preview" style="display:block; width:${size}px; height:${size}px;" /></div>${cap}</td>`;
+    const cap = n > 1 ? `<div style="font-size:8.5px; letter-spacing:.5px; text-transform:uppercase; color:${labelColor}; font-family:Arial,sans-serif; margin-top:5px; text-align:center;">${i === 0 ? 'Front' : 'Reverse'}</div>` : '';
+    return `<td valign="top" style="padding:0 ${i < n - 1 ? gap : 0}px 0 0;"><div style="width:${tile}px; height:${tile}px; background:${tileBg}; border:1px solid ${border}; border-radius:9px;"><img src="${src}" width="${tile}" height="${tile}" border="0" alt="3D preview" style="display:block; width:${tile}px; height:${tile}px;" /></div>${cap}</td>`;
   }).join('');
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${align}" style="margin:10px 0 2px;"><tbody><tr>${cells}</tr></tbody></table>`;
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${align}" style="border:1px solid ${border}; border-radius:11px; background:${bg};"><tbody>` +
+    `<tr><td style="padding:${pad}px ${pad}px 0;"><span style="font-size:8.5px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; color:${accent}; font-family:Arial,sans-serif;">Previews</span></td></tr>` +
+    `<tr><td style="padding:7px ${pad}px ${pad}px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tbody><tr>${cells}</tr></tbody></table></td></tr>` +
+    `</tbody></table>`;
 }
 
 /* ── TEMPLATE 1 — CLASSIC ── */
@@ -44,16 +50,22 @@ function tplClassic(m) {
   const { groupName, optionName, expiration, message, lines, total, show } = m;
   const FONT = '&quot;Lato&quot;, &quot;Helvetica&quot;, &quot;Arial&quot;, sans-serif';
   const GREY = '#7f7f7f', ACC = '#339900', PRICE = '#ff6600';
-  const cols = (show.images ? 1 : 0) + 1 + 1 + (show.cost ? 1 : 0) + 1;
+  // Left media column appears when there are product photos OR any rendered
+  // previews — the 3D preview box stacks under the main photo there, so the
+  // item text wraps cleanly beside it.
+  const anyPrev = lines.some(_hasPrev);
+  const hasMedia = show.images || anyPrev;
+  const cols = (hasMedia ? 1 : 0) + 1 + 1 + (show.cost ? 1 : 0) + 1;
   const th = (label, extra, align) => `<th style="font-weight: normal; color: ${GREY}; border-bottom: 2px solid ${GREY}; padding: 5px 0; ${extra || ''}" align="${align || 'left'}">${label}</th>`;
-  const headerRow = `<tr>` + (show.images ? th('', 'width: 150px;') : '') + th('item', 'width: 210px;') + th('qty', 'width: 70px;') + (show.cost ? th('cost', '') : '') + th('total', 'width: 90px;', 'right') + `</tr>`;
+  const headerRow = `<tr>` + (hasMedia ? th('', 'width: 162px;') : '') + th('item', 'width: 198px;') + th('qty', 'width: 70px;') + (show.cost ? th('cost', '') : '') + th('total', 'width: 90px;', 'right') + `</tr>`;
   const rows = lines.map((l) => {
-    const img = show.images ? `<td style="padding: 12px 0;" valign="top"><img src="${_esc(l.img)}" width="140" border="0" style="border-radius: 6px;" /></td>` : '';
+    const box = _previewBox(l, { width: 150, accent: ACC, label: GREY });
+    const media = hasMedia
+      ? `<td width="162" valign="top" style="padding: 12px 14px 12px 0;">${show.images ? `<img src="${_esc(l.img)}" width="148" border="0" style="border-radius: 6px; display:block;" />` : ''}${box ? `<div style="margin-top:${show.images ? '8px' : '0'};">${box}</div>` : ''}</td>`
+      : '';
     const sub = l.subtitle ? `<div style="font-size: 12px; color: ${GREY}; margin-top: 3px;">${_esc(l.subtitle)}</div>` : '';
     const cost = show.cost ? `<td style="padding: 12px 0; color: #333;" valign="top">${_money(l.unitPrice)}</td>` : '';
-    const prev = _previewStrip(l, { bg: '#f6f6f4', border: '#dcdcd6', label: GREY });
-    const prevRow = prev ? `<tr><td colspan="${cols}" style="padding: 2px 0 10px;">${prev}</td></tr>` : '';
-    return `<tr>${img}<td style="padding: 12px 0 12px ${show.images ? '12px' : '0'};" valign="top">${_brandLine(l, GREY)}<div style="font-size: 14px; color: #222; font-weight: bold;">${_esc(l.title)}</div>${sub}</td><td style="padding: 12px 0; color: #333;" valign="top">${l.qty}</td>${cost}<td style="color: ${PRICE}; font-weight: bold; padding: 12px 0;" align="right" valign="top">${_money(l.lineTotal)}</td></tr>${prevRow}<tr><td colspan="${cols}" style="border-bottom: 1px solid #e6e6e6; padding: 0; font-size: 0; line-height: 0;">&nbsp;</td></tr>`;
+    return `<tr>${media}<td style="padding: 12px 0;" valign="top">${_brandLine(l, GREY)}<div style="font-size: 14px; color: #222; font-weight: bold;">${_esc(l.title)}</div>${sub}</td><td style="padding: 12px 0; color: #333;" valign="top">${l.qty}</td>${cost}<td style="color: ${PRICE}; font-weight: bold; padding: 12px 0;" align="right" valign="top">${_money(l.lineTotal)}</td></tr><tr><td colspan="${cols}" style="border-bottom: 1px solid #e6e6e6; padding: 0; font-size: 0; line-height: 0;">&nbsp;</td></tr>`;
   }).join('\n');
   const totalsRow = show.total ? `<tr style="font-weight: bold; font-size: 16.8px;"><td colspan="${cols - 1}" style="padding: 12px 0;" valign="top">Estimated total${show.disclaimer ? '*' : ''}</td><td style="color: ${PRICE}; font-weight: bold; padding: 12px 0;" align="right" valign="top">${_money(total)}</td></tr>` : '';
   const msg = (show.message && message) ? `<p style="color: #444; font-size: 14px; line-height: 1.5; margin: 0 0 1.3em;">${_esc(message).replace(/\n/g, '<br/>')}</p>` : '';
@@ -79,9 +91,9 @@ function tplMinimal(m) {
     const img = show.images ? `<td width="68" valign="middle" style="padding:14px 14px 14px 0;"><img src="${_esc(l.img)}" width="56" border="0" style="border-radius:6px; display:block;" /></td>` : '';
     const sub = l.subtitle ? `<div style="font-size:12px; color:${MUT}; margin-top:3px;">${_esc(l.subtitle)}</div>` : '';
     const qtyLine = show.cost ? `${l.qty} &times; ${_money(l.unitPrice)}` : `Qty ${l.qty}`;
-    const prev = _previewStrip(l, { bg: '#f4f6f2', border: '#e2e7dc', label: MUT });
-    const prevRow = prev ? `<tr><td colspan="${show.images ? 3 : 2}" style="padding:0 0 14px;">${prev}</td></tr>` : '';
-    return `<tr style="border-top:1px solid ${LINE};">${img}<td valign="middle" style="padding:14px 0;">${_brandLine(l, MUT)}<div style="font-size:15px; color:${INK}; font-weight:600;">${_esc(l.title)}</div>${sub}</td><td valign="middle" align="right" style="padding:14px 0;"><div style="font-size:11px; color:${MUT};">${qtyLine}</div><div style="font-size:16px; color:${PRICE}; font-weight:700; margin-top:3px;">${_money(l.lineTotal)}</div></td></tr>${prevRow}`;
+    const box = _previewBox(l, { width: 300, accent: ACC, label: MUT, bg: '#fafbf9' });
+    const boxBlock = box ? `<div style="margin-top:11px;">${box}</div>` : '';
+    return `<tr style="border-top:1px solid ${LINE};">${img}<td valign="top" style="padding:14px 0;">${_brandLine(l, MUT)}<div style="font-size:15px; color:${INK}; font-weight:600; margin-top:${l.brand ? '2px' : '0'};">${_esc(l.title)}</div>${sub}${boxBlock}</td><td valign="top" align="right" style="padding:14px 0;"><div style="font-size:11px; color:${MUT};">${qtyLine}</div><div style="font-size:16px; color:${PRICE}; font-weight:700; margin-top:3px;">${_money(l.lineTotal)}</div></td></tr>`;
   }).join('\n');
   const totalsRow = show.total ? `<tr style="border-top:2px solid ${ACC};"><td colspan="${show.images ? 2 : 1}" valign="middle" style="padding:16px 0;"><span style="font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:${MUT};">Estimated total${show.disclaimer ? '*' : ''}</span></td><td align="right" valign="middle" style="padding:16px 0;"><span style="font-size:24px; font-weight:800; color:${PRICE}; letter-spacing:-.5px;">${_money(total)}</span></td></tr>` : '';
   const exp = show.expiration ? `<p style="font-size:13px; color:${MUT}; margin:18px 0 0;">Valid through <strong style="color:${INK};">${_esc(expiration)}</strong></p>` : '';
@@ -103,12 +115,16 @@ function tplCatalog(m) {
   const ACC = '#339900', ACC_BG = '#e9f4e2', INK = '#1f2937', MUT = '#6b7280', PRICE = '#ff6600', PRICE_BG = '#fff1e6';
   const msg = (show.message && message) ? `<p style="color:#374151; font-size:14px; line-height:1.55; margin:0 0 16px;">${_esc(message).replace(/\n/g, '<br/>')}</p>` : '';
   const cards = lines.map((l) => {
-    const img = show.images ? `<td width="120" valign="top" style="padding:14px;"><img src="${_esc(l.img)}" width="104" border="0" style="border-radius:8px; display:block;" /></td>` : '';
+    // Media column: product photo with the Previews box stacked beneath it, so
+    // the title/qty/price text wraps in the column beside it.
+    const box = _previewBox(l, { width: 142, accent: ACC, label: MUT, bg: '#f7faf4', border: '#dcebd1' });
+    const media = (show.images || _hasPrev(l))
+      ? `<td width="166" valign="top" style="padding:14px;">${show.images ? `<img src="${_esc(l.img)}" width="138" border="0" style="border-radius:8px; display:block;" />` : ''}${box ? `<div style="margin-top:${show.images ? '10px' : '0'};">${box}</div>` : ''}</td>`
+      : '';
     const sub = l.subtitle ? `<div style="font-size:12px; color:${MUT}; margin-top:4px;">${_esc(l.subtitle)}</div>` : '';
     const qtyLine = show.cost ? `Qty ${l.qty} &nbsp;·&nbsp; ${_money(l.unitPrice)} ea` : `Qty ${l.qty}`;
-    const prev = _previewStrip(l, { bg: '#f3f7ef', border: '#dcebd1', label: MUT });
-    const prevRow = prev ? `<tr><td colspan="3" style="padding:0 16px 14px;">${prev}</td></tr>` : '';
-    return `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:12px;"><tbody><tr>${img}<td valign="middle" style="padding:14px ${show.images ? '0' : '16px'};">${_brandLine(l, ACC)}<div style="font-size:16px; color:${INK}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${MUT}; margin-top:7px;">${qtyLine}</div></td><td width="118" valign="middle" align="right" style="padding:14px 16px;"><span style="display:inline-block; background:${PRICE_BG}; color:${PRICE}; font-size:15px; font-weight:800; padding:7px 12px; border-radius:7px;">${_money(l.lineTotal)}</span></td></tr>${prevRow}</tbody></table>`;
+    const contentPad = (show.images || _hasPrev(l)) ? '14px 0' : '14px 16px';
+    return `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:12px;"><tbody><tr>${media}<td valign="top" style="padding:${contentPad};">${_brandLine(l, ACC)}<div style="font-size:16px; color:${INK}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${MUT}; margin-top:7px;">${qtyLine}</div></td><td width="118" valign="top" align="right" style="padding:14px 16px;"><span style="display:inline-block; background:${PRICE_BG}; color:${PRICE}; font-size:15px; font-weight:800; padding:7px 12px; border-radius:7px;">${_money(l.lineTotal)}</span></td></tr></tbody></table>`;
   }).join('\n');
   const totalBox = show.total ? `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; margin-top:4px;"><tbody><tr><td style="background:${ACC_BG}; border-left:4px solid ${ACC}; border-radius:6px; padding:14px 16px;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:13px; font-weight:700; color:${INK};">Estimated total${show.disclaimer ? '*' : ''}</span></td><td align="right" valign="middle"><span style="font-size:22px; font-weight:800; color:${PRICE};">${_money(total)}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
   const exp = show.expiration ? `<p style="font-size:13px; color:${MUT}; margin:16px 0 0;" align="right">This proposal expires on <strong style="color:${INK};">${_esc(expiration)}</strong></p>` : '';
@@ -137,9 +153,9 @@ function tplQuote(m) {
   const rows = lines.map((l) => {
     const sub = l.subtitle ? `<div style="font-size:12px; color:${MUT}; margin-top:3px;">${_esc(l.subtitle)}</div>` : '';
     const cost = show.cost ? `<td valign="middle" align="right" style="padding:13px 0; font-size:13px; color:${INK};">${_money(l.unitPrice)}</td>` : '';
-    const prev = _previewStrip(l, { bg: '#f4f7f1', border: '#e1e8da', label: MUT });
-    const prevRow = prev ? `<tr><td colspan="${cols}" style="padding:0 0 12px;">${prev}</td></tr>` : '';
-    return `<tr><td valign="middle" style="padding:13px 0;">${_brandLine(l, MUT)}<div style="font-size:14px; color:${INK}; font-weight:700;">${_esc(l.title)}</div>${sub}</td><td valign="middle" style="padding:13px 0; font-size:13px; color:${INK};">${l.qty}</td>${cost}<td valign="middle" align="right" style="padding:13px 0; font-size:14px; font-weight:800; color:${PRICE};">${_money(l.lineTotal)}</td></tr>${prevRow}<tr><td colspan="${cols}" style="border-bottom:1px solid ${LINE}; font-size:0; line-height:0;">&nbsp;</td></tr>`;
+    const box = _previewBox(l, { width: 300, accent: ACC, label: MUT, bg: '#fafcf8' });
+    const prevRow = box ? `<tr><td colspan="${cols}" style="padding:0 0 14px;">${box}</td></tr>` : '';
+    return `<tr><td valign="top" style="padding:13px 0;">${_brandLine(l, MUT)}<div style="font-size:14px; color:${INK}; font-weight:700;">${_esc(l.title)}</div>${sub}</td><td valign="top" style="padding:13px 0; font-size:13px; color:${INK};">${l.qty}</td>${cost}<td valign="top" align="right" style="padding:13px 0; font-size:14px; font-weight:800; color:${PRICE};">${_money(l.lineTotal)}</td></tr>${prevRow}<tr><td colspan="${cols}" style="border-bottom:1px solid ${LINE}; font-size:0; line-height:0;">&nbsp;</td></tr>`;
   }).join('\n');
   const disc = show.disclaimer ? `<p style="font-style:italic; color:#9ca3af; font-size:12px; margin:14px 0 0;">*shipping and sales tax are calculated in the shopping cart</p>` : '';
   const cta = show.cta ? `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; margin-top:22px;"><tbody><tr><td><a href="{{CART_LINK}}" style="display:block; text-align:center; background:${ACC}; color:#fff; text-decoration:none; font-size:15px; font-weight:700; padding:15px; border-radius:8px;">Approve &amp; view in cart &rsaquo;</a></td></tr></tbody></table>` : '';
@@ -161,8 +177,8 @@ function tplLookbook(m) {
     const imgRow = show.images ? `<tr><td align="center" style="padding:18px 18px 4px;"><img src="${_esc(l.img)}" width="220" border="0" style="border-radius:8px; display:block; margin:0 auto;" /></td></tr>` : '';
     const sub = l.subtitle ? `<div style="font-size:12px; color:${MUT}; margin-top:4px;">${_esc(l.subtitle)}</div>` : '';
     const qtyLine = show.cost ? `Qty ${l.qty} &nbsp;·&nbsp; ${_money(l.unitPrice)} ea` : `Qty ${l.qty}`;
-    const prev = _previewStrip(l, { bg: '#f4f7f1', border: '#e1e8da', label: MUT, align: 'center', size: 132 });
-    const prevRow = prev ? `<tr><td align="center" style="padding:0 18px 16px;">${prev}</td></tr>` : '';
+    const box = _previewBox(l, { width: 300, accent: ACC, label: MUT, align: 'center', bg: '#fafcf8' });
+    const prevRow = box ? `<tr><td align="center" style="padding:0 18px 16px;">${box}</td></tr>` : '';
     return `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:14px;"><tbody>${imgRow}<tr><td style="padding:${show.images ? '6px' : '16px'} 18px 16px;"><table width="100%"><tbody><tr><td valign="middle">${_brandLine(l, ACC)}<div style="font-size:17px; color:${INK}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${MUT}; margin-top:6px;">${qtyLine}</div></td><td valign="middle" align="right" width="96"><span style="font-size:19px; font-weight:800; color:${PRICE};">${_money(l.lineTotal)}</span></td></tr></tbody></table></td></tr>${prevRow}</tbody></table>`;
   }).join('\n');
   const totalBox = show.total ? `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT};"><tbody><tr><td style="border-top:2px solid ${ACC}; padding:16px 2px 0;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:12px; letter-spacing:.6px; text-transform:uppercase; color:${MUT}; font-weight:700;">Estimated total${show.disclaimer ? '*' : ''}</span></td><td align="right" valign="middle"><span style="font-size:25px; font-weight:800; color:${PRICE};">${_money(total)}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
