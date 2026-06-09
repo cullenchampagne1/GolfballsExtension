@@ -119,8 +119,14 @@ export async function buildContactContext(contact, deps = {}) {
   const phone = (resolvePath(doc, 'contact.phone') || '').toString().replace(/\D/g, '');
   const first = resolvePath(doc, 'contact.firstName') || '';
   const last = resolvePath(doc, 'contact.lastName') || '';
+  const email = (resolvePath(doc, 'contact.email') || contact.email || '').toString();
   const contactName = `${first} ${last}`.trim() || contact.contactName || contact.name || '';
   const accountId = resolvePath(doc, 'account.id') || '';
+
+  // "Do not contact" flag — set when the phrase appears in the name or email
+  // (case-insensitive, flexible whitespace). Reps stash it in those fields.
+  const DNC_RE = /do\s*not\s*contact/i;
+  const doNotContact = DNC_RE.test(first) || DNC_RE.test(last) || DNC_RE.test(email) || DNC_RE.test(contactName);
 
   /* The resolver matchEngine.evalTree calls per condition. */
   async function getValue(cond) {
@@ -139,7 +145,7 @@ export async function buildContactContext(contact, deps = {}) {
   return {
     contact, html, doc, data, signals, error,
     contactId, employeeId: rep.employeeId || '', phone, contactName, accountId,
-    bounceCode, mailerRemoved,
+    bounceCode, mailerRemoved, doNotContact,
     emailConfig, signature, fromLocalPart, dispatch, dryRun,
     getValue,
   };

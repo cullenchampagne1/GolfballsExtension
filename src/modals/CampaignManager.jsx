@@ -604,6 +604,7 @@ function CampaignInspector({ campaign, onChange }) {
         <div>
           <SectionLabel>Delivery</SectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9, padding: 12, background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)' }}>
+            <Checkbox checked={campaign.suppressDoNotContact !== false} label="Skip “do not contact”" hint="Name or email contains the phrase (any case)" onChange={(v) => upd({ suppressDoNotContact: v })} />
             <Checkbox checked={campaign.suppressBounced !== false} label="Skip bounced contacts" hint="Contacts with a CRM bounce code" onChange={(v) => upd({ suppressBounced: v })} />
             <Checkbox checked={campaign.suppressMailerRemoved !== false} label="Skip mailer-removed contacts" hint="Opted out of mailings" onChange={(v) => upd({ suppressMailerRemoved: v })} />
           </div>
@@ -621,9 +622,6 @@ function CampaignInspector({ campaign, onChange }) {
           </Field>
         </div>
 
-        <Callout tone="info" icon={<I.sparkle />} title="Branch behavior">
-          Once a branch step sends, no later sibling steps run for that recipient.
-        </Callout>
       </div>
     </div>
   );
@@ -1069,7 +1067,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
           vw/vh) so the modal-scale `zoom` on the mount host scales it
           cleanly; the inline 1.2 zoom is the default size bump and composes
           on top of whatever the modal scaler is set to. */}
-      <ModalShell width={1280} height={760} style={{ maxWidth: '94vw', maxHeight: '90vh', zoom: 1.2, color: 'var(--gb-text-secondary)' }}>
+      <ModalShell width={1280} height={760} style={{ maxWidth: 'calc(94vw / 1.2)', maxHeight: 'calc(90vh / 1.2)', zoom: 1.2, color: 'var(--gb-text-secondary)' }}>
         <TopBar campaign={campaign} onChange={patchCampaign} sim={sim} onSimStart={startSim} onSimStop={stopSim} onSimReset={resetSim}
           dirty={dirty} audienceCount={contacts.length} onRun={startRun} onClose={onClose}
           dryRun={dryRun} onDryRunChange={setDryRun} />

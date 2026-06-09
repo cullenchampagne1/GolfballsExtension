@@ -385,6 +385,81 @@ async function gbSnugzFetchParse(origin, urls, kind) {
   return out;
 }
 
+/* ── Bulk cost sync: persistent authed gbcadmin iframe + in-frame batch fetch ──
+   One hidden office.gbcadmin.com iframe (reused across batches), inside which we
+   credentialed-fetch Inventory.aspx?sku=X for a batch of SKUs (same-origin, so no
+   CORS, cookies flow). We extract just the per-unit cost per SKU there and return
+   { sku: cost|null } so we never ship hundreds of 7KB tables back to the page. */
+function gbEnsureInvFrame(origin) {
+  return new Promise((res) => {
+    try {
+      const ex = document.getElementById('__gb_cost_frame');
+      if (ex) { res(ex.dataset.ready === '1'); return; }
+      const f = document.createElement('iframe');
+      f.id = '__gb_cost_frame';
+      f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1100px;height:760px;opacity:0;border:0;pointer-events:none';
+      f.addEventListener('load', () => { f.dataset.ready = '1'; res(true); });
+      f.src = origin + '/office/Dynamics/Inventory.aspx';
+      document.body.appendChild(f);
+      setTimeout(() => res(f.dataset.ready === '1'), 12000);
+    } catch (e) { res(false); }
+  });
+}
+async function gbInvFetchCosts(origin, skus) {
+  if (location.origin !== origin) return null;
+  // Canonical cost = first variant row (tr[id^="SKU-"]) whose first $-cell is > 0.
+  // Falls back to the first $-value > 0 anywhere in the table if no id'd rows.
+  const costFromHtml = (html, sku) => {
+    try {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      if (/GenericErrorPage|aspxerrorpath|Login/i.test(doc.title || '')) return undefined; // auth bounce
+      const money = (s) => { const m = /\$\s*([\d,]+\.?\d*)/.exec(s || ''); return m ? Number(m[1].replace(/,/g, '')) : null; };
+      const pref = String(sku).toUpperCase() + '-';
+      const rows = Array.from(doc.querySelectorAll('tr'));
+      for (const tr of rows) {
+        const id = (tr.getAttribute('id') || '').toUpperCase();
+        if (!id.startsWith(pref)) continue;
+        const cell = Array.from(tr.querySelectorAll('td,th')).map((c) => c.textContent).find((t) => /\$/.test(t));
+        const c = money(cell);
+        if (c && c > 0) return c;
+      }
+      // fallback: any $-value > 0 in the table
+      for (const tr of rows) {
+        for (const c of Array.from(tr.querySelectorAll('td,th'))) {
+          const v = money(c.textContent);
+          if (v && v > 0) return v;
+        }
+      }
+      return null;
+    } catch (e) { return null; }
+  };
+  const out = {};
+  for (const sku of skus) {
+    try {
+      const r = await fetch('/office/Dynamics/Inventory.aspx?sku=' + encodeURIComponent(sku), { credentials: 'include', headers: { Accept: 'text/html,*/*' } });
+      const html = await r.text();
+      const c = costFromHtml(html, sku);
+      if (c === undefined) return { __auth: false };   // bounced to login — abort batch
+      out[sku] = c;
+    } catch (e) { out[sku] = null; }
+    await new Promise((z) => setTimeout(z, 60));
+  }
+  return out;
+}
+/* In-frame fetch of a single SKU's full inventory table HTML (same-origin, so
+   the gbcadmin session cookie flows). Returns { html } or { __auth:false } on a
+   login bounce. Reuses the persistent cost frame — far more reliable than the
+   old fetchInventory which navigated a throwaway iframe per request. */
+async function gbInvFetchHtml(origin, sku) {
+  if (location.origin !== origin) return null;
+  try {
+    const r = await fetch('/office/Dynamics/Inventory.aspx?sku=' + encodeURIComponent(sku), { credentials: 'include', headers: { Accept: 'text/html,*/*' } });
+    const html = await r.text();
+    if (/GenericErrorPage|aspxerrorpath/i.test(r.url || '') || /<title>[^<]*Login/i.test(html)) return { __auth: false };
+    return { html };
+  } catch (e) { return { error: String((e && e.message) || e) }; }
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // ── Relay a message to all frames in the sender's tab ──────────────────────
@@ -455,51 +530,62 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'fetchInventory' && msg.sku) {
     const tabId = sender && sender.tab && sender.tab.id;
     if (!tabId) { sendResponse({ ok: false, error: 'No tab context for inventory request' }); return true; }
-    const url = 'https://office.gbcadmin.com/office/Dynamics/Inventory.aspx?sku=' + encodeURIComponent(msg.sku);
     (async () => {
       try {
-        // 1. Create the hidden gbcadmin iframe in the page and wait for it to load.
-        await chrome.scripting.executeScript({
-          target: { tabId }, world: 'MAIN',
-          func: (u) => new Promise((res) => {
-            try {
-              const old = document.getElementById('__gb_inv_frame'); if (old) old.remove();
-              const f = document.createElement('iframe');
-              f.id = '__gb_inv_frame';
-              f.style.cssText = 'position:fixed;left:-10000px;top:0;width:1100px;height:760px;opacity:0;border:0;pointer-events:none';
-              f.addEventListener('load', () => setTimeout(() => res(true), 200));
-              f.src = u;
-              document.body.appendChild(f);
-              setTimeout(() => res(true), 9000);   // safety if load never fires
-            } catch (e) { res(false); }
-          }),
-          args: [url],
+        // Reuse the persistent authed gbcadmin frame, then in-frame credentialed-
+        // fetch the single SKU's inventory HTML. (The old per-request throwaway
+        // iframe nav was flaky — embedding blocks/timeouts; the standing frame +
+        // same-origin fetch is reliable.)
+        const ready = await chrome.scripting.executeScript({
+          target: { tabId }, world: 'MAIN', func: gbEnsureInvFrame, args: ['https://office.gbcadmin.com'],
         });
-        // 2. Read the gbcadmin frame's DOM (runs in every frame; only the
-        //    office.gbcadmin.com one returns data — same-origin, no CORS).
-        const results = await chrome.scripting.executeScript({
+        if (!(ready || []).some((r) => r && r.result)) {
+          sendResponse({ ok: false, error: 'gbcadmin frame did not load — open office.gbcadmin.com in a tab and sign in, then retry.' });
+          return;
+        }
+        const r = await chrome.scripting.executeScript({
           target: { tabId, allFrames: true }, world: 'MAIN',
-          func: () => {
-            try {
-              if (location.hostname && location.hostname.endsWith('gbcadmin.com')) {
-                return { href: location.href, html: document.documentElement.outerHTML };
-              }
-            } catch (e) { /* cross-origin guard */ }
-            return null;
-          },
+          func: gbInvFetchHtml, args: ['https://office.gbcadmin.com', msg.sku],
         });
-        // 3. Clean up the iframe.
-        chrome.scripting.executeScript({
-          target: { tabId }, world: 'MAIN',
-          func: () => { const f = document.getElementById('__gb_inv_frame'); if (f) f.remove(); },
-        }).catch(() => {});
-
-        const hit = (results || []).map((r) => r && r.result).find(Boolean);
-        if (!hit) { sendResponse({ ok: false, error: 'Inventory frame did not load (it may block embedding). Open office.gbcadmin.com in a tab and sign in, then retry.' }); return; }
-        if (/GenericErrorPage|aspxerrorpath/i.test(hit.href || '')) { sendResponse({ ok: false, error: 'Not signed in to office.gbcadmin.com — open it in a tab and sign in.' }); return; }
+        const hit = (r || []).map((x) => x && x.result).find((v) => v != null);
+        if (!hit) { sendResponse({ ok: false, error: 'Inventory frame returned nothing (it may block embedding).' }); return; }
+        if (hit.__auth === false) { sendResponse({ ok: false, error: 'Not signed in to office.gbcadmin.com — open it in a tab and sign in.' }); return; }
+        if (hit.error) { sendResponse({ ok: false, error: hit.error }); return; }
         sendResponse({ ok: true, text: hit.html || '' });
       } catch (err) {
         console.warn('[GB] fetchInventory error:', err.message);
+        sendResponse({ ok: false, error: String((err && err.message) || err) });
+      }
+    })();
+    return true;
+  }
+
+  // ── Bulk cost sync: fetch per-unit cost for a batch of SKUs ────────────────
+  // Ensures the persistent authed gbcadmin iframe, then in-frame credentialed-
+  // fetches Inventory.aspx for each SKU and returns { sku: cost|null }. The lib
+  // calls this in chunks so it can report progress + cancel between batches.
+  if (msg.action === 'fetchCosts' && Array.isArray(msg.skus)) {
+    const tabId = sender && sender.tab && sender.tab.id;
+    if (!tabId) { sendResponse({ ok: false, error: 'No tab context for cost sync' }); return true; }
+    (async () => {
+      try {
+        const ready = await chrome.scripting.executeScript({
+          target: { tabId }, world: 'MAIN', func: gbEnsureInvFrame, args: ['https://office.gbcadmin.com'],
+        });
+        if (!(ready || []).some((r) => r && r.result)) {
+          sendResponse({ ok: false, error: 'gbcadmin frame did not load — open office.gbcadmin.com in a tab and sign in, then retry.' });
+          return;
+        }
+        const r = await chrome.scripting.executeScript({
+          target: { tabId, allFrames: true }, world: 'MAIN',
+          func: gbInvFetchCosts, args: ['https://office.gbcadmin.com', msg.skus],
+        });
+        const hit = (r || []).map((x) => x && x.result).find((v) => v != null);
+        if (!hit) { sendResponse({ ok: false, error: 'Cost frame returned nothing (it may block embedding).' }); return; }
+        if (hit.__auth === false) { sendResponse({ ok: false, error: 'Not signed in to office.gbcadmin.com — open it in a tab and sign in, then retry.' }); return; }
+        sendResponse({ ok: true, costs: hit });
+      } catch (err) {
+        console.warn('[GB] fetchCosts error:', err.message);
         sendResponse({ ok: false, error: String((err && err.message) || err) });
       }
     })();

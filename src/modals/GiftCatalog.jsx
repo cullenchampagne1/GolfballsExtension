@@ -10,7 +10,7 @@ import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDr
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS } from '../lib/customItems.js';
 import { importHpgCatalog } from '../lib/hpgImport.js';
 import { importSnugzCatalog } from '../lib/snugzImport.js';
-import { getInventory, cachedCostForSku, primeCostCache } from '../lib/inventory.js';
+import { getInventory, cachedCostForSku, primeCostCache, importCosts } from '../lib/inventory.js';
 import { ProposalEmailModal, ProposalEmailComposer } from './ProposalEmail.jsx';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
@@ -2657,6 +2657,43 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // Manual rebuild button — always a fresh, cache-clearing crawl.
   const refresh = () => { if (refreshing) return; runPull({ force: true }); };
 
+  // ── Bulk cost sync ────────────────────────────────────────────────────────
+  // Pulls per-unit cost (from the gbcadmin Inventory endpoint) for every catalog
+  // SKU into a persistent map so the margin breakdown uses real cost instead of
+  // the 40% placeholder. One command, runs in the page (golfballs.com) context
+  // so the gbcadmin session cookie flows. Progress + cancel; skips already-known
+  // SKUs (cost doesn't change), so re-running only fills gaps.
+  const [costSync, setCostSync] = useState(null);   // { done, total, found } while running
+  const costAbortRef = useRef(null);
+  const syncCosts = async () => {
+    if (costSync) { try { costAbortRef.current && costAbortRef.current.abort(); } catch {} return; }
+    // Unique inventory SKUs across the loaded catalog (parentCode is the base
+    // product code the endpoint keys on; fall back to sku).
+    const skus = Array.from(new Set(catalog.map((p) => p.parentCode || p.sku).filter(Boolean)));
+    if (!skus.length) { toast && toast.error && toast.error('No catalog SKUs to sync yet — let the index load first.'); return; }
+    const ctrl = new AbortController();
+    costAbortRef.current = ctrl;
+    setCostSync({ done: 0, total: skus.length, found: 0 });
+    try {
+      await importCosts(skus, {
+        signal: ctrl.signal,
+        onProgress: (p) => { if (aliveRef.current) setCostSync(p); },
+      });
+      if (aliveRef.current) {
+        await primeCostCache();
+        setProposal((pr) => pr.slice());   // re-render margins with the fresh costs
+      }
+    } catch (e) {
+      // Errors only (auth / embedding failures) — success stays silent; the
+      // button's progress already conveys completion.
+      if (aliveRef.current) toast && toast.error && toast.error('Cost sync failed: ' + (e.message || e));
+    } finally {
+      if (aliveRef.current) setCostSync(null);
+      costAbortRef.current = null;
+    }
+  };
+  const costPct = costSync && costSync.total ? Math.round((costSync.done / costSync.total) * 100) : 0;
+
   // Custom-logo subset: total, per-"Shop by Type" category counts, and the
   // ordered list of categories present (canonical order, extras trail).
   // Commissionable (custom-logo) count — kept only for the header stat; these
@@ -2823,6 +2860,16 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           </div>
           <SearchBox value={query} onChange={setQuery} commands={commands} onPick={onPickCommand} filtersActive={filtersActive} onClearAll={clearAll} />
           <SortSelect value={sort} onChange={setSort} />
+          <IconBtn
+            size="md"
+            title={costSync ? `Syncing costs — ${costSync.done}/${costSync.total} (click to cancel)` : 'Sync costs for margin (from gbcadmin)'}
+            icon={costSync
+              ? <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 15, height: 15 }}>
+                  <span style={{ width: 13, height: 13, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} />
+                  <span style={{ position: 'absolute', fontSize: 7, fontWeight: 700, color: 'var(--gb-text-muted)' }}>{costPct}</span>
+                </span>
+              : <I.calc />}
+            onClick={syncCosts} />
           <IconBtn size="md" title="Rebuild catalog index" icon={<I.refresh style={{ animation: refreshing ? 'gb-spin .8s linear infinite' : 'none' }} />} onClick={refresh} />
           <IconBtn size="md" icon={<I.close />} onClick={doClose} />
         </div>

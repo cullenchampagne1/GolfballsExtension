@@ -318,17 +318,19 @@ function ArrayModeControl({ arrayInfo, path, onChange }) {
           size="sm"
           value={arrayInfo.mode}
           options={ARRAY_MODE_OPTS}
-          onChange={(m) => onChange(rewriteArrayRef(path, m, arrayInfo.index))}
+          /* `[0]` encodes "first" and `[-1]` "last", so an index position
+             must be ≥ 1 to round-trip as index mode (item 0 IS "First"). */
+          onChange={(m) => onChange(rewriteArrayRef(path, m, m === 'index' ? Math.max(1, arrayInfo.index || 0) : arrayInfo.index))}
         />
       </div>
       {arrayInfo.mode === 'index' && (
         <input
           type="number"
-          min={0}
+          min={1}
           value={String(arrayInfo.index)}
           onChange={(e) => {
             const v = parseInt(e.target.value, 10);
-            onChange(rewriteArrayRef(path, 'index', Number.isFinite(v) ? Math.max(0, v) : 0));
+            onChange(rewriteArrayRef(path, 'index', Number.isFinite(v) ? Math.max(1, v) : 1));
           }}
           style={baseControlStyle({ width: 56 })}
         />

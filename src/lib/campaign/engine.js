@@ -122,7 +122,8 @@ export async function runCampaign({ campaign, audience, lookupTemplate, deps = {
 
     // Suppression — skip the whole contact (bounced / mailer-removed) before
     // any step runs.
-    const suppressReason = (campaign?.suppressBounced && ctx.bounceCode) ? 'bounced'
+    const suppressReason = (campaign?.suppressDoNotContact && ctx.doNotContact) ? 'do-not-contact'
+      : (campaign?.suppressBounced && ctx.bounceCode) ? 'bounced'
       : (campaign?.suppressMailerRemoved && ctx.mailerRemoved) ? 'mailer-removed' : null;
     if (suppressReason) {
       const summary = { contact, contactId: ctx.contactId, ran: 0, skipped: 0, failed: 0, suppressed: true, suppressReason, stoppedAtBranch: false, error: ctx.error, steps: [] };
