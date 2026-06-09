@@ -434,14 +434,36 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
             </div>
             <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
               <iframe title="proposal-preview" srcDoc={doc} style={{ width: '100%', height: '100%', border: 'none', background: '#eef0f2' }} />
-              {/* Catalog-style loading veil while the 3D snapshots render. */}
+              {/* Polished render-progress overlay: an animated card with a tile
+                  grid that fills with checks as each preview renders, plus a
+                  determinate bar + count. */}
               {busy && (
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, background: 'color-mix(in srgb, var(--gb-surface-deep) 72%, transparent)', backdropFilter: 'blur(2px)', WebkitBackdropFilter: 'blur(2px)' }}>
-                  <span style={{ width: 26, height: 26, borderRadius: '50%', border: '2.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} />
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>
-                    Rendering personalization previews{prog.t ? ` — ${prog.n}/${prog.t}` : '…'}
-                  </div>
-                </div>
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .18 }}
+                  style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'color-mix(in srgb, var(--gb-surface-deep) 82%, transparent)', backdropFilter: 'blur(5px)', WebkitBackdropFilter: 'blur(5px)' }}>
+                  <motion.div initial={{ opacity: 0, scale: .96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ type: 'spring', stiffness: 340, damping: 28 }}
+                    style={{ width: 320, maxWidth: '88%', padding: '24px 24px 20px', borderRadius: 'var(--gb-r-xl)', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+                    <div style={{ position: 'relative', width: 48, height: 48, flexShrink: 0 }}>
+                      <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '3px solid var(--gb-brand-tint-soft)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .85s linear infinite' }} />
+                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gb-brand-label)' }}><I.card size={19} /></div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Rendering 3D previews</div>
+                      <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', marginTop: 3 }}>{prog.t ? 'Snapshotting each personalization on its model' : 'Preparing personalizations…'}</div>
+                    </div>
+                    {prog.t > 0 && prog.t <= 24 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', maxWidth: 252 }}>
+                        {Array.from({ length: prog.t }).map((_, idx) => {
+                          const done = idx < prog.n, active = idx === prog.n;
+                          return <div key={idx} style={{ width: 24, height: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', transition: 'background .3s, border-color .3s', background: done ? 'var(--gb-brand-label)' : 'var(--gb-fill-subtle)', border: '1px solid ' + (done ? 'var(--gb-brand-label)' : active ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'), animation: (!done && active) ? 'gb-pulse 1s ease-in-out infinite' : 'none' }}>{done && <I.check size={13} strokeWidth={3} />}</div>;
+                        })}
+                      </div>
+                    )}
+                    <div style={{ width: '100%', height: 7, borderRadius: 4, background: 'var(--gb-fill-subtle)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', borderRadius: 4, background: 'var(--gb-brand-label)', width: prog.t ? `${Math.max(4, Math.round((prog.n / prog.t) * 100))}%` : '24%', animation: prog.t ? 'none' : 'gb-pulse 1s ease-in-out infinite', transition: 'width .35s cubic-bezier(.4,0,.2,1)' }} />
+                    </div>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-secondary)' }}>{prog.t ? `${prog.n} of ${prog.t}` : 'Loading…'}</div>
+                  </motion.div>
+                </motion.div>
               )}
             </div>
           </div>
