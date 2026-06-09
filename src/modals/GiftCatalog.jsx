@@ -2125,7 +2125,10 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
         {selectMode && sel.size > 0 && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} transition={{ duration: .16 }}
             style={{ position: 'absolute', right: 18, bottom: 18, zIndex: 6 }}>
-            <Btn variant="danger" size="md" icon={<I.trash />} onClick={bulkDelete}
+            {/* variant=primary so its hover is a brightness filter (keeps the solid
+                fill) — the `danger` variant's hover animates backgroundColor to a
+                tint, which made the button go transparent on hover. */}
+            <Btn variant="primary" size="md" icon={<I.trash />} onClick={bulkDelete}
               style={{ background: 'var(--gb-danger, #e5484d)', color: '#fff', border: '1px solid var(--gb-danger, #e5484d)', boxShadow: '0 6px 18px -6px rgba(0,0,0,.45)' }}>Delete {nfmt(sel.size)}</Btn>
           </motion.div>
         )}
