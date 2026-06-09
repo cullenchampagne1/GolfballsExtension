@@ -12,6 +12,23 @@
    ─────────────────────────────────────────────────────────────────────────── */
 
 const STORAGE_KEY = 'gbCustomItems';
+
+/* Supplier "repos" a custom item can be imported from. `label` is the short tag
+   shown on the card; `host` lets us recover the source from an item's link for
+   items imported before `source` was stored (migration-proof). */
+export const REPOS = {
+  hpg:   { label: 'HPG',   name: 'HPG Brands', host: 'hpgbrands.com' },
+  snugz: { label: 'SnugZ', name: 'SnugZ USA',  host: 'snugzusa.com' },
+};
+/* Which repo a custom item came from — its stored `source`, or inferred from the
+   product link (so previously-imported items still get tagged). Null = manual. */
+export function repoOf(rec) {
+  if (!rec) return null;
+  if (rec.source && REPOS[rec.source]) return rec.source;
+  const link = (rec.link || '').toLowerCase();
+  for (const id of Object.keys(REPOS)) { if (link.includes(REPOS[id].host)) return id; }
+  return null;
+}
 const _rid = () => Math.random().toString(36).slice(2, 9);
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 

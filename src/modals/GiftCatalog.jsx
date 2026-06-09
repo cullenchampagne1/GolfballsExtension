@@ -7,7 +7,9 @@ import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CA
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions, colorNameOf } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal } from '../lib/saveProposal.js';
-import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty } from '../lib/customItems.js';
+import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS } from '../lib/customItems.js';
+import { importHpgCatalog } from '../lib/hpgImport.js';
+import { importSnugzCatalog } from '../lib/snugzImport.js';
 import { getInventory, cachedCostForSku, primeCostCache } from '../lib/inventory.js';
 import { ProposalEmailModal, ProposalEmailComposer } from './ProposalEmail.jsx';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
@@ -1899,14 +1901,113 @@ function CustomAddTile({ onNew, minH }) {
   );
 }
 
-function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, onOpen, onDelete, onDeleteMany, search = '' }) {
+const REPO_RUN = { hpg: importHpgCatalog, snugz: importSnugzCatalog };
+
+/* Repo import modal — pick a supplier "repo" and pull its customizable catalog in
+   as custom items. A link input is stubbed for a future per-URL import. Running
+   shows a live progress animation that can be cancelled mid-flight. */
+function RepoImportModal({ onClose, onImported }) {
+  const [repo, setRepo] = useState('hpg');
+  const [busy, setBusy] = useState(false);
+  const [prog, setProg] = useState(null);   // { label, count, total }
+  const signalRef = useRef(null);
+  const repoOptions = Object.keys(REPOS).map((id) => ({ value: id, label: REPOS[id].name }));
+
+  const run = () => {
+    const fn = REPO_RUN[repo];
+    if (!fn || busy) return;
+    const signal = { aborted: false };
+    signalRef.current = signal;
+    setBusy(true);
+    setProg({ label: 'Starting…' });
+    const onProgress = (p) => {
+      if (signal.aborted) return;
+      const label = p.phase === 'list'
+        ? (p.cats ? `Scanning categories — ${p.cat}/${p.cats} (${p.found} found)` : `Scanning catalog — page ${p.page}${p.totalPages ? '/' + p.totalPages : ''} (${p.kept} kept)`)
+        : `Importing products — ${p.count}/${p.total}`;
+      setProg({ label, count: p.count, total: p.total });
+    };
+    fn({ onProgress, signal })
+      .then((res) => { if (!signal.aborted) onImported(repo, res); })
+      .catch((e) => {
+        if (signal.aborted || /cancel/i.test(e && e.message)) return;
+        try { window.__gbToast && window.__gbToast.error && window.__gbToast.error((e && e.message) || 'Import failed', { duration: 4500 }); } catch { /* */ }
+        setBusy(false);
+      });
+  };
+  const stop = () => { if (signalRef.current) signalRef.current.aborted = true; };
+  const close = () => { stop(); onClose(); };
+  const pct = (prog && prog.total) ? Math.max(4, Math.round((prog.count / prog.total) * 100)) : null;
+
+  return (
+    <motion.div onClick={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .16 }}
+      style={{ position: 'absolute', inset: 0, zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)' }}>
+      <motion.div initial={{ opacity: 0, scale: .96, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97 }} transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+        style={{ width: 420, maxWidth: '92%', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden' }}>
+        <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 11, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+          <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.download size={16} /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Import from a repo</div>
+            <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1 }}>Pull a supplier’s customizable catalog into your custom items</div>
+          </div>
+          {!busy && <IconBtn size="sm" icon={<I.close />} onClick={onClose} />}
+        </div>
+
+        {busy ? (
+          <div style={{ padding: '28px 22px 22px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+            <div style={{ position: 'relative', width: 56, height: 56 }}>
+              <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '3px solid var(--gb-brand-tint-soft)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} />
+              <div style={{ position: 'absolute', inset: 7, borderRadius: '50%', border: '2px solid var(--gb-brand-tint-soft)', borderBottomColor: 'var(--gb-brand-label)', animation: 'gb-spin 1.3s linear infinite reverse' }} />
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gb-brand-label)' }}><I.download size={18} /></div>
+            </div>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Importing {REPOS[repo].name}</div>
+              <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', marginTop: 3 }}>{(prog && prog.label) || 'Working…'}</div>
+            </div>
+            <div style={{ width: '100%', height: 7, borderRadius: 4, background: 'var(--gb-fill-subtle)', overflow: 'hidden' }}>
+              <div style={{ height: '100%', borderRadius: 4, background: 'var(--gb-brand-label)', width: pct != null ? `${pct}%` : '30%', animation: pct != null ? 'none' : 'gb-pulse 1s ease-in-out infinite', transition: 'width .35s ease' }} />
+            </div>
+            <Btn variant="secondary" size="md" icon={<I.close />} onClick={close} style={{ width: '100%' }}>Cancel import</Btn>
+          </div>
+        ) : (
+          <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Product / category link</label>
+              <Input size="sm" value="" onChange={() => {}} disabled placeholder="Paste a link to import one product…" />
+              <span style={{ fontSize: 10, color: 'var(--gb-text-ghost)', fontStyle: 'italic' }}>Coming soon</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Repo</label>
+              <Dropdown size="sm" value={repo} onChange={setRepo} options={repoOptions} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <Btn variant="ghost" size="md" onClick={onClose}>Cancel</Btn>
+              <Btn variant="primary" size="md" icon={<I.download />} onClick={run}>Import</Btn>
+            </div>
+          </div>
+        )}
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, onOpen, onDelete, onDeleteMany, onReload, search = '' }) {
   const minH = compact ? 232 : 262;
   const INIT = 60, CHUNK = 48;
   const [visible, setVisible] = useState(INIT);
   const [selectMode, setSelectMode] = useState(false);
   const [sel, setSel] = useState(() => new Set());
+  const [repoOpen, setRepoOpen] = useState(false);
+  const toast = useToast();
   const lastIdx = useRef(null);
   const scrollRef = useRef(null);
+  const onRepoImported = (repoId, res) => {
+    setRepoOpen(false);
+    if (onReload) onReload();
+    const r = REPOS[repoId];
+    toast?.success?.(`Imported ${res.added} new + ${res.updated} updated from ${r ? r.name : repoId}`, { duration: 4000 });
+  };
   // Driven by the shared catalog search bar — a leading "/" is a catalog command,
   // so it filters nothing here.
   const term = useMemo(() => { const s = (search || '').trim(); return s.startsWith('/') ? '' : s.toLowerCase(); }, [search]);
@@ -1966,8 +2067,12 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
         ) : (
           items.length > 0 && <IconBtn size="sm" variant="secondary" title="Select items" icon={<I.check />} onClick={() => setSelectMode(true)} />
         )}
+        {!selectMode && <IconBtn size="sm" variant="secondary" title="Import from a repo" icon={<I.download size={14} />} onClick={() => setRepoOpen(true)} />}
         <Btn variant="primary" size="sm" icon={<I.plus />} onClick={onNew}>Add custom item</Btn>
       </div>
+      <AnimatePresence>
+        {repoOpen && <RepoImportModal key="repo-import" onClose={() => setRepoOpen(false)} onImported={onRepoImported} />}
+      </AnimatePresence>
       <div ref={scrollRef} onScroll={onScroll} className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: 16 }}>
         {filtered.length === 0 ? (
           <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--gb-text-muted)', textAlign: 'center', padding: 24 }}>
@@ -1981,10 +2086,17 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
               {shown.map((ci, idx) => {
                 const p = customItemToProduct(ci);
                 const picked = sel.has(ci.id);
+                const repo = repoOf(ci);
                 return (
                   <div key={ci.id} style={{ position: 'relative', borderRadius: 'var(--gb-r-lg)', outline: picked ? '2px solid var(--gb-brand-label)' : 'none', outlineOffset: 2 }}>
                     <ProductCard p={p} compact={compact} showRating={false}
                       inProposal={inProposal(p.id)} onAdd={() => onAdd(ci)} onClick={(e) => onCardClick(ci, idx, e)} />
+                    {/* Where this item came from (repo import), incl. migrated items. */}
+                    {repo && (
+                      <span style={{ position: 'absolute', top: 8, left: 8, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 999, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', boxShadow: '0 1px 4px rgba(0,0,0,.1)', fontSize: 9, fontWeight: 800, letterSpacing: .3, color: 'var(--gb-text-secondary)', pointerEvents: 'none' }}>
+                        <I.download size={9} /> {REPOS[repo].label}
+                      </span>
+                    )}
                     {selectMode ? (
                       <div style={{ position: 'absolute', top: 8, right: 8, width: 22, height: 22, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: picked ? 'var(--gb-brand-label)' : 'var(--gb-surface-modal)', border: '1px solid ' + (picked ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.12)', pointerEvents: 'none' }}>
                         {picked && <I.check size={13} strokeWidth={3} />}
@@ -2743,7 +2855,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           ) : view === 'custom' ? (
             <motion.div key="custom" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
             <CustomItemsGallery items={customItems} compact={compact} colMin={colMin} search={query}
-              inProposal={inProposal} onAdd={addCustomToProposal}
+              inProposal={inProposal} onAdd={addCustomToProposal} onReload={() => loadCustomItems().then(setCustomItems)}
               onNew={() => setEditingCustom({})} onOpen={(ci) => setSelected(customItemToProduct(ci))} onDelete={deleteCustom} onDeleteMany={deleteCustomMany} />
           </motion.div>
           ) : (
