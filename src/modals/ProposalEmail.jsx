@@ -16,6 +16,7 @@ import { linesToShots } from '../lib/proposalSnapshots.js';
 const _esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const _money = (n) => '$' + (n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const _brandLine = (l, color) => l.brand ? `<div style="font-size: 11px; letter-spacing: .6px; text-transform: uppercase; color: ${color};">${_esc(l.brand)}</div>` : '';
+const _hasPrev = (l) => !!(l && l.previews && l.previews.length);
 
 /* A labeled "Previews" box for a line — the rendered 3D personalization photo(s)
    (Front + Reverse for dual-pole) inside a small bordered, captioned card. Tile
