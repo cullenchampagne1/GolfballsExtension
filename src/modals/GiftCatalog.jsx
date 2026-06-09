@@ -2474,7 +2474,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     // First text line (front) drives the synthetic-chip label fallback.
     const text = front.kind === 'text' ? ((front.lines || []).filter(Boolean).join(' / ') || null)
       : front.kind === 'monogram' ? (front.text || null) : null;
-    return { type: deco.engine, typeLabel, color, colorHex: colorHex || null, detailLines, text };
+    // `frontLabel` = the front imprint's type alone (templates that show only the
+    // first personalization, e.g. Quote, use this instead of the combined label).
+    return { type: deco.engine, typeLabel, frontLabel, color, colorHex: colorHex || null, detailLines, text };
   };
   const proposalToEmailSource = (lines, name) => {
     const rows = []; let total = 0;
