@@ -14,7 +14,7 @@
    and PUT it through the giftSaveCart relay.
    ─────────────────────────────────────────────────────────────────────────── */
 
-import { assembleLine, buildSaveCartBody, buildSaveProposalBody, buildCustomItemLine, buildCartData, buildAsCartContents } from './cartSerializer.js';
+import { assembleLine, buildSaveCartBody, buildSaveProposalBody, buildCustomItemLine, buildCartData, buildAsCartContents, decorationFromCartItem } from './cartSerializer.js';
 import { runEngine } from './page-engine/index.js';
 import { needsIngest, ingestImageUrl, saveCustomItem } from './customItems.js';
 
@@ -389,6 +389,8 @@ function cartItemToLine(it, i) {
   const qty = Number(it.totalQty) || (breaks[0] && breaks[0].q) || 1;
   let price = it.ItemPrice;
   if (price == null) { let p = breaks[0] ? breaks[0].p : 0; for (const b of breaks) if (b.q <= qty) p = b.p; price = p; }
+  const decoration = decorationFromCartItem(it);     // read the saved imprint back
+  const isLogo = decoration && (decoration.engine === 'ballLogo' || decoration.engine === 'logoOverlay');
   return {
     id: 'crmln-' + (it.itemGuid || i),
     productId: it.itemGuid || ('p' + i),
@@ -402,11 +404,12 @@ function cartItemToLine(it, i) {
       sku: cd.parentSku || it.ShortCode || '',
       parentCode: it.ShortCode || '',
       breaks: breaks.length ? breaks : [{ q: qty, p: price }],
-      customLogo: false,
+      customLogo: !!isLogo,
+      cat: (it.itemType === 'Golf Balls') ? 'Logo Golf Balls' : undefined,
       price,
       minQty: (breaks[0] && breaks[0].q) || qty,
     },
-    decoration: null,
+    decoration,
     variant: null,
     splits: [{ id: 'crms-' + (it.itemGuid || i), qty, price }],
   };

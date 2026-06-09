@@ -602,6 +602,92 @@ export function buildDecoration(product, decoration = {}) {
   return out;
 }
 
+/* ── REVERSE: a cart line's modification → the decoration descriptor ──────────
+   The inverse of buildDecoration: read the imprint a saved cart stored
+   (dynamicImage / interfaceState / customUserImage) back into the engine-agnostic
+   decoration the modal + giftImprints.decoImprints understand, so a CRM proposal
+   shows its real imprint details (type · text/logo · colour · pole). Returns null
+   when the line has no detectable imprint. Covers the ball engines (logo, text,
+   monogram, dual-pole) + tee + towel; mirrors the fields buildDecoration writes. */
+export function decorationFromCartItem(it) {
+  const m = it && it.modification;
+  if (!m) return null;
+  const di = Array.isArray(m.dynamicImage) ? m.dynamicImage : [];
+  const d0 = di[0] || {};
+  const is = m.interfaceState || {};
+  const cui = it.customUserImage || {};
+  const baseColor = (d0.configOverrides && d0.configOverrides.BC) || '#FFFFFF';
+  const finish = { MFS: '279', SecondMFS: '279' };
+  const nonEmpty = (lines) => (lines || []).some((l) => l != null && String(l).trim() !== '');
+  const logoFrom = (poleObj, cuiPole) => {
+    const fp = (poleObj && poleObj.filePath) || (cuiPole && cuiPole.filePath) || '';
+    const fn = (poleObj && poleObj.fileName) || (cuiPole && cuiPole.fileName) || '';
+    if (!fp && !fn) return null;
+    return { filePath: fp, fileName: fn, cropFilePath: (poleObj && poleObj.cropFilePath) || '' };
+  };
+
+  // Tee text (modID 15)
+  if (d0.sku === 'tee' || d0.imageType === 'Tee') {
+    const u = (d0.userText && d0.userText[0]) || {};
+    return nonEmpty(u.lines)
+      ? { engine: 'accessoryText', baseColor, finish, dualPole: false, pole2: null, pole1: { lines: u.lines, font: u.font || 'Kabel Dm BT', color: u.color || '#000000' } }
+      : null;
+  }
+
+  // Towel / hat embroidery (both sub-conditions live in interfaceState)
+  if (is.GolfTowelPersonalized || is.GolfTowelMonogram || d0.imageType === 'Golf Towel') {
+    const monoU = ((is.GolfTowelMonogram || {}).userText || [])[0] || {};
+    const textU = ((is.GolfTowelPersonalized || {}).userText || [])[0] || {};
+    if ((d0.condition === 'Monogram' || (nonEmpty(monoU.lines) && !nonEmpty(textU.lines))) && nonEmpty(monoU.lines)) {
+      return { engine: 'towelMonogram', baseColor, finish, dualPole: false, pole2: null, monogram: { text: (monoU.lines || []).join(''), color: monoU.color || '#000000', color2: '#FFFFFF', overlay: 'circle' } };
+    }
+    if (nonEmpty(textU.lines)) {
+      return { engine: 'towelText', baseColor, finish, dualPole: false, pole2: null, pole1: { lines: textU.lines, font: textU.font || 'Century', color: textU.color || '#000000' } };
+    }
+    return null;
+  }
+
+  // Monogram on a ball (decorationType MonogramPadded + metaData)
+  const print = d0.Print || {};
+  if ((print.versionProperties && print.versionProperties.decorationType === 'MonogramPadded') || (d0.metaData && print.userOverlay)) {
+    const md = d0.metaData || {};
+    const pc = print.configOverrides || {};
+    const overlayName = ((print.userOverlay || [])[0] || {}).fileName || '';
+    const text = md.text != null ? md.text : overlayName.replace(/,/g, '');
+    if (!String(text).trim()) return null;
+    return { engine: 'monogram', baseColor, finish, dualPole: false, pole2: null,
+      monogram: { baseColor, text: String(text), view: print.view || md.view, color: md.color || pc.Color1 || '#000000', color2: md.color2 || pc.Color2 || '#FFFFFF', overlay: md.overlay || 'circle' } };
+  }
+
+  // Custom logo on a ball (GolfBallCustomLogo) — front logo + optional 2nd pole
+  const gb = is.GolfBallCustomLogo;
+  if (gb) {
+    const frontLogo = logoFrom(gb.customLogo, cui.firstPole);
+    let pole2 = null, dualPole = false;
+    if (gb.customLogoSecondPole && (gb.customLogoSecondPole.filePath || gb.customLogoSecondPole.fileName || (cui.secondPole && cui.secondPole.filePath))) {
+      pole2 = { kind: 'logo', logo: logoFrom(gb.customLogoSecondPole, cui.secondPole) || { filePath: '', fileName: '' } }; dualPole = true;
+    } else if (gb.textSecondPole && gb.textSecondPole.useCustomLogo) {
+      const t = is.firstPoleUserText || {};
+      if (nonEmpty(t.lines)) { pole2 = { kind: 'text', lines: t.lines, font: t.font || 'Kabel Dm BT', color: t.color || '#000000' }; dualPole = true; }
+    }
+    if (frontLogo || pole2) return { engine: 'ballLogo', baseColor, finish, dualPole, pole2, logo: frontLogo };
+  }
+
+  // Personalized text on a ball (Print.userText, + optional Print2 2nd pole)
+  if (print.userText) {
+    const u = print.userText[0] || {};
+    const u2 = ((d0.Print2 || {}).userText || [])[0] || null;
+    if (nonEmpty(u.lines)) {
+      const second = u2 && nonEmpty(u2.lines);
+      return { engine: 'ballText', baseColor, finish,
+        dualPole: !!second, pole2: second ? { kind: 'text', lines: u2.lines, font: u2.font || 'Kabel Dm BT', color: u2.color || '#000000' } : null,
+        pole1: { lines: u.lines, font: u.font || 'Kabel Dm BT', color: u.color || '#000000' } };
+    }
+  }
+
+  return null;
+}
+
 /* Assemble one itemsInCart line from the product page object
    (__NEXT_DATA__.props.pageProps.product), the catalog pricing ladder, the
    buyer's property selection, the decoration descriptor, and quantity. Works
