@@ -183,6 +183,18 @@ export function cachedCostForSku(sku) {
   return _costMap.has(sku) ? _costMap.get(sku) : null;
 }
 
+/* Cache-only read of a SKU's inventory — returns the parsed object (even if past
+   TTL, with `stale:true`) or null if never fetched. Lets the panel show last-
+   known inventory instantly on open without hitting the network. */
+export async function peekInventory(sku) {
+  if (!sku) return null;
+  const map = await _readCache();
+  const hit = map[String(sku)];
+  if (!hit || !hit.parsed) return null;
+  if (hit.parsed.cost != null) _costMap.set(String(sku), hit.parsed.cost);
+  return { ...hit.parsed, stale: (Date.now() - (hit.ts || 0)) >= TTL_MS };
+}
+
 /* Fetch + parse inventory for a SKU, with a 6h chrome.storage cache.
    Returns the parsed object { sku, rows, cost }. `force` bypasses the cache. */
 export async function getInventory(sku, { force = false } = {}) {
@@ -199,6 +211,7 @@ export async function getInventory(sku, { force = false } = {}) {
   // bounced to the auth error page (see background.js `fetchInventory`).
   const r = await _sendBg('fetchInventory', { sku: key });
   const parsed = parseInventoryHtml(r.text || '', key);
+  if (r.notFound) parsed.notFound = true;   // SKU has no Dynamics record (404)
   map[key] = { ts: Date.now(), parsed };
   _writeCache(map);
   if (parsed.cost != null) _costMap.set(key, parsed.cost);

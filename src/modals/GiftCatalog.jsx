@@ -10,7 +10,7 @@ import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDr
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS } from '../lib/customItems.js';
 import { importHpgCatalog } from '../lib/hpgImport.js';
 import { importSnugzCatalog } from '../lib/snugzImport.js';
-import { getInventory, cachedCostForSku, primeCostCache, importCosts } from '../lib/inventory.js';
+import { getInventory, peekInventory, cachedCostForSku, primeCostCache, importCosts } from '../lib/inventory.js';
 import { ProposalEmailModal, ProposalEmailComposer } from './ProposalEmail.jsx';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
@@ -533,14 +533,24 @@ function InventoryPanel({ sku }) {
       .then((d) => { setData(d); setState('done'); })
       .catch((e) => { setErr((e && e.message) || 'failed'); setState('error'); });
   };
-  const numCell = (v) => <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--gb-font-mono)', fontSize: 11, color: 'var(--gb-text-secondary)', borderTop: '1px solid var(--gb-border-subtle)' }}>{(v || 0).toLocaleString('en-US')}</td>;
+  // Show last-known inventory instantly on open (cache-first); only the refresh
+  // button (or a never-fetched SKU) hits the network.
+  useEffect(() => {
+    let alive = true;
+    setState('idle'); setData(null); setErr('');
+    peekInventory(sku).then((d) => { if (alive && d) { setData(d); setState('done'); } });
+    return () => { alive = false; };
+  }, [sku]);
+  const COLS = [['available', 'Avail'], ['onHand', 'OnHand'], ['alloc', 'Alloc'], ['onOrder', 'OnOrdr']];
+  const numCell = (v, k) => <td key={k} style={{ padding: '6px 10px', textAlign: 'right', fontFamily: 'var(--gb-font-mono)', fontSize: 11.5, color: 'var(--gb-text-secondary)', borderTop: '1px solid var(--gb-border-subtle)' }}>{(v || 0).toLocaleString('en-US')}</td>;
   return (
     <div style={{ marginTop: 18 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
         <Layers size={12} style={{ color: 'var(--gb-brand-label)' }} />
         <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-secondary)' }}>Inventory</span>
+        {data && data.stale && state === 'done' && <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--gb-text-ghost)', letterSpacing: .3 }}>· cached</span>}
         <div style={{ flex: 1 }} />
-        {state === 'done' && <button type="button" onClick={() => load(true)} title="Refresh" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--gb-text-muted)', display: 'flex', padding: 2 }}><I.refresh size={12} /></button>}
+        {(state === 'done' || state === 'error') && <button type="button" onClick={() => load(true)} title="Refresh inventory" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--gb-text-muted)', display: 'flex', padding: 2 }}><I.refresh size={12} /></button>}
       </div>
       {state === 'idle' && <Btn variant="secondary" size="sm" icon={<Layers size={13} />} onClick={() => load(false)}>Check inventory</Btn>}
       {state === 'loading' && <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 11.5, padding: '6px 0' }}><span style={{ width: 13, height: 13, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} /> Loading inventory…</div>}
@@ -553,22 +563,22 @@ function InventoryPanel({ sku }) {
           <Btn variant="secondary" size="sm" icon={<I.refresh size={13} />} onClick={() => load(true)} style={{ alignSelf: 'flex-start' }}>Retry</Btn>
         </div>
       )}
-      {state === 'done' && data && (data.rows.length ? (
+      {state === 'done' && data && (data.notFound ? (
+        <div style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>No Dynamics inventory record for this SKU.</div>
+      ) : data.rows.length ? (
         <div style={{ border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <thead>
               <tr style={{ background: 'var(--gb-fill-inverse-strong)' }}>
-                {['Item', 'Avail', 'OnHand', 'Alloc', 'OnOrdr', 'Cost'].map((h, i) => (
-                  <th key={h} style={{ padding: '6px 8px', textAlign: i === 0 ? 'left' : 'right', fontSize: 8.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>{h}</th>
+                {COLS.map(([, h]) => (
+                  <th key={h} style={{ padding: '6px 10px', textAlign: 'right', fontSize: 8.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {data.rows.map((r, i) => (
-                <tr key={i} title={r.description || ''}>
-                  <td style={{ padding: '6px 8px', fontFamily: 'var(--gb-font-mono)', fontSize: 10.5, fontWeight: 700, color: 'var(--gb-text-primary)', borderTop: '1px solid var(--gb-border-subtle)', whiteSpace: 'nowrap' }}>{r.itemNumber}</td>
-                  {numCell(r.available)}{numCell(r.onHand)}{numCell(r.alloc)}{numCell(r.onOrder)}
-                  <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--gb-font-mono)', fontSize: 11, fontWeight: 700, color: r.cost ? 'var(--gb-text-primary)' : 'var(--gb-text-ghost)', borderTop: '1px solid var(--gb-border-subtle)' }}>{r.cost != null ? usd(r.cost) : '—'}</td>
+                <tr key={i} title={[r.itemNumber, r.description].filter(Boolean).join(' — ')}>
+                  {COLS.map(([k]) => numCell(r[k], k))}
                 </tr>
               ))}
             </tbody>
@@ -720,6 +730,11 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) 
               <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 6, lineHeight: 1.4 }}>{isGiftPricing ? 'Per-set price drops with order volume — quote the tier that matches the gift run.' : 'Per-unit price drops with order volume — quote the tier that matches the gift run.'}</div>
             </div>
           )}
+          {/* Synced per-unit cost (from the gbcadmin inventory sync) shown the
+              same way custom items show theirs — text under the pricing chart. */}
+          {!p.isCustom && (() => { const c = cachedCostForSku(invSkuOf(p)); return c != null && c > 0 ? (
+            <div style={{ marginTop: 16, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>Cost <b style={{ color: 'var(--gb-text-secondary)', fontFamily: 'var(--gb-font-mono)' }}>{usd(c)}</b>/unit · used for margin</div>
+          ) : null; })()}
           {/* View product — opens the saved supplier link (custom items only),
               with a copy-to-clipboard icon beside it. */}
           {p.isCustom && p.link && (
@@ -2856,10 +2871,12 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 2, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {refreshing && progress ? (
                 <>Indexing {nfmt(progress.loaded)}{progress.total ? ' / ' + nfmt(progress.total) : ''} products…</>
+              ) : costSync ? (
+                <>Syncing costs {nfmt(costSync.done)}{costSync.total ? ' / ' + nfmt(costSync.total) : ''} SKUs…</>
               ) : (
                 <>{nfmt(catalog.length)} products{clTotal ? <> · {nfmt(clTotal)} custom-logo</> : null}{updatedTs ? <> · updated {relTime(updatedTs)}</> : null}</>
               )}
-              {refreshing && <span style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite', display: 'inline-block', flexShrink: 0 }} />}
+              {(refreshing || costSync) && <span style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite', display: 'inline-block', flexShrink: 0 }} />}
             </div>
           </div>
           <SearchBox value={query} onChange={setQuery} commands={commands} onPick={onPickCommand} filtersActive={filtersActive} onClearAll={clearAll} />
@@ -2867,12 +2884,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           <IconBtn
             size="md"
             title={costSync ? `Syncing costs — ${costSync.done}/${costSync.total} (click to cancel)` : 'Sync costs for margin (from gbcadmin)'}
-            icon={costSync
-              ? <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 15, height: 15 }}>
-                  <span style={{ width: 13, height: 13, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} />
-                  <span style={{ position: 'absolute', fontSize: 7, fontWeight: 700, color: 'var(--gb-text-muted)' }}>{costPct}</span>
-                </span>
-              : <I.calc />}
+            icon={<I.calc style={{ animation: costSync ? 'gb-spin .8s linear infinite' : 'none' }} />}
             onClick={syncCosts} />
           <IconBtn size="md" title="Rebuild catalog index" icon={<I.refresh style={{ animation: refreshing ? 'gb-spin .8s linear infinite' : 'none' }} />} onClick={refresh} />
           <IconBtn size="md" icon={<I.close />} onClick={doClose} />
@@ -2881,8 +2893,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         {/* Re-index progress bar — determinate when numFound is known, a thin
             indeterminate sweep otherwise. Sits flush under the header so the
             grid below stays visible (no blanking) during a refresh. */}
-        <div style={{ height: 2, flexShrink: 0, position: 'relative', overflow: 'hidden', background: refreshing ? 'var(--gb-border-subtle)' : 'transparent' }}>
-          {refreshing && (
+        <div style={{ height: 2, flexShrink: 0, position: 'relative', overflow: 'hidden', background: (refreshing || costSync) ? 'var(--gb-border-subtle)' : 'transparent' }}>
+          {refreshing ? (
             <div style={{
               position: 'absolute', top: 0, bottom: 0, left: 0,
               width: progress && progress.total ? `${Math.min(100, Math.round((progress.loaded / progress.total) * 100))}%` : '35%',
@@ -2890,7 +2902,15 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               transition: 'width .35s ease',
               animation: progress && progress.total ? 'none' : 'gc-indef 1.1s ease-in-out infinite',
             }} />
-          )}
+          ) : costSync ? (
+            <div style={{
+              position: 'absolute', top: 0, bottom: 0, left: 0,
+              width: costSync.total ? `${Math.min(100, costPct)}%` : '35%',
+              background: 'var(--gb-brand-label)', borderRadius: 2,
+              transition: 'width .35s ease',
+              animation: costSync.total ? 'none' : 'gc-indef 1.1s ease-in-out infinite',
+            }} />
+          ) : null}
         </div>
 
         {/* Body — also the positioning context for the slide-over panels,
