@@ -5,7 +5,7 @@ import { Icon, I } from '../ui/icons.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, DEPT_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
-import { CustomizeBlock, ProductOptions } from './giftCustomize.jsx';
+import { CustomizeBlock, ProductOptions, colorNameOf } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal } from '../lib/saveProposal.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty } from '../lib/customItems.js';
 import { getInventory, cachedCostForSku, primeCostCache } from '../lib/inventory.js';
@@ -2434,17 +2434,38 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // Generate proposal HTML — maps proposal lines → the email composer's source
   // (one row per split) and opens the HTML modal (which hides the catalog).
   const [emailSource, setEmailSource] = useState(null);
+  // Describe a line's FRONT imprint for the email "Imprint proof" card — type
+  // label, imprint color (name + hex swatch), method, and the text/logo detail.
+  const lineImprint = (deco) => {
+    if (!deco || !deco.engine || deco.engine === 'none') return null;
+    const e = deco.engine;
+    const chips = decoImprints(deco);
+    const front = chips.find((c) => c.slot === 'front') || chips[0] || null;
+    const typeLabel = (e === 'monogram' || e === 'towelMonogram') ? 'Monogram'
+      : (e === 'ballText' || e === 'accessoryText' || e === 'towelText') ? 'Personalized'
+      : 'Custom Logo';
+    let color = '', colorHex = '', method = null, text = null, logo = null;
+    if (front) {
+      if (front.kind === 'text') { text = (front.lines || []).map((x) => (x == null ? '' : String(x).trim())).filter(Boolean).join(' · ') || null; colorHex = front.color || ''; }
+      else if (front.kind === 'monogram') { text = (front.text || '') || null; colorHex = front.color || ''; }
+      else { logo = front.fileName || (front.icon ? ('Icon · ' + front.icon) : 'Custom logo'); method = 'Pad print'; }
+      if (colorHex) color = colorNameOf(colorHex) || '';
+    }
+    return { type: e, typeLabel, color, colorHex: colorHex || null, method, text, logo };
+  };
   const proposalToEmailSource = (lines, name) => {
     const rows = []; let total = 0;
     for (const l of (lines || [])) {
       const p = l.product || {};
       const sub = (l.variant && l.variant.values && l.variant.values.style) || '';
+      const imprint = lineImprint(l.decoration);
       for (const s of (l.splits || [])) {
         const qty = s.qty || 0, unitPrice = s.price || 0, lineTotal = Math.round(qty * unitPrice * 100) / 100;
         total += lineTotal;
         // `lineId` lets the email composer attach 3D snapshot previews back to the
-        // right rows (one line can span multiple split rows).
-        rows.push({ lineId: l.id, brand: (p.brand && p.brand !== 'Custom') ? p.brand : '', title: p.title || '', subtitle: sub, img: p.img || '', qty, unitPrice, lineTotal });
+        // right rows (one line can span multiple split rows). `imprint` drives the
+        // proof card's spec line.
+        rows.push({ lineId: l.id, brand: (p.brand && p.brand !== 'Custom') ? p.brand : '', title: p.title || '', subtitle: sub, img: p.img || '', qty, unitPrice, lineTotal, imprint });
       }
     }
     // `rawLines` carries the product + decoration so the composer can render the

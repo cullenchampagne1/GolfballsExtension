@@ -812,6 +812,15 @@ const _hexOf = (name) => {
   const m = IMPRINT_COLORS.find((c) => c.name === name);
   return (m && m.hex) || '#000000';
 };
+/* Reverse of _hexOf — best-effort name for a stored hex (exact match), for the
+   email imprint-proof spec line. Returns '' when unknown (caller shows just the
+   swatch). */
+export function colorNameOf(hex) {
+  if (!hex) return '';
+  const h = String(hex).toLowerCase();
+  const m = IMPRINT_COLORS.find((c) => c.hex.toLowerCase() === h);
+  return m ? m.name : '';
+}
 /* For optional/stroke roles: 'Transparent' → 'none' so SVG paints nothing
    instead of treating it as black. */
 const _hexOrNone = (name) => {

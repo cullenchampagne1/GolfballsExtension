@@ -18,183 +18,195 @@ const _money = (n) => '$' + (n || 0).toLocaleString('en-US', { minimumFractionDi
 const _brandLine = (l, color) => l.brand ? `<div style="font-size: 11px; letter-spacing: .6px; text-transform: uppercase; color: ${color};">${_esc(l.brand)}</div>` : '';
 const _hasPrev = (l) => !!(l && l.previews && l.previews.length);
 
-/* A labeled "Previews" box for a line — the rendered 3D personalization photo(s)
-   (Front + Reverse for dual-pole) inside a small bordered, captioned card. Tile
-   size auto-fits the `width` budget so the box sits cleanly whether it's in a
-   narrow photo column or a wide full-width row. Returns '' when the line has no
-   rendered previews. Themed per template via opts. */
-function _previewBox(l, opt = {}) {
+/* ════════════════════════════════════════════════════════════
+   SHARED EMAIL DESIGN SYSTEM — one palette + email-safe (table /
+   inline-style) building blocks shared by every template, so they
+   read as one considered family. The headline block is the IMPRINT
+   PROOF: a designed card that shows how each item's personalization
+   is applied — the real 3D render we snapshot when available, else
+   a colour chip — alongside the spec (type · colour · method).
+════════════════════════════════════════════════════════════ */
+const T = {
+  acc: '#339900', accDeep: '#236b00', accSoft: '#eef6e7',
+  ink: '#19240f', body: '#454d41', mut: '#7c857a', faint: '#aab0a2',
+  line: '#e7e9e1', plate: '#f6f7f1', card: '#ffffff',
+  price: '#ff6600', priceSoft: '#fff1e6',
+};
+const SANS = '&quot;Helvetica Neue&quot;, Helvetica, Arial, sans-serif';
+const _LIGHT_IMPRINT = { White: 1, Silver: 1, Gold: 1 };
+
+const _msgBlock = (m, align) => (m.show.message && m.message)
+  ? `<p style="color:${T.body}; font-size:14px; line-height:1.6; margin:0 0 4px;${align ? ' text-align:' + align + ';' : ''}">${_esc(m.message).replace(/\n/g, '<br/>')}</p>` : '';
+const _swatch = (hex, light) => `<span style="display:inline-block; width:10px; height:10px; border-radius:3px; background:${hex};${light ? ' border:1px solid #cfcfc8;' : ''} vertical-align:middle;"></span>`;
+const _star = (m) => m.show.disclaimer ? '*' : '';
+const _qtyLine = (l, show) => show.cost ? `${l.qty} &times; ${_money(l.unitPrice)}` : `Qty ${l.qty}`;
+
+/* synthetic imprint chip — fallback visual when there's no 3D render yet */
+function _chip(imp, size) {
+  const light = _LIGHT_IMPRINT[imp.color];
+  const fg = light ? '#1f2937' : '#ffffff';
+  const label = imp.text ? (imp.text.split(' · ')[0] || '') : 'LOGO';
+  const fs = imp.text ? Math.max(8, Math.round(size * 0.15)) : Math.round(size * 0.17);
+  return `<table border="0" cellpadding="0" cellspacing="0" width="${size}" height="${size}" style="width:${size}px; height:${size}px; background:${imp.colorHex || '#1f2f5b'}; border-radius:${Math.round(size * 0.22)}px;${light ? ' border:1px solid #d6d6cf;' : ''}"><tbody><tr><td align="center" valign="middle" style="text-align:center; padding:4px;"><span style="font-family:${SANS}; font-size:${fs}px; font-weight:800; letter-spacing:.5px; color:${fg}; line-height:1.12;">${_esc(label).slice(0, 16)}</span></td></tr></tbody></table>`;
+}
+/* a real 3D-render tile (transparent PNG on a soft plate) */
+function _renderTile(src, size) {
+  return `<table border="0" cellpadding="0" cellspacing="0" width="${size}" height="${size}" style="width:${size}px; height:${size}px; background:${T.card}; border:1px solid ${T.line}; border-radius:${Math.round(size * 0.18)}px;"><tbody><tr><td align="center" valign="middle" height="${size}" style="text-align:center;"><img src="${_esc(src)}" width="${size - 6}" height="${size - 6}" border="0" alt="proof" style="display:inline-block; width:${size - 6}px; height:${size - 6}px;" /></td></tr></tbody></table>`;
+}
+/* product photo on a soft plate */
+function _photoPlate(img, plate) {
+  return `<table border="0" cellpadding="0" cellspacing="0" width="${plate}" style="background:${T.card}; border:1px solid ${T.line}; border-radius:10px;"><tbody><tr><td align="center" valign="middle" height="${plate}" style="padding:6px;"><img src="${_esc(img)}" width="${plate - 16}" border="0" style="display:block; border-radius:6px;" /></td></tr></tbody></table>`;
+}
+/* the imprint PROOF visual cell — real render(s) when we have them (Front +
+   Reverse for dual-pole), else the synthetic chip. */
+function _proofVisual(l, imp, size) {
   const imgs = (l && l.previews) || [];
-  if (!imgs.length) return '';
-  const width = opt.width || 300;
-  const bg = opt.bg || '#ffffff';
-  const border = opt.border || '#e3e5e1';
-  const tileBg = opt.tileBg || '#f6f7f5';
-  const labelColor = opt.label || '#9aa0a6';
-  const accent = opt.accent || '#339900';
-  const align = opt.align || 'left';
-  const n = imgs.length, gap = 8, pad = 10;
-  const inner = Math.max(44, width - pad * 2);
-  const tile = Math.max(44, Math.min(opt.maxTile || 132, Math.floor((inner - gap * (n - 1)) / n)));
-  const cells = imgs.map((src, i) => {
-    const cap = n > 1 ? `<div style="font-size:8.5px; letter-spacing:.5px; text-transform:uppercase; color:${labelColor}; font-family:Arial,sans-serif; margin-top:5px; text-align:center;">${i === 0 ? 'Front' : 'Reverse'}</div>` : '';
-    return `<td valign="top" style="padding:0 ${i < n - 1 ? gap : 0}px 0 0;"><div style="width:${tile}px; height:${tile}px; background:${tileBg}; border:1px solid ${border}; border-radius:9px;"><img src="${src}" width="${tile}" height="${tile}" border="0" alt="3D preview" style="display:block; width:${tile}px; height:${tile}px;" /></div>${cap}</td>`;
-  }).join('');
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="${align}" style="border:1px solid ${border}; border-radius:11px; background:${bg};"><tbody>` +
-    `<tr><td style="padding:${pad}px ${pad}px 0;"><span style="font-size:8.5px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; color:${accent}; font-family:Arial,sans-serif;">Previews</span></td></tr>` +
-    `<tr><td style="padding:7px ${pad}px ${pad}px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tbody><tr>${cells}</tr></tbody></table></td></tr>` +
-    `</tbody></table>`;
+  if (imgs.length >= 2) {
+    const s = Math.round(size * 0.92);
+    return `<td valign="middle" style="padding-right:14px;"><table border="0" cellpadding="0" cellspacing="0"><tbody><tr>${imgs.slice(0, 2).map((src, i) => `<td valign="middle" style="padding-right:${i ? 0 : 7}px;">${_renderTile(src, s)}</td>`).join('')}</tr></tbody></table></td>`;
+  }
+  if (imgs.length === 1) return `<td valign="middle" width="${size}" style="padding-right:14px;">${_renderTile(imgs[0], size)}</td>`;
+  return imp ? `<td valign="middle" width="${size}" style="padding-right:14px;">${_chip(imp, size)}</td>` : '';
 }
-
-/* ── TEMPLATE 1 — CLASSIC ── */
-function tplClassic(m) {
-  const { groupName, optionName, expiration, message, lines, total, show } = m;
-  const FONT = '&quot;Lato&quot;, &quot;Helvetica&quot;, &quot;Arial&quot;, sans-serif';
-  const GREY = '#7f7f7f', ACC = '#339900', PRICE = '#ff6600';
-  const cols = (show.images ? 1 : 0) + 1 + 1 + (show.cost ? 1 : 0) + 1;
-  const th = (label, extra, align) => `<th style="font-weight: normal; color: ${GREY}; border-bottom: 2px solid ${GREY}; padding: 5px 0; ${extra || ''}" align="${align || 'left'}">${label}</th>`;
-  const headerRow = `<tr>` + (show.images ? th('', 'width: 150px;') : '') + th('item', 'width: 210px;') + th('qty', 'width: 70px;') + (show.cost ? th('cost', '') : '') + th('total', 'width: 90px;', 'right') + `</tr>`;
-  const rows = lines.map((l) => {
-    // Photo stays in the left column; the Previews box sits with the title on the
-    // right (under it), so the text reads alongside the photo.
-    const img = show.images ? `<td width="150" style="padding: 12px 0;" valign="top"><img src="${_esc(l.img)}" width="140" border="0" style="border-radius: 6px; display:block;" /></td>` : '';
-    const sub = l.subtitle ? `<div style="font-size: 12px; color: ${GREY}; margin-top: 3px;">${_esc(l.subtitle)}</div>` : '';
-    const cost = show.cost ? `<td style="padding: 12px 0; color: #333;" valign="top">${_money(l.unitPrice)}</td>` : '';
-    const box = _previewBox(l, { width: 200, accent: ACC, label: GREY });
-    const boxBlock = box ? `<div style="margin-top:10px;">${box}</div>` : '';
-    return `<tr>${img}<td style="padding: 12px 0 12px ${show.images ? '12px' : '0'};" valign="top">${_brandLine(l, GREY)}<div style="font-size: 14px; color: #222; font-weight: bold;">${_esc(l.title)}</div>${sub}${boxBlock}</td><td style="padding: 12px 0; color: #333;" valign="top">${l.qty}</td>${cost}<td style="color: ${PRICE}; font-weight: bold; padding: 12px 0;" align="right" valign="top">${_money(l.lineTotal)}</td></tr><tr><td colspan="${cols}" style="border-bottom: 1px solid #e6e6e6; padding: 0; font-size: 0; line-height: 0;">&nbsp;</td></tr>`;
-  }).join('\n');
-  const totalsRow = show.total ? `<tr style="font-weight: bold; font-size: 16.8px;"><td colspan="${cols - 1}" style="padding: 12px 0;" valign="top">Estimated total${show.disclaimer ? '*' : ''}</td><td style="color: ${PRICE}; font-weight: bold; padding: 12px 0;" align="right" valign="top">${_money(total)}</td></tr>` : '';
-  const msg = (show.message && message) ? `<p style="color: #444; font-size: 14px; line-height: 1.5; margin: 0 0 1.3em;">${_esc(message).replace(/\n/g, '<br/>')}</p>` : '';
-  const exp = show.expiration ? `<p style="font-weight: bold; font-size: 18px; margin: 1em 0;" align="right">This proposal expires on <span style="color: ${PRICE}">${_esc(expiration)}</span></p>` : '';
-  const disc = show.disclaimer ? `<p style="font-style: italic; color: ${GREY}; font-size: 12.6px; margin: 0 0 1.4em;" align="right">*shipping and sales tax will be added in shopping cart</p>` : '';
-  const cta = show.cta ? `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT};"><tbody><tr><td align="center" style="padding-top:6px;"><a href="{{CART_LINK}}" style="display:inline-block; background:${ACC}; color:#fff; text-decoration:none; font-family:${FONT}; font-size:15px; font-weight:bold; padding:12px 34px; border-radius:6px;">View this option &rsaquo;</a></td></tr></tbody></table>` : '';
-  return `<table cellpadding="0" cellspacing="0" border="0" style="font-family:${FONT}; width:600px;"><tbody><tr><td style="border-radius:10px; padding:22px 24px; border:2px solid #cccccc;">
-    <p style="color:${ACC}; font-size:18px; font-weight:bold; margin:0;" align="center">${_esc(groupName)}</p>
-    <p style="color:${GREY}; font-size:25px; margin:0 0 1em;" align="center">${_esc(optionName)}</p>
-    ${msg}
-    <table cellpadding="0" cellspacing="0" border="0" style="font-family:${FONT}; width:100%;"><tbody>${headerRow}${rows}${totalsRow}</tbody></table>
-    ${exp}${disc}${cta}
-  </td></tr></tbody></table>`;
-}
-
-/* ── TEMPLATE 2 — MINIMAL ── */
-function tplMinimal(m) {
-  const { groupName, optionName, expiration, message, lines, total, show } = m;
-  const FONT = '&quot;Helvetica Neue&quot;, Helvetica, Arial, sans-serif';
-  const INK = '#1b2a14', MUT = '#6b7280', LINE = '#e5e7eb', ACC = '#339900', PRICE = '#ff6600';
-  const msg = (show.message && message) ? `<p style="color:#374151; font-size:14px; line-height:1.55; margin:0 0 20px;">${_esc(message).replace(/\n/g, '<br/>')}</p>` : '';
-  const rows = lines.map((l) => {
-    const img = show.images ? `<td width="68" valign="middle" style="padding:14px 14px 14px 0;"><img src="${_esc(l.img)}" width="56" border="0" style="border-radius:6px; display:block;" /></td>` : '';
-    const sub = l.subtitle ? `<div style="font-size:12px; color:${MUT}; margin-top:3px;">${_esc(l.subtitle)}</div>` : '';
-    const qtyLine = show.cost ? `${l.qty} &times; ${_money(l.unitPrice)}` : `Qty ${l.qty}`;
-    const box = _previewBox(l, { width: 300, accent: ACC, label: MUT, bg: '#fafbf9' });
-    const boxBlock = box ? `<div style="margin-top:11px;">${box}</div>` : '';
-    return `<tr style="border-top:1px solid ${LINE};">${img}<td valign="top" style="padding:14px 0;">${_brandLine(l, MUT)}<div style="font-size:15px; color:${INK}; font-weight:600; margin-top:${l.brand ? '2px' : '0'};">${_esc(l.title)}</div>${sub}${boxBlock}</td><td valign="top" align="right" style="padding:14px 0;"><div style="font-size:11px; color:${MUT};">${qtyLine}</div><div style="font-size:16px; color:${PRICE}; font-weight:700; margin-top:3px;">${_money(l.lineTotal)}</div></td></tr>`;
-  }).join('\n');
-  const totalsRow = show.total ? `<tr style="border-top:2px solid ${ACC};"><td colspan="${show.images ? 2 : 1}" valign="middle" style="padding:16px 0;"><span style="font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:${MUT};">Estimated total${show.disclaimer ? '*' : ''}</span></td><td align="right" valign="middle" style="padding:16px 0;"><span style="font-size:24px; font-weight:800; color:${PRICE}; letter-spacing:-.5px;">${_money(total)}</span></td></tr>` : '';
-  const exp = show.expiration ? `<p style="font-size:13px; color:${MUT}; margin:18px 0 0;">Valid through <strong style="color:${INK};">${_esc(expiration)}</strong></p>` : '';
-  const disc = show.disclaimer ? `<p style="font-size:12px; color:#9ca3af; margin:6px 0 0;">*shipping and sales tax are added at checkout</p>` : '';
-  const cta = show.cta ? `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; margin-top:26px;"><tbody><tr><td><a href="{{CART_LINK}}" style="display:block; text-align:center; background:${ACC}; color:#fff; text-decoration:none; font-size:15px; font-weight:600; padding:15px; border-radius:8px;">View this option</a></td></tr></tbody></table>` : '';
-  return `<table cellpadding="0" cellspacing="0" border="0" style="font-family:${FONT}; width:600px;"><tbody><tr><td style="padding:8px 4px;">
-    <div style="font-size:12px; letter-spacing:1.4px; text-transform:uppercase; color:${ACC}; font-weight:700;">${_esc(groupName)}</div>
-    <div style="font-size:28px; font-weight:800; color:${INK}; letter-spacing:-.6px; margin:6px 0 22px;">${_esc(optionName)}</div>
-    ${msg}
-    <table cellpadding="0" cellspacing="0" border="0" style="font-family:${FONT}; width:100%;"><tbody>${rows}${totalsRow}</tbody></table>
-    ${exp}${disc}${cta}
-  </td></tr></tbody></table>`;
-}
-
-/* ── TEMPLATE 3 — CATALOG CARDS ── */
-function tplCatalog(m) {
-  const { groupName, optionName, expiration, message, lines, total, show } = m;
-  const FONT = '&quot;Lato&quot;, Helvetica, Arial, sans-serif';
-  const ACC = '#339900', ACC_BG = '#e9f4e2', INK = '#1f2937', MUT = '#6b7280', PRICE = '#ff6600', PRICE_BG = '#fff1e6';
-  const msg = (show.message && message) ? `<p style="color:#374151; font-size:14px; line-height:1.55; margin:0 0 16px;">${_esc(message).replace(/\n/g, '<br/>')}</p>` : '';
-  const cards = lines.map((l) => {
-    // Photo on the left; title + Previews box together on the right.
-    const img = show.images ? `<td width="120" valign="top" style="padding:14px;"><img src="${_esc(l.img)}" width="104" border="0" style="border-radius:8px; display:block;" /></td>` : '';
-    const sub = l.subtitle ? `<div style="font-size:12px; color:${MUT}; margin-top:4px;">${_esc(l.subtitle)}</div>` : '';
-    const qtyLine = show.cost ? `Qty ${l.qty} &nbsp;·&nbsp; ${_money(l.unitPrice)} ea` : `Qty ${l.qty}`;
-    const box = _previewBox(l, { width: 240, accent: ACC, label: MUT, bg: '#f7faf4', border: '#dcebd1' });
-    const boxBlock = box ? `<div style="margin-top:10px;">${box}</div>` : '';
-    return `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; border:1px solid #e5e7eb; border-radius:10px; margin-bottom:12px;"><tbody><tr>${img}<td valign="top" style="padding:14px ${show.images ? '0' : '16px'};">${_brandLine(l, ACC)}<div style="font-size:16px; color:${INK}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${MUT}; margin-top:7px;">${qtyLine}</div>${boxBlock}</td><td width="118" valign="top" align="right" style="padding:14px 16px;"><span style="display:inline-block; background:${PRICE_BG}; color:${PRICE}; font-size:15px; font-weight:800; padding:7px 12px; border-radius:7px;">${_money(l.lineTotal)}</span></td></tr></tbody></table>`;
-  }).join('\n');
-  const totalBox = show.total ? `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; margin-top:4px;"><tbody><tr><td style="background:${ACC_BG}; border-left:4px solid ${ACC}; border-radius:6px; padding:14px 16px;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:13px; font-weight:700; color:${INK};">Estimated total${show.disclaimer ? '*' : ''}</span></td><td align="right" valign="middle"><span style="font-size:22px; font-weight:800; color:${PRICE};">${_money(total)}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
-  const exp = show.expiration ? `<p style="font-size:13px; color:${MUT}; margin:16px 0 0;" align="right">This proposal expires on <strong style="color:${INK};">${_esc(expiration)}</strong></p>` : '';
-  const disc = show.disclaimer ? `<p style="font-style:italic; color:#9ca3af; font-size:12px; margin:5px 0 0;" align="right">*shipping and sales tax added in cart</p>` : '';
-  const cta = show.cta ? `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; margin-top:22px;"><tbody><tr><td align="center"><a href="{{CART_LINK}}" style="display:inline-block; background:${ACC}; color:#fff; text-decoration:none; font-size:15px; font-weight:700; padding:13px 40px; border-radius:30px;">View this option &rsaquo;</a></td></tr></tbody></table>` : '';
-  return `<table cellpadding="0" cellspacing="0" border="0" style="font-family:${FONT}; width:600px;"><tbody>
-    <tr><td style="background:${ACC}; border-radius:10px 10px 0 0; padding:20px 24px;"><div style="font-size:12px; letter-spacing:1px; text-transform:uppercase; color:rgba(255,255,255,.78); font-weight:700;">${_esc(groupName)}</div><div style="font-size:23px; font-weight:800; color:#fff; margin-top:4px;">${_esc(optionName)}</div></td></tr>
-    <tr><td style="padding:18px 24px 24px;">${msg}${cards}${totalBox}${exp}${disc}${cta}</td></tr>
+/* the imprint PROOF card — the centrepiece the templates are built around */
+function _proof(l, withPhoto) {
+  const imp = l.imprint;
+  const imgs = (l && l.previews) || [];
+  if (!imp && !imgs.length) return '';
+  const typeLabel = (imp && imp.typeLabel) || 'Personalization';
+  const light = imp && _LIGHT_IMPRINT[imp.color];
+  const colorRow = (imp && (imp.color || imp.method))
+    ? `<div style="font-size:11px; line-height:1.5; color:${T.mut}; padding-top:5px; white-space:nowrap;">${imp.color ? _swatch(imp.colorHex || '#1f2f5b', light) + ' ' : ''}<span style="vertical-align:middle;">${imp.color ? _esc(imp.color) : ''}${(imp.color && imp.method) ? ' &middot; ' : ''}${imp.method ? _esc(imp.method) : ''}</span></div>` : '';
+  const detail = imp && imp.text ? `<div style="font-size:11px; line-height:1.5; color:${T.mut}; padding-top:3px;">&ldquo;${_esc(imp.text)}&rdquo;</div>`
+    : (imp && imp.logo ? `<div style="font-size:11px; line-height:1.5; color:${T.mut}; padding-top:3px;">${_esc(imp.logo)}</div>` : '');
+  const photoCell = withPhoto ? `<td valign="middle" width="74" style="padding-right:14px;">${_photoPlate(l.img, 74)}</td>` : '';
+  const visual = _proofVisual(l, imp, 56);
+  return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:12px; background:${T.plate}; margin-top:12px;"><tbody>
+    <tr><td style="padding:10px 14px 0;"><span style="font-family:${SANS}; font-size:9px; letter-spacing:.9px; text-transform:uppercase; color:${T.acc}; font-weight:800;">Imprint proof</span></td></tr>
+    <tr><td style="padding:9px 14px 13px;"><table border="0" cellpadding="0" cellspacing="0"><tbody><tr>${photoCell}${visual}<td valign="middle"><div style="font-size:12px; line-height:1.4; font-weight:700; color:${T.ink};">${_esc(typeLabel)}</div>${colorRow}${detail}</td></tr></tbody></table></td></tr>
   </tbody></table>`;
 }
 
-/* ── TEMPLATE 4 — QUOTE ── */
-function tplQuote(m) {
-  const { groupName, optionName, expiration, message, lines, total, show } = m;
-  const FONT = '&quot;Lato&quot;, Helvetica, Arial, sans-serif';
-  const ACC = '#339900', INK = '#1f2937', MUT = '#6b7280', PRICE = '#ff6600', LINE = '#e5e7eb';
-  const units = lines.reduce((a, l) => a + l.qty, 0);
-  const subParts = [`${units} units`, `${lines.length} item${lines.length === 1 ? '' : 's'}`];
-  if (show.expiration) subParts.push(`valid until ${_esc(expiration)}`);
-  const totalCell = show.total ? `<td align="right" valign="middle" width="190"><div style="font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:rgba(255,255,255,.82);">Estimated total${show.disclaimer ? '*' : ''}</div><div style="font-size:31px; font-weight:800; color:#fff; letter-spacing:-.6px; margin-top:2px;">${_money(total)}</div></td>` : '';
-  const panel = `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT};"><tbody><tr><td style="background:${ACC}; border-radius:12px; padding:22px 24px;"><table width="100%"><tbody><tr><td valign="middle"><div style="font-size:12px; letter-spacing:1.2px; text-transform:uppercase; color:rgba(255,255,255,.82); font-weight:700;">${_esc(groupName)}</div><div style="font-size:23px; font-weight:800; color:#fff; margin:4px 0 6px;">${_esc(optionName)}</div><div style="font-size:12px; color:rgba(255,255,255,.85);">${subParts.join(' &nbsp;·&nbsp; ')}</div></td>${totalCell}</tr></tbody></table></td></tr></tbody></table>`;
-  const msg = (show.message && message) ? `<p style="color:#374151; font-size:14px; line-height:1.55; margin:18px 0 0;">${_esc(message).replace(/\n/g, '<br/>')}</p>` : '';
-  const cols = 1 + 1 + (show.cost ? 1 : 0) + 1;
-  const th = (label, extra, align) => `<th style="font-weight:700; font-size:11px; letter-spacing:.5px; text-transform:uppercase; color:${MUT}; border-bottom:2px solid ${ACC}; padding:0 0 8px;" align="${align || 'left'}">${label}</th>`;
-  const head = `<tr>${th('Item')}${th('Qty', 'width:60px;')}${show.cost ? th('Unit', 'width:80px;', 'right') : ''}${th('Total', 'width:90px;', 'right')}</tr>`;
-  const rows = lines.map((l) => {
-    const sub = l.subtitle ? `<div style="font-size:12px; color:${MUT}; margin-top:3px;">${_esc(l.subtitle)}</div>` : '';
-    const cost = show.cost ? `<td valign="middle" align="right" style="padding:13px 0; font-size:13px; color:${INK};">${_money(l.unitPrice)}</td>` : '';
-    const box = _previewBox(l, { width: 300, accent: ACC, label: MUT, bg: '#fafcf8' });
-    const prevRow = box ? `<tr><td colspan="${cols}" style="padding:0 0 14px;">${box}</td></tr>` : '';
-    return `<tr><td valign="top" style="padding:13px 0;">${_brandLine(l, MUT)}<div style="font-size:14px; color:${INK}; font-weight:700;">${_esc(l.title)}</div>${sub}</td><td valign="top" style="padding:13px 0; font-size:13px; color:${INK};">${l.qty}</td>${cost}<td valign="top" align="right" style="padding:13px 0; font-size:14px; font-weight:800; color:${PRICE};">${_money(l.lineTotal)}</td></tr>${prevRow}<tr><td colspan="${cols}" style="border-bottom:1px solid ${LINE}; font-size:0; line-height:0;">&nbsp;</td></tr>`;
+const _ctaBtn = (label, pill) => `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:24px;"><tbody><tr><td align="center"><a href="{{CART_LINK}}" style="display:inline-block; background:${T.acc}; color:#fff; text-decoration:none; font-family:${SANS}; font-size:15px; font-weight:700; padding:14px 42px; border-radius:${pill ? '30px' : '8px'};">${label}</a></td></tr></tbody></table>`;
+const _ctaBar = (label) => `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:24px;"><tbody><tr><td><a href="{{CART_LINK}}" style="display:block; text-align:center; background:${T.acc}; color:#fff; text-decoration:none; font-family:${SANS}; font-size:15px; font-weight:700; padding:16px; border-radius:8px;">${label}</a></td></tr></tbody></table>`;
+const _wordmark = (align) => `<table border="0" cellpadding="0" cellspacing="0"${align === 'center' ? ' align="center"' : ''}><tbody><tr><td valign="middle"><span style="display:inline-block; width:9px; height:9px; border-radius:9px; background:${T.acc}; margin-right:7px; vertical-align:middle;"></span></td><td valign="middle"><span style="font-family:${SANS}; font-size:13px; font-weight:800; letter-spacing:2.5px; text-transform:uppercase; color:${T.ink};">Golfballs</span></td></tr></tbody></table>`;
+const _foot = () => `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:22px; border-top:1px solid ${T.line};"><tbody><tr><td align="center" style="padding-top:14px;"><span style="font-family:${SANS}; font-size:10px; letter-spacing:1.6px; text-transform:uppercase; color:${T.faint}; font-weight:700;">Golfballs &middot; Corporate Gifting &middot; golfballs.com</span></td></tr></tbody></table>`;
+const _expLine = (m, align) => m.show.expiration ? `<p style="font-family:${SANS}; font-size:13px; color:${T.mut}; margin:18px 0 0;${align ? ' text-align:' + align + ';' : ''}">This proposal expires on <strong style="color:${T.ink};">${_esc(m.expiration)}</strong></p>` : '';
+const _discLine = (m, align) => m.show.disclaimer ? `<p style="font-family:${SANS}; font-style:italic; font-size:12px; color:${T.faint}; margin:5px 0 0;${align ? ' text-align:' + align + ';' : ''}">*shipping &amp; sales tax are calculated in the shopping cart</p>` : '';
+
+/* ── TEMPLATE 1 — CLASSIC ── */
+function tplClassic(m) {
+  const { groupName, optionName, lines, total, show } = m;
+  const rows = lines.map((l, i) => {
+    const photo = show.images ? `<td width="66" valign="top" style="padding-right:14px;">${_photoPlate(l.img, 66)}</td>` : '';
+    const sub = l.subtitle ? `<div style="font-size:12px; color:${T.mut}; margin-top:3px;">${_esc(l.subtitle)}</div>` : '';
+    const proof = show.previews ? _proof(l, false) : '';
+    return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="${i ? `border-top:1px solid ${T.line};` : ''}"><tbody><tr><td style="padding:16px 0;"><table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr>${photo}<td valign="top">${_brandLine(l, T.mut)}<div style="font-size:15px; color:${T.ink}; font-weight:700;">${_esc(l.title)}</div>${sub}<div style="font-size:11px; color:${T.mut}; margin-top:4px;">${_qtyLine(l, show)}</div></td><td valign="top" align="right" width="92"><span style="font-size:16px; font-weight:800; color:${T.price};">${_money(l.lineTotal)}</span></td></tr></tbody></table>${proof}</td></tr></tbody></table>`;
   }).join('\n');
-  const disc = show.disclaimer ? `<p style="font-style:italic; color:#9ca3af; font-size:12px; margin:14px 0 0;">*shipping and sales tax are calculated in the shopping cart</p>` : '';
-  const cta = show.cta ? `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; margin-top:22px;"><tbody><tr><td><a href="{{CART_LINK}}" style="display:block; text-align:center; background:${ACC}; color:#fff; text-decoration:none; font-size:15px; font-weight:700; padding:15px; border-radius:8px;">Approve &amp; view in cart &rsaquo;</a></td></tr></tbody></table>` : '';
-  return `<table cellpadding="0" cellspacing="0" border="0" style="font-family:${FONT}; width:600px;"><tbody><tr><td>
-    ${panel}${msg}
-    <table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; margin-top:20px;"><tbody>${head}${rows}</tbody></table>
-    ${disc}${cta}
+  const totalRow = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-top:2px solid ${T.ink}; margin-top:4px;"><tbody><tr><td style="padding:16px 0;"><span style="font-size:13px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:${T.ink};">Estimated total${_star(m)}</span></td><td align="right" style="padding:16px 0;"><span style="font-size:23px; font-weight:800; color:${T.price};">${_money(total)}</span></td></tr></tbody></table>` : '';
+  return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="border:1px solid #e0e0d6; border-radius:14px; padding:30px 30px 26px;">
+    ${_wordmark('center')}
+    <div style="height:16px; line-height:16px; font-size:0;">&nbsp;</div>
+    <div align="center" style="font-size:11px; letter-spacing:1.6px; text-transform:uppercase; color:${T.acc}; font-weight:700;">${_esc(groupName)}</div>
+    <div align="center" style="font-size:25px; font-weight:800; color:${T.ink}; letter-spacing:-.5px; margin:6px 0 16px;">${_esc(optionName)}</div>
+    ${_msgBlock(m)}
+    <div style="height:6px; line-height:6px; font-size:0;">&nbsp;</div>
+    ${rows}${totalRow}${_expLine(m, 'right')}${_discLine(m, 'right')}${show.cta ? _ctaBtn('View this option &rsaquo;', false) : ''}${_foot()}
   </td></tr></tbody></table>`;
 }
 
-/* ── TEMPLATE 5 — LOOKBOOK ── */
-function tplLookbook(m) {
-  const { groupName, optionName, expiration, message, lines, total, show } = m;
-  const FONT = '&quot;Lato&quot;, Helvetica, Arial, sans-serif';
-  const ACC = '#339900', INK = '#1f2937', MUT = '#6b7280', PRICE = '#ff6600';
-  const head = `<div style="text-align:center;"><div style="font-size:12px; letter-spacing:1.4px; text-transform:uppercase; color:${ACC}; font-weight:800;">${_esc(groupName)}</div><div style="font-size:26px; font-weight:800; color:${INK}; margin:7px 0 0;">${_esc(optionName)}</div><div style="width:46px; height:4px; background:${ACC}; border-radius:2px; margin:14px auto 0;"></div></div>`;
-  const msg = (show.message && message) ? `<p style="color:#374151; font-size:14px; line-height:1.55; margin:18px 0 0; text-align:center;">${_esc(message).replace(/\n/g, '<br/>')}</p>` : '';
-  const cards = lines.map((l) => {
-    const sub = l.subtitle ? `<div style="font-size:12px; color:${MUT}; margin-top:4px;">${_esc(l.subtitle)}</div>` : '';
-    const qtyLine = show.cost ? `Qty ${l.qty} &nbsp;·&nbsp; ${_money(l.unitPrice)} ea` : `Qty ${l.qty}`;
-    // Photo and the Previews box sit SIDE BY SIDE (preview to the right of the
-    // item photo); the title/price block sits below.
-    const box = _previewBox(l, { width: 250, accent: ACC, label: MUT, bg: '#fafcf8' });
-    const mediaRow = (show.images || box)
-      ? `<tr><td style="padding:18px 18px 8px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tbody><tr>${show.images ? `<td valign="top" style="padding-right:${box ? '14px' : '0'};"><img src="${_esc(l.img)}" width="190" border="0" style="border-radius:8px; display:block;" /></td>` : ''}${box ? `<td valign="top">${box}</td>` : ''}</tr></tbody></table></td></tr>`
-      : '';
-    return `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; border:1px solid #e5e7eb; border-radius:12px; margin-bottom:14px;"><tbody>${mediaRow}<tr><td style="padding:${mediaRow ? '6px' : '16px'} 18px 16px;"><table width="100%"><tbody><tr><td valign="middle">${_brandLine(l, ACC)}<div style="font-size:17px; color:${INK}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${MUT}; margin-top:6px;">${qtyLine}</div></td><td valign="middle" align="right" width="96"><span style="font-size:19px; font-weight:800; color:${PRICE};">${_money(l.lineTotal)}</span></td></tr></tbody></table></td></tr></tbody></table>`;
+/* ── TEMPLATE 2 — MINIMAL — editorial, borderless ── */
+function tplMinimal(m) {
+  const { groupName, optionName, lines, total, show } = m;
+  const rows = lines.map((l) => {
+    const photo = show.images ? `<td width="60" valign="top" style="padding:18px 14px 0 0;"><img src="${_esc(l.img)}" width="52" border="0" style="border-radius:7px; display:block;" /></td>` : '';
+    const sub = l.subtitle ? `<div style="font-size:12px; color:${T.mut}; margin-top:3px;">${_esc(l.subtitle)}</div>` : '';
+    const proof = show.previews ? _proof(l, false) : '';
+    return `<tr style="border-top:1px solid ${T.line};">${photo}<td valign="top" style="padding:18px 0;">${_brandLine(l, T.mut)}<div style="font-size:16px; color:${T.ink}; font-weight:700;">${_esc(l.title)}</div>${sub}${proof}</td><td valign="top" align="right" style="padding:18px 0;"><div style="font-size:11px; color:${T.mut};">${_qtyLine(l, show)}</div><div style="font-size:17px; color:${T.price}; font-weight:800; margin-top:4px;">${_money(l.lineTotal)}</div></td></tr>`;
   }).join('\n');
-  const totalBox = show.total ? `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT};"><tbody><tr><td style="border-top:2px solid ${ACC}; padding:16px 2px 0;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:12px; letter-spacing:.6px; text-transform:uppercase; color:${MUT}; font-weight:700;">Estimated total${show.disclaimer ? '*' : ''}</span></td><td align="right" valign="middle"><span style="font-size:25px; font-weight:800; color:${PRICE};">${_money(total)}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
-  const exp = show.expiration ? `<p style="font-size:13px; color:${MUT}; margin:14px 0 0; text-align:center;">This proposal expires on <strong style="color:${INK};">${_esc(expiration)}</strong></p>` : '';
-  const disc = show.disclaimer ? `<p style="font-style:italic; color:#9ca3af; font-size:12px; margin:5px 0 0; text-align:center;">*shipping and sales tax added in cart</p>` : '';
-  const cta = show.cta ? `<table cellpadding="0" cellspacing="0" border="0" style="width:100%; font-family:${FONT}; margin-top:22px;"><tbody><tr><td align="center"><a href="{{CART_LINK}}" style="display:inline-block; background:${ACC}; color:#fff; text-decoration:none; font-size:15px; font-weight:700; padding:14px 44px; border-radius:30px;">View this option &rsaquo;</a></td></tr></tbody></table>` : '';
-  return `<table cellpadding="0" cellspacing="0" border="0" style="font-family:${FONT}; width:600px;"><tbody><tr><td style="padding:4px 4px 6px;">
-    ${head}${msg}
-    <div style="height:20px; line-height:20px; font-size:0;">&nbsp;</div>
-    ${cards}${totalBox}${exp}${disc}${cta}
+  const totalsRow = show.total ? `<tr style="border-top:2px solid ${T.ink};"><td colspan="${show.images ? 2 : 1}" valign="middle" style="padding:18px 0;"><span style="font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:${T.mut}; font-weight:700;">Estimated total${_star(m)}</span></td><td align="right" valign="middle" style="padding:18px 0;"><span style="font-size:26px; font-weight:800; color:${T.price}; letter-spacing:-.6px;">${_money(total)}</span></td></tr>` : '';
+  return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="padding:8px 6px;">
+    ${_wordmark()}
+    <div style="font-size:12px; letter-spacing:1.6px; text-transform:uppercase; color:${T.acc}; font-weight:700; margin-top:18px;">${_esc(groupName)}</div>
+    <div style="font-size:30px; font-weight:800; color:${T.ink}; letter-spacing:-.8px; margin:7px 0 20px;">${_esc(optionName)}</div>
+    ${_msgBlock(m)}
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:8px;"><tbody>${rows}${totalsRow}</tbody></table>
+    ${_expLine(m)}${_discLine(m)}${show.cta ? _ctaBar('View this option') : ''}${_foot()}
+  </td></tr></tbody></table>`;
+}
+
+/* ── TEMPLATE 3 — CATALOG CARDS — header band, proof per card ── */
+function tplCatalog(m) {
+  const { groupName, optionName, lines, total, show } = m;
+  const cards = lines.map((l) => {
+    const photo = show.images ? `<td width="116" valign="top" style="padding:16px 0 16px 16px;">${_photoPlate(l.img, 100)}</td>` : '';
+    const sub = l.subtitle ? `<div style="font-size:12px; color:${T.mut}; margin-top:4px;">${_esc(l.subtitle)}</div>` : '';
+    const qtyLine = show.cost ? `Qty ${l.qty} &nbsp;&middot;&nbsp; ${_money(l.unitPrice)} ea` : `Qty ${l.qty}`;
+    const proof = (show.previews && (l.imprint || _hasPrev(l))) ? `<tr><td colspan="${show.images ? 3 : 2}" style="padding:0 16px 16px;">${_proof(l, false)}</td></tr>` : '';
+    return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:12px; margin-bottom:13px;"><tbody><tr>${photo}<td valign="middle" style="padding:16px ${show.images ? '14px' : '16px'};">${_brandLine(l, T.acc)}<div style="font-size:16px; color:${T.ink}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${T.mut}; margin-top:8px;">${qtyLine}</div></td><td width="112" valign="middle" align="right" style="padding:16px;"><span style="display:inline-block; background:${T.priceSoft}; color:${T.price}; font-size:15px; font-weight:800; padding:7px 13px; border-radius:8px;">${_money(l.lineTotal)}</span></td></tr>${proof}</tbody></table>`;
+  }).join('\n');
+  const totalBox = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:4px;"><tbody><tr><td style="background:${T.accSoft}; border-left:4px solid ${T.acc}; border-radius:8px; padding:16px 18px;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:13px; font-weight:700; color:${T.ink};">Estimated total${_star(m)}</span></td><td align="right" valign="middle"><span style="font-size:23px; font-weight:800; color:${T.price};">${_money(total)}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
+  return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody>
+    <tr><td style="background:${T.acc}; border-radius:14px 14px 0 0; padding:22px 26px;"><div style="font-size:11px; letter-spacing:1.4px; text-transform:uppercase; color:rgba(255,255,255,.82); font-weight:700;">${_esc(groupName)}</div><div style="font-size:24px; font-weight:800; color:#fff; margin-top:4px; letter-spacing:-.4px;">${_esc(optionName)}</div></td></tr>
+    <tr><td style="border:1px solid ${T.line}; border-top:none; border-radius:0 0 14px 14px; padding:20px 22px 24px;">${_msgBlock(m)}<div style="height:4px; line-height:4px; font-size:0;">&nbsp;</div>${cards}${totalBox}${_expLine(m, 'right')}${_discLine(m, 'right')}${show.cta ? _ctaBtn('View this option &rsaquo;', true) : ''}${_foot()}</td></tr>
+  </tbody></table>`;
+}
+
+/* ── TEMPLATE 4 — QUOTE — total panel + lined schedule + inline proof ── */
+function tplQuote(m) {
+  const { groupName, optionName, expiration, lines, total, show } = m;
+  const units = lines.reduce((a, l) => a + l.qty, 0);
+  const subParts = [`${units} units`, `${lines.length} item${lines.length === 1 ? '' : 's'}`];
+  if (show.expiration) subParts.push(`valid until ${_esc(expiration)}`);
+  const totalCell = show.total ? `<td align="right" valign="middle" width="190"><div style="font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:rgba(255,255,255,.82);">Estimated total${_star(m)}</div><div style="font-size:32px; font-weight:800; color:#fff; letter-spacing:-.6px; margin-top:2px;">${_money(total)}</div></td>` : '';
+  const panel = `<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td style="background:${T.acc}; border-radius:14px; padding:24px 26px;"><table width="100%"><tbody><tr><td valign="middle"><div style="font-size:11px; letter-spacing:1.2px; text-transform:uppercase; color:rgba(255,255,255,.82); font-weight:700;">${_esc(groupName)}</div><div style="font-size:23px; font-weight:800; color:#fff; margin:5px 0 7px; letter-spacing:-.4px;">${_esc(optionName)}</div><div style="font-size:12px; color:rgba(255,255,255,.88);">${subParts.join(' &nbsp;&middot;&nbsp; ')}</div></td>${totalCell}</tr></tbody></table></td></tr></tbody></table>`;
+  const rows = lines.map((l, i) => {
+    const sub = l.subtitle ? `<div style="font-size:12px; color:${T.mut}; margin-top:3px;">${_esc(l.subtitle)}</div>` : '';
+    const cost = show.cost ? `<td valign="top" align="right" width="86" style="padding:15px 0; font-size:13px; color:${T.body};">${_money(l.unitPrice)}</td>` : '';
+    const imp = l.imprint;
+    const imgs = l.previews || [];
+    const visual = imgs.length ? _renderTile(imgs[0], 34) : (imp ? _chip(imp, 34) : '');
+    const chip = (show.previews && (imp || imgs.length))
+      ? `<table border="0" cellpadding="0" cellspacing="0" style="margin-top:9px;"><tbody><tr><td valign="middle" width="34" style="padding-right:10px;">${visual}</td><td valign="middle"><span style="font-size:11px; color:${T.mut};">${imp && imp.color ? _swatch(imp.colorHex, _LIGHT_IMPRINT[imp.color]) + ' ' : ''}<span style="vertical-align:middle;">${imp ? _esc(imp.typeLabel) + (imp.color ? ' &middot; ' + _esc(imp.color) : '') + (imp.method ? ' &middot; ' + _esc(imp.method) : '') : 'Personalization'}</span></span></td></tr></tbody></table>` : '';
+    return `<tr style="${i ? `border-top:1px solid ${T.line};` : ''}"><td valign="top" style="padding:15px 0;">${_brandLine(l, T.mut)}<div style="font-size:14px; color:${T.ink}; font-weight:700;">${_esc(l.title)}</div>${sub}${chip}</td><td valign="top" width="54" style="padding:15px 0; font-size:13px; color:${T.body};">${l.qty}</td>${cost}<td valign="top" align="right" width="92" style="padding:15px 0; font-size:14px; font-weight:800; color:${T.price};">${_money(l.lineTotal)}</td></tr>`;
+  }).join('\n');
+  const th = (label, w, align) => `<th style="font-family:${SANS}; font-weight:700; font-size:10px; letter-spacing:.6px; text-transform:uppercase; color:${T.mut}; border-bottom:2px solid ${T.acc}; padding:0 0 9px;${w ? ' width:' + w + 'px;' : ''}" align="${align || 'left'}">${label}</th>`;
+  const head = `<tr>${th('Item')}${th('Qty', 54)}${show.cost ? th('Unit', 86, 'right') : ''}${th('Total', 92, 'right')}</tr>`;
+  return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td>
+    ${panel}${_msgBlock(m) ? '<div style="height:18px; line-height:18px; font-size:0;">&nbsp;</div>' + _msgBlock(m) : ''}
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:22px;"><tbody>${head}${rows}</tbody></table>
+    ${_discLine(m)}${show.cta ? _ctaBar('Approve &amp; view in cart &rsaquo;') : ''}${_foot()}
+  </td></tr></tbody></table>`;
+}
+
+/* ── TEMPLATE 5 — LOOKBOOK — image-top cards, proof under each ── */
+function tplLookbook(m) {
+  const { groupName, optionName, lines, total, show } = m;
+  const cards = lines.map((l) => {
+    const imgRow = show.images ? `<tr><td align="center" style="padding:20px 20px 6px;"><img src="${_esc(l.img)}" width="220" border="0" style="border-radius:10px; display:block; margin:0 auto;" /></td></tr>` : '';
+    const sub = l.subtitle ? `<div style="font-size:12px; color:${T.mut}; margin-top:4px;">${_esc(l.subtitle)}</div>` : '';
+    const qtyLine = show.cost ? `Qty ${l.qty} &nbsp;&middot;&nbsp; ${_money(l.unitPrice)} ea` : `Qty ${l.qty}`;
+    const proof = show.previews ? _proof(l, false) : '';
+    return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:14px; margin-bottom:15px;"><tbody>${imgRow}<tr><td style="padding:${show.images ? '8px' : '18px'} 20px 18px;"><table width="100%"><tbody><tr><td valign="middle">${_brandLine(l, T.acc)}<div style="font-size:18px; color:${T.ink}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${T.mut}; margin-top:6px;">${qtyLine}</div></td><td valign="middle" align="right" width="96"><span style="font-size:20px; font-weight:800; color:${T.price};">${_money(l.lineTotal)}</span></td></tr></tbody></table>${proof}</td></tr></tbody></table>`;
+  }).join('\n');
+  const totalBox = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td style="border-top:2px solid ${T.acc}; padding:18px 2px 0;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:12px; letter-spacing:.6px; text-transform:uppercase; color:${T.mut}; font-weight:700;">Estimated total${_star(m)}</span></td><td align="right" valign="middle"><span style="font-size:26px; font-weight:800; color:${T.price};">${_money(total)}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
+  return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="padding:6px 6px 8px;">
+    <div align="center">${_wordmark('center')}</div>
+    <div align="center" style="font-size:12px; letter-spacing:1.6px; text-transform:uppercase; color:${T.acc}; font-weight:800; margin-top:16px;">${_esc(groupName)}</div>
+    <div align="center" style="font-size:27px; font-weight:800; color:${T.ink}; margin:7px 0 0; letter-spacing:-.5px;">${_esc(optionName)}</div>
+    <div style="width:46px; height:4px; background:${T.acc}; border-radius:2px; margin:14px auto 0;"></div>
+    ${_msgBlock(m, 'center')}
+    <div style="height:22px; line-height:22px; font-size:0;">&nbsp;</div>
+    ${cards}${totalBox}${_expLine(m, 'center')}${_discLine(m, 'center')}${show.cta ? _ctaBtn('View this option &rsaquo;', true) : ''}${_foot()}
   </td></tr></tbody></table>`;
 }
 
 export const PROPOSAL_TEMPLATES = [
-  { id: 'classic', name: 'Classic', sub: 'Bordered card · Golfballs original', accent: '#339900', build: tplClassic },
-  { id: 'minimal', name: 'Minimal', sub: 'Borderless · left-aligned', accent: '#339900', build: tplMinimal },
-  { id: 'catalog', name: 'Catalog cards', sub: 'Item cards · header band', accent: '#339900', build: tplCatalog },
-  { id: 'quote', name: 'Quote', sub: 'Total-summary panel · lined table', accent: '#339900', build: tplQuote },
-  { id: 'lookbook', name: 'Lookbook', sub: 'Image-top cards · centered', accent: '#339900', build: tplLookbook },
+  { id: 'classic', name: 'Classic', sub: 'Formal letter · imprint proofs', accent: '#339900', build: tplClassic },
+  { id: 'minimal', name: 'Minimal', sub: 'Editorial · borderless', accent: '#339900', build: tplMinimal },
+  { id: 'catalog', name: 'Catalog cards', sub: 'Header band · proof per card', accent: '#339900', build: tplCatalog },
+  { id: 'quote', name: 'Quote', sub: 'Total panel · imprint chips', accent: '#339900', build: tplQuote },
+  { id: 'lookbook', name: 'Lookbook', sub: 'Image-top · proof under each', accent: '#339900', build: tplLookbook },
 ];
 const tplById = (id) => PROPOSAL_TEMPLATES.find((t) => t.id === id) || PROPOSAL_TEMPLATES[0];
 
@@ -427,7 +439,7 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
             <ConfigGroup title="Display options">
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <OptionToggle checked={show.images} label="Product images" onClick={() => toggle('images')} />
-                <OptionToggle checked={show.previews} label="3D personalization previews" hint={busy ? `Rendering ${prog.n}/${prog.t || '…'}` : 'Renders each item’s logo/text on the 3D model (2 photos for dual-pole)'} onClick={() => toggle('previews')} />
+                <OptionToggle checked={show.previews} label="Imprint proofs" hint={busy ? `Rendering 3D proofs ${prog.n}/${prog.t || '…'}` : 'Show how each logo / personalization is applied'} onClick={() => toggle('previews')} />
                 <OptionToggle checked={show.cost} label="Unit cost / qty detail" onClick={() => toggle('cost')} />
                 <OptionToggle checked={show.total} label="Estimated total" hint="Uncheck to hide the subtotal" onClick={() => toggle('total')} />
                 <OptionToggle checked={show.expiration} label="Expiration date" onClick={() => toggle('expiration')} />
@@ -447,42 +459,20 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
                 <span style={{ width: 8, height: 8, borderRadius: 2, background: tpl.accent }} />
                 <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>{tpl.name}</span>
               </span>
+              {busy && show.previews && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 9px', borderRadius: 999, background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)' }}>
+                  <span style={{ width: 11, height: 11, borderRadius: '50%', border: '2px solid var(--gb-brand-tint-border)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} />
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--gb-brand-label)' }}>Rendering proofs {prog.t ? `${prog.n}/${prog.t}` : '…'}</span>
+                </span>
+              )}
               <div style={{ flex: 1 }} />
               <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>600px · HTML</span>
             </div>
             <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+              {/* The proof cards show instantly (synthetic chip + spec); the 3D
+                  renders swap in as the background batch completes — a tiny pill in
+                  the bar above reports progress, so no blocking veil is needed. */}
               <iframe title="proposal-preview" srcDoc={doc} style={{ width: '100%', height: '100%', border: 'none', background: '#eef0f2' }} />
-              {/* Polished render-progress overlay: an animated card with a tile
-                  grid that fills with checks as each preview renders, plus a
-                  determinate bar + count. */}
-              {busy && show.previews && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .18 }}
-                  style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'color-mix(in srgb, var(--gb-surface-deep) 82%, transparent)', backdropFilter: 'blur(5px)', WebkitBackdropFilter: 'blur(5px)' }}>
-                  <motion.div initial={{ opacity: 0, scale: .96, y: 8 }} animate={{ opacity: 1, scale: 1, y: 0 }} transition={{ type: 'spring', stiffness: 340, damping: 28 }}
-                    style={{ width: 320, maxWidth: '88%', padding: '24px 24px 20px', borderRadius: 'var(--gb-r-xl)', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', boxShadow: 'var(--gb-shadow-modal)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
-                    <div style={{ position: 'relative', width: 48, height: 48, flexShrink: 0 }}>
-                      <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '3px solid var(--gb-brand-tint-soft)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .85s linear infinite' }} />
-                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gb-brand-label)' }}><I.card size={19} /></div>
-                    </div>
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Rendering 3D previews</div>
-                      <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', marginTop: 3 }}>{prog.t ? 'Snapshotting each personalization on its model' : 'Preparing personalizations…'}</div>
-                    </div>
-                    {prog.t > 0 && prog.t <= 24 && (
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center', maxWidth: 252 }}>
-                        {Array.from({ length: prog.t }).map((_, idx) => {
-                          const done = idx < prog.n, active = idx === prog.n;
-                          return <div key={idx} style={{ width: 24, height: 24, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', transition: 'background .3s, border-color .3s', background: done ? 'var(--gb-brand-label)' : 'var(--gb-fill-subtle)', border: '1px solid ' + (done ? 'var(--gb-brand-label)' : active ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'), animation: (!done && active) ? 'gb-pulse 1s ease-in-out infinite' : 'none' }}>{done && <I.check size={13} strokeWidth={3} />}</div>;
-                        })}
-                      </div>
-                    )}
-                    <div style={{ width: '100%', height: 7, borderRadius: 4, background: 'var(--gb-fill-subtle)', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', borderRadius: 4, background: 'var(--gb-brand-label)', width: prog.t ? `${Math.max(4, Math.round((prog.n / prog.t) * 100))}%` : '24%', animation: prog.t ? 'none' : 'gb-pulse 1s ease-in-out infinite', transition: 'width .35s cubic-bezier(.4,0,.2,1)' }} />
-                    </div>
-                    <div style={{ fontSize: 11.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-secondary)' }}>{prog.t ? `${prog.n} of ${prog.t}` : 'Loading…'}</div>
-                  </motion.div>
-                </motion.div>
-              )}
             </div>
           </div>
         </div>
