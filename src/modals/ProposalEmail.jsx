@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Btn, IconBtn } from '../ui/index.js';
 import { I } from '../ui/icons.jsx';
+import { EmailHtmlView } from '../ui/components/EmailHtmlView.jsx';
 import { GolfballViewer } from './GolfballViewer.jsx';
 import { linesToShots } from '../lib/proposalSnapshots.js';
 
@@ -246,10 +247,6 @@ export const PROPOSAL_TEMPLATES = [
 ];
 const tplById = (id) => PROPOSAL_TEMPLATES.find((t) => t.id === id) || PROPOSAL_TEMPLATES[0];
 
-function previewDocument(emailHtml) {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{margin:0;background:#eef0f2;padding:26px 18px;}.page{display:flex;justify-content:center;}.sheet{background:#fff;padding:26px;border-radius:8px;box-shadow:0 8px 30px rgba(20,20,30,.12);}</style></head><body><div class="page"><div class="sheet">${emailHtml}</div></div></body></html>`;
-}
-
 function TemplateThumb({ id, accent }) {
   const bar = (w, c, h) => ({ width: w, height: h || 3, background: c, borderRadius: 1 });
   const G = '#cfd3d8';
@@ -437,7 +434,9 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
   );
   const model = useMemo(() => ({ groupName, optionName, expiration, message, lines: modelLines, total: source.total, show }), [groupName, optionName, expiration, message, modelLines, source.total, show]);
   const emailHtml = useMemo(() => tpl.build(model), [tpl, model]);
-  const doc = useMemo(() => previewDocument(emailHtml), [emailHtml]);
+  // Preview is wrapped so the 600px email centers in the (wider) pane. It's a
+  // VIEW-only wrapper — the copied HTML stays the untouched `emailHtml`.
+  const previewHtml = useMemo(() => `<div style="text-align:center;"><div style="display:inline-block; text-align:left;">${emailHtml}</div></div>`, [emailHtml]);
 
   const flash = () => { setCopied(true); setTimeout(() => setCopied(false), 1800); };
   // Copy RICH — write the HTML to the clipboard as `text/html` so pasting into a
@@ -509,7 +508,10 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
               <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>600px · HTML</span>
             </div>
             <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-              <iframe title="proposal-preview" srcDoc={doc} style={{ width: '100%', height: '100%', border: 'none', background: '#eef0f2' }} />
+              {/* Render via EmailHtmlView so the preview re-themes to the user's
+                  light/dark surface (white→transparent, dark text→light, brand
+                  colors kept) — the VIEW adapts, the copied HTML stays fixed. */}
+              <EmailHtmlView html={previewHtml} style={{ height: '100%', border: 'none', borderRadius: 0 }} />
               {/* Blocking render-progress overlay — wait for the full batch before
                   revealing the email so the proofs land with real renders, not a
                   half-rendered/synthetic state. */}
