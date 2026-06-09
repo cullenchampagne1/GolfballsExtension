@@ -7,7 +7,7 @@ import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CA
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions, colorNameOf } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposalEntries, proposalCartUrl, loadKnownPromos, addKnownPromo } from '../lib/saveProposal.js';
-import { promoDiscount } from '../lib/cartSerializer.js';
+import { promoDiscount, freeLinesFromPromo } from '../lib/cartSerializer.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS } from '../lib/customItems.js';
 import { importHpgCatalog } from '../lib/hpgImport.js';
 import { importSnugzCatalog } from '../lib/snugzImport.js';
@@ -1119,7 +1119,7 @@ function resolveSavedEntry(entry) {
   // lines are filtered out here).
   const entries = [];
   (entry.lines || []).forEach((l, srcIndex) => {
-    if (l && l.product) entries.push({ product: l.product, decoration: l.decoration, splits: l.splits || [], srcIndex });
+    if (l && l.product) entries.push({ product: l.product, decoration: l.decoration, splits: l.splits || [], free: !!l.free, srcIndex });
   });
   const units = entries.reduce((s, e) => s + e.splits.reduce((a, x) => a + (x.qty || 0), 0), 0);
   const total = entries.reduce((s, e) => s + e.splits.reduce((a, x) => a + (x.qty || 0) * (x.price || 0), 0), 0);
@@ -1251,12 +1251,12 @@ function EditablePrice({ value, onCommit }) {
         onBlur={commit}
         onKeyDown={(ev) => { if (ev.key === 'Enter') { ev.preventDefault(); commit(); } else if (ev.key === 'Escape') { ev.preventDefault(); setEditing(false); } }}
         onClick={(ev) => ev.stopPropagation()}
-        style={{ width: 58, textAlign: 'right', fontFamily: 'var(--gb-font-mono)', fontSize: 10.5, fontWeight: 700, color: 'var(--gb-text-primary)', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-brand-border)', borderRadius: 'var(--gb-r-sm)', padding: '1px 4px', outline: 'none' }} />
+        style={{ width: 58, textAlign: 'right', fontFamily: 'var(--gb-font-mono)', fontSize: 10.5, fontWeight: 700, color: 'var(--gb-text-primary)', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-brand-border)', borderRadius: 'var(--gb-r-sm)', padding: '1px 4px', outline: 'none', WebkitTapHighlightColor: 'transparent' }} />
     );
   }
   return (
     <button type="button" onClick={(ev) => { ev.stopPropagation(); start(); }} title="Edit price"
-      style={{ border: 'none', background: 'transparent', cursor: 'text', font: 'inherit', fontFamily: 'var(--gb-font-mono)', color: 'inherit', padding: 0, borderBottom: '1px dashed var(--gb-border-strong, var(--gb-border-default))' }}>
+      style={{ border: 'none', background: 'transparent', cursor: 'text', font: 'inherit', fontFamily: 'var(--gb-font-mono)', color: 'inherit', padding: 0, outline: 'none', WebkitTapHighlightColor: 'transparent', borderBottom: '1px dashed var(--gb-border-strong, var(--gb-border-default))' }}>
       {usd(value)}
     </button>
   );
@@ -1267,7 +1267,7 @@ function EditablePrice({ value, onCommit }) {
    proposal). */
 function MarginLineRow({ e, first, onEditPrice, estimated }) {
   const chips = decoImprints(e.decoration);
-  const editable = typeof onEditPrice === 'function';
+  const editable = typeof onEditPrice === 'function' && !e.free;   // free giveaway lines aren't editable
   const star = estimated ? <sup title="No cost on file — estimated" style={{ color: 'var(--gb-warning-fg, #b6830a)', fontWeight: 800, marginLeft: 1 }}>*</sup> : null;
   return (
     <div style={{ padding: '9px 12px', borderTop: first ? 'none' : '1px solid var(--gb-border-subtle)' }}>
@@ -1275,7 +1275,10 @@ function MarginLineRow({ e, first, onEditPrice, estimated }) {
         <MiniThumb src={lineGiftImg(e) || e.product.img} size={36} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{e.product.brand}</div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lineGiftTitle(e) || e.product.title}</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{lineGiftTitle(e) || e.product.title}</span>
+            {e.free && <span style={{ flexShrink: 0, fontSize: 8.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-success-fg, #2e9e5b)', background: 'var(--gb-success-tint, rgba(46,158,91,.12))', border: '1px solid var(--gb-success-border, rgba(46,158,91,.32))', borderRadius: 'var(--gb-r-pill)', padding: '1px 6px' }}>Free</span>}
+          </div>
         </div>
         <span style={{ width: 50, textAlign: 'right', fontSize: 11.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-secondary)' }}>{e.units}</span>
         <span style={{ width: 80, textAlign: 'right', fontSize: 12.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-primary)' }}>{money(e.lineRev)}</span>
@@ -1438,9 +1441,9 @@ function PromoBlock({ promo, onApply, onClear, onCheck }) {
             <div style={{ flex: 1, position: 'relative', display: 'flex' }}>
               <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="Enter or pick a promo code"
                 onKeyDown={(e) => { if (e.key === 'Enter') apply(code); }}
-                style={{ flex: 1, fontFamily: 'var(--gb-font-mono)', fontSize: 12, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-primary)', background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', padding: '8px 32px 8px 11px', outline: 'none', width: '100%', boxSizing: 'border-box' }} />
+                style={{ flex: 1, height: 28, fontFamily: 'var(--gb-font-mono)', fontSize: 12, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-primary)', background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)', padding: '0 32px 0 11px', outline: 'none', WebkitTapHighlightColor: 'transparent', width: '100%', boxSizing: 'border-box' }} />
               <button type="button" onClick={() => setOpen((o) => !o)} title="Browse codes that apply"
-                style={{ position: 'absolute', right: 4, top: 0, bottom: 0, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--gb-text-muted)', display: 'flex', alignItems: 'center', padding: '0 5px' }}>
+                style={{ position: 'absolute', right: 4, top: 0, bottom: 0, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--gb-text-muted)', display: 'flex', alignItems: 'center', padding: '0 5px', outline: 'none', WebkitTapHighlightColor: 'transparent' }}>
                 <I.chevd size={14} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
               </button>
             </div>
@@ -1450,28 +1453,36 @@ function PromoBlock({ promo, onApply, onClear, onCheck }) {
           <AnimatePresence>
             {open && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: .16 }} style={{ overflow: 'hidden' }}>
-                <div style={{ marginTop: 8, border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden' }}>
-                  {known.length === 0 ? (
-                    <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', padding: '10px 12px' }}>No saved codes yet — type one above to apply &amp; remember it.</div>
-                  ) : known.map((c, i) => {
-                    const st = checks[c] || { state: 'checking' };
-                    const ok = st.state === 'ok';
-                    const checking = st.state === 'checking';
-                    return (
-                      <button key={c} type="button" disabled={!ok || !!busy} onClick={() => apply(c)}
-                        style={{ width: '100%', textAlign: 'left', border: 'none', borderTop: i ? '1px solid var(--gb-border-subtle)' : 'none', background: 'transparent', cursor: ok ? 'pointer' : 'default', padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 9, opacity: ok || checking ? 1 : .5 }}>
-                        <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 11.5, fontWeight: 800, letterSpacing: .4, color: ok ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }}>{c}</span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          {ok && st.desc && <div style={{ fontSize: 10, color: 'var(--gb-text-tertiary)', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.desc}</div>}
-                        </div>
-                        {checking ? <span style={{ width: 11, height: 11, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite', flexShrink: 0 }} />
-                          : ok ? <span style={{ fontSize: 10.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-success-fg, #2e9e5b)', flexShrink: 0 }}>{st.disc > 0 ? '−' + usd(st.disc) : st.freeQty > 0 ? '+' + st.freeQty + ' dz' : 'Applies'}</span>
-                          : <span style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)', flexShrink: 0 }}>N/A</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)', marginTop: 5, lineHeight: 1.4 }}>Checked against the items in this proposal.</div>
+                {(() => {
+                  // Only codes that apply to THIS cart (hide N/A); keep ones still
+                  // checking so the list fills in rather than flashing empty.
+                  const shown = known.filter((c) => { const st = checks[c]; return !st || st.state === 'checking' || st.state === 'ok'; });
+                  const anyChecking = shown.some((c) => !checks[c] || checks[c].state === 'checking');
+                  return (
+                    <>
+                      <div style={{ marginTop: 8, border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden' }}>
+                        {shown.length === 0 ? (
+                          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', padding: '10px 12px' }}>{known.length ? 'No saved codes apply to this cart.' : 'No saved codes yet — type one above to apply & remember it.'}</div>
+                        ) : shown.map((c, i) => {
+                          const st = checks[c] || { state: 'checking' };
+                          const ok = st.state === 'ok';
+                          return (
+                            <button key={c} type="button" disabled={!ok || !!busy} onClick={() => apply(c)}
+                              style={{ width: '100%', textAlign: 'left', border: 'none', borderTop: i ? '1px solid var(--gb-border-subtle)' : 'none', background: 'transparent', cursor: ok ? 'pointer' : 'default', padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 9, outline: 'none', WebkitTapHighlightColor: 'transparent' }}>
+                              <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 11.5, fontWeight: 800, letterSpacing: .4, color: ok ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }}>{c}</span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                {ok && st.desc && <div style={{ fontSize: 10, color: 'var(--gb-text-tertiary)', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.desc}</div>}
+                              </div>
+                              {ok ? <span style={{ fontSize: 10.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-success-fg, #2e9e5b)', flexShrink: 0 }}>{st.disc > 0 ? '−' + usd(st.disc) : st.freeQty > 0 ? '+' + st.freeQty + ' dz' : 'Applies'}</span>
+                                : <span style={{ width: 11, height: 11, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite', flexShrink: 0 }} />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)', marginTop: 5, lineHeight: 1.4 }}>{anyChecking ? 'Checking which codes apply…' : 'Showing only codes that apply to this proposal.'}</div>
+                    </>
+                  );
+                })()}
               </motion.div>
             )}
           </AnimatePresence>
@@ -1915,6 +1926,8 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
 function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onMergeImprint, onRemoveFront, onRemoveSecond, pageContext = {}, onSaveToAccount, onAddOpportunity, accountSaveSeq = 0, onEmail, promo, onApplyPromo, onClearPromo, onCheckPromo }) {
   const total = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
   const promoDisc = (promo && promo.promotion) ? promoDiscount(promo.promotion) : 0;
+  // Free giveaway lines a FREE_QUANTITY coupon grants (shown read-only, $0).
+  const freeLines = (promo && promo.promotion) ? freeLinesFromPromo(promo.promotion, proposal) : [];
   const units = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty, 0), 0);
   // Drag-to-copy imprints between lines. `drag` holds the in-flight source so
   // every line can light up (or stay dim) based on whether it can take it.
@@ -2035,6 +2048,20 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
                     onRemove={() => onRemoveLine(line.id)} />
                 ))}
               </AnimatePresence>
+              {/* Free giveaway lines from a FREE_QUANTITY coupon — read-only, $0. */}
+              {freeLines.map((fl) => (
+                <div key={fl.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint, rgba(46,158,91,.10))', border: '1px solid var(--gb-success-border, rgba(46,158,91,.30))' }}>
+                  <MiniThumb src={lineGiftImg(fl) || (fl.product && fl.product.img)} size={30} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(fl.product && fl.product.title) || 'Item'}</span>
+                      <span style={{ flexShrink: 0, fontSize: 8.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-success-fg, #2e9e5b)', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-success-border, rgba(46,158,91,.32))', borderRadius: 'var(--gb-r-pill)', padding: '1px 6px' }}>Free</span>
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--gb-text-tertiary)', marginTop: 1, fontFamily: 'var(--gb-font-mono)' }}>{fl.splits[0].qty} × $0.00 · promo</div>
+                  </div>
+                  <span style={{ fontSize: 12.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-success-fg, #2e9e5b)', flexShrink: 0 }}>FREE</span>
+                </div>
+              ))}
             </>
           )}
         </div>
@@ -2661,6 +2688,12 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // Validate a code against the current cart WITHOUT applying it — drives the
   // picker's "which codes apply" check.
   const checkPromo = (code) => validatePromo(proposal, code);
+  // $0 "free" lines a FREE_QUANTITY coupon grants on the working proposal (cloned
+  // from the matching line) — shown in the breakdown/email like the site's cart.
+  const proposalFreeLines = useMemo(
+    () => (proposalPromo && proposalPromo.promotion) ? freeLinesFromPromo(proposalPromo.promotion, proposal) : [],
+    [proposalPromo, proposal]);
+  const proposalWithFree = proposalFreeLines.length ? [...proposal, ...proposalFreeLines] : proposal;
   const [proposalOpen, setProposalOpen] = useState(false);
   const [detail, setDetail] = useState(null);   // proposal-breakdown drill-in: { kind:'saved'|'current', item? }
   // ── Verified DISPLAY pricing ───────────────────────────────────────────────
@@ -2826,6 +2859,11 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
       return [...prev, ...incoming.filter((l) => !have.has(l.productId))];
     });
     setLoadedId(entry.id);
+    // Carry the loaded proposal's coupon into the working set (or clear a stale
+    // one) — otherwise a previously-applied code persists and shows "requirements
+    // not met" against the newly-loaded cart.
+    setProposalPromo((entry.promotion && entry.promotion.promo)
+      ? { code: entry.promotion.promo, promotion: entry.promotion } : null);
     setProposalOpen(true);
   };
 
@@ -3319,6 +3357,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                     subtitle={`${it.opportunitySubject || 'Opportunity ' + it.opportunityID} · ${r.units} units`}
                     badge={<Tag tone="brand" size="sm" icon={<I.card size={9} />}>Current</Tag>}
                     entries={r.entries} loaded={loadedId === it.id} onClose={close}
+                    promo={it.promotion && it.promotion.promo ? { code: it.promotion.promo, promotion: it.promotion } : null}
                     buildEmailSource={() => proposalToEmailSource(linesFromSaved(it, rid), it.name)}
                     onCopy={() => copySaved(it)} onSaveToAccount={() => { close(); loadSavedToAccount(it); }}
                     onLoad={() => { close(); loadSaved(it); }} />
@@ -3328,11 +3367,11 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                 return (
                   <SavedDetail key="bd-current" current title="Current proposal" subtitle="Live working set · unsaved"
                     badge={<Tag tone="brand" size="sm" icon={<Dot tone="brand" size={5} />}>Unsaved</Tag>}
-                    entries={proposal} onClose={close}
+                    entries={proposalWithFree} onClose={close}
                     promo={proposalPromo} onApplyPromo={applyPromo} onClearPromo={clearPromo} onCheckPromo={checkPromo}
                     onPatchSplit={(entryIndex, _src, splitIndex, price) => setProposal((prev) => prev.map((pl, li) => li !== entryIndex ? pl
                       : { ...pl, splits: pl.splits.map((s, si) => si !== splitIndex ? s : { ...s, price, priceEdited: true }) }))}
-                    buildEmailSource={() => proposalToEmailSource(proposal, '')}
+                    buildEmailSource={() => proposalToEmailSource(proposalWithFree, '')}
                     onOpenProposal={() => { close(); setProposalOpen(true); }} />
                 );
               }

@@ -165,6 +165,7 @@ export async function buildProposalLines(proposal) {
         selection,
         qty: split.qty,
         url: lineUrl,
+        itemGuid: split.id,        // deterministic → promotion freeItems map back to this split
       }));
     }
   }
@@ -391,9 +392,16 @@ function cartItemToLine(it, i) {
   if (price == null) { let p = breaks[0] ? breaks[0].p : 0; for (const b of breaks) if (b.q <= qty) p = b.p; price = p; }
   const decoration = decorationFromCartItem(it);     // read the saved imprint back
   const isLogo = decoration && (decoration.engine === 'ballLogo' || decoration.engine === 'logoOverlay');
+  // FREE_QUANTITY promos add the free dozens as a separate line whose guid ends
+  // "-PROMO" (billed at full price in the cart, then zeroed by the promotion
+  // discount). We surface it as a $0 "free" line so the proposal reads like the
+  // site: a free giveaway line, no separate discount to reconcile.
+  const free = /-PROMO$/i.test(String(it.itemGuid || ''));
+  if (free) price = 0;
   return {
     id: 'crmln-' + (it.itemGuid || i),
     productId: it.itemGuid || ('p' + i),
+    free,
     product: {
       id: 'crmp-' + (it.ShortCode || it.itemGuid || i),
       title: it.productTitle || it.nameFormat || 'Item',

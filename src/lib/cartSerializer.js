@@ -1004,12 +1004,65 @@ export function buildCustomItemLine({ ci = {}, qty, price, style } = {}) {
    uses `totalDiscount`; the cart's stored promotion block uses
    `totalPromoDiscount`). Returns 0 when there's no monetary discount (e.g. a
    FREE_QUANTITY promo's value is in freeItems, not a $ off). */
+/* The MONETARY discount to subtract from revenue for display — order-level +
+   item-level only. A FREE_QUANTITY promo's value is NOT counted here; it's shown
+   as a $0 "free" line instead (see freeLinesFromPromo), so counting it again
+   would double-discount. */
 export function promoDiscount(promotion) {
+  if (!promotion || typeof promotion !== 'object') return 0;
+  if (promotion.promoType === 'FREE_QUANTITY') {
+    const order = Number(promotion.orderLevelDiscount) || 0;
+    const items = (promotion.itemLevelDiscounts || []).reduce((s, d) => s + (Number(d && (d.amount != null ? d.amount : d.discount)) || 0), 0);
+    return round2(order + items);
+  }
+  const v = promotion.totalPromoDiscount != null ? promotion.totalPromoDiscount
+    : promotion.totalDiscount != null ? promotion.totalDiscount
+    : promotion.orderLevelDiscount != null ? promotion.orderLevelDiscount : 0;
+  return round2(Number(v) || 0);
+}
+
+/* The FULL discount the cart stores (includes the free-quantity value) — used
+   when building a cart payload so cartTotal matches the site. */
+function fullPromoDiscount(promotion) {
   if (!promotion || typeof promotion !== 'object') return 0;
   const v = promotion.totalPromoDiscount != null ? promotion.totalPromoDiscount
     : promotion.totalDiscount != null ? promotion.totalDiscount
     : promotion.orderLevelDiscount != null ? promotion.orderLevelDiscount : 0;
   return round2(Number(v) || 0);
+}
+
+/* Free lines a FREE_QUANTITY promo grants: one $0 line per freeItem, cloned from
+   the matching proposal line (so it carries the same product + imprint), at the
+   granted quantity. `lines` are the live proposal lines (each with an `id`/splits
+   whose `id` we used as the promotion itemGuid). Returns [] for non-free promos. */
+export function freeLinesFromPromo(promotion, lines) {
+  if (!promotion || promotion.promoType !== 'FREE_QUANTITY') return [];
+  const free = promotion.freeItems || [];
+  if (!free.length) return [];
+  // Map promotion itemGuid → the source proposal line (we set itemGuid = split.id;
+  // also accept the cart's "<guid>-PROMO" / base-guid forms).
+  const byKey = new Map();
+  for (const l of (lines || [])) {
+    for (const s of (l.splits || [])) if (s && s.id) byKey.set(String(s.id), l);
+    if (l.id) byKey.set(String(l.id), l);
+    if (l.productId) byKey.set(String(l.productId), l);
+  }
+  const out = [];
+  free.forEach((f, i) => {
+    const key = String(f.itemGuid || '').replace(/-PROMO$/i, '');
+    const src = byKey.get(key) || byKey.get(String(f.itemGuid || '')) || (lines || [])[0];
+    if (!src) return;
+    out.push({
+      id: 'free-' + (f.itemGuid || i),
+      productId: (src.product && src.product.id) || src.productId,
+      product: src.product,
+      decoration: src.decoration || null,
+      variant: src.variant || null,
+      free: true,
+      splits: [{ id: 'frees-' + (f.itemGuid || i), qty: Number(f.amount) || 0, price: 0 }],
+    });
+  });
+  return out;
 }
 
 export function buildCartData(itemsInCart, { proposalID = null, promotion = null } = {}) {
@@ -1019,7 +1072,7 @@ export function buildCartData(itemsInCart, { proposalID = null, promotion = null
   // re-applies it on load; cartTotal nets the order-level discount. The empty
   // sentinel keeps a no-coupon cart byte-identical to the verified capture.
   const hasPromo = promotion && promotion.promo;
-  const discount = hasPromo ? promoDiscount(promotion) : 0;
+  const discount = hasPromo ? fullPromoDiscount(promotion) : 0;
   return {
     cartStateVersion: 5,
     stateProperty: 'test value',
