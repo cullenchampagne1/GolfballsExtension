@@ -14,6 +14,39 @@ import { useEffect, useState, useCallback } from 'react';
    Missing keys fall back to the registry default.
 ─────────────────────────────────────────────────────────────── */
 
+/* Per-model export-photo (snapshot) framing. Each 3D model gets its own fixed
+   position (x/y/z) + scale used when the Image Viewer copies/downloads a
+   transparent PNG of the render — so exports are consistent regardless of the
+   live viewport, and ready to drop into a proposal. Keys must match
+   snapKeyForModel() in GolfballViewer.jsx (gift sets keyed by box model). */
+const SNAP_MODELS = [
+  { key: 'ball',                     label: 'Ball',                  scale: 1.35 },
+  { key: 'chip',                     label: 'Poker chip',            scale: 1.35 },
+  { key: 'divot',                    label: 'Divot tool',            scale: 1.35 },
+  { key: 'bartender',                label: 'Bartender tool',        scale: 1.35 },
+  { key: 'marker',                   label: 'Ball marker',           scale: 1.35 },
+  { key: 'giftset.giftbox',          label: 'Gift set — poker chip', scale: 1 },
+  { key: 'giftset.giftboxLever',     label: 'Gift set — lever',      scale: 1 },
+  { key: 'giftset.giftboxBartender', label: 'Gift set — bartender',  scale: 1 },
+  { key: 'giftset.giftboxWoodPoker', label: 'Gift set — wood poker', scale: 1 },
+  { key: 'giftset.giftboxWoodLever', label: 'Gift set — wood lever', scale: 1 },
+];
+const SNAP_SETTINGS = SNAP_MODELS.flatMap((m) => {
+  const base = `golfballViewer.snap.${m.key}`;
+  const axis = (ax, lbl) => ({
+    key: `${base}.${ax}`,
+    label: `Snapshot ${m.label}: ${lbl}`,
+    desc: `Export-photo ${lbl} for the ${m.label} render (transparent copy/download). Fixed, so every export frames identically.`,
+    type: 'number', default: 0, min: -300, max: 300, step: 1,
+  });
+  return [
+    axis('x', 'position X'),
+    axis('y', 'position Y'),
+    axis('z', 'position Z'),
+    { key: `${base}.scale`, label: `Snapshot ${m.label}: scale`, desc: `Export-photo scale for the ${m.label} render.`, type: 'number', default: m.scale, min: 0.2, max: 4, step: 0.05 },
+  ];
+});
+
 export const DEV_SETTINGS = [
   {
     key:     'numberDisplay.enabled',
@@ -469,6 +502,9 @@ export const DEV_SETTINGS = [
      dev settings were retired — the shelf's always-actions now follow each
      destination feature's own flag (imagePreviewEnabled / crmSearchEnabled /
      taskListEnabled / giftCatalogEnabled) instead of a redundant toggle. */
+
+  // Per-model export-photo framing (generated above) — 4 knobs × each model.
+  ...SNAP_SETTINGS,
 ];
 
 export const STORAGE_KEY = 'devSettings';

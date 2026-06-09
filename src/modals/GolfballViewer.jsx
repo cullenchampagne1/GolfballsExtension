@@ -244,6 +244,67 @@ export const SCENES = [
   { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'assets/moonlit_golf_4k.exr',     icon: 'moon' },
 ];
 
+/* ── Export-photo (snapshot) framing ──────────────────────────────────────────
+   The Copy/Download buttons capture a transparent PNG of the model. To make
+   every export of a given model frame IDENTICALLY (rather than tracking whatever
+   the user has zoomed/rotated/panned the live viewport to), the capture places
+   the model at a fixed, per-model pose from dev settings — position x/y/z + scale
+   — and renders it dead-on with a fixed camera. Rotation resets to the model's
+   initial (configured) pose. This is also the canonical render we'll later drop
+   into a proposal. */
+function snapKeyForModel(shape, giftSet) {
+  if (shape === 'giftset') return 'giftset.' + ((giftSet && giftSet.boxModel) || 'giftbox');
+  return shape || 'ball';
+}
+function snapPoseFromDev(dev, key, fallbackScale = 1) {
+  const num = (k, fb) => { const v = Number(dev?.[k]); return Number.isFinite(v) ? v : fb; };
+  const base = `golfballViewer.snap.${key}`;
+  return {
+    x: num(`${base}.x`, 0), y: num(`${base}.y`, 0), z: num(`${base}.z`, 0),
+    scale: num(`${base}.scale`, fallbackScale),
+  };
+}
+/* Render `ballGroup` (the single root for every model) to an offscreen,
+   transparent square canvas at a fixed pose, restoring the live transform after.
+   THREE comes from the build effect's closure. `wallMeshes` (box chrome) are
+   hidden for the shot. */
+function captureModelSnapshot({ THREE, renderer, scene, camera, ballGroup, wallMeshes, pose, baseRot, size = 1024 }) {
+  if (!THREE || !renderer || !scene || !camera || !ballGroup) return null;
+  const savedPos = ballGroup.position.clone();
+  const savedScl = ballGroup.scale.clone();
+  const savedRot = ballGroup.rotation.clone();
+  ballGroup.position.set(pose.x, pose.y, pose.z);
+  ballGroup.scale.setScalar(pose.scale);
+  if (baseRot) ballGroup.rotation.copy(baseRot);
+
+  const snapCam = camera.clone();
+  snapCam.position.set(0, 0, 520);   // matches the live camera's fixed distance
+  snapCam.aspect = 1;
+  snapCam.lookAt(0, 0, 0);
+  snapCam.updateProjectionMatrix();
+
+  const prevVis = (wallMeshes || []).map((m) => m.visible);
+  (wallMeshes || []).forEach((m) => { m.visible = false; });
+
+  const snapCanvas = document.createElement('canvas');
+  snapCanvas.width = size; snapCanvas.height = size;
+  const snapRenderer = new THREE.WebGLRenderer({ canvas: snapCanvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+  snapRenderer.setPixelRatio(1);
+  snapRenderer.setSize(size, size, false);
+  snapRenderer.setClearColor(0x000000, 0);
+  snapRenderer.outputColorSpace = renderer.outputColorSpace;
+  snapRenderer.toneMapping = renderer.toneMapping;
+  snapRenderer.render(scene, snapCam);
+  const dataUrl = snapCanvas.toDataURL('image/png');
+  snapRenderer.dispose();
+
+  (wallMeshes || []).forEach((m, i) => { m.visible = prevVis[i]; });
+  ballGroup.position.copy(savedPos);
+  ballGroup.scale.copy(savedScl);
+  ballGroup.rotation.copy(savedRot);
+  return dataUrl;
+}
+
 export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDataUrl, secondDecalDataUrl, onError, onSceneChange, onThrowChange, minimal = false, initialScale, autoRotate = false, shape = 'ball', tint, chipTint, giftSet }, ref) {
   const containerRef = useRef(null);
   // Imperative snapshot handle — set by the WebGL effect once the
@@ -378,6 +439,10 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
   // framing per-install. Snapshotted once into a ref at mount; future
   // toggles affect the next 3D-view open, not the live scene.
   const [dev] = useDevSettings();
+  // Live mirror of dev settings for the snapshot fn (the scene-build effect
+  // doesn't re-run on dev changes, so it can't close over a fresh `dev`).
+  const devRef = useRef(dev);
+  devRef.current = dev;
   const initialBallRef = useRef(null);
   if (!initialBallRef.current) {
     const deg = (k, fallback) => (Number(dev[k] ?? fallback) * Math.PI) / 180;
@@ -1379,15 +1444,16 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           renderer.domElement.addEventListener('pointerup', gsOnPUp);
           renderer.domElement.addEventListener('pointercancel', gsOnPUp);
 
-          // Snapshot — current view, walls hidden, transparent background.
-          snapshotRef.current = () => {
-            const prev = wallMeshes.map((m) => m.visible);
-            wallMeshes.forEach((m) => { m.visible = false; });
-            renderer.render(scene, camera);
-            const url = renderer.domElement.toDataURL('image/png');
-            wallMeshes.forEach((m, i) => { m.visible = prev[i]; });
-            return url;
-          };
+          // Snapshot — fixed per-model pose (dev-settings x/y/z/scale), walls
+          // hidden, transparent background. Independent of the live viewport so
+          // every export of this gift set frames identically.
+          const gsSnapKey = snapKeyForModel('giftset', giftSet);
+          const gsBaseRot = ballGroup.rotation.clone();
+          snapshotRef.current = (size = 1024) => captureModelSnapshot({
+            THREE, renderer, scene, camera, ballGroup, wallMeshes,
+            pose: snapPoseFromDev(devRef.current, gsSnapKey, 1),
+            baseRot: gsBaseRot, size,
+          });
 
           const gsRo = new ResizeObserver(() => {
             if (!renderer || !camera || !container) return;
@@ -1704,52 +1770,19 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
            any GPU resource conflict — both renderers compile their
            own programs against the same geometry/material objects.
         */
-        snapshotRef.current = (size = 1024) => {
-          // Frame the ball precisely on the camera at its current
-          // scale. Camera FOV = 40°, distance 520. Visible half-
-          // height at the ball plane = 520 * tan(20°) ≈ 189. We
-          // want the ball (radius 100 * state.scale) to fill ~90%
-          // of the snapshot, so push the snapshot camera closer:
-          const snapCam = camera.clone();
-          const ballRadiusVisual = 100 * state.scale;
-          const padFraction = 0.72;             // how much of the frame the ball occupies (lower = more breathing room)
-          const visHalfH = ballRadiusVisual / padFraction;
-          // distance for ortho-equivalent framing under perspective:
-          // visHalfH = dist * tan(FOV/2)
-          const dist = visHalfH / Math.tan((camera.fov * Math.PI / 180) / 2);
-          snapCam.position.set(0, 0, dist);
-          snapCam.aspect = 1;
-          snapCam.lookAt(0, 0, 0);
-          snapCam.updateProjectionMatrix();
-
-          // Hide chrome — walls only. The ball/decal stay visible.
-          const prevVis = wallMeshes.map((m) => m.visible);
-          wallMeshes.forEach((m) => { m.visible = false; });
-
-          const snapCanvas = document.createElement('canvas');
-          snapCanvas.width = size;
-          snapCanvas.height = size;
-          const snapRenderer = new THREE.WebGLRenderer({
-            canvas: snapCanvas,
-            antialias: true,
-            alpha: true,
-            preserveDrawingBuffer: true,  // required for toDataURL
-          });
-          snapRenderer.setPixelRatio(1);
-          snapRenderer.setSize(size, size, false);
-          snapRenderer.setClearColor(0x000000, 0);
-          snapRenderer.outputColorSpace = renderer.outputColorSpace;
-          snapRenderer.toneMapping = renderer.toneMapping;
-          snapRenderer.render(scene, snapCam);
-          const dataUrl = snapCanvas.toDataURL('image/png');
-
-          // Restore + dispose the snapshot renderer (its GL context
-          // is throwaway; the scene's resources are reference-counted
-          // by Three.js so they're untouched).
-          snapRenderer.dispose();
-          wallMeshes.forEach((m, i) => { m.visible = prevVis[i]; });
-          return dataUrl;
-        };
+        // Snapshot — fixed per-model pose (dev-settings x/y/z/scale) rendered
+        // dead-on with a fixed camera, walls hidden, transparent background.
+        // Rotation resets to the model's configured initial pose, so every
+        // export frames identically regardless of how the live view was
+        // zoomed/rotated/panned. The 5 normalize to ~radius-100 so they share a
+        // sensible default scale (~1.35 ≈ the old 72%-fill framing).
+        const ballSnapKey = snapKeyForModel(shape, giftSet);
+        const ballBaseRot = ballGroup.rotation.clone();
+        snapshotRef.current = (size = 1024) => captureModelSnapshot({
+          THREE, renderer, scene, camera, ballGroup, wallMeshes,
+          pose: snapPoseFromDev(devRef.current, ballSnapKey, 1.35),
+          baseRot: ballBaseRot, size,
+        });
 
         containsPointRef.current = ({ clientX, clientY }) => {
           const canvas = renderer.domElement;
