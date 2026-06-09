@@ -447,17 +447,35 @@ async function gbInvFetchCosts(origin, skus) {
   return out;
 }
 /* In-frame fetch of a single SKU's full inventory table HTML (same-origin, so
-   the gbcadmin session cookie flows). Returns { html } or { __auth:false } on a
-   login bounce. Reuses the persistent cost frame — far more reliable than the
-   old fetchInventory which navigated a throwaway iframe per request. */
+   the gbcadmin session cookie flows). Returns { html }, { notFound:true } for a
+   404 (SKU not in Dynamics), or { __auth:false } on a login bounce. */
 async function gbInvFetchHtml(origin, sku) {
   if (location.origin !== origin) return null;
   try {
     const r = await fetch('/office/Dynamics/Inventory.aspx?sku=' + encodeURIComponent(sku), { credentials: 'include', headers: { Accept: 'text/html,*/*' } });
+    if (r.status === 404) return { notFound: true };
     const html = await r.text();
     if (/GenericErrorPage|aspxerrorpath/i.test(r.url || '') || /<title>[^<]*Login/i.test(html)) return { __auth: false };
     return { html };
   } catch (e) { return { error: String((e && e.message) || e) }; }
+}
+/* Resolve where to run the in-frame inventory fetches. PREFER a real first-party
+   office.gbcadmin.com tab — its session cookie survives 3rd-party-cookie blocking
+   (an embedded iframe under golfballs.com is a 3rd-party context and loads logged
+   out). Fall back to a hidden iframe in the sender tab when no gbcadmin tab is
+   open. Returns { tabId, allFrames, needFrame } or null. */
+async function gbResolveInvTarget(sender) {
+  try {
+    const tabs = await chrome.tabs.query({ url: 'https://office.gbcadmin.com/*' });
+    if (tabs && tabs.length) {
+      // Prefer a non-discarded tab; run in its top frame (first-party).
+      const t = tabs.find((x) => !x.discarded) || tabs[0];
+      return { tabId: t.id, allFrames: false, needFrame: false };
+    }
+  } catch (e) { /* tabs.query unavailable — fall through to iframe */ }
+  const tabId = sender && sender.tab && sender.tab.id;
+  if (tabId) return { tabId, allFrames: true, needFrame: true };
+  return null;
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -528,27 +546,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Inventory URL (the iframe nav carries the session cookie), then read that
   // frame's own DOM via executeScript (same-origin → no CORS). Returns {ok,text}.
   if (msg.action === 'fetchInventory' && msg.sku) {
-    const tabId = sender && sender.tab && sender.tab.id;
-    if (!tabId) { sendResponse({ ok: false, error: 'No tab context for inventory request' }); return true; }
     (async () => {
       try {
-        // Reuse the persistent authed gbcadmin frame, then in-frame credentialed-
-        // fetch the single SKU's inventory HTML. (The old per-request throwaway
-        // iframe nav was flaky — embedding blocks/timeouts; the standing frame +
-        // same-origin fetch is reliable.)
-        const ready = await chrome.scripting.executeScript({
-          target: { tabId }, world: 'MAIN', func: gbEnsureInvFrame, args: ['https://office.gbcadmin.com'],
-        });
-        if (!(ready || []).some((r) => r && r.result)) {
-          sendResponse({ ok: false, error: 'gbcadmin frame did not load — open office.gbcadmin.com in a tab and sign in, then retry.' });
-          return;
+        const tgt = await gbResolveInvTarget(sender);
+        if (!tgt) { sendResponse({ ok: false, error: 'No tab context for inventory request' }); return; }
+        if (tgt.needFrame) {
+          const ready = await chrome.scripting.executeScript({
+            target: { tabId: tgt.tabId }, world: 'MAIN', func: gbEnsureInvFrame, args: ['https://office.gbcadmin.com'],
+          });
+          if (!(ready || []).some((r) => r && r.result)) {
+            sendResponse({ ok: false, error: 'gbcadmin frame did not load — open office.gbcadmin.com in a tab and sign in, then retry.' });
+            return;
+          }
         }
         const r = await chrome.scripting.executeScript({
-          target: { tabId, allFrames: true }, world: 'MAIN',
+          target: { tabId: tgt.tabId, allFrames: tgt.allFrames }, world: 'MAIN',
           func: gbInvFetchHtml, args: ['https://office.gbcadmin.com', msg.sku],
         });
         const hit = (r || []).map((x) => x && x.result).find((v) => v != null);
         if (!hit) { sendResponse({ ok: false, error: 'Inventory frame returned nothing (it may block embedding).' }); return; }
+        if (hit.notFound) { sendResponse({ ok: true, text: '', notFound: true }); return; }
         if (hit.__auth === false) { sendResponse({ ok: false, error: 'Not signed in to office.gbcadmin.com — open it in a tab and sign in.' }); return; }
         if (hit.error) { sendResponse({ ok: false, error: hit.error }); return; }
         sendResponse({ ok: true, text: hit.html || '' });
@@ -565,19 +582,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // fetches Inventory.aspx for each SKU and returns { sku: cost|null }. The lib
   // calls this in chunks so it can report progress + cancel between batches.
   if (msg.action === 'fetchCosts' && Array.isArray(msg.skus)) {
-    const tabId = sender && sender.tab && sender.tab.id;
-    if (!tabId) { sendResponse({ ok: false, error: 'No tab context for cost sync' }); return true; }
     (async () => {
       try {
-        const ready = await chrome.scripting.executeScript({
-          target: { tabId }, world: 'MAIN', func: gbEnsureInvFrame, args: ['https://office.gbcadmin.com'],
-        });
-        if (!(ready || []).some((r) => r && r.result)) {
-          sendResponse({ ok: false, error: 'gbcadmin frame did not load — open office.gbcadmin.com in a tab and sign in, then retry.' });
-          return;
+        const tgt = await gbResolveInvTarget(sender);
+        if (!tgt) { sendResponse({ ok: false, error: 'No tab context for cost sync' }); return; }
+        if (tgt.needFrame) {
+          const ready = await chrome.scripting.executeScript({
+            target: { tabId: tgt.tabId }, world: 'MAIN', func: gbEnsureInvFrame, args: ['https://office.gbcadmin.com'],
+          });
+          if (!(ready || []).some((r) => r && r.result)) {
+            sendResponse({ ok: false, error: 'gbcadmin frame did not load — open office.gbcadmin.com in a tab and sign in, then retry.' });
+            return;
+          }
         }
         const r = await chrome.scripting.executeScript({
-          target: { tabId, allFrames: true }, world: 'MAIN',
+          target: { tabId: tgt.tabId, allFrames: tgt.allFrames }, world: 'MAIN',
           func: gbInvFetchCosts, args: ['https://office.gbcadmin.com', msg.skus],
         });
         const hit = (r || []).map((x) => x && x.result).find((v) => v != null);
