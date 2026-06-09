@@ -551,7 +551,15 @@ function NumberCell({ def, value, onChange }) {
         if (clamped !== value) onChange(clamped);
       }}
       onChange={(v) => {
-        const cleaned = v.replace(/[^0-9.]/g, '');
+        // Allow a single leading minus when the setting's range goes negative
+        // (e.g. snapshot position X/Y/Z, rotation) — the old digits-only filter
+        // silently ate the "-" so negatives couldn't be typed.
+        const allowNeg = (def.min ?? 0) < 0;
+        let cleaned = v.replace(allowNeg ? /[^0-9.\-]/g : /[^0-9.]/g, '');
+        if (allowNeg) {
+          const neg = cleaned.startsWith('-');
+          cleaned = (neg ? '-' : '') + cleaned.replace(/-/g, '');
+        }
         setDraft(cleaned);
         // Persist as the user types when the field holds a valid number;
         // empty / partial input ("1.") stays in the draft only so React
