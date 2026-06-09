@@ -478,7 +478,7 @@ function ProductCard({ p, compact, showRating, active, inProposal, onAdd, onClic
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
             <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.brand}</span>
             {p.repoTag && (
-              <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 999, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', fontSize: 8, fontWeight: 800, letterSpacing: .3, textTransform: 'uppercase', color: 'var(--gb-text-tertiary)' }}><I.download size={8} /> {p.repoTag}</span>
+              <span style={{ flexShrink: 0, padding: '0 4px', borderRadius: 3, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', fontSize: 7.5, fontWeight: 800, letterSpacing: .3, textTransform: 'uppercase', color: 'var(--gb-text-tertiary)' }}>{p.repoTag}</span>
             )}
           </span>
           {showRating && p.rating && <Rating value={p.rating} count={p.reviews} size={10} />}
@@ -649,6 +649,10 @@ function DetailPanel({ p, inProposal, onAdd, onOpenProposal, onClose, onEdit }) 
               </span>
             )}
           </div>
+          {/* Custom item description (rep-entered) — shown in the sidebar. */}
+          {p.isCustom && p.custom && p.custom.description && (
+            <div style={{ marginTop: 12, fontSize: 12, lineHeight: 1.55, color: 'var(--gb-text-tertiary)', whiteSpace: 'pre-wrap' }}>{p.custom.description}</div>
+          )}
           {/* Custom items: a rep-defined Style selector (the chosen option rides
               into the cart's SERVICEITEM 'style'). Catalog items: base options
               that change price (Tee Count, …), which self-hide when none. */}
