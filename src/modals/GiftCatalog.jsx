@@ -2441,24 +2441,40 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // Generate proposal HTML — maps proposal lines → the email composer's source
   // (one row per split) and opens the HTML modal (which hides the catalog).
   const [emailSource, setEmailSource] = useState(null);
-  // Describe a line's FRONT imprint for the email "Imprint proof" card — type
-  // label, imprint color (name + hex swatch), method, and the text/logo detail.
+  // Describe a line's imprint(s) for the email "Imprint preview" card — type
+  // label, color (name + swatch), and a short per-pole detail line. Dual-pole
+  // lines describe BOTH poles (Front: … / Back: …) and surface text/monogram on
+  // the opposite pole; logo file names are truncated so a line never wraps.
+  const _imprintLabel = (c) => !c ? '' : (c.kind === 'monogram' ? 'Monogram' : c.kind === 'text' ? 'Personalized' : 'Custom Logo');
+  const _truncName = (s, n = 26) => { s = String(s || ''); return s.length > n ? s.slice(0, n - 1).replace(/\s+$/, '') + '…' : s; };
+  const _chipDesc = (c) => {
+    if (!c) return '';
+    if (c.kind === 'text') { const t = (c.lines || []).map((x) => (x == null ? '' : String(x).trim())).filter(Boolean).join(' / '); return t ? `“${t}”` : 'Personalized text'; }
+    if (c.kind === 'monogram') { return c.text ? `Monogram “${String(c.text).toUpperCase()}”` : 'Monogram'; }
+    return _truncName(c.fileName || (c.icon ? ('Icon · ' + c.icon) : 'Custom logo'));
+  };
   const lineImprint = (deco) => {
     if (!deco || !deco.engine || deco.engine === 'none') return null;
-    const e = deco.engine;
     const chips = decoImprints(deco);
-    const front = chips.find((c) => c.slot === 'front') || chips[0] || null;
-    const typeLabel = (e === 'monogram' || e === 'towelMonogram') ? 'Monogram'
-      : (e === 'ballText' || e === 'accessoryText' || e === 'towelText') ? 'Personalized'
-      : 'Custom Logo';
-    let color = '', colorHex = '', method = null, text = null, logo = null;
-    if (front) {
-      if (front.kind === 'text') { text = (front.lines || []).map((x) => (x == null ? '' : String(x).trim())).filter(Boolean).join(' · ') || null; colorHex = front.color || ''; }
-      else if (front.kind === 'monogram') { text = (front.text || '') || null; colorHex = front.color || ''; }
-      else { logo = front.fileName || (front.icon ? ('Icon · ' + front.icon) : 'Custom logo'); method = 'Pad print'; }
-      if (colorHex) color = colorNameOf(colorHex) || '';
+    if (!chips.length) return null;
+    const front = chips.find((c) => c.slot === 'front') || chips[0];
+    const second = chips.find((c) => c.slot === 'second') || null;
+    const frontLabel = _imprintLabel(front);
+    let typeLabel = frontLabel, detailLines;
+    if (second) {
+      const secondLabel = _imprintLabel(second);
+      typeLabel = frontLabel === secondLabel ? frontLabel : `${frontLabel} + ${secondLabel}`;
+      detailLines = [`Front: ${_chipDesc(front)}`, `Back: ${_chipDesc(second)}`];
+    } else {
+      detailLines = [_chipDesc(front)];
     }
-    return { type: e, typeLabel, color, colorHex: colorHex || null, method, text, logo };
+    // Color swatch only for single-color imprints (text / monogram) on the front.
+    const colorHex = (front.kind === 'text' || front.kind === 'monogram') ? (front.color || '') : '';
+    const color = colorHex ? (colorNameOf(colorHex) || '') : '';
+    // First text line (front) drives the synthetic-chip label fallback.
+    const text = front.kind === 'text' ? ((front.lines || []).filter(Boolean).join(' / ') || null)
+      : front.kind === 'monogram' ? (front.text || null) : null;
+    return { type: deco.engine, typeLabel, color, colorHex: colorHex || null, detailLines, text };
   };
   const proposalToEmailSource = (lines, name) => {
     const rows = []; let total = 0;

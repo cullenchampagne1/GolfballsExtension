@@ -75,10 +75,12 @@ function _proof(l, withPhoto) {
   if (!imp && !imgs.length) return '';
   const typeLabel = (imp && imp.typeLabel) || 'Personalization';
   const light = imp && _LIGHT_IMPRINT[imp.color];
-  const colorRow = (imp && (imp.color || imp.method))
-    ? `<div style="font-size:11px; line-height:1.5; color:${T.mut}; padding-top:5px; white-space:nowrap;">${imp.color ? _swatch(imp.colorHex || '#1f2f5b', light) + ' ' : ''}<span style="vertical-align:middle;">${imp.color ? _esc(imp.color) : ''}${(imp.color && imp.method) ? ' &middot; ' : ''}${imp.method ? _esc(imp.method) : ''}</span></div>` : '';
-  const detail = imp && imp.text ? `<div style="font-size:11px; line-height:1.5; color:${T.mut}; padding-top:3px;">&ldquo;${_esc(imp.text)}&rdquo;</div>`
-    : (imp && imp.logo ? `<div style="font-size:11px; line-height:1.5; color:${T.mut}; padding-top:3px;">${_esc(imp.logo)}</div>` : '');
+  const colorRow = (imp && imp.color)
+    ? `<div style="font-size:11px; line-height:1.5; color:${T.mut}; padding-top:5px; white-space:nowrap;">${_swatch(imp.colorHex || '#1f2f5b', light)} <span style="vertical-align:middle;">${_esc(imp.color)}</span></div>` : '';
+  // Per-pole detail line(s) — never wrap (truncated upstream + ellipsis here).
+  const detail = (imp && imp.detailLines && imp.detailLines.length)
+    ? imp.detailLines.map((d) => `<div style="font-size:11px; line-height:1.5; color:${T.mut}; padding-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:300px;">${_esc(d)}</div>`).join('')
+    : '';
   const photoCell = withPhoto ? `<td valign="middle" width="74" style="padding-right:14px;">${_photoPlate(l.img, 74)}</td>` : '';
   const visual = _proofVisual(l, imp, 56);
   return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:12px; background:${T.plate}; margin-top:12px;"><tbody>
@@ -166,8 +168,9 @@ function tplQuote(m) {
     const imp = l.imprint;
     const imgs = l.previews || [];
     const visual = imgs.length ? _renderTile(imgs[0], 34) : (imp ? _chip(imp, 34) : '');
+    const chipSpec = imp ? (_esc(imp.typeLabel) + (imp.color ? ' &middot; ' + _esc(imp.color) : '')) : 'Personalization';
     const chip = (show.previews && (imp || imgs.length))
-      ? `<table border="0" cellpadding="0" cellspacing="0" style="margin-top:9px;"><tbody><tr><td valign="middle" width="34" style="padding-right:10px;">${visual}</td><td valign="middle"><span style="font-size:11px; color:${T.mut};">${imp && imp.color ? _swatch(imp.colorHex, _LIGHT_IMPRINT[imp.color]) + ' ' : ''}<span style="vertical-align:middle;">${imp ? _esc(imp.typeLabel) + (imp.color ? ' &middot; ' + _esc(imp.color) : '') + (imp.method ? ' &middot; ' + _esc(imp.method) : '') : 'Personalization'}</span></span></td></tr></tbody></table>` : '';
+      ? `<table border="0" cellpadding="0" cellspacing="0" style="margin-top:9px;"><tbody><tr><td valign="middle" width="34" style="padding-right:10px;">${visual}</td><td valign="middle"><span style="font-size:11px; color:${T.mut}; white-space:nowrap;">${imp && imp.color ? _swatch(imp.colorHex, _LIGHT_IMPRINT[imp.color]) + ' ' : ''}<span style="vertical-align:middle;">${chipSpec}</span></span></td></tr></tbody></table>` : '';
     return `<tr style="${i ? `border-top:1px solid ${T.line};` : ''}"><td valign="top" style="padding:15px 0;">${_brandLine(l, T.mut)}<div style="font-size:14px; color:${T.ink}; font-weight:700;">${_esc(l.title)}</div>${sub}${chip}</td><td valign="top" width="54" style="padding:15px 0; font-size:13px; color:${T.body};">${l.qty}</td>${cost}<td valign="top" align="right" width="92" style="padding:15px 0; font-size:14px; font-weight:800; color:${T.price};">${_money(l.lineTotal)}</td></tr>`;
   }).join('\n');
   const th = (label, w, align) => `<th style="font-family:${SANS}; font-weight:700; font-size:10px; letter-spacing:.6px; text-transform:uppercase; color:${T.mut}; border-bottom:2px solid ${T.acc}; padding:0 0 9px;${w ? ' width:' + w + 'px;' : ''}" align="${align || 'left'}">${label}</th>`;
