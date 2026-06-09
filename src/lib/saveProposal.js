@@ -282,6 +282,113 @@ export async function fetchOpportunitiesForAccount(accountId) {
   return (ctx && ctx.data && Array.isArray(ctx.data.opportunities)) ? ctx.data.opportunities : [];
 }
 
+/* ── Current proposals (live, from the CRM) ─────────────────────────────────
+   The opportunity page (Page=280) renders a "Proposals" table: each row is a
+   saved cart with a name, cartID, date, and expiration. We parse it so the
+   modal can list the proposals already attached to an account's opportunities,
+   distinct from local saved drafts. ── */
+const OPP_PAGE = (id) => `${CRM_ADMIN}Default.aspx?Page=280&opportunityID=${encodeURIComponent(id)}`;
+
+/* Build the customer-facing proposal-mode cart URL for a saved cart. */
+export function proposalCartUrl(opportunityID, cartID) {
+  return `https://www.golfballs.com/cart?proposalMode=true&opportunityID=${encodeURIComponent(opportunityID)}&cartID=${encodeURIComponent(cartID)}`;
+}
+
+/* Parse the opportunity page's Proposals table → [{ cartID, name, date,
+   expiration }]. Each proposal row carries id="<cartID>row" with a
+   "<cartID>_Name" span and a "<cartID>_Exp" span; the cart link holds the
+   cartID. Resilient to the surrounding admin markup. */
+export function parseProposalsHtml(html) {
+  const out = [];
+  if (!html) return out;
+  let doc; try { doc = new DOMParser().parseFromString(html, 'text/html'); } catch { return out; }
+  const seen = new Set();
+  for (const a of Array.from(doc.querySelectorAll('a[href*="cartID="]'))) {
+    const m = /cartID=([0-9a-f-]{8,})/i.exec(a.getAttribute('href') || '');
+    if (!m) continue;
+    const cartID = m[1];
+    if (seen.has(cartID)) continue;
+    seen.add(cartID);
+    const nameEl = doc.getElementById(cartID + '_Name');
+    const expEl = doc.getElementById(cartID + '_Exp');
+    let date = '';
+    const tr = a.closest('tr');
+    if (tr) {
+      for (const td of Array.from(tr.querySelectorAll('td'))) {
+        if (td.id) continue;                                 // skip name/exp cells
+        const dm = /\d{1,2}\/\d{1,2}\/\d{4}[^()<]*/.exec(td.textContent || '');
+        if (dm) { date = dm[0].trim(); break; }
+      }
+    }
+    out.push({
+      cartID,
+      name: (nameEl ? nameEl.textContent.trim() : '') || 'Proposal',
+      expiration: expEl ? expEl.textContent.trim() : '',
+      date,
+    });
+  }
+  return out;
+}
+
+/* Fetch + parse the proposals attached to one opportunity. */
+export async function fetchProposalsForOpportunity(opportunityID) {
+  if (opportunityID == null || opportunityID === '') return [];
+  let html = '';
+  try { const r = await sendBg('fetchRaw', { url: OPP_PAGE(opportunityID) }); html = r.text || ''; }
+  catch { return []; }
+  return parseProposalsHtml(html).map((p) => ({ ...p, opportunityID: String(opportunityID) }));
+}
+
+/* All current proposals for an account: each ACTIVE (non-closed) opportunity's
+   proposals, flattened and tagged with the opportunity subject. `opportunities`
+   may be passed (from the page engine) to skip the account-page fetch.
+   Returns [{ cartID, name, date, expiration, opportunityID, opportunitySubject,
+   stage, url }]. */
+export async function fetchActiveProposals({ accountId, opportunities } = {}) {
+  let opps = (Array.isArray(opportunities) && opportunities.length)
+    ? opportunities
+    : (accountId ? await fetchOpportunitiesForAccount(accountId) : []);
+  const active = opps.filter((o) => o && o.id && !/closed/i.test(o.stage || ''));
+  const lists = await Promise.all(active.map(async (o) => {
+    const props = await fetchProposalsForOpportunity(o.id);
+    return props.map((p) => ({
+      ...p,
+      opportunityID: String(o.id),
+      opportunitySubject: o.subject || '',
+      stage: o.stage || '',
+      url: proposalCartUrl(o.id, p.cartID),
+    }));
+  }));
+  return lists.flat();
+}
+
+/* ── Known promo codes (rep-curated, persisted) ─────────────────────────────
+   There's no "list all promos" endpoint, so we keep the codes the rep uses in
+   storage (seeded with the known site promo) and validate each against the cart
+   to show which currently apply. ── */
+const PROMO_KEY = 'gbKnownPromos';
+const SEED_PROMOS = ['EVERY12GETS6'];
+
+export function loadKnownPromos() {
+  return new Promise((resolve) => {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) { resolve(SEED_PROMOS.slice()); return; }
+      chrome.storage.local.get(PROMO_KEY, (d) => {
+        const stored = (d && Array.isArray(d[PROMO_KEY])) ? d[PROMO_KEY] : [];
+        resolve(Array.from(new Set([...stored, ...SEED_PROMOS].map((s) => String(s).toUpperCase().trim()).filter(Boolean))));
+      });
+    } catch { resolve(SEED_PROMOS.slice()); }
+  });
+}
+export async function addKnownPromo(code) {
+  const c = String(code || '').toUpperCase().trim();
+  if (!c) return loadKnownPromos();
+  const list = await loadKnownPromos();
+  if (!list.includes(c)) list.unshift(c);
+  try { chrome.storage.local.set({ [PROMO_KEY]: list }); } catch { /* */ }
+  return list;
+}
+
 /* Save the proposal to a chosen opportunity. Resolves to { cartID, raw,
    savedLines, skipped }. Throws with a user-facing message on bad input. */
 export async function saveProposalToOpportunity(proposal, {

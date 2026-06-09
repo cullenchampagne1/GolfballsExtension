@@ -6,7 +6,7 @@ import { useToast } from '../ui/components/ToastHost.jsx';
 import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, DEPT_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { CustomizeBlock, ProductOptions, colorNameOf } from './giftCustomize.jsx';
-import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo } from '../lib/saveProposal.js';
+import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposals, proposalCartUrl, loadKnownPromos, addKnownPromo } from '../lib/saveProposal.js';
 import { promoDiscount } from '../lib/cartSerializer.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS } from '../lib/customItems.js';
 import { importHpgCatalog } from '../lib/hpgImport.js';
@@ -821,7 +821,7 @@ function SavedNavRow({ label, icon, count, active, onClick }) {
   );
 }
 
-function CategoryRail({ sel, onSelect, depts, deptCounts, total, dock, view, onSetView, savedCount, customCount }) {
+function CategoryRail({ sel, onSelect, depts, deptCounts, total, dock, view, onSetView, savedCount, customCount, currentCount }) {
   return (
     <div style={{ width: 220, flexShrink: 0, borderRight: '1px solid var(--gb-border-subtle)', padding: 12, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .8, textTransform: 'uppercase', color: 'var(--gb-text-muted)', padding: '2px 10px 8px', flexShrink: 0 }}>Browse</div>
@@ -853,9 +853,10 @@ function CategoryRail({ sel, onSelect, depts, deptCounts, total, dock, view, onS
         <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-ghost)', padding: '12px 11px 4px', flexShrink: 0 }}>Saved</div>
         <SavedNavRow label="Saved Proposals" icon={<I.bookmark size={14} />} count={savedCount}
           active={view === 'proposals'} onClick={() => onSetView('proposals')} />
-        {/* Coming soon: proposals already applied to the opportunity (pulled from
-            the CRM), distinct from local saved drafts. */}
-        <SavedStub label="Current Proposals" icon={<I.card size={14} />} />
+        {/* Live proposals already attached to the account's opportunities (pulled
+            from the CRM), distinct from local saved drafts. */}
+        <SavedNavRow label="Current Proposals" icon={<I.card size={14} />} count={currentCount || 0}
+          active={view === 'current'} onClick={() => onSetView('current')} />
         <SavedStub label="Previous orders" icon={<I.refresh size={14} />} />
       </div>
       {/* AnimatePresence so the dock plays its exit when the proposal opens
@@ -1370,22 +1371,52 @@ function ImprintDetail({ chip }) {
    Applying validates live via the icustomize promotion engine (same call the cart
    page makes); the resolved promo is stored on the proposal + flows into the
    saved/loaded cart so the discount is real. */
-function PromoBlock({ promo, onApply, onClear }) {
+function PromoBlock({ promo, onApply, onClear, onCheck }) {
   const [code, setCode] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState('');         // code currently being applied
   const [err, setErr] = useState('');
+  const [open, setOpen] = useState(false);      // browse-codes panel
+  const [known, setKnown] = useState([]);
+  const [checks, setChecks] = useState({});     // CODE -> { state:'checking'|'ok'|'no', disc, freeQty, desc }
   const applied = promo && promo.promotion;
   const disc = applied ? promoDiscount(promo.promotion) : 0;
   const freeQty = applied && promo.promotion.promoType === 'FREE_QUANTITY'
     ? (promo.promotion.freeItems || []).reduce((a, f) => a + (f.amount || 0), 0) : 0;
   const unmet = (applied && (promo.promotion.unmetRequirements || []).length) ? promo.promotion.unmetRequirements : null;
-  const apply = async () => {
-    const c = code.trim(); if (!c || busy) return;
-    setBusy(true); setErr('');
-    try { await onApply(c); setCode(''); }
+
+  // When the picker opens, load the rep's known codes and test each against the
+  // current cart so we can show which actually apply (and their value).
+  useEffect(() => {
+    if (!open || !onCheck) return undefined;
+    let alive = true;
+    loadKnownPromos().then((list) => {
+      if (!alive) return;
+      setKnown(list);
+      list.forEach((c) => {
+        setChecks((s) => (s[c] && s[c].state !== 'no' ? s : { ...s, [c]: { state: 'checking' } }));
+        onCheck(c)
+          .then((pr) => {
+            if (!alive) return;
+            const ok = pr && pr.promo && !((pr.unmetRequirements || []).length);
+            const entry = ok
+              ? { state: 'ok', disc: promoDiscount(pr), freeQty: pr.promoType === 'FREE_QUANTITY' ? (pr.freeItems || []).reduce((a, f) => a + (f.amount || 0), 0) : 0, desc: pr.promoDescription }
+              : { state: 'no' };
+            setChecks((s) => ({ ...s, [c]: entry }));
+          })
+          .catch(() => { if (alive) setChecks((s) => ({ ...s, [c]: { state: 'no' } })); });
+      });
+    });
+    return () => { alive = false; };
+  }, [open, onCheck]);
+
+  const apply = async (c) => {
+    const v = (c || '').trim(); if (!v || busy) return;
+    setBusy(v); setErr('');
+    try { await onApply(v); setCode(''); setOpen(false); }
     catch (e) { setErr((e && e.message) || 'Invalid code'); }
-    finally { setBusy(false); }
+    finally { setBusy(''); }
   };
+
   return (
     <div>
       <SectionTitle icon={<I.bolt />}>Promotion</SectionTitle>
@@ -1402,11 +1433,48 @@ function PromoBlock({ promo, onApply, onClear }) {
           {unmet && <div style={{ fontSize: 10.5, color: 'var(--gb-warning-fg, #b6830a)', lineHeight: 1.4 }}>⚠ Requirements not yet met — the discount applies once the cart qualifies.</div>}
         </div>
       ) : (
-        <div style={{ display: 'flex', gap: 7 }}>
-          <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="Promo code"
-            onKeyDown={(e) => { if (e.key === 'Enter') apply(); }}
-            style={{ flex: 1, fontFamily: 'var(--gb-font-mono)', fontSize: 12, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-primary)', background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', padding: '8px 11px', outline: 'none' }} />
-          <Btn variant="secondary" size="sm" icon={busy ? <span style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', display: 'inline-block', animation: 'gb-spin .7s linear infinite' }} /> : <I.check size={13} />} onClick={apply}>Apply</Btn>
+        <div>
+          <div style={{ display: 'flex', gap: 7 }}>
+            <div style={{ flex: 1, position: 'relative', display: 'flex' }}>
+              <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="Enter or pick a promo code"
+                onKeyDown={(e) => { if (e.key === 'Enter') apply(code); }}
+                style={{ flex: 1, fontFamily: 'var(--gb-font-mono)', fontSize: 12, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-primary)', background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', padding: '8px 32px 8px 11px', outline: 'none', width: '100%', boxSizing: 'border-box' }} />
+              <button type="button" onClick={() => setOpen((o) => !o)} title="Browse codes that apply"
+                style={{ position: 'absolute', right: 4, top: 0, bottom: 0, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--gb-text-muted)', display: 'flex', alignItems: 'center', padding: '0 5px' }}>
+                <I.chevd size={14} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+              </button>
+            </div>
+            <Btn variant="secondary" size="sm" icon={busy === code && code ? <span style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', display: 'inline-block', animation: 'gb-spin .7s linear infinite' }} /> : <I.check size={13} />} onClick={() => apply(code)}>Apply</Btn>
+          </div>
+
+          <AnimatePresence>
+            {open && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: .16 }} style={{ overflow: 'hidden' }}>
+                <div style={{ marginTop: 8, border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden' }}>
+                  {known.length === 0 ? (
+                    <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', padding: '10px 12px' }}>No saved codes yet — type one above to apply &amp; remember it.</div>
+                  ) : known.map((c, i) => {
+                    const st = checks[c] || { state: 'checking' };
+                    const ok = st.state === 'ok';
+                    const checking = st.state === 'checking';
+                    return (
+                      <button key={c} type="button" disabled={!ok || !!busy} onClick={() => apply(c)}
+                        style={{ width: '100%', textAlign: 'left', border: 'none', borderTop: i ? '1px solid var(--gb-border-subtle)' : 'none', background: 'transparent', cursor: ok ? 'pointer' : 'default', padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 9, opacity: ok || checking ? 1 : .5 }}>
+                        <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 11.5, fontWeight: 800, letterSpacing: .4, color: ok ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }}>{c}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {ok && st.desc && <div style={{ fontSize: 10, color: 'var(--gb-text-tertiary)', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.desc}</div>}
+                        </div>
+                        {checking ? <span style={{ width: 11, height: 11, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite', flexShrink: 0 }} />
+                          : ok ? <span style={{ fontSize: 10.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-success-fg, #2e9e5b)', flexShrink: 0 }}>{st.disc > 0 ? '−' + usd(st.disc) : st.freeQty > 0 ? '+' + st.freeQty + ' dz' : 'Applies'}</span>
+                          : <span style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)', flexShrink: 0 }}>N/A</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)', marginTop: 5, lineHeight: 1.4 }}>Checked against the items in this proposal.</div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       )}
       {err && <div style={{ fontSize: 10.5, color: 'var(--gb-danger, #e5484d)', marginTop: 6, lineHeight: 1.4 }}>{err}</div>}
@@ -1414,7 +1482,7 @@ function PromoBlock({ promo, onApply, onClear }) {
   );
 }
 
-function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose, onLoad, onOpenProposal, onCopy, onSaveToAccount, buildEmailSource, onPatchSplit, promo, onApplyPromo, onClearPromo }) {
+function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose, onLoad, onOpenProposal, onCopy, onSaveToAccount, buildEmailSource, onPatchSplit, promo, onApplyPromo, onClearPromo, onCheckPromo }) {
   // Proactively fetch a cost for any catalog line that has none yet, so the
   // breakdown fills in real numbers on open. `costTick` re-renders once the cost
   // map updates; `costFailed` records SKUs we tried and couldn't price (→ they
@@ -1550,7 +1618,7 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
           </div>
         )}
 
-        {onApplyPromo && <PromoBlock promo={promo} onApply={onApplyPromo} onClear={onClearPromo} />}
+        {onApplyPromo && <PromoBlock promo={promo} onApply={onApplyPromo} onClear={onClearPromo} onCheck={onCheckPromo} />}
 
         <div>
           <SectionTitle icon={<Layers />}>Margin summary</SectionTitle>
@@ -1817,6 +1885,105 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
                   onOpen={onOpen} onLoad={onLoad} onDelete={onDelete} />
               ))}
             </AnimatePresence>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* One live proposal card — name, opportunity, contact, dates + open/copy. */
+function CurrentProposalCardLive({ p, contactName, onOpen, onCopy }) {
+  const [hover, setHover] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const dateOnly = (p.date || '').split(/\s+/)[0] || '';
+  return (
+    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ position: 'relative', borderRadius: 'var(--gb-r-lg)', border: '1px solid var(--gb-border-default)', background: 'var(--gb-surface-1)', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: hover ? 'var(--gb-shadow-card-hover, 0 6px 18px rgba(0,0,0,.12))' : 'var(--gb-shadow-card, 0 1px 3px rgba(0,0,0,.06))', transform: hover ? 'translateY(-2px)' : 'none', transition: 'transform .16s ease, box-shadow .16s ease' }}>
+      <div style={{ height: 3, background: 'var(--gb-brand-label)', flexShrink: 0 }} />
+      <div style={{ padding: '13px 14px', display: 'flex', flexDirection: 'column', gap: 9, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <I.card size={15} />
+          </div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+            {p.opportunitySubject && <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.opportunitySubject}</div>}
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {contactName && <Tag tone="neutral" size="sm" icon={<I.user size={9} />}>{contactName}</Tag>}
+          {p.stage && <Tag tone="brand" size="sm">{p.stage}</Tag>}
+        </div>
+        <div style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', display: 'flex', gap: 10, fontFamily: 'var(--gb-font-mono)' }}>
+          {dateOnly && <span>{dateOnly}</span>}
+          {p.expiration && <span style={{ color: 'var(--gb-text-muted)' }}>· exp {p.expiration}</span>}
+        </div>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: 'flex', gap: 6, alignItems: 'stretch' }}>
+          <Btn variant="secondary" size="sm" icon={<I.eye size={13} />} style={{ flex: 1 }} onClick={() => onOpen(p)}>Open</Btn>
+          <IconBtn size="sm" variant="secondary" active={copied} icon={copied ? <I.check size={14} /> : <I.copy size={14} />}
+            title="Copy proposal link" onClick={() => { onCopy(p); setCopied(true); setTimeout(() => setCopied(false), 1400); }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Current Proposals view — live proposals pulled from the CRM for the account in
+   context, grouped flat with their opportunity + contact. */
+function CurrentProposalsView({ proposals, loading, error, hasAccount, accountName, contactName, colMin, onRefresh, onOpen, onCopy }) {
+  const byOpp = useMemo(() => {
+    const m = new Map();
+    for (const p of proposals) {
+      const k = p.opportunityID || '—';
+      if (!m.has(k)) m.set(k, { subject: p.opportunitySubject || ('Opportunity ' + k), items: [] });
+      m.get(k).items.push(p);
+    }
+    return Array.from(m.values());
+  }, [proposals]);
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Current Proposals</div>
+          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {hasAccount ? <>Live from the CRM{accountName ? ` · ${accountName}` : ''}{proposals.length ? ` · ${proposals.length}` : ''}</> : 'Open the catalog from a CRM account to see its proposals'}
+          </div>
+        </div>
+        <div style={{ flex: 1 }} />
+        <IconBtn size="md" title="Refresh" icon={<I.refresh style={{ animation: loading ? 'gb-spin .8s linear infinite' : 'none' }} />} onClick={onRefresh} disabled={!hasAccount} />
+      </div>
+      <div className="gb-thin-scroll" style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
+        {!hasAccount ? (
+          <div style={{ textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12, padding: '48px 16px', lineHeight: 1.5 }}>
+            <I.card size={26} style={{ opacity: .4, marginBottom: 10 }} /><br />
+            No account in context. Open the catalog from a golfballs.com CRM<br />account or opportunity page to list its current proposals.
+          </div>
+        ) : loading ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, color: 'var(--gb-text-muted)', fontSize: 12, padding: '48px 0' }}>
+            <span style={{ width: 15, height: 15, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} /> Loading proposals…
+          </div>
+        ) : error ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '40px 16px' }}>
+            <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', textAlign: 'center' }}><I.alert size={14} style={{ color: 'var(--gb-danger, #e5484d)', verticalAlign: 'middle', marginRight: 6 }} />{error}</div>
+            <Btn variant="secondary" size="sm" icon={<I.refresh size={13} />} onClick={onRefresh}>Retry</Btn>
+          </div>
+        ) : proposals.length === 0 ? (
+          <div style={{ textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12, padding: '48px 16px' }}>No active proposals on this account’s open opportunities.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {byOpp.map((g, gi) => (
+              <div key={gi}>
+                <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', marginBottom: 9, display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <Gift size={11} style={{ color: 'var(--gb-brand-label)' }} />{g.subject}
+                  <span style={{ color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)' }}>{g.items.length}</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${colMin || 240}px, 1fr))`, gap: 12 }}>
+                  {g.items.map((p) => <CurrentProposalCardLive key={p.cartID} p={p} contactName={contactName} onOpen={onOpen} onCopy={onCopy} />)}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -2557,10 +2724,14 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // the saved/loaded cart; the site recomputes the exact discount on cart load.
   const applyPromo = async (code) => {
     const promotion = await validatePromo(proposal, code);
-    setProposalPromo({ code: code.trim(), promotion });
+    setProposalPromo({ code: code.trim().toUpperCase(), promotion });
+    addKnownPromo(code).catch(() => {});            // remember codes the rep uses
     return promotion;
   };
   const clearPromo = () => setProposalPromo(null);
+  // Validate a code against the current cart WITHOUT applying it — drives the
+  // picker's "which codes apply" check.
+  const checkPromo = (code) => validatePromo(proposal, code);
   const [proposalOpen, setProposalOpen] = useState(false);
   const [detail, setDetail] = useState(null);   // proposal-breakdown drill-in: { kind:'saved'|'current', item? }
   // ── Verified DISPLAY pricing ───────────────────────────────────────────────
@@ -2608,10 +2779,24 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   }, [proposal]);
   // Saved Proposals library (chrome.storage). `view` swaps the catalog grid
   // for the gallery; `loadedId` flags the last draft copied into the proposal.
-  const [view, setView] = useState('catalog');        // 'catalog' | 'proposals' | 'custom'
+  const [view, setView] = useState('catalog');        // 'catalog' | 'proposals' | 'custom' | 'current'
   useEffect(() => { if (view !== 'proposals') setDetail(null); }, [view]);  // close breakdown on view change
   const [savedProposals, setSavedProposals] = useState([]);
   const [loadedId, setLoadedId] = useState(null);
+  // Current Proposals — live, pulled from the CRM for the account in context.
+  // Lazy: fetched the first time the view opens (and re-fetchable).
+  const [currentProposals, setCurrentProposals] = useState([]);
+  const [currentLoading, setCurrentLoading] = useState(false);
+  const [currentLoaded, setCurrentLoaded] = useState(false);
+  const [currentError, setCurrentError] = useState('');
+  const loadCurrentProposals = useCallback(() => {
+    setCurrentLoading(true); setCurrentError(''); setCurrentLoaded(true);
+    fetchActiveProposals({ accountId: pageContext.accountId, opportunities: pageContext.opportunities })
+      .then((list) => { if (aliveRef.current) setCurrentProposals(list); })
+      .catch((e) => { if (aliveRef.current) setCurrentError((e && e.message) || 'Could not load proposals'); })
+      .finally(() => { if (aliveRef.current) setCurrentLoading(false); });
+  }, [pageContext.accountId, pageContext.opportunities]);
+  useEffect(() => { if (view === 'current' && !currentLoaded) loadCurrentProposals(); }, [view, currentLoaded, loadCurrentProposals]);
   // Custom items (SERVICEITEM) — rep-defined products in chrome.storage; editingCustom
   // holds the record being created/edited in the form ({} = new, null = closed).
   const [customItems, setCustomItems] = useState([]);
@@ -3113,7 +3298,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         <div style={{ flex: 1, display: 'flex', minHeight: 0, position: 'relative', overflow: 'hidden', boxShadow: 'inset 0 7px 7px -7px rgba(0,0,0,.16), inset 0 -7px 7px -7px rgba(0,0,0,.16)' }}>
           <CategoryRail sel={sel} onSelect={(s) => { setView('catalog'); setSelFromCmd(false); setSel((cur) => (cur === s ? 'all' : s)); }} total={catalog.length}
             depts={depts} deptCounts={deptCounts}
-            view={view} onSetView={setView} savedCount={savedProposals.length} customCount={customItems.length}
+            view={view} onSetView={setView} savedCount={savedProposals.length} customCount={customItems.length} currentCount={currentProposals.length}
             dock={proposal.length > 0 && !proposalOpen ? <ProposalDock key="dock" count={proposal.length} total={propTotal} active={proposalOpen} onOpen={() => setProposalOpen(true)} /> : null} />
           <AnimatePresence mode="wait" initial={false}>
           {view === 'proposals' ? (
@@ -3122,6 +3307,14 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               current={proposal} onOpen={(item) => setDetail({ kind: 'saved', item })} onOpenCurrent={() => setDetail({ kind: 'current' })}
               onLoad={loadSaved} onCopy={copySaved} onDelete={deleteSaved} onSaveToAccount={loadSavedToAccount}
               onEmail={(entry) => openProposalEmail(linesFromSaved(entry, rid), entry.name)} />
+          </motion.div>
+          ) : view === 'current' ? (
+            <motion.div key="current" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
+            <CurrentProposalsView proposals={currentProposals} loading={currentLoading} error={currentError}
+              hasAccount={!!pageContext.accountId} accountName={pageContext.accountName} contactName={pageContext.contactName} colMin={colMin}
+              onRefresh={loadCurrentProposals}
+              onOpen={(p) => { try { window.open(p.url || proposalCartUrl(p.opportunityID, p.cartID), '_blank', 'noopener'); } catch { /* */ } }}
+              onCopy={(p) => { copyToClipboard(p.url || proposalCartUrl(p.opportunityID, p.cartID)).catch(() => {}); }} />
           </motion.div>
           ) : view === 'custom' ? (
             <motion.div key="custom" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
@@ -3192,7 +3385,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                   <SavedDetail key="bd-current" current title="Current proposal" subtitle="Live working set · unsaved"
                     badge={<Tag tone="brand" size="sm" icon={<Dot tone="brand" size={5} />}>Unsaved</Tag>}
                     entries={proposal} onClose={close}
-                    promo={proposalPromo} onApplyPromo={applyPromo} onClearPromo={clearPromo}
+                    promo={proposalPromo} onApplyPromo={applyPromo} onClearPromo={clearPromo} onCheckPromo={checkPromo}
                     onPatchSplit={(entryIndex, _src, splitIndex, price) => setProposal((prev) => prev.map((pl, li) => li !== entryIndex ? pl
                       : { ...pl, splits: pl.splits.map((s, si) => si !== splitIndex ? s : { ...s, price, priceEdited: true }) }))}
                     buildEmailSource={() => proposalToEmailSource(proposal, '')}

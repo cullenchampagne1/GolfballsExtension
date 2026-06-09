@@ -23,6 +23,8 @@ function resolvePageContext() {
       orderId: ids.order || null,
       customerId: ids.customer || ids.contact || null,
       accountName: (ctx.data.account && ctx.data.account.name) || null,
+      contactName: (ctx.data.contact && (ctx.data.contact.name || ctx.data.contact.fullName))
+        || (ctx.data.account && ctx.data.account.name) || null,
       opportunities: Array.isArray(ctx.data.opportunities) ? ctx.data.opportunities : [],
     };
   } catch { return {}; }
