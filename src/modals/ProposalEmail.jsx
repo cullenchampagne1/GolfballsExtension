@@ -43,34 +43,35 @@ const _star = (m) => m.show.disclaimer ? '*' : '';
 const _qtyLine = (l, show) => show.cost ? `${l.qty} &times; ${_money(l.unitPrice)}` : `Qty ${l.qty}`;
 
 /* synthetic imprint chip — fallback visual when there's no 3D render yet */
-function _chip(imp, size) {
+function _chip(imp, size, square) {
   const light = _LIGHT_IMPRINT[imp.color];
   const fg = light ? '#1f2937' : '#ffffff';
   const label = imp.text ? (imp.text.split(' · ')[0] || '') : 'LOGO';
   const fs = imp.text ? Math.max(8, Math.round(size * 0.15)) : Math.round(size * 0.17);
-  return `<table border="0" cellpadding="0" cellspacing="0" width="${size}" height="${size}" style="width:${size}px; height:${size}px; background:${imp.colorHex || '#1f2f5b'}; border-radius:${Math.round(size * 0.22)}px;${light ? ' border:1px solid #d6d6cf;' : ''}"><tbody><tr><td align="center" valign="middle" style="text-align:center; padding:4px;"><span style="font-family:${SANS}; font-size:${fs}px; font-weight:800; letter-spacing:.5px; color:${fg}; line-height:1.12;">${_esc(label).slice(0, 16)}</span></td></tr></tbody></table>`;
+  return `<table border="0" cellpadding="0" cellspacing="0" width="${size}" height="${size}" style="width:${size}px; height:${size}px; background:${imp.colorHex || '#1f2f5b'}; border-radius:${square ? 0 : Math.round(size * 0.22)}px;${light ? ' border:1px solid #d6d6cf;' : ''}"><tbody><tr><td align="center" valign="middle" style="text-align:center; padding:4px;"><span style="font-family:${SANS}; font-size:${fs}px; font-weight:800; letter-spacing:.5px; color:${fg}; line-height:1.12;">${_esc(label).slice(0, 16)}</span></td></tr></tbody></table>`;
 }
 /* a real 3D-render tile (transparent PNG on a soft plate) */
-function _renderTile(src, size) {
-  return `<table border="0" cellpadding="0" cellspacing="0" width="${size}" height="${size}" style="width:${size}px; height:${size}px; background:${T.card}; border:1px solid ${T.line}; border-radius:${Math.round(size * 0.18)}px;"><tbody><tr><td align="center" valign="middle" height="${size}" style="text-align:center;"><img src="${_esc(src)}" width="${size - 6}" height="${size - 6}" border="0" alt="preview" style="display:inline-block; width:${size - 6}px; height:${size - 6}px;" /></td></tr></tbody></table>`;
+function _renderTile(src, size, square) {
+  return `<table border="0" cellpadding="0" cellspacing="0" width="${size}" height="${size}" style="width:${size}px; height:${size}px; background:${T.card}; border:1px solid ${T.line}; border-radius:${square ? 0 : Math.round(size * 0.18)}px;"><tbody><tr><td align="center" valign="middle" height="${size}" style="text-align:center;"><img src="${_esc(src)}" width="${size - 6}" height="${size - 6}" border="0" alt="preview" style="display:inline-block; width:${size - 6}px; height:${size - 6}px;" /></td></tr></tbody></table>`;
 }
 /* product photo on a soft plate */
-function _photoPlate(img, plate) {
-  return `<table border="0" cellpadding="0" cellspacing="0" width="${plate}" style="background:${T.card}; border:1px solid ${T.line}; border-radius:10px;"><tbody><tr><td align="center" valign="middle" height="${plate}" style="padding:6px;"><img src="${_esc(img)}" width="${plate - 16}" border="0" style="display:block; border-radius:6px;" /></td></tr></tbody></table>`;
+function _photoPlate(img, plate, square) {
+  return `<table border="0" cellpadding="0" cellspacing="0" width="${plate}" style="background:${T.card}; border:1px solid ${T.line}; border-radius:${square ? 0 : 10}px;"><tbody><tr><td align="center" valign="middle" height="${plate}" style="padding:6px;"><img src="${_esc(img)}" width="${plate - 16}" border="0" style="display:block; border-radius:${square ? 0 : 6}px;" /></td></tr></tbody></table>`;
 }
 /* the imprint PROOF visual cell — real render(s) when we have them (Front +
    Reverse for dual-pole), else the synthetic chip. */
-function _proofVisual(l, imp, size) {
+function _proofVisual(l, imp, size, square) {
   const imgs = (l && l.previews) || [];
   if (imgs.length >= 2) {
     const s = Math.round(size * 0.92);
-    return `<td valign="middle" style="padding-right:14px;"><table border="0" cellpadding="0" cellspacing="0"><tbody><tr>${imgs.slice(0, 2).map((src, i) => `<td valign="middle" style="padding-right:${i ? 0 : 7}px;">${_renderTile(src, s)}</td>`).join('')}</tr></tbody></table></td>`;
+    return `<td valign="middle" style="padding-right:14px;"><table border="0" cellpadding="0" cellspacing="0"><tbody><tr>${imgs.slice(0, 2).map((src, i) => `<td valign="middle" style="padding-right:${i ? 0 : 7}px;">${_renderTile(src, s, square)}</td>`).join('')}</tr></tbody></table></td>`;
   }
-  if (imgs.length === 1) return `<td valign="middle" width="${size}" style="padding-right:14px;">${_renderTile(imgs[0], size)}</td>`;
-  return imp ? `<td valign="middle" width="${size}" style="padding-right:14px;">${_chip(imp, size)}</td>` : '';
+  if (imgs.length === 1) return `<td valign="middle" width="${size}" style="padding-right:14px;">${_renderTile(imgs[0], size, square)}</td>`;
+  return imp ? `<td valign="middle" width="${size}" style="padding-right:14px;">${_chip(imp, size, square)}</td>` : '';
 }
-/* the imprint PROOF card — the centrepiece the templates are built around */
-function _proof(l, withPhoto) {
+/* the imprint PROOF card — the centrepiece the templates are built around.
+   `square` drops the rounded corners (for the squared Corporate letterhead). */
+function _proof(l, withPhoto, square) {
   const imp = l.imprint;
   const imgs = (l && l.previews) || [];
   if (!imp && !imgs.length) return '';
@@ -82,9 +83,9 @@ function _proof(l, withPhoto) {
   const detail = (imp && imp.detailLines && imp.detailLines.length)
     ? imp.detailLines.map((d) => `<div style="font-size:11px; line-height:1.5; color:${T.mut}; padding-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:300px;">${_esc(d)}</div>`).join('')
     : '';
-  const photoCell = withPhoto ? `<td valign="middle" width="74" style="padding-right:14px;">${_photoPlate(l.img, 74)}</td>` : '';
-  const visual = _proofVisual(l, imp, 56);
-  return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:12px; background:${T.plate}; margin-top:12px;"><tbody>
+  const photoCell = withPhoto ? `<td valign="middle" width="74" style="padding-right:14px;">${_photoPlate(l.img, 74, square)}</td>` : '';
+  const visual = _proofVisual(l, imp, 56, square);
+  return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:${square ? 0 : 12}px; background:${T.plate}; margin-top:12px;"><tbody>
     <tr><td style="padding:10px 14px 0;"><span style="font-family:${SANS}; font-size:9px; letter-spacing:.9px; text-transform:uppercase; color:${T.acc}; font-weight:800;">Imprint preview</span></td></tr>
     <tr><td style="padding:9px 14px 13px;"><table border="0" cellpadding="0" cellspacing="0"><tbody><tr>${photoCell}${visual}<td valign="middle"><div style="font-size:12px; line-height:1.4; font-weight:700; color:${T.ink};">${_esc(typeLabel)}</div>${colorRow}${detail}</td></tr></tbody></table></td></tr>
   </tbody></table>`;
@@ -237,10 +238,42 @@ function tplSeparated(m) {
   </td></tr></tbody></table>`;
 }
 
+/* ── TEMPLATE — CORPORATE — squared letterhead, ruled schedule ── */
+function tplCorporate(m) {
+  const { groupName, optionName, expiration, lines, total, show } = m;
+  const INK = T.ink, MUT = T.mut, LINE = '#d7dace', RULE = '#19240f';
+  const cols = (show.images ? 1 : 0) + 1 + 1 + (show.cost ? 1 : 0) + 1;
+  const th = (label, w, align) => `<td style="font-family:${SANS}; font-size:10px; letter-spacing:1px; text-transform:uppercase; color:${MUT}; font-weight:700; border-bottom:2px solid ${RULE}; padding:0 0 10px;${w ? ' width:' + w + 'px;' : ''}" align="${align || 'left'}">${label}</td>`;
+  const head = `<tr>${show.images ? th('', 62) : ''}${th('Item')}${th('Qty', 50, 'right')}${show.cost ? th('Unit', 78, 'right') : ''}${th('Amount', 92, 'right')}</tr>`;
+  const rows = lines.map((l) => {
+    const photo = show.images ? `<td valign="top" width="62" style="padding:15px 14px 15px 0;">${_photoPlate(l.img, 54, true)}</td>` : '';
+    const sub = l.subtitle ? `<div style="font-size:11px; color:${MUT}; margin-top:3px;">${_esc(l.subtitle)}</div>` : '';
+    const unit = show.cost ? `<td valign="top" align="right" style="padding:15px 0; font-size:13px; color:${INK};">${_money(l.unitPrice)}</td>` : '';
+    const proof = show.previews ? `<tr><td colspan="${cols}" style="padding:0 0 15px ${show.images ? '76px' : '0'};">${_proof(l, false, true)}</td></tr>` : '';
+    return `<tr>${photo}<td valign="top" style="padding:15px 14px 15px 0;">${_brandLine(l, MUT)}<div style="font-size:14px; color:${INK}; font-weight:700;">${_esc(l.title)}</div>${sub}</td><td valign="top" align="right" style="padding:15px 0; font-size:13px; color:${INK};">${l.qty}</td>${unit}<td valign="top" align="right" style="padding:15px 0; font-size:14px; font-weight:800; color:${INK};">${_money(l.lineTotal)}</td></tr><tr><td colspan="${cols}" style="border-bottom:1px solid ${LINE}; font-size:0; line-height:0;">&nbsp;</td></tr>${proof}`;
+  }).join('');
+  const totalsBlock = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:18px;"><tbody><tr><td></td><td width="240"><table width="100%" border="0" cellpadding="0" cellspacing="0"><tbody><tr><td style="border-top:2px solid ${RULE}; padding:12px 0 0; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:${MUT}; font-weight:700;">Estimated total${_star(m)}</td><td align="right" style="border-top:2px solid ${RULE}; padding:12px 0 0; font-size:22px; font-weight:800; color:${INK};">${_money(total)}</td></tr></tbody></table></td></tr></tbody></table>` : '';
+  const cta = show.cta ? `<table border="0" cellpadding="0" cellspacing="0" style="margin-top:26px;"><tbody><tr><td style="background:${T.acc};"><a href="{{CART_LINK}}" style="display:inline-block; color:#fff; text-decoration:none; font-family:${SANS}; font-size:14px; font-weight:700; letter-spacing:.4px; padding:14px 38px;">Review this proposal &rsaquo;</a></td></tr></tbody></table>` : '';
+  return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="border:1px solid ${LINE}; border-top:3px solid ${T.acc};">
+    <table width="100%" border="0" cellpadding="0" cellspacing="0"><tbody>
+    <tr><td style="padding:26px 30px 0;">
+      <table width="100%"><tbody><tr><td valign="middle">${_wordmark()}</td><td valign="middle" align="right"><div style="font-size:11px; letter-spacing:2px; text-transform:uppercase; color:${MUT}; font-weight:700;">Proposal</div>${show.expiration ? `<div style="font-size:11px; color:${MUT}; margin-top:3px;">Valid until ${_esc(expiration)}</div>` : ''}</td></tr></tbody></table>
+      <div style="border-top:1px solid ${LINE}; margin-top:18px;"></div>
+      <div style="font-size:11px; letter-spacing:1.4px; text-transform:uppercase; color:${T.acc}; font-weight:700; margin-top:20px;">${_esc(groupName)}</div>
+      <div style="font-size:24px; font-weight:800; color:${INK}; letter-spacing:-.4px; margin:6px 0 18px;">${_esc(optionName)}</div>
+      ${_msgBlock(m) ? _msgBlock(m) + '<div style="height:14px; line-height:14px; font-size:0;">&nbsp;</div>' : ''}
+      <table width="100%" border="0" cellpadding="0" cellspacing="0"><tbody>${head}${rows}</tbody></table>
+      ${totalsBlock}${_discLine(m, 'right')}${cta}
+    </td></tr>
+    <tr><td style="padding:24px 30px 22px;"><div style="border-top:1px solid ${LINE}; padding-top:14px;"><span style="font-family:${SANS}; font-size:10px; letter-spacing:1.4px; text-transform:uppercase; color:${T.faint}; font-weight:700;">Golfballs &middot; Corporate Gifting &middot; golfballs.com</span></div></td></tr>
+    </tbody></table>
+  </td></tr></tbody></table>`;
+}
+
 export const PROPOSAL_TEMPLATES = [
+  { id: 'corporate', name: 'Corporate', sub: 'Squared letterhead · ruled', accent: '#339900', build: tplCorporate },
   { id: 'classic', name: 'Classic', sub: 'Formal letter · imprint previews', accent: '#339900', build: tplClassic },
   { id: 'minimal', name: 'Minimal', sub: 'Editorial · borderless', accent: '#339900', build: tplMinimal },
-  { id: 'catalog', name: 'Catalog cards', sub: 'Header band · preview per card', accent: '#339900', build: tplCatalog },
   { id: 'quote', name: 'Quote', sub: 'Total panel · imprint previews', accent: '#339900', build: tplQuote },
   { id: 'lookbook', name: 'Lookbook', sub: 'Image-top · preview under each', accent: '#339900', build: tplLookbook },
   { id: 'separated', name: 'Separated', sub: 'Detached option cards · per-price', accent: '#339900', build: tplSeparated },
@@ -249,23 +282,34 @@ const tplById = (id) => PROPOSAL_TEMPLATES.find((t) => t.id === id) || PROPOSAL_
 
 function TemplateThumb({ id, accent }) {
   const bar = (w, c, h) => ({ width: w, height: h || 3, background: c, borderRadius: 1 });
-  const G = '#cfd3d8';
-  const wrap = { width: 46, height: 36, flexShrink: 0, borderRadius: 4, background: '#fff', border: '1px solid #e1e4e8', padding: 4, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden' };
-  if (id === 'classic') return <div style={{ ...wrap, border: `1.5px solid ${G}`, alignItems: 'center' }}><div style={{ ...bar(20, accent), marginTop: 1 }} /><div style={bar(26, '#e3e6ea', 2)} /><div style={{ display: 'flex', gap: 2, width: '100%', marginTop: 1 }}><div style={bar(10, G, 8)} /><div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}><div style={bar('100%', '#e3e6ea', 2)} /><div style={bar('70%', '#eceef1', 2)} /></div></div></div>;
-  if (id === 'catalog') return <div style={{ ...wrap, padding: 0 }}><div style={{ ...bar('100%', accent, 9), borderRadius: '3px 3px 0 0' }} /><div style={{ padding: 4, display: 'flex', flexDirection: 'column', gap: 3 }}><div style={{ display: 'flex', gap: 2, alignItems: 'center', border: `1px solid ${G}`, borderRadius: 2, padding: 1 }}><div style={bar(7, G, 7)} /><div style={bar(14, '#e3e6ea', 2)} /><div style={{ ...bar(6, accent, 4), marginLeft: 'auto' }} /></div><div style={{ display: 'flex', gap: 2, alignItems: 'center', border: `1px solid ${G}`, borderRadius: 2, padding: 1 }}><div style={bar(7, G, 7)} /><div style={bar(14, '#e3e6ea', 2)} /><div style={{ ...bar(6, accent, 4), marginLeft: 'auto' }} /></div></div></div>;
-  if (id === 'quote') return <div style={{ ...wrap, gap: 3 }}><div style={{ ...bar('100%', accent, 14), borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 2, boxSizing: 'border-box' }}><div style={bar(11, 'rgba(255,255,255,.8)', 6)} /></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 1 }}><div style={bar(18, '#e3e6ea', 2)} /><div style={bar(7, '#ff6600', 2)} /></div><div style={{ display: 'flex', justifyContent: 'space-between' }}><div style={bar(16, '#e3e6ea', 2)} /><div style={bar(7, '#ff6600', 2)} /></div></div>;
-  if (id === 'lookbook') return <div style={{ ...wrap, alignItems: 'center', gap: 2 }}><div style={{ width: 9, height: 2, background: accent, borderRadius: 1, marginTop: 1 }} /><div style={{ width: '100%', border: `1px solid ${G}`, borderRadius: 2, padding: 2, display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'center', boxSizing: 'border-box' }}><div style={bar(16, G, 9)} /><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><div style={bar(12, '#e3e6ea', 2)} /><div style={bar(6, '#ff6600', 2)} /></div></div><div style={{ ...bar('100%', accent, 3), marginTop: 'auto' }} /></div>;
+  // Themed tokens so the picker thumbs read correctly in light AND dark (they're
+  // UI swatches, not photos). Brand green/orange stay as-is in both.
+  const G = 'var(--gb-border-default)';     // borders / dividers
+  const LT = 'var(--gb-fill-strong)';       // light "text" bars
+  const DK = 'var(--gb-text-primary)';      // strong/header bars
+  const PR = '#ff6600';                     // price (brand)
+  const PANEL = 'var(--gb-fill-subtle)';    // option/header strip
+  const wrap = { width: 46, height: 36, flexShrink: 0, borderRadius: 4, background: 'var(--gb-surface-1)', border: `1px solid ${G}`, padding: 4, boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden' };
+  if (id === 'corporate') return <div style={{ ...wrap, borderRadius: 0, borderTop: `2px solid ${accent}`, gap: 2 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div style={{ ...bar(15, DK, 3), borderRadius: 0 }} /><div style={{ ...bar(7, G, 2), borderRadius: 0 }} /></div>
+    <div style={{ borderTop: `1px solid ${G}`, marginTop: 1 }} />
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `1px solid ${G}`, paddingBottom: 1, marginTop: 1 }}><div style={{ ...bar(16, LT, 2), borderRadius: 0 }} /><div style={{ ...bar(9, DK, 2), borderRadius: 0 }} /></div>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div style={{ ...bar(13, LT, 2), borderRadius: 0 }} /><div style={{ ...bar(9, DK, 2), borderRadius: 0 }} /></div>
+  </div>;
+  if (id === 'classic') return <div style={{ ...wrap, border: `1.5px solid ${G}`, alignItems: 'center' }}><div style={{ ...bar(20, accent), marginTop: 1 }} /><div style={bar(26, LT, 2)} /><div style={{ display: 'flex', gap: 2, width: '100%', marginTop: 1 }}><div style={bar(10, G, 8)} /><div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}><div style={bar('100%', LT, 2)} /><div style={bar('70%', LT, 2)} /></div></div></div>;
+  if (id === 'quote') return <div style={{ ...wrap, gap: 3 }}><div style={{ ...bar('100%', accent, 14), borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 2, boxSizing: 'border-box' }}><div style={bar(11, 'rgba(255,255,255,.8)', 6)} /></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 1 }}><div style={bar(18, LT, 2)} /><div style={bar(7, PR, 2)} /></div><div style={{ display: 'flex', justifyContent: 'space-between' }}><div style={bar(16, LT, 2)} /><div style={bar(7, PR, 2)} /></div></div>;
+  if (id === 'lookbook') return <div style={{ ...wrap, alignItems: 'center', gap: 2 }}><div style={{ width: 9, height: 2, background: accent, borderRadius: 1, marginTop: 1 }} /><div style={{ width: '100%', border: `1px solid ${G}`, borderRadius: 2, padding: 2, display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'center', boxSizing: 'border-box' }}><div style={bar(16, G, 9)} /><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><div style={bar(12, LT, 2)} /><div style={bar(6, PR, 2)} /></div></div><div style={{ ...bar('100%', accent, 3), marginTop: 'auto' }} /></div>;
   if (id === 'separated') return <div style={{ ...wrap, gap: 3, justifyContent: 'center' }}>
     <div style={{ width: '100%', border: `1px solid ${G}`, borderRadius: 2, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#eef3ea', padding: '1px 2px' }}><div style={bar(6, accent, 2)} /><div style={bar(4, G, 2)} /></div>
-      <div style={{ display: 'flex', gap: 2, alignItems: 'center', padding: 2 }}><div style={bar(7, G, 7)} /><div style={bar(12, '#e3e6ea', 2)} /><div style={{ ...bar(7, '#ff6600', 4), marginLeft: 'auto' }} /></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: PANEL, padding: '1px 2px' }}><div style={bar(6, accent, 2)} /><div style={bar(4, G, 2)} /></div>
+      <div style={{ display: 'flex', gap: 2, alignItems: 'center', padding: 2 }}><div style={bar(7, G, 7)} /><div style={bar(12, LT, 2)} /><div style={{ ...bar(7, PR, 4), marginLeft: 'auto' }} /></div>
     </div>
     <div style={{ width: '100%', border: `1px solid ${G}`, borderRadius: 2, overflow: 'hidden' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#eef3ea', padding: '1px 2px' }}><div style={bar(6, accent, 2)} /><div style={bar(4, G, 2)} /></div>
-      <div style={{ display: 'flex', gap: 2, alignItems: 'center', padding: 2 }}><div style={bar(7, G, 7)} /><div style={bar(12, '#e3e6ea', 2)} /><div style={{ ...bar(7, '#ff6600', 4), marginLeft: 'auto' }} /></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: PANEL, padding: '1px 2px' }}><div style={bar(6, accent, 2)} /><div style={bar(4, G, 2)} /></div>
+      <div style={{ display: 'flex', gap: 2, alignItems: 'center', padding: 2 }}><div style={bar(7, G, 7)} /><div style={bar(12, LT, 2)} /><div style={{ ...bar(7, PR, 4), marginLeft: 'auto' }} /></div>
     </div>
   </div>;
-  return <div style={{ ...wrap, gap: 3 }}><div style={bar(8, accent, 2)} /><div style={bar(24, '#2b2f36', 4)} /><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}><div style={bar(20, '#e3e6ea', 2)} /><div style={bar(8, accent, 2)} /></div><div style={{ display: 'flex', justifyContent: 'space-between' }}><div style={bar(18, '#e3e6ea', 2)} /><div style={bar(8, '#e3e6ea', 2)} /></div><div style={{ ...bar('100%', '#2b2f36', 5), marginTop: 'auto' }} /></div>;
+  return <div style={{ ...wrap, gap: 3 }}><div style={bar(8, accent, 2)} /><div style={bar(24, DK, 4)} /><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}><div style={bar(20, LT, 2)} /><div style={bar(8, accent, 2)} /></div><div style={{ display: 'flex', justifyContent: 'space-between' }}><div style={bar(18, LT, 2)} /><div style={bar(8, LT, 2)} /></div><div style={{ ...bar('100%', DK, 5), marginTop: 'auto' }} /></div>;
 }
 
 function TemplateCard({ tpl, on, onClick }) {

@@ -1911,7 +1911,7 @@ function RepoImportModal({ onClose, onImported }) {
   const [busy, setBusy] = useState(false);
   const [prog, setProg] = useState(null);   // { label, count, total }
   const signalRef = useRef(null);
-  const repoOptions = Object.keys(REPOS).map((id) => ({ value: id, label: REPOS[id].name }));
+  const repoOptions = Object.keys(REPOS).map((id) => ({ id, label: REPOS[id].name }));
 
   const run = () => {
     const fn = REPO_RUN[repo];
@@ -1973,8 +1973,8 @@ function RepoImportModal({ onClose, onImported }) {
         ) : (
           <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Product / category link</label>
-              <Input size="sm" value="" onChange={() => {}} disabled placeholder="Paste a link to import one product…" />
+              <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Repo link</label>
+              <Input size="sm" value="" onChange={() => {}} disabled placeholder="Paste a repo link to add a new source…" />
               <span style={{ fontSize: 10, color: 'var(--gb-text-ghost)', fontStyle: 'italic' }}>Coming soon</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

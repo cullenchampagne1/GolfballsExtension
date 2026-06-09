@@ -88,24 +88,50 @@ function remapTextColor(v, isDark) {
   return lum > 0.62 ? DARK_TEXT : null;               // whitish → darken
 }
 
+/* An explicit background that's COLORED (saturated) or DARK — i.e. one the email
+   designed its text against (a brand band, a dark panel). Text inside such a
+   container is left alone, so e.g. white-on-green headers don't get "fixed" into
+   dark-on-green. */
+function bgKept(v) {
+  if (!v) return false;
+  const c = parseColor(v); if (!c) return false;
+  const { lum, chroma } = lumChroma(c);
+  return chroma > 40 || lum < 0.5;
+}
+function elHasKeptBg(el) {
+  if (!el || !el.getAttribute) return false;
+  const a = el.getAttribute('bgcolor'); if (a && bgKept(a)) return true;
+  if (el.style && (bgKept(el.style.backgroundColor) || bgKept(el.style.background))) return true;
+  return false;
+}
+function underKeptBg(el, root) {
+  let n = el;
+  while (n && n !== root) { if (elHasKeptBg(n)) return true; n = n.parentElement; }
+  return false;
+}
+
 /* Normalise the email body for the active theme. White / near-white
    backgrounds blend into the pane (→ transparent shows the current
    surface through); grayscale text is remapped by the white-shade
-   engine above (both themes). Saturated colors + images are untouched. */
+   engine above (both themes) — EXCEPT text sitting on a kept colored/dark
+   background, which was authored for that background. Saturated colors +
+   images are untouched. */
 function normaliseEmailDom(container, isDark) {
   const fix = (v) => remapTextColor(v, isDark);
   container.querySelectorAll('*').forEach((el) => {
     const bgAttr = el.getAttribute && el.getAttribute('bgcolor');
     if (bgAttr && isLightBg(bgAttr)) el.setAttribute('bgcolor', 'transparent');
 
+    const keep = underKeptBg(el, container);   // text designed for a colored/dark panel — leave it
+
     if (el.style) {
       if (isLightBg(el.style.backgroundColor)) el.style.backgroundColor = 'transparent';
       if (isLightBg(el.style.background)) el.style.background = 'transparent';
-      if (el.style.color) { const next = fix(el.style.color); if (next) el.style.color = next; }
+      if (!keep && el.style.color) { const next = fix(el.style.color); if (next) el.style.color = next; }
     }
 
     const colorAttr = el.getAttribute && el.getAttribute('color');
-    if (colorAttr) { const next = fix(colorAttr); if (next) el.setAttribute('color', next); }
+    if (!keep && colorAttr) { const next = fix(colorAttr); if (next) el.setAttribute('color', next); }
   });
 
   /* Outlook sets body color via <style> class rules (p.MsoNormal
@@ -148,14 +174,24 @@ function emailProvidesSidePadding(content) {
    pane. Prefer the actual surface (--gb-surface-1); fall back to the
    text token, then default dark. */
 function surfaceIsDark(el) {
-  const root = el || (typeof document !== 'undefined' ? document.documentElement : null);
-  if (!root || typeof getComputedStyle === 'undefined') return true;
+  if (!el || typeof getComputedStyle === 'undefined') return true;
   try {
-    const cs = getComputedStyle(root);
-    const bg = parseColor(cs.getPropertyValue('--gb-surface-1').trim());
+    // Judge the ACTUAL painted surface behind the email: walk up to the first
+    // ancestor with a non-transparent background and read its luminance. More
+    // reliable than reading a --gb token through the shadow boundary (which can
+    // come back empty → text not re-themed → black-on-dark line items).
+    let n = el;
+    while (n) {
+      const s = getComputedStyle(n).backgroundColor;
+      if (s && s !== 'transparent' && !/,\s*0\s*\)\s*$/.test(s)) {
+        const bg = parseColor(s);
+        if (bg) return (0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b) / 255 < 0.5;
+      }
+      n = n.parentElement;
+    }
+    const cs = getComputedStyle(el);
+    const bg = parseColor((cs.getPropertyValue('--gb-surface-1') || '').trim());
     if (bg) return (0.2126 * bg.r + 0.7152 * bg.g + 0.0722 * bg.b) / 255 < 0.5;
-    const tx = parseColor(cs.getPropertyValue('--gb-text-primary').trim());
-    if (tx) return (0.2126 * tx.r + 0.7152 * tx.g + 0.0722 * tx.b) / 255 > 0.5;
   } catch { /* ignore */ }
   return true; // default dark
 }
