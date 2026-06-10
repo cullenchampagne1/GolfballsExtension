@@ -103,7 +103,7 @@ export const NAV = [
     { id: 'start', title: 'Getting Started', icon: 'bolt', slugs: ['what-this-extension-does', 'first-launch', 'initial-configuration', 'actions-shelf', 'keyboard-shortcuts'] },
   ]},
   { group: 'Daily Driver', items: [
-    { id: 'popup', title: 'The Popup', icon: 'mail', wip: true, slugs: ['email-templates-popup', 'how-email-sending-works'] },
+    { id: 'popup', title: 'The Popup', icon: 'mail', slugs: ['email-templates-popup', 'how-email-sending-works'] },
     { id: 'templates', title: 'Email Templates', icon: 'edit', wip: true, slugs: ['template-editor', 'template-variables', 'note-templates'] },
     { id: 'charge', title: 'Charge & Order Edit', icon: 'card', wip: true, slugs: ['charge-refund', 'order-edit'] },
     { id: 'proof', title: 'Submit Proof', icon: 'send', wip: true, slugs: ['submit-proof'] },
