@@ -8,6 +8,7 @@ import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '
 import { CustomizeBlock, ProductOptions, colorNameOf } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposalEntries, proposalCartUrl, loadKnownPromos, addKnownPromo, submitProposalEmail } from '../lib/saveProposal.js';
 import { promoDiscount, freeLinesFromPromo } from '../lib/cartSerializer.js';
+import { usd, onSale, hasPromo, isDeal, money, rid, nfmt, relTime, priceAtQty, isTierPrice, SECOND_POLE_FEE, lineHasImprint, lineSecondPoleFee, linePriceAt, lineIsTierPrice, priceAtBreaks, topPrice, lowPrice, saleCut, netP, netTop, netLow } from '../lib/giftCatalogMath.js';
 import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS } from '../lib/customItems.js';
 import { importHpgCatalog } from '../lib/hpgImport.js';
 import { importSnugzCatalog } from '../lib/snugzImport.js';
@@ -72,75 +73,8 @@ const Layers= (p) => <Icon {...p}><path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5"/
 const ArrowL= (p) => <Icon {...p} strokeWidth={2.2}><path d="M19 12H5M12 19l-7-7 7-7"/></Icon>;
 const TagI  = (p) => <Icon {...p}><path d="M20.6 13.4L13 21a1.7 1.7 0 01-2.4 0L3 13.4A1.7 1.7 0 012.5 12V4.5A1.5 1.5 0 014 3h7.5a1.7 1.7 0 011.2.5l7.9 7.9a1.7 1.7 0 010 2.4z"/><circle cx="7.5" cy="7.5" r="1.3" fill="currentColor"/></Icon>;
 
-const usd = (n) => (n == null ? '—' : '$' + Number(n).toFixed(2));
-
-const onSale = (p) => p.orig != null && p.orig > p.price;
-const hasPromo = (p) => !!(p && p.promo);
-const isDeal = (p) => onSale(p) || hasPromo(p);
-
-const money = (n) => '$' + (n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const rid = () => Math.random().toString(36).slice(2, 8);
-const nfmt = (n) => Number(n || 0).toLocaleString('en-US');
-
-/* "updated just now / 5m ago / 2h ago / 3d ago" for the catalog index age. */
-function relTime(ts) {
-  if (!ts) return '';
-  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
-  if (s < 45) return 'just now';
-  const m = Math.round(s / 60);
-  if (m < 60) return m + 'm ago';
-  const h = Math.round(m / 60);
-  if (h < 24) return h + 'h ago';
-  return Math.round(h / 24) + 'd ago';
-}
-
-/* Per-unit price for a quantity, walking the custom-logo volume ladder. */
-function priceAtQty(p, qty) {
-  if (p.breaks && p.breaks.length) {
-    let price = p.breaks[0].p;
-    for (const b of p.breaks) if (qty >= b.q) price = b.p;
-    return price;
-  }
-  return p.logo || p.price || 0;
-}
-/* Has the price been hand-edited away from the tier the qty implies? */
-const isTierPrice = (p, qty, price) => Math.abs(priceAtQty(p, qty) - price) < 0.005;
-
-/* ── Accurate proposal-line pricing ───────────────────────────────────────────
-   The card headlines the custom-logo "from" price, but the PROPOSAL/cart must
-   reflect what's actually configured:
-     • no imprint            → retail (product.price)
-     • custom-logo imprint   → the custom-logo volume ladder at the qty
-     • a chosen base variant → its price (tee count, etc.)
-     • + the second-pole upcharge when a dual-pole imprint is added
-   These (Logo +$6 / Text +$4 per dozen) are golfballs.com's standard second-pole
-   fees — the charge that was missing and skewing cart totals. */
-const SECOND_POLE_FEE = { logo: 6, text: 4 };
-const lineHasImprint = (line) => { const d = line && line.decoration; return !!(d && d.engine && d.engine !== 'none'); };
-const lineSecondPoleFee = (line) => {
-  const d = line && line.decoration;
-  if (!d || !d.pole2 || !d.pole2.kind) return 0;   // keyed on a real 2nd-pole imprint
-  return SECOND_POLE_FEE[d.pole2.kind] || 0;
-};
-function linePriceAt(line, qty) {
-  const p = (line && line.product) || {};
-  // Gift set: per-set price from the verified gift-set ladder (the catalog's
-  // custom-logo ladder == the raw ladder, so this matches the cart exactly).
-  const gs = line && line.decoration && line.decoration.giftSet;
-  if (gs && p.customLogo && p.breaks && p.breaks.length) {
-    const v = priceAtBreaks(giftSetLadder(p.breaks, gs), qty);
-    if (v != null) return v;
-  }
-  let base;
-  if (line && line.variant && line.variant.price != null) base = line.variant.price;          // tee count etc.
-  else if (p.isCustom && p.breaks && p.breaks.length) base = priceAtQty(p, qty);               // custom item ladder
-  else if (lineHasImprint(line) && p.customLogo) base = priceAtQty(p, qty);                    // custom-logo ladder
-  else base = p.price || 0;                                                                     // no imprint → retail
-  return Math.round((base + lineSecondPoleFee(line)) * 100) / 100;
-}
-const lineIsTierPrice = (line, qty, price) => Math.abs(linePriceAt(line, qty) - price) < 0.005;
-// Largest break ≤ q from a [{q,p}] ladder (the verified engine's output shape).
-const priceAtBreaks = (breaks, q) => { let p = null; for (const b of (breaks || [])) if (b.q <= q) p = b.p; return p; };
+/* Pure pricing/format helpers (usd, money, priceAtQty, linePriceAt, priceAtBreaks,
+   topPrice/netTop, …) now live in ../lib/giftCatalogMath.js — imported above. */
 
 /* The per-imprint model (capabilities + chip/merge/validation) lives in
    ../lib/giftImprints.js so it's unit-testable; imported at the top of this file. */
@@ -167,19 +101,6 @@ function promotePole2ToFront(product, deco) {
   return null;
 }
 
-/* Highest custom-logo per-unit price (the smallest-qty tier) — shown
-   on the card by default ("from" pricing), before volume discounts. */
-const topPrice = (p) => (p.breaks && p.breaks.length ? Math.max(...p.breaks.map((b) => b.p)) : (p.logo ?? p.price ?? 0));
-const lowPrice = (p) => (p.breaks && p.breaks.length ? Math.min(...p.breaks.map((b) => b.p)) : (p.logo ?? p.price ?? 0));
-// On-sale markdown (MSRP − sale price). The custom-logo break ladder is stored
-// PRE-markdown; this discount comes off ON TOP (it can be a second, stacked sale).
-// So the real per-unit price = break − saleCut, and the raw break is the "was"
-// (strike-through). e.g. a $51.99 1+ break with a −$10 markdown actually costs
-// $41.99.
-const saleCut = (p) => (onSale(p) ? Math.max(0, p.orig - p.price) : 0);
-const netP    = (p, raw) => Math.max(0, raw - saleCut(p));   // a raw break/unit price after the markdown
-const netTop  = (p) => netP(p, topPrice(p));                  // actual per-unit (1+) price
-const netLow  = (p) => netP(p, lowPrice(p));                  // actual top-volume price
 
 /* "/" quick-filters beyond category + brand. */
 const SPECIAL_CMDS = [
@@ -2683,6 +2604,24 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     if (!promoHydrated.current) return;
     try { chrome.storage.local.set({ gbCurrentPromo: proposalPromo || null }); } catch { /* */ }
   }, [proposalPromo]);
+  // Promos are cart-dependent (free quantities, spend thresholds), so a coupon
+  // applied earlier goes stale as lines are added/removed/re-priced — it would
+  // keep granting free giveaways for items no longer in the cart. Re-validate
+  // (debounced) whenever the proposal changes and refresh the stored promotion,
+  // so freeLinesFromPromo always reflects the CURRENT cart. A transient network
+  // failure keeps the last good result rather than dropping a valid coupon.
+  // Reads proposalPromo via closure (not a dep) so refreshing it can't loop.
+  useEffect(() => {
+    if (!proposalPromo || !proposalPromo.code || !proposal.length) return undefined;
+    let alive = true;
+    const code = proposalPromo.code;
+    const t = setTimeout(() => {
+      validatePromo(proposal, code)
+        .then((promotion) => { if (alive) setProposalPromo((p) => (p && p.code === code) ? { ...p, promotion } : p); })
+        .catch(() => { /* transient — keep the last validated promotion */ });
+    }, 500);
+    return () => { alive = false; clearTimeout(t); };
+  }, [proposal]); // eslint-disable-line react-hooks/exhaustive-deps
   // Validate + apply a promo against the current proposal (throws on invalid; the
   // PromoBlock surfaces the error). The resolved promo is stored and flows into
   // the saved/loaded cart; the site recomputes the exact discount on cart load.
@@ -2851,7 +2790,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // confirm button can drive its success flash.
   const saveDraft = (name) => {
     if (!proposal.length) return Promise.resolve();
-    return saveProposalDraft(name, proposal)
+    return saveProposalDraft(name, proposal, proposalPromo && proposalPromo.promotion)
       .then((r) => { setSavedProposals(r.list); toast?.success?.(`Saved “${r.entry.name}” to Saved Proposals`); })
       .catch((e) => { toast?.error?.('Couldn’t save — ' + ((e && e.message) || 'unknown error')); throw e; });
   };
@@ -2914,9 +2853,13 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // Draft → account: load the draft into the proposal, open it, and pop the
   // account form so the rep can edit then publish.
   const loadSavedToAccount = (entry) => { loadSaved(entry); setAccountSaveSeq((n) => n + 1); };
-  // New-opportunity (future) — the "+" beside the opportunity dropdown. Fields TBD;
-  // stub for now so the button is in place to wire once the create form is defined.
-  const addOpportunity = (accountId) => { /* TODO: open new-opportunity form (fields pending) */ };
+  // New-opportunity (future) — the "+" beside the opportunity dropdown. Creating
+  // an opportunity from here isn't built yet (fields TBD), so give honest
+  // feedback instead of a silent no-op; pick an existing opportunity or create
+  // it in the CRM for now.
+  const addOpportunity = (_accountId) => {
+    window.__gbToast?.info?.("Creating a new opportunity isn't available here yet — pick an existing one or add it in the CRM.", { duration: 3200 });
+  };
 
   // ── Custom items ──────────────────────────────────────────────────────────
   // Save (create/edit) → storage; the onChanged listener refreshes the grid.

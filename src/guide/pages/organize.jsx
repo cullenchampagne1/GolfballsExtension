@@ -6,7 +6,10 @@ import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
 import {
   WatchListLive, WatchRow, WatchEditor, FilterChips, sampleTasks, URGENCY_TINT,
 } from '../lib/watchlist-live.jsx';
-import { TaskList } from '../../modals/TaskList.jsx';
+import {
+  TaskListLive, TaskRow, TableHeader, Toolbar as TLToolbar, SelectionBar, PushDueCard,
+  sampleTasks as sampleTaskRows,
+} from '../lib/tasklist-live.jsx';
 import { QuickTask } from '../../modals/QuickTask.jsx';
 import { CallLog } from '../../modals/CallLog.jsx';
 import { CalendarModal } from '../../modals/CalendarModal.jsx';
@@ -189,6 +192,52 @@ export function WatchListPage() {
 }
 
 /* ════════ TASK LIST ════════ */
+
+const TL_CALLOUTS = [
+  { n: 1, target: 'header', title: 'Title & count', text: 'My Task List, with the visible / total count for the current filters.' },
+  { n: 2, target: 'toolbar', title: 'Search & filters', text: 'Search account/contact/subject, plus Status and Priority dropdowns and Refresh.' },
+  { n: 3, target: 'sortheader', title: 'Sortable columns', text: 'Click a header to sort; click again for descending; Shift+click another to chain.' },
+  { n: 4, target: 'row', title: 'A task row', text: 'Account + category, contact, due date, priority, subject, and a status badge.' },
+  { n: 5, target: 'footer', title: 'Bulk actions', text: 'Open Tabs and Quick Task act on every selected row.' },
+];
+const TL_STEPS = [
+  { target: 'toolbar', caption: 'Search by account, contact, or subject, and narrow by Status and Priority. Watch — filter to High priority…', run: (api) => api.setPriorityFilter('1'), hold: 2400 },
+  { target: 'toolbar', caption: '…and clear it to see them all again.', run: (api) => api.setPriorityFilter(''), hold: 1500 },
+  { target: 'sortheader', caption: 'Click a column to sort. Click Due Date to put the most overdue on top…', run: (api) => api.onSort('dueDate'), hold: 2200 },
+  { target: 'sortheader', caption: '…then Shift+click Priority to chain a second sort — the 1 / 2 rank badges show the order.', run: (api) => api.onSort('priority', true), hold: 2800 },
+  { target: 'row', caption: 'Each row reads across: account with its category underneath, the contact, the due date, a priority tag, the subject, and a status badge that flags Overdue or Due today.', hold: 3400 },
+  { target: 'header', caption: 'Tick rows to select them…', run: (api) => api.selectN(3), hold: 1600 },
+  { target: 'selbar', caption: '…and the selection bar appears with Run campaign, Email selected, and Export CSV — acting on all of them at once.', hold: 3200 },
+  { target: 'footer', caption: 'The footer adds Open Tabs (each record in its own tab) and Quick Task (a follow-up on every selected row).', hold: 2800 },
+];
+
+function ToolbarSnippet() {
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('1');
+  const [priorityFilter, setPriorityFilter] = useState('');
+  return (
+    <MiniFrame width={560} label="task list · toolbar" pad={false}>
+      <TLToolbar {...{ query, setQuery, statusFilter, setStatusFilter, priorityFilter, setPriorityFilter }} />
+    </MiniFrame>
+  );
+}
+
+function TableSnippet() {
+  const [rows] = useState(() => sampleTaskRows().filter((t) => t.status !== 'Complete').slice(0, 4));
+  const [sel, setSel] = useState(new Set([rows[0].id]));
+  const sortChain = [{ key: 'dueDate', dir: 'asc' }, { key: 'priority', dir: 'asc' }];
+  return (
+    <MiniFrame width={900} label="task list · table" pad={false}>
+      <div style={{ background: 'var(--gb-surface-canvas)' }}>
+        <TableHeader allChecked={false} onToggleAll={() => {}} sortChain={sortChain} onSort={() => {}} />
+        <div style={{ padding: '4px 0' }}>
+          {rows.map((t) => <TaskRow key={t.id} task={t} isSelected={sel.has(t.id)} onToggle={() => setSel((s) => { const n = new Set(s); n.has(t.id) ? n.delete(t.id) : n.add(t.id); return n; })} />)}
+        </div>
+      </div>
+    </MiniFrame>
+  );
+}
+
 export function TasksPage() {
   return (
     <div className="prose">
@@ -197,22 +246,57 @@ export function TasksPage() {
       <p className="lede">
         Press <span className="kbd">Ctrl+X</span> anywhere and your CRM tasks open in a fast, sortable
         table — no navigating to the task page. Search, filter, chain sorts, and act on many tasks at
-        once. The real modal is below on sample tasks.
+        once. Watch it work below, then read each piece beside its live control.
       </p>
 
-      <LiveModal w={1000} h={640} frameLabel="task list · sample tasks"
-        note="Tick rows to reveal the selection bar; click a column header to sort, Shift+click to chain."
-        render={(box, onClosed) => <TaskList useMock contained portalContainer={box} onClosed={onClosed} />} />
+      <LiveStage
+        wide
+        width={1000}
+        frameKind="modal"
+        frameLabel="golfballs.com · task list"
+        render={(apiRef) => <TaskListLive ref={apiRef} />}
+        callouts={TL_CALLOUTS}
+        steps={TL_STEPS}
+        note="Live Task List on sample tasks — hover the pins, press Play, or Try it yourself."
+      />
 
-      <h2 className="sec">Find, select, act</h2>
-      <p>The toolbar: search (account, contact, or subject), a <strong>Status</strong> filter (New tasks / Completed / All statuses), a <strong>Priority</strong> filter (All / High / Medium / Low), and Refresh. Click a column header to sort, again for descending — and <strong>Shift+click a second column to chain sorts</strong> (Due Date, then Priority).</p>
-      <p>Tick rows and the selection bar slides in with <strong>Run campaign</strong>, <strong>Email selected</strong>, and <strong>Export CSV</strong>; the footer adds <strong>Open Tabs</strong> (every selected record in its own tab) and <strong>Quick Task</strong>. Acting on a task opens a compact popover with three panes: <strong>Main</strong> (Mark complete / Reopen + the Push-due card: +1d, +3d, +1w, +2w, +1mo, or Other with a day stepper), <strong>Set date</strong> (a mini calendar), and <strong>Add task</strong> (a quick custom task or a template; "Add to all N" in bulk).</p>
+      <h2 className="sec">Walk through it, piece by piece</h2>
+      <p>Each block pairs the real control with what it does. The snippets are live.</p>
+
+      <TourBox n={1} eyebrow="Find" title="Search & filters" live={<ToolbarSnippet />} flip>
+        <p>Search matches <strong>account, contact, and subject</strong> at once. Two dropdowns narrow the list:</p>
+        <ul>
+          <li><strong>Status</strong> — New tasks (the default), Completed, or All statuses.</li>
+          <li><strong>Priority</strong> — All, High, Medium, or Low.</li>
+        </ul>
+        <p><strong>Refresh</strong> re-pulls your tasks from the CRM. The dropdowns in the snippet are live.</p>
+      </TourBox>
+
+      <TourBox stack eyebrow="The table" title="Rows, columns & sorting" live={<TableSnippet />}>
+        <p>Each row reads across: the <strong>account</strong> with its <strong>category</strong> folded underneath, the <strong>contact</strong>, the <strong>due date</strong>, a <strong>priority tag</strong>, the <strong>subject</strong>, and a <strong>status badge</strong> — which shows the urgency (<Tag tone="error" size="xs">Overdue 3d</Tag> <Tag tone="warning" size="xs">Due today</Tag> <Tag tone="neutral" size="xs">in 2d</Tag>) rather than a flat “New”.</p>
+        <p>Click any column header to sort, again for descending, a third time to drop it. <strong>Shift+click a second column to chain</strong> — the snippet above is sorted by Due Date then Priority, and the small <strong>1 / 2 rank badges</strong> show the order. Tick a row's checkbox (or the header's) to select.</p>
+      </TourBox>
+
+      <TourBox n={2} eyebrow="Act on many" title="Selection & bulk actions" live={<MiniFrame width={560} label="task list · selection bar" pad={false}><SelectionBar selCount={3} total={7} /></MiniFrame>} flip>
+        <p>Tick rows and a selection bar slides in at the top: <strong>Run campaign</strong>, <strong>Email selected</strong>, and <strong>Export CSV</strong> — each acting on every checked row.</p>
+        <p>The footer carries two more: <strong>Open Tabs</strong> opens each selected record in its own browser tab, and <strong>Quick Task</strong> drops a follow-up task on every one.</p>
+      </TourBox>
+
+      <TourBox n={3} eyebrow="The line-item settings" title="The per-task popover" live={<MiniFrame width={340} label="task · push due date" pad><PushDueCard /></MiniFrame>} wide>
+        <p>Acting on a single task (or a bulk selection) opens a compact popover with three panes:</p>
+        <ul>
+          <li><strong>Main</strong> — Mark complete / Reopen, plus the <strong>Push due date</strong> card shown here: chips for +1d, +3d, +1w, +2w, +1mo, or <strong>Other</strong> with a day stepper, then Apply.</li>
+          <li><strong>Set date</strong> — a mini calendar to pick an exact due date.</li>
+          <li><strong>Add task</strong> — a quick custom task or one of your templates; in bulk mode it reads “Add to all N”.</li>
+        </ul>
+        <p>The push-due chips in the snippet are live — pick one, or Other for a custom number of days.</p>
+      </TourBox>
 
       <div className="docnote brand">
         <span className="dn-ico"><I.megaphone size={15} /></span>
         <div className="dn-b">
           <div className="dn-t">Selections feed campaigns</div>
-          <p style={{ margin: 0 }}>The same selection that bulk-completes tasks can launch a <a href="#quicksend">Quick Send</a> — each selected task's contact gets a personalized email. It's the fastest path from "these 30 follow-ups" to "30 sent."</p>
+          <p style={{ margin: 0 }}>The same selection that bulk-completes tasks can launch a <a href="#quicksend">Quick Send</a> — each selected task's contact gets a personalized email. It's the fastest path from “these 30 follow-ups” to “30 sent.”</p>
         </div>
       </div>
     </div>

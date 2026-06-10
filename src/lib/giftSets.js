@@ -28,7 +28,9 @@
    import from cartSerializer. Live loading + the seed live in giftSetsData.js.
    ─────────────────────────────────────────────────────────────────────────── */
 
-export const PACKAGE_UPSELL_URL = 'https://master.api.icustomize.com/user/getPackageUpsellData';
+import { API } from './constants.js';
+
+export const PACKAGE_UPSELL_URL = `${API.MASTER_USER}/getPackageUpsellData`;
 
 /* Round a price so its cents end in 95 — the site's `u(t,95)`:
    r = 95/100 = .95 ; i = (100-95)/100 + .01 = .06 ; floor(t - i) + r. */

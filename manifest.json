@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Golfballs.com",
+  "name": "Golfballs.com Sales Toolkit",
   "version": "3.3",
-  "description": "Helper utilities for the golfballs.com website.",
+  "description": "Email, proposal, CRM-workflow, and order tools for the golfballs.com admin CRM.",
   "permissions": [
     "activeTab",
     "scripting",
@@ -15,16 +15,26 @@
     "downloads"
   ],
   "host_permissions": [
-    "<all_urls>",
+    "*://*.golfballs.com/*",
+    "*://*.icustomize.com/*",
+    "*://*.gbcadmin.com/*",
+    "*://snugzusa.com/*",
+    "*://*.snugzusa.com/*",
+    "*://hpgbrands.com/*",
+    "*://*.hpgbrands.com/*",
+    "*://*.customizationapplications.com/*",
     "http://s.customizationapps.com/*",
-    "https://www.icustomize.com/*",
+    "https://s.customizationapps.com/*",
+    "https://d1tp32r8b76g0z.cloudfront.net/*",
+    "https://brmth7.a.searchspring.io/*",
+    "https://*.execute-api.us-east-2.amazonaws.com/*",
     "https://graph.microsoft.com/*",
     "https://login.microsoftonline.com/*"
   ],
   "web_accessible_resources": [
     {
-      "resources": ["charge.html", "charge.js", "editor.html", "playground.html", "sandbox.html", "react-dist/sandbox/sandbox-eval.js", "assets/photo_ball.jpg", "assets/golfball_model/Golf_ball.obj", "assets/poker_chip_model/PokerChip.obj", "assets/divot_tool_model/DivotTool.obj", "assets/bartender_tool_model/BartenderTool.obj", "assets/marker_model/BallMarker.obj", "assets/giftbox_model/GiftBox.obj", "assets/giftbox_model/GiftBox_Lever.obj", "assets/giftbox_model/GiftBox_Bartender.obj", "assets/giftbox_model/GiftBox_WoodPoker.obj", "assets/giftbox_model/GiftBox_WoodLever.obj", "assets/giftbox_model/wood_diff.jpg", "assets/metal_texture/worn_metal_rough.jpg", "assets/metal_texture/worn_metal_normal.png", "assets/tee_model/Tee.obj", "assets/golden_gate_hills_4k.exr", "assets/lilienstein_4k.exr", "assets/moonlit_golf_4k.exr", "assets/sunset_fairway_4k.exr", "assets/mockup_base.png"],
-      "matches": ["<all_urls>"]
+      "resources": ["editor.html", "playground.html", "sandbox.html", "react-dist/sandbox/sandbox-eval.js", "assets/photo_ball.jpg", "assets/golfball_model/Golf_ball.obj", "assets/poker_chip_model/PokerChip.obj", "assets/divot_tool_model/DivotTool.obj", "assets/bartender_tool_model/BartenderTool.obj", "assets/marker_model/BallMarker.obj", "assets/giftbox_model/GiftBox.obj", "assets/giftbox_model/GiftBox_Lever.obj", "assets/giftbox_model/GiftBox_Bartender.obj", "assets/giftbox_model/GiftBox_WoodPoker.obj", "assets/giftbox_model/GiftBox_WoodLever.obj", "assets/giftbox_model/wood_diff.jpg", "assets/metal_texture/worn_metal_rough.jpg", "assets/metal_texture/worn_metal_normal.png", "assets/tee_model/Tee.obj", "assets/golden_gate_hills_4k.exr", "assets/lilienstein_4k.exr", "assets/moonlit_golf_4k.exr", "assets/sunset_fairway_4k.exr", "assets/mockup_base.png"],
+      "matches": ["*://*.golfballs.com/*", "*://*.icustomize.com/*"]
     }
   ],
   "sandbox": {

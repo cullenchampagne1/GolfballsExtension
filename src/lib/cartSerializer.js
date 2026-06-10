@@ -30,8 +30,9 @@
    ─────────────────────────────────────────────────────────────────────────── */
 
 import { giftSetLadder, buildBundleBlock } from './giftSets.js';
+import { API } from './constants.js';
 
-const ICU = 'https://master.api.icustomize.com/user';
+const ICU = API.MASTER_USER;
 export const SAVE_CART_URL = `${ICU}/saveCart`;
 export const getCartUrl = (cartNumber) => `${ICU}/getCart/${encodeURIComponent(cartNumber)}`;
 
@@ -1050,7 +1051,12 @@ export function freeLinesFromPromo(promotion, lines) {
   const out = [];
   free.forEach((f, i) => {
     const key = String(f.itemGuid || '').replace(/-PROMO$/i, '');
-    const src = byKey.get(key) || byKey.get(String(f.itemGuid || '')) || (lines || [])[0];
+    // Map the granted free item back to ITS source line only. If that line is
+    // gone (the rep removed the item the promo keyed off), drop the free line —
+    // do NOT fall back to lines[0], which would re-attach the giveaway to an
+    // unrelated product. (The promo is re-validated on every proposal change, so
+    // a still-qualifying promo always has a live source line to map to.)
+    const src = byKey.get(key) || byKey.get(String(f.itemGuid || ''));
     if (!src) return;
     out.push({
       id: 'free-' + (f.itemGuid || i),

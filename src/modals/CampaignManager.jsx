@@ -1061,7 +1061,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const mainCount = steps.filter((s) => !s.parentId).length;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', zIndex: 2147483000 }}>
+    <div style={{ position: 'fixed', inset: 0, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', zIndex: 'var(--gb-z-max)' }}>
       {/* The shared ModalShell (non-draggable card) keeps chrome + the
           bounce-in consistent with every other modal. Fixed-pixel size (not
           vw/vh) so the modal-scale `zoom` on the mount host scales it

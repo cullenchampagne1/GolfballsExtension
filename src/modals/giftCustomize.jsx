@@ -1,5 +1,5 @@
 import React, { useState, useEffect, createContext, useContext, useMemo, useCallback, useRef } from 'react';
-import { Btn, Tag, Dot, DraggablePopup, Segmented, CompactModal, ModalHeader, ModalFooter, Slider, IconBtn, Dropdown } from '../ui/index.js';
+import { Btn, Tag, Dot, DraggablePopup, Segmented, CompactModal, ModalHeader, ModalFooter, Slider, IconBtn, Dropdown, Spinner } from '../ui/index.js';
 import { motion, AnimatePresence } from 'motion/react';
 import { Icon, I } from '../ui/icons.jsx';
 import { GolfballViewer } from './GolfballViewer.jsx';
@@ -450,7 +450,7 @@ const AG_RADIUS = 9;
 function AlignRing() {
   return (
     <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-      <div style={{ height: '70%', aspectRatio: '1 / 1', maxWidth: 240, maxHeight: 240, borderRadius: '50%', border: '2px solid var(--gb-brand-label)', boxShadow: '0 0 0 9999px rgba(0,0,0,.55)' }} />
+      <div style={{ height: '70%', aspectRatio: '1 / 1', maxWidth: 240, maxHeight: 240, borderRadius: '50%', border: '2px solid var(--gb-brand-label)', boxShadow: '0 0 0 9999px var(--gb-overlay-strong)' }} />
       <div style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, background: 'var(--gb-brand-label)', opacity: 0.4 }} />
       <div style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, background: 'var(--gb-brand-label)', opacity: 0.4 }} />
     </div>
@@ -2077,7 +2077,7 @@ export function ProductOptions({ p, onChange }) {
 
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', color: 'var(--gb-text-muted)', fontSize: 11.5 }}>
-      <span style={{ width: 12, height: 12, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} /> Loading options…
+      <Spinner size={12} thickness={1.5} variant="brand" /> Loading options…
     </div>
   );
   if (!propLabels.length) return null;

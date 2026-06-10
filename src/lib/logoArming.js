@@ -16,6 +16,8 @@
      window.__gbHideHoverBtn()         — hide the floating affordance
 ─────────────────────────────────────────────────────────────── */
 
+import { API, CRM_PAGES } from './constants.js';
+
 const CDN_HOST = 's.customizationapps.com';
 const ALT_HOST = 'www.icustomize.com';
 
@@ -198,7 +200,7 @@ function findItemLinkForImage(img) {
     for (const a of anchors) {
       const name = a.getAttribute('name');
       if (isItemId(name) && current.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_PRECEDING) {
-        return `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=253&itemID=${name}`;
+        return `${API.CRM_ADMIN}Default.aspx?Page=${CRM_PAGES.PRODUCT}&itemID=${name}`;
       }
     }
     current = current.parentNode;
@@ -207,7 +209,7 @@ function findItemLinkForImage(img) {
   current = img;
   while (current && current !== document.body) {
     if (isItemId(current.id)) {
-      return `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=253&itemID=${current.id}`;
+      return `${API.CRM_ADMIN}Default.aspx?Page=${CRM_PAGES.PRODUCT}&itemID=${current.id}`;
     }
     current = current.parentNode;
   }
@@ -329,7 +331,7 @@ function resolveExpressOriginal(rawSrc, done) {
   const timer = setTimeout(() => { LOG('express: editOrder timed out (6s)'); finish(null); }, 6000);
   try {
     chrome.runtime.sendMessage(
-      { action: 'chargeApiProxy', url: 'https://master.api.icustomize.com/admin/editOrder', method: 'PUT', body: { messageID: messageId } },
+      { action: 'chargeApiProxy', url: `${API.MASTER}/admin/editOrder`, method: 'PUT', body: { messageID: messageId } },
       (resp) => {
         if (chrome.runtime.lastError || !resp || !resp.ok || !resp.text) {
           LOG('express: editOrder request failed (' + (chrome.runtime.lastError?.message || ('status ' + (resp && resp.status))) + ')');

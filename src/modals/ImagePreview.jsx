@@ -1746,7 +1746,7 @@ function AlignmentOverlay() {
           maxWidth: 240, maxHeight: 240,
           borderRadius: '50%',
           border: '2px solid var(--gb-brand-label)',
-          boxShadow: `0 0 0 9999px rgba(0,0,0,.55)`,
+          boxShadow: `0 0 0 9999px var(--gb-overlay-strong)`,
         }}
       />
       {/* Crosshair guides — paint thin brand-tinted lines through the

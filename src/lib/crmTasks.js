@@ -13,7 +13,9 @@
    shared session cookies.
 ─────────────────────────────────────────────────────────────── */
 
-const BASE = 'https://api.golfballs.com';
+import { API } from './constants.js';
+
+const BASE = API.CRM;
 const TASKS_ENDPOINT = `${BASE}/golfballs/adminnew/Default.aspx?Page=349`;
 
 function contactIdFromHref(href) {

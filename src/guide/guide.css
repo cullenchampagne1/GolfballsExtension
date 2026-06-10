@@ -364,3 +364,11 @@ h3.sub { font-size: 15.5px; font-weight: 700; color: var(--gb-text-primary); mar
    elements to their final visible state — CSS-class-based dimming
    (disabled, completed) is untouched. */
 .gb-livemodal-box .gb-modal-card [style*="opacity"] { opacity: 1 !important; }
+
+/* Wide LiveStage — for table-sized modals (Task List, CRM Search): the
+   frame spans the full content width and the legend/player sits below,
+   so a ~1000px modal renders 1:1 with no scaling (keeps Tour pins +
+   the Play cursor pixel-accurate). */
+.gb-livestage.wide .gb-ls-body { grid-template-columns: 1fr; }
+.gb-livestage.wide .gb-ls-framewrap { border-right: none; border-bottom: 1px solid var(--gb-border-subtle); min-height: 0; }
+.gb-livestage.wide .gb-ls-side { padding: 16px 22px; }

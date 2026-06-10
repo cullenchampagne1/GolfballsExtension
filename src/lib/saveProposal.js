@@ -17,6 +17,7 @@
 import { assembleLine, buildSaveCartBody, buildSaveProposalBody, buildCustomItemLine, buildCartData, buildAsCartContents, decorationFromCartItem } from './cartSerializer.js';
 import { runEngine } from './page-engine/index.js';
 import { needsIngest, ingestImageUrl, saveCustomItem } from './customItems.js';
+import { API } from './constants.js';
 
 // golfballs.com second-pole upcharge per dozen (Logo / Text), added on top of
 // the custom-logo ladder for a dual-pole imprint. Mirrors the modal's pricing.
@@ -227,8 +228,11 @@ export async function validatePromo(proposal, promoCode, { country = null } = {}
   return promotion;
 }
 
-/* Server save (PUT /user/saveCart) — kept for the future "Send proposal" flow;
-   Save draft is clipboard-only for now. Resolves to { cartNumber, cartID, … }. */
+/* Server save (PUT /user/saveCart) — kept for the future "Send proposal" flow.
+   NOTE: drafts already persist to chrome.storage via saveProposalDraft/
+   loadSavedProposals/updateSavedProposal; this server save is separate and
+   currently only used by the opportunity-save path. Resolves to
+   { cartNumber, cartID, … }. */
 export async function saveProposalToServer(proposal, { proposalID = null, customerID = 0, salesRepID = 0 } = {}) {
   if (!proposal || !proposal.length) throw new Error('Proposal is empty');
   const { items, skipped } = await buildProposalLines(proposal);
@@ -246,7 +250,7 @@ export async function saveProposalToServer(proposal, { proposalID = null, custom
    an account is read off the account detail page (Page=271, #TableOpportunities)
    via the existing page-engine extraction — no dedicated JSON endpoint needed.
    ─────────────────────────────────────────────────────────────────────────── */
-const CRM_ADMIN = 'https://api.golfballs.com/golfballs/adminnew/';
+const CRM_ADMIN = API.CRM_ADMIN;
 
 /* Account detail page URL. NOTE: the account-id query param is reverse-engineered
    (AccountID, matching the page's #AccountID field) — verify live; some CRM pages
@@ -453,7 +457,7 @@ export function cartToEntry(cartData, meta = {}) {
    update the opportunity's estimated value (Opportunity Get→Update, preserving
    subject/description/lead/stage). All credentialed via the CRM relay. Throws if
    the track step fails; the opp-value update is best-effort. */
-const _crmBase = 'https://api.golfballs.com/golfballs/crm/Admin/';
+const _crmBase = API.CRM_CRM;
 function _crmAjax(url, opts = {}) { return sendBg('crmAjax', { url, method: opts.method || 'GET', body: opts.body, contentType: opts.contentType }); }
 function _toISODate(s) {
   const m = /(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(s || ''));
@@ -583,18 +587,24 @@ function _writeSaved(list) {
   });
 }
 
-/* Snapshot the current proposal as a named draft; prepend to the library. */
-export async function saveProposalDraft(name, proposal) {
+/* Snapshot the current proposal as a named draft; prepend to the library.
+   `promotion` is the resolved /user/promotion object (from validatePromo) when a
+   coupon is applied — persisted so reloading the draft restores the promo (the
+   load path reads entry.promotion). The per-line `free` flag is preserved too,
+   so free giveaway lines reload as free, not as ordinary $0 lines. */
+export async function saveProposalDraft(name, proposal, promotion = null) {
   if (!proposal || !proposal.length) throw new Error('Proposal is empty');
   const list = await loadSavedProposals();
   const entry = {
     id: 'prop-' + _rid(),
     name: (name && name.trim()) || 'Untitled draft',
     date: new Date().toISOString().slice(0, 10),
+    promotion: (promotion && promotion.promo) ? promotion : null,
     lines: proposal.map((l) => ({
       product: l.product,
       decoration: l.decoration || null,
       variant: l.variant || null,
+      free: !!l.free,
       splits: (l.splits || []).map((s) => ({ qty: s.qty, price: s.price })),
     })),
   };
@@ -644,6 +654,7 @@ export function saveCurrentProposal(lines) {
     product: l.product,
     decoration: l.decoration || null,
     variant: l.variant || null,
+    free: !!l.free,
     splits: (l.splits || []).map((s) => ({ ...s })),
   }));
   return new Promise((resolve) => {
@@ -663,6 +674,7 @@ export function linesFromSaved(entry, ridFn) {
     product: l.product,
     decoration: l.decoration || undefined,
     variant: l.variant || undefined,
+    free: !!l.free,
     splits: (l.splits || []).map((s) => ({ id: mk(), qty: s.qty, price: s.price })),
   }));
 }

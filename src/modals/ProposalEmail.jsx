@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
-import { Btn, IconBtn } from '../ui/index.js';
+import { Btn, IconBtn, Input, Textarea, Checkbox, Spinner, useTransientFlag } from '../ui/index.js';
 import { I } from '../ui/icons.jsx';
 import { EmailHtmlView } from '../ui/components/EmailHtmlView.jsx';
 import { GolfballViewer } from './GolfballViewer.jsx';
@@ -372,30 +372,25 @@ function ConfigGroup({ title, children }) {
 }
 
 function EmailField({ label, value, onChange, placeholder, mono, area, half }) {
-  const [focus, setFocus] = useState(false);
-  const common = {
-    width: '100%', boxSizing: 'border-box', padding: area ? '8px 10px' : '0 10px', height: area ? 'auto' : 32,
-    background: 'var(--gb-fill-inverse-medium)', borderRadius: 'var(--gb-r-sm)',
-    border: '1px solid ' + (focus ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
-    outline: 'none', color: 'var(--gb-text-primary)', fontFamily: mono ? 'var(--gb-font-mono)' : 'var(--gb-font-sans)',
-    fontSize: 12.5, fontWeight: 500, transition: 'all var(--gb-anim)', resize: 'vertical',
-  };
   return (
     <div style={{ flex: half ? 1 : 'none', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
       <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>{label}</label>
       {area
-        ? <textarea rows={3} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} style={common} />
-        : <input value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)} style={common} />}
+        ? <Textarea rows={3} value={value} placeholder={placeholder} onChange={onChange} resize="vertical" />
+        : <Input value={value} placeholder={placeholder} mono={mono} onChange={onChange} />}
     </div>
   );
 }
 
 function OptionToggle({ checked, label, hint, onClick, disabled }) {
   const [hover, setHover] = useState(false);
+  const on = checked && !disabled;
   return (
     <div onClick={disabled ? undefined : onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px', borderRadius: 'var(--gb-r-md)', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? .45 : 1, background: (checked && !disabled) ? 'var(--gb-brand-tint-soft)' : (hover && !disabled) ? 'var(--gb-fill-subtle)' : 'transparent', border: '1px solid ' + ((checked && !disabled) ? 'var(--gb-brand-tint-border)' : 'transparent'), transition: 'all var(--gb-anim)' }}>
-      <div style={{ width: 17, height: 17, flexShrink: 0, marginTop: 1, borderRadius: 5, background: (checked && !disabled) ? 'var(--gb-brand-label)' : 'var(--gb-fill-inverse-strong)', border: '1px solid ' + ((checked && !disabled) ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'), color: 'var(--gb-surface-deep)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all var(--gb-anim)' }}>{checked && !disabled && <I.check size={11} strokeWidth={3} />}</div>
+      style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 10px', borderRadius: 'var(--gb-r-md)', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? .45 : 1, background: on ? 'var(--gb-brand-tint-soft)' : (hover && !disabled) ? 'var(--gb-fill-subtle)' : 'transparent', border: '1px solid ' + (on ? 'var(--gb-brand-tint-border)' : 'transparent'), transition: 'all var(--gb-anim)' }}>
+      {/* Shared checkbox as the visual indicator — the row is the click target,
+          so the box has no onChange (clicks bubble up to the row's onClick). */}
+      <Checkbox checked={on} style={{ marginTop: 1, pointerEvents: 'none' }} />
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)' }}>{label}</div>
         {hint && <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1, lineHeight: 1.4 }}>{hint}</div>}
@@ -466,7 +461,7 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
   const [expiration, setExpiration] = useState(() => { const d = new Date(); d.setDate(d.getDate() + 14); return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`; });
   const [templateId, setTemplateId] = useState('classic');
   const [show, setShow] = useState({ images: true, previews: false, cost: true, total: true, expiration: true, disclaimer: true, cta: true, message: false });
-  const [copied, setCopied] = useState(false);
+  const [copied, flash] = useTransientFlag(1800);
   const [submitted, setSubmitted] = useState(false);   // current-proposal: Submit → Copy once generated
   const [submitting, setSubmitting] = useState(false);  // server track in flight
 
@@ -528,7 +523,6 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
   // VIEW-only wrapper — the copied HTML stays the untouched `emailHtml`.
   const previewHtml = useMemo(() => `<div style="text-align:center;"><div style="display:inline-block; text-align:left;">${emailHtml}</div></div>`, [emailHtml]);
 
-  const flash = () => { setCopied(true); setTimeout(() => setCopied(false), 1800); };
   // Copy RICH — write the HTML to the clipboard as `text/html` so pasting into a
   // mail client / doc renders the FORMATTING (writeText only copies the raw markup
   // string, which is what pasted as literal HTML before). text/plain carries the
@@ -661,7 +655,7 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
           <div style={{ flex: 1 }} />
           <Btn variant="ghost" size="md" icon={<I.copy />} onClick={copySource}>Copy source</Btn>
           {hasLink && !submitted
-            ? <Btn variant="primary" size="md" icon={submitting ? <span style={{ width: 13, height: 13, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', display: 'inline-block', animation: 'gb-spin .7s linear infinite' }} /> : <I.send />} onClick={submit}>{submitting ? 'Submitting…' : 'Submit'}</Btn>
+            ? <Btn variant="primary" size="md" icon={submitting ? <Spinner size={13} thickness={1.5} /> : <I.send />} onClick={submit}>{submitting ? 'Submitting…' : 'Submit'}</Btn>
             : <Btn variant="primary" size="md" icon={copied ? <I.check /> : <I.copy />} onClick={copyRich}>{copied ? 'Copied' : 'Copy'}</Btn>}
         </div>
     </div>

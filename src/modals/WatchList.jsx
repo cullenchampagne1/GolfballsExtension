@@ -7,6 +7,7 @@ import {
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { getPageContext } from '../lib/pageContext.js';
+import { API, CRM_PAGES } from '../lib/constants.js';
 
 /* ───────────────────────────────────────────────────────────────
    WatchList — "My Watch List" modal. Visual structure mirrors
@@ -1030,7 +1031,7 @@ function contextUrl(ctx) {
   if (!ctx?.id) return '';
   const id = String(ctx.id);
   if (ctx.type === 'order')   return `https://api.golfballs.com/golfballs/adminNew/default.aspx?Page=222&orderID=${id}`;
-  if (ctx.type === 'contact') return `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=240&customerID=${id}`;
+  if (ctx.type === 'contact') return `${API.CRM_ADMIN}Default.aspx?Page=${CRM_PAGES.CONTACT_DETAIL}&customerID=${id}`;
   if (ctx.type === 'account') return `https://api.golfballs.com/golfballs/adminNew/default.aspx?Page=271&accountID=${id}`;
   return '';
 }

@@ -28,7 +28,9 @@
    toast, so the rep sees what went wrong without needing devtools.
 ─────────────────────────────────────────────────────────────── */
 
-const BASE = 'https://api.golfballs.com';
+import { API } from './constants.js';
+
+const BASE = API.CRM;
 
 const hasChromeRuntime = () => {
   try { return typeof chrome !== 'undefined' && !!chrome.runtime?.sendMessage; }

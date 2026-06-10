@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   FloatingPanel, ModalHeader,
-  Btn, Kbd, TYPE_ICONS,
+  Btn, Kbd, TYPE_ICONS, EmptyState, StatusBadge,
   KeyboardComposer, useComposerFilter, COMPOSER_TONE, DueControl,
   Icon, I, useToast,
 } from '../ui/index.js';
@@ -344,7 +344,7 @@ function TaskRow({ tpl, hotkey, isActive, flashing, rowRef, onFocus, onKeyDown, 
     >
       <span aria-hidden style={{ position: 'absolute', left: 0, top: 7, bottom: 7, width: 3, borderRadius: 3, background: tone.solid, transform: isActive ? 'scaleY(1)' : hover ? 'scaleY(.4)' : 'scaleY(0)', opacity: isActive ? 1 : hover ? 0.55 : 0, boxShadow: isActive ? `0 0 8px ${tone.solid}` : 'none', transition: 'transform .2s cubic-bezier(.34,1.4,.64,1), opacity .18s ease' }} />
       <span style={{ display: 'flex', justifyContent: 'center' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 17, height: 17, padding: '0 4px', borderRadius: 4, fontSize: 9.5, fontWeight: 700, fontFamily: 'var(--gb-font-mono)', background: isActive ? tone.bgMed : 'var(--gb-fill-inverse-medium)', border: `1px solid ${isActive ? tone.bd : 'var(--gb-border-default)'}`, color: isActive ? tone.fg : 'var(--gb-text-tertiary)', transition: 'all .15s' }}>{hotkey}</span>
+        <StatusBadge active={isActive} tone={tone}>{hotkey}</StatusBadge>
       </span>
       <span style={{ display: 'flex', justifyContent: 'center', color: tone.fg }}><TYPE_ICONS.task size={15} /></span>
       <span style={{ minWidth: 0 }}>
@@ -369,13 +369,11 @@ function ListHint({ children }) {
 
 function BuildPrompt({ onBuild, text }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '24px 16px', textAlign: 'center' }}>
-      <I.search size={20} style={{ color: 'var(--gb-text-ghost)' }} />
-      <div style={{ fontSize: 12, color: 'var(--gb-text-tertiary)', fontWeight: 600 }}>{text}</div>
+    <EmptyState icon={<I.search size={20} />} title={text}>
       <button type="button" className="clr-focusable clr-no-lift" onClick={onBuild}
         style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 13px', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', borderRadius: 'var(--gb-r-md)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
         <I.plus size={13} /> Build a task <Kbd>↵</Kbd>
       </button>
-    </div>
+    </EmptyState>
   );
 }

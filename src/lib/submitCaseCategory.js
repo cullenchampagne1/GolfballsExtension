@@ -7,7 +7,9 @@
    through the background fetchRaw bridge for the right session cookies.
 ─────────────────────────────────────────────────────────────── */
 
-const BASE = 'https://api.golfballs.com';
+import { API } from './constants.js';
+
+const BASE = API.CRM;
 
 const send = (msg) => new Promise((res) => {
   try { chrome.runtime.sendMessage(msg, (r) => { if (chrome.runtime.lastError) res(null); else res(r); }); }

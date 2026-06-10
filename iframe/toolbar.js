@@ -1,6 +1,18 @@
 // toolbar.js — quick-note toolbar, calendar button, note buttons + observers
 // Depends on: note-sender.js, calendar-bridge.js
 
+/* Target origin for messages posted UP to the embedding CRM page — derived
+   from the actual parent (ancestorOrigins → referrer) instead of '*', so the
+   rep name / employee ID aren't broadcast to an arbitrary embedder. */
+const __gbToolbarParentOrigin = (() => {
+  try {
+    const a = window.location.ancestorOrigins;
+    if (a && a.length) return a[0];
+    if (document.referrer) return new URL(document.referrer).origin;
+  } catch { /* fall through */ }
+  return '*';
+})();
+
   // ── Sales rep detection: scans notes, broadcasts name to parent ──────────
   /**
    * Scans the notes section body text for a "was assigned to [name]" pattern
@@ -13,7 +25,7 @@
     if (m) {
       window.__gbRepFound = true;
       const name = m[1] + (m[2] ? ' ' + m[2].charAt(0) : '');
-      window.parent.postMessage({ action: 'GB_SALES_REP_FOUND', salesRep: name.trim() }, '*');
+      window.parent.postMessage({ action: 'GB_SALES_REP_FOUND', salesRep: name.trim() }, __gbToolbarParentOrigin);
     }
   }
 
@@ -243,6 +255,6 @@ function __gbRenderQuickNotes() {
       if (!token) return;
       const payload = JSON.parse(atob(token.split('.')[1]));
       const id = payload.adminUserID || payload.employeeID || payload.EmployeeID || payload.sub;
-      if (id) window.parent.postMessage({ action: 'GB_EMPLOYEE_ID', employeeId: String(id) }, '*');
+      if (id) window.parent.postMessage({ action: 'GB_EMPLOYEE_ID', employeeId: String(id) }, __gbToolbarParentOrigin);
     } catch (_) {}
   })();

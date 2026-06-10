@@ -275,10 +275,52 @@
   --gb-r-xl: 14px;
   --gb-r-pill: 999px;
 
+  /* ─── Type scale ─────────────────────────
+     Canonical font-size steps. The codebase still hardcodes ~60 sizes
+     (incl. half-px like 9.5/11.5); these are the steps to migrate onto. */
+  --gb-text-2xs:  9px;
+  --gb-text-xs:  10px;
+  --gb-text-sm:  11px;
+  --gb-text-base:12px;
+  --gb-text-md:  13px;
+  --gb-text-lg:  14px;
+  --gb-text-xl:  16px;
+  --gb-text-2xl: 18px;
+  --gb-text-3xl: 24px;
+
+  /* ─── Z-index scale ──────────────────────
+     One ladder for every stacking context so layers can't fight with
+     ad-hoc magic numbers (the worst offender was 2147483000). */
+  --gb-z-base:      1;
+  --gb-z-dropdown:  10;
+  --gb-z-sticky:    20;
+  --gb-z-overlay:   30;
+  --gb-z-modal:     100;
+  --gb-z-toast:     999990;
+  --gb-z-max:       2147483000;  /* content-script overlays that must beat host-page z-index */
+
+  /* ─── Overlay / scrim ────────────────────
+     In-component darkening (image overlays, loading veils). Distinct from
+     --gb-backdrop, which is the per-theme MODAL backdrop. */
+  --gb-overlay-soft:   rgba(0, 0, 0, 0.2);
+  --gb-overlay-medium: rgba(0, 0, 0, 0.35);
+  --gb-overlay-strong: rgba(0, 0, 0, 0.55);
+
+  /* ─── Blur scale ─────────────────────────
+     For backdrop-filter / glass surfaces. (--gb-backdrop-blur stays as the
+     modal-backdrop default.) */
+  --gb-blur-subtle: blur(4px);
+  --gb-blur-medium: blur(8px);
+  --gb-blur-strong: blur(16px);
+
   /* ─── Motion ─────────────────────────── */
   --gb-anim-fast:   .12s cubic-bezier(.4,0,.2,1);
   --gb-anim:        .18s cubic-bezier(.4,0,.2,1);
   --gb-anim-bounce: .28s cubic-bezier(.34,1.4,.64,1);
+  /* Standalone easings for ad-hoc inline transitions that need a custom
+     duration but should still use the system curve. */
+  --gb-ease:        cubic-bezier(.4,0,.2,1);
+  --gb-ease-bounce: cubic-bezier(.34,1.4,.64,1);
 }
 
 /* ════════════════════════════════════════════════════════════

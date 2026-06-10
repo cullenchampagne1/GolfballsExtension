@@ -35,7 +35,7 @@ function CursorSVG() {
   );
 }
 
-export function LiveStage({ width = 320, frameLabel, frameKind = 'popup', render, callouts = [], steps = [], note }) {
+export function LiveStage({ width = 320, frameLabel, frameKind = 'popup', render, callouts = [], steps = [], note, wide = false }) {
   const stageRef = useRef(null);
   const apiRef = useRef(null);
   const [mode, setMode] = useState(callouts.length ? 'tour' : 'plain'); // 'tour' | 'play' | 'plain'
@@ -127,7 +127,7 @@ export function LiveStage({ width = 320, frameLabel, frameKind = 'popup', render
   const curStep = mode === 'play' && stepIdx >= 0 && stepIdx < steps.length ? steps[stepIdx] : null;
 
   return (
-    <div className="gb-livestage">
+    <div className={`gb-livestage${wide ? ' wide' : ''}`}>
       {/* mode tabs */}
       <div className="gb-ls-tabs">
         {callouts.length > 0 && (
@@ -157,7 +157,9 @@ export function LiveStage({ width = 320, frameLabel, frameKind = 'popup', render
               <span className="gb-ls-chrome-label">{frameLabel}</span>
             </div>
           )}
-          <div className={`gb-ls-frame ${frameKind}`} style={{ width }}>
+          {/* Wide mode fills the (full-width) framewrap so a table modal
+              with fr columns reflows to fit instead of overflowing. */}
+          <div className={`gb-ls-frame ${frameKind}`} style={{ width: wide ? '100%' : width, maxWidth: '100%' }}>
             <div className="gb-ls-stage" ref={stageRef}>
               <div key={runKey}>{render(apiRef, helpers)}</div>
 

@@ -200,6 +200,10 @@ async function gbGetProductConfig(rawUrl) {
 // fabric userImage is a centered placement (their crop is axis-aligned — no
 // rotate — which is why we bake rotation into the pixels). Returns the pieces
 // the cart line needs: { filePath, fileName, cropFilePath, userImage }.
+/* icustomize's image-convert service, passed as the ?url= that /user/cropImage
+   fetches. The '/dev/' segment is icustomize's API Gateway STAGE NAME (captured
+   from the live golfballs.com traffic) — NOT our environment. Do not "fix" it to
+   /prod/: there is no such stage and the crop would 404. */
 const GB_CONVERT_URL = 'https://7uyieah5s5.execute-api.us-east-2.amazonaws.com/dev/convert';
 
 // The fabric.js image object the cart stores (customUserImage.firstPole.userImage)
@@ -246,7 +250,13 @@ async function gbUploadCustomLogo({ dataUrl, fileName = 'logo.png' }) {
       body: JSON.stringify({ userImage, url: GB_CONVERT_URL + '?fileName=' + publicUrl }),
     });
     if (cr.ok) cropFilePath = (await cr.json()).url || '';
-  } catch (e) { /* crop is best-effort; the upload + fabric still drive the cart */ }
+    else console.warn('[GB] cropImage HTTP ' + cr.status + ' — logo will render without the cropped overlay');
+  } catch (e) {
+    /* crop is best-effort; the upload + fabric still drive the cart. Log it so
+       a broken/changed convert endpoint is diagnosable instead of silently
+       producing logo-less carts. */
+    console.warn('[GB] cropImage failed (convert endpoint?):', (e && e.message) || e);
+  }
   return { filePath, fileName, cropFilePath, userImage };
 }
 
@@ -479,7 +489,36 @@ async function gbResolveInvTarget(sender) {
   return null;
 }
 
+/* Hosts the URL-taking proxies (fetchRaw / proxyFetchImage) may reach.
+   These proxies fetch with the user's session cookies, so an arbitrary URL
+   would let a malicious code-variable or injected frame exfiltrate CRM data
+   (the request is sent — and any data in its query string leaked — even when
+   CORS hides the response). Restricting to first-party data hosts closes that
+   without affecting real callers (EmailRunner, image preview, code recipes all
+   target these). Mirrors manifest host_permissions, minus the Microsoft OAuth
+   endpoints, which are reached only by the dedicated graph/token handlers. */
+function gbIsAllowedFetchHost(url) {
+  let host;
+  try { host = new URL(url, 'https://www.golfballs.com').hostname.toLowerCase(); }
+  catch { return false; }
+  return /(^|\.)golfballs\.com$/.test(host)
+      || /(^|\.)icustomize\.com$/.test(host)
+      || /(^|\.)gbcadmin\.com$/.test(host)
+      || /(^|\.)customizationapplications\.com$/.test(host)
+      || host === 's.customizationapps.com'
+      || host === 'd1tp32r8b76g0z.cloudfront.net'
+      || /(^|\.)hpgbrands\.com$/.test(host)
+      || host === 'brmth7.a.searchspring.io'
+      || host === 'snugzusa.com';
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+
+  /* Only service messages from this extension's own contexts (content
+     scripts, popup, editor). No externally_connectable is declared, so this
+     is defense-in-depth: it fails safe if that ever changes and documents
+     that page/other-extension senders are not trusted. */
+  if (sender.id !== chrome.runtime.id) return;
 
   // ── Relay a message to all frames in the sender's tab ──────────────────────
   if (msg.action === 'broadcastToFrames' && msg.payload) {
@@ -494,6 +533,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   
   // ── 1. Image Proxy ─────────────────────────────────────────
   if (msg.action === 'proxyFetchImage' && msg.url) {
+    if (!gbIsAllowedFetchHost(msg.url)) { sendResponse({ ok: false, error: 'Blocked host' }); return true; }
     // credentials:'include' so session-gated render endpoints succeed: the
     // express Render.aspx (icustomize / customizationapplications) only
     // returns the composited image when the logged-in cookie is sent —
@@ -523,6 +563,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
    * included (credentials:'include'). Used by the email preview feature.
    */
   if (msg.action === 'fetchRaw' && msg.url) {
+    if (!gbIsAllowedFetchHost(msg.url)) { sendResponse({ ok: false, status: 0, text: '', error: 'Blocked host' }); return true; }
     const opts = { credentials: 'include' };
     if (msg.method && msg.method.toUpperCase() !== 'GET') {
       opts.method = msg.method.toUpperCase();
@@ -1235,20 +1276,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: false, status: 0, text: '', error: err.name + ': ' + err.message });
       }
     });
-    return true;
-  }
-
-    // ── 6. Open Charge Window ───────────────────────────────────
-  if (msg.action === 'openChargeWindow') {
-    chrome.storage.local.set({ chargeContext: msg.context }, () => {
-      chrome.windows.create({
-        url: chrome.runtime.getURL('charge.html'),
-        type: 'popup',
-        width: 500,
-        height: 600
-      });
-    });
-    sendResponse({ success: true });
     return true;
   }
 

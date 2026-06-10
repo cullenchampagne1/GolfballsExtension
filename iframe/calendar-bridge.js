@@ -2,6 +2,19 @@
 // ALL chrome.runtime.sendMessage calendar calls live here so cookies work.
 // Depends on: note-sender.js, date-utils.js
 
+/* Target origin for messages posted UP to the embedding CRM page. Derive
+   the real parent origin (ancestorOrigins → referrer) so we don't broadcast
+   calendar/order data to an arbitrary embedder with '*'. Falls back to '*'
+   only if the parent origin can't be determined. */
+const __gbParentOrigin = (() => {
+  try {
+    const a = window.location.ancestorOrigins;
+    if (a && a.length) return a[0];
+    if (document.referrer) return new URL(document.referrer).origin;
+  } catch { /* fall through */ }
+  return '*';
+})();
+
 
 // ── Background-proxied fetch helpers (called from iframe — cookies flow) ───────
 /**
@@ -97,7 +110,7 @@ function __gbCalendarFinalSubmit(url, state) {
  * @returns {Promise<void>}
  */
 async function __gbRunCalendarChain(calendarUrl, calState, approvalOffset, commitmentOffset) {
-  const up = (action, payload) => window.parent.postMessage({ action, ...payload }, '*');
+  const up = (action, payload) => window.parent.postMessage({ action, ...payload }, __gbParentOrigin);
 
   try {
     up('GB_CALENDAR_STEP', { step: 1, label: 'Selecting approval date…' });
@@ -160,7 +173,7 @@ async function __gbShowCalendarModal() {
         defaultApproval:   __gbParseDateFromCell('ctl00_ApprovalDate',      doc),
         defaultCommitment: __gbParseDateFromCell('ctl00_DeviveryCommitment', doc),
       }
-    }, '*');
+    }, __gbParentOrigin);
 
   } catch (err) {
     console.error('[GB] Calendar Sync Error:', err);
@@ -168,7 +181,7 @@ async function __gbShowCalendarModal() {
       action: 'GB_NOTIFY',
       message: 'Calendar sync failed: ' + String(err.message || err).slice(0, 80),
       type: 'error', duration: 5000
-    }, '*');
+    }, __gbParentOrigin);
   }
 }
 
@@ -196,7 +209,7 @@ async function __gbPushDatesAndSubmitNote(note, btn) {
   if (stateText) stateText.textContent = 'Syncing...';
   btn.classList.add('show-state', 'is-saving');
 
-  const up = (action, payload) => window.parent.postMessage({ action, ...payload }, '*');
+  const up = (action, payload) => window.parent.postMessage({ action, ...payload }, __gbParentOrigin);
 
   try {
     const html = await __gbFetchCalendarHtml(calendarUrl);
@@ -282,7 +295,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
   if (msg.action === 'GB_CALENDAR_SAVE') {
     if (!__gbCalendarState || !__gbCalendarUrl) {
-      window.parent.postMessage({ action: 'GB_CALENDAR_ERROR', error: 'Calendar state lost — please reopen the calendar.' }, '*');
+      window.parent.postMessage({ action: 'GB_CALENDAR_ERROR', error: 'Calendar state lost — please reopen the calendar.' }, __gbParentOrigin);
       sendResponse({ ok: false });
       return true;
     }

@@ -5,8 +5,10 @@ import {
   ProofCard,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
+import { useClickOutside } from '../ui/hooks.js';
 import { useDevSetting } from '../lib/devSettings.js';
 import { callSource, defineSource, hasExtensionContext } from '../lib/dataSource.js';
+import { CRM_PAGES } from '../lib/constants.js';
 
 /* ───────────────────────────────────────────────────────────────
    SubmitProof — React port of the proof-submission flow that used
@@ -38,13 +40,13 @@ import { callSource, defineSource, hasExtensionContext } from '../lib/dataSource
      bindClose        (close: () => void) => void
 ─────────────────────────────────────────────────────────────── */
 
-const ENDPOINT_PAGE128 = '/golfballs/adminnew/Default.aspx?Page=128';
+const ENDPOINT_PAGE128 = `/golfballs/adminnew/Default.aspx?Page=${CRM_PAGES.CONTACT_SEARCH}`;
 
 // Shared footer height — used by both the form column's real footer
 // AND the gallery column's blank "footer extender" so the two
 // visually merge into one bar across the modal's bottom edge.
 const FOOTER_HEIGHT = 52;
-const ENDPOINT_CRM240  = (custId) => `/golfballs/adminnew/Default.aspx?Page=240&customerID=${custId}`;
+const ENDPOINT_CRM240  = (custId) => `/golfballs/adminnew/Default.aspx?Page=${CRM_PAGES.CONTACT_DETAIL}&customerID=${custId}`;
 
 const ITEMS = [
   'Pad to Digital Request', 'Ball',
@@ -1291,11 +1293,7 @@ function SourceImageChip({ imageData, onRemove }) {
 function ItemMultiSelect({ items, counts, error, onAdd, onRemove, onTouch }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
-  useEffect(() => {
-    const onDown = (e) => { if (!wrapRef.current?.contains(e.target)) { setOpen(false); onTouch?.(); } };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [onTouch]);
+  useClickOutside(wrapRef, () => { setOpen(false); onTouch?.(); });
 
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   const summary = total === 0 ? 'Select items…' : `${total} item${total === 1 ? '' : 's'} selected`;

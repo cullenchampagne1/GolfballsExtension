@@ -15,8 +15,8 @@
  * verts), not placed at runtime — tees are never customized.
  *
  * All three 6-ball black-box sets share the SAME box (6-ball grid + tee well); they
- * differ only in the upper-right kit: 2 poker chips, OR 1 divot tool + 2 (empty,
- * not-yet-modeled) ball-marker spots.
+ * differ only in the upper-right kit: 2 poker chips, OR 1 divot tool + 2
+ * ball-marker discs (see MARKER_SLOTS below).
  */
 
 // MODEL_URLS keys in GolfballViewer for each baked box (walls + cut foam + tees).
@@ -44,8 +44,8 @@ const BALL_SLOTS = [
  *   scale   — for irregular tools: direct box-local scale factor (matches the foam recess)
  *   rz      — in-plane angle (deg) the item is rotated to (tools lie diagonally)
  *   decal   — true → project the shared logo onto its print face / marker disc
- * (The 2 ball-marker spots in the divot/bartender sets are left empty for now —
- *  no marker model yet — so they're not listed as kit items.)
+ * (The 2 ball-marker discs in the divot/bartender sets render via MARKER_SLOTS
+ *  with the shared logo decal; they're decorative recesses, not priced kit items.)
  */
 export const SIX_BALL_POKER_CHIP = {
   boxModel: BOX_MODELS.sixBallPokerChip,

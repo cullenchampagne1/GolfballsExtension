@@ -100,7 +100,33 @@ const RAW_TTL_MS = 30000;
 const _rawCache = new Map();     // url → { ts, ok, status, text, error }
 const _rawInflight = new Map();  // url → Promise<entry>
 const _parseCache = new Map();   // html → { schemaId, data } (avoids re-DOMParsing the same page)
+
+/* Host allowlist for code-variable fetches (h.fetchText / h.fetchJson /
+   h.product). The background fetchRaw handler enforces the same list — this
+   layer is defense-in-depth and gives the code author a clear error instead
+   of a generic network failure. A code var only ever needs first-party
+   golfballs / icustomize / catalog hosts; anything else is treated as an
+   accidental (or exfiltration) target and refused. */
+function isAllowedCodeVarHost(url) {
+  let host;
+  try { host = new URL(String(url), 'https://www.golfballs.com').hostname.toLowerCase(); }
+  catch { return false; }
+  return /(^|\.)golfballs\.com$/.test(host)
+      || /(^|\.)icustomize\.com$/.test(host)
+      || /(^|\.)gbcadmin\.com$/.test(host)
+      || /(^|\.)customizationapplications\.com$/.test(host)
+      || host === 's.customizationapps.com'
+      || host === 'd1tp32r8b76g0z.cloudfront.net'
+      || /(^|\.)hpgbrands\.com$/.test(host)
+      || host === 'brmth7.a.searchspring.io'
+      || host === 'snugzusa.com';
+}
+
 function fetchRawCached(send, url) {
+  if (!isAllowedCodeVarHost(url)) {
+    return Promise.resolve({ ts: Date.now(), ok: false, status: 0, text: '',
+      error: 'blocked host — code variables may only fetch golfballs.com / icustomize.com and related catalog hosts' });
+  }
   const cached = _rawCache.get(url);
   if (cached && (Date.now() - cached.ts) < RAW_TTL_MS) return Promise.resolve(cached);
   const existing = _rawInflight.get(url);

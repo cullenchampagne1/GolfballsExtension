@@ -65,7 +65,9 @@ function deriveSignals(doc, data) {
     'order.daysSince': daysSince(lastOrderDate),
     'order.brand': itemBlob,
     'order.keyword': itemBlob,
-    // Email / call history — TODO: scrape the contact activity log.
+    // Email / call history — NOT SUPPORTED: the contact activity log isn't
+    // scraped, so these signals are always null. Campaign conditions that
+    // reference them therefore never match (they fail safe, not error).
     'sent.subject': null,
     'sent.daysAgo': null,
     'sent.count': null,

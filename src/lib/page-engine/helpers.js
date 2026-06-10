@@ -15,6 +15,8 @@
    here don't need to parse numbers themselves.
 ─────────────────────────────────────────────────────────────── */
 
+import { API } from '../constants.js';
+
 /** Pull a value from a stat tile rendered as
  *      <tr><th>{label}</th><td>{value}</td></tr>.
  *  Search is case-insensitive and ignores surrounding whitespace.
@@ -606,8 +608,8 @@ export function orderActionUrl(doc, name) {
   const orderString = orderStringField(doc);
   const customerID = orderHeaderField(doc, 'customer');
   if (!orderID) return null;
-  const ADMIN = 'https://api.golfballs.com/golfballs/adminnew/';
-  const ROOT = 'https://api.golfballs.com/golfballs/';
+  const ADMIN = API.CRM_ADMIN;
+  const ROOT = API.CRM_ROOT;
   switch (name) {
     case 'tracking':            return orderString ? `${ROOT}account.aspx?page=orderTracking&orderString=${orderString}` : null;
     case 'printInvoice':        return orderString ? `${ROOT}printOrder.aspx?orderID=${orderString}&invoice=true` : null;

@@ -3,7 +3,7 @@
   "private": true,
   "version": "3.3.0",
   "type": "module",
-  "description": "Build tooling for incrementally migrating the extension to React.",
+  "description": "Golfballs.com Sales Toolkit — Chrome extension layering email/proposal, CRM workflow, and order tools onto the golfballs.com admin CRM. See README.md.",
   "scripts": {
     "build": "node --max-old-space-size=8192 build.js",
     "watch": "node --max-old-space-size=8192 build.js --watch",

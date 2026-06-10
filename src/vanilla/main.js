@@ -13,6 +13,21 @@
 if (!window.__gbContentReady) {
 window.__gbContentReady = true;
 
+  /* Trust gate for window.postMessage. Legitimate GB_* messages arrive
+     either same-origin (our own React content scripts) or from the
+     admin.icustomize.com iframe embedded in the CRM page. Anything else
+     — a malicious ad/iframe on the page — must not be able to inject an
+     employeeId, fake calendar progress, etc. Sandbox-bridge messages use
+     a separate __gbSandbox marker and their own listener, so dropping
+     unknown-origin `action` messages here is safe. */
+  const GB_TRUSTED_ORIGIN_RE = /^https?:\/\/([a-z0-9-]+\.)*golfballs\.com$/i;
+  function __gbTrustedMessage(event) {
+    const o = event.origin;
+    return o === window.location.origin
+      || o === 'https://admin.icustomize.com'
+      || GB_TRUSTED_ORIGIN_RE.test(o);
+  }
+
 // ── Message bridge from iframe (calendar, dates, notifications) ─────────────
   // MESSAGE LISTENER (From Iframe)
   // ═══════════════════════════════════════════════════════
@@ -29,6 +44,7 @@ window.__gbContentReady = true;
   }
 
   window.addEventListener('message', (event) => {
+    if (!__gbTrustedMessage(event)) return;
     const { action, message, type, duration, data } = event.data || {};
 
     if (action === 'GB_NOTIFY') {
@@ -87,6 +103,7 @@ window.__gbContentReady = true;
       placement: 'top-center',
     });
     const handler = (event) => {
+      if (!__gbTrustedMessage(event)) return;
       const d = event.data;
       if (!d) return;
       if (d.action === 'GB_AUTO_PUSH_STEP') {
@@ -569,14 +586,33 @@ window.__gbContentReady = true;
     });
   });
 
-  const __gbObserver = new MutationObserver(() => {
-    __gbApplySignifydGlow();
+  /* Re-run the page scans, each gated by its own feature flag. (Previously
+     __gbApplySignifydGlow ran twice — once unconditionally, once flag-gated —
+     so the glow ignored its disable flag; fixed to a single gated call.) */
+  const __gbRunScans = () => {
+    if (window.__gbFeatureFlags?.signifydGlowEnabled !== false) __gbApplySignifydGlow();
     if (window.__gbFeatureFlags?.emailPreviewEnabled !== false && window.__gbEmailPreviewScan) __gbEmailPreviewScan();
     if (window.__gbFeatureFlags?.textPreviewEnabled  !== false && window.__gbTextPreviewScan)  __gbTextPreviewScan();
-    if (window.__gbFeatureFlags?.imagePreviewEnabled  !== false && window.__gbScanForRenderImages) window.__gbScanForRenderImages();
-    if (window.__gbFeatureFlags?.signifydGlowEnabled  !== false) __gbApplySignifydGlow();
+    if (window.__gbFeatureFlags?.imagePreviewEnabled !== false && window.__gbScanForRenderImages) window.__gbScanForRenderImages();
+  };
+
+  /* Coalesce mutation bursts. CRM pages mutate the DOM continuously (live
+     DataTables, async-loaded rows), and running every scan on each mutation
+     is the bulk of this content script's cost on all-day tabs. Schedule one
+     run per burst (~200ms trailing) instead of one per mutation. The initial
+     on-load scans above still run immediately, so first paint is unaffected. */
+  let __gbScanTimer = null;
+  const __gbObserver = new MutationObserver(() => {
+    if (__gbScanTimer) return;
+    __gbScanTimer = setTimeout(() => { __gbScanTimer = null; __gbRunScans(); }, 200);
   });
   __gbObserver.observe(document.body, { childList: true, subtree: true });
+
+  /* Release the observer + pending timer when the page is torn down. */
+  window.addEventListener('pagehide', () => {
+    __gbObserver.disconnect();
+    if (__gbScanTimer) { clearTimeout(__gbScanTimer); __gbScanTimer = null; }
+  });
 
   // ═══════════════════════════════════════════════════════
 

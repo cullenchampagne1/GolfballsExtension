@@ -328,9 +328,10 @@ function MetaRow({ k, children }) {
   );
 }
 
-/* Sticky reply composer — UI only for now (no send wiring). Uses the
-   same RichTextEditor as the template/signature editors so the rep
-   gets the full formatting toolbar (bold/italic/lists/colors). */
+/* Sticky reply composer — draft-only (no send transport yet). The Send
+   button is intentionally not wired to a backend; clicking it explains that
+   and points the rep to copy + Outlook. Uses the same RichTextEditor as the
+   template/signature editors for the full formatting toolbar. */
 function ReplyComposer({ replyTo, subject }) {
   const [expanded, setExpanded] = useState(false);
   const [body, setBody] = useState('');
@@ -453,7 +454,8 @@ function ReplyComposer({ replyTo, subject }) {
               <IconBtn size="sm" variant="ghost" icon={<I.copy />} tooltip="Attach" />
               <span style={{ flex: 1 }} />
               <Btn size="sm" variant="ghost" onClick={discard}>Discard</Btn>
-              <Btn size="sm" variant="primary" status="brand" icon={<I.send size={11} />} disabled={!hasText}>
+              <Btn size="sm" variant="primary" status="brand" icon={<I.send size={11} />} disabled={!hasText}
+                onClick={() => window.__gbToast?.info?.("Reply sending isn't wired up yet — copy the draft and send from Outlook for now.", { duration: 3200 })}>
                 Send
               </Btn>
             </div>

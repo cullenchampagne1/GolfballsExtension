@@ -21,7 +21,7 @@ const CLASS_PREFIX = 'gb-';
 let started = false;
 
 /* On extension-owned pages (popup.html, editor.html, playground.html,
-   charge.html) we OWN every element — no host-page DOM to be careful
+   sandbox.html) we OWN every element — no host-page DOM to be careful
    around — so we can patch everything. On content-script context
    (chrome injected into golfballs.com pages) we have to walk up and
    confirm the element is part of an extension subtree first. */

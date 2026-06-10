@@ -40,8 +40,14 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
   }
 
   let __gbBroadcastedSalesRep = '';
+  /* Only trust the sales-rep broadcast from our own origin or the
+     admin.icustomize.com toolbar iframe — otherwise any frame on the
+     page could spoof the rep name attached to outgoing notes/emails. */
+  const GB_TRUSTED_ORIGIN_RE = /^https?:\/\/([a-z0-9-]+\.)*golfballs\.com$/i;
   window.addEventListener('message', (event) => {
-      if (event.data && event.data.action === 'GB_SALES_REP_FOUND') {
+      const o = event.origin;
+      if (o !== window.location.origin && o !== 'https://admin.icustomize.com' && !GB_TRUSTED_ORIGIN_RE.test(o)) return;
+      if (event.data && event.data.action === 'GB_SALES_REP_FOUND' && typeof event.data.salesRep === 'string') {
           __gbBroadcastedSalesRep = event.data.salesRep;
       }
   });

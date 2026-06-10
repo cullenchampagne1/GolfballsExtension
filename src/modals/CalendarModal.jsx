@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { FloatingPanel, ModalHeader, Btn, Icon, I } from '../ui/index.js';
+import { FloatingPanel, ModalHeader, Btn, IconBtn, Icon, I } from '../ui/index.js';
 import { useModalTopState } from '../lib/actionRegistry.js';
 import { useDevSetting } from '../lib/devSettings.js';
 
@@ -60,32 +60,16 @@ function MiniCalendar({ value, onChange }) {
     cells.push({ date, outside });
   }
 
-  const navBtn = {
-    width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', color: 'var(--gb-text-muted)',
-    background: 'transparent', border: '1px solid transparent', transition: 'all var(--gb-anim-fast)',
-  };
-  const hoverNav = (e, on) => {
-    e.currentTarget.style.background = on ? 'var(--gb-fill-subtle)' : 'transparent';
-    e.currentTarget.style.color = on ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)';
-  };
-
   return (
     <div style={{ width: 244, userSelect: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <div role="button" tabIndex={0} style={navBtn}
-          onClick={() => setView(new Date(year, month - 1, 1))}
-          onMouseEnter={(e) => hoverNav(e, true)} onMouseLeave={(e) => hoverNav(e, false)}>
-          <Icon size={14} strokeWidth={2.4}><path d="M15 18l-6-6 6-6" /></Icon>
-        </div>
+        <IconBtn size="sm" variant="ghost" onClick={() => setView(new Date(year, month - 1, 1))}
+          icon={<Icon strokeWidth={2.4}><path d="M15 18l-6-6 6-6" /></Icon>} />
         <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -0.1 }}>
           {MONTHS[month]} {year}
         </div>
-        <div role="button" tabIndex={0} style={navBtn}
-          onClick={() => setView(new Date(year, month + 1, 1))}
-          onMouseEnter={(e) => hoverNav(e, true)} onMouseLeave={(e) => hoverNav(e, false)}>
-          <Icon size={14} strokeWidth={2.4}><path d="M9 18l6-6-6-6" /></Icon>
-        </div>
+        <IconBtn size="sm" variant="ghost" onClick={() => setView(new Date(year, month + 1, 1))}
+          icon={<Icon strokeWidth={2.4}><path d="M9 18l6-6-6-6" /></Icon>} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', marginBottom: 4 }}>
@@ -116,9 +100,10 @@ function DayCell({ date, outside, selected, isToday, onClick }) {
     shadow = '0 0 12px var(--gb-brand-tint-strong)'; weight = 700;
   }
   return (
-    <div role="button" tabIndex={0}
+    <button type="button"
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} onClick={onClick}
       style={{
+        width: '100%', padding: 0, boxSizing: 'border-box', font: 'inherit',
         height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: 12.5, fontWeight: weight, borderRadius: 'var(--gb-r-sm)',
         background: bg, color, border, boxShadow: shadow, cursor: 'pointer', position: 'relative',
@@ -128,7 +113,7 @@ function DayCell({ date, outside, selected, isToday, onClick }) {
       {isToday && !selected && (
         <span style={{ position: 'absolute', bottom: 4, left: '50%', transform: 'translateX(-50%)', width: 3, height: 3, borderRadius: '50%', background: 'var(--gb-brand-label)' }} />
       )}
-    </div>
+    </button>
   );
 }
 

@@ -25,8 +25,9 @@
 ─────────────────────────────────────────────────────────────── */
 
 import { DEFAULT_PRIORITY } from './quickTask.js';
+import { API } from './constants.js';
 
-const BASE = 'https://api.golfballs.com';
+const BASE = API.CRM;
 
 const hasChromeRuntime = () => {
   try { return typeof chrome !== 'undefined' && !!chrome.runtime?.sendMessage; }

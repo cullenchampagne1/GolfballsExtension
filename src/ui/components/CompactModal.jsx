@@ -93,8 +93,8 @@ export function CompactModal({
       onClick={closeOnBackdrop ? onClose : undefined}
       style={{
         position: 'fixed', inset: 0,
-        // Stacked: sit above the standard 2147483000 modal layer.
-        zIndex: stacked ? 2147483200 : 2147483000,
+        // Stacked: sit above the standard modal layer (--gb-z-max).
+        zIndex: stacked ? 'calc(var(--gb-z-max) + 200)' : 'var(--gb-z-max)',
         // Stacked: a soft scrim only — the parent already dimmed + blurred
         // the page, so a second blur just looks muddy and costs paint.
         background: stacked ? 'rgba(0, 0, 0, 0.35)' : 'var(--gb-backdrop)',

@@ -6,6 +6,7 @@ import {
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { useDevSetting } from '../lib/devSettings.js';
 import { callSource, defineSource, hasExtensionContext } from '../lib/dataSource.js';
+import { API, CRM_PAGES } from '../lib/constants.js';
 import { QueryBuilder, describeCondition, compileToSolr, compileToLabel, loadSavedQueries, compileGroupsToSolr } from './QueryBuilder.jsx';
 import { SCAN_LAST_RUN_KEY } from '../lib/recentOrdersScan.js';
 import { EmailRunner } from './EmailRunner.jsx';
@@ -31,10 +32,9 @@ import { actionRegistry } from '../lib/actionRegistry.js';
    Failure path: toast.action with primary "Use template data"
    that fills the table with MOCK_RESULTS so the design is demo-able.
 
-   This port is scoped to SEARCH + SELECT. The original's downstream
-   campaign-run flow (PA email / Task create per selected row) is out
-   of scope for now — selected IDs are surfaced via the Run-campaign
-   button stub which can be wired up later.
+   Search + select, then hand off: the "Run campaign" button builds the
+   selected-contact audience and opens the Campaign Manager
+   (window.__gbOpenCampaignManager) to run the PA email / task flow there.
 ─────────────────────────────────────────────────────────────── */
 
 const ENDPOINT = 'https://api.golfballs.com/Golfballs/WebServices/Private/SolrIndexCrm.asmx/Query';
@@ -82,7 +82,7 @@ const fmtDate = (iso) => {
 };
 const contactUrl = (id) => {
   const [type, num] = String(id || '').split('_');
-  if (type === 'contact') return `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=240&customerID=${num}`;
+  if (type === 'contact') return `${API.CRM_ADMIN}Default.aspx?Page=${CRM_PAGES.CONTACT_DETAIL}&customerID=${num}`;
   if (type === 'account') return `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=267&AccountID=${num}`;
   return '';
 };

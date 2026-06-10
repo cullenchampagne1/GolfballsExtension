@@ -20,6 +20,7 @@ const SANDBOX_URL = (typeof chrome !== 'undefined' && chrome.runtime && chrome.r
   : null;
 
 let framePromise = null;        // Promise<HTMLIFrameElement> (resolved once ready)
+let sandboxWindow = null;       // the sandbox iframe's contentWindow (trust anchor)
 const jobs = new Map();         // jobId → { resolve, reject }
 const jobDocs = new Map();      // jobId → doc (for the domText proxy)
 let seq = 0;
@@ -37,6 +38,13 @@ function installListener() {
   window.addEventListener('message', async (ev) => {
     const m = ev.data;
     if (!m || m.__gbSandbox == null) return;
+    /* Trust gate: privileged 'hcall' (h.send / h.fetch* / DOM) and job
+       'result' messages are honored ONLY from our own sandbox iframe.
+       Without this, any other frame on the page could post an 'hcall' and
+       drive the real helpers (which carry chrome + the live DOM). The frame
+       isn't ready until the 'ready' handshake sets sandboxWindow, so before
+       then there is nothing legitimate to service. */
+    if (!sandboxWindow || ev.source !== sandboxWindow) return;
 
     if (m.__gbSandbox === 'result') {
       const job = jobs.get(m.id);
@@ -81,6 +89,7 @@ function ensureFrame() {
     const onReady = (ev) => {
       if (!iframe.contentWindow || ev.source !== iframe.contentWindow) return;
       if (!ev.data || ev.data.__gbSandbox !== 'ready') return;
+      sandboxWindow = iframe.contentWindow;   // trust anchor for the main listener
       settle(resolve, iframe);
     };
     window.addEventListener('message', onReady);

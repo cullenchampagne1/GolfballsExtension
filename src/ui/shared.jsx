@@ -91,16 +91,28 @@ function ensureSpinKeyframe() {
   s.textContent = '@keyframes gb-spin{to{transform:rotate(360deg)}}';
   (document.head || document.documentElement).appendChild(s);
 }
-export function Spinner({ size = 12 }) {
+/**
+ * Spinner — the one spinning ring. Two looks:
+ *   variant 'current' (default) — monochrome, inherits currentColor with a
+ *     transparent gap. For buttons / dark overlays (pass color via `style`).
+ *   variant 'brand' — two-tone: a subtle track with a brand-coloured arc.
+ *     For standalone "Loading…" indicators on surfaces.
+ * `thickness` (px) and `style` override as needed. Defaults reproduce the
+ * original single-arg Spinner exactly, so existing callsites are unaffected.
+ */
+export function Spinner({ size = 12, thickness = 2, variant = 'current', style }) {
   ensureSpinKeyframe();
+  const brand = variant === 'brand';
   return (
     <span
       aria-hidden="true"
       style={{
         width: size, height: size, borderRadius: '50%',
-        border: '2px solid currentColor', borderTopColor: 'transparent',
+        border: `${thickness}px solid ${brand ? 'var(--gb-border-default)' : 'currentColor'}`,
+        borderTopColor: brand ? 'var(--gb-brand-label)' : 'transparent',
         display: 'block', flexShrink: 0,
         animation: 'gb-spin 0.7s linear infinite',
+        ...style,
       }}
     />
   );

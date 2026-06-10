@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { I } from '../icons.jsx';
+import { Spinner } from '../shared.jsx';
 
 /**
  * SelectToast — a notification that asks the user to PICK one item
@@ -57,14 +58,7 @@ export function SelectToast({
         borderBottom: '1px solid var(--gb-border-subtle)',
         background: 'var(--gb-brand-tint-soft)',
       }}>
-        {busy && (
-          <span style={{
-            width: s.spinner, height: s.spinner, borderRadius: '50%',
-            border: '2px solid var(--gb-brand-label)', borderTopColor: 'transparent',
-            animation: 'gb-spin .8s linear infinite',
-            flexShrink: 0,
-          }} />
-        )}
+        {busy && <Spinner size={s.spinner} style={{ color: 'var(--gb-brand-label)' }} />}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
             fontSize: s.head, fontWeight: 700, color: 'var(--gb-brand-label)',

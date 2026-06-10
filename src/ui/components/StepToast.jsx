@@ -1,5 +1,6 @@
 import React from 'react';
 import { I } from '../icons.jsx';
+import { Spinner } from '../shared.jsx';
 
 /**
  * StepToast — progress through a multi-step async operation. Shows a
@@ -46,11 +47,7 @@ export function StepToast({
         borderBottom: '1px solid var(--gb-border-subtle)',
         background: 'var(--gb-brand-tint-soft)',
       }}>
-        <span style={{
-          width: s.spinner, height: s.spinner, borderRadius: '50%',
-          border: '2px solid var(--gb-brand-label)', borderTopColor: 'transparent',
-          animation: 'gb-spin .8s linear infinite',
-        }} />
+        <Spinner size={s.spinner} style={{ color: 'var(--gb-brand-label)' }} />
         <div style={{ flex: 1, fontSize: s.head, fontWeight: 700, color: 'var(--gb-brand-label)' }}>{title}</div>
         <span onClick={onDismiss} style={{ cursor: 'pointer', color: 'var(--gb-text-muted)', display: 'flex' }}>
           <I.close size={s.close} />

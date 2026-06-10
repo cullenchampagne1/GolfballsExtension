@@ -11,22 +11,44 @@ window.__gbIframeReady = true;
   // ═══════════════════════════════════════════════════════
 
   // --- THE TOKEN THIEF (FETCH INTERCEPTOR) --- //
+  /* We wrap fetch to harvest the AdminSession bearer the admin app already
+     sends on its own API calls, so we can replay it on the Notes API.
+     Scope is deliberately narrow: only requests bound for icustomize hosts
+     are inspected — unrelated requests this frame makes (analytics, CDNs,
+     anything else) are passed straight through untouched, never snooped.
+     The whole inspection is wrapped in try/catch so a malformed headers
+     object can never break the page's real fetch. */
   let __gbStolenToken = null;
   const __originalFetch = window.fetch;
-  
-  window.fetch = async function(...args) {
+
+  const __gbIsIcustomizeReq = (resource) => {
+    try {
+      const url = typeof resource === 'string' ? resource
+                : (resource && resource.url) ? resource.url : '';
+      return /(^|\.)icustomize\.com$/i.test(new URL(url, location.href).hostname);
+    } catch { return false; }
+  };
+
+  window.fetch = function(...args) {
+    try {
       const [resource, config] = args;
-      if (config && config.headers) {
-          let headers = config.headers;
-          if (headers instanceof Headers) {
-              if (headers.has('adminsession')) __gbStolenToken = headers.get('adminsession');
-          } else {
-              for (let key in headers) {
-                  if (key.toLowerCase() === 'adminsession') __gbStolenToken = headers[key];
-              }
+      if (__gbIsIcustomizeReq(resource)) {
+        const headers = config && config.headers;
+        if (headers instanceof Headers) {
+          if (headers.has('adminsession')) __gbStolenToken = headers.get('adminsession');
+        } else if (headers) {
+          for (const key in headers) {
+            if (key.toLowerCase() === 'adminsession') __gbStolenToken = headers[key];
           }
+        }
+        // A Request object may carry the header directly.
+        if (!__gbStolenToken && typeof Request !== 'undefined' && resource instanceof Request
+            && resource.headers && resource.headers.has('adminsession')) {
+          __gbStolenToken = resource.headers.get('adminsession');
+        }
       }
-      return __originalFetch.apply(this, args);
+    } catch { /* never let inspection break the real fetch */ }
+    return __originalFetch.apply(this, args);
   };
 
   /**
