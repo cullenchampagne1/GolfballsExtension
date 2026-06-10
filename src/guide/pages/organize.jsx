@@ -10,7 +10,9 @@ import {
   TaskListLive, TaskRow, TableHeader, Toolbar as TLToolbar, SelectionBar, PushDueCard,
   sampleTasks as sampleTaskRows,
 } from '../lib/tasklist-live.jsx';
-import { QuickTask } from '../../modals/QuickTask.jsx';
+import {
+  QuickTaskLive, QtTemplateRow, QtComposeBar, QtTokenMenu, SAMPLE_TEMPLATES,
+} from '../lib/quicktask-live.jsx';
 import { CallLog } from '../../modals/CallLog.jsx';
 import { CalendarModal } from '../../modals/CalendarModal.jsx';
 
@@ -304,26 +306,100 @@ export function TasksPage() {
 }
 
 /* ════════ QUICK TASK ════════ */
+
+const QT_CALLOUTS = [
+  { n: 1, target: 'compose-chips', title: 'Tag chips', text: 'Category and Priority as removable chips. The dashed “+ tag” (or /) opens the picker.' },
+  { n: 2, target: 'compose-subject', title: 'Subject', text: 'What needs doing. Type a recognized word + space and it snaps into a chip.' },
+  { n: 3, target: 'compose-due', title: 'Due', text: 'Quick chips — Today, +1d, +2d, +3d, +1w — or a typed date.' },
+  { n: 4, target: 'footer', title: 'Keyboard legend', text: '/ to compose · ↑↓ to move the list · Enter to add.' },
+];
+const QT_STEPS = [
+  { target: 'header', caption: 'Open Quick Task on a contact and it’s ready to compose — keyboard-first, no mouse needed.', hold: 2400 },
+  { target: 'compose-chips', caption: 'Press / (or the + tag) to open the picker and tag a Category and Priority…', run: (api) => api.openMenu(), hold: 2400 },
+  { target: 'compose-chips', caption: '…the chips snap in, removable with their ×.', run: (api) => api.closeMenu(), hold: 1600 },
+  { target: 'compose-subject', caption: 'Type the subject. A recognized word + space (like “high ”) snaps straight into a priority chip.', hold: 2600 },
+  { target: 'compose-due', caption: 'Set the due date from the quick chips — Today, +1d, +3d, +1w — or type one.', hold: 2600 },
+  { target: 'footer', caption: 'Enter adds the task; a toast confirms “Task created”. The whole flow never leaves the keyboard.', hold: 2600 },
+];
+
+function TemplateListSnippet() {
+  const [active, setActive] = useState(0);
+  return (
+    <MiniFrame width={440} label="quick task · templates" pad={false}>
+      <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {SAMPLE_TEMPLATES.map((tpl, i) => <QtTemplateRow key={tpl.id} tpl={tpl} hotkey={i + 1} isActive={active === i} onClick={() => setActive(i)} />)}
+      </div>
+    </MiniFrame>
+  );
+}
+
+function ComposeSnippet() {
+  const [tokens, setTokens] = useState({ category: 8, priority: '2' });
+  const [subject, setSubject] = useState('Confirm artwork before reorder');
+  const [note, setNote] = useState('');
+  const [due, setDue] = useState({ kind: 'relative', days: 5 });
+  const [menu, setMenu] = useState(false);
+  return (
+    <MiniFrame width={460} label="quick task · composer" pad={false}>
+      <div style={{ position: 'relative' }}>
+        <QtComposeBar {...{ tokens, setTokens, subject, setSubject, note, setNote, due, setDue }} onOpenMenu={() => setMenu((v) => !v)} onCommit={() => {}} onClear={() => { setSubject(''); setNote(''); setTokens({}); }} />
+        {menu && <div style={{ position: 'absolute', left: 16, right: 16, top: 58, zIndex: 40 }}><QtTokenMenu tokens={tokens} onSelect={() => setMenu(false)} /></div>}
+      </div>
+    </MiniFrame>
+  );
+}
+
+function TokenMenuSnippet() {
+  const [tokens, setTokens] = useState({ category: 8 });
+  return (
+    <MiniFrame width={300} label="quick task · / menu" pad>
+      <QtTokenMenu tokens={tokens} onSelect={() => {}} />
+    </MiniFrame>
+  );
+}
+
 export function QuickTaskCreatePage() {
   return (
     <div className="prose">
       <div className="eyebrow">Stay Organized</div>
       <h1 className="title">Quick Task</h1>
       <p className="lede">
-        A CRM task in seconds, two ways: fire a saved template with one keystroke, or press
-        <span className="kbd">/</span> and compose from scratch without touching the mouse. The real
-        modal is below — type to filter, press <span className="kbd">/</span> to compose, and try typing
-        <span className="kbd">high </span> (with a trailing space) to watch the word snap into a chip.
+        A CRM task in seconds, two ways: fire a saved template with one keystroke, or compose from
+        scratch without touching the mouse. Opens from the shelf (“Quick task for &lt;name&gt;”) on
+        contact, account, and order pages. Watch it work below, then read each piece beside its live
+        control.
       </p>
 
-      <LiveModal w={480} h={540} frameLabel="quick task · Marcus Chen (sample)"
-        note="The live Quick Task composer. Submitting here is a sample — nothing is written to a real CRM."
-        render={(box, onClosed) => (
-          <QuickTask contained portalContainer={box} contactName="Marcus Chen" contactType="contact" onSubmit={demoSubmit} onClosed={onClosed} />
-        )} />
+      <LiveStage
+        width={480}
+        frameKind="modal"
+        frameLabel="golfballs.com · quick task"
+        render={(apiRef) => <QuickTaskLive ref={apiRef} contact="Marcus Chen" />}
+        callouts={QT_CALLOUTS}
+        steps={QT_STEPS}
+        note="Live Quick Task composer on sample data — hover the pins, press Play, or Try it yourself."
+      />
+
+      <h2 className="sec">Walk through it, piece by piece</h2>
+      <p>Each block pairs the real control with what it does. The snippets are live.</p>
+
+      <TourBox n={1} eyebrow="One keystroke" title="The template list" live={<TemplateListSnippet />} flip>
+        <p>The modal opens in filter mode — type to narrow your task templates, then press <span className="kbd">1–9</span> to fire the Nth one, <span className="kbd">↑↓</span> + <span className="kbd">Enter</span> to pick, or <span className="kbd">Shift+Enter</span> to load it into the composer to tweak first.</p>
+        <p>Each row shows its <strong>hotkey</strong>, name, the due offset (<span className="kbd">+5d</span>), and its <strong>category</strong> — so the whole list scans at a glance. Hover reveals a customise button.</p>
+      </TourBox>
+
+      <TourBox stack eyebrow="From scratch" title="The composer" live={<ComposeSnippet />}>
+        <p>Press <span className="kbd">/</span> and the bar grows into the composer. A <strong>chips row</strong> holds the Category and Priority (each removable with its <span className="kbd">×</span>); below it the <strong>Subject</strong> and <strong>Note</strong> fields, then the <strong>Due</strong> control.</p>
+        <p>The trick that makes it fast: <strong>type a recognized word + space and it snaps into a chip</strong> — typing “high ” mid-subject becomes the High-priority chip. The dashed <strong>“+ tag”</strong> button (or <span className="kbd">/</span>) opens the picker for the rest. Everything here is live — try it.</p>
+      </TourBox>
+
+      <TourBox n={2} eyebrow="The / picker" title="Tagging category & priority" live={<TokenMenuSnippet />} flip>
+        <p>The <span className="kbd">/</span> menu lists every <strong>Category</strong> and <strong>Priority</strong> token, colour-coded by tone. Arrow keys move, Enter selects (a check marks the active one), and the chip appears in the bar.</p>
+        <p>Categories are the CRM's real task list — the full set is below.</p>
+      </TourBox>
 
       <h3 className="sub">Due dates</h3>
-      <p>The Due control takes quick chips — <strong>Today, Tomorrow, In 3 days, Next week</strong> — or a typed date (<code>mm/dd/yy</code>, or shorthand like <code>+1d</code> / <code>+1w</code>). A live preview pane mirrors exactly what will be created and flags any missing required field; a toast confirms "Task created: &lt;name&gt;".</p>
+      <p>The Due control takes quick chips — <strong>Today, +1d, +2d, +3d, +1w</strong> — or a typed relative value. A live preview pane (in the modal above) mirrors exactly what will be created and flags a missing category; a toast confirms “Task created”.</p>
 
       <h3 className="sub">Every key</h3>
       <ComposerKeysTable submitLabel="Save the task" />
@@ -336,7 +412,7 @@ export function QuickTaskCreatePage() {
         <span className="dn-ico"><I.edit size={15} /></span>
         <div className="dn-b">
           <div className="dn-t">Templates live in the Manager's Notes tab</div>
-          <p style={{ margin: 0 }}>A task template carries a button label, subject, description, priority, category, and a due-in-days offset — so your recurring follow-ups ("Proof Requested", "15-Day Call") are two keystrokes. See <a href="#templates">Email Templates</a> for the editor itself.</p>
+          <p style={{ margin: 0 }}>A task template carries a button label, subject, description, priority, category, and a due-in-days offset — so your recurring follow-ups (“Proof Requested”, “15-Day Call”) are two keystrokes. See <a href="#templates">Email Templates</a> for the editor itself.</p>
         </div>
       </div>
     </div>
