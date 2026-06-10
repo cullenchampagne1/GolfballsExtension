@@ -800,25 +800,6 @@ export function SettingsPanel() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, fontFamily: 'var(--gb-font-sans)' }}>
 
-      {/* Help & Training — the in-app user guide. On the editor page the
-          bridge swaps views in place (window.openHelp); anywhere else
-          (popup, playground) fall back to opening the editor deep-linked
-          into Help. */}
-      <section>
-        <SectionLabel>Help</SectionLabel>
-        <Btn
-          variant="dashed"
-          icon={<I.bookmark />}
-          full
-          onClick={() => {
-            if (typeof window.openHelp === 'function') return window.openHelp();
-            try { window.open(chrome.runtime.getURL('editor.html?view=help')); } catch (_) { /* non-extension context */ }
-          }}
-        >
-          Help &amp; Training — guides, tutorials, and the full settings reference
-        </Btn>
-      </section>
-
       {/* User Presets */}
       <UserPresetsManager onPresetLoad={() => setRefreshKey(k => k + 1)} />
 
