@@ -1,7 +1,11 @@
-import React from 'react';
-import { I } from '../../ui/index.js';
+import React, { useState } from 'react';
+import { I, Tag } from '../../ui/index.js';
 import { LiveModal } from '../lib/live-modal.jsx';
-import { CRMSearch } from '../../modals/CRMSearch.jsx';
+import { LiveStage } from '../lib/stage.jsx';
+import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
+import {
+  CRMSearchLive, ResultRow, TableHeader, Toolbar as CSToolbar, SelectionBar, MOCK_RESULTS,
+} from '../lib/crmsearch-live.jsx';
 import { QueryBuilder } from '../../modals/QueryBuilder.jsx';
 import { CRMCreateContact } from '../../modals/CRMCreateContact.jsx';
 
@@ -14,6 +18,46 @@ import { CRMCreateContact } from '../../modals/CRMCreateContact.jsx';
 ─────────────────────────────────────────────────────────────── */
 
 /* ════════ CRM SEARCH ════════ */
+const CS_CALLOUTS = [
+  { n: 1, target: 'toolbar', title: 'Query bar', text: 'Type to filter the local index; the Type dropdown narrows to Contacts/Accounts. Query Builder + Search sit beside it.' },
+  { n: 2, target: 'sortheader', title: 'Sortable columns', text: 'Name, Account, Type, Orders, YTD, PY, Last Order — click a header to sort.' },
+  { n: 3, target: 'row', title: 'A result row', text: 'Name, account, a Contact/Account tag, email, and the revenue + order stats.' },
+  { n: 4, target: 'footer', title: 'The local index', text: 'Indexed for instant typeahead; Enter falls through to a full server search.' },
+];
+const CS_STEPS = [
+  { target: 'toolbar', caption: 'Press Ctrl+K anywhere. Type to filter your locally indexed contacts instantly — narrow to just Contacts…', run: (api) => api.setType('contact'), hold: 2600 },
+  { target: 'toolbar', caption: '…or back to all types. Enter runs a full server search; Query Builder adds structured filters.', run: (api) => api.setType('all'), hold: 1800 },
+  { target: 'sortheader', caption: 'Click a column to sort — YTD Revenue puts your biggest accounts on top.', run: (api) => api.onSort('yearToDateRevenue_f'), hold: 2400 },
+  { target: 'row', caption: 'Each row: the name, its account, a Contact / Account tag, email, and the order + revenue stats.', hold: 2800 },
+  { target: 'header', caption: 'Tick rows to select them…', run: (api) => api.selectN(3), hold: 1600 },
+  { target: 'selbar', caption: '…and the selection bar gives you Run campaign, Email selected, and Export CSV across all of them.', hold: 3000 },
+];
+
+function ToolbarSnippet() {
+  const [query, setQuery] = useState('');
+  const [typeFilter, setType] = useState('all');
+  return (
+    <MiniFrame width={560} label="crm search · query bar" pad={false}>
+      <CSToolbar {...{ query, setQuery, typeFilter, setType }} />
+    </MiniFrame>
+  );
+}
+
+function ResultsSnippet() {
+  const [rows] = useState(() => MOCK_RESULTS.slice(0, 4));
+  const [sel, setSel] = useState(new Set([rows[0].id]));
+  return (
+    <MiniFrame width={900} label="crm search · results" pad={false}>
+      <div style={{ background: 'var(--gb-surface-canvas)' }}>
+        <TableHeader allChecked={false} onToggleAll={() => {}} sortKey="yearToDateRevenue_f" sortDir="desc" onSort={() => {}} />
+        <div style={{ padding: '4px 0' }}>
+          {rows.map((r) => <ResultRow key={r.id} row={r} isSelected={sel.has(r.id)} onToggle={() => setSel((s) => { const n = new Set(s); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} />)}
+        </div>
+      </div>
+    </MiniFrame>
+  );
+}
+
 export function SearchPage() {
   return (
     <div className="prose">
@@ -22,30 +66,43 @@ export function SearchPage() {
       <p className="lede">
         Press <span className="kbd">Ctrl+K</span> anywhere. The search runs in two gears: as you type it
         filters your <strong>locally indexed</strong> contacts instantly; press <span className="kbd">Enter</span>
-        and it runs a full <strong>server</strong> search. The real modal is below on sample contacts —
-        type, sort columns, tick rows for the bulk bar.
+        and it runs a full <strong>server</strong> search. Watch it work below, then read each piece beside
+        its live control.
       </p>
 
-      <LiveModal w={1000} h={640} frameLabel="crm search · sample contacts"
-        note="The live CRM Search modal (sample data). Tick rows to reveal Run campaign / Email selected / Export."
-        render={(box, onClosed) => <CRMSearch useMock contained portalContainer={box} onClosed={onClosed} />} />
+      <LiveStage
+        wide
+        width={1000}
+        frameKind="modal"
+        frameLabel="golfballs.com · crm search"
+        render={(apiRef) => <CRMSearchLive ref={apiRef} />}
+        callouts={CS_CALLOUTS}
+        steps={CS_STEPS}
+        note="Live CRM Search on sample contacts — hover the pins, press Play, or Try it yourself."
+      />
 
-      <h2 className="sec">Results, columns, and selection</h2>
-      <p>Result columns: Contact Name, Account Name, Account ID, Email, Phone, Sales Rep, Role, Order Count, YTD Revenue, Prior Year Revenue, Last Order Date, Next Task Date. Click a header to sort; server results load more as you scroll. Tick rows and the summary bar appears with <strong>Run campaign</strong>, <strong>Email selected</strong>, and <strong>Export CSV</strong>. Keyboard: <span className="kbd">Tab</span> from the input drops onto the first row; Tab/Shift+Tab walk rows (wrapping); <span className="kbd">Esc</span> returns to the input.</p>
+      <h2 className="sec">Walk through it, piece by piece</h2>
+      <p>Each block pairs the real control with what it does. The snippets are live.</p>
 
-      <h2 className="sec">The local index</h2>
-      <p>
-        The index is what makes repeat searches instant. After a server search, an <strong>"Index all N"</strong> button
-        stores the results locally; a footer notes "Locally indexed — instant typeahead. Falls through to
-        server on Enter", with a <strong>Clear index</strong> button beside it. Records you visit also index
-        themselves automatically.
-      </p>
+      <TourBox n={1} eyebrow="Find" title="The query bar" live={<ToolbarSnippet />} flip>
+        <p>As you type, the search filters your <strong>locally indexed</strong> contacts instantly (the placeholder says so). The <strong>Type</strong> dropdown narrows to Contacts or Accounts; <strong>Query Builder</strong> adds structured filters; <strong>Search</strong> (or Enter) runs a full server query.</p>
+        <p>Keyboard: <span className="kbd">Tab</span> from the input drops onto the first row, Tab/Shift+Tab walk rows (wrapping), <span className="kbd">Esc</span> returns to the input, and Enter on a row opens it in a new tab.</p>
+      </TourBox>
+
+      <TourBox stack eyebrow="The results" title="Columns, sorting & selection" live={<ResultsSnippet />}>
+        <p>Columns: <strong>Name</strong>, <strong>Account</strong>, a <strong>Type</strong> tag (<Tag tone="info" size="xs">Contact</Tag> / <Tag tone="brand" size="xs">Account</Tag>), <strong>Email</strong>, <strong>Orders</strong>, <strong>YTD Rev</strong>, <strong>PY Rev</strong>, and <strong>Last Order</strong>. Click any header to sort (the snippet above is sorted by YTD Revenue, descending). Server results load more as you scroll.</p>
+        <p>Tick a row's checkbox (or the header's) to select. The full field set — including Account ID, Phone, Sales Rep, Role, Pod ID, and Next Task Date — is what the <a href="#crm-query">Query Builder</a> filters on.</p>
+      </TourBox>
+
+      <TourBox n={2} eyebrow="Act on many" title="Selection & bulk actions" live={<MiniFrame width={560} label="crm search · selection bar" pad={false}><SelectionBar selCount={3} total={6} /></MiniFrame>} flip>
+        <p>Tick rows and the selection bar slides in: <strong>Run campaign</strong> builds the selected-contact audience and opens the Campaign Manager, <strong>Email selected</strong> opens the bulk runner, and <strong>Export CSV</strong> downloads them — each acting on every checked row.</p>
+      </TourBox>
 
       <div className="docnote info">
         <span className="dn-ico"><I.search size={15} /></span>
         <div className="dn-b">
-          <div className="dn-t">Missing phone numbers</div>
-          <p style={{ margin: 0 }}>When a contact has no phone but does have orders, the shelf offers <strong>Find phone</strong> — it scans their order pages, collects every number found (labeled with the shipping name it came from), and saves your pick to the contact.</p>
+          <div className="dn-t">The local index, and missing phones</div>
+          <p style={{ margin: 0 }}>After a server search, <strong>“Index all N”</strong> stores the results locally for instant typeahead (the footer notes it, with a <strong>Clear index</strong> button); records you visit index themselves too. And when a contact has no phone but does have orders, the shelf's <strong>Find phone</strong> scans their order pages for one.</p>
         </div>
       </div>
     </div>

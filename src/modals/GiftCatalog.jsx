@@ -1801,7 +1801,10 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
   const [moveAnim, setMoveAnim] = useState(false);
   useEffect(() => { if (settled && !moveAnim) setMoveAnim(true); }, [settled, moveAnim]);
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+    /* minHeight:0 lets this flex child shrink below its content so the inner
+       scroll area (overflowY:auto) actually scrolls instead of the whole
+       gallery growing past the modal — the Current Proposals "can't scroll" bug. */
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 16px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
         <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {headerIcon || <I.bookmark size={16} />}
@@ -2940,11 +2943,18 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           origUnit, origTotal: origUnit != null ? Math.round(qty * origUnit * 100) / 100 : null, free: isFree, imprint });
       }
     }
-    const discount = opts.promotion ? promoDiscount(opts.promotion) : 0;
+    const promotion = opts.promotion || null;
+    const freePromo = !!(promotion && promotion.promoType === 'FREE_QUANTITY');
+    const savings = promotion ? promoDiscount(promotion) : 0;
+    // A FREE_QUANTITY promo is shown as an informational "you save $X" badge —
+    // the free items are NOT separate $0 lines and their value is NOT netted off
+    // the total (the paid items ARE the total). A monetary ($-off) promo still
+    // subtracts from the total as before.
+    const discount = freePromo ? 0 : savings;
     // `rawLines` carries the product + decoration so the composer can render the
     // personalization snapshots; `lines` stays the flat display rows.
     return { groupName: 'Your Custom Order', optionName: name || 'Option 1', lines: rows, rawLines: lines || [],
-      total: Math.round(total * 100) / 100, discount, promoCode: (opts.promotion && opts.promotion.promo) || '', cartLink: opts.cartLink || null, onSubmit: opts.onSubmit || null };
+      total: Math.round(total * 100) / 100, discount, savings, freePromo, promoCode: (promotion && promotion.promo) || '', cartLink: opts.cartLink || null, onSubmit: opts.onSubmit || null };
   };
   const openProposalEmail = (lines, name, opts) => { if (lines && lines.length) setEmailSource(proposalToEmailSource(lines, name, opts)); };
 
@@ -3341,7 +3351,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                     promo={proposalPromo} onApplyPromo={applyPromo} onClearPromo={clearPromo} onCheckPromo={checkPromo}
                     onPatchSplit={(entryIndex, _src, splitIndex, price) => setProposal((prev) => prev.map((pl, li) => li !== entryIndex ? pl
                       : { ...pl, splits: pl.splits.map((s, si) => si !== splitIndex ? s : { ...s, price, priceEdited: true }) }))}
-                    buildEmailSource={() => proposalToEmailSource(proposalWithFree, '', { promotion: proposalPromo && proposalPromo.promotion })}
+                    buildEmailSource={() => proposalToEmailSource(proposal, '', { promotion: proposalPromo && proposalPromo.promotion })}
                     onOpenProposal={() => { close(); setProposalOpen(true); }} />
                 );
               }
@@ -3406,7 +3416,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               onRemoveLine={removeLine} onSaveDraft={saveDraft} onMergeImprint={mergeImprintOnLine}
               onRemoveFront={removeFrontImprint} onRemoveSecond={removeSecondPole}
               pageContext={pageContext} onSaveToAccount={saveToAccount} onAddOpportunity={addOpportunity} accountSaveSeq={accountSaveSeq}
-              onEmail={() => openProposalEmail(proposalWithFree, '', { promotion: proposalPromo && proposalPromo.promotion })}
+              onEmail={() => openProposalEmail(proposal, '', { promotion: proposalPromo && proposalPromo.promotion })}
               promo={proposalPromo} onApplyPromo={applyPromo} onClearPromo={clearPromo} onCheckPromo={checkPromo}
               onClear={() => { setProposal([]); setProposalOpen(false); }} />
           </div>

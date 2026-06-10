@@ -52,10 +52,16 @@ const _qtyLine = (l, show) => {
 const _ltot = (l) => l.free
   ? `<span style="color:${T.acc}; font-weight:800;">FREE</span>`
   : (l.origTotal ? `<span style="color:#d11; text-decoration:line-through; font-weight:600; font-size:.85em;">${_money(l.origTotal)}</span> ${_money(l.lineTotal)}` : _money(l.lineTotal));
-// Discount summary row (monetary order/item-level promos) — shown above the total.
-const _discRow = (m) => (m.discount > 0)
-  ? `<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td style="padding:6px 0; font-size:13px; color:${T.body};">Promotion${m.promoCode ? ` (${_esc(m.promoCode)})` : ''}</td><td align="right" style="padding:6px 0; font-size:14px; font-weight:700; color:#2e9e5b;">&minus;${_money(m.discount)}</td></tr></tbody></table>`
-  : '';
+// Discount summary row above the total. A FREE_QUANTITY promo is shown as an
+// informational "you save $X" badge (the free items aren't separate lines and the
+// value is NOT subtracted from the total); a monetary ($-off) promo subtracts.
+const _discRow = (m) => {
+  if (m.freePromo && m.savings > 0)
+    return `<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td colspan="2" style="padding:6px 0;"><span style="display:inline-block; background:#e1f5d1; color:#46781b; font-size:12px; font-weight:700; border-radius:4px; padding:3px 9px;">Promotion${m.promoCode ? ` ${_esc(m.promoCode)}` : ''} &middot; you save ${_money(m.savings)}</span></td></tr></tbody></table>`;
+  if (m.discount > 0)
+    return `<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td style="padding:6px 0; font-size:13px; color:${T.body};">Promotion${m.promoCode ? ` (${_esc(m.promoCode)})` : ''}</td><td align="right" style="padding:6px 0; font-size:14px; font-weight:700; color:#2e9e5b;">&minus;${_money(m.discount)}</td></tr></tbody></table>`;
+  return '';
+};
 
 // No-imprint-color default: a light brand-green wash. SOLID hex (not rgba) so
 // Outlook's Word engine renders it — and a #d-range green (not near-white) so the
@@ -514,7 +520,7 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
   const hasLink = !!source.cartLink;
   useEffect(() => { setSubmitted(false); }, [source.cartLink]);   // reset Submit→Copy when the proposal changes
   const effShow = useMemo(() => ({ ...show, cta: show.cta && hasLink }), [show, hasLink]);
-  const model = useMemo(() => ({ groupName, optionName, expiration, message, lines: modelLines, total: source.total, discount: source.discount || 0, promoCode: source.promoCode || '', show: effShow }), [groupName, optionName, expiration, message, modelLines, source.total, source.discount, source.promoCode, effShow]);
+  const model = useMemo(() => ({ groupName, optionName, expiration, message, lines: modelLines, total: source.total, discount: source.discount || 0, savings: source.savings || 0, freePromo: !!source.freePromo, promoCode: source.promoCode || '', show: effShow }), [groupName, optionName, expiration, message, modelLines, source.total, source.discount, source.savings, source.freePromo, source.promoCode, effShow]);
   const builtHtml = useMemo(() => tpl.build(model), [tpl, model]);
   // Substitute the real cart link (only present when valid); otherwise the CTA
   // isn't rendered, so no {{CART_LINK}} leaks into the copy.
