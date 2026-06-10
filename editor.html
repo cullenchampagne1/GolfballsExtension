@@ -344,6 +344,14 @@ textarea::-webkit-scrollbar-thumb:hover { background: var(--gb-text-muted,#88888
   margin: 0 auto;
 }
 
+/* Help & Training — wider than Settings: it carries its own two-column
+   layout (sticky nav tree + article) inside the React page. */
+#ed-help {
+  padding: 20px 0 40px;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
 .settings-hdr {
   display: flex; align-items: flex-start; justify-content: space-between;
   margin-bottom: 22px; padding-bottom: 14px; border-bottom: 1px solid var(--gb-border-standard,#2a2a2a);
@@ -1094,6 +1102,9 @@ textarea::-webkit-scrollbar-thumb:hover { background: var(--gb-text-muted,#88888
   <div class="ed-form hidden view-animate" id="ed-settings">
     </div>
 
+  <div class="ed-form hidden view-animate" id="ed-help">
+    </div>
+
   <div class="ed-form hidden view-animate" id="ed-case-tpls">
     </div>
 </div>
@@ -1110,6 +1121,7 @@ textarea::-webkit-scrollbar-thumb:hover { background: var(--gb-text-muted,#88888
 <script src="react-dist/content/editor-notifications.js"></script>
 <script src="react-dist/content/editor-toasts.js"></script>
 <script src="react-dist/content/editor-settings.js"></script>
+<script src="react-dist/content/editor-help.js"></script>
 <script src="react-dist/content/editor-templates.js"></script>
 <script src="react-dist/content/editor-notes.js"></script>
 <script src="react-dist/content/editor-sidebar.js"></script>

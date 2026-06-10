@@ -111,6 +111,7 @@ async function newTemplate() {
   hide('ed-empty');
   hide('ed-note-form');
   hide('ed-settings');
+  hide('ed-help');
   show('ed-form');
   animateView('ed-form');
   openTemplate(id);
@@ -124,6 +125,7 @@ function openTemplate(id) {
   hide('ed-empty');
   hide('ed-note-form');
   hide('ed-settings');
+  hide('ed-help');
   show('ed-form');
   animateView('ed-form');
   if (window.__gbOpenTemplate) {
@@ -180,6 +182,7 @@ async function newNoteTemplate() {
   hide('ed-empty');
   hide('ed-form');
   hide('ed-settings');
+  hide('ed-help');
   show('ed-note-form');
   animateView('ed-note-form');
   openNoteTemplate(id);
@@ -193,6 +196,7 @@ function openNoteTemplate(id) {
   hide('ed-empty');
   hide('ed-form');
   hide('ed-settings');
+  hide('ed-help');
   show('ed-note-form');
   animateView('ed-note-form');
   if (window.__gbOpenNote) {
@@ -282,7 +286,7 @@ function resolveVarsLive(varsObj) {
 
 // ── Settings open/close (React owns the panel body) ────────────
 function openSettings() {
-  const views = ['ed-empty', 'ed-form', 'ed-note-form'];
+  const views = ['ed-empty', 'ed-form', 'ed-note-form', 'ed-help'];
   _settingsPreviousView = views.find((v) => !$(v)?.classList.contains('hidden')) || 'ed-empty';
   views.forEach((v) => $(v)?.classList.add('hidden'));
   show('ed-settings');
@@ -292,6 +296,26 @@ function closeSettings() {
   $('ed-settings')?.classList.add('hidden');
   $(_settingsPreviousView)?.classList.remove('hidden');
   $(_settingsPreviousView)?.classList.add('view-animate');
+}
+
+// ── Help & Training open/close (React owns the page body) ──────
+// Same view-swap contract as Settings. `article` deep-links into a
+// specific article/tutorial via the hook HelpPage registers
+// (window.__gbHelpNavigate) — safe to call before React mounts; the
+// page just opens on its default article in that case.
+let _helpPreviousView = 'ed-empty';
+function openHelp(article) {
+  const views = ['ed-empty', 'ed-form', 'ed-note-form', 'ed-settings'];
+  _helpPreviousView = views.find((v) => !$(v)?.classList.contains('hidden')) || 'ed-empty';
+  views.forEach((v) => $(v)?.classList.add('hidden'));
+  show('ed-help');
+  animateView('ed-help');
+  if (article) window.__gbHelpNavigate?.(article);
+}
+function closeHelp() {
+  $('ed-help')?.classList.add('hidden');
+  $(_helpPreviousView)?.classList.remove('hidden');
+  $(_helpPreviousView)?.classList.add('view-animate');
 }
 
 /**
@@ -406,6 +430,8 @@ window.deleteTemplateById     = deleteTemplateById;
 window.deleteNoteTemplateById = deleteNoteTemplateById;
 window.openSettings     = openSettings;
 window.closeSettings    = closeSettings;
+window.openHelp         = openHelp;
+window.closeHelp        = closeHelp;
 window.openCaseTplEditor = openCaseTplEditor;
 
 window.__gbSaveTemplate = applyTemplatePatch;
@@ -456,6 +482,20 @@ chrome.runtime.onMessage.addListener((msg) => {
   }
 })();
 
+// Deep link: editor.html?view=help&article=<slug> opens straight into
+// Help (used by the popup/Settings launchers and, later, per-modal "?"
+// buttons routed through the background openEditor handler).
+function handleViewParam() {
+  try {
+    const params = new URLSearchParams(location.search);
+    if (params.get('view') !== 'help') return;
+    const article = params.get('article') || undefined;
+    // The Help React bundle mounts on DOMContentLoaded; defer one tick so
+    // __gbHelpNavigate is registered before we route to the article.
+    setTimeout(() => openHelp(article), 0);
+  } catch (_) { /* noop */ }
+}
+
 async function init() {
   const data = await loadStorage();
   templates     = data.templates     || [];
@@ -471,9 +511,10 @@ async function init() {
     if (mig.changed) { templates = mig.migrated; await saveTemplates(); }
   } catch (e) { console.warn('[gb] templateMigration failed', e); }
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', wireGearButton);
+    document.addEventListener('DOMContentLoaded', () => { wireGearButton(); handleViewParam(); });
   } else {
     wireGearButton();
+    handleViewParam();
   }
 }
 init();
