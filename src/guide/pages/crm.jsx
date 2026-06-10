@@ -6,6 +6,7 @@ import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
 import {
   CRMSearchLive, ResultRow, TableHeader, Toolbar as CSToolbar, SelectionBar, MOCK_RESULTS,
 } from '../lib/crmsearch-live.jsx';
+import { QuickSendPanel } from '../lib/quicksend-live.jsx';
 import { QueryBuilder } from '../../modals/QueryBuilder.jsx';
 import { CRMCreateContact } from '../../modals/CRMCreateContact.jsx';
 
@@ -96,6 +97,16 @@ export function SearchPage() {
 
       <TourBox n={2} eyebrow="Act on many" title="Selection & bulk actions" live={<MiniFrame width={560} label="crm search · selection bar" pad={false}><SelectionBar selCount={3} total={6} /></MiniFrame>} flip>
         <p>Tick rows and the selection bar slides in: <strong>Run campaign</strong> builds the selected-contact audience and opens the Campaign Manager, <strong>Email selected</strong> opens the bulk runner, and <strong>Export CSV</strong> downloads them — each acting on every checked row.</p>
+      </TourBox>
+
+      <TourBox n={3} eyebrow="Email selected → Quick Send" title="Bulk email, with a progress ring" live={<QuickSendPanel contactCount={3} />} wide>
+        <p><strong>Email selected</strong> opens the <strong>Quick Send</strong> runner over your checked contacts. Press <strong>Run</strong> in the panel — it's live — and watch the three phases:</p>
+        <ul>
+          <li><strong>Setup</strong> — pick the email template (with weighted variation splits when it has variations) and the <strong>delay between sends</strong> (a random range, so a blast looks human).</li>
+          <li><strong>Running</strong> — the ring fills to a live %, a “Now sending” card shows the current contact, and a pacing line counts down between sends; sent / queued chips track the run.</li>
+          <li><strong>Done</strong> — a checkmark burst, then stat tiles (Sent, Success %, Elapsed) and a per-contact timeline. Send again or Close.</li>
+        </ul>
+        <p>Each contact opens in a background tab, its variables resolve against that contact's real data, the email sends, the tab closes — so every recipient gets genuinely personalized content. <em>Keep Power Automate on for a real blast; off, each send opens an Outlook window instead.</em> The same runner powers <a href="#tasks">Task List</a>'s Email selected. Full detail on the <a href="#quicksend">Quick Send</a> page.</p>
       </TourBox>
 
       <div className="docnote info">

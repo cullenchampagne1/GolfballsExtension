@@ -16,6 +16,7 @@ import {
   CallLogLive, ClTemplateRow, ClComposeBar, ClTokenMenu, SAMPLE_CALL_TEMPLATES,
 } from '../lib/calllog-live.jsx';
 import { CalendarLive, MiniCalendar, addDays } from '../lib/calendar-live.jsx';
+import { QuickSendPanel } from '../lib/quicksend-live.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    organize.jsx — Stay Organized pages. Each leads with the REAL
@@ -281,6 +282,16 @@ export function TasksPage() {
       <TourBox n={2} eyebrow="Act on many" title="Selection & bulk actions" live={<MiniFrame width={560} label="task list · selection bar" pad={false}><SelectionBar selCount={3} total={7} /></MiniFrame>} flip>
         <p>Tick rows and a selection bar slides in at the top: <strong>Run campaign</strong>, <strong>Email selected</strong>, and <strong>Export CSV</strong> — each acting on every checked row.</p>
         <p>The footer carries two more: <strong>Open Tabs</strong> opens each selected record in its own browser tab, and <strong>Quick Task</strong> drops a follow-up task on every one.</p>
+      </TourBox>
+
+      <TourBox n={3} eyebrow="Email selected → Quick Send" title="Bulk email, with a progress ring" live={<QuickSendPanel contactCount={3} />} wide>
+        <p><strong>Email selected</strong> opens the <strong>Quick Send</strong> runner over your checked rows. Press <strong>Run</strong> in the panel — it's live — and watch the three phases:</p>
+        <ul>
+          <li><strong>Setup</strong> — pick the email template (with weighted variation splits when it has variations) and the <strong>delay between sends</strong> (a random range, so a blast looks human).</li>
+          <li><strong>Running</strong> — the ring fills to a live %, a “Now sending” card shows the current contact, and a pacing line counts down between sends; sent / queued chips track the run.</li>
+          <li><strong>Done</strong> — a checkmark burst, then stat tiles (Sent, Success %, Elapsed) and a per-contact timeline. Send again or Close.</li>
+        </ul>
+        <p>Each contact is opened in a background tab, its variables resolve against that contact's real data, the email sends, the tab closes — so every recipient gets genuinely personalized content, not mail-merge blanks. <em>Keep Power Automate on for a real blast; off, each send opens an Outlook window instead.</em> Full detail on the <a href="#quicksend">Quick Send</a> page.</p>
       </TourBox>
 
       <TourBox n={3} eyebrow="The line-item settings" title="The per-task popover" live={<MiniFrame width={340} label="task · push due date" pad><PushDueCard /></MiniFrame>} wide>
