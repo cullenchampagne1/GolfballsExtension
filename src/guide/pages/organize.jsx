@@ -115,8 +115,10 @@ function FilterChipsSnippet() {
 
 function EditorSnippet() {
   const [draft, setDraft] = useState({ title: 'Confirm logo colors with Marcus', priority: 'med', due: '', context: { type: 'contact', id: '4421', name: 'Marcus Chen' } });
+  /* Match the real modal's inner width (~520) so the Priority segmented
+     and the Due field share the row without crowding. */
   return (
-    <MiniFrame width={420} label="watch list · inline editor" pad>
+    <MiniFrame width={520} label="watch list · inline editor" pad>
       <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
         <WatchEditor draft={draft} onChange={setDraft} onCommit={() => {}} onCancel={() => {}} />
       </ul>
