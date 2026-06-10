@@ -6,148 +6,304 @@
       "title": "Gift Catalog",
       "icon": "card",
       "tiers": ["beginner", "intermediate"],
-      "keywords": ["catalog", "gift", "products", "browse", "index", "gifting"],
-      "summary": "Browse and search the entire golfballs.com product range — every item on the site, indexed locally for instant filtering by category, brand, and price.",
+      "keywords": ["catalog", "gift", "products", "browse", "index", "gifting", "departments", "sale", "promo", "commissionable"],
+      "summary": "The full golfballs.com range in one searchable grid — departments, badges, the '/' filter palette, and the product detail panel with live inventory.",
       "feature": "gift-catalog",
       "flag": "giftCatalogEnabled",
       "covers": ["gift-catalog"],
       "tutorial": "build-proposal",
       "body": {
         "beginner": [
-          { "type": "p", "text": "Open the Gift Catalog from the Actions Shelf on a contact, account, or order page. You get a searchable grid of the full site catalog — over three thousand items — with a collapsible category sidebar and a Custom Logo group at the top." },
-          { "type": "p", "text": "Search by name, filter by category, brand, or price, and sort by popularity or price. Click Customize on any card to start decorating it, or add it straight to the quote." }
+          { "type": "p", "text": "Open the Gift Catalog from the Actions Shelf. The layout: a search bar across the top, a BROWSE sidebar on the left, the product grid in the middle, and — once you've added something — the proposal panel on the right." },
+          { "type": "heading", "text": "Searching and filtering" },
+          { "type": "list", "items": [
+            "The search box ('Search products, or / to filter…') is focused on open — just type.",
+            "Type / inside it for the filter palette: pick categories, brands, or special filters like 'On sale / promo' and 'Commissionable only' with arrows + Enter.",
+            "Sort dropdown: Most reviewed (default), Price: low → high, Price: high → low, Name A–Z.",
+            "An X appears next to the search when any filter is active — one click clears everything."
+          ] },
+          { "type": "heading", "text": "The sidebar" },
+          { "type": "list", "items": [
+            "Departments — Golf Balls, Apparel, Drinkware, Gift Sets and the rest, each with a live count. Click to scope, click again to clear.",
+            "Custom Items — your own service products (see Custom & Service Items).",
+            "SAVED — Saved Proposals (your local drafts) and Current Proposals (live from the CRM when an account is linked).",
+            "Proposal dock — when your proposal has items, a compact card at the sidebar's bottom shows the line count + running total; click it to pop the proposal panel open."
+          ] },
+          { "type": "heading", "text": "Reading a product card" },
+          { "type": "table", "headers": ["Element", "Meaning"], "rows": [
+            ["Sale badge (red) / Promo badge (green)", "On sale, or a promotion currently applies"],
+            ["$ coin badge", "Commissionable — a custom-logo SKU priced on the volume ladder"],
+            ["'from' price", "Custom-logo items show the 1+ tier; volume drops it further"],
+            ["HPG / SNUGZ pill", "A custom item imported from that supplier"],
+            ["Round + button", "Adds straight to the proposal (tooltip: 'Add to proposal')"]
+          ] }
         ],
         "intermediate": [
-          { "type": "heading", "text": "The index and refresh" },
-          { "type": "p", "text": "The catalog indexes the whole site and caches the result locally, re-indexing automatically after 24 hours (configurable as 'Re-index interval' in Developer Settings). The first open after the cache expires takes a few extra seconds while it rebuilds — that's normal." },
-          { "type": "callout", "kind": "tip", "text": "Card density and default sort are configurable in Developer Settings if you prefer a tighter grid or price-first ordering." }
+          { "type": "heading", "text": "The product detail panel" },
+          { "type": "p", "text": "Click a card and a panel slides in from the right: big photo, brand + category pills, rating and SKU, the per-unit price (with the struck-through 'was' price on sale items), and — for tiered products — the quantity pricing table showing every break with its per-unit price and green savings column. A footer note explains it: 'Per-unit price drops with order volume — quote the tier that matches the gift run.'" },
+          { "type": "list", "items": [
+            "Promo banner — green pill with the promo's label and code when one applies to this product.",
+            "Cost line — 'Cost $X.XX/unit · used for margin' appears once a cost has been synced for the SKU.",
+            "Check inventory — a button that pulls the live stock table (Avail / OnHand / Alloc / OnOrdr) on demand, with a refresh icon and a retry on error.",
+            "Footer — 'View product' opens the live site page; 'Add to proposal' (changes to 'Add another' once it's in) commits the line."
+          ] },
+          { "type": "callout", "kind": "tip", "text": "The catalog index is cached locally and re-pulls after 24h (Developer Settings → 'Re-index interval'). Seed data paints instantly while the live feed loads, so a brief 'old prices' flash on first open is normal." }
         ]
       },
-      "related": ["customizing-item", "gift-sets", "build-email-proposal", "ts-catalog-stale"]
+      "related": ["customizing-item", "proposal-panel", "custom-service-items", "gifting-glossary", "ts-catalog-stale"]
     },
     {
       "slug": "customizing-item",
       "title": "Customizing an Item",
       "icon": "edit",
       "tiers": ["intermediate"],
-      "keywords": ["logo", "text", "monogram", "imprint", "dual pole", "customize", "personalize"],
-      "summary": "Add a logo, personalized text, or monogram to a product — with a live 3D preview and an optional second imprint on the opposite pole.",
+      "keywords": ["logo", "text", "monogram", "imprint", "dual pole", "customize", "personalize", "photo", "icons", "alignment", "player number", "font"],
+      "summary": "Eight imprint types — logo, text, monogram, photo, alignment art, icons, player numbers — each with its exact controls, plus dual-pole decoration.",
       "feature": "gift-catalog",
       "flag": "giftCatalogEnabled",
       "covers": ["gift-customize", "3d-viewer", "golfball-viewer"],
       "body": {
         "intermediate": [
-          { "type": "p", "text": "Click Customize on a catalog card. The panel shows the imprint types this specific product supports — products that can't take a monogram simply won't offer one. Choose:" },
-          { "type": "list", "items": [
-            "Logo — upload or pick the customer's artwork; it renders onto the live 3D preview.",
-            "Personalized text — real fonts rendered exactly as production will print them.",
-            "Monogram — live letter art in multiple styles, recolorable, laid out by letter count."
+          { "type": "p", "text": "On a customizable product, the detail panel grows a customize block: tabs for each imprint type the product actually supports, type-specific controls below, and a live 3D preview that re-renders as you change anything. The preview uses the real production rendering services — what you see is what prints." },
+          { "type": "table", "headers": ["Imprint type", "Controls"], "rows": [
+            ["Custom Logo", "Drag-and-drop or click-to-upload (PNG/JPG/GIF, ~5 MB). Art auto-aligns to the print area and projects onto the 3D ball."],
+            ["Personalized (Text)", "Up to 3 text lines (~20 chars each) · font dropdown: Kabel Dm BT (default), Calibri, Lucida Handwriting, Bradley Hand · color picker (6 quick colors, 75+ in the expanded panel) · size: Standard / Large / Max"],
+            ["Monogram", "7 style thumbnails — Circle, Hexagram, Gardenia (3 initials); Vertical, Horizontal, Diagonal (2); Simple Circle (1) · initials input (letters only) · primary + accent color pickers"],
+            ["Photo", "Upload a photo; auto-crops to a circle (or square where the product calls for it) with a live crop preview"],
+            ["AlignXL (accent line)", "8 line styles (Star, Thin, Medium, Thick, Dot, Skull, Martini, Wine) · optional text line · separate text + line colors, or a 'same color' checkbox"],
+            ["IDAlign (alignment text)", "12 line styles (arrows, dots, stars, chevrons, martini/wine glyphs) · 1–3 initials centered on the line · text + line colors"],
+            ["Icons", "Theme dropdown (Dad/Father's Day, Drinks, USA/Patriotic, Masters, Misc) → grid of 5–9 ready-made graphics"],
+            ["Custom Player Number", "A 1–3 digit number input"]
           ] },
-          { "type": "p", "text": "Dual-pole decoration puts a second imprint on the opposite side of the ball — logo on one pole, personalization or monogram on the other. The 3D preview shows both; drag to rotate, scroll to zoom." },
-          { "type": "callout", "kind": "info", "text": "Previews use the real production rendering services, so what you see is what the customer gets — not an approximation." }
+          { "type": "heading", "text": "Dual-pole (the second side)" },
+          { "type": "p", "text": "Where the product supports it, a checkbox — 'Add personalization to the back' — reveals a second, identical set of imprint controls for the opposite pole: logo on one side, text or a monogram on the other. Both render in the 3D preview. The second pole carries an upcharge (per dozen: +$6 for a logo, +$4 for text). Deleting the front imprint promotes the back one to front." },
+          { "type": "callout", "kind": "proTip", "text": "In the proposal panel, each imprint shows as a draggable pill on its line — drag a pill onto another line to copy the same decoration to a second product." }
         ]
       },
-      "related": ["gift-catalog", "gift-sets", "3d-product-viewer"]
+      "related": ["gift-catalog", "gift-sets", "3d-product-viewer", "proposal-panel"]
     },
     {
       "slug": "gift-sets",
       "title": "Gift Sets",
       "icon": "card",
       "tiers": ["intermediate"],
-      "keywords": ["gift set", "box", "sleeve", "packaging", "upsell", "bundle", "wooden"],
-      "summary": "Wrap custom-logo balls into boxed gift sets — sleeves, 6-ball boxes, premium wood — with an assembled 3D box preview and verified ladder pricing.",
+      "keywords": ["gift set", "box", "sleeve", "packaging", "upsell", "bundle", "wooden", "per set"],
+      "summary": "Wrap custom-logo balls into packaged sets — sleeve, black box, or premium wood with divot-tool or poker-chip kits — and watch pricing flip from per-dozen to per-set.",
       "feature": "gift-catalog",
       "flag": "giftCatalogEnabled",
       "covers": ["gift-sets"],
       "body": {
         "intermediate": [
-          { "type": "p", "text": "While customizing a ball, the packaging section offers gift-set bundles: a 3-ball sleeve, a 6-ball box with accessories (divot tool, poker chip, ball marker variants), or premium wooden boxes." },
-          { "type": "p", "text": "Pick one and the 3D preview swaps to the assembled open box — balls and accessories seated in their foam slots, with your imprints visible on each piece." },
-          { "type": "callout", "kind": "info", "text": "Set pricing combines the ball's custom-logo volume ladder with the kit's own ladder, rounded to .95 — the same math the website uses, verified against production carts." }
+          { "type": "p", "text": "While customizing a ball, the gift-set selector offers the packaging options: 'No packaging' (default), a 3-Ball Sleeve, 6-Ball Black Box variants with a lever-divot or poker-chip kit, and Premium Wood 6-Ball boxes. Each option lists its size and the upcharge per set." },
+          { "type": "heading", "text": "What changes when you pick one" },
+          { "type": "list", "items": [
+            "The 3D preview swaps to the assembled open box — balls and the kit seated in their foam slots, imprints visible on every piece.",
+            "Pricing flips to per-SET: the ball's custom-logo ladder is scaled to the set's ball count and the kit's own ladder is added, rounded to .95 — the same math the website uses, verified against production carts.",
+            "In the proposal, the line shows a gift-set banner (set name + '6 balls · per set') and quantity now means number of sets, not dozens."
+          ] }
         ]
       },
-      "related": ["customizing-item", "3d-product-viewer", "build-email-proposal"]
+      "related": ["customizing-item", "3d-product-viewer", "proposal-panel"]
+    },
+    {
+      "slug": "proposal-panel",
+      "title": "The Proposal Panel",
+      "icon": "task",
+      "tiers": ["intermediate", "advanced"],
+      "keywords": ["proposal", "quote", "line item", "split", "tier", "price edit", "save draft", "quantity", "promo", "drag imprint"],
+      "summary": "Where the quote takes shape: line items, split tiers, inline price editing with tier-reset, draggable imprint pills, the promo block, and saving drafts.",
+      "feature": "proposals",
+      "flag": "giftCatalogEnabled",
+      "covers": ["proposals"],
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "The right-hand panel slides in with your first added item. Its header shows 'PROPOSAL', the count ('3 products · 36 units'), a Clear button, and a collapse arrow. Each line item card carries:" },
+          { "type": "list", "items": [
+            "Thumbnail, brand, title, and the line total (right-aligned).",
+            "A gift-set banner when packaging is applied (set name + per-set size).",
+            "Imprint pills — front-pole pills tinted brand, back-pole tinted green, each with the art preview and an X to remove. Drag a pill onto another line to copy the decoration there.",
+            "Split rows — quantity stepper × price × subtotal (see below).",
+            "A trash icon to remove the line, and 'N units' at the bottom right."
+          ] },
+          { "type": "heading", "text": "Splits, prices, and tier snapping" },
+          { "type": "p", "text": "Each line starts with one split: a qty stepper (−/+ or type a number) and a price. The price auto-snaps to the matching volume tier as quantity changes. Click the dashed-underline price to type your own — that locks it, and a small ↺ link appears showing the auto tier price; click it to snap back. '+ Split tier' adds another qty/price row on the same line, so one quote can show 'option A: 12 @ $6.50, option B: 50 @ $5.95' side by side." },
+          { "type": "heading", "text": "The footer" },
+          { "type": "list", "items": [
+            "Promo block — type a code or open the chevron to browse known codes (only ones applicable to this cart are offered, each showing its real value). Applied promos render as a pill with the discount in green plus any free-quantity line; the total shows old-price strikethrough + new total.",
+            "Estimated total — units + the big number.",
+            "Buttons — Save draft (expands a name field, e.g. 'Q3 Client Gift Run'), Load (pull a saved draft back in), Generate email, Clear."
+          ] }
+        ],
+        "advanced": [
+          { "type": "heading", "text": "Saved and current proposals" },
+          { "type": "p", "text": "Sidebar → Saved Proposals is the gallery of your local drafts: each card shows thumbnails, name, date, unit count, total, and a Load button (loading is additive — it merges into the working proposal). Hover a card's 'Draft' tag and it morphs into a red Delete. Current Proposals pulls the linked account's real proposals live from the CRM — open any of them into the Breakdown view, load them into the builder, or re-email them." }
+        ]
+      },
+      "related": ["proposal-breakdown", "build-email-proposal", "promo-codes", "gifting-glossary"]
+    },
+    {
+      "slug": "proposal-breakdown",
+      "title": "Breakdown & Margin View",
+      "icon": "calc",
+      "tiers": ["intermediate", "advanced"],
+      "keywords": ["breakdown", "margin", "cost", "profit", "blended", "revenue", "cost basis", "asterisk", "sync"],
+      "summary": "The profitability X-ray of any proposal: revenue/cost/profit/margin tiles, per-line margin color coding, cost basis, and price overrides.",
+      "feature": "proposals",
+      "flag": "giftCatalogEnabled",
+      "covers": ["inventory-costs"],
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "Click a saved-proposal card (or the current proposal) to open its breakdown. Across the top, four stat tiles: Revenue, Est. Cost, Gross Profit, and Blended Margin. Below, the LINE ITEMS & MARGIN table — Product, Qty, Revenue, Cost, Margin % — where each margin badge is color-coded: green at 45%+ margin, yellow from 32%, red below 32%. Click a row to expand its splits and imprints. Free promo lines carry a 'Free' badge and are excluded from margin math." },
+          { "type": "heading", "text": "Where costs come from" },
+          { "type": "table", "headers": ["Cost basis", "Meaning"], "rows": [
+            ["actual", "Every line uses a real synced cost (from inventory or a custom item's entered cost)"],
+            ["mixed", "Some lines synced, the rest estimated — estimated lines are marked with an asterisk *"],
+            ["assumed", "No costs on file; margins assume a default percentage of sell price"]
+          ] },
+          { "type": "p", "text": "Missing costs auto-load when the breakdown opens; a sync progress indicator shows while the cost map fills in. The footer note tells you which basis you're looking at and reminds you prices are clickable — any price can be overridden right here." }
+        ],
+        "advanced": [
+          { "type": "heading", "text": "Sections below the table" },
+          { "type": "list", "items": [
+            "CUSTOMIZATION — every decorated item with its imprint chips (art square, type + pole, content, color swatches) and gift-set pill.",
+            "PROMOTION — the applied code with its value, or the same type/browse/Apply promo block as the proposal panel.",
+            "Margin summary box — Revenue, − Cost (with basis), − Promotion, Gross profit, Blended margin badge.",
+            "Action buttons — saved drafts get Copy command / Save to account / Load / Generate email; the current proposal gets Open proposal / Generate email."
+          ] }
+        ]
+      },
+      "related": ["proposal-panel", "margin-calculator", "ts-no-cost", "build-email-proposal"]
     },
     {
       "slug": "custom-service-items",
       "title": "Custom & Service Items",
       "icon": "plus",
       "tiers": ["intermediate"],
-      "keywords": ["service item", "custom item", "freight", "setup fee", "one-off"],
-      "summary": "Create one-off items — design setup, freight, consulting — with their own pricing ladders, and add them to any proposal like catalog products.",
+      "keywords": ["service item", "custom item", "freight", "setup fee", "one-off", "add item", "cost breaks"],
+      "summary": "Build your own products — the full add-item form, cost ladders for margin, style options, and the repo tags that track where items came from.",
       "feature": "custom-items",
       "flag": "giftCatalogEnabled",
       "covers": ["custom-items"],
       "body": {
         "intermediate": [
-          { "type": "p", "text": "Not everything you quote is in the catalog. Custom items let you define service products — a setup fee, freight, a special-order item — with a name, description, thumbnail, price ladder, setup cost, and lead time." },
-          { "type": "p", "text": "Saved items live in your local library (deduped by SKU) and appear alongside catalog products when building a quote. Edit or remove them any time; bulk delete handles cleanup after big imports." }
+          { "type": "p", "text": "Sidebar → Custom Items opens your library as a masonry gallery (filtered to the linked account where one is set). The '+ Add' button opens the item form:" },
+          { "type": "table", "headers": ["Field", "Notes"], "rows": [
+            ["Name", "Required — e.g. 'Custom Golf Cap'"],
+            ["Brand / Item ID", "Your supplier's brand and SKU"],
+            ["Description", "Materials, decorating options — shows on the detail panel"],
+            ["Link to product", "Supplier URL; the detail panel gets View product + copy-link buttons"],
+            ["Thumbnail image", "Drag/drop or pick a file — automatically re-hosted on the company image server so it renders in proposal emails"],
+            ["Price", "Required — your sell price"],
+            ["Style options", "Comma-separated (Color, Size…); each becomes a picker on the detail panel"],
+            ["Cost (per unit) + Cost breaks", "Supplier cost, optionally as a quantity/cost ladder — this is what powers real margins in the breakdown"]
+          ] },
+          { "type": "p", "text": "Items show a source pill — HPG or SNUGZ for imports, nothing for hand-made ones — and behave exactly like catalog products in the proposal: quantities, splits, even style variants. Bulk delete handles cleanup after a big import." }
         ]
       },
-      "related": ["supplier-import", "build-email-proposal"]
+      "related": ["supplier-import", "proposal-panel", "proposal-breakdown"]
     },
     {
       "slug": "supplier-import",
       "title": "Supplier Import (HPG / SnugZ)",
       "icon": "download",
       "tiers": ["advanced"],
-      "keywords": ["import", "hpg", "snugz", "supplier", "markup", "third party"],
-      "summary": "Import customizable products from HPG Brands or SnugZ USA — costs, options, and minimums fetched automatically, markup computed, saved as custom items.",
+      "keywords": ["import", "hpg", "snugz", "supplier", "markup", "third party", "review sheet"],
+      "summary": "One-click bulk import from HPG Brands or SnugZ USA: catalog paging, per-item cost ladders, automatic markup, and a review sheet before anything saves.",
       "feature": "supplier-import",
       "flag": "giftCatalogEnabled",
       "covers": ["supplier-import"],
       "tutorial": "import-supplier",
       "body": {
         "advanced": [
-          { "type": "p", "text": "From the custom items panel, start an HPG or SnugZ import. The extension pages the supplier's catalog, filters to customizable products, then fetches each detail page for cost ladders, decoration options, minimums, weight, and lead time." },
-          { "type": "p", "text": "A markup is computed on top of cost (margin + setup + shipping), and you preview the resulting price ladder before saving the items you want into your custom items library." },
-          { "type": "callout", "kind": "warning", "text": "SnugZ requires you to be signed in to snugzusa.com in another tab first. HPG is public. Large imports fetch many pages — let the progress finish before navigating away." }
+          { "type": "p", "text": "In the Custom Items gallery, the '+ HPG Brands' and '+ SnugZ USA' buttons start an import. The flow runs in two visible phases — 'Fetching product catalog…' (paging the supplier's search, page counter shown) then 'Fetching product details…' (per-item progress) — and lands on a review sheet: every found item with its thumbnail, name, SKU, cost ladder, and style options, plus an include/exclude checkbox. 'Save X items' commits your selection to the library, deduped by SKU." },
+          { "type": "p", "text": "Sell prices are computed from supplier cost with the standard model — (cost + setup + shipping) ÷ (1 − target margin) — so imported items arrive quote-ready with honest margins." },
+          { "type": "callout", "kind": "warning", "text": "SnugZ needs you signed in to snugzusa.com in another tab first; HPG is public. Big imports fetch many pages — let the progress finish before navigating away." }
         ]
       },
-      "related": ["custom-service-items", "build-email-proposal"]
+      "related": ["custom-service-items", "proposal-breakdown"]
     },
     {
       "slug": "promo-codes",
       "title": "Promo Codes",
       "icon": "sparkle",
       "tiers": ["intermediate"],
-      "keywords": ["promo", "coupon", "discount", "free quantity", "code"],
-      "summary": "Validate and apply real promotions to a proposal — discounts and free-item lines computed by the same engine the website uses.",
+      "keywords": ["promo", "coupon", "discount", "free quantity", "code", "applicable"],
+      "summary": "Apply real promotions to a proposal — the picker only offers codes that actually fit the cart, and free-quantity promos add genuine free-item lines.",
       "feature": "promos",
       "flag": "giftCatalogEnabled",
       "covers": ["promos"],
       "body": {
         "intermediate": [
-          { "type": "p", "text": "In the proposal sidebar, type a promo code or pick from known promos — the picker only offers codes that actually apply to what's in your cart. Applying one recomputes the proposal: percentage discounts appear as discount lines, and free-quantity promos add real free-item lines." },
-          { "type": "callout", "kind": "info", "text": "Free promo lines are excluded from margin math, so the breakdown still tells you the truth about profitability." }
+          { "type": "p", "text": "The promo block lives in the proposal panel footer and in the breakdown: type a code, or open the chevron to browse known codes — each candidate is pre-checked against your current cart and only applicable ones appear, with their real value shown (dollar discount or free quantity). Apply recomputes the proposal: a green discount line, free-item lines where the promo grants them, and a struck-through old total." },
+          { "type": "callout", "kind": "info", "text": "Free promo lines show 'FREE' in the proposal email and are excluded from margin math, so the breakdown still reads true. A warning appears if the cart stops meeting the promo's requirements." }
         ]
       },
-      "related": ["build-email-proposal", "margin-calculator"]
+      "related": ["proposal-panel", "build-email-proposal", "proposal-breakdown"]
     },
     {
       "slug": "build-email-proposal",
-      "title": "Building & Emailing a Proposal",
+      "title": "Emailing a Proposal",
       "icon": "send",
       "tiers": ["intermediate", "advanced"],
-      "keywords": ["proposal", "quote", "email proposal", "cart link", "opportunity", "tracked"],
-      "summary": "Assemble line items into a priced quote, then email it as a tracked proposal — with 3D render snapshots, a live cart link, and automatic opportunity updates.",
+      "keywords": ["proposal email", "quote email", "cart link", "opportunity", "tracked", "templates", "classic", "minimal", "imprint preview"],
+      "summary": "Generate the customer-facing email: four layout templates, content toggles (costs, images, 3D previews, CTA), and the tracked server-side send.",
       "feature": "proposals",
       "flag": "giftCatalogEnabled",
-      "covers": ["proposal-email", "proposals"],
+      "covers": ["proposal-email"],
       "tutorial": "build-proposal",
       "body": {
         "intermediate": [
-          { "type": "p", "text": "As you add items from the catalog (customized or plain, plus custom items), the proposal sidebar tracks line items and a running total. You can split a quantity across price tiers, apply a promo, and review a margin breakdown per line." },
-          { "type": "p", "text": "Email Proposal opens a composer with the rendered quote: line items with pricing, automatic 3D snapshots of each customized product, and a link to a live cart the customer can check out from." },
-          { "type": "p", "text": "Sending does three things server-side: creates the proposal email record, registers it for tracking, and updates the opportunity's value — the same bookkeeping as quoting from the website." }
+          { "type": "p", "text": "'Generate email' (from the proposal panel or a breakdown) opens the composer in place. At the top, a template selector with four layouts — Classic (detailed rows), Minimal (editorial), Catalog Cards (card grid), Quote (grouped table). Then the message fields: recipient (pre-filled from the page's contact when available), subject (pre-filled 'Corporate Gift Proposal — …'), and an editable intro body." },
+          { "type": "heading", "text": "Content toggles" },
+          { "type": "table", "headers": ["Toggle", "Effect"], "rows": [
+            ["Expiration date", "Adds 'This proposal expires on <date>' with a date picker"],
+            ["Disclaimer", "Adds the footnote '*shipping & sales tax are calculated in the shopping cart'"],
+            ["Show cost", "Off hides per-unit prices — for teaser sends"],
+            ["Show images", "Product photos on/off"],
+            ["Show previews", "Includes IMPRINT PREVIEW cards — real 3D render snapshots of each decoration"],
+            ["Show CTA", "Adds the 'View this option →' button linking to the live cart"]
+          ] },
+          { "type": "p", "text": "The rendered email shows each line with brand, title, 'Qty N × $X ea' and the line total; sale and volume pricing render with the old price struck through; promo discounts appear as a green '−$X' line and free items as 'Qty X · FREE'." }
         ],
         "advanced": [
-          { "type": "heading", "text": "Saved and current proposals" },
-          { "type": "p", "text": "The Current Proposals sidebar pulls the contact's existing proposals live from the CRM — open one to see its breakdown, load it back into the builder, or re-email it. Each saved proposal maps back to a real cart, so 'load' restores the exact line items and decorations." },
-          { "type": "callout", "kind": "tip", "text": "The cart link only appears in the email when the cart saved successfully — if it's missing, re-save the proposal before sending." }
+          { "type": "heading", "text": "What Send actually does" },
+          { "type": "p", "text": "Sending uploads the 3D snapshots, then runs the same server-side bookkeeping as a quote from the website: it creates the proposal email record, registers it for tracking, and updates the opportunity's value on the account. The cart link is only included when the cart saved successfully — if the CTA is missing from a preview, re-save the proposal first. A toast confirms 'Proposal sent to <email>'." }
         ]
       },
-      "related": ["gift-catalog", "promo-codes", "how-email-sending-works", "margin-calculator"]
+      "related": ["proposal-panel", "proposal-breakdown", "promo-codes", "how-email-sending-works"]
+    },
+    {
+      "slug": "gifting-glossary",
+      "title": "Gifting Glossary",
+      "icon": "bookmark",
+      "tiers": ["beginner"],
+      "keywords": ["glossary", "terms", "imprint", "pole", "ladder", "split", "commissionable", "definitions"],
+      "summary": "Every term the gifting suite throws at you, defined in one place.",
+      "feature": "gift-catalog",
+      "covers": [],
+      "body": {
+        "beginner": [
+          { "type": "table", "headers": ["Term", "Meaning"], "rows": [
+            ["Imprint / Decoration", "The custom artwork on a product — logo, text, monogram, photo, icon"],
+            ["Pole / Dual-pole", "The two printable sides of a ball. Dual-pole = both sides decorated (per-dozen upcharge: +$6 logo, +$4 text)"],
+            ["Commissionable / Custom-logo", "A SKU priced on the volume ladder instead of retail — marked with the $ coin badge"],
+            ["Ladder / Price breaks", "Tiered pricing: 1+ @ $6.00, 12+ @ $5.50, 50+ @ $5.00 — quantity snaps the price to the best tier"],
+            ["Split / Split tier", "Multiple qty × price rows on one line, to quote several volume scenarios at once"],
+            ["Line / Line item", "One product in the proposal: product + decoration + variant + its splits"],
+            ["Gift set", "A custom-logo ball wrapped into packaged sets (sleeve / box / wood, with a divot or poker-chip kit), priced per set"],
+            ["Variant / Base option", "A product option that changes the price (Tee Count, Color…) — separate from decoration"],
+            ["Proposal / Draft", "The working quote. Saved drafts live locally with a name; 'Current' = the unsaved working set"],
+            ["Current proposals", "The account's real proposals pulled live from the CRM opportunity"],
+            ["Breakdown", "The margin view: revenue, cost, profit, per-line margin color coding"],
+            ["Cost basis", "Where costs came from: actual (synced), mixed (some estimated, marked *), or assumed"],
+            ["Custom item / Service item", "A product you define yourself (or import from HPG/SnugZ) — setup fees, freight, special orders"],
+            ["Repo", "The import source tag on a custom item: HPG, SNUGZ, or none for hand-made"],
+            ["Snapshot", "A fixed-pose PNG export of the 3D render, used in proposal emails"],
+            ["Opportunity / Cart number", "The CRM record a sent proposal attaches to, and the saved cart's ID — what makes proposals reloadable and trackable"]
+          ] }
+        ]
+      },
+      "related": ["gift-catalog", "proposal-panel", "proposal-breakdown"]
     }
   ]
 }

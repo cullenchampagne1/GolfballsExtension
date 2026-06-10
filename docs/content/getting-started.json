@@ -91,20 +91,21 @@
         ],
         "intermediate": [
           { "type": "heading", "text": "Every shelf action" },
-          { "type": "table", "headers": ["Action", "Opens", "Appears on"], "rows": [
-            ["Add Task", "Quick Task", "contact, account"],
-            ["My Tasks", "Task List", "contact, account"],
-            ["Search CRM", "CRM Search", "everywhere"],
-            ["Log Call", "Call Log", "contact, account"],
-            ["Margin Calc", "Margin Calculator", "order"],
-            ["Gift Catalog", "Gift Catalog", "contact, account"],
-            ["Watch", "Watch-add form", "order, contact"],
-            ["Submit Proof", "Submit Proof", "order"],
-            ["Charge", "Charge modal", "order"],
-            ["Copy Order IDs", "clipboard action", "order index"],
-            ["New Contact", "New Contact", "contact, account"]
+          { "type": "table", "headers": ["Action", "What it does", "Appears on"], "rows": [
+            ["Call <contact name>", "Dials the contact (the row hints the number it will dial) and opens the Call Log; shown when the contact has a phone", "contact, account"],
+            ["Log incoming call", "Opens the Call Log without dialing", "contact, account"],
+            ["Quick task for <name>", "Opens Quick Task pre-targeted at this record", "contact, account"],
+            ["Find phone", "Shown instead of Call when the contact has no number but has orders — scans them for one", "contact"],
+            ["My Tasks", "Opens the Task List", "contact, account"],
+            ["Search CRM", "Opens CRM Search", "everywhere"],
+            ["Gift Catalog", "Opens the catalog / proposal builder", "contact, account"],
+            ["Watch", "Inline watch-add form for this record", "order, contact"],
+            ["Margin Calc / Submit Proof / Charge", "The order-page toolkit", "order"],
+            ["Manage order dates", "Opens the Order Date Manager ('Change approval & commitment dates for #…')", "order"],
+            ["Copy order IDs", "Copies every listed ID — the hint counts them ('N orders on this page')", "order index"],
+            ["New Contact", "Opens the contact creator", "contact, account"]
           ] },
-          { "type": "callout", "kind": "proTip", "text": "Actions are ordered by relevance: modal-contextual first, then page-contextual, then general — destructive actions always sit at the bottom in red." }
+          { "type": "p", "text": "The expanded panel's header names where you are ('Contact · Marcus Chen'), and actions that fit the current page float to the top. Destructive actions always sit at the bottom in red." }
         ]
       },
       "related": ["keyboard-shortcuts", "crm-search", "gift-catalog"]

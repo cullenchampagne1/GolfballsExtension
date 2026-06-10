@@ -344,13 +344,16 @@ textarea::-webkit-scrollbar-thumb:hover { background: var(--gb-text-muted,#88888
   margin: 0 auto;
 }
 
-/* Help & Training — wider than Settings: it carries its own two-column
-   layout (sticky nav tree + article) inside the React page. */
+/* Help & Training — full-bleed: it carries its own two-column layout
+   (sticky nav tree + article) inside the React page, so the editor's
+   4% gutters + centered max-width just waste space (worse at higher
+   UI scales). Drop the gutters while Help is the visible view. */
 #ed-help {
-  padding: 20px 0 40px;
-  max-width: 1080px;
-  margin: 0 auto;
+  padding: 16px 0 40px;
+  max-width: none;
+  margin: 0;
 }
+#editor:has(#ed-help:not(.hidden)) { padding: 0 16px; }
 
 .settings-hdr {
   display: flex; align-items: flex-start; justify-content: space-between;

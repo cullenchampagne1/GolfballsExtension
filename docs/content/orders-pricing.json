@@ -14,7 +14,7 @@
       "covers": ["margin-calc", "inventory-costs"],
       "body": {
         "beginner": [
-          { "type": "p", "text": "Press Ctrl+M on an order page (or use the Actions Shelf). Enter any two of cost, price, margin, markup, or profit and the rest compute instantly, with an animated total-profit display." },
+          { "type": "p", "text": "Press Ctrl+M on an order page (or use the Actions Shelf). The fields: Item Cost and Selling Price on the first row, Gross Margin % and Markup % below, then Qty, Unit Profit, and the animated Total Profit readout. Enter any two values and the rest compute as you type; Clear all resets." },
           { "type": "callout", "kind": "warning", "title": "Minimum margin guardrail", "text": "If the margin falls below your minimum (default 30%), the calculator flags it in red. Adjust the threshold under Settings → Developer Settings → 'Minimum allowed margin'." }
         ],
         "intermediate": [
@@ -98,9 +98,15 @@
       "covers": ["watch-list"],
       "body": {
         "beginner": [
-          { "type": "p", "text": "Watch an order or contact from the popup's TRACKING section or the Actions Shelf — it lands on your Watch List with a link back to where it came from. Open the list any time to see everything you're tracking." },
-          { "type": "p", "text": "Each item takes a title, priority, due date, and a done checkbox. Filter chips (All / Active / High Priority / Completed) show live counts." },
-          { "type": "callout", "kind": "info", "text": "Completed items clean themselves up after 5 days (configurable in Developer Settings). The list is personal and stored locally — it isn't shared with the CRM or teammates." }
+          { "type": "p", "text": "Watch an order or contact from the popup's TRACKING section or the Actions Shelf — it lands on your Watch List with a link back to where it came from. Filter chips (All / Active / High priority / Completed) carry live counts, and the search box matches title, context, and due date." },
+          { "type": "heading", "text": "Reading a row" },
+          { "type": "list", "items": [
+            "A colored stripe on the left shows how long the item has been waiting: nothing (<1h), blue (1–4h), amber (4–6h), red (6h+). When anything goes red, the modal header tints red too and the subtitle counts the criticals.",
+            "Line one: priority dot + title. Line two: the context ('Order #29103', 'Contact #4421 · Marcus Chen', or 'Standalone') and the due date.",
+            "The right edge shows the item's age (5m, 2h, 3d); hovering swaps it for Edit and Remove buttons. The checkbox marks it done."
+          ] },
+          { "type": "p", "text": "The Watch button (or Edit) opens the inline editor: title, priority (High/Med/Low), an optional due date, and the context picker — Standalone, or Order/Contact/Account with an ID (plus a name for contacts/accounts)." },
+          { "type": "callout", "kind": "info", "text": "Completed items clean themselves up after 5 days (configurable in Developer Settings). The list is personal and stored locally — it isn't shared with the CRM or teammates. 'Clear all' asks for a second click to confirm." }
         ]
       },
       "related": ["quick-task", "task-list"]

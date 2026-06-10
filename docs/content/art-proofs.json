@@ -5,22 +5,40 @@
       "slug": "image-viewer",
       "title": "Image Viewer & Logo Extraction",
       "icon": "eye",
-      "tiers": ["beginner", "intermediate"],
-      "keywords": ["logo", "image", "artwork", "download", "original", "extract", "viewer"],
-      "summary": "Hover any order image to open a zoomable viewer that resolves the customer's original artwork from wherever it lives — then download, recolor, or submit it as a proof.",
+      "tiers": ["beginner", "intermediate", "advanced"],
+      "keywords": ["logo", "image", "artwork", "download", "original", "extract", "viewer", "align", "eyedropper", "zoom", "knockout"],
+      "summary": "Zoom/pan inspection, the alignment ring that extracts a clean decal, color swapping with the eyedropper, and the W/S/R/A/3/C keyboard map.",
       "feature": "image-viewer",
       "flag": "imagePreviewEnabled",
       "covers": ["image-preview", "image-viewer"],
       "tutorial": "verify-logo",
       "body": {
         "beginner": [
-          { "type": "p", "text": "Hover a product or render image on an order page and an expand button appears. Click it and the Image Viewer opens with the best-quality version of the customer's artwork it can find — zoom, pan, copy the URL, or download." },
-          { "type": "callout", "kind": "proTip", "text": "Shift+click the expand button to skip the viewer and download the logo immediately." }
+          { "type": "p", "text": "Hover a product/render image on an order page and click the expand button (Shift+click downloads immediately instead). The viewer opens on a grid surface and resolves the best original it can find — direct file, the express order's raw upload, CDN candidates, then the page render as a last resort. The subtitle tells you which you got ('Original file' vs 'Extracted logo'). You can also paste any image URL, or drag a file straight onto the surface." },
+          { "type": "heading", "text": "The floating controls" },
+          { "type": "table", "headers": ["Control", "Where", "Does"], "rows": [
+            ["Align · 3D · Mockup", "top right", "Toggle alignment mode, the 3D ball view, and the grass-scene mockup"],
+            ["Size chip + eyedropper", "top left", "Natural pixel size · pick a color off the image for swapping"],
+            ["Zoom % chip", "bottom left", "Current zoom"],
+            ["− · 1:1 · +", "bottom right", "Zoom out / reset / in (wheel zooms too; double-click toggles 1x ↔ 2x)"]
+          ] },
+          { "type": "p", "text": "Below the preview: Copy URL, Download, and Submit Proof (which carries the image across)." }
         ],
         "intermediate": [
-          { "type": "heading", "text": "How resolution works" },
-          { "type": "p", "text": "The image on the page is often a cropped, composited render — not the customer's file. The viewer chases the original through several sources in order: a directly linked file, the raw upload from the express order, CDN candidates, and finally the page render as a fallback. You get the most original version available." },
-          { "type": "p", "text": "From the viewer you can also extract colors with the eyedropper, jump into the Mockup Composer to recolor, or hand the image to Submit Proof." }
+          { "type": "heading", "text": "Alignment: extracting a clean decal" },
+          { "type": "p", "text": "Click Align and a circular ring overlays the image, with a rotation slider (−180° to 180°) and unrestricted panning. Frame the logo inside the ring and hit 'Save alignment' — the crop is captured and near-white pixels are knocked out to transparency, producing a clean decal ready for the 3D ball and proposal renders." },
+          { "type": "heading", "text": "Color swapping" },
+          { "type": "p", "text": "Pick the eyedropper, click a pixel, and a popover opens: the picked color, a tolerance slider, and the replacement color picker. Apply commits the swap (the original is kept so you can reset). This is the 'what would it look like in our navy?' tool." },
+          { "type": "table", "headers": ["Key", "Action"], "rows": [
+            ["W / S", "Zoom in / out"],
+            ["R", "Reset zoom"],
+            ["A", "Toggle alignment mode"],
+            ["3", "Toggle the 3D ball view"],
+            ["C", "Toggle the mockup view"]
+          ] }
+        ],
+        "advanced": [
+          { "type": "p", "text": "The 3D view projects your extracted decal onto a chosen model (ball, poker chip, divot tool, bartender tool, marker) with tint controls, selectable HDRI scenes, and snapshot Copy/Download buttons that export a fixed-pose transparent PNG. There's also a physics throw mode for the ball — drag and fling it — with a bomb tool in the fun menu. Yes, really." }
         ]
       },
       "related": ["mockup-composer", "submit-proof", "3d-product-viewer"]
@@ -31,14 +49,13 @@
       "icon": "shuffle",
       "tiers": ["intermediate"],
       "keywords": ["recolor", "mockup", "grass", "render", "color swap"],
-      "summary": "Swap colors in a logo and render it on a 3D ball in a grass scene — a client-ready mockup in under a minute.",
+      "summary": "A photoreal grass-scene render of the ball with your extracted decal — the one-minute client mockup.",
       "feature": "mockup-composer",
       "flag": "imagePreviewEnabled",
       "covers": ["grass-mockup"],
       "body": {
         "intermediate": [
-          { "type": "p", "text": "From the Image Viewer's color-swap popover, open the Mockup Composer. Pick the source color in the logo and the target color to replace it with — the recolored preview updates live, and the 3D ball render updates with it." },
-          { "type": "p", "text": "Use it when a customer asks 'what would this look like in our navy?' — recolor, render, download, and attach to your reply." }
+          { "type": "p", "text": "From the Image Viewer, the Mockup button (or C) swaps the preview to a photoreal grass scene with the ball front and center and your aligned decal composited on the camera-facing surface. Combine it with the color-swap tool — recolor the logo first, then render — and you have a client-ready mockup without opening a design tool." }
         ]
       },
       "related": ["image-viewer", "3d-product-viewer"]
@@ -48,16 +65,15 @@
       "title": "3D Product Viewer",
       "icon": "target",
       "tiers": ["intermediate"],
-      "keywords": ["3d", "ball", "rotate", "preview", "gift box", "render", "export"],
-      "summary": "Interactive 3D preview of balls, poker chips, divot tools, markers, and assembled gift boxes — with your decorations projected on, and consistent export photos.",
+      "keywords": ["3d", "ball", "rotate", "preview", "gift box", "render", "export", "snapshot"],
+      "summary": "Interactive 3D balls, accessories, and assembled gift boxes with decal projection — and fixed-pose snapshot exports for proposals.",
       "feature": "3d-viewer",
       "flag": "imagePreviewEnabled",
       "covers": ["3d-viewer"],
       "body": {
         "intermediate": [
-          { "type": "p", "text": "The 3D viewer appears inside the Image Viewer, the Gift Catalog customizer, and proposal renders. Drag to rotate, scroll to zoom. It shows logos, personalized text, and monograms exactly where production prints them — including dual-pole decorations on opposite sides of the ball." },
-          { "type": "p", "text": "Beyond balls it renders poker chips, divot tools, bartender tools, ball markers, and the assembled gift boxes with every piece seated in its foam slot." },
-          { "type": "callout", "kind": "info", "text": "Copy/download exports use a fixed pose per model, so every exported photo frames identically — ready to drop into a proposal. Admins can tune poses in Developer Settings under 'Snapshot'." }
+          { "type": "p", "text": "The 3D viewer appears inside the Image Viewer, the catalog customizer, and proposal renders. Drag to orbit, scroll to zoom. Models: golf ball, poker chip, divot tool, bartender tool, chrome ball marker, and the gift boxes (black 6-ball, premium wood, lever-divot variants) with every piece seated in its foam slot. Decorations — logos, personalized text, monograms, dual-pole pairs — render exactly where production prints them." },
+          { "type": "callout", "kind": "info", "text": "Copy/Download snapshot exports use a fixed pose per model, so every exported PNG frames identically — that consistency is what makes proposal emails look composed rather than screenshotted. Admins can tune poses under Developer Settings → Snapshot." }
         ]
       },
       "related": ["customizing-item", "gift-sets", "ts-3d-blank"]
@@ -67,21 +83,32 @@
       "title": "Submit Proof",
       "icon": "send",
       "tiers": ["beginner", "intermediate"],
-      "keywords": ["proof", "artist", "submit", "art approval", "decoration proof"],
-      "summary": "Submit decoration proof art to the CRM with order and customer IDs pre-filled, item and artist pickers, notes, and a gallery of the customer's previous proofs.",
+      "keywords": ["proof", "artist", "submit", "art approval", "decoration proof", "rush", "logo status", "gallery"],
+      "summary": "The full proof request form — multi-item selection with per-item fields, logo status, rush flags, the prior-proof gallery, and the results panel with shareable links.",
       "feature": "submit-proof",
       "flag": "submitProofEnabled",
       "covers": ["submit-proof"],
       "body": {
         "beginner": [
-          { "type": "p", "text": "Open Submit Proof from the popup, the Actions Shelf on an order page, or directly from the Image Viewer (which carries the image across). Order ID and customer ID pre-fill from the page; pick the item and artist from the dropdowns, add notes, and submit." },
-          { "type": "p", "text": "A gallery below shows the customer's previous proofs, so you can check what's already been sent before submitting a new one." }
+          { "type": "p", "text": "Open it from the popup, the shelf on an order page, or the Image Viewer (the image rides along). Order # and Customer ID pre-fill from the page. The right column shows the customer's previous proofs — check it before submitting a duplicate." },
+          { "type": "heading", "text": "The form, top to bottom" },
+          { "type": "table", "headers": ["Field", "Detail"], "rows": [
+            ["Item(s) being proofed", "Multi-select chips — Ball, Apparel, Hats, Towels, Bags, Gloves, Poker Chip, Ball Marker, Divot Tools, Tees, Flags, the Gift Set variants, Other. Pick several; each gets its own proof block."],
+            ["Order # / Customer ID / Proof link name", "IDs pre-filled; the proof name (e.g. 'ATT – Divot Tool') is required"],
+            ["Logo status", "New logo (no proof yet) · Awaiting approval (proof created) · Digitization queue · Approved"],
+            ["Sales rep / Artist", "Searchable dropdowns scraped live from the CRM"],
+            ["Order type / value", "Live · Potential · Jardine — and Under $2k / Over $2k"],
+            ["Flags", "Rush ⚡ · Canada Drop · Drop Ship TS toggle chips"]
+          ] }
         ],
         "intermediate": [
-          { "type": "callout", "kind": "tip", "text": "The default order type (Live Order / Potential Order / Jardine Order) is configurable in Developer Settings → 'Submit Proof: default order type'." }
+          { "type": "heading", "text": "Per-item proof blocks" },
+          { "type": "p", "text": "Each selected item adds a 'Proof N of M' block with an auto-generated proof name (editable) and fields that adapt to the item: balls ask for logo type, color, imprint, dozens, and print method; apparel adds decorator, method, and placement; tees ask size and colors; gift sets lock the logo type. Below the blocks: an item link field, reference logo links (one per line), and special instructions ('Write N/A if unneeded')." },
+          { "type": "heading", "text": "Sending and results" },
+          { "type": "p", "text": "Send request shows per-item progress ('2 of 3…'), then a results panel: each item's proof link with a copy button, plus 'Copy all links' and 'Open in Outlook' to drop everything into an email. Attached images that aren't hosted on the company server get an amber warning — they won't render in email templates." }
         ]
       },
-      "related": ["image-viewer", "order-date-manager"]
+      "related": ["image-viewer", "note-templates"]
     }
   ]
 }

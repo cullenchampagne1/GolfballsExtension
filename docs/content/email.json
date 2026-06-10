@@ -5,80 +5,213 @@
       "slug": "email-templates-popup",
       "title": "Email Templates & the Popup",
       "icon": "mail",
-      "tiers": ["beginner", "intermediate", "advanced"],
-      "keywords": ["template", "send", "variables", "popup", "resolved", "email"],
-      "summary": "Pick a template matched to the page you're on, watch its variables fill in live from the page, and send in one click.",
+      "tiers": ["beginner", "intermediate"],
+      "keywords": ["template", "send", "variables", "popup", "resolved", "email", "matched", "variation"],
+      "summary": "The popup matches templates to the page you're on, streams in live variable values, and sends — here is every section, badge, and button state.",
       "feature": "email-templates",
       "flag": "emailTemplatesEnabled",
       "covers": ["popup", "email-templates"],
       "tutorial": "send-first-email",
       "body": {
         "beginner": [
-          { "type": "p", "text": "Click the extension icon while on any CRM page (order, case, contact, or account). The popup shows email templates that match that page type — pick one and the RESOLVED section fills in live values pulled straight from the page: the customer's name, order totals, tracking numbers, and so on." },
-          { "type": "p", "text": "When everything you need has resolved, click Send. With Power Automate enabled the email sends silently with your signature; otherwise a pre-filled Outlook window opens." }
+          { "type": "p", "text": "Click the extension icon on any CRM page. The popup is one vertical column — here is what each section does, top to bottom:" },
+          { "type": "table", "headers": ["Section", "What you see"], "rows": [
+            ["Header", "Mail icon, 'Email Templates' title, template count, and the Manage gear (opens the Template Editor)"],
+            ["Template", "The template picker. Templates whose rules match this page appear first under 'Matched on this page' (with a glowing dot); everything else sits under 'All templates'. No match? You'll see 'No templates for this page type.'"],
+            ["Actions", "Context buttons that appear when relevant: Charge Card ($X.XX) or Refund ($X.XX), Order Edit, Watch + Watch List (with a count badge that pulses red when items are overdue), My Tasks, CRM Search, Submit Proof"],
+            ["Resolved", "A 'To' row plus one row per template variable, filling in live from the page"],
+            ["Footer", "Send (or 'Open in Outlook') and, in Outlook mode, a Copy button"]
+          ] },
+          { "type": "heading", "text": "Reading the Resolved list" },
+          { "type": "table", "headers": ["What a row shows", "Meaning"], "rows": [
+            ["A value (green)", "Resolved from the page — this exact text goes into the email"],
+            ["Spinner + 'resolving…'", "Still being pulled from the page"],
+            ["Spinner + 'running code…'", "A code variable is executing (these finish last)"],
+            ["Red 'Not found' tag", "Could not resolve — fix before sending or the literal {{name}} leaks into the email"]
+          ] },
+          { "type": "callout", "kind": "warning", "text": "Send stays disabled while variables are resolving and when no recipient was found. A red 'Not found' on the To row means the page has no detectable customer email." }
         ],
         "intermediate": [
-          { "type": "heading", "text": "How templates are matched" },
-          { "type": "p", "text": "Templates have a type (order, case, account, contact) and optional rules. The popup only offers templates whose type matches the current page and whose rules pass — for example a 'shipping delay' template can require the order to actually have a late ship date." },
-          { "type": "p", "text": "Templates are authored in the Template Editor (popup → edit, or the editor window's sidebar tabs). Each template carries a subject, a rich-text body with variable chips, and its matching rules." }
-        ],
-        "advanced": [
-          { "type": "heading", "text": "Variable syntax" },
-          { "type": "table", "headers": ["Syntax", "Resolves to"], "rows": [
-            ["{{name}}, {{email}}, {{phone}}", "Contact fields scraped from the page"],
-            ["{{companyName}}", "Account / company name"],
-            ["{{ytd}}, {{orderCount}}, {{lastOrderDate}}", "Order-history stats"],
-            ["{{orders[any].total}}", "Array quantifiers over order history: any / none / [0] / [-1]"],
-            ["{{repName}}", "The logged-in sales rep"],
-            ["{{a|b|c}}", "OR-block — first non-empty candidate wins"],
-            ["code variables", "Sandboxed JavaScript expressions — see Code Variables & Recipes"]
+          { "type": "heading", "text": "Send vs. Open in Outlook vs. Copy" },
+          { "type": "table", "headers": ["Button", "When it appears", "What it does"], "rows": [
+            ["Send", "Power Automate is on", "Sends silently through your flow with your signature appended"],
+            ["Reply", "Power Automate on + the template is set to reply to the most recent email", "Sends threaded into the existing conversation"],
+            ["Open in Outlook / Reply in Outlook", "Power Automate is off", "Opens a pre-filled Outlook window (plain text, no signature)"],
+            ["Copy", "Outlook mode only", "Copies the rendered email as rich HTML — pasting into Outlook/Gmail keeps the formatting the mailto window strips"]
           ] },
-          { "type": "callout", "kind": "proTip", "text": "Conditional blocks let a paragraph drop out entirely when its variable is empty — no more 'Dear ,' emails." }
+          { "type": "heading", "text": "Variations: A/B testing a template" },
+          { "type": "p", "text": "A template can carry variations — alternate subject/body versions. In the picker, a parent template with variations shows a shuffle badge: selecting the parent means each send randomly picks one of the original + all variations. Expand the parent's sub-list and click a specific variation to pin it (check badge) so every send uses exactly that version." },
+          { "type": "callout", "kind": "proTip", "text": "When Power Automate is on with multiple senders configured, a sender picker appears in the editor header — including a Random option that rotates the From identity per send." }
         ]
       },
-      "related": ["how-email-sending-works", "code-variables", "ts-variable-unresolved"],
+      "related": ["template-editor", "template-variables", "how-email-sending-works", "ts-variable-unresolved"],
       "faq": [
-        { "q": "Why does the popup say no templates match?", "a": "Templates are filtered by page type and rules. Check that you have templates of the right type (order/case/account/contact) and that their rules pass for this page." }
+        { "q": "Why does the popup say no templates match?", "a": "Templates are filtered by type (order/case/account) and by their auto-match rules. Check the template's type matches this page and that its rules pass — a rule like 'order total > $500' silently hides the template on smaller orders." },
+        { "q": "Why did the same template send different text twice?", "a": "It has variations and you selected the parent (shuffle badge) — each send picks a random version. Pin a specific variation in the picker's sub-list to lock it." }
       ]
     },
     {
+      "slug": "template-editor",
+      "title": "The Template Editor",
+      "icon": "edit",
+      "tiers": ["intermediate", "advanced"],
+      "keywords": ["template editor", "create template", "rules", "auto-match", "recipient", "variations", "body", "subject", "manage"],
+      "summary": "Where templates are built: types and recipient modes, auto-match rules, the rich-text body with variable chips, and variations.",
+      "feature": "email-templates",
+      "flag": "emailTemplatesEnabled",
+      "covers": ["editor"],
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "Open it from the popup's Manage gear. The left sidebar lists your templates (Templates / Notes tabs, folders, search, a dashed '+ Template' button); the editor pane fills the right. A template's fields, top to bottom: Name → Recipient (To) → auto-match rules → Subject → Body → Variations → Variables." },
+          { "type": "heading", "text": "Template types" },
+          { "type": "table", "headers": ["Type", "Where it appears", "What its rules match against", "Recipient modes"], "rows": [
+            ["Order", "Popup on order pages", "Order page data (status, totals, items…)", "Smart detect · Pick from page · Fixed email"],
+            ["Case", "The email preview's reply bar", "The inbound email's From / Subject / Body", "Reply to sender · Pick from case · Fixed email"],
+            ["Account", "Popup on account/contact pages", "The contact's live record (revenue, order stats…)", "Contact email · Fixed email"]
+          ] },
+          { "type": "heading", "text": "Recipient modes" },
+          { "type": "list", "items": [
+            "Smart detect / Contact email / Reply to sender — automatic; a live hint shows the resolved address.",
+            "Pick from page — a CSS selector points at the email on the page. Click the Pick button and the page enters pick mode: hover highlights elements, click one and the selector fills itself. The hint shows '1 match · name@example.com' or 'No match on active page'.",
+            "Fixed email — a hardcoded address, same every send."
+          ] },
+          { "type": "heading", "text": "Auto-match rules" },
+          { "type": "p", "text": "Rules decide when a template shows as 'Matched on this page'. Each rule is field + operator + value; rules combine with AND/OR and can be grouped for nesting (e.g. status is 'Hold' AND (total > 500 OR item count > 10)). The field picker is a tree of the page's real data — order fields, contact + account fields, plus this template's own variables. Operators adapt to the field type: text gets is/contains/starts with; numbers get comparisons; dates get before/after/relative." },
+          { "type": "callout", "kind": "info", "text": "Account templates can also auto-create a follow-up task on send (pick a task template), and case templates carry recommended case tags — those power the category chips in the email preview." }
+        ],
+        "advanced": [
+          { "type": "heading", "text": "The body editor" },
+          { "type": "p", "text": "Subject and Body are rich-text editors. Toolbar: Bold, Italic, Underline, Strikethrough, bullet/numbered lists, Link, alignment, and Clear formatting. The Insert menu drops any of the template's variables in as a chip at the caret." },
+          { "type": "p", "text": "Variable chips are color-coded live against the active page: green = resolves, yellow = unresolved but has a fallback set, red = unresolved with no fallback (the literal {{name}} would leak). Click a chip's lightning bolt to open its smart options." },
+          { "type": "heading", "text": "Variations" },
+          { "type": "p", "text": "The dashed 'Add variation' button adds an alternate subject + body (auto-labeled Variation 1, 2, …) that can use the same variables. At send time the popup picks randomly among original + variations unless one is pinned — and the Campaign Runner lets you set weighted splits instead of uniform odds." }
+        ]
+      },
+      "related": ["template-variables", "email-templates-popup", "note-templates", "bulk-email-selection"]
+    },
+    {
+      "slug": "template-variables",
+      "title": "Variables: Schema, Code, Regex & Smart Options",
+      "icon": "code",
+      "tiers": ["intermediate", "advanced"],
+      "keywords": ["variable", "schema", "code", "regex", "builtin", "fallback", "transform", "conditional", "or block", "smart options", "add variable"],
+      "summary": "Every variable source kind, the full built-in field list, OR-blocks, conditional drops, and the fallback/transform/format smart options.",
+      "feature": "email-templates",
+      "flag": "emailTemplatesEnabled",
+      "covers": [],
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "Variables are how a template pulls live data. Add one from the Variables table's 'Add variable' button: give it a name (no spaces — they become underscores), pick a source kind, configure it, and a live Preview chip shows what it resolves to right now." },
+          { "type": "heading", "text": "Source kinds" },
+          { "type": "table", "headers": ["Kind", "Available on", "What it does"], "rows": [
+            ["Schema", "Order, Account", "Picks a field from the page-engine data tree (order.status, contact.firstName, account.ytdRevenue…). Navigate the tree with arrow keys + Enter. This is the default choice."],
+            ["Code", "All types", "Runs a JavaScript expression over the page data — see Code Variables & Recipes for the full helper API."],
+            ["Literal", "All types", "A fixed string, used verbatim every time."],
+            ["Regex", "Case only", "Captures text from the inbound email. Pick the field (Email body / Subject line / From address), write a pattern with a capture group — e.g. order\\s+(ORD-\\d+) — and group 1 becomes the value."],
+            ["DOM (legacy)", "Older templates", "A CSS selector; the first matching element's text is used. The Pick button lets you click the element on the page instead of writing the selector. New account variables should use Schema instead."],
+            ["Built-in (legacy)", "Older templates", "A pre-defined path — see the list below."]
+          ] },
+          { "type": "heading", "text": "Built-in paths (legacy but still resolving)" },
+          { "type": "table", "headers": ["Type", "Available built-ins"], "rows": [
+            ["Order", "Customer email · Order number · Payment link · Out-of-stock item(s) · Recommended replacement"],
+            ["Case", "Sender email · Order number · Payment link"],
+            ["Account — Contact", "firstName, lastName, middleInit, fullName, jobTitle, contactEmail, phoneNumber, zipCode, contactId, linkedIn"],
+            ["Account — Account", "companyName, accountName, accountId, webAddress, mainAddress, mainCity, mainState, mainZip, mainCountry, salesRep, userType, createdBy, creditApproved, creditReqs"],
+            ["Account — Stats", "orderCount, totalRevenue, ytdRevenue, priorYearRev, avgOrderSize, lastOrderDate, creationDate"],
+            ["Account — Tasks", "nextTaskName, nextTaskDue"]
+          ] }
+        ],
+        "advanced": [
+          { "type": "heading", "text": "Writing variables into the body" },
+          { "type": "table", "headers": ["Syntax", "Behavior"], "rows": [
+            ["{{name}}", "Substituted with the resolved value; if unresolved, the literal {{name}} stays visible so you notice"],
+            ["{{mobile|office|email}}", "OR-block: candidates tried left to right, first non-empty wins. Renders in the body as a two-tone split pill — lighter half is the preferred variable, darker half the fallbacks"],
+            ["Conditional", "Set on a chip via smart options: if the variable is empty, the whole sentence, line, or paragraph containing it is dropped from the output — no more 'Dear ,' emails"]
+          ] },
+          { "type": "heading", "text": "Smart options (the lightning bolt on a chip)" },
+          { "type": "table", "headers": ["Option", "What it does"], "rows": [
+            ["Fallback", "A replacement value used when the variable can't resolve — unresolved-with-fallback shows yellow instead of red"],
+            ["Transform", "Post-process the value: Extract regex (pattern + group #), Format as currency, Format as number, Format as date, Title case"],
+            ["Conditional", "Drop the surrounding Sentence / Line / Paragraph when empty"],
+            ["Format", "Render the value Bold, Italic, or Underlined in the email"]
+          ] },
+          { "type": "heading", "text": "How resolution runs" },
+          { "type": "p", "text": "Resolution is two-phase. Phase 1: schema, built-in, DOM, and literal variables resolve instantly, the recipient resolves, and rule matching fires. Phase 2: code variables run asynchronously (10-second timeout each) — rows show 'running code…' until they land, and a template whose rules depend on a code variable can become 'Matched' a beat later." },
+          { "type": "callout", "kind": "proTip", "text": "Variables resolve in their listed order and later ones receive earlier results — a code variable can read vars.order_number to build on another variable's value." }
+        ]
+      },
+      "related": ["template-editor", "code-variables", "ts-variable-unresolved"]
+    },
+    {
+      "slug": "note-templates",
+      "title": "Note, Task & Call-Log Templates",
+      "icon": "task",
+      "tiers": ["intermediate"],
+      "keywords": ["note template", "task template", "call template", "audience", "days out", "button label"],
+      "summary": "The Notes tab of the editor: one-click order notes, pre-built CRM tasks, and call-log presets — every field per type.",
+      "feature": "email-templates",
+      "covers": [],
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "The editor's Notes tab holds the templates behind the one-click buttons in Quick Task, Call Log, and the order-notes toolbar. Each subtype has its own fields; all subjects and bodies accept {{date}} and {{time}} chips (the Insert row above each field drops them at the caret)." },
+          { "type": "table", "headers": ["Type", "Used on", "Fields"], "rows": [
+            ["Note", "Order pages (notes toolbar)", "Button label · Audience value (must exactly match an option in the page's Audience dropdown) · Subject · Body · Push dates forward (days) — auto-shifts the order's Approval and Commitment dates when clicked"],
+            ["Task", "Contact + account pages (Quick Task)", "Button label · Task subject (becomes the CRM task name) · Description · Priority (High/Medium/Low, default Medium) · Due (days out from today) · Category (searchable CRM list)"],
+            ["Call Log", "Contact pages (Call Log)", "Button label · Direction (Outbound/Inbound) · Category (searchable CRM list) · Left voicemail toggle · Subject · Description · Next-step actions (up to 4 numbered steps)"]
+          ] },
+          { "type": "callout", "kind": "bestPractice", "text": "Name button labels for the moment of use ('Proof Requested', 'Promo Follow-Up') — they render as one-click buttons in the modals, so reps pick by label at speed." }
+        ]
+      },
+      "related": ["quick-task", "call-log", "order-date-manager", "template-editor"]
+    },
+    {
       "slug": "email-thread-preview",
-      "title": "Email Thread Preview",
+      "title": "Email Thread Preview & Case Categorization",
       "icon": "eye",
       "tiers": ["beginner", "intermediate"],
-      "keywords": ["preview", "case", "categorize", "thread", "email history", "triage"],
-      "summary": "Read full email threads inline from Case Email History, with auto-recommended case categories and a suggested reply template.",
+      "keywords": ["preview", "case", "categorize", "thread", "email history", "triage", "junk", "reply draft"],
+      "summary": "Read full threads inline, apply case categories from the rail (or keys 1–9), and start a reply — with the full category catalog.",
       "feature": "email-preview",
       "flag": "emailPreviewEnabled",
       "covers": ["email-preview"],
       "tutorial": "triage-case-email",
       "body": {
         "beginner": [
-          { "type": "p", "text": "On a contact's Case Email History, each email row gets a preview button. Click it to read the entire thread in place — messages in order, inline images included, quoted replies collapsed until you expand them." }
+          { "type": "p", "text": "Click the preview button on an email row and the thread opens in place: one card per message in chronological order, each with the sender's avatar and 'Name <email>', a timestamp, and a SENT badge on messages from our side. Quoted replies are split into their own collapsible cards — click a collapsed card to expand it. The header reads 'Thread · N messages'." },
+          { "type": "p", "text": "On case pages, a categorize rail sits on the right. Recommended chips (marked with a ✦ star) come from the selected reply template's case tags; press 1–9 to apply the Nth recommendation, or browse the full category list. Clicking a category applies it (with its first subcategory); clicking a subcategory applies the exact pair. The status line below shows 'Saving…' then 'Applied: <subcategory>'. A red Junk button is at the bottom." }
         ],
         "intermediate": [
-          { "type": "heading", "text": "Categorize as you read" },
-          { "type": "p", "text": "A categorize rail on the side recommends case categories (Order Status, Returns, Charge Error, …) based on the email's content. Click a chip — or press 1–9 — to apply category and subcategory to the case." },
-          { "type": "p", "text": "Below the thread, the extension recommends the best-matching reply template and can open a draft reply with it." },
-          { "type": "callout", "kind": "info", "text": "Recommendations come from the same rule engine that matches templates in the popup — improve your template rules and the recommendations improve too." }
+          { "type": "heading", "text": "The category catalog" },
+          { "type": "table", "headers": ["Category", "Subcategories (examples)"], "rows": [
+            ["Order Status Update", "Lost Package, Carrier Issue, Tracking Update, Out of Stock, Drop Ships, Late Ship, Misunderstanding"],
+            ["Returns/Reprint", "Wrong Item Ordered (Customer Error), Wrong Item Shipped (GBC Error), Manufacture Error/Defect, Lost in Transit, printing-defect variants…"],
+            ["Charge Error", "Fixed – System did not charge, Actual Charge Error – Resolved by CSR, Fraud, Card did not populate…"],
+            ["Order Change", "Quantity, Personalization Edit, Shipping Address, Payment Method, Product Change…"],
+            ["Cancelation", "Out of Stock, Customer Changed Mind, Delivery Delays, better price/quality found…"],
+            ["Website Concerns", "Cannot Load cart, Cannot Login, Cannot Check out, Promo Codes, Price Variance…"],
+            ["Also", "Place an Order · Product Inquiry · Transfer · Fraud Inquiry · International Orders · Profanity · General Inquiry · CSAT · Other"]
+          ] },
+          { "type": "heading", "text": "Replying" },
+          { "type": "p", "text": "The reply bar at the bottom ('Reply to Email <address>') expands into a composer: To, Subject (pre-filled RE:), and a rich-text body seeded with your signature. The reply target is resolved automatically to the customer side of the thread — our own domains are skipped." },
+          { "type": "callout", "kind": "warning", "text": "The composer writes a DRAFT — it does not send from here. Finish and send the draft from Outlook." }
         ]
       },
       "related": ["text-note-preview", "email-templates-popup", "how-email-sending-works"]
     },
     {
       "slug": "text-note-preview",
-      "title": "Text & Note Preview",
+      "title": "Text & Chat Preview",
       "icon": "eye",
       "tiers": ["beginner"],
-      "keywords": ["sms", "chat", "note preview", "text", "transcript"],
-      "summary": "Inline preview of case notes, SMS, and chat transcripts with a recommended reply.",
+      "keywords": ["sms", "chat", "note preview", "text", "transcript", "snapengage"],
+      "summary": "Read live-chat transcripts as a proper conversation — visitor and agent bubbles, system events, and the same categorize rail on cases.",
       "feature": "text-preview",
       "flag": "textPreviewEnabled",
       "covers": ["text-preview"],
       "body": {
         "beginner": [
-          { "type": "p", "text": "The same idea as Email Thread Preview, for text rows: hover a case note, SMS, or chat transcript row and click the preview button to read the full conversation without opening it." },
-          { "type": "p", "text": "The extension parses the transcript into a readable message thread and recommends a reply template when one matches." }
+          { "type": "p", "text": "Click the preview button on a chat/note row to read the transcript as a conversation: visitor messages on the left, agent messages right-aligned with a brand tint, system events as centered divider badges, internal notes in amber 'NOTE' boxes, and a 'View full transcript on SnapEngage' pill when a link exists. The header counts the parsed messages and carries a READ-ONLY tag." },
+          { "type": "p", "text": "It's view-only by design — replies happen in SnapEngage (the footer says so). On case pages the same categorize rail as the email preview appears for tagging the case." }
         ]
       },
       "related": ["email-thread-preview"]
@@ -88,25 +221,25 @@
       "title": "How Email Sending Works",
       "icon": "send",
       "tiers": ["intermediate", "advanced"],
-      "keywords": ["power automate", "outlook", "mailto", "signature", "images", "graph", "draft", "transport", "send"],
-      "summary": "Three transports — Power Automate (silent send), Outlook fallback (pre-filled window), and Microsoft Graph (draft-only) — and exactly when each is used.",
+      "keywords": ["power automate", "outlook", "mailto", "signature", "images", "graph", "draft", "transport", "send", "copy"],
+      "summary": "Three transports — Power Automate (silent send), Outlook fallback (pre-filled window + Copy), and Microsoft Graph (draft-only) — and exactly when each is used.",
       "feature": "email-templates",
       "covers": ["graph-replies"],
       "coversFlags": ["powerAutomateEnabled"],
       "body": {
         "intermediate": [
           { "type": "table", "headers": ["Transport", "When it's used", "What happens"], "rows": [
-            ["Power Automate", "powerAutomateEnabled is ON and a flow URL is set", "Email sends silently through your Power Automate flow. Signature auto-appended. Inline images delivered as proper attachments."],
-            ["Outlook (mailto)", "Power Automate is OFF — the default", "A pre-filled Outlook window opens. Formatting is stripped to plain text and no signature is added. In bulk sends, one window opens per email."],
-            ["Microsoft Graph", "Reply-with-template after signing in with Microsoft", "Creates a DRAFT in your mailbox. It never sends automatically — you review and send from Outlook."]
+            ["Power Automate", "powerAutomateEnabled is ON and a flow URL is set", "Email sends silently through your flow. Signature auto-appended. Inline images delivered as proper attachments. Supports multiple From senders + reply-threading."],
+            ["Outlook (mailto)", "Power Automate is OFF — the default", "A pre-filled Outlook window opens: formatting stripped to plain text, no signature. The popup adds a Copy button that puts the formatted HTML on your clipboard so a paste into Outlook keeps the styling."],
+            ["Microsoft Graph", "Reply-with-template after signing in with Microsoft", "Creates a DRAFT in your mailbox. It never sends automatically — review and send from Outlook."]
           ] },
           { "type": "callout", "kind": "warning", "title": "The most common surprise", "text": "Power Automate ships OFF. If Send keeps opening Outlook windows, that's the fallback working as designed — enable Power Automate and paste your flow URL in Settings to get silent sends." }
         ],
         "advanced": [
           { "type": "heading", "text": "Inline images" },
-          { "type": "p", "text": "When sending through Power Automate, images inside the email body are converted to inline CID attachments (up to 3 MB each) so Outlook renders them reliably. Your Power Automate flow must forward the attachments array to its Outlook send action." },
-          { "type": "heading", "text": "Microsoft sign-in" },
-          { "type": "p", "text": "Graph drafts use a standard Microsoft OAuth sign-in (one browser prompt; the token refreshes silently afterwards). Sign out any time from Settings." },
+          { "type": "p", "text": "On Power Automate sends, images in the body are converted to inline CID attachments (up to 3 MB each) so Outlook renders them reliably. Your flow must forward the attachments array to its Outlook send action — if recipients see broken images, that's the usual culprit." },
+          { "type": "heading", "text": "Senders and reply mode" },
+          { "type": "p", "text": "With Power Automate on, the template editor header shows a sender picker (specific accounts or Random per send), and non-case templates gain a 'Reply to most recent email' toggle that threads the send into the existing conversation instead of starting fresh." },
           { "type": "callout", "kind": "warning", "text": "Graph mode is draft-only by design. Creating a draft does NOT send the email — check your Outlook Drafts folder." }
         ]
       },

@@ -3,20 +3,25 @@
   "articles": [
     {
       "slug": "bulk-email-selection",
-      "title": "Bulk Email from a Selection",
+      "title": "Quick Send (Bulk Email)",
       "icon": "megaphone",
       "tiers": ["intermediate"],
-      "keywords": ["bulk", "blast", "run campaign", "selected", "mass email"],
-      "summary": "Select rows in Task List or CRM Search, pick a template, and send to everyone — with per-recipient progress, personalization, and retry.",
+      "keywords": ["bulk", "blast", "quick send", "run campaign", "selected", "mass email", "delay", "pacing", "variation weights"],
+      "summary": "Select rows, pick a template, set the human-pacing delay, and watch the progress ring — every state of the Quick Send runner.",
       "feature": "campaigns",
       "flag": "campaignManagerEnabled",
       "covers": ["email-runner"],
       "tutorial": "run-campaign",
       "body": {
         "intermediate": [
-          { "type": "p", "text": "Tick rows in Task List or CRM Search and click Run Campaign. The Campaign Runner opens: pick a template, preview how it resolves for one recipient, then Send All." },
-          { "type": "p", "text": "Each contact is processed individually — their page opens in a background tab, variables resolve against their data, the email sends, and the tab closes — with a randomized delay between contacts. A progress bar tracks every recipient, and failed sends can be retried." },
-          { "type": "callout", "kind": "warning", "text": "Keep Chrome open until the run finishes. And note the transport rule: with Power Automate off, every send opens an Outlook window instead — for a 50-person list that's 50 windows. Enable Power Automate before any real bulk send." }
+          { "type": "p", "text": "Tick rows in Task List or CRM Search and the selection bar offers 'Email selected'. The Quick Send panel docks bottom-right with a big progress ring and three phases:" },
+          { "type": "table", "headers": ["Phase", "What you see / do"], "rows": [
+            ["Setup", "'N contacts selected' · template picker (templates with variations expand to show '(original)' + each variation) · variation weight sliders when the template has variations (always sum to 100%) · the delay slider: 5–80 seconds, 'random per contact — keeps the blast looking human' · Run · N button"],
+            ["Running", "The ring fills with %. A 'Now sending' card shows the current contact (avatar, name, email); between sends a 'Pacing — next send in X.Xs' countdown card takes its place. Chips track sent / queued / fail counts, and a trail lists the last four results. 'Cancel run' stops cleanly after the current send."],
+            ["Done", "Checkmark burst · 'All N delivered' or 'N sent · M failed' · stat tiles (Sent, Failed, Success %, Elapsed) · a per-contact timeline bar chart (green full bars = sent, short red = failed, hover for names) · Close / Send again"]
+          ] },
+          { "type": "p", "text": "Under the hood each contact's page opens in a background tab, the template's variables resolve against their real data, the email sends, and the tab closes — which is why every recipient gets genuinely personalized content, not mail-merge blanks." },
+          { "type": "callout", "kind": "warning", "text": "Keep Chrome open until the ring completes. And with Power Automate off, every send opens an Outlook window instead — enable it before any real bulk run." }
         ]
       },
       "related": ["campaign-manager", "how-email-sending-works", "crm-search", "task-list"]
@@ -26,24 +31,44 @@
       "title": "Campaign Manager",
       "icon": "flow",
       "tiers": ["advanced"],
-      "keywords": ["campaign", "steps", "conditions", "pacing", "dry run", "sequence", "automation"],
-      "summary": "Design multi-step outreach sequences — email, task, call log, and code actions — with per-step conditions, audience ordering, pacing, and a zero-side-effect dry run.",
+      "keywords": ["campaign", "steps", "branch", "conditions", "pacing", "dry run", "sequence", "automation", "simulate", "send cap"],
+      "summary": "Multi-step flows with branches, groups, four step types, pacing and suppression controls, simulation, dry-run, and the live audience run view.",
       "feature": "campaigns",
       "flag": "campaignManagerEnabled",
       "covers": ["campaign-manager"],
       "tutorial": "run-campaign",
       "body": {
         "advanced": [
-          { "type": "p", "text": "Where the Campaign Runner sends one template to a selection, Campaign Manager builds sequences: step 1 sends an email, step 2 creates a follow-up task, step 3 sends a second email only to contacts matching a condition." },
-          { "type": "heading", "text": "Building a campaign" },
-          { "type": "list", "items": [
-            "Steps — each is an action: send an email template, create a task, log a call, or run a code action.",
-            "Conditions — grouped AND/OR rules per step (order count, days since last order, YTD, …); contacts that don't match skip the step.",
-            "Audience ordering — process contacts in a chosen order, e.g. by YTD revenue.",
-            "Pacing — a delay plus random jitter between contacts keeps sends natural and avoids hammering the CRM."
+          { "type": "p", "text": "Campaign Manager is a full-page editor in three columns: the campaign list (grouped Active / Drafts / Paused, with status dots and search), the flow timeline in the middle, and the inspector on the right. A stats strip along the bottom shows pacing, step count, gates, and validity, plus the Save campaign button." },
+          { "type": "heading", "text": "Steps and the timeline" },
+          { "type": "p", "text": "Steps run top to bottom, numbered 1, 2, 3…, joined by connector lines. Each step card shows its type icon, label, template or code summary, and a conditions preview ('if FIELD OP +N more'). Copy and trash icons duplicate/delete; click a card to edit it in the inspector." },
+          { "type": "table", "headers": ["Step type", "Configuration"], "rows": [
+            ["Email", "Template picker; variation weight sliders appear when the template has variations"],
+            ["Call", "Create a call log (saved template or custom: category, direction, subject, notes, voicemail flag) — or complete the contact's open tasks (latest / all)"],
+            ["Task", "Create a task (template or custom: subject, notes, due-in days, priority) — or complete open tasks"],
+            ["Custom", "A code editor (ctx = contact/account data, h = fetch/send/dom helpers, window.open opens a tab) with an optional 'Kill the flow after this step' switch — the code can also return 'kill'"]
           ] },
-          { "type": "callout", "kind": "bestPractice", "title": "Always dry-run first", "text": "Dry-run mode executes the whole campaign logic — conditions, variable resolution, step routing — without sending anything or writing to the CRM. Read the per-contact simulation before going live." },
-          { "type": "p", "text": "Running campaigns can be paused, resumed, or stopped at any time. Campaign status (Draft / Active / Paused) shows in the campaign list." }
+          { "type": "heading", "text": "Branches and groups" },
+          { "type": "list", "items": [
+            "Branch step — flip the Branch toggle and the step becomes conditional: if its conditions pass, it fires and the campaign STOPS for that contact; if not, it's skipped and the main path continues. Child steps (assigned via 'Branch membership' in the inspector) indent under it as 1a, 1b… and only run when the branch fired.",
+            "Group label — steps sharing a group name are mutually exclusive: only the first whose conditions pass runs. Use it for 'send exactly one of these three pitches'.",
+            "Conditions — the same grouped AND/OR builder as everywhere else, over campaign signals: order count, days since last order, lifetime spend, has-ordered-brand, order-item-contains — plus schema fields and code expressions. (Email/call-history signals are visible but not yet active.)"
+          ] },
+          { "type": "heading", "text": "Campaign defaults (click empty space to edit)" },
+          { "type": "table", "headers": ["Setting", "Detail"], "rows": [
+            ["Status", "Draft / Active / Paused pills"],
+            ["Pacing", "Delay-between-sends range slider (1–90s); shown as '~R sends per minute · runs only while the tab is open'"],
+            ["Suppressions", "Checked by default: Skip 'do not contact' · Skip bounced contacts · Skip mailer-removed contacts"],
+            ["Audience order", "As selected · Highest value · Shuffle"],
+            ["Send cap", "Stop the run after N sends/actions (0 = unlimited)"]
+          ] },
+          { "type": "heading", "text": "Simulate, dry-run, and the real run" },
+          { "type": "list", "items": [
+            "Simulate — animates the flow step by step in the timeline (pulsing badges, tracing connectors) so you can sanity-check the routing without an audience.",
+            "Dry run — the toggle next to Run. The full run executes against the real audience with 'Dry-run · nothing is sent' across the top: every step reports 'Would email…' / 'Would log call…' with zero sends and zero CRM writes.",
+            "Run view — a live audience table: each contact's row shows their pipeline dots, current step, and a status badge (Queued / Running / Done / Skipped / Branch · stop / Suppressed / Failed), with Pause / Resume / Stop & edit controls and a progress bar."
+          ] },
+          { "type": "callout", "kind": "bestPractice", "text": "Dry-run every campaign before going live, and read at least a handful of per-contact results — it is the cheapest QA you will ever do." }
         ]
       },
       "related": ["campaign-conditions", "bulk-email-selection", "query-builder", "code-variables"]
@@ -53,17 +78,20 @@
       "title": "Campaign Conditions & Signals",
       "icon": "branch",
       "tiers": ["advanced"],
-      "keywords": ["condition", "signal", "rule", "and or", "criteria"],
-      "summary": "The data a campaign step can branch on: contact and order-history fields, with grouped AND/OR logic and code variables for anything custom.",
+      "keywords": ["condition", "signal", "rule", "and or", "criteria", "order count", "days since"],
+      "summary": "The three condition sources — CRM signals, schema fields, and code expressions — with the current signal catalog.",
       "feature": "campaigns",
       "flag": "campaignManagerEnabled",
       "covers": [],
       "body": {
         "advanced": [
-          { "type": "p", "text": "Step conditions are built from contact signals — fields the extension extracts from the contact's CRM data: name, company, email/phone presence, order count, last order date, YTD spend, and order-history queries like 'any order over $500'." },
-          { "type": "p", "text": "Conditions group with AND/OR nesting, the same rule trees used by template matching and the Query Builder — learn it once, use it in all three places." },
-          { "type": "p", "text": "When a built-in signal isn't enough, a code variable runs a sandboxed JavaScript expression per contact — prebuilt recipes cover common cases like 'ordered an item that is now out of stock'. See Code Variables & Recipes." },
-          { "type": "callout", "kind": "info", "text": "Email/call history signals (e.g. 'hasn't replied to my last email') are visible in the editor but not yet active — they'll light up in a future release." }
+          { "type": "p", "text": "Branch steps gate on conditions built from three sources, combined with the same grouped AND/OR + NOT logic used by template rules and the Query Builder:" },
+          { "type": "table", "headers": ["Source", "What it offers"], "rows": [
+            ["Signal", "Pre-computed CRM stats: Order count · Days since last order · Lifetime spend ($) · Has ordered brand · Order item contains"],
+            ["Schema", "Any contact/account field path — contact.email, account.id, orders[any].total with array quantifiers"],
+            ["Code", "A JavaScript expression evaluated per contact in the sandbox — anything the other two can't express"]
+          ] },
+          { "type": "callout", "kind": "info", "text": "Email/call-history signals (replied, days since last call, sent count…) exist in the editor but are marked not-ready — they'll activate in a future release. Don't build campaigns around them yet." }
         ]
       },
       "related": ["campaign-manager", "code-variables", "query-builder"]

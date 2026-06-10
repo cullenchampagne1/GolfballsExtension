@@ -5,7 +5,7 @@
 
 export const HELP_CONTENT = {
   "version": "3.3",
-  "generatedAt": "2026-06-09",
+  "generatedAt": "2026-06-10",
   "tree": [
     {
       "title": "Getting Started",
@@ -38,6 +38,15 @@ export const HELP_CONTENT = {
           "items": [
             {
               "article": "email-templates-popup"
+            },
+            {
+              "article": "template-editor"
+            },
+            {
+              "article": "template-variables"
+            },
+            {
+              "article": "note-templates"
             },
             {
               "article": "email-thread-preview"
@@ -118,6 +127,12 @@ export const HELP_CONTENT = {
               "article": "gift-sets"
             },
             {
+              "article": "proposal-panel"
+            },
+            {
+              "article": "proposal-breakdown"
+            },
+            {
               "article": "custom-service-items"
             },
             {
@@ -128,6 +143,9 @@ export const HELP_CONTENT = {
             },
             {
               "article": "build-email-proposal"
+            },
+            {
+              "article": "gifting-glossary"
             }
           ]
         },
@@ -327,7 +345,8 @@ export const HELP_CONTENT = {
       "icon": "eye",
       "tiers": [
         "beginner",
-        "intermediate"
+        "intermediate",
+        "advanced"
       ],
       "keywords": [
         "logo",
@@ -336,9 +355,13 @@ export const HELP_CONTENT = {
         "download",
         "original",
         "extract",
-        "viewer"
+        "viewer",
+        "align",
+        "eyedropper",
+        "zoom",
+        "knockout"
       ],
-      "summary": "Hover any order image to open a zoomable viewer that resolves the customer's original artwork from wherever it lives — then download, recolor, or submit it as a proof.",
+      "summary": "Zoom/pan inspection, the alignment ring that extracts a clean decal, color swapping with the eyedropper, and the W/S/R/A/3/C keyboard map.",
       "feature": "image-viewer",
       "flag": "imagePreviewEnabled",
       "covers": [
@@ -350,26 +373,98 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "Hover a product or render image on an order page and an expand button appears. Click it and the Image Viewer opens with the best-quality version of the customer's artwork it can find — zoom, pan, copy the URL, or download."
+            "text": "Hover a product/render image on an order page and click the expand button (Shift+click downloads immediately instead). The viewer opens on a grid surface and resolves the best original it can find — direct file, the express order's raw upload, CDN candidates, then the page render as a last resort. The subtitle tells you which you got ('Original file' vs 'Extracted logo'). You can also paste any image URL, or drag a file straight onto the surface."
           },
           {
-            "type": "callout",
-            "kind": "proTip",
-            "text": "Shift+click the expand button to skip the viewer and download the logo immediately."
+            "type": "heading",
+            "text": "The floating controls"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Control",
+              "Where",
+              "Does"
+            ],
+            "rows": [
+              [
+                "Align · 3D · Mockup",
+                "top right",
+                "Toggle alignment mode, the 3D ball view, and the grass-scene mockup"
+              ],
+              [
+                "Size chip + eyedropper",
+                "top left",
+                "Natural pixel size · pick a color off the image for swapping"
+              ],
+              [
+                "Zoom % chip",
+                "bottom left",
+                "Current zoom"
+              ],
+              [
+                "− · 1:1 · +",
+                "bottom right",
+                "Zoom out / reset / in (wheel zooms too; double-click toggles 1x ↔ 2x)"
+              ]
+            ]
+          },
+          {
+            "type": "p",
+            "text": "Below the preview: Copy URL, Download, and Submit Proof (which carries the image across)."
           }
         ],
         "intermediate": [
           {
             "type": "heading",
-            "text": "How resolution works"
+            "text": "Alignment: extracting a clean decal"
           },
           {
             "type": "p",
-            "text": "The image on the page is often a cropped, composited render — not the customer's file. The viewer chases the original through several sources in order: a directly linked file, the raw upload from the express order, CDN candidates, and finally the page render as a fallback. You get the most original version available."
+            "text": "Click Align and a circular ring overlays the image, with a rotation slider (−180° to 180°) and unrestricted panning. Frame the logo inside the ring and hit 'Save alignment' — the crop is captured and near-white pixels are knocked out to transparency, producing a clean decal ready for the 3D ball and proposal renders."
+          },
+          {
+            "type": "heading",
+            "text": "Color swapping"
           },
           {
             "type": "p",
-            "text": "From the viewer you can also extract colors with the eyedropper, jump into the Mockup Composer to recolor, or hand the image to Submit Proof."
+            "text": "Pick the eyedropper, click a pixel, and a popover opens: the picked color, a tolerance slider, and the replacement color picker. Apply commits the swap (the original is kept so you can reset). This is the 'what would it look like in our navy?' tool."
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Key",
+              "Action"
+            ],
+            "rows": [
+              [
+                "W / S",
+                "Zoom in / out"
+              ],
+              [
+                "R",
+                "Reset zoom"
+              ],
+              [
+                "A",
+                "Toggle alignment mode"
+              ],
+              [
+                "3",
+                "Toggle the 3D ball view"
+              ],
+              [
+                "C",
+                "Toggle the mockup view"
+              ]
+            ]
+          }
+        ],
+        "advanced": [
+          {
+            "type": "p",
+            "text": "The 3D view projects your extracted decal onto a chosen model (ball, poker chip, divot tool, bartender tool, marker) with tint controls, selectable HDRI scenes, and snapshot Copy/Download buttons that export a fixed-pose transparent PNG. There's also a physics throw mode for the ball — drag and fling it — with a bomb tool in the fun menu. Yes, really."
           }
         ]
       },
@@ -394,7 +489,7 @@ export const HELP_CONTENT = {
         "render",
         "color swap"
       ],
-      "summary": "Swap colors in a logo and render it on a 3D ball in a grass scene — a client-ready mockup in under a minute.",
+      "summary": "A photoreal grass-scene render of the ball with your extracted decal — the one-minute client mockup.",
       "feature": "mockup-composer",
       "flag": "imagePreviewEnabled",
       "covers": [
@@ -404,11 +499,7 @@ export const HELP_CONTENT = {
         "intermediate": [
           {
             "type": "p",
-            "text": "From the Image Viewer's color-swap popover, open the Mockup Composer. Pick the source color in the logo and the target color to replace it with — the recolored preview updates live, and the 3D ball render updates with it."
-          },
-          {
-            "type": "p",
-            "text": "Use it when a customer asks 'what would this look like in our navy?' — recolor, render, download, and attach to your reply."
+            "text": "From the Image Viewer, the Mockup button (or C) swaps the preview to a photoreal grass scene with the ball front and center and your aligned decal composited on the camera-facing surface. Combine it with the color-swap tool — recolor the logo first, then render — and you have a client-ready mockup without opening a design tool."
           }
         ]
       },
@@ -432,9 +523,10 @@ export const HELP_CONTENT = {
         "preview",
         "gift box",
         "render",
-        "export"
+        "export",
+        "snapshot"
       ],
-      "summary": "Interactive 3D preview of balls, poker chips, divot tools, markers, and assembled gift boxes — with your decorations projected on, and consistent export photos.",
+      "summary": "Interactive 3D balls, accessories, and assembled gift boxes with decal projection — and fixed-pose snapshot exports for proposals.",
       "feature": "3d-viewer",
       "flag": "imagePreviewEnabled",
       "covers": [
@@ -444,16 +536,12 @@ export const HELP_CONTENT = {
         "intermediate": [
           {
             "type": "p",
-            "text": "The 3D viewer appears inside the Image Viewer, the Gift Catalog customizer, and proposal renders. Drag to rotate, scroll to zoom. It shows logos, personalized text, and monograms exactly where production prints them — including dual-pole decorations on opposite sides of the ball."
-          },
-          {
-            "type": "p",
-            "text": "Beyond balls it renders poker chips, divot tools, bartender tools, ball markers, and the assembled gift boxes with every piece seated in its foam slot."
+            "text": "The 3D viewer appears inside the Image Viewer, the catalog customizer, and proposal renders. Drag to orbit, scroll to zoom. Models: golf ball, poker chip, divot tool, bartender tool, chrome ball marker, and the gift boxes (black 6-ball, premium wood, lever-divot variants) with every piece seated in its foam slot. Decorations — logos, personalized text, monograms, dual-pole pairs — render exactly where production prints them."
           },
           {
             "type": "callout",
             "kind": "info",
-            "text": "Copy/download exports use a fixed pose per model, so every exported photo frames identically — ready to drop into a proposal. Admins can tune poses in Developer Settings under 'Snapshot'."
+            "text": "Copy/Download snapshot exports use a fixed pose per model, so every exported PNG frames identically — that consistency is what makes proposal emails look composed rather than screenshotted. Admins can tune poses under Developer Settings → Snapshot."
           }
         ]
       },
@@ -477,9 +565,12 @@ export const HELP_CONTENT = {
         "artist",
         "submit",
         "art approval",
-        "decoration proof"
+        "decoration proof",
+        "rush",
+        "logo status",
+        "gallery"
       ],
-      "summary": "Submit decoration proof art to the CRM with order and customer IDs pre-filled, item and artist pickers, notes, and a gallery of the customer's previous proofs.",
+      "summary": "The full proof request form — multi-item selection with per-item fields, logo status, rush flags, the prior-proof gallery, and the results panel with shareable links.",
       "feature": "submit-proof",
       "flag": "submitProofEnabled",
       "covers": [
@@ -489,30 +580,74 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "Open Submit Proof from the popup, the Actions Shelf on an order page, or directly from the Image Viewer (which carries the image across). Order ID and customer ID pre-fill from the page; pick the item and artist from the dropdowns, add notes, and submit."
+            "text": "Open it from the popup, the shelf on an order page, or the Image Viewer (the image rides along). Order # and Customer ID pre-fill from the page. The right column shows the customer's previous proofs — check it before submitting a duplicate."
           },
           {
-            "type": "p",
-            "text": "A gallery below shows the customer's previous proofs, so you can check what's already been sent before submitting a new one."
+            "type": "heading",
+            "text": "The form, top to bottom"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Field",
+              "Detail"
+            ],
+            "rows": [
+              [
+                "Item(s) being proofed",
+                "Multi-select chips — Ball, Apparel, Hats, Towels, Bags, Gloves, Poker Chip, Ball Marker, Divot Tools, Tees, Flags, the Gift Set variants, Other. Pick several; each gets its own proof block."
+              ],
+              [
+                "Order # / Customer ID / Proof link name",
+                "IDs pre-filled; the proof name (e.g. 'ATT – Divot Tool') is required"
+              ],
+              [
+                "Logo status",
+                "New logo (no proof yet) · Awaiting approval (proof created) · Digitization queue · Approved"
+              ],
+              [
+                "Sales rep / Artist",
+                "Searchable dropdowns scraped live from the CRM"
+              ],
+              [
+                "Order type / value",
+                "Live · Potential · Jardine — and Under $2k / Over $2k"
+              ],
+              [
+                "Flags",
+                "Rush ⚡ · Canada Drop · Drop Ship TS toggle chips"
+              ]
+            ]
           }
         ],
         "intermediate": [
           {
-            "type": "callout",
-            "kind": "tip",
-            "text": "The default order type (Live Order / Potential Order / Jardine Order) is configurable in Developer Settings → 'Submit Proof: default order type'."
+            "type": "heading",
+            "text": "Per-item proof blocks"
+          },
+          {
+            "type": "p",
+            "text": "Each selected item adds a 'Proof N of M' block with an auto-generated proof name (editable) and fields that adapt to the item: balls ask for logo type, color, imprint, dozens, and print method; apparel adds decorator, method, and placement; tees ask size and colors; gift sets lock the logo type. Below the blocks: an item link field, reference logo links (one per line), and special instructions ('Write N/A if unneeded')."
+          },
+          {
+            "type": "heading",
+            "text": "Sending and results"
+          },
+          {
+            "type": "p",
+            "text": "Send request shows per-item progress ('2 of 3…'), then a results panel: each item's proof link with a copy button, plus 'Copy all links' and 'Open in Outlook' to drop everything into an email. Attached images that aren't hosted on the company server get an amber warning — they won't render in email templates."
           }
         ]
       },
       "related": [
         "image-viewer",
-        "order-date-manager"
+        "note-templates"
       ],
       "sectionLabel": "Core Features / Art & Proofs"
     },
     {
       "slug": "bulk-email-selection",
-      "title": "Bulk Email from a Selection",
+      "title": "Quick Send (Bulk Email)",
       "icon": "megaphone",
       "tiers": [
         "intermediate"
@@ -520,11 +655,15 @@ export const HELP_CONTENT = {
       "keywords": [
         "bulk",
         "blast",
+        "quick send",
         "run campaign",
         "selected",
-        "mass email"
+        "mass email",
+        "delay",
+        "pacing",
+        "variation weights"
       ],
-      "summary": "Select rows in Task List or CRM Search, pick a template, and send to everyone — with per-recipient progress, personalization, and retry.",
+      "summary": "Select rows, pick a template, set the human-pacing delay, and watch the progress ring — every state of the Quick Send runner.",
       "feature": "campaigns",
       "flag": "campaignManagerEnabled",
       "covers": [
@@ -535,16 +674,37 @@ export const HELP_CONTENT = {
         "intermediate": [
           {
             "type": "p",
-            "text": "Tick rows in Task List or CRM Search and click Run Campaign. The Campaign Runner opens: pick a template, preview how it resolves for one recipient, then Send All."
+            "text": "Tick rows in Task List or CRM Search and the selection bar offers 'Email selected'. The Quick Send panel docks bottom-right with a big progress ring and three phases:"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Phase",
+              "What you see / do"
+            ],
+            "rows": [
+              [
+                "Setup",
+                "'N contacts selected' · template picker (templates with variations expand to show '(original)' + each variation) · variation weight sliders when the template has variations (always sum to 100%) · the delay slider: 5–80 seconds, 'random per contact — keeps the blast looking human' · Run · N button"
+              ],
+              [
+                "Running",
+                "The ring fills with %. A 'Now sending' card shows the current contact (avatar, name, email); between sends a 'Pacing — next send in X.Xs' countdown card takes its place. Chips track sent / queued / fail counts, and a trail lists the last four results. 'Cancel run' stops cleanly after the current send."
+              ],
+              [
+                "Done",
+                "Checkmark burst · 'All N delivered' or 'N sent · M failed' · stat tiles (Sent, Failed, Success %, Elapsed) · a per-contact timeline bar chart (green full bars = sent, short red = failed, hover for names) · Close / Send again"
+              ]
+            ]
           },
           {
             "type": "p",
-            "text": "Each contact is processed individually — their page opens in a background tab, variables resolve against their data, the email sends, and the tab closes — with a randomized delay between contacts. A progress bar tracks every recipient, and failed sends can be retried."
+            "text": "Under the hood each contact's page opens in a background tab, the template's variables resolve against their real data, the email sends, and the tab closes — which is why every recipient gets genuinely personalized content, not mail-merge blanks."
           },
           {
             "type": "callout",
             "kind": "warning",
-            "text": "Keep Chrome open until the run finishes. And note the transport rule: with Power Automate off, every send opens an Outlook window instead — for a 50-person list that's 50 windows. Enable Power Automate before any real bulk send."
+            "text": "Keep Chrome open until the ring completes. And with Power Automate off, every send opens an Outlook window instead — enable it before any real bulk run."
           }
         ]
       },
@@ -566,13 +726,16 @@ export const HELP_CONTENT = {
       "keywords": [
         "campaign",
         "steps",
+        "branch",
         "conditions",
         "pacing",
         "dry run",
         "sequence",
-        "automation"
+        "automation",
+        "simulate",
+        "send cap"
       ],
-      "summary": "Design multi-step outreach sequences — email, task, call log, and code actions — with per-step conditions, audience ordering, pacing, and a zero-side-effect dry run.",
+      "summary": "Multi-step flows with branches, groups, four step types, pacing and suppression controls, simulation, dry-run, and the live audience run view.",
       "feature": "campaigns",
       "flag": "campaignManagerEnabled",
       "covers": [
@@ -583,30 +746,102 @@ export const HELP_CONTENT = {
         "advanced": [
           {
             "type": "p",
-            "text": "Where the Campaign Runner sends one template to a selection, Campaign Manager builds sequences: step 1 sends an email, step 2 creates a follow-up task, step 3 sends a second email only to contacts matching a condition."
+            "text": "Campaign Manager is a full-page editor in three columns: the campaign list (grouped Active / Drafts / Paused, with status dots and search), the flow timeline in the middle, and the inspector on the right. A stats strip along the bottom shows pacing, step count, gates, and validity, plus the Save campaign button."
           },
           {
             "type": "heading",
-            "text": "Building a campaign"
+            "text": "Steps and the timeline"
+          },
+          {
+            "type": "p",
+            "text": "Steps run top to bottom, numbered 1, 2, 3…, joined by connector lines. Each step card shows its type icon, label, template or code summary, and a conditions preview ('if FIELD OP +N more'). Copy and trash icons duplicate/delete; click a card to edit it in the inspector."
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Step type",
+              "Configuration"
+            ],
+            "rows": [
+              [
+                "Email",
+                "Template picker; variation weight sliders appear when the template has variations"
+              ],
+              [
+                "Call",
+                "Create a call log (saved template or custom: category, direction, subject, notes, voicemail flag) — or complete the contact's open tasks (latest / all)"
+              ],
+              [
+                "Task",
+                "Create a task (template or custom: subject, notes, due-in days, priority) — or complete open tasks"
+              ],
+              [
+                "Custom",
+                "A code editor (ctx = contact/account data, h = fetch/send/dom helpers, window.open opens a tab) with an optional 'Kill the flow after this step' switch — the code can also return 'kill'"
+              ]
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "Branches and groups"
           },
           {
             "type": "list",
             "items": [
-              "Steps — each is an action: send an email template, create a task, log a call, or run a code action.",
-              "Conditions — grouped AND/OR rules per step (order count, days since last order, YTD, …); contacts that don't match skip the step.",
-              "Audience ordering — process contacts in a chosen order, e.g. by YTD revenue.",
-              "Pacing — a delay plus random jitter between contacts keeps sends natural and avoids hammering the CRM."
+              "Branch step — flip the Branch toggle and the step becomes conditional: if its conditions pass, it fires and the campaign STOPS for that contact; if not, it's skipped and the main path continues. Child steps (assigned via 'Branch membership' in the inspector) indent under it as 1a, 1b… and only run when the branch fired.",
+              "Group label — steps sharing a group name are mutually exclusive: only the first whose conditions pass runs. Use it for 'send exactly one of these three pitches'.",
+              "Conditions — the same grouped AND/OR builder as everywhere else, over campaign signals: order count, days since last order, lifetime spend, has-ordered-brand, order-item-contains — plus schema fields and code expressions. (Email/call-history signals are visible but not yet active.)"
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "Campaign defaults (click empty space to edit)"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Setting",
+              "Detail"
+            ],
+            "rows": [
+              [
+                "Status",
+                "Draft / Active / Paused pills"
+              ],
+              [
+                "Pacing",
+                "Delay-between-sends range slider (1–90s); shown as '~R sends per minute · runs only while the tab is open'"
+              ],
+              [
+                "Suppressions",
+                "Checked by default: Skip 'do not contact' · Skip bounced contacts · Skip mailer-removed contacts"
+              ],
+              [
+                "Audience order",
+                "As selected · Highest value · Shuffle"
+              ],
+              [
+                "Send cap",
+                "Stop the run after N sends/actions (0 = unlimited)"
+              ]
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "Simulate, dry-run, and the real run"
+          },
+          {
+            "type": "list",
+            "items": [
+              "Simulate — animates the flow step by step in the timeline (pulsing badges, tracing connectors) so you can sanity-check the routing without an audience.",
+              "Dry run — the toggle next to Run. The full run executes against the real audience with 'Dry-run · nothing is sent' across the top: every step reports 'Would email…' / 'Would log call…' with zero sends and zero CRM writes.",
+              "Run view — a live audience table: each contact's row shows their pipeline dots, current step, and a status badge (Queued / Running / Done / Skipped / Branch · stop / Suppressed / Failed), with Pause / Resume / Stop & edit controls and a progress bar."
             ]
           },
           {
             "type": "callout",
             "kind": "bestPractice",
-            "title": "Always dry-run first",
-            "text": "Dry-run mode executes the whole campaign logic — conditions, variable resolution, step routing — without sending anything or writing to the CRM. Read the per-contact simulation before going live."
-          },
-          {
-            "type": "p",
-            "text": "Running campaigns can be paused, resumed, or stopped at any time. Campaign status (Draft / Active / Paused) shows in the campaign list."
+            "text": "Dry-run every campaign before going live, and read at least a handful of per-contact results — it is the cheapest QA you will ever do."
           }
         ]
       },
@@ -630,9 +865,11 @@ export const HELP_CONTENT = {
         "signal",
         "rule",
         "and or",
-        "criteria"
+        "criteria",
+        "order count",
+        "days since"
       ],
-      "summary": "The data a campaign step can branch on: contact and order-history fields, with grouped AND/OR logic and code variables for anything custom.",
+      "summary": "The three condition sources — CRM signals, schema fields, and code expressions — with the current signal catalog.",
       "feature": "campaigns",
       "flag": "campaignManagerEnabled",
       "covers": [],
@@ -640,20 +877,33 @@ export const HELP_CONTENT = {
         "advanced": [
           {
             "type": "p",
-            "text": "Step conditions are built from contact signals — fields the extension extracts from the contact's CRM data: name, company, email/phone presence, order count, last order date, YTD spend, and order-history queries like 'any order over $500'."
+            "text": "Branch steps gate on conditions built from three sources, combined with the same grouped AND/OR + NOT logic used by template rules and the Query Builder:"
           },
           {
-            "type": "p",
-            "text": "Conditions group with AND/OR nesting, the same rule trees used by template matching and the Query Builder — learn it once, use it in all three places."
-          },
-          {
-            "type": "p",
-            "text": "When a built-in signal isn't enough, a code variable runs a sandboxed JavaScript expression per contact — prebuilt recipes cover common cases like 'ordered an item that is now out of stock'. See Code Variables & Recipes."
+            "type": "table",
+            "headers": [
+              "Source",
+              "What it offers"
+            ],
+            "rows": [
+              [
+                "Signal",
+                "Pre-computed CRM stats: Order count · Days since last order · Lifetime spend ($) · Has ordered brand · Order item contains"
+              ],
+              [
+                "Schema",
+                "Any contact/account field path — contact.email, account.id, orders[any].total with array quantifiers"
+              ],
+              [
+                "Code",
+                "A JavaScript expression evaluated per contact in the sandbox — anything the other two can't express"
+              ]
+            ]
           },
           {
             "type": "callout",
             "kind": "info",
-            "text": "Email/call history signals (e.g. 'hasn't replied to my last email') are visible in the editor but not yet active — they'll light up in a future release."
+            "text": "Email/call-history signals (replied, days since last call, sent count…) exist in the editor but are marked not-ready — they'll activate in a future release. Don't build campaigns around them yet."
           }
         ]
       },
@@ -679,9 +929,11 @@ export const HELP_CONTENT = {
         "find contact",
         "account",
         "lookup",
-        "customer"
+        "customer",
+        "index",
+        "typeahead"
       ],
-      "summary": "Instant search over contacts, accounts, and orders from anywhere — Ctrl+K, type, done. Select rows to launch bulk actions and campaigns.",
+      "summary": "Instant local typeahead over your indexed contacts, Enter for a full server search, rich result columns, and bulk selection for campaigns.",
       "feature": "crm-search",
       "flag": "crmSearchEnabled",
       "shortcut": "Ctrl+K",
@@ -692,32 +944,35 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "Press Ctrl+K on any CRM page. Type a name, email, or phone number and results appear immediately. A type filter narrows to Contacts or Accounts; clicking a result opens it."
+            "text": "Press Ctrl+K anywhere. The search runs in two gears: as you type it filters your locally indexed contacts instantly (the placeholder says so: 'Filter indexed contacts — Enter to search server'); press Enter and it runs a full server search. A type dropdown narrows to Contacts or Accounts, and Enter on a highlighted row opens that record in a new tab."
           },
           {
-            "type": "callout",
-            "kind": "tip",
-            "text": "Your last search is remembered, so reopening the modal picks up where you left off."
+            "type": "p",
+            "text": "Result columns: Contact Name, Account Name, Account ID, Email, Phone, Sales Rep, Role, Order Count, YTD Revenue, Prior Year Revenue, Last Order Date, Next Task Date. Click any header to sort; server results load more as you scroll."
           }
         ],
         "intermediate": [
+          {
+            "type": "heading",
+            "text": "The local index"
+          },
+          {
+            "type": "p",
+            "text": "The index is what makes repeat searches instant. After a server search, an 'Index all N' / 'Index these N' button stores the results locally; a footer notes 'Locally indexed — instant typeahead. Falls through to server on Enter', with a Clear index button beside it. Records you visit also index themselves automatically."
+          },
           {
             "type": "heading",
             "text": "Selections and bulk actions"
           },
           {
             "type": "p",
-            "text": "Tick rows to build a selection — a summary bar appears with bulk actions: open every selected record in tabs, create a Quick Task, or Run Campaign to email all of them (see Bulk Email from a Selection)."
-          },
-          {
-            "type": "p",
-            "text": "Filter chips and saved quick presets sit above the results for one-click refinement."
+            "text": "Tick rows and the summary bar appears — 'N selected of M results' — with Run campaign, Email selected, and Export CSV. Keyboard: Tab from the input drops focus onto the first row; Tab/Shift+Tab walk rows (wrapping); Esc returns to the input."
           }
         ],
         "advanced": [
           {
             "type": "p",
-            "text": "The filter button opens the Query Builder for grouped AND/OR conditions with field-specific operators — see its dedicated article. Records you visit are also indexed locally, which is what makes repeat searches instant."
+            "text": "The Query Builder button adds structured filters; active filters render as removable tags above the results. See the Query Builder article for the full field and operator catalog."
           }
         ]
       },
@@ -741,28 +996,97 @@ export const HELP_CONTENT = {
         "advanced search",
         "saved query",
         "filter",
-        "conditions"
+        "conditions",
+        "presets",
+        "fq"
       ],
-      "summary": "Grouped AND/OR condition builder for CRM Search — build precise audience queries and save them for reuse.",
+      "summary": "Grouped AND/OR/NOT conditions over 15 CRM fields, quick presets, saved queries, and the live human-readable + Solr previews.",
       "feature": "crm-search",
       "flag": "crmSearchEnabled",
       "covers": [
         "query-builder"
       ],
+      "tutorial": "query-builder-tutorial",
       "body": {
         "advanced": [
           {
             "type": "p",
-            "text": "Open it from the filter button inside CRM Search. Add conditions (field, operator, value) and group them with AND/OR logic — for example: state is TX AND (order count > 5 OR YTD > $2,000)."
+            "text": "Open it from CRM Search's filter button. Left sidebar: quick presets and saved queries. Right: the condition builder, live previews, and Save/Apply controls."
+          },
+          {
+            "type": "heading",
+            "text": "Quick presets (built in)"
+          },
+          {
+            "type": "list",
+            "items": [
+              "VIP accounts — high-revenue, frequent reorderers (order count ≥ 12, YTD ≥ $10,000)",
+              "Stale leads — no order in 90 days, no task pending",
+              "Recent reorder — last order in the past 30 days",
+              "Tournament prospects — AEs or BDRs with no recent contact"
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "Building conditions"
           },
           {
             "type": "p",
-            "text": "Apply runs the query immediately; Save stores it by name so you — or a campaign — can reuse the exact audience later."
+            "text": "Each condition row: an optional NOT pill, the field, its category tag, the operator, and a type-aware value editor. Conditions stack inside lettered groups (Group A, Group B…) with an AND/OR toggle inside each group and another between groups."
           },
           {
-            "type": "callout",
-            "kind": "proTip",
-            "text": "Saved queries are the cleanest way to define campaign audiences: build once, verify the results visually, then select-all and Run Campaign."
+            "type": "table",
+            "headers": [
+              "Field group",
+              "Fields"
+            ],
+            "rows": [
+              [
+                "Identity",
+                "Record Type (Contact/Account) · Sales Rep · Role (BDR/AE/CSM/SE/Manager) · Pod ID · Contact Name · Account Name · Account ID"
+              ],
+              [
+                "Contact",
+                "Email · Phone"
+              ],
+              [
+                "Activity",
+                "Order Count · Last Order Date · Next Task Date"
+              ],
+              [
+                "Revenue",
+                "Prior Year Revenue · YTD Revenue"
+              ]
+            ]
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Value type",
+              "Operators"
+            ],
+            "rows": [
+              [
+                "Text",
+                "is (exact) · contains · starts with · is set · is not set"
+              ],
+              [
+                "Enum",
+                "is · is not"
+              ],
+              [
+                "Number",
+                "= ≠ > ≥ < ≤ · between · is set · is not set"
+              ],
+              [
+                "Date",
+                "more than … ago · less than … ago · within next … · before/after date · after/before today · is set / is not set (relative ops take a number + days/weeks/months/years)"
+              ]
+            ]
+          },
+          {
+            "type": "p",
+            "text": "Two live previews update as you build: HUMAN (the query in plain English, e.g. 'Email contains \"sale\" AND Order count > 5') and FQ (the compiled Solr filter) — both copyable. Name the query and Save to keep it; saved queries can be promoted (bolt icon) into the quick-presets list for one-click reuse, and they double as campaign audiences."
           }
         ]
       },
@@ -825,9 +1149,12 @@ export const HELP_CONTENT = {
         "todo",
         "follow up",
         "due date",
-        "create task"
+        "create task",
+        "composer",
+        "filter",
+        "chips"
       ],
-      "summary": "Create a CRM task in seconds: pick a template, set priority and a due date like +1w, submit.",
+      "summary": "Two speeds: fire a saved template with one keystroke, or compose from scratch with the keyboard grammar — chips, due shorthand, and a live preview.",
       "feature": "quick-task",
       "flag": "quickTaskEnabled",
       "covers": [
@@ -839,50 +1166,70 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "From a contact, account, or order page, open Quick Task (Actions Shelf → Add Task, or popup → Tools). The filter bar is focused — type to find a task template, press Enter, adjust, submit. The task attaches to the contact in the CRM."
+            "text": "Open it from the shelf ('Quick task for <name>'). The modal opens in filter mode — the input reads 'Filter quick tasks…  or / to compose'. Type to filter your task templates; press 1–9 to fire the Nth one, ↑↓ + Enter to pick, or Shift+Enter to load a template into the composer for tweaking first. A toast confirms 'Task created: <name>' and the modal closes."
           }
         ],
         "intermediate": [
           {
             "type": "heading",
-            "text": "Due dates and the composer"
+            "text": "The composer (press /)"
+          },
+          {
+            "type": "p",
+            "text": "Composer mode is built for hands-on-keyboard speed. A chips row holds Category and Priority; below it Subject ('What needs doing?'), Note, and the Due control. The trick: type a recognized word + space and it snaps into a chip — 'high ' becomes the High-priority chip mid-sentence. The '/' menu also lists every category and priority for arrow-key picking. Due accepts the quick chips (Today, Tomorrow, In 3 days, Next week) or typed dates (mm/dd/yy)."
+          },
+          {
+            "type": "p",
+            "text": "A live preview pane mirrors exactly what will be created — subject, colored category/priority/due chips, note, and the contact it logs against — and tells you if a required field is missing."
           },
           {
             "type": "table",
             "headers": [
-              "Type",
-              "Means"
+              "Key",
+              "Action"
             ],
             "rows": [
               [
-                "+1d / +3d",
-                "tomorrow / in three days"
+                "/",
+                "Open the composer / token menu"
               ],
               [
-                "+1w / +2w",
-                "in one / two weeks"
+                "word + space",
+                "Snap a recognized word into its chip"
               ],
               [
-                "mm/dd/yy",
-                "a specific date"
+                "Tab / Shift+Tab",
+                "Subject → Note → Due → buttons, and back"
+              ],
+              [
+                "Enter",
+                "Save the task"
+              ],
+              [
+                "Backspace on empty Subject",
+                "Remove the last chip"
+              ],
+              [
+                "Esc",
+                "Back to filter mode"
               ]
             ]
           },
           {
-            "type": "p",
-            "text": "Press '/' to enter composer mode and fill category, priority, subject, and description entirely from the keyboard, with a live preview alongside."
+            "type": "heading",
+            "text": "Task categories"
           },
           {
-            "type": "callout",
-            "kind": "bestPractice",
-            "text": "Save your recurring follow-ups as task templates (Template Editor → Task tab) — two keystrokes beats retyping the same task every day."
+            "type": "p",
+            "text": "Other · Order History Special · Proposal Follow-up · Order day call · Customer Request · High Priority · 15 Day Call/Email · 5 Day Follow-Up to Email · Workflow Task · Courier Claims · High Priority Opportunity · Replacement Contact. Priorities: High / Medium / Low."
           }
         ]
       },
       "related": [
         "task-list",
         "call-log",
-        "watch-list"
+        "note-templates",
+        "keyboard-shortcuts"
       ],
       "sectionLabel": "Core Features / CRM & Contacts"
     },
@@ -899,9 +1246,12 @@ export const HELP_CONTENT = {
         "ctrl x",
         "bulk",
         "open tabs",
-        "task list"
+        "task list",
+        "push due",
+        "complete",
+        "export csv"
       ],
-      "summary": "Your CRM task list in a fast modal — search, filter by status and priority, sort, and act on many tasks at once.",
+      "summary": "Your CRM tasks in a sortable table with chained sorts, bulk complete/push/email, and the per-task popover with its mini calendar.",
       "feature": "task-list",
       "flag": "taskListEnabled",
       "shortcut": "Ctrl+X",
@@ -912,18 +1262,37 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "Press Ctrl+X to see your tasks without navigating to the CRM task page. Search, filter by status or priority, and click a task to open its record."
+            "text": "Press Ctrl+X. The toolbar: a search box ('Search account, contact, subject…'), a Status dropdown (New tasks / Completed / All statuses), a Priority dropdown (All / High / Medium / Low), and Refresh. The table sorts by clicking headers — click again for descending, and Shift+click a second column to chain sorts (sort by Due Date, then Priority)."
           }
         ],
         "intermediate": [
           {
-            "type": "p",
-            "text": "Tick rows for bulk actions: open all in tabs, create a follow-up Quick Task, or Run Campaign to email every selected task's contact with one template."
+            "type": "heading",
+            "text": "Bulk actions"
           },
           {
-            "type": "callout",
-            "kind": "info",
-            "text": "The list reflects your CRM tasks page — if a task doesn't appear, confirm it exists in the CRM and that it's assigned to you."
+            "type": "p",
+            "text": "Tick rows and the summary bar slides in — 'N selected of M tasks' — with Run campaign, Email selected, and Export CSV; the footer adds Open Tabs (every selected record in its own tab) and Quick Task."
+          },
+          {
+            "type": "heading",
+            "text": "The task popover"
+          },
+          {
+            "type": "p",
+            "text": "Acting on a task (or a bulk selection) opens a compact popover with three panes:"
+          },
+          {
+            "type": "list",
+            "items": [
+              "Main — Mark complete / Reopen task, plus a 'Push due date' card with chips (+1d, +3d, +1w, +2w, +1mo, or Other with a day stepper) and Apply push.",
+              "Set date — a mini calendar (month navigation, today outlined, pick a day) with 'Save · Jun 12'.",
+              "Add task — a quick custom task ('What needs doing?' + due chips) or pick from your templates; in bulk mode the button reads 'Add to all N'."
+            ]
+          },
+          {
+            "type": "p",
+            "text": "Bulk runs show a progress panel ('Completing 14 tasks…' → checkmark), with a Try again button if any fail."
           }
         ]
       },
@@ -947,9 +1316,12 @@ export const HELP_CONTENT = {
         "log call",
         "voicemail",
         "activity",
-        "phone call"
+        "phone call",
+        "inbound",
+        "outbound",
+        "direction"
       ],
-      "summary": "Keyboard-first call logging: filter to a template, '/' through category, direction, and notes, and submit to the CRM activity log.",
+      "summary": "The same keyboard-first composer as Quick Task, tuned for calls: direction + voicemail chips, the full call category list, and tel: dialing from the shelf.",
       "feature": "call-log",
       "flag": "callLogEnabled",
       "covers": [
@@ -960,23 +1332,36 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "On a contact or account page, open Log Call from the Actions Shelf. The modal shows the contact's name and phone; type to filter call templates or press '/' to compose from scratch."
-          },
-          {
-            "type": "p",
-            "text": "Set the category, direction (inbound/outbound), and voicemail flag, write the note, and submit — the call lands in the CRM activity log immediately."
+            "text": "From the shelf, 'Call <name>' dials the contact (the row hints the number it will dial) and opens the logger; 'Log incoming call' opens it without dialing. The modal header shows the contact and phone; the filter bar lists your call templates — each row shows its direction glyph (↙ inbound / ↗ outbound) and category chip. Same keys as Quick Task: 1–9, ↑↓ + Enter, Shift+Enter to customize, / to compose."
           }
         ],
         "intermediate": [
           {
+            "type": "heading",
+            "text": "Composer specifics"
+          },
+          {
+            "type": "p",
+            "text": "The chips row holds Category, Direction, and a Voicemail flag. Word-snap works here too: typing 'inbound ', 'out ', or a category shorthand plus space turns into the chip. Subject placeholder: 'What was the call about?'. The preview pane mirrors the final log entry; Enter submits to the CRM activity log."
+          },
+          {
+            "type": "heading",
+            "text": "Call categories"
+          },
+          {
+            "type": "p",
+            "text": "Product Question · Order Status · Place Order · Transfer · Order Payment · Turnaround Time · Art · Prior Year Followup · Returning VoiceMail · Tournament Lead · Form Lead Followup · General Question · Order Issues · CSR Backup · Discovery · Opportunity · Returns/Reprints · Charge Error · Fraud Inquiry · International Orders · Profanity · Order Change · Cancelation · Website Concerns."
+          },
+          {
             "type": "callout",
-            "kind": "proTip",
-            "text": "The whole flow is keyboard-driven: '/' enters the composer, Enter advances fields, and the preview pane shows exactly what will be logged. With templates for your common call outcomes, logging takes under ten seconds."
+            "kind": "bestPractice",
+            "text": "Build call templates (Notes tab of the editor) for your recurring outcomes, including next-step actions — they pre-fill everything, leaving you just the note."
           }
         ]
       },
       "related": [
         "quick-task",
+        "note-templates",
         "phone-finder",
         "keyboard-shortcuts"
       ],
@@ -1005,7 +1390,7 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "Contact missing a phone number? Run Phone Finder from the contact page. It scans the contact's orders, collects every phone number found (each labeled with the shipping name it came from), and shows a picker. Choose one and it saves to the contact automatically."
+            "text": "When a contact has no phone but does have orders, the shelf offers 'Find phone'. It scans the contact's order pages, collects every number found (each labeled with the shipping name it came from), and shows a picker. Choose one and it saves to the contact automatically."
           }
         ]
       },
@@ -1021,8 +1406,7 @@ export const HELP_CONTENT = {
       "icon": "mail",
       "tiers": [
         "beginner",
-        "intermediate",
-        "advanced"
+        "intermediate"
       ],
       "keywords": [
         "template",
@@ -1030,9 +1414,11 @@ export const HELP_CONTENT = {
         "variables",
         "popup",
         "resolved",
-        "email"
+        "email",
+        "matched",
+        "variation"
       ],
-      "summary": "Pick a template matched to the page you're on, watch its variables fill in live from the page, and send in one click.",
+      "summary": "The popup matches templates to the page you're on, streams in live variable values, and sends — here is every section, badge, and button state.",
       "feature": "email-templates",
       "flag": "emailTemplatesEnabled",
       "covers": [
@@ -1044,92 +1430,518 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "Click the extension icon while on any CRM page (order, case, contact, or account). The popup shows email templates that match that page type — pick one and the RESOLVED section fills in live values pulled straight from the page: the customer's name, order totals, tracking numbers, and so on."
-          },
-          {
-            "type": "p",
-            "text": "When everything you need has resolved, click Send. With Power Automate enabled the email sends silently with your signature; otherwise a pre-filled Outlook window opens."
-          }
-        ],
-        "intermediate": [
-          {
-            "type": "heading",
-            "text": "How templates are matched"
-          },
-          {
-            "type": "p",
-            "text": "Templates have a type (order, case, account, contact) and optional rules. The popup only offers templates whose type matches the current page and whose rules pass — for example a 'shipping delay' template can require the order to actually have a late ship date."
-          },
-          {
-            "type": "p",
-            "text": "Templates are authored in the Template Editor (popup → edit, or the editor window's sidebar tabs). Each template carries a subject, a rich-text body with variable chips, and its matching rules."
-          }
-        ],
-        "advanced": [
-          {
-            "type": "heading",
-            "text": "Variable syntax"
+            "text": "Click the extension icon on any CRM page. The popup is one vertical column — here is what each section does, top to bottom:"
           },
           {
             "type": "table",
             "headers": [
-              "Syntax",
-              "Resolves to"
+              "Section",
+              "What you see"
             ],
             "rows": [
               [
-                "{{name}}, {{email}}, {{phone}}",
-                "Contact fields scraped from the page"
+                "Header",
+                "Mail icon, 'Email Templates' title, template count, and the Manage gear (opens the Template Editor)"
               ],
               [
-                "{{companyName}}",
-                "Account / company name"
+                "Template",
+                "The template picker. Templates whose rules match this page appear first under 'Matched on this page' (with a glowing dot); everything else sits under 'All templates'. No match? You'll see 'No templates for this page type.'"
               ],
               [
-                "{{ytd}}, {{orderCount}}, {{lastOrderDate}}",
-                "Order-history stats"
+                "Actions",
+                "Context buttons that appear when relevant: Charge Card ($X.XX) or Refund ($X.XX), Order Edit, Watch + Watch List (with a count badge that pulses red when items are overdue), My Tasks, CRM Search, Submit Proof"
               ],
               [
-                "{{orders[any].total}}",
-                "Array quantifiers over order history: any / none / [0] / [-1]"
+                "Resolved",
+                "A 'To' row plus one row per template variable, filling in live from the page"
               ],
               [
-                "{{repName}}",
-                "The logged-in sales rep"
+                "Footer",
+                "Send (or 'Open in Outlook') and, in Outlook mode, a Copy button"
+              ]
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "Reading the Resolved list"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "What a row shows",
+              "Meaning"
+            ],
+            "rows": [
+              [
+                "A value (green)",
+                "Resolved from the page — this exact text goes into the email"
               ],
               [
-                "{{a|b|c}}",
-                "OR-block — first non-empty candidate wins"
+                "Spinner + 'resolving…'",
+                "Still being pulled from the page"
               ],
               [
-                "code variables",
-                "Sandboxed JavaScript expressions — see Code Variables & Recipes"
+                "Spinner + 'running code…'",
+                "A code variable is executing (these finish last)"
+              ],
+              [
+                "Red 'Not found' tag",
+                "Could not resolve — fix before sending or the literal {{name}} leaks into the email"
               ]
             ]
           },
           {
             "type": "callout",
+            "kind": "warning",
+            "text": "Send stays disabled while variables are resolving and when no recipient was found. A red 'Not found' on the To row means the page has no detectable customer email."
+          }
+        ],
+        "intermediate": [
+          {
+            "type": "heading",
+            "text": "Send vs. Open in Outlook vs. Copy"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Button",
+              "When it appears",
+              "What it does"
+            ],
+            "rows": [
+              [
+                "Send",
+                "Power Automate is on",
+                "Sends silently through your flow with your signature appended"
+              ],
+              [
+                "Reply",
+                "Power Automate on + the template is set to reply to the most recent email",
+                "Sends threaded into the existing conversation"
+              ],
+              [
+                "Open in Outlook / Reply in Outlook",
+                "Power Automate is off",
+                "Opens a pre-filled Outlook window (plain text, no signature)"
+              ],
+              [
+                "Copy",
+                "Outlook mode only",
+                "Copies the rendered email as rich HTML — pasting into Outlook/Gmail keeps the formatting the mailto window strips"
+              ]
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "Variations: A/B testing a template"
+          },
+          {
+            "type": "p",
+            "text": "A template can carry variations — alternate subject/body versions. In the picker, a parent template with variations shows a shuffle badge: selecting the parent means each send randomly picks one of the original + all variations. Expand the parent's sub-list and click a specific variation to pin it (check badge) so every send uses exactly that version."
+          },
+          {
+            "type": "callout",
             "kind": "proTip",
-            "text": "Conditional blocks let a paragraph drop out entirely when its variable is empty — no more 'Dear ,' emails."
+            "text": "When Power Automate is on with multiple senders configured, a sender picker appears in the editor header — including a Random option that rotates the From identity per send."
           }
         ]
       },
       "related": [
+        "template-editor",
+        "template-variables",
         "how-email-sending-works",
-        "code-variables",
         "ts-variable-unresolved"
       ],
       "faq": [
         {
           "q": "Why does the popup say no templates match?",
-          "a": "Templates are filtered by page type and rules. Check that you have templates of the right type (order/case/account/contact) and that their rules pass for this page."
+          "a": "Templates are filtered by type (order/case/account) and by their auto-match rules. Check the template's type matches this page and that its rules pass — a rule like 'order total > $500' silently hides the template on smaller orders."
+        },
+        {
+          "q": "Why did the same template send different text twice?",
+          "a": "It has variations and you selected the parent (shuffle badge) — each send picks a random version. Pin a specific variation in the picker's sub-list to lock it."
         }
       ],
       "sectionLabel": "Core Features / Email"
     },
     {
+      "slug": "template-editor",
+      "title": "The Template Editor",
+      "icon": "edit",
+      "tiers": [
+        "intermediate",
+        "advanced"
+      ],
+      "keywords": [
+        "template editor",
+        "create template",
+        "rules",
+        "auto-match",
+        "recipient",
+        "variations",
+        "body",
+        "subject",
+        "manage"
+      ],
+      "summary": "Where templates are built: types and recipient modes, auto-match rules, the rich-text body with variable chips, and variations.",
+      "feature": "email-templates",
+      "flag": "emailTemplatesEnabled",
+      "covers": [
+        "editor"
+      ],
+      "body": {
+        "intermediate": [
+          {
+            "type": "p",
+            "text": "Open it from the popup's Manage gear. The left sidebar lists your templates (Templates / Notes tabs, folders, search, a dashed '+ Template' button); the editor pane fills the right. A template's fields, top to bottom: Name → Recipient (To) → auto-match rules → Subject → Body → Variations → Variables."
+          },
+          {
+            "type": "heading",
+            "text": "Template types"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Type",
+              "Where it appears",
+              "What its rules match against",
+              "Recipient modes"
+            ],
+            "rows": [
+              [
+                "Order",
+                "Popup on order pages",
+                "Order page data (status, totals, items…)",
+                "Smart detect · Pick from page · Fixed email"
+              ],
+              [
+                "Case",
+                "The email preview's reply bar",
+                "The inbound email's From / Subject / Body",
+                "Reply to sender · Pick from case · Fixed email"
+              ],
+              [
+                "Account",
+                "Popup on account/contact pages",
+                "The contact's live record (revenue, order stats…)",
+                "Contact email · Fixed email"
+              ]
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "Recipient modes"
+          },
+          {
+            "type": "list",
+            "items": [
+              "Smart detect / Contact email / Reply to sender — automatic; a live hint shows the resolved address.",
+              "Pick from page — a CSS selector points at the email on the page. Click the Pick button and the page enters pick mode: hover highlights elements, click one and the selector fills itself. The hint shows '1 match · name@example.com' or 'No match on active page'.",
+              "Fixed email — a hardcoded address, same every send."
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "Auto-match rules"
+          },
+          {
+            "type": "p",
+            "text": "Rules decide when a template shows as 'Matched on this page'. Each rule is field + operator + value; rules combine with AND/OR and can be grouped for nesting (e.g. status is 'Hold' AND (total > 500 OR item count > 10)). The field picker is a tree of the page's real data — order fields, contact + account fields, plus this template's own variables. Operators adapt to the field type: text gets is/contains/starts with; numbers get comparisons; dates get before/after/relative."
+          },
+          {
+            "type": "callout",
+            "kind": "info",
+            "text": "Account templates can also auto-create a follow-up task on send (pick a task template), and case templates carry recommended case tags — those power the category chips in the email preview."
+          }
+        ],
+        "advanced": [
+          {
+            "type": "heading",
+            "text": "The body editor"
+          },
+          {
+            "type": "p",
+            "text": "Subject and Body are rich-text editors. Toolbar: Bold, Italic, Underline, Strikethrough, bullet/numbered lists, Link, alignment, and Clear formatting. The Insert menu drops any of the template's variables in as a chip at the caret."
+          },
+          {
+            "type": "p",
+            "text": "Variable chips are color-coded live against the active page: green = resolves, yellow = unresolved but has a fallback set, red = unresolved with no fallback (the literal {{name}} would leak). Click a chip's lightning bolt to open its smart options."
+          },
+          {
+            "type": "heading",
+            "text": "Variations"
+          },
+          {
+            "type": "p",
+            "text": "The dashed 'Add variation' button adds an alternate subject + body (auto-labeled Variation 1, 2, …) that can use the same variables. At send time the popup picks randomly among original + variations unless one is pinned — and the Campaign Runner lets you set weighted splits instead of uniform odds."
+          }
+        ]
+      },
+      "related": [
+        "template-variables",
+        "email-templates-popup",
+        "note-templates",
+        "bulk-email-selection"
+      ],
+      "sectionLabel": "Core Features / Email"
+    },
+    {
+      "slug": "template-variables",
+      "title": "Variables: Schema, Code, Regex & Smart Options",
+      "icon": "code",
+      "tiers": [
+        "intermediate",
+        "advanced"
+      ],
+      "keywords": [
+        "variable",
+        "schema",
+        "code",
+        "regex",
+        "builtin",
+        "fallback",
+        "transform",
+        "conditional",
+        "or block",
+        "smart options",
+        "add variable"
+      ],
+      "summary": "Every variable source kind, the full built-in field list, OR-blocks, conditional drops, and the fallback/transform/format smart options.",
+      "feature": "email-templates",
+      "flag": "emailTemplatesEnabled",
+      "covers": [],
+      "body": {
+        "intermediate": [
+          {
+            "type": "p",
+            "text": "Variables are how a template pulls live data. Add one from the Variables table's 'Add variable' button: give it a name (no spaces — they become underscores), pick a source kind, configure it, and a live Preview chip shows what it resolves to right now."
+          },
+          {
+            "type": "heading",
+            "text": "Source kinds"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Kind",
+              "Available on",
+              "What it does"
+            ],
+            "rows": [
+              [
+                "Schema",
+                "Order, Account",
+                "Picks a field from the page-engine data tree (order.status, contact.firstName, account.ytdRevenue…). Navigate the tree with arrow keys + Enter. This is the default choice."
+              ],
+              [
+                "Code",
+                "All types",
+                "Runs a JavaScript expression over the page data — see Code Variables & Recipes for the full helper API."
+              ],
+              [
+                "Literal",
+                "All types",
+                "A fixed string, used verbatim every time."
+              ],
+              [
+                "Regex",
+                "Case only",
+                "Captures text from the inbound email. Pick the field (Email body / Subject line / From address), write a pattern with a capture group — e.g. order\\s+(ORD-\\d+) — and group 1 becomes the value."
+              ],
+              [
+                "DOM (legacy)",
+                "Older templates",
+                "A CSS selector; the first matching element's text is used. The Pick button lets you click the element on the page instead of writing the selector. New account variables should use Schema instead."
+              ],
+              [
+                "Built-in (legacy)",
+                "Older templates",
+                "A pre-defined path — see the list below."
+              ]
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "Built-in paths (legacy but still resolving)"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Type",
+              "Available built-ins"
+            ],
+            "rows": [
+              [
+                "Order",
+                "Customer email · Order number · Payment link · Out-of-stock item(s) · Recommended replacement"
+              ],
+              [
+                "Case",
+                "Sender email · Order number · Payment link"
+              ],
+              [
+                "Account — Contact",
+                "firstName, lastName, middleInit, fullName, jobTitle, contactEmail, phoneNumber, zipCode, contactId, linkedIn"
+              ],
+              [
+                "Account — Account",
+                "companyName, accountName, accountId, webAddress, mainAddress, mainCity, mainState, mainZip, mainCountry, salesRep, userType, createdBy, creditApproved, creditReqs"
+              ],
+              [
+                "Account — Stats",
+                "orderCount, totalRevenue, ytdRevenue, priorYearRev, avgOrderSize, lastOrderDate, creationDate"
+              ],
+              [
+                "Account — Tasks",
+                "nextTaskName, nextTaskDue"
+              ]
+            ]
+          }
+        ],
+        "advanced": [
+          {
+            "type": "heading",
+            "text": "Writing variables into the body"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Syntax",
+              "Behavior"
+            ],
+            "rows": [
+              [
+                "{{name}}",
+                "Substituted with the resolved value; if unresolved, the literal {{name}} stays visible so you notice"
+              ],
+              [
+                "{{mobile|office|email}}",
+                "OR-block: candidates tried left to right, first non-empty wins. Renders in the body as a two-tone split pill — lighter half is the preferred variable, darker half the fallbacks"
+              ],
+              [
+                "Conditional",
+                "Set on a chip via smart options: if the variable is empty, the whole sentence, line, or paragraph containing it is dropped from the output — no more 'Dear ,' emails"
+              ]
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "Smart options (the lightning bolt on a chip)"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Option",
+              "What it does"
+            ],
+            "rows": [
+              [
+                "Fallback",
+                "A replacement value used when the variable can't resolve — unresolved-with-fallback shows yellow instead of red"
+              ],
+              [
+                "Transform",
+                "Post-process the value: Extract regex (pattern + group #), Format as currency, Format as number, Format as date, Title case"
+              ],
+              [
+                "Conditional",
+                "Drop the surrounding Sentence / Line / Paragraph when empty"
+              ],
+              [
+                "Format",
+                "Render the value Bold, Italic, or Underlined in the email"
+              ]
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "How resolution runs"
+          },
+          {
+            "type": "p",
+            "text": "Resolution is two-phase. Phase 1: schema, built-in, DOM, and literal variables resolve instantly, the recipient resolves, and rule matching fires. Phase 2: code variables run asynchronously (10-second timeout each) — rows show 'running code…' until they land, and a template whose rules depend on a code variable can become 'Matched' a beat later."
+          },
+          {
+            "type": "callout",
+            "kind": "proTip",
+            "text": "Variables resolve in their listed order and later ones receive earlier results — a code variable can read vars.order_number to build on another variable's value."
+          }
+        ]
+      },
+      "related": [
+        "template-editor",
+        "code-variables",
+        "ts-variable-unresolved"
+      ],
+      "sectionLabel": "Core Features / Email"
+    },
+    {
+      "slug": "note-templates",
+      "title": "Note, Task & Call-Log Templates",
+      "icon": "task",
+      "tiers": [
+        "intermediate"
+      ],
+      "keywords": [
+        "note template",
+        "task template",
+        "call template",
+        "audience",
+        "days out",
+        "button label"
+      ],
+      "summary": "The Notes tab of the editor: one-click order notes, pre-built CRM tasks, and call-log presets — every field per type.",
+      "feature": "email-templates",
+      "covers": [],
+      "body": {
+        "intermediate": [
+          {
+            "type": "p",
+            "text": "The editor's Notes tab holds the templates behind the one-click buttons in Quick Task, Call Log, and the order-notes toolbar. Each subtype has its own fields; all subjects and bodies accept {{date}} and {{time}} chips (the Insert row above each field drops them at the caret)."
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Type",
+              "Used on",
+              "Fields"
+            ],
+            "rows": [
+              [
+                "Note",
+                "Order pages (notes toolbar)",
+                "Button label · Audience value (must exactly match an option in the page's Audience dropdown) · Subject · Body · Push dates forward (days) — auto-shifts the order's Approval and Commitment dates when clicked"
+              ],
+              [
+                "Task",
+                "Contact + account pages (Quick Task)",
+                "Button label · Task subject (becomes the CRM task name) · Description · Priority (High/Medium/Low, default Medium) · Due (days out from today) · Category (searchable CRM list)"
+              ],
+              [
+                "Call Log",
+                "Contact pages (Call Log)",
+                "Button label · Direction (Outbound/Inbound) · Category (searchable CRM list) · Left voicemail toggle · Subject · Description · Next-step actions (up to 4 numbered steps)"
+              ]
+            ]
+          },
+          {
+            "type": "callout",
+            "kind": "bestPractice",
+            "text": "Name button labels for the moment of use ('Proof Requested', 'Promo Follow-Up') — they render as one-click buttons in the modals, so reps pick by label at speed."
+          }
+        ]
+      },
+      "related": [
+        "quick-task",
+        "call-log",
+        "order-date-manager",
+        "template-editor"
+      ],
+      "sectionLabel": "Core Features / Email"
+    },
+    {
       "slug": "email-thread-preview",
-      "title": "Email Thread Preview",
+      "title": "Email Thread Preview & Case Categorization",
       "icon": "eye",
       "tiers": [
         "beginner",
@@ -1141,9 +1953,11 @@ export const HELP_CONTENT = {
         "categorize",
         "thread",
         "email history",
-        "triage"
+        "triage",
+        "junk",
+        "reply draft"
       ],
-      "summary": "Read full email threads inline from Case Email History, with auto-recommended case categories and a suggested reply template.",
+      "summary": "Read full threads inline, apply case categories from the rail (or keys 1–9), and start a reply — with the full category catalog.",
       "feature": "email-preview",
       "flag": "emailPreviewEnabled",
       "covers": [
@@ -1154,26 +1968,67 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "On a contact's Case Email History, each email row gets a preview button. Click it to read the entire thread in place — messages in order, inline images included, quoted replies collapsed until you expand them."
+            "text": "Click the preview button on an email row and the thread opens in place: one card per message in chronological order, each with the sender's avatar and 'Name <email>', a timestamp, and a SENT badge on messages from our side. Quoted replies are split into their own collapsible cards — click a collapsed card to expand it. The header reads 'Thread · N messages'."
+          },
+          {
+            "type": "p",
+            "text": "On case pages, a categorize rail sits on the right. Recommended chips (marked with a ✦ star) come from the selected reply template's case tags; press 1–9 to apply the Nth recommendation, or browse the full category list. Clicking a category applies it (with its first subcategory); clicking a subcategory applies the exact pair. The status line below shows 'Saving…' then 'Applied: <subcategory>'. A red Junk button is at the bottom."
           }
         ],
         "intermediate": [
           {
             "type": "heading",
-            "text": "Categorize as you read"
+            "text": "The category catalog"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Category",
+              "Subcategories (examples)"
+            ],
+            "rows": [
+              [
+                "Order Status Update",
+                "Lost Package, Carrier Issue, Tracking Update, Out of Stock, Drop Ships, Late Ship, Misunderstanding"
+              ],
+              [
+                "Returns/Reprint",
+                "Wrong Item Ordered (Customer Error), Wrong Item Shipped (GBC Error), Manufacture Error/Defect, Lost in Transit, printing-defect variants…"
+              ],
+              [
+                "Charge Error",
+                "Fixed – System did not charge, Actual Charge Error – Resolved by CSR, Fraud, Card did not populate…"
+              ],
+              [
+                "Order Change",
+                "Quantity, Personalization Edit, Shipping Address, Payment Method, Product Change…"
+              ],
+              [
+                "Cancelation",
+                "Out of Stock, Customer Changed Mind, Delivery Delays, better price/quality found…"
+              ],
+              [
+                "Website Concerns",
+                "Cannot Load cart, Cannot Login, Cannot Check out, Promo Codes, Price Variance…"
+              ],
+              [
+                "Also",
+                "Place an Order · Product Inquiry · Transfer · Fraud Inquiry · International Orders · Profanity · General Inquiry · CSAT · Other"
+              ]
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "Replying"
           },
           {
             "type": "p",
-            "text": "A categorize rail on the side recommends case categories (Order Status, Returns, Charge Error, …) based on the email's content. Click a chip — or press 1–9 — to apply category and subcategory to the case."
-          },
-          {
-            "type": "p",
-            "text": "Below the thread, the extension recommends the best-matching reply template and can open a draft reply with it."
+            "text": "The reply bar at the bottom ('Reply to Email <address>') expands into a composer: To, Subject (pre-filled RE:), and a rich-text body seeded with your signature. The reply target is resolved automatically to the customer side of the thread — our own domains are skipped."
           },
           {
             "type": "callout",
-            "kind": "info",
-            "text": "Recommendations come from the same rule engine that matches templates in the popup — improve your template rules and the recommendations improve too."
+            "kind": "warning",
+            "text": "The composer writes a DRAFT — it does not send from here. Finish and send the draft from Outlook."
           }
         ]
       },
@@ -1186,7 +2041,7 @@ export const HELP_CONTENT = {
     },
     {
       "slug": "text-note-preview",
-      "title": "Text & Note Preview",
+      "title": "Text & Chat Preview",
       "icon": "eye",
       "tiers": [
         "beginner"
@@ -1196,9 +2051,10 @@ export const HELP_CONTENT = {
         "chat",
         "note preview",
         "text",
-        "transcript"
+        "transcript",
+        "snapengage"
       ],
-      "summary": "Inline preview of case notes, SMS, and chat transcripts with a recommended reply.",
+      "summary": "Read live-chat transcripts as a proper conversation — visitor and agent bubbles, system events, and the same categorize rail on cases.",
       "feature": "text-preview",
       "flag": "textPreviewEnabled",
       "covers": [
@@ -1208,11 +2064,11 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "The same idea as Email Thread Preview, for text rows: hover a case note, SMS, or chat transcript row and click the preview button to read the full conversation without opening it."
+            "text": "Click the preview button on a chat/note row to read the transcript as a conversation: visitor messages on the left, agent messages right-aligned with a brand tint, system events as centered divider badges, internal notes in amber 'NOTE' boxes, and a 'View full transcript on SnapEngage' pill when a link exists. The header counts the parsed messages and carries a READ-ONLY tag."
           },
           {
             "type": "p",
-            "text": "The extension parses the transcript into a readable message thread and recommends a reply template when one matches."
+            "text": "It's view-only by design — replies happen in SnapEngage (the footer says so). On case pages the same categorize rail as the email preview appears for tagging the case."
           }
         ]
       },
@@ -1238,9 +2094,10 @@ export const HELP_CONTENT = {
         "graph",
         "draft",
         "transport",
-        "send"
+        "send",
+        "copy"
       ],
-      "summary": "Three transports — Power Automate (silent send), Outlook fallback (pre-filled window), and Microsoft Graph (draft-only) — and exactly when each is used.",
+      "summary": "Three transports — Power Automate (silent send), Outlook fallback (pre-filled window + Copy), and Microsoft Graph (draft-only) — and exactly when each is used.",
       "feature": "email-templates",
       "covers": [
         "graph-replies"
@@ -1261,17 +2118,17 @@ export const HELP_CONTENT = {
               [
                 "Power Automate",
                 "powerAutomateEnabled is ON and a flow URL is set",
-                "Email sends silently through your Power Automate flow. Signature auto-appended. Inline images delivered as proper attachments."
+                "Email sends silently through your flow. Signature auto-appended. Inline images delivered as proper attachments. Supports multiple From senders + reply-threading."
               ],
               [
                 "Outlook (mailto)",
                 "Power Automate is OFF — the default",
-                "A pre-filled Outlook window opens. Formatting is stripped to plain text and no signature is added. In bulk sends, one window opens per email."
+                "A pre-filled Outlook window opens: formatting stripped to plain text, no signature. The popup adds a Copy button that puts the formatted HTML on your clipboard so a paste into Outlook keeps the styling."
               ],
               [
                 "Microsoft Graph",
                 "Reply-with-template after signing in with Microsoft",
-                "Creates a DRAFT in your mailbox. It never sends automatically — you review and send from Outlook."
+                "Creates a DRAFT in your mailbox. It never sends automatically — review and send from Outlook."
               ]
             ]
           },
@@ -1289,15 +2146,15 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "When sending through Power Automate, images inside the email body are converted to inline CID attachments (up to 3 MB each) so Outlook renders them reliably. Your Power Automate flow must forward the attachments array to its Outlook send action."
+            "text": "On Power Automate sends, images in the body are converted to inline CID attachments (up to 3 MB each) so Outlook renders them reliably. Your flow must forward the attachments array to its Outlook send action — if recipients see broken images, that's the usual culprit."
           },
           {
             "type": "heading",
-            "text": "Microsoft sign-in"
+            "text": "Senders and reply mode"
           },
           {
             "type": "p",
-            "text": "Graph drafts use a standard Microsoft OAuth sign-in (one browser prompt; the token refreshes silently afterwards). Sign out any time from Settings."
+            "text": "With Power Automate on, the template editor header shows a sender picker (specific accounts or Random per send), and non-case templates gain a 'Reply to most recent email' toggle that threads the send into the existing conversation instead of starting fresh."
           },
           {
             "type": "callout",
@@ -1672,71 +2529,75 @@ export const HELP_CONTENT = {
             "type": "table",
             "headers": [
               "Action",
-              "Opens",
+              "What it does",
               "Appears on"
             ],
             "rows": [
               [
-                "Add Task",
-                "Quick Task",
+                "Call <contact name>",
+                "Dials the contact (the row hints the number it will dial) and opens the Call Log; shown when the contact has a phone",
                 "contact, account"
               ],
               [
+                "Log incoming call",
+                "Opens the Call Log without dialing",
+                "contact, account"
+              ],
+              [
+                "Quick task for <name>",
+                "Opens Quick Task pre-targeted at this record",
+                "contact, account"
+              ],
+              [
+                "Find phone",
+                "Shown instead of Call when the contact has no number but has orders — scans them for one",
+                "contact"
+              ],
+              [
                 "My Tasks",
-                "Task List",
+                "Opens the Task List",
                 "contact, account"
               ],
               [
                 "Search CRM",
-                "CRM Search",
+                "Opens CRM Search",
                 "everywhere"
               ],
               [
-                "Log Call",
-                "Call Log",
-                "contact, account"
-              ],
-              [
-                "Margin Calc",
-                "Margin Calculator",
-                "order"
-              ],
-              [
                 "Gift Catalog",
-                "Gift Catalog",
+                "Opens the catalog / proposal builder",
                 "contact, account"
               ],
               [
                 "Watch",
-                "Watch-add form",
+                "Inline watch-add form for this record",
                 "order, contact"
               ],
               [
-                "Submit Proof",
-                "Submit Proof",
+                "Margin Calc / Submit Proof / Charge",
+                "The order-page toolkit",
                 "order"
               ],
               [
-                "Charge",
-                "Charge modal",
+                "Manage order dates",
+                "Opens the Order Date Manager ('Change approval & commitment dates for #…')",
                 "order"
               ],
               [
-                "Copy Order IDs",
-                "clipboard action",
+                "Copy order IDs",
+                "Copies every listed ID — the hint counts them ('N orders on this page')",
                 "order index"
               ],
               [
                 "New Contact",
-                "New Contact",
+                "Opens the contact creator",
                 "contact, account"
               ]
             ]
           },
           {
-            "type": "callout",
-            "kind": "proTip",
-            "text": "Actions are ordered by relevance: modal-contextual first, then page-contextual, then general — destructive actions always sit at the bottom in red."
+            "type": "p",
+            "text": "The expanded panel's header names where you are ('Contact · Marcus Chen'), and actions that fit the current page float to the top. Destructive actions always sit at the bottom in red."
           }
         ]
       },
@@ -1874,9 +2735,13 @@ export const HELP_CONTENT = {
         "products",
         "browse",
         "index",
-        "gifting"
+        "gifting",
+        "departments",
+        "sale",
+        "promo",
+        "commissionable"
       ],
-      "summary": "Browse and search the entire golfballs.com product range — every item on the site, indexed locally for instant filtering by category, brand, and price.",
+      "summary": "The full golfballs.com range in one searchable grid — departments, badges, the '/' filter palette, and the product detail panel with live inventory.",
       "feature": "gift-catalog",
       "flag": "giftCatalogEnabled",
       "covers": [
@@ -1887,33 +2752,98 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "Open the Gift Catalog from the Actions Shelf on a contact, account, or order page. You get a searchable grid of the full site catalog — over three thousand items — with a collapsible category sidebar and a Custom Logo group at the top."
+            "text": "Open the Gift Catalog from the Actions Shelf. The layout: a search bar across the top, a BROWSE sidebar on the left, the product grid in the middle, and — once you've added something — the proposal panel on the right."
           },
           {
-            "type": "p",
-            "text": "Search by name, filter by category, brand, or price, and sort by popularity or price. Click Customize on any card to start decorating it, or add it straight to the quote."
+            "type": "heading",
+            "text": "Searching and filtering"
+          },
+          {
+            "type": "list",
+            "items": [
+              "The search box ('Search products, or / to filter…') is focused on open — just type.",
+              "Type / inside it for the filter palette: pick categories, brands, or special filters like 'On sale / promo' and 'Commissionable only' with arrows + Enter.",
+              "Sort dropdown: Most reviewed (default), Price: low → high, Price: high → low, Name A–Z.",
+              "An X appears next to the search when any filter is active — one click clears everything."
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "The sidebar"
+          },
+          {
+            "type": "list",
+            "items": [
+              "Departments — Golf Balls, Apparel, Drinkware, Gift Sets and the rest, each with a live count. Click to scope, click again to clear.",
+              "Custom Items — your own service products (see Custom & Service Items).",
+              "SAVED — Saved Proposals (your local drafts) and Current Proposals (live from the CRM when an account is linked).",
+              "Proposal dock — when your proposal has items, a compact card at the sidebar's bottom shows the line count + running total; click it to pop the proposal panel open."
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "Reading a product card"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Element",
+              "Meaning"
+            ],
+            "rows": [
+              [
+                "Sale badge (red) / Promo badge (green)",
+                "On sale, or a promotion currently applies"
+              ],
+              [
+                "$ coin badge",
+                "Commissionable — a custom-logo SKU priced on the volume ladder"
+              ],
+              [
+                "'from' price",
+                "Custom-logo items show the 1+ tier; volume drops it further"
+              ],
+              [
+                "HPG / SNUGZ pill",
+                "A custom item imported from that supplier"
+              ],
+              [
+                "Round + button",
+                "Adds straight to the proposal (tooltip: 'Add to proposal')"
+              ]
+            ]
           }
         ],
         "intermediate": [
           {
             "type": "heading",
-            "text": "The index and refresh"
+            "text": "The product detail panel"
           },
           {
             "type": "p",
-            "text": "The catalog indexes the whole site and caches the result locally, re-indexing automatically after 24 hours (configurable as 'Re-index interval' in Developer Settings). The first open after the cache expires takes a few extra seconds while it rebuilds — that's normal."
+            "text": "Click a card and a panel slides in from the right: big photo, brand + category pills, rating and SKU, the per-unit price (with the struck-through 'was' price on sale items), and — for tiered products — the quantity pricing table showing every break with its per-unit price and green savings column. A footer note explains it: 'Per-unit price drops with order volume — quote the tier that matches the gift run.'"
+          },
+          {
+            "type": "list",
+            "items": [
+              "Promo banner — green pill with the promo's label and code when one applies to this product.",
+              "Cost line — 'Cost $X.XX/unit · used for margin' appears once a cost has been synced for the SKU.",
+              "Check inventory — a button that pulls the live stock table (Avail / OnHand / Alloc / OnOrdr) on demand, with a refresh icon and a retry on error.",
+              "Footer — 'View product' opens the live site page; 'Add to proposal' (changes to 'Add another' once it's in) commits the line."
+            ]
           },
           {
             "type": "callout",
             "kind": "tip",
-            "text": "Card density and default sort are configurable in Developer Settings if you prefer a tighter grid or price-first ordering."
+            "text": "The catalog index is cached locally and re-pulls after 24h (Developer Settings → 'Re-index interval'). Seed data paints instantly while the live feed loads, so a brief 'old prices' flash on first open is normal."
           }
         ]
       },
       "related": [
         "customizing-item",
-        "gift-sets",
-        "build-email-proposal",
+        "proposal-panel",
+        "custom-service-items",
+        "gifting-glossary",
         "ts-catalog-stale"
       ],
       "sectionLabel": "Core Features / Gifting & Proposals"
@@ -1932,9 +2862,14 @@ export const HELP_CONTENT = {
         "imprint",
         "dual pole",
         "customize",
-        "personalize"
+        "personalize",
+        "photo",
+        "icons",
+        "alignment",
+        "player number",
+        "font"
       ],
-      "summary": "Add a logo, personalized text, or monogram to a product — with a live 3D preview and an optional second imprint on the opposite pole.",
+      "summary": "Eight imprint types — logo, text, monogram, photo, alignment art, icons, player numbers — each with its exact controls, plus dual-pole decoration.",
       "feature": "gift-catalog",
       "flag": "giftCatalogEnabled",
       "covers": [
@@ -1946,31 +2881,69 @@ export const HELP_CONTENT = {
         "intermediate": [
           {
             "type": "p",
-            "text": "Click Customize on a catalog card. The panel shows the imprint types this specific product supports — products that can't take a monogram simply won't offer one. Choose:"
+            "text": "On a customizable product, the detail panel grows a customize block: tabs for each imprint type the product actually supports, type-specific controls below, and a live 3D preview that re-renders as you change anything. The preview uses the real production rendering services — what you see is what prints."
           },
           {
-            "type": "list",
-            "items": [
-              "Logo — upload or pick the customer's artwork; it renders onto the live 3D preview.",
-              "Personalized text — real fonts rendered exactly as production will print them.",
-              "Monogram — live letter art in multiple styles, recolorable, laid out by letter count."
+            "type": "table",
+            "headers": [
+              "Imprint type",
+              "Controls"
+            ],
+            "rows": [
+              [
+                "Custom Logo",
+                "Drag-and-drop or click-to-upload (PNG/JPG/GIF, ~5 MB). Art auto-aligns to the print area and projects onto the 3D ball."
+              ],
+              [
+                "Personalized (Text)",
+                "Up to 3 text lines (~20 chars each) · font dropdown: Kabel Dm BT (default), Calibri, Lucida Handwriting, Bradley Hand · color picker (6 quick colors, 75+ in the expanded panel) · size: Standard / Large / Max"
+              ],
+              [
+                "Monogram",
+                "7 style thumbnails — Circle, Hexagram, Gardenia (3 initials); Vertical, Horizontal, Diagonal (2); Simple Circle (1) · initials input (letters only) · primary + accent color pickers"
+              ],
+              [
+                "Photo",
+                "Upload a photo; auto-crops to a circle (or square where the product calls for it) with a live crop preview"
+              ],
+              [
+                "AlignXL (accent line)",
+                "8 line styles (Star, Thin, Medium, Thick, Dot, Skull, Martini, Wine) · optional text line · separate text + line colors, or a 'same color' checkbox"
+              ],
+              [
+                "IDAlign (alignment text)",
+                "12 line styles (arrows, dots, stars, chevrons, martini/wine glyphs) · 1–3 initials centered on the line · text + line colors"
+              ],
+              [
+                "Icons",
+                "Theme dropdown (Dad/Father's Day, Drinks, USA/Patriotic, Masters, Misc) → grid of 5–9 ready-made graphics"
+              ],
+              [
+                "Custom Player Number",
+                "A 1–3 digit number input"
+              ]
             ]
           },
           {
+            "type": "heading",
+            "text": "Dual-pole (the second side)"
+          },
+          {
             "type": "p",
-            "text": "Dual-pole decoration puts a second imprint on the opposite side of the ball — logo on one pole, personalization or monogram on the other. The 3D preview shows both; drag to rotate, scroll to zoom."
+            "text": "Where the product supports it, a checkbox — 'Add personalization to the back' — reveals a second, identical set of imprint controls for the opposite pole: logo on one side, text or a monogram on the other. Both render in the 3D preview. The second pole carries an upcharge (per dozen: +$6 for a logo, +$4 for text). Deleting the front imprint promotes the back one to front."
           },
           {
             "type": "callout",
-            "kind": "info",
-            "text": "Previews use the real production rendering services, so what you see is what the customer gets — not an approximation."
+            "kind": "proTip",
+            "text": "In the proposal panel, each imprint shows as a draggable pill on its line — drag a pill onto another line to copy the same decoration to a second product."
           }
         ]
       },
       "related": [
         "gift-catalog",
         "gift-sets",
-        "3d-product-viewer"
+        "3d-product-viewer",
+        "proposal-panel"
       ],
       "sectionLabel": "Core Features / Gifting & Proposals"
     },
@@ -1988,9 +2961,10 @@ export const HELP_CONTENT = {
         "packaging",
         "upsell",
         "bundle",
-        "wooden"
+        "wooden",
+        "per set"
       ],
-      "summary": "Wrap custom-logo balls into boxed gift sets — sleeves, 6-ball boxes, premium wood — with an assembled 3D box preview and verified ladder pricing.",
+      "summary": "Wrap custom-logo balls into packaged sets — sleeve, black box, or premium wood with divot-tool or poker-chip kits — and watch pricing flip from per-dozen to per-set.",
       "feature": "gift-catalog",
       "flag": "giftCatalogEnabled",
       "covers": [
@@ -2000,22 +2974,192 @@ export const HELP_CONTENT = {
         "intermediate": [
           {
             "type": "p",
-            "text": "While customizing a ball, the packaging section offers gift-set bundles: a 3-ball sleeve, a 6-ball box with accessories (divot tool, poker chip, ball marker variants), or premium wooden boxes."
+            "text": "While customizing a ball, the gift-set selector offers the packaging options: 'No packaging' (default), a 3-Ball Sleeve, 6-Ball Black Box variants with a lever-divot or poker-chip kit, and Premium Wood 6-Ball boxes. Each option lists its size and the upcharge per set."
           },
           {
-            "type": "p",
-            "text": "Pick one and the 3D preview swaps to the assembled open box — balls and accessories seated in their foam slots, with your imprints visible on each piece."
+            "type": "heading",
+            "text": "What changes when you pick one"
           },
           {
-            "type": "callout",
-            "kind": "info",
-            "text": "Set pricing combines the ball's custom-logo volume ladder with the kit's own ladder, rounded to .95 — the same math the website uses, verified against production carts."
+            "type": "list",
+            "items": [
+              "The 3D preview swaps to the assembled open box — balls and the kit seated in their foam slots, imprints visible on every piece.",
+              "Pricing flips to per-SET: the ball's custom-logo ladder is scaled to the set's ball count and the kit's own ladder is added, rounded to .95 — the same math the website uses, verified against production carts.",
+              "In the proposal, the line shows a gift-set banner (set name + '6 balls · per set') and quantity now means number of sets, not dozens."
+            ]
           }
         ]
       },
       "related": [
         "customizing-item",
         "3d-product-viewer",
+        "proposal-panel"
+      ],
+      "sectionLabel": "Core Features / Gifting & Proposals"
+    },
+    {
+      "slug": "proposal-panel",
+      "title": "The Proposal Panel",
+      "icon": "task",
+      "tiers": [
+        "intermediate",
+        "advanced"
+      ],
+      "keywords": [
+        "proposal",
+        "quote",
+        "line item",
+        "split",
+        "tier",
+        "price edit",
+        "save draft",
+        "quantity",
+        "promo",
+        "drag imprint"
+      ],
+      "summary": "Where the quote takes shape: line items, split tiers, inline price editing with tier-reset, draggable imprint pills, the promo block, and saving drafts.",
+      "feature": "proposals",
+      "flag": "giftCatalogEnabled",
+      "covers": [
+        "proposals"
+      ],
+      "body": {
+        "intermediate": [
+          {
+            "type": "p",
+            "text": "The right-hand panel slides in with your first added item. Its header shows 'PROPOSAL', the count ('3 products · 36 units'), a Clear button, and a collapse arrow. Each line item card carries:"
+          },
+          {
+            "type": "list",
+            "items": [
+              "Thumbnail, brand, title, and the line total (right-aligned).",
+              "A gift-set banner when packaging is applied (set name + per-set size).",
+              "Imprint pills — front-pole pills tinted brand, back-pole tinted green, each with the art preview and an X to remove. Drag a pill onto another line to copy the decoration there.",
+              "Split rows — quantity stepper × price × subtotal (see below).",
+              "A trash icon to remove the line, and 'N units' at the bottom right."
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "Splits, prices, and tier snapping"
+          },
+          {
+            "type": "p",
+            "text": "Each line starts with one split: a qty stepper (−/+ or type a number) and a price. The price auto-snaps to the matching volume tier as quantity changes. Click the dashed-underline price to type your own — that locks it, and a small ↺ link appears showing the auto tier price; click it to snap back. '+ Split tier' adds another qty/price row on the same line, so one quote can show 'option A: 12 @ $6.50, option B: 50 @ $5.95' side by side."
+          },
+          {
+            "type": "heading",
+            "text": "The footer"
+          },
+          {
+            "type": "list",
+            "items": [
+              "Promo block — type a code or open the chevron to browse known codes (only ones applicable to this cart are offered, each showing its real value). Applied promos render as a pill with the discount in green plus any free-quantity line; the total shows old-price strikethrough + new total.",
+              "Estimated total — units + the big number.",
+              "Buttons — Save draft (expands a name field, e.g. 'Q3 Client Gift Run'), Load (pull a saved draft back in), Generate email, Clear."
+            ]
+          }
+        ],
+        "advanced": [
+          {
+            "type": "heading",
+            "text": "Saved and current proposals"
+          },
+          {
+            "type": "p",
+            "text": "Sidebar → Saved Proposals is the gallery of your local drafts: each card shows thumbnails, name, date, unit count, total, and a Load button (loading is additive — it merges into the working proposal). Hover a card's 'Draft' tag and it morphs into a red Delete. Current Proposals pulls the linked account's real proposals live from the CRM — open any of them into the Breakdown view, load them into the builder, or re-email them."
+          }
+        ]
+      },
+      "related": [
+        "proposal-breakdown",
+        "build-email-proposal",
+        "promo-codes",
+        "gifting-glossary"
+      ],
+      "sectionLabel": "Core Features / Gifting & Proposals"
+    },
+    {
+      "slug": "proposal-breakdown",
+      "title": "Breakdown & Margin View",
+      "icon": "calc",
+      "tiers": [
+        "intermediate",
+        "advanced"
+      ],
+      "keywords": [
+        "breakdown",
+        "margin",
+        "cost",
+        "profit",
+        "blended",
+        "revenue",
+        "cost basis",
+        "asterisk",
+        "sync"
+      ],
+      "summary": "The profitability X-ray of any proposal: revenue/cost/profit/margin tiles, per-line margin color coding, cost basis, and price overrides.",
+      "feature": "proposals",
+      "flag": "giftCatalogEnabled",
+      "covers": [
+        "inventory-costs"
+      ],
+      "body": {
+        "intermediate": [
+          {
+            "type": "p",
+            "text": "Click a saved-proposal card (or the current proposal) to open its breakdown. Across the top, four stat tiles: Revenue, Est. Cost, Gross Profit, and Blended Margin. Below, the LINE ITEMS & MARGIN table — Product, Qty, Revenue, Cost, Margin % — where each margin badge is color-coded: green at 45%+ margin, yellow from 32%, red below 32%. Click a row to expand its splits and imprints. Free promo lines carry a 'Free' badge and are excluded from margin math."
+          },
+          {
+            "type": "heading",
+            "text": "Where costs come from"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Cost basis",
+              "Meaning"
+            ],
+            "rows": [
+              [
+                "actual",
+                "Every line uses a real synced cost (from inventory or a custom item's entered cost)"
+              ],
+              [
+                "mixed",
+                "Some lines synced, the rest estimated — estimated lines are marked with an asterisk *"
+              ],
+              [
+                "assumed",
+                "No costs on file; margins assume a default percentage of sell price"
+              ]
+            ]
+          },
+          {
+            "type": "p",
+            "text": "Missing costs auto-load when the breakdown opens; a sync progress indicator shows while the cost map fills in. The footer note tells you which basis you're looking at and reminds you prices are clickable — any price can be overridden right here."
+          }
+        ],
+        "advanced": [
+          {
+            "type": "heading",
+            "text": "Sections below the table"
+          },
+          {
+            "type": "list",
+            "items": [
+              "CUSTOMIZATION — every decorated item with its imprint chips (art square, type + pole, content, color swatches) and gift-set pill.",
+              "PROMOTION — the applied code with its value, or the same type/browse/Apply promo block as the proposal panel.",
+              "Margin summary box — Revenue, − Cost (with basis), − Promotion, Gross profit, Blended margin badge.",
+              "Action buttons — saved drafts get Copy command / Save to account / Load / Generate email; the current proposal gets Open proposal / Generate email."
+            ]
+          }
+        ]
+      },
+      "related": [
+        "proposal-panel",
+        "margin-calculator",
+        "ts-no-cost",
         "build-email-proposal"
       ],
       "sectionLabel": "Core Features / Gifting & Proposals"
@@ -2032,9 +3176,11 @@ export const HELP_CONTENT = {
         "custom item",
         "freight",
         "setup fee",
-        "one-off"
+        "one-off",
+        "add item",
+        "cost breaks"
       ],
-      "summary": "Create one-off items — design setup, freight, consulting — with their own pricing ladders, and add them to any proposal like catalog products.",
+      "summary": "Build your own products — the full add-item form, cost ladders for margin, style options, and the repo tags that track where items came from.",
       "feature": "custom-items",
       "flag": "giftCatalogEnabled",
       "covers": [
@@ -2044,17 +3190,59 @@ export const HELP_CONTENT = {
         "intermediate": [
           {
             "type": "p",
-            "text": "Not everything you quote is in the catalog. Custom items let you define service products — a setup fee, freight, a special-order item — with a name, description, thumbnail, price ladder, setup cost, and lead time."
+            "text": "Sidebar → Custom Items opens your library as a masonry gallery (filtered to the linked account where one is set). The '+ Add' button opens the item form:"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Field",
+              "Notes"
+            ],
+            "rows": [
+              [
+                "Name",
+                "Required — e.g. 'Custom Golf Cap'"
+              ],
+              [
+                "Brand / Item ID",
+                "Your supplier's brand and SKU"
+              ],
+              [
+                "Description",
+                "Materials, decorating options — shows on the detail panel"
+              ],
+              [
+                "Link to product",
+                "Supplier URL; the detail panel gets View product + copy-link buttons"
+              ],
+              [
+                "Thumbnail image",
+                "Drag/drop or pick a file — automatically re-hosted on the company image server so it renders in proposal emails"
+              ],
+              [
+                "Price",
+                "Required — your sell price"
+              ],
+              [
+                "Style options",
+                "Comma-separated (Color, Size…); each becomes a picker on the detail panel"
+              ],
+              [
+                "Cost (per unit) + Cost breaks",
+                "Supplier cost, optionally as a quantity/cost ladder — this is what powers real margins in the breakdown"
+              ]
+            ]
           },
           {
             "type": "p",
-            "text": "Saved items live in your local library (deduped by SKU) and appear alongside catalog products when building a quote. Edit or remove them any time; bulk delete handles cleanup after big imports."
+            "text": "Items show a source pill — HPG or SNUGZ for imports, nothing for hand-made ones — and behave exactly like catalog products in the proposal: quantities, splits, even style variants. Bulk delete handles cleanup after a big import."
           }
         ]
       },
       "related": [
         "supplier-import",
-        "build-email-proposal"
+        "proposal-panel",
+        "proposal-breakdown"
       ],
       "sectionLabel": "Core Features / Gifting & Proposals"
     },
@@ -2071,9 +3259,10 @@ export const HELP_CONTENT = {
         "snugz",
         "supplier",
         "markup",
-        "third party"
+        "third party",
+        "review sheet"
       ],
-      "summary": "Import customizable products from HPG Brands or SnugZ USA — costs, options, and minimums fetched automatically, markup computed, saved as custom items.",
+      "summary": "One-click bulk import from HPG Brands or SnugZ USA: catalog paging, per-item cost ladders, automatic markup, and a review sheet before anything saves.",
       "feature": "supplier-import",
       "flag": "giftCatalogEnabled",
       "covers": [
@@ -2084,22 +3273,22 @@ export const HELP_CONTENT = {
         "advanced": [
           {
             "type": "p",
-            "text": "From the custom items panel, start an HPG or SnugZ import. The extension pages the supplier's catalog, filters to customizable products, then fetches each detail page for cost ladders, decoration options, minimums, weight, and lead time."
+            "text": "In the Custom Items gallery, the '+ HPG Brands' and '+ SnugZ USA' buttons start an import. The flow runs in two visible phases — 'Fetching product catalog…' (paging the supplier's search, page counter shown) then 'Fetching product details…' (per-item progress) — and lands on a review sheet: every found item with its thumbnail, name, SKU, cost ladder, and style options, plus an include/exclude checkbox. 'Save X items' commits your selection to the library, deduped by SKU."
           },
           {
             "type": "p",
-            "text": "A markup is computed on top of cost (margin + setup + shipping), and you preview the resulting price ladder before saving the items you want into your custom items library."
+            "text": "Sell prices are computed from supplier cost with the standard model — (cost + setup + shipping) ÷ (1 − target margin) — so imported items arrive quote-ready with honest margins."
           },
           {
             "type": "callout",
             "kind": "warning",
-            "text": "SnugZ requires you to be signed in to snugzusa.com in another tab first. HPG is public. Large imports fetch many pages — let the progress finish before navigating away."
+            "text": "SnugZ needs you signed in to snugzusa.com in another tab first; HPG is public. Big imports fetch many pages — let the progress finish before navigating away."
           }
         ]
       },
       "related": [
         "custom-service-items",
-        "build-email-proposal"
+        "proposal-breakdown"
       ],
       "sectionLabel": "Core Features / Gifting & Proposals"
     },
@@ -2115,9 +3304,10 @@ export const HELP_CONTENT = {
         "coupon",
         "discount",
         "free quantity",
-        "code"
+        "code",
+        "applicable"
       ],
-      "summary": "Validate and apply real promotions to a proposal — discounts and free-item lines computed by the same engine the website uses.",
+      "summary": "Apply real promotions to a proposal — the picker only offers codes that actually fit the cart, and free-quantity promos add genuine free-item lines.",
       "feature": "promos",
       "flag": "giftCatalogEnabled",
       "covers": [
@@ -2127,81 +3317,216 @@ export const HELP_CONTENT = {
         "intermediate": [
           {
             "type": "p",
-            "text": "In the proposal sidebar, type a promo code or pick from known promos — the picker only offers codes that actually apply to what's in your cart. Applying one recomputes the proposal: percentage discounts appear as discount lines, and free-quantity promos add real free-item lines."
+            "text": "The promo block lives in the proposal panel footer and in the breakdown: type a code, or open the chevron to browse known codes — each candidate is pre-checked against your current cart and only applicable ones appear, with their real value shown (dollar discount or free quantity). Apply recomputes the proposal: a green discount line, free-item lines where the promo grants them, and a struck-through old total."
           },
           {
             "type": "callout",
             "kind": "info",
-            "text": "Free promo lines are excluded from margin math, so the breakdown still tells you the truth about profitability."
+            "text": "Free promo lines show 'FREE' in the proposal email and are excluded from margin math, so the breakdown still reads true. A warning appears if the cart stops meeting the promo's requirements."
           }
         ]
       },
       "related": [
+        "proposal-panel",
         "build-email-proposal",
-        "margin-calculator"
+        "proposal-breakdown"
       ],
       "sectionLabel": "Core Features / Gifting & Proposals"
     },
     {
       "slug": "build-email-proposal",
-      "title": "Building & Emailing a Proposal",
+      "title": "Emailing a Proposal",
       "icon": "send",
       "tiers": [
         "intermediate",
         "advanced"
       ],
       "keywords": [
-        "proposal",
-        "quote",
-        "email proposal",
+        "proposal email",
+        "quote email",
         "cart link",
         "opportunity",
-        "tracked"
+        "tracked",
+        "templates",
+        "classic",
+        "minimal",
+        "imprint preview"
       ],
-      "summary": "Assemble line items into a priced quote, then email it as a tracked proposal — with 3D render snapshots, a live cart link, and automatic opportunity updates.",
+      "summary": "Generate the customer-facing email: four layout templates, content toggles (costs, images, 3D previews, CTA), and the tracked server-side send.",
       "feature": "proposals",
       "flag": "giftCatalogEnabled",
       "covers": [
-        "proposal-email",
-        "proposals"
+        "proposal-email"
       ],
       "tutorial": "build-proposal",
       "body": {
         "intermediate": [
           {
             "type": "p",
-            "text": "As you add items from the catalog (customized or plain, plus custom items), the proposal sidebar tracks line items and a running total. You can split a quantity across price tiers, apply a promo, and review a margin breakdown per line."
+            "text": "'Generate email' (from the proposal panel or a breakdown) opens the composer in place. At the top, a template selector with four layouts — Classic (detailed rows), Minimal (editorial), Catalog Cards (card grid), Quote (grouped table). Then the message fields: recipient (pre-filled from the page's contact when available), subject (pre-filled 'Corporate Gift Proposal — …'), and an editable intro body."
+          },
+          {
+            "type": "heading",
+            "text": "Content toggles"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Toggle",
+              "Effect"
+            ],
+            "rows": [
+              [
+                "Expiration date",
+                "Adds 'This proposal expires on <date>' with a date picker"
+              ],
+              [
+                "Disclaimer",
+                "Adds the footnote '*shipping & sales tax are calculated in the shopping cart'"
+              ],
+              [
+                "Show cost",
+                "Off hides per-unit prices — for teaser sends"
+              ],
+              [
+                "Show images",
+                "Product photos on/off"
+              ],
+              [
+                "Show previews",
+                "Includes IMPRINT PREVIEW cards — real 3D render snapshots of each decoration"
+              ],
+              [
+                "Show CTA",
+                "Adds the 'View this option →' button linking to the live cart"
+              ]
+            ]
           },
           {
             "type": "p",
-            "text": "Email Proposal opens a composer with the rendered quote: line items with pricing, automatic 3D snapshots of each customized product, and a link to a live cart the customer can check out from."
-          },
-          {
-            "type": "p",
-            "text": "Sending does three things server-side: creates the proposal email record, registers it for tracking, and updates the opportunity's value — the same bookkeeping as quoting from the website."
+            "text": "The rendered email shows each line with brand, title, 'Qty N × $X ea' and the line total; sale and volume pricing render with the old price struck through; promo discounts appear as a green '−$X' line and free items as 'Qty X · FREE'."
           }
         ],
         "advanced": [
           {
             "type": "heading",
-            "text": "Saved and current proposals"
+            "text": "What Send actually does"
           },
           {
             "type": "p",
-            "text": "The Current Proposals sidebar pulls the contact's existing proposals live from the CRM — open one to see its breakdown, load it back into the builder, or re-email it. Each saved proposal maps back to a real cart, so 'load' restores the exact line items and decorations."
-          },
+            "text": "Sending uploads the 3D snapshots, then runs the same server-side bookkeeping as a quote from the website: it creates the proposal email record, registers it for tracking, and updates the opportunity's value on the account. The cart link is only included when the cart saved successfully — if the CTA is missing from a preview, re-save the proposal first. A toast confirms 'Proposal sent to <email>'."
+          }
+        ]
+      },
+      "related": [
+        "proposal-panel",
+        "proposal-breakdown",
+        "promo-codes",
+        "how-email-sending-works"
+      ],
+      "sectionLabel": "Core Features / Gifting & Proposals"
+    },
+    {
+      "slug": "gifting-glossary",
+      "title": "Gifting Glossary",
+      "icon": "bookmark",
+      "tiers": [
+        "beginner"
+      ],
+      "keywords": [
+        "glossary",
+        "terms",
+        "imprint",
+        "pole",
+        "ladder",
+        "split",
+        "commissionable",
+        "definitions"
+      ],
+      "summary": "Every term the gifting suite throws at you, defined in one place.",
+      "feature": "gift-catalog",
+      "covers": [],
+      "body": {
+        "beginner": [
           {
-            "type": "callout",
-            "kind": "tip",
-            "text": "The cart link only appears in the email when the cart saved successfully — if it's missing, re-save the proposal before sending."
+            "type": "table",
+            "headers": [
+              "Term",
+              "Meaning"
+            ],
+            "rows": [
+              [
+                "Imprint / Decoration",
+                "The custom artwork on a product — logo, text, monogram, photo, icon"
+              ],
+              [
+                "Pole / Dual-pole",
+                "The two printable sides of a ball. Dual-pole = both sides decorated (per-dozen upcharge: +$6 logo, +$4 text)"
+              ],
+              [
+                "Commissionable / Custom-logo",
+                "A SKU priced on the volume ladder instead of retail — marked with the $ coin badge"
+              ],
+              [
+                "Ladder / Price breaks",
+                "Tiered pricing: 1+ @ $6.00, 12+ @ $5.50, 50+ @ $5.00 — quantity snaps the price to the best tier"
+              ],
+              [
+                "Split / Split tier",
+                "Multiple qty × price rows on one line, to quote several volume scenarios at once"
+              ],
+              [
+                "Line / Line item",
+                "One product in the proposal: product + decoration + variant + its splits"
+              ],
+              [
+                "Gift set",
+                "A custom-logo ball wrapped into packaged sets (sleeve / box / wood, with a divot or poker-chip kit), priced per set"
+              ],
+              [
+                "Variant / Base option",
+                "A product option that changes the price (Tee Count, Color…) — separate from decoration"
+              ],
+              [
+                "Proposal / Draft",
+                "The working quote. Saved drafts live locally with a name; 'Current' = the unsaved working set"
+              ],
+              [
+                "Current proposals",
+                "The account's real proposals pulled live from the CRM opportunity"
+              ],
+              [
+                "Breakdown",
+                "The margin view: revenue, cost, profit, per-line margin color coding"
+              ],
+              [
+                "Cost basis",
+                "Where costs came from: actual (synced), mixed (some estimated, marked *), or assumed"
+              ],
+              [
+                "Custom item / Service item",
+                "A product you define yourself (or import from HPG/SnugZ) — setup fees, freight, special orders"
+              ],
+              [
+                "Repo",
+                "The import source tag on a custom item: HPG, SNUGZ, or none for hand-made"
+              ],
+              [
+                "Snapshot",
+                "A fixed-pose PNG export of the 3D render, used in proposal emails"
+              ],
+              [
+                "Opportunity / Cart number",
+                "The CRM record a sent proposal attaches to, and the saved cart's ID — what makes proposals reloadable and trackable"
+              ]
+            ]
           }
         ]
       },
       "related": [
         "gift-catalog",
-        "promo-codes",
-        "how-email-sending-works",
-        "margin-calculator"
+        "proposal-panel",
+        "proposal-breakdown"
       ],
       "sectionLabel": "Core Features / Gifting & Proposals"
     },
@@ -2234,7 +3559,7 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "Press Ctrl+M on an order page (or use the Actions Shelf). Enter any two of cost, price, margin, markup, or profit and the rest compute instantly, with an animated total-profit display."
+            "text": "Press Ctrl+M on an order page (or use the Actions Shelf). The fields: Item Cost and Selling Price on the first row, Gross Margin % and Markup % below, then Qty, Unit Profit, and the animated Total Profit readout. Enter any two values and the rest compute as you type; Clear all resets."
           },
           {
             "type": "callout",
@@ -2432,16 +3757,28 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "Watch an order or contact from the popup's TRACKING section or the Actions Shelf — it lands on your Watch List with a link back to where it came from. Open the list any time to see everything you're tracking."
+            "text": "Watch an order or contact from the popup's TRACKING section or the Actions Shelf — it lands on your Watch List with a link back to where it came from. Filter chips (All / Active / High priority / Completed) carry live counts, and the search box matches title, context, and due date."
+          },
+          {
+            "type": "heading",
+            "text": "Reading a row"
+          },
+          {
+            "type": "list",
+            "items": [
+              "A colored stripe on the left shows how long the item has been waiting: nothing (<1h), blue (1–4h), amber (4–6h), red (6h+). When anything goes red, the modal header tints red too and the subtitle counts the criticals.",
+              "Line one: priority dot + title. Line two: the context ('Order #29103', 'Contact #4421 · Marcus Chen', or 'Standalone') and the due date.",
+              "The right edge shows the item's age (5m, 2h, 3d); hovering swaps it for Edit and Remove buttons. The checkbox marks it done."
+            ]
           },
           {
             "type": "p",
-            "text": "Each item takes a title, priority, due date, and a done checkbox. Filter chips (All / Active / High Priority / Completed) show live counts."
+            "text": "The Watch button (or Edit) opens the inline editor: title, priority (High/Med/Low), an optional due date, and the context picker — Standalone, or Order/Contact/Account with an ID (plus a name for contacts/accounts)."
           },
           {
             "type": "callout",
             "kind": "info",
-            "text": "Completed items clean themselves up after 5 days (configurable in Developer Settings). The list is personal and stored locally — it isn't shared with the CRM or teammates."
+            "text": "Completed items clean themselves up after 5 days (configurable in Developer Settings). The list is personal and stored locally — it isn't shared with the CRM or teammates. 'Clear all' asks for a second click to confirm."
           }
         ]
       },
@@ -2549,7 +3886,81 @@ export const HELP_CONTENT = {
         "advanced": [
           {
             "type": "p",
-            "text": "When a built-in variable or signal isn't enough, a code variable runs a JavaScript expression in a locked-down sandbox. Expressions get generic helpers — DOM queries against the current page, text fetches, catalog lookups — and return a value that drops into the template or decides a campaign condition."
+            "text": "When a built-in variable or signal isn't enough, a code variable runs JavaScript in a guarded sandbox. You author it in a real code editor (syntax highlighting, helper autocomplete); the function receives three arguments and must return a string:"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Argument",
+              "What it holds"
+            ],
+            "rows": [
+              [
+                "ctx",
+                "The extracted page data — order.status, order.items[], contact.firstName, account.ytdRevenue…"
+              ],
+              [
+                "vars",
+                "Previously-resolved variables, so later code can build on earlier values (vars.order_number)"
+              ],
+              [
+                "h",
+                "The helper namespace below"
+              ]
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "The h.* helper API"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Helper",
+              "Does"
+            ],
+            "rows": [
+              [
+                "h.dom(sel) / h.domAll(sel) / h.domText(sel)",
+                "Query the live page: first element, all elements, or the first match's text"
+              ],
+              [
+                "h.fetchText(url) / h.fetchJson(url)",
+                "Fetch a page or JSON through the background worker (CORS-safe, allow-listed hosts)"
+              ],
+              [
+                "h.send(action, payload)",
+                "Call any background action directly"
+              ],
+              [
+                "h.catalogSearch(q, {limit}) / h.catalogFind(q)",
+                "Search the gift catalog by name similarity — top matches, or the single best one"
+              ],
+              [
+                "h.fmt.currency / h.fmt.number / h.fmt.date",
+                "Format values for the email ($1,234.00 · 1,234 · MM/DD/YYYY)"
+              ],
+              [
+                "h.parseNumber / h.parseDate / h.normalizePhone",
+                "Extract a number, parse a date, format a phone as (###) ###-####"
+              ],
+              [
+                "h.coalesce(...vals) / h.titleCase(s)",
+                "First non-empty value · Title Case"
+              ]
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "Sandbox rules"
+          },
+          {
+            "type": "list",
+            "items": [
+              "Async is automatic — write 'await' and the variable runs on the async path with a 10-second timeout.",
+              "Blocked outright: fetch(, chrome., eval(, import(, Function(, setTimeout/setInterval, Worker, XMLHttpRequest, and infinite-loop shapes like while(true). Use the h.* equivalents instead.",
+              "Bodies are capped at 8,192 characters. Errors surface in the variable table so you can fix them — at send time an erroring variable resolves to empty."
+            ]
           },
           {
             "type": "heading",
@@ -2563,23 +3974,19 @@ export const HELP_CONTENT = {
             ],
             "rows": [
               [
-                "Out-of-stock scanner",
-                "Scans the order page for items that are now out of stock — drives win-back campaigns"
+                "Out-of-stock items",
+                "Scans the order page for items flagged OOS — fully self-contained, sync"
               ],
               [
                 "Recommended replacement",
-                "Finds the closest in-stock product to a discontinued item, brand-aware and similarity-scored"
+                "For each OOS item, fetches the brand's catalog and scores candidates by name/price/decoration to suggest the closest in-stock match (async)"
               ]
             ]
           },
           {
-            "type": "p",
-            "text": "Insert a recipe from the condition editor's picker, then edit its body if you need a variant. Test the expression in the editor before relying on it — a thrown error resolves to empty."
-          },
-          {
             "type": "callout",
             "kind": "warning",
-            "text": "Code variables run per-contact during campaigns. An expression that fetches pages adds time for every contact in the audience — keep them lean."
+            "text": "Code variables run per-contact during campaigns and bulk sends. An expression that fetches pages adds those seconds for every contact in the audience — keep them lean."
           }
         ]
       },
@@ -5606,9 +7013,13 @@ export const HELP_CONTENT = {
         "download",
         "original",
         "extract",
-        "viewer"
+        "viewer",
+        "align",
+        "eyedropper",
+        "zoom",
+        "knockout"
       ],
-      "description": "Hover any order image to open a zoomable viewer that resolves the customer's original artwork from wherever it lives — then download, recolor, or submit it as a proof.",
+      "description": "Zoom/pan inspection, the alignment ring that extracts a clean decal, color swapping with the eyedropper, and the W/S/R/A/3/C keyboard map.",
       "article": "image-viewer",
       "shortcut": null,
       "flag": "imagePreviewEnabled"
@@ -5624,7 +7035,7 @@ export const HELP_CONTENT = {
         "render",
         "color swap"
       ],
-      "description": "Swap colors in a logo and render it on a 3D ball in a grass scene — a client-ready mockup in under a minute.",
+      "description": "A photoreal grass-scene render of the ball with your extracted decal — the one-minute client mockup.",
       "article": "mockup-composer",
       "shortcut": null,
       "flag": "imagePreviewEnabled"
@@ -5640,9 +7051,10 @@ export const HELP_CONTENT = {
         "preview",
         "gift box",
         "render",
-        "export"
+        "export",
+        "snapshot"
       ],
-      "description": "Interactive 3D preview of balls, poker chips, divot tools, markers, and assembled gift boxes — with your decorations projected on, and consistent export photos.",
+      "description": "Interactive 3D balls, accessories, and assembled gift boxes with decal projection — and fixed-pose snapshot exports for proposals.",
       "article": "3d-product-viewer",
       "shortcut": null,
       "flag": "imagePreviewEnabled"
@@ -5656,9 +7068,12 @@ export const HELP_CONTENT = {
         "artist",
         "submit",
         "art approval",
-        "decoration proof"
+        "decoration proof",
+        "rush",
+        "logo status",
+        "gallery"
       ],
-      "description": "Submit decoration proof art to the CRM with order and customer IDs pre-filled, item and artist pickers, notes, and a gallery of the customer's previous proofs.",
+      "description": "The full proof request form — multi-item selection with per-item fields, logo status, rush flags, the prior-proof gallery, and the results panel with shareable links.",
       "article": "submit-proof",
       "shortcut": null,
       "flag": "submitProofEnabled"
@@ -5666,15 +7081,19 @@ export const HELP_CONTENT = {
     {
       "id": "article:bulk-email-selection",
       "category": "Articles",
-      "title": "Bulk Email from a Selection",
+      "title": "Quick Send (Bulk Email)",
       "keywords": [
         "bulk",
         "blast",
+        "quick send",
         "run campaign",
         "selected",
-        "mass email"
+        "mass email",
+        "delay",
+        "pacing",
+        "variation weights"
       ],
-      "description": "Select rows in Task List or CRM Search, pick a template, and send to everyone — with per-recipient progress, personalization, and retry.",
+      "description": "Select rows, pick a template, set the human-pacing delay, and watch the progress ring — every state of the Quick Send runner.",
       "article": "bulk-email-selection",
       "shortcut": null,
       "flag": "campaignManagerEnabled"
@@ -5686,13 +7105,16 @@ export const HELP_CONTENT = {
       "keywords": [
         "campaign",
         "steps",
+        "branch",
         "conditions",
         "pacing",
         "dry run",
         "sequence",
-        "automation"
+        "automation",
+        "simulate",
+        "send cap"
       ],
-      "description": "Design multi-step outreach sequences — email, task, call log, and code actions — with per-step conditions, audience ordering, pacing, and a zero-side-effect dry run.",
+      "description": "Multi-step flows with branches, groups, four step types, pacing and suppression controls, simulation, dry-run, and the live audience run view.",
       "article": "campaign-manager",
       "shortcut": null,
       "flag": "campaignManagerEnabled"
@@ -5706,9 +7128,11 @@ export const HELP_CONTENT = {
         "signal",
         "rule",
         "and or",
-        "criteria"
+        "criteria",
+        "order count",
+        "days since"
       ],
-      "description": "The data a campaign step can branch on: contact and order-history fields, with grouped AND/OR logic and code variables for anything custom.",
+      "description": "The three condition sources — CRM signals, schema fields, and code expressions — with the current signal catalog.",
       "article": "campaign-conditions",
       "shortcut": null,
       "flag": "campaignManagerEnabled"
@@ -5723,9 +7147,11 @@ export const HELP_CONTENT = {
         "find contact",
         "account",
         "lookup",
-        "customer"
+        "customer",
+        "index",
+        "typeahead"
       ],
-      "description": "Instant search over contacts, accounts, and orders from anywhere — Ctrl+K, type, done. Select rows to launch bulk actions and campaigns.",
+      "description": "Instant local typeahead over your indexed contacts, Enter for a full server search, rich result columns, and bulk selection for campaigns.",
       "article": "crm-search",
       "shortcut": "Ctrl+K",
       "flag": "crmSearchEnabled"
@@ -5740,9 +7166,11 @@ export const HELP_CONTENT = {
         "advanced search",
         "saved query",
         "filter",
-        "conditions"
+        "conditions",
+        "presets",
+        "fq"
       ],
-      "description": "Grouped AND/OR condition builder for CRM Search — build precise audience queries and save them for reuse.",
+      "description": "Grouped AND/OR/NOT conditions over 15 CRM fields, quick presets, saved queries, and the live human-readable + Solr previews.",
       "article": "query-builder",
       "shortcut": null,
       "flag": "crmSearchEnabled"
@@ -5771,9 +7199,12 @@ export const HELP_CONTENT = {
         "todo",
         "follow up",
         "due date",
-        "create task"
+        "create task",
+        "composer",
+        "filter",
+        "chips"
       ],
-      "description": "Create a CRM task in seconds: pick a template, set priority and a due date like +1w, submit.",
+      "description": "Two speeds: fire a saved template with one keystroke, or compose from scratch with the keyboard grammar — chips, due shorthand, and a live preview.",
       "article": "quick-task",
       "shortcut": null,
       "flag": "quickTaskEnabled"
@@ -5787,9 +7218,12 @@ export const HELP_CONTENT = {
         "ctrl x",
         "bulk",
         "open tabs",
-        "task list"
+        "task list",
+        "push due",
+        "complete",
+        "export csv"
       ],
-      "description": "Your CRM task list in a fast modal — search, filter by status and priority, sort, and act on many tasks at once.",
+      "description": "Your CRM tasks in a sortable table with chained sorts, bulk complete/push/email, and the per-task popover with its mini calendar.",
       "article": "task-list",
       "shortcut": "Ctrl+X",
       "flag": "taskListEnabled"
@@ -5803,9 +7237,12 @@ export const HELP_CONTENT = {
         "log call",
         "voicemail",
         "activity",
-        "phone call"
+        "phone call",
+        "inbound",
+        "outbound",
+        "direction"
       ],
-      "description": "Keyboard-first call logging: filter to a template, '/' through category, direction, and notes, and submit to the CRM activity log.",
+      "description": "The same keyboard-first composer as Quick Task, tuned for calls: direction + voicemail chips, the full call category list, and tel: dialing from the shelf.",
       "article": "call-log",
       "shortcut": null,
       "flag": "callLogEnabled"
@@ -5835,9 +7272,11 @@ export const HELP_CONTENT = {
         "variables",
         "popup",
         "resolved",
-        "email"
+        "email",
+        "matched",
+        "variation"
       ],
-      "description": "Pick a template matched to the page you're on, watch its variables fill in live from the page, and send in one click.",
+      "description": "The popup matches templates to the page you're on, streams in live variable values, and sends — here is every section, badge, and button state.",
       "article": "email-templates-popup",
       "shortcut": null,
       "flag": "emailTemplatesEnabled"
@@ -5847,22 +7286,91 @@ export const HELP_CONTENT = {
       "category": "FAQ",
       "title": "Why does the popup say no templates match?",
       "keywords": [],
-      "description": "Templates are filtered by page type and rules. Check that you have templates of the right type (order/case/account/contact) and that their rules pass for this page.",
+      "description": "Templates are filtered by type (order/case/account) and by their auto-match rules. Check the template's type matches this page and that its rules pass — a rule like 'order total > $500' silently hides the template on smaller orders.",
       "article": "email-templates-popup"
+    },
+    {
+      "id": "faq:email-templates-popup:1",
+      "category": "FAQ",
+      "title": "Why did the same template send different text twice?",
+      "keywords": [],
+      "description": "It has variations and you selected the parent (shuffle badge) — each send picks a random version. Pin a specific variation in the picker's sub-list to lock it.",
+      "article": "email-templates-popup"
+    },
+    {
+      "id": "article:template-editor",
+      "category": "Articles",
+      "title": "The Template Editor",
+      "keywords": [
+        "template editor",
+        "create template",
+        "rules",
+        "auto-match",
+        "recipient",
+        "variations",
+        "body",
+        "subject",
+        "manage"
+      ],
+      "description": "Where templates are built: types and recipient modes, auto-match rules, the rich-text body with variable chips, and variations.",
+      "article": "template-editor",
+      "shortcut": null,
+      "flag": "emailTemplatesEnabled"
+    },
+    {
+      "id": "article:template-variables",
+      "category": "Articles",
+      "title": "Variables: Schema, Code, Regex & Smart Options",
+      "keywords": [
+        "variable",
+        "schema",
+        "code",
+        "regex",
+        "builtin",
+        "fallback",
+        "transform",
+        "conditional",
+        "or block",
+        "smart options",
+        "add variable"
+      ],
+      "description": "Every variable source kind, the full built-in field list, OR-blocks, conditional drops, and the fallback/transform/format smart options.",
+      "article": "template-variables",
+      "shortcut": null,
+      "flag": "emailTemplatesEnabled"
+    },
+    {
+      "id": "article:note-templates",
+      "category": "Articles",
+      "title": "Note, Task & Call-Log Templates",
+      "keywords": [
+        "note template",
+        "task template",
+        "call template",
+        "audience",
+        "days out",
+        "button label"
+      ],
+      "description": "The Notes tab of the editor: one-click order notes, pre-built CRM tasks, and call-log presets — every field per type.",
+      "article": "note-templates",
+      "shortcut": null,
+      "flag": null
     },
     {
       "id": "article:email-thread-preview",
       "category": "Articles",
-      "title": "Email Thread Preview",
+      "title": "Email Thread Preview & Case Categorization",
       "keywords": [
         "preview",
         "case",
         "categorize",
         "thread",
         "email history",
-        "triage"
+        "triage",
+        "junk",
+        "reply draft"
       ],
-      "description": "Read full email threads inline from Case Email History, with auto-recommended case categories and a suggested reply template.",
+      "description": "Read full threads inline, apply case categories from the rail (or keys 1–9), and start a reply — with the full category catalog.",
       "article": "email-thread-preview",
       "shortcut": null,
       "flag": "emailPreviewEnabled"
@@ -5870,15 +7378,16 @@ export const HELP_CONTENT = {
     {
       "id": "article:text-note-preview",
       "category": "Articles",
-      "title": "Text & Note Preview",
+      "title": "Text & Chat Preview",
       "keywords": [
         "sms",
         "chat",
         "note preview",
         "text",
-        "transcript"
+        "transcript",
+        "snapengage"
       ],
-      "description": "Inline preview of case notes, SMS, and chat transcripts with a recommended reply.",
+      "description": "Read live-chat transcripts as a proper conversation — visitor and agent bubbles, system events, and the same categorize rail on cases.",
       "article": "text-note-preview",
       "shortcut": null,
       "flag": "textPreviewEnabled"
@@ -5896,9 +7405,10 @@ export const HELP_CONTENT = {
         "graph",
         "draft",
         "transport",
-        "send"
+        "send",
+        "copy"
       ],
-      "description": "Three transports — Power Automate (silent send), Outlook fallback (pre-filled window), and Microsoft Graph (draft-only) — and exactly when each is used.",
+      "description": "Three transports — Power Automate (silent send), Outlook fallback (pre-filled window + Copy), and Microsoft Graph (draft-only) — and exactly when each is used.",
       "article": "how-email-sending-works",
       "shortcut": null,
       "flag": null
@@ -6108,9 +7618,13 @@ export const HELP_CONTENT = {
         "products",
         "browse",
         "index",
-        "gifting"
+        "gifting",
+        "departments",
+        "sale",
+        "promo",
+        "commissionable"
       ],
-      "description": "Browse and search the entire golfballs.com product range — every item on the site, indexed locally for instant filtering by category, brand, and price.",
+      "description": "The full golfballs.com range in one searchable grid — departments, badges, the '/' filter palette, and the product detail panel with live inventory.",
       "article": "gift-catalog",
       "shortcut": null,
       "flag": "giftCatalogEnabled"
@@ -6126,9 +7640,14 @@ export const HELP_CONTENT = {
         "imprint",
         "dual pole",
         "customize",
-        "personalize"
+        "personalize",
+        "photo",
+        "icons",
+        "alignment",
+        "player number",
+        "font"
       ],
-      "description": "Add a logo, personalized text, or monogram to a product — with a live 3D preview and an optional second imprint on the opposite pole.",
+      "description": "Eight imprint types — logo, text, monogram, photo, alignment art, icons, player numbers — each with its exact controls, plus dual-pole decoration.",
       "article": "customizing-item",
       "shortcut": null,
       "flag": "giftCatalogEnabled"
@@ -6144,10 +7663,52 @@ export const HELP_CONTENT = {
         "packaging",
         "upsell",
         "bundle",
-        "wooden"
+        "wooden",
+        "per set"
       ],
-      "description": "Wrap custom-logo balls into boxed gift sets — sleeves, 6-ball boxes, premium wood — with an assembled 3D box preview and verified ladder pricing.",
+      "description": "Wrap custom-logo balls into packaged sets — sleeve, black box, or premium wood with divot-tool or poker-chip kits — and watch pricing flip from per-dozen to per-set.",
       "article": "gift-sets",
+      "shortcut": null,
+      "flag": "giftCatalogEnabled"
+    },
+    {
+      "id": "article:proposal-panel",
+      "category": "Articles",
+      "title": "The Proposal Panel",
+      "keywords": [
+        "proposal",
+        "quote",
+        "line item",
+        "split",
+        "tier",
+        "price edit",
+        "save draft",
+        "quantity",
+        "promo",
+        "drag imprint"
+      ],
+      "description": "Where the quote takes shape: line items, split tiers, inline price editing with tier-reset, draggable imprint pills, the promo block, and saving drafts.",
+      "article": "proposal-panel",
+      "shortcut": null,
+      "flag": "giftCatalogEnabled"
+    },
+    {
+      "id": "article:proposal-breakdown",
+      "category": "Articles",
+      "title": "Breakdown & Margin View",
+      "keywords": [
+        "breakdown",
+        "margin",
+        "cost",
+        "profit",
+        "blended",
+        "revenue",
+        "cost basis",
+        "asterisk",
+        "sync"
+      ],
+      "description": "The profitability X-ray of any proposal: revenue/cost/profit/margin tiles, per-line margin color coding, cost basis, and price overrides.",
+      "article": "proposal-breakdown",
       "shortcut": null,
       "flag": "giftCatalogEnabled"
     },
@@ -6160,9 +7721,11 @@ export const HELP_CONTENT = {
         "custom item",
         "freight",
         "setup fee",
-        "one-off"
+        "one-off",
+        "add item",
+        "cost breaks"
       ],
-      "description": "Create one-off items — design setup, freight, consulting — with their own pricing ladders, and add them to any proposal like catalog products.",
+      "description": "Build your own products — the full add-item form, cost ladders for margin, style options, and the repo tags that track where items came from.",
       "article": "custom-service-items",
       "shortcut": null,
       "flag": "giftCatalogEnabled"
@@ -6177,9 +7740,10 @@ export const HELP_CONTENT = {
         "snugz",
         "supplier",
         "markup",
-        "third party"
+        "third party",
+        "review sheet"
       ],
-      "description": "Import customizable products from HPG Brands or SnugZ USA — costs, options, and minimums fetched automatically, markup computed, saved as custom items.",
+      "description": "One-click bulk import from HPG Brands or SnugZ USA: catalog paging, per-item cost ladders, automatic markup, and a review sheet before anything saves.",
       "article": "supplier-import",
       "shortcut": null,
       "flag": "giftCatalogEnabled"
@@ -6193,9 +7757,10 @@ export const HELP_CONTENT = {
         "coupon",
         "discount",
         "free quantity",
-        "code"
+        "code",
+        "applicable"
       ],
-      "description": "Validate and apply real promotions to a proposal — discounts and free-item lines computed by the same engine the website uses.",
+      "description": "Apply real promotions to a proposal — the picker only offers codes that actually fit the cart, and free-quantity promos add genuine free-item lines.",
       "article": "promo-codes",
       "shortcut": null,
       "flag": "giftCatalogEnabled"
@@ -6203,19 +7768,41 @@ export const HELP_CONTENT = {
     {
       "id": "article:build-email-proposal",
       "category": "Articles",
-      "title": "Building & Emailing a Proposal",
+      "title": "Emailing a Proposal",
       "keywords": [
-        "proposal",
-        "quote",
-        "email proposal",
+        "proposal email",
+        "quote email",
         "cart link",
         "opportunity",
-        "tracked"
+        "tracked",
+        "templates",
+        "classic",
+        "minimal",
+        "imprint preview"
       ],
-      "description": "Assemble line items into a priced quote, then email it as a tracked proposal — with 3D render snapshots, a live cart link, and automatic opportunity updates.",
+      "description": "Generate the customer-facing email: four layout templates, content toggles (costs, images, 3D previews, CTA), and the tracked server-side send.",
       "article": "build-email-proposal",
       "shortcut": null,
       "flag": "giftCatalogEnabled"
+    },
+    {
+      "id": "article:gifting-glossary",
+      "category": "Articles",
+      "title": "Gifting Glossary",
+      "keywords": [
+        "glossary",
+        "terms",
+        "imprint",
+        "pole",
+        "ladder",
+        "split",
+        "commissionable",
+        "definitions"
+      ],
+      "description": "Every term the gifting suite throws at you, defined in one place.",
+      "article": "gifting-glossary",
+      "shortcut": null,
+      "flag": null
     },
     {
       "id": "article:margin-calculator",

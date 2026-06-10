@@ -6,24 +6,25 @@
       "title": "CRM Search",
       "icon": "search",
       "tiers": ["beginner", "intermediate", "advanced"],
-      "keywords": ["search", "ctrl k", "find contact", "account", "lookup", "customer"],
-      "summary": "Instant search over contacts, accounts, and orders from anywhere — Ctrl+K, type, done. Select rows to launch bulk actions and campaigns.",
+      "keywords": ["search", "ctrl k", "find contact", "account", "lookup", "customer", "index", "typeahead"],
+      "summary": "Instant local typeahead over your indexed contacts, Enter for a full server search, rich result columns, and bulk selection for campaigns.",
       "feature": "crm-search",
       "flag": "crmSearchEnabled",
       "shortcut": "Ctrl+K",
       "covers": ["crm-search"],
       "body": {
         "beginner": [
-          { "type": "p", "text": "Press Ctrl+K on any CRM page. Type a name, email, or phone number and results appear immediately. A type filter narrows to Contacts or Accounts; clicking a result opens it." },
-          { "type": "callout", "kind": "tip", "text": "Your last search is remembered, so reopening the modal picks up where you left off." }
+          { "type": "p", "text": "Press Ctrl+K anywhere. The search runs in two gears: as you type it filters your locally indexed contacts instantly (the placeholder says so: 'Filter indexed contacts — Enter to search server'); press Enter and it runs a full server search. A type dropdown narrows to Contacts or Accounts, and Enter on a highlighted row opens that record in a new tab." },
+          { "type": "p", "text": "Result columns: Contact Name, Account Name, Account ID, Email, Phone, Sales Rep, Role, Order Count, YTD Revenue, Prior Year Revenue, Last Order Date, Next Task Date. Click any header to sort; server results load more as you scroll." }
         ],
         "intermediate": [
+          { "type": "heading", "text": "The local index" },
+          { "type": "p", "text": "The index is what makes repeat searches instant. After a server search, an 'Index all N' / 'Index these N' button stores the results locally; a footer notes 'Locally indexed — instant typeahead. Falls through to server on Enter', with a Clear index button beside it. Records you visit also index themselves automatically." },
           { "type": "heading", "text": "Selections and bulk actions" },
-          { "type": "p", "text": "Tick rows to build a selection — a summary bar appears with bulk actions: open every selected record in tabs, create a Quick Task, or Run Campaign to email all of them (see Bulk Email from a Selection)." },
-          { "type": "p", "text": "Filter chips and saved quick presets sit above the results for one-click refinement." }
+          { "type": "p", "text": "Tick rows and the summary bar appears — 'N selected of M results' — with Run campaign, Email selected, and Export CSV. Keyboard: Tab from the input drops focus onto the first row; Tab/Shift+Tab walk rows (wrapping); Esc returns to the input." }
         ],
         "advanced": [
-          { "type": "p", "text": "The filter button opens the Query Builder for grouped AND/OR conditions with field-specific operators — see its dedicated article. Records you visit are also indexed locally, which is what makes repeat searches instant." }
+          { "type": "p", "text": "The Query Builder button adds structured filters; active filters render as removable tags above the results. See the Query Builder article for the full field and operator catalog." }
         ]
       },
       "related": ["query-builder", "bulk-email-selection", "new-contact"]
@@ -33,16 +34,37 @@
       "title": "Query Builder",
       "icon": "filter",
       "tiers": ["advanced"],
-      "keywords": ["query", "solr", "advanced search", "saved query", "filter", "conditions"],
-      "summary": "Grouped AND/OR condition builder for CRM Search — build precise audience queries and save them for reuse.",
+      "keywords": ["query", "solr", "advanced search", "saved query", "filter", "conditions", "presets", "fq"],
+      "summary": "Grouped AND/OR/NOT conditions over 15 CRM fields, quick presets, saved queries, and the live human-readable + Solr previews.",
       "feature": "crm-search",
       "flag": "crmSearchEnabled",
       "covers": ["query-builder"],
+      "tutorial": "query-builder-tutorial",
       "body": {
         "advanced": [
-          { "type": "p", "text": "Open it from the filter button inside CRM Search. Add conditions (field, operator, value) and group them with AND/OR logic — for example: state is TX AND (order count > 5 OR YTD > $2,000)." },
-          { "type": "p", "text": "Apply runs the query immediately; Save stores it by name so you — or a campaign — can reuse the exact audience later." },
-          { "type": "callout", "kind": "proTip", "text": "Saved queries are the cleanest way to define campaign audiences: build once, verify the results visually, then select-all and Run Campaign." }
+          { "type": "p", "text": "Open it from CRM Search's filter button. Left sidebar: quick presets and saved queries. Right: the condition builder, live previews, and Save/Apply controls." },
+          { "type": "heading", "text": "Quick presets (built in)" },
+          { "type": "list", "items": [
+            "VIP accounts — high-revenue, frequent reorderers (order count ≥ 12, YTD ≥ $10,000)",
+            "Stale leads — no order in 90 days, no task pending",
+            "Recent reorder — last order in the past 30 days",
+            "Tournament prospects — AEs or BDRs with no recent contact"
+          ] },
+          { "type": "heading", "text": "Building conditions" },
+          { "type": "p", "text": "Each condition row: an optional NOT pill, the field, its category tag, the operator, and a type-aware value editor. Conditions stack inside lettered groups (Group A, Group B…) with an AND/OR toggle inside each group and another between groups." },
+          { "type": "table", "headers": ["Field group", "Fields"], "rows": [
+            ["Identity", "Record Type (Contact/Account) · Sales Rep · Role (BDR/AE/CSM/SE/Manager) · Pod ID · Contact Name · Account Name · Account ID"],
+            ["Contact", "Email · Phone"],
+            ["Activity", "Order Count · Last Order Date · Next Task Date"],
+            ["Revenue", "Prior Year Revenue · YTD Revenue"]
+          ] },
+          { "type": "table", "headers": ["Value type", "Operators"], "rows": [
+            ["Text", "is (exact) · contains · starts with · is set · is not set"],
+            ["Enum", "is · is not"],
+            ["Number", "= ≠ > ≥ < ≤ · between · is set · is not set"],
+            ["Date", "more than … ago · less than … ago · within next … · before/after date · after/before today · is set / is not set (relative ops take a number + days/weeks/months/years)"]
+          ] },
+          { "type": "p", "text": "Two live previews update as you build: HUMAN (the query in plain English, e.g. 'Email contains \"sale\" AND Order count > 5') and FQ (the compiled Solr filter) — both copyable. Name the query and Save to keep it; saved queries can be promoted (bolt icon) into the quick-presets list for one-click reuse, and they double as campaign audiences." }
         ]
       },
       "related": ["crm-search", "campaign-manager"]
@@ -71,47 +93,60 @@
       "title": "Quick Task",
       "icon": "check",
       "tiers": ["beginner", "intermediate"],
-      "keywords": ["task", "todo", "follow up", "due date", "create task"],
-      "summary": "Create a CRM task in seconds: pick a template, set priority and a due date like +1w, submit.",
+      "keywords": ["task", "todo", "follow up", "due date", "create task", "composer", "filter", "chips"],
+      "summary": "Two speeds: fire a saved template with one keystroke, or compose from scratch with the keyboard grammar — chips, due shorthand, and a live preview.",
       "feature": "quick-task",
       "flag": "quickTaskEnabled",
       "covers": ["quick-task", "quick-task-popover"],
       "tutorial": "log-call-task",
       "body": {
         "beginner": [
-          { "type": "p", "text": "From a contact, account, or order page, open Quick Task (Actions Shelf → Add Task, or popup → Tools). The filter bar is focused — type to find a task template, press Enter, adjust, submit. The task attaches to the contact in the CRM." }
+          { "type": "p", "text": "Open it from the shelf ('Quick task for <name>'). The modal opens in filter mode — the input reads 'Filter quick tasks…  or / to compose'. Type to filter your task templates; press 1–9 to fire the Nth one, ↑↓ + Enter to pick, or Shift+Enter to load a template into the composer for tweaking first. A toast confirms 'Task created: <name>' and the modal closes." }
         ],
         "intermediate": [
-          { "type": "heading", "text": "Due dates and the composer" },
-          { "type": "table", "headers": ["Type", "Means"], "rows": [
-            ["+1d / +3d", "tomorrow / in three days"],
-            ["+1w / +2w", "in one / two weeks"],
-            ["mm/dd/yy", "a specific date"]
+          { "type": "heading", "text": "The composer (press /)" },
+          { "type": "p", "text": "Composer mode is built for hands-on-keyboard speed. A chips row holds Category and Priority; below it Subject ('What needs doing?'), Note, and the Due control. The trick: type a recognized word + space and it snaps into a chip — 'high ' becomes the High-priority chip mid-sentence. The '/' menu also lists every category and priority for arrow-key picking. Due accepts the quick chips (Today, Tomorrow, In 3 days, Next week) or typed dates (mm/dd/yy)." },
+          { "type": "p", "text": "A live preview pane mirrors exactly what will be created — subject, colored category/priority/due chips, note, and the contact it logs against — and tells you if a required field is missing." },
+          { "type": "table", "headers": ["Key", "Action"], "rows": [
+            ["/", "Open the composer / token menu"],
+            ["word + space", "Snap a recognized word into its chip"],
+            ["Tab / Shift+Tab", "Subject → Note → Due → buttons, and back"],
+            ["Enter", "Save the task"],
+            ["Backspace on empty Subject", "Remove the last chip"],
+            ["Esc", "Back to filter mode"]
           ] },
-          { "type": "p", "text": "Press '/' to enter composer mode and fill category, priority, subject, and description entirely from the keyboard, with a live preview alongside." },
-          { "type": "callout", "kind": "bestPractice", "text": "Save your recurring follow-ups as task templates (Template Editor → Task tab) — two keystrokes beats retyping the same task every day." }
+          { "type": "heading", "text": "Task categories" },
+          { "type": "p", "text": "Other · Order History Special · Proposal Follow-up · Order day call · Customer Request · High Priority · 15 Day Call/Email · 5 Day Follow-Up to Email · Workflow Task · Courier Claims · High Priority Opportunity · Replacement Contact. Priorities: High / Medium / Low." }
         ]
       },
-      "related": ["task-list", "call-log", "watch-list"]
+      "related": ["task-list", "call-log", "note-templates", "keyboard-shortcuts"]
     },
     {
       "slug": "task-list",
       "title": "Task List",
       "icon": "check",
       "tiers": ["beginner", "intermediate"],
-      "keywords": ["my tasks", "ctrl x", "bulk", "open tabs", "task list"],
-      "summary": "Your CRM task list in a fast modal — search, filter by status and priority, sort, and act on many tasks at once.",
+      "keywords": ["my tasks", "ctrl x", "bulk", "open tabs", "task list", "push due", "complete", "export csv"],
+      "summary": "Your CRM tasks in a sortable table with chained sorts, bulk complete/push/email, and the per-task popover with its mini calendar.",
       "feature": "task-list",
       "flag": "taskListEnabled",
       "shortcut": "Ctrl+X",
       "covers": ["task-list"],
       "body": {
         "beginner": [
-          { "type": "p", "text": "Press Ctrl+X to see your tasks without navigating to the CRM task page. Search, filter by status or priority, and click a task to open its record." }
+          { "type": "p", "text": "Press Ctrl+X. The toolbar: a search box ('Search account, contact, subject…'), a Status dropdown (New tasks / Completed / All statuses), a Priority dropdown (All / High / Medium / Low), and Refresh. The table sorts by clicking headers — click again for descending, and Shift+click a second column to chain sorts (sort by Due Date, then Priority)." }
         ],
         "intermediate": [
-          { "type": "p", "text": "Tick rows for bulk actions: open all in tabs, create a follow-up Quick Task, or Run Campaign to email every selected task's contact with one template." },
-          { "type": "callout", "kind": "info", "text": "The list reflects your CRM tasks page — if a task doesn't appear, confirm it exists in the CRM and that it's assigned to you." }
+          { "type": "heading", "text": "Bulk actions" },
+          { "type": "p", "text": "Tick rows and the summary bar slides in — 'N selected of M tasks' — with Run campaign, Email selected, and Export CSV; the footer adds Open Tabs (every selected record in its own tab) and Quick Task." },
+          { "type": "heading", "text": "The task popover" },
+          { "type": "p", "text": "Acting on a task (or a bulk selection) opens a compact popover with three panes:" },
+          { "type": "list", "items": [
+            "Main — Mark complete / Reopen task, plus a 'Push due date' card with chips (+1d, +3d, +1w, +2w, +1mo, or Other with a day stepper) and Apply push.",
+            "Set date — a mini calendar (month navigation, today outlined, pick a day) with 'Save · Jun 12'.",
+            "Add task — a quick custom task ('What needs doing?' + due chips) or pick from your templates; in bulk mode the button reads 'Add to all N'."
+          ] },
+          { "type": "p", "text": "Bulk runs show a progress panel ('Completing 14 tasks…' → checkmark), with a Try again button if any fail." }
         ]
       },
       "related": ["quick-task", "bulk-email-selection", "crm-search"]
@@ -121,22 +156,25 @@
       "title": "Call Log",
       "icon": "phone",
       "tiers": ["beginner", "intermediate"],
-      "keywords": ["call", "log call", "voicemail", "activity", "phone call"],
-      "summary": "Keyboard-first call logging: filter to a template, '/' through category, direction, and notes, and submit to the CRM activity log.",
+      "keywords": ["call", "log call", "voicemail", "activity", "phone call", "inbound", "outbound", "direction"],
+      "summary": "The same keyboard-first composer as Quick Task, tuned for calls: direction + voicemail chips, the full call category list, and tel: dialing from the shelf.",
       "feature": "call-log",
       "flag": "callLogEnabled",
       "covers": ["call-log"],
       "tutorial": "log-call-task",
       "body": {
         "beginner": [
-          { "type": "p", "text": "On a contact or account page, open Log Call from the Actions Shelf. The modal shows the contact's name and phone; type to filter call templates or press '/' to compose from scratch." },
-          { "type": "p", "text": "Set the category, direction (inbound/outbound), and voicemail flag, write the note, and submit — the call lands in the CRM activity log immediately." }
+          { "type": "p", "text": "From the shelf, 'Call <name>' dials the contact (the row hints the number it will dial) and opens the logger; 'Log incoming call' opens it without dialing. The modal header shows the contact and phone; the filter bar lists your call templates — each row shows its direction glyph (↙ inbound / ↗ outbound) and category chip. Same keys as Quick Task: 1–9, ↑↓ + Enter, Shift+Enter to customize, / to compose." }
         ],
         "intermediate": [
-          { "type": "callout", "kind": "proTip", "text": "The whole flow is keyboard-driven: '/' enters the composer, Enter advances fields, and the preview pane shows exactly what will be logged. With templates for your common call outcomes, logging takes under ten seconds." }
+          { "type": "heading", "text": "Composer specifics" },
+          { "type": "p", "text": "The chips row holds Category, Direction, and a Voicemail flag. Word-snap works here too: typing 'inbound ', 'out ', or a category shorthand plus space turns into the chip. Subject placeholder: 'What was the call about?'. The preview pane mirrors the final log entry; Enter submits to the CRM activity log." },
+          { "type": "heading", "text": "Call categories" },
+          { "type": "p", "text": "Product Question · Order Status · Place Order · Transfer · Order Payment · Turnaround Time · Art · Prior Year Followup · Returning VoiceMail · Tournament Lead · Form Lead Followup · General Question · Order Issues · CSR Backup · Discovery · Opportunity · Returns/Reprints · Charge Error · Fraud Inquiry · International Orders · Profanity · Order Change · Cancelation · Website Concerns." },
+          { "type": "callout", "kind": "bestPractice", "text": "Build call templates (Notes tab of the editor) for your recurring outcomes, including next-step actions — they pre-fill everything, leaving you just the note." }
         ]
       },
-      "related": ["quick-task", "phone-finder", "keyboard-shortcuts"]
+      "related": ["quick-task", "note-templates", "phone-finder", "keyboard-shortcuts"]
     },
     {
       "slug": "phone-finder",
@@ -150,7 +188,7 @@
       "covers": ["phone-finder"],
       "body": {
         "beginner": [
-          { "type": "p", "text": "Contact missing a phone number? Run Phone Finder from the contact page. It scans the contact's orders, collects every phone number found (each labeled with the shipping name it came from), and shows a picker. Choose one and it saves to the contact automatically." }
+          { "type": "p", "text": "When a contact has no phone but does have orders, the shelf offers 'Find phone'. It scans the contact's order pages, collects every number found (each labeled with the shipping name it came from), and shows a picker. Choose one and it saves to the contact automatically." }
         ]
       },
       "related": ["new-contact", "call-log"]

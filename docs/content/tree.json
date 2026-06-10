@@ -20,6 +20,9 @@
           "icon": "mail",
           "items": [
             { "article": "email-templates-popup" },
+            { "article": "template-editor" },
+            { "article": "template-variables" },
+            { "article": "note-templates" },
             { "article": "email-thread-preview" },
             { "article": "text-note-preview" },
             { "article": "how-email-sending-works" }
@@ -58,10 +61,13 @@
             { "article": "gift-catalog" },
             { "article": "customizing-item" },
             { "article": "gift-sets" },
+            { "article": "proposal-panel" },
+            { "article": "proposal-breakdown" },
             { "article": "custom-service-items" },
             { "article": "supplier-import" },
             { "article": "promo-codes" },
-            { "article": "build-email-proposal" }
+            { "article": "build-email-proposal" },
+            { "article": "gifting-glossary" }
           ]
         },
         {

@@ -12,14 +12,34 @@
       "covers": ["code-variables", "sandbox"],
       "body": {
         "advanced": [
-          { "type": "p", "text": "When a built-in variable or signal isn't enough, a code variable runs a JavaScript expression in a locked-down sandbox. Expressions get generic helpers — DOM queries against the current page, text fetches, catalog lookups — and return a value that drops into the template or decides a campaign condition." },
+          { "type": "p", "text": "When a built-in variable or signal isn't enough, a code variable runs JavaScript in a guarded sandbox. You author it in a real code editor (syntax highlighting, helper autocomplete); the function receives three arguments and must return a string:" },
+          { "type": "table", "headers": ["Argument", "What it holds"], "rows": [
+            ["ctx", "The extracted page data — order.status, order.items[], contact.firstName, account.ytdRevenue…"],
+            ["vars", "Previously-resolved variables, so later code can build on earlier values (vars.order_number)"],
+            ["h", "The helper namespace below"]
+          ] },
+          { "type": "heading", "text": "The h.* helper API" },
+          { "type": "table", "headers": ["Helper", "Does"], "rows": [
+            ["h.dom(sel) / h.domAll(sel) / h.domText(sel)", "Query the live page: first element, all elements, or the first match's text"],
+            ["h.fetchText(url) / h.fetchJson(url)", "Fetch a page or JSON through the background worker (CORS-safe, allow-listed hosts)"],
+            ["h.send(action, payload)", "Call any background action directly"],
+            ["h.catalogSearch(q, {limit}) / h.catalogFind(q)", "Search the gift catalog by name similarity — top matches, or the single best one"],
+            ["h.fmt.currency / h.fmt.number / h.fmt.date", "Format values for the email ($1,234.00 · 1,234 · MM/DD/YYYY)"],
+            ["h.parseNumber / h.parseDate / h.normalizePhone", "Extract a number, parse a date, format a phone as (###) ###-####"],
+            ["h.coalesce(...vals) / h.titleCase(s)", "First non-empty value · Title Case"]
+          ] },
+          { "type": "heading", "text": "Sandbox rules" },
+          { "type": "list", "items": [
+            "Async is automatic — write 'await' and the variable runs on the async path with a 10-second timeout.",
+            "Blocked outright: fetch(, chrome., eval(, import(, Function(, setTimeout/setInterval, Worker, XMLHttpRequest, and infinite-loop shapes like while(true). Use the h.* equivalents instead.",
+            "Bodies are capped at 8,192 characters. Errors surface in the variable table so you can fix them — at send time an erroring variable resolves to empty."
+          ] },
           { "type": "heading", "text": "Prebuilt recipes" },
           { "type": "table", "headers": ["Recipe", "What it computes"], "rows": [
-            ["Out-of-stock scanner", "Scans the order page for items that are now out of stock — drives win-back campaigns"],
-            ["Recommended replacement", "Finds the closest in-stock product to a discontinued item, brand-aware and similarity-scored"]
+            ["Out-of-stock items", "Scans the order page for items flagged OOS — fully self-contained, sync"],
+            ["Recommended replacement", "For each OOS item, fetches the brand's catalog and scores candidates by name/price/decoration to suggest the closest in-stock match (async)"]
           ] },
-          { "type": "p", "text": "Insert a recipe from the condition editor's picker, then edit its body if you need a variant. Test the expression in the editor before relying on it — a thrown error resolves to empty." },
-          { "type": "callout", "kind": "warning", "text": "Code variables run per-contact during campaigns. An expression that fetches pages adds time for every contact in the audience — keep them lean." }
+          { "type": "callout", "kind": "warning", "text": "Code variables run per-contact during campaigns and bulk sends. An expression that fetches pages adds those seconds for every contact in the audience — keep them lean." }
         ]
       },
       "related": ["email-templates-popup", "campaign-conditions"]
