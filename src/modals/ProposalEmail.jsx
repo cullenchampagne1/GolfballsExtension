@@ -43,24 +43,26 @@ const _star = (m) => m.show.disclaimer ? '*' : '';
 // Red strike for a "was" price (sale / volume break). #d11 reads on light + dark.
 const _wasUnit = (l) => l.origUnit ? `<span style="color:#d11; text-decoration:line-through; font-weight:600;">${_money(l.origUnit)}</span> ` : '';
 const _qtyLine = (l, show) => {
-  if (l.free) return `Qty ${l.qty} &middot; <span style="color:${T.acc}; font-weight:800;">FREE</span>`;
+  // A free (promo-granted) line shows its FULL cost like the cart does — the
+  // promotion nets it at the bottom — plus a green FREE marker on the qty line.
+  if (l.free) return `${show.cost ? `${l.qty} &times; ${_money(l.unitPrice)} &middot; ` : `Qty ${l.qty} &middot; `}<span style="color:${T.acc}; font-weight:800;">FREE</span>`;
   if (!show.cost) return `Qty ${l.qty}`;
   return `${l.qty} &times; ${_wasUnit(l)}${_money(l.unitPrice)}`;
 };
-// The line-total cell value: FREE for giveaways, a red strike + new price for a
-// discounted line, else the plain total.
-const _ltot = (l) => l.free
-  ? `<span style="color:${T.acc}; font-weight:800;">FREE</span>`
-  : (l.origTotal ? `<span style="color:#d11; text-decoration:line-through; font-weight:600; font-size:.85em;">${_money(l.origTotal)}</span> ${_money(l.lineTotal)}` : _money(l.lineTotal));
-// Discount summary row above the total. A FREE_QUANTITY promo is shown as an
-// informational "you save $X" badge (the free items aren't separate lines and the
-// value is NOT subtracted from the total); a monetary ($-off) promo subtracts.
+// The line-total cell value: a red strike + new price for a discounted line,
+// else the plain total. Free lines show their full value (HAR cart layout) —
+// the FREE marker lives on the qty line, the netting on the Promotion row.
+const _ltot = (l) =>
+  (l.origTotal ? `<span style="color:#d11; text-decoration:line-through; font-weight:600; font-size:.85em;">${_money(l.origTotal)}</span> ${_money(l.lineTotal)}` : _money(l.lineTotal));
+// Totals block above the final total — HAR cart layout: when a promotion is
+// applied, show Subtotal (free lines included at full price) and the netted
+// Promotion (CODE) −$X; the template's own total row then renders the final.
 const _discRow = (m) => {
-  if (m.freePromo && m.savings > 0)
-    return `<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td colspan="2" style="padding:6px 0;"><span style="display:inline-block; background:#e1f5d1; color:#46781b; font-size:12px; font-weight:700; border-radius:4px; padding:3px 9px;">Promotion${m.promoCode ? ` ${_esc(m.promoCode)}` : ''} &middot; you save ${_money(m.savings)}</span></td></tr></tbody></table>`;
-  if (m.discount > 0)
-    return `<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td style="padding:6px 0; font-size:13px; color:${T.body};">Promotion${m.promoCode ? ` (${_esc(m.promoCode)})` : ''}</td><td align="right" style="padding:6px 0; font-size:14px; font-weight:700; color:#2e9e5b;">&minus;${_money(m.discount)}</td></tr></tbody></table>`;
-  return '';
+  if (!(m.discount > 0)) return '';
+  return `<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody>`
+    + `<tr><td style="padding:6px 0 2px; font-size:13px; color:${T.body};">Subtotal</td><td align="right" style="padding:6px 0 2px; font-size:14px; font-weight:700; color:${T.body};">${_money(m.total)}</td></tr>`
+    + `<tr><td style="padding:2px 0 6px; font-size:13px; color:${T.body};">Promotion${m.promoCode ? ` (${_esc(m.promoCode)})` : ''}</td><td align="right" style="padding:2px 0 6px; font-size:14px; font-weight:700; color:#2e9e5b;">&minus;${_money(m.discount)}</td></tr>`
+    + `</tbody></table>`;
 };
 
 // No-imprint-color default: a light brand-green wash. SOLID hex (not rgba) so
@@ -226,7 +228,7 @@ function tplQuote(m) {
   return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td>
     ${panel}${_msgBlock(m) ? '<div style="height:18px; line-height:18px; font-size:0;">&nbsp;</div>' + _msgBlock(m) : ''}
     <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:22px;"><tbody>${head}${rows}</tbody></table>
-    ${_discLine(m)}${show.cta ? _ctaBar('Approve &amp; view in cart &rsaquo;') : ''}${_foot()}
+    ${_discRow(m)}${_discLine(m)}${show.cta ? _ctaBar('Approve &amp; view in cart &rsaquo;') : ''}${_foot()}
   </td></tr></tbody></table>`;
 }
 
@@ -258,14 +260,27 @@ function tplLookbook(m) {
    options rather than one itemised order. Total is optional (for bundling). */
 function tplSeparated(m) {
   const { groupName, optionName, lines, total, show } = m;
-  const cards = lines.map((l, i) => {
+  // Group buy-X-get-Y giveaways INTO the option card of the line that earned
+  // them: a free row whose parentLineId resolves to a paid row renders as a
+  // green "included" strip inside that card instead of its own card. Free rows
+  // with no resolvable parent (older saved proposals) keep their own card.
+  const paidIds = new Set(lines.filter((l) => !l.free).map((l) => l.lineId));
+  const isGrouped = (l) => !!(l.free && l.parentLineId && paidIds.has(l.parentLineId));
+  const mains = lines.filter((l) => !isGrouped(l));
+  const freeFor = (lineId) => lines.filter((l) => isGrouped(l) && l.parentLineId === lineId);
+  const _freeStrip = (f) => `<table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#e1f5d1" style="background:#e1f5d1; border:1px solid #b9dd9e; border-radius:10px; margin-top:12px;"><tbody><tr>
+      <td style="padding:10px 14px;"><span style="display:inline-block; background:#46781b; color:#ffffff; font-size:10px; font-weight:800; letter-spacing:.6px; border-radius:4px; padding:2px 7px; vertical-align:middle;">FREE</span> <span style="font-size:12px; font-weight:700; color:#2c4a10; vertical-align:middle;">&nbsp;Qty ${f.qty} &middot; ${_esc(f.title)}</span>${f.subtitle ? `<div style="font-size:11px; color:#46781b; margin-top:3px;">${_esc(f.subtitle)}</div>` : ''}</td>
+      <td align="right" valign="middle" style="padding:10px 14px; white-space:nowrap;"><span style="font-size:12px; color:#46781b; text-decoration:line-through; font-weight:600;">${_money(f.lineTotal)}</span> <span style="font-size:12px; font-weight:800; color:#2c4a10;">included</span></td>
+    </tr></tbody></table>`;
+  const cards = mains.map((l, i) => {
     const photo = show.images ? `<td width="92" valign="top" style="padding-right:16px;">${_photoPlate(l.img, 92)}</td>` : '';
     const sub = l.subtitle ? `<div style="font-size:12px; color:${T.mut}; margin-top:4px;">${_esc(l.subtitle)}</div>` : '';
     const qtyLine = show.cost ? `Qty ${l.qty} &nbsp;&middot;&nbsp; ${_money(l.unitPrice)} ea` : `Qty ${l.qty}`;
     const proof = show.previews ? _proof(l, false) : '';
+    const freeStrips = freeFor(l.lineId).map(_freeStrip).join('');
     return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:14px; margin-bottom:16px;"><tbody>
       <tr><td bgcolor="${T.plate}" style="background:${T.plate}; border-bottom:1px solid ${T.line}; border-radius:14px 14px 0 0; padding:11px 18px;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:${T.acc}; font-weight:800;">Option ${String.fromCharCode(65 + i)}</span></td><td align="right" valign="middle"><span style="font-size:11px; color:${T.mut}; font-weight:600;">${qtyLine}</span></td></tr></tbody></table></td></tr>
-      <tr><td style="padding:18px;"><table width="100%"><tbody><tr>${photo}<td valign="middle">${_brandLine(l, T.mut)}<div style="font-size:18px; color:${T.ink}; font-weight:800; letter-spacing:-.3px;">${_esc(l.title)}</div>${sub}</td><td valign="middle" align="right" width="118"><div style="font-size:10px; letter-spacing:.6px; text-transform:uppercase; color:${T.mut}; font-weight:700;">Price</div><div style="font-size:23px; font-weight:800; color:${T.price}; letter-spacing:-.6px; margin-top:2px;">${_ltot(l)}</div></td></tr></tbody></table>${proof}</td></tr>
+      <tr><td style="padding:18px;"><table width="100%"><tbody><tr>${photo}<td valign="middle">${_brandLine(l, T.mut)}<div style="font-size:18px; color:${T.ink}; font-weight:800; letter-spacing:-.3px;">${_esc(l.title)}</div>${sub}</td><td valign="middle" align="right" width="118"><div style="font-size:10px; letter-spacing:.6px; text-transform:uppercase; color:${T.mut}; font-weight:700;">Price</div><div style="font-size:23px; font-weight:800; color:${T.price}; letter-spacing:-.6px; margin-top:2px;">${_ltot(l)}</div></td></tr></tbody></table>${freeStrips}${proof}</td></tr>
     </tbody></table>`;
   }).join('\n');
   const totalBox = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:2px;"><tbody><tr><td bgcolor="${T.accSoft}" style="background:${T.accSoft}; border:1px solid #d6e8c9; border-radius:12px; padding:16px 20px;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:12px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:${T.ink};">Estimated total${_star(m)}</span><div style="font-size:11px; color:${T.mut}; margin-top:2px;">All options combined</div></td><td align="right" valign="middle"><span style="font-size:24px; font-weight:800; color:${T.price};">${_money(total - (m.discount || 0))}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
@@ -273,7 +288,7 @@ function tplSeparated(m) {
     ${_wordmark()}
     <div style="font-size:12px; letter-spacing:1.6px; text-transform:uppercase; color:${T.acc}; font-weight:700; margin-top:18px;">${_esc(groupName)}</div>
     <div style="font-size:28px; font-weight:800; color:${T.ink}; letter-spacing:-.6px; margin:7px 0 4px;">${_esc(optionName)}</div>
-    <div style="font-size:13px; color:${T.mut}; margin:0 0 22px;">${lines.length} option${lines.length === 1 ? '' : 's'} &middot; priced individually</div>
+    <div style="font-size:13px; color:${T.mut}; margin:0 0 22px;">${mains.length} option${mains.length === 1 ? '' : 's'} &middot; priced individually</div>
     ${_msgBlock(m) ? _msgBlock(m) + '<div style="height:18px; line-height:18px; font-size:0;">&nbsp;</div>' : ''}
     ${cards}${_discRow(m)}${totalBox}${_expLine(m)}${_discLine(m)}${show.cta ? _ctaBar('View these options') : ''}${_foot()}
   </td></tr></tbody></table>`;
@@ -304,7 +319,7 @@ function tplCorporate(m) {
       <div style="font-size:24px; font-weight:800; color:${INK}; letter-spacing:-.4px; margin:6px 0 18px;">${_esc(optionName)}</div>
       ${_msgBlock(m) ? _msgBlock(m) + '<div style="height:14px; line-height:14px; font-size:0;">&nbsp;</div>' : ''}
       <table width="100%" border="0" cellpadding="0" cellspacing="0"><tbody>${head}${rows}</tbody></table>
-      ${totalsBlock}${_discLine(m, 'right')}${cta}
+      ${_discRow(m)}${totalsBlock}${_discLine(m, 'right')}${cta}
     </td></tr>
     <tr><td style="padding:24px 30px 22px;"><div style="border-top:1px solid ${LINE}; padding-top:14px;"><span style="font-family:${SANS}; font-size:10px; letter-spacing:1.4px; text-transform:uppercase; color:${T.faint}; font-weight:700;">Golfballs &middot; Corporate Gifting &middot; golfballs.com</span></div></td></tr>
     </tbody></table>
@@ -495,7 +510,12 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
       setProg({ n: 0, t: s.length });
       setShots(s);   // mounts SnapshotRenderer
     }).catch(() => { if (!cancelled) { setPreviewsByLine({}); setBusy(false); } });
-    return () => { cancelled = true; };
+    // Cleanup UNLATCHES the guard: if a dep change (e.g. the source object was
+    // rebuilt by the parent) cancels this run before it finished, the next
+    // effect pass may re-enter and restart. Without this, a single identity
+    // churn left startedRef latched true with previewsByLine still null — the
+    // generate flow never ran and the toggle appeared dead.
+    return () => { cancelled = true; if (!previewsByLine) startedRef.current = false; };
   }, [show.previews, previewsByLine, source.rawLines]);
   const onShotsDone = (res) => {
     const byLine = {};

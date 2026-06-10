@@ -1048,6 +1048,16 @@ export function freeLinesFromPromo(promotion, lines) {
     if (l.id) byKey.set(String(l.id), l);
     if (l.productId) byKey.set(String(l.productId), l);
   }
+  // The promotion's per-item discounts carry each free item's FULL value (what
+  // the site nets off at the bottom of the cart) — keyed by the same itemGuid
+  // family as freeItems. Mapped here so the email can show the free line at
+  // full price (HAR layout: Subtotal → −Promotion → Total).
+  const valueByKey = new Map();
+  for (const d of (promotion.itemLevelDiscounts || [])) {
+    const g = String((d && d.itemGuid) || '').replace(/-PROMO$/i, '');
+    const amt = Number(d && (d.amount != null ? d.amount : d.discount)) || 0;
+    if (g) valueByKey.set(g, (valueByKey.get(g) || 0) + amt);
+  }
   const out = [];
   free.forEach((f, i) => {
     const key = String(f.itemGuid || '').replace(/-PROMO$/i, '');
@@ -1065,6 +1075,10 @@ export function freeLinesFromPromo(promotion, lines) {
       decoration: src.decoration || null,
       variant: src.variant || null,
       free: true,
+      // `parentLineId` ties the giveaway to the line that earned it (Separated-
+      // theme grouping); `freeValue` is the site's authoritative full value.
+      parentLineId: src.id || null,
+      freeValue: round2(valueByKey.get(key) || 0) || null,
       splits: [{ id: 'frees-' + (f.itemGuid || i), qty: Number(f.amount) || 0, price: 0 }],
     });
   });

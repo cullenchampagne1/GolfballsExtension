@@ -1455,9 +1455,14 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
   const _netMargin = _netRev > 0 ? (_netRev - M.cost) / _netRev : 0;
   const decorated = M.lines.filter((l) => decoImprints(l.decoration).length > 0 || (l.decoration && l.decoration.giftSet));
   // Email composer lives INLINE here (replacing the breakdown) rather than in a
-  // separate modal — a smoother single-surface flow. Built lazily on demand.
-  const [emailMode, setEmailMode] = useState(false);
-  const emailSource = useMemo(() => (emailMode && buildEmailSource) ? buildEmailSource() : null, [emailMode, buildEmailSource]);
+  // separate modal — a smoother single-surface flow. The source is captured ONCE
+  // when entering email mode (state, not useMemo): `buildEmailSource` is an
+  // inline arrow recreated on every parent render, so memoizing on its identity
+  // rebuilt the source each render — which churned source.rawLines and cancelled
+  // the in-flight 3D preview generation (the "Imprint previews" toggle hung).
+  const [emailSource, setEmailSource] = useState(null);
+  const emailMode = !!emailSource;
+  const setEmailMode = (on) => setEmailSource(on && buildEmailSource ? buildEmailSource() : null);
   const canEmail = !!buildEmailSource && M.count > 0;
   // Copy-as-command spins while artwork uploads, mirroring the card behaviour.
   const [copying, setCopying] = useState(false);
@@ -2916,7 +2921,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     return { type: deco.engine, typeLabel, frontLabel, color, colorHex: colorHex || null, detailLines, text };
   };
   const proposalToEmailSource = (lines, name, opts = {}) => {
-    const rows = []; let total = 0;
+    const rows = []; let total = 0; let freeTotal = 0;
     for (const l of (lines || [])) {
       const p = l.product || {};
       const gs = l.decoration && l.decoration.giftSet;
@@ -2933,24 +2938,41 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
       const brks = p.breaks || [];
       const retailUnit = Math.max(Number(p.orig) || 0, (brks[0] && Number(brks[0].p)) || 0, Number(p.price) || 0);
       for (const s of (l.splits || [])) {
-        const qty = s.qty || 0, unitPrice = isFree ? 0 : (s.price || 0), lineTotal = Math.round(qty * unitPrice * 100) / 100;
+        const qty = s.qty || 0;
+        // HAR layout: a FREE line is shown at its FULL price (so the subtotal
+        // includes it) and the promotion nets it off at the bottom. Unit comes
+        // from the promotion's authoritative per-item value when present, else
+        // the ladder price at that qty, else the retail unit.
+        let unitPrice;
+        if (isFree) {
+          const fullVal = Number(l.freeValue) || 0;
+          unitPrice = (qty > 0 && fullVal > 0) ? Math.round((fullVal / qty) * 100) / 100
+            : (priceAtBreaks(brks, qty) ?? retailUnit ?? 0);
+        } else {
+          unitPrice = s.price || 0;
+        }
+        const lineTotal = Math.round(qty * unitPrice * 100) / 100;
         total += lineTotal;
+        if (isFree) freeTotal += lineTotal;
         const origUnit = (!isFree && retailUnit > unitPrice + 0.005) ? Math.round(retailUnit * 100) / 100 : null;
         // `lineId` lets the email composer attach 3D snapshot previews back to the
-        // right rows (one line can span multiple split rows). `imprint` drives the
-        // preview card's spec line.
-        rows.push({ lineId: l.id, brand: (p.brand && p.brand !== 'Custom') ? p.brand : '', title, subtitle, img, qty, unitPrice, lineTotal,
+        // right rows (one line can span multiple split rows). `parentLineId` ties
+        // a free row to the line that earned it (Separated-theme grouping).
+        // `imprint` drives the preview card's spec line.
+        rows.push({ lineId: l.id, parentLineId: l.parentLineId || null, brand: (p.brand && p.brand !== 'Custom') ? p.brand : '', title, subtitle, img, qty, unitPrice, lineTotal,
           origUnit, origTotal: origUnit != null ? Math.round(qty * origUnit * 100) / 100 : null, free: isFree, imprint });
       }
     }
     const promotion = opts.promotion || null;
     const freePromo = !!(promotion && promotion.promoType === 'FREE_QUANTITY');
     const savings = promotion ? promoDiscount(promotion) : 0;
-    // A FREE_QUANTITY promo is shown as an informational "you save $X" badge —
-    // the free items are NOT separate $0 lines and their value is NOT netted off
-    // the total (the paid items ARE the total). A monetary ($-off) promo still
-    // subtracts from the total as before.
-    const discount = freePromo ? 0 : savings;
+    // HAR totals: Subtotal (incl. free lines at full price) → −Promotion →
+    // Total. For FREE_QUANTITY the discount = OUR summed free-line value (+ any
+    // order-level $ off) so Subtotal − Promotion lands exactly on the paid sum
+    // even when a ladder fallback stood in for the site's number; a monetary
+    // promo keeps the site's discount as before.
+    const orderOff = freePromo ? (Number(promotion.orderLevelDiscount) || 0) : 0;
+    const discount = freePromo ? Math.round((freeTotal + orderOff) * 100) / 100 : savings;
     // `rawLines` carries the product + decoration so the composer can render the
     // personalization snapshots; `lines` stays the flat display rows.
     return { groupName: 'Your Custom Order', optionName: name || 'Option 1', lines: rows, rawLines: lines || [],
@@ -3351,7 +3373,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                     promo={proposalPromo} onApplyPromo={applyPromo} onClearPromo={clearPromo} onCheckPromo={checkPromo}
                     onPatchSplit={(entryIndex, _src, splitIndex, price) => setProposal((prev) => prev.map((pl, li) => li !== entryIndex ? pl
                       : { ...pl, splits: pl.splits.map((s, si) => si !== splitIndex ? s : { ...s, price, priceEdited: true }) }))}
-                    buildEmailSource={() => proposalToEmailSource(proposal, '', { promotion: proposalPromo && proposalPromo.promotion })}
+                    buildEmailSource={() => proposalToEmailSource(proposalWithFree, '', { promotion: proposalPromo && proposalPromo.promotion })}
                     onOpenProposal={() => { close(); setProposalOpen(true); }} />
                 );
               }
@@ -3416,7 +3438,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               onRemoveLine={removeLine} onSaveDraft={saveDraft} onMergeImprint={mergeImprintOnLine}
               onRemoveFront={removeFrontImprint} onRemoveSecond={removeSecondPole}
               pageContext={pageContext} onSaveToAccount={saveToAccount} onAddOpportunity={addOpportunity} accountSaveSeq={accountSaveSeq}
-              onEmail={() => openProposalEmail(proposal, '', { promotion: proposalPromo && proposalPromo.promotion })}
+              onEmail={() => openProposalEmail(proposalWithFree, '', { promotion: proposalPromo && proposalPromo.promotion })}
               promo={proposalPromo} onApplyPromo={applyPromo} onClearPromo={clearPromo} onCheckPromo={checkPromo}
               onClear={() => { setProposal([]); setProposalOpen(false); }} />
           </div>
