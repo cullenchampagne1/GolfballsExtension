@@ -13,7 +13,9 @@ import {
 import {
   QuickTaskLive, QtTemplateRow, QtComposeBar, QtTokenMenu, SAMPLE_TEMPLATES,
 } from '../lib/quicktask-live.jsx';
-import { CallLog } from '../../modals/CallLog.jsx';
+import {
+  CallLogLive, ClTemplateRow, ClComposeBar, ClTokenMenu, SAMPLE_CALL_TEMPLATES,
+} from '../lib/calllog-live.jsx';
 import { CalendarModal } from '../../modals/CalendarModal.jsx';
 
 /* ───────────────────────────────────────────────────────────────
@@ -420,6 +422,56 @@ export function QuickTaskCreatePage() {
 }
 
 /* ════════ CALL LOG ════════ */
+
+const CL_CALLOUTS = [
+  { n: 1, target: 'header', title: 'Who you’re logging', text: 'Log call, with the contact and the number that was dialed.' },
+  { n: 2, target: 'compose-chips', title: 'Tag chips', text: 'Category, Direction (Inbound/Outbound), and a Voicemail flag. / or “+ tag” to add.' },
+  { n: 3, target: 'compose-subject', title: 'Subject', text: 'What the call was about — word-snap turns “inbound” / “out” into the Direction chip.' },
+  { n: 4, target: 'footer', title: 'Keyboard legend', text: 'Dialed via tel: · / to compose · ↑↓ move · Enter logs.' },
+];
+const CL_STEPS = [
+  { target: 'header', caption: 'From the shelf, “Call Marcus” dials the number and opens the logger — keyboard-first, ready to compose.', hold: 2400 },
+  { target: 'compose-chips', caption: 'Press / (or + tag) to tag the Category, Direction, and a Voicemail flag…', run: (api) => api.openMenu(), hold: 2600 },
+  { target: 'compose-chips', caption: '…the coloured chips snap in, each removable with its ×.', run: (api) => api.closeMenu(), hold: 1600 },
+  { target: 'compose-subject', caption: 'Type what the call was about. A word like “inbound” + space snaps straight into the Direction chip.', hold: 2600 },
+  { target: 'footer', caption: 'Enter writes it to the CRM activity log. The whole flow takes under ten seconds without leaving the keyboard.', hold: 2600 },
+];
+
+function CallTemplateListSnippet() {
+  const [active, setActive] = useState(0);
+  return (
+    <MiniFrame width={440} label="call log · templates" pad={false}>
+      <div style={{ padding: '8px 12px', display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {SAMPLE_CALL_TEMPLATES.map((tpl, i) => <ClTemplateRow key={tpl.id} tpl={tpl} hotkey={i + 1} isActive={active === i} onClick={() => setActive(i)} />)}
+      </div>
+    </MiniFrame>
+  );
+}
+
+function CallComposeSnippet() {
+  const [tokens, setTokens] = useState({ category: '27', direction: '0', vm: true });
+  const [subject, setSubject] = useState('Left VM — returning their call');
+  const [note, setNote] = useState('');
+  const [menu, setMenu] = useState(false);
+  return (
+    <MiniFrame width={460} label="call log · composer" pad={false}>
+      <div style={{ position: 'relative' }}>
+        <ClComposeBar {...{ tokens, setTokens, subject, setSubject, note, setNote }} onOpenMenu={() => setMenu((v) => !v)} onCommit={() => {}} onClear={() => { setSubject(''); setNote(''); setTokens({}); }} />
+        {menu && <div style={{ position: 'absolute', left: 16, right: 16, top: 58, zIndex: 40 }}><ClTokenMenu tokens={tokens} onSelect={() => setMenu(false)} /></div>}
+      </div>
+    </MiniFrame>
+  );
+}
+
+function CallTokenMenuSnippet() {
+  const [tokens] = useState({ category: '2', direction: '1' });
+  return (
+    <MiniFrame width={300} label="call log · / menu" pad>
+      <ClTokenMenu tokens={tokens} onSelect={() => {}} />
+    </MiniFrame>
+  );
+}
+
 export function CallsPage() {
   return (
     <div className="prose">
@@ -427,19 +479,38 @@ export function CallsPage() {
       <h1 className="title">Call Log</h1>
       <p className="lede">
         The same keyboard-first composer as Quick Task, tuned for calls. From the shelf,
-        <strong> "Call &lt;name&gt;"</strong> dials the contact and opens the logger;
-        <strong> "Log incoming call"</strong> opens it without dialing. Submitting writes straight to the
-        CRM activity log. The real modal is below.
+        <strong> “Call &lt;name&gt;”</strong> dials the contact (the row hints the number) and opens the
+        logger; <strong>“Log incoming call”</strong> opens it without dialing. Submitting writes straight
+        to the CRM activity log. Watch it work below, then read each piece beside its live control.
       </p>
 
-      <LiveModal w={480} h={540} frameLabel="call log · Marcus Chen (sample)"
-        note="The live Call Log composer — direction, category, and a voicemail flag. Sample data only."
-        render={(box, onClosed) => (
-          <CallLog contained portalContainer={box} contactName="Marcus Chen" contactType="contact" phone="(415) 555-0142" onSubmit={demoSubmit} onClosed={onClosed} />
-        )} />
+      <LiveStage
+        width={480}
+        frameKind="modal"
+        frameLabel="golfballs.com · call log"
+        render={(apiRef) => <CallLogLive ref={apiRef} contact="Marcus Chen" phone="(415) 555-0142" />}
+        callouts={CL_CALLOUTS}
+        steps={CL_STEPS}
+        note="Live Call Log composer on sample data — hover the pins, press Play, or Try it yourself."
+      />
 
-      <h2 className="sec">Templates and the composer</h2>
-      <p>The filter bar lists your call templates — each row shows its direction glyph (<span style={{ color: 'var(--gb-info-fg)', fontWeight: 700 }}>↙ inbound</span> / <span style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>↗ outbound</span>), a VM tag when it pre-sets the voicemail flag, and its category chip. Same keys as Quick Task: <span className="kbd">1–9</span>, <span className="kbd">↑↓</span> + <span className="kbd">Enter</span>, <span className="kbd">Shift+Enter</span> to customize, <span className="kbd">/</span> to compose. In the composer the chips row holds <strong>Category, Direction, and the Voicemail flag</strong>; word-snap works here too (typing <code>inbound␣</code> or <code>out␣</code> becomes the Direction chip).</p>
+      <h2 className="sec">Walk through it, piece by piece</h2>
+      <p>Each block pairs the real control with what it does. The snippets are live.</p>
+
+      <TourBox n={1} eyebrow="One keystroke" title="The template list" live={<CallTemplateListSnippet />} flip>
+        <p>The logger opens in filter mode — type to narrow your call templates, then <span className="kbd">1–9</span> to fire the Nth, <span className="kbd">↑↓</span> + <span className="kbd">Enter</span> to pick, or <span className="kbd">Shift+Enter</span> to customize first.</p>
+        <p>Each row shows its <strong>hotkey</strong>, a <strong>direction glyph</strong> (<span style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>↗ outbound</span> / <span style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>↙ inbound</span> / a voicemail icon), the name, and its <strong>category</strong> chip — so a template's whole shape scans at a glance.</p>
+      </TourBox>
+
+      <TourBox stack eyebrow="From scratch" title="The composer" live={<CallComposeSnippet />}>
+        <p>Press <span className="kbd">/</span> and the bar grows into the composer. The <strong>chips row</strong> holds three call-specific tokens — <strong>Category</strong>, <strong>Direction</strong> (Inbound/Outbound), and a <strong>Voicemail</strong> flag — each removable with its <span className="kbd">×</span>. Below sit the <strong>Subject</strong> (“What was the call about?”) and <strong>Note</strong> fields.</p>
+        <p>Word-snap works here too: typing <code>inbound␣</code> or <code>out␣</code> mid-subject becomes the Direction chip, and <code>vm␣</code> sets the voicemail flag. The dashed <strong>“+ tag”</strong> (or <span className="kbd">/</span>) opens the picker for the rest. It's live — try it.</p>
+      </TourBox>
+
+      <TourBox n={2} eyebrow="The / picker" title="Category, Direction & Flag" live={<CallTokenMenuSnippet />} flip>
+        <p>The <span className="kbd">/</span> menu groups the tokens: the full <strong>Category</strong> enum, the two <strong>Directions</strong>, and the <strong>Left voicemail</strong> flag — colour-coded, arrow-key navigable, with a check on the active one.</p>
+        <p>Categories are the CRM's real call list — the full set is below.</p>
+      </TourBox>
 
       <h3 className="sub">Call categories (the CRM's list)</h3>
       <CatGrid items={CALL_CATEGORIES} />
