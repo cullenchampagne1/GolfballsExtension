@@ -104,12 +104,12 @@ export const NAV = [
   ]},
   { group: 'Daily Driver', items: [
     { id: 'popup', title: 'The Popup', icon: 'mail', slugs: ['email-templates-popup', 'how-email-sending-works'] },
-    { id: 'templates', title: 'Email Templates', icon: 'edit', wip: true, slugs: ['template-editor', 'template-variables', 'note-templates'] },
+    { id: 'templates', title: 'Email Templates', icon: 'edit', slugs: ['template-editor', 'template-variables', 'note-templates'] },
     { id: 'charge', title: 'Charge & Order Edit', icon: 'card', wip: true, slugs: ['charge-refund', 'order-edit'] },
     { id: 'proof', title: 'Submit Proof', icon: 'send', wip: true, slugs: ['submit-proof'] },
   ]},
   { group: 'Configuration', items: [
-    { id: 'settings', title: 'Settings & Manager', icon: 'cog', wip: true, slugs: ['feature-toggles', 'email-integrations', 'presets', 'custom-crm-pages', 'developer-settings'] },
+    { id: 'settings', title: 'Settings & Manager', icon: 'cog', slugs: ['feature-toggles', 'email-integrations', 'presets', 'custom-crm-pages', 'developer-settings'] },
     { id: 'themes', title: 'Themes & UI Scale', icon: 'sun', wip: true, slugs: ['theme-appearance'] },
     { id: 'shortcuts', title: 'Keyboard Shortcuts', icon: 'code', wip: true, slugs: ['keyboard-shortcuts', 'shortcuts-settings'] },
   ]},
