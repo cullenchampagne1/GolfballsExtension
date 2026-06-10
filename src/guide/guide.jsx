@@ -1,7 +1,14 @@
+/* FIRST import — installs the preview-only chrome shim (seeded sample
+   data) as a side effect, before any modal module evaluates and
+   captures chrome at its own module-eval time. No-op in the real
+   extension, where modals read the user's actual data. */
+import './lib/mock-chrome.js';
+
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import { ensureScales } from '../lib/scales.js';
+import { ToastHost } from '../ui/index.js';
 import guideCss from './guide.css?inline';
 import { App } from './lib/app.jsx';
 
@@ -29,7 +36,9 @@ function mount() {
   ensureScales();
   injectGuideCss();
   host.setAttribute('data-gb-scale', 'editor');
-  createRoot(host).render(<App />);
+  // ToastHost provides useToast() for the embedded real modals and
+  // installs the window.__gbToast shim they fall back to.
+  createRoot(host).render(<ToastHost><App /></ToastHost>);
 }
 
 if (document.readyState === 'loading') {

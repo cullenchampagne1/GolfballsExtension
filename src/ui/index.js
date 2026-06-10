@@ -10,6 +10,9 @@
 
 export { Icon, I } from './icons.jsx';
 export { T, TINT, SHAKE, SHAKE_T, Spinner, sizeIcon, useAsyncState, inputBaseStyle, ensureMarchingAntsStyle } from './shared.jsx';
+export { useClickOutside, useTransientFlag } from './hooks.js';
+export { EmptyState } from './components/EmptyState.jsx';
+export { StatusBadge } from './components/StatusBadge.jsx';
 
 export { Btn } from './components/Btn.jsx';
 export { IconBtn } from './components/IconBtn.jsx';
@@ -23,7 +26,6 @@ export { Textarea } from './components/Textarea.jsx';
 export { RichTextEditor } from './components/RichTextEditor.jsx';
 export { Dropdown } from './components/Dropdown.jsx';
 export { TemplatePicker, parseTemplateValue } from './components/TemplatePicker.jsx';
-export { ColorField } from './components/ColorField.jsx';
 export { ColorButton } from './components/ColorButton.jsx';
 export { ColorPicker, ColorPickerPopover } from './components/ColorPicker.jsx';
 export { Field } from './components/Field.jsx';
@@ -52,7 +54,7 @@ export { ToastHost, useToast } from './components/ToastHost.jsx';
 export { Callout } from './components/Callout.jsx';
 export { ModalShell } from './components/ModalShell.jsx';
 export { CompactModal } from './components/CompactModal.jsx';
-export { FloatingPanel } from './components/FloatingPanel.jsx';
+export { FloatingPanel, FloatingPanelEmbedContext } from './components/FloatingPanel.jsx';
 export { DraggablePopup, PopupDragContext } from './components/DraggablePopup.jsx';
 export { Throwable } from './components/Throwable.jsx';
 export { ModalHeader } from './components/ModalHeader.jsx';
@@ -65,7 +67,7 @@ export { ResolveHint } from './components/ResolveHint.jsx';
 export { CollapsibleChecklist } from './components/CollapsibleChecklist.jsx';
 export { CollapsibleSection } from './components/CollapsibleSection.jsx';
 export { TYPE_ICONS, TYPE_COLORS } from './typeIcons.jsx';
-export { ProofCard, ProofSphere, STATUS_TONE as PROOF_STATUS_TONE, statusTone as proofStatusTone } from './components/ProofCard.jsx';
+export { ProofCard } from './components/ProofCard.jsx';
 export { EmailHtmlView } from './components/EmailHtmlView.jsx';
 export { CategorizeRail } from './components/CategorizeRail.jsx';
 

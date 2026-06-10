@@ -1,8 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { T, FloatingPanelContext } from '../shared.jsx';
 import { Throwable } from './Throwable.jsx';
+
+/* Embed context — lets a host (the Operator's Guide) put every modal
+   rendered beneath it into `contained` mode and target a portal box,
+   WITHOUT each modal having to forward contained/portalContainer props
+   to its FloatingPanel. A provider value of { container: el } turns on
+   contained mode and portals into `el`. Explicit props still win. */
+export const FloatingPanelEmbedContext = React.createContext(null);
 
 /**
  * FloatingPanel — a screen-positioned modal with two behavior modes.
@@ -73,6 +80,11 @@ function ModalCard({ cssWidth, cssMaxHeight, cssHeight, cardStyle, children }) {
   // Inject the themed-scrollbar stylesheet on first mount. Safe to
   // call multiple times — the guard in injectScrollbarStyles dedupes.
   useEffect(injectScrollbarStyles, []);
+  // When embedded in the guide (our own themed page), the `all:
+  // revert-layer` host-CSS armor is not only unnecessary, it misfires —
+  // reverting the card's own width/opacity past the styles we set here,
+  // leaving it narrow + faded. Drop it in embed mode.
+  const embedded = !!useContext(FloatingPanelEmbedContext)?.container;
   return (
     <motion.div
       className="gb-modal-card"
@@ -89,7 +101,7 @@ function ModalCard({ cssWidth, cssMaxHeight, cssHeight, cardStyle, children }) {
         // like golfballs.com ship aggressive resets (e.g.
         // `* { border-radius: 0 !important }` in some legacy CSS)
         // that would otherwise flatten our rounded corners + inputs.
-        all: 'revert-layer',
+        ...(embedded ? null : { all: 'revert-layer' }),
         width: cssWidth,
         maxHeight: cssMaxHeight,
         ...(cssHeight ? { height: cssHeight } : null),
@@ -141,8 +153,27 @@ export function FloatingPanel({
   // card's own styles, so the caller wins). Used e.g. to set
   // `userSelect: 'none'` on a specific modal without touching the rest.
   cardStyle,
+  // Embed mode: render the modal CONTAINED inside a host element instead
+  // of the full viewport. Used by the Operator's Guide to show real
+  // modals scaled into a framed stage. When set:
+  //   • the panel portals into `portalContainer` (not <body>)
+  //   • backdrop + card switch from position:fixed → position:absolute,
+  //     filling the container rather than the viewport
+  //   • dragging is disabled (the modal sits centered in the box)
+  //   • size clamps use 100% of the container, not 100vw/vh
+  // Defaults preserve the existing full-screen behavior for every
+  // production caller.
+  contained = false,
+  portalContainer = null,
 }) {
   const [open, setOpen] = useState(true);
+
+  // Merge explicit props with the embed context (guide). Either turns on
+  // contained mode + a portal target; explicit props win.
+  const _embed = useContext(FloatingPanelEmbedContext);
+  const isContained = contained || !!(_embed && _embed.container);
+  const resolvedPortal = portalContainer || (_embed && _embed.container) || null;
+
   // dragHandleRef is published via context so ModalHeader (or any inner
   // component) can attach itself as the throw handle by setting this
   // ref on its DOM node. Throwable wires its pointer listeners to
@@ -165,19 +196,27 @@ export function FloatingPanel({
   // ModalHeader) know whether they should wire themselves as a drag
   // handle. Without this, a centered/non-draggable modal still shows
   // a grab cursor on the header — confusing because nothing happens.
-  const ctx = useMemo(() => ({ dragHandleRef, requestClose, draggable }), [requestClose, draggable]);
-  const cssWidth = typeof width === 'number' ? `min(${width}px, calc(100vw - 32px))` : width;
+  const ctx = useMemo(() => ({ dragHandleRef, requestClose, draggable: draggable && !isContained }), [requestClose, draggable, isContained]);
+  // Contained mode clamps to the host box; full-screen clamps to viewport.
+  const clampW = isContained ? '100%' : 'calc(100vw - 32px)';
+  const clampH = isContained ? '100%' : 'calc(100vh - 32px)';
+  const cssWidth = typeof width === 'number' ? `min(${width}px, ${clampW})` : width;
   const cssMaxHeight = maxHeight == null
-    ? 'calc(100vh - 32px)'
+    ? clampH
     : (typeof maxHeight === 'number'
-      ? `min(${maxHeight}px, calc(100vh - 32px))`
+      ? `min(${maxHeight}px, ${clampH})`
       : maxHeight);
   const cssHeight = height == null
     ? undefined
     : (typeof height === 'number'
-      ? `min(${height}px, calc(100vh - 32px))`
+      ? `min(${height}px, ${clampH})`
       : height);
   const phys = { ...DEFAULT_PHYSICS, ...(physics || {}) };
+
+  // Contained mode never drags (the box is small + scaled) and anchors
+  // with absolute positioning inside the host instead of fixed/viewport.
+  const isDraggable = draggable && !isContained;
+  const posFixed = isContained ? 'absolute' : 'fixed';
 
   // Portal to <body> so any ancestor `transform` (e.g. the playground's
   // 0.74x scale wrapper) doesn't reframe our position:fixed coordinates.
@@ -185,7 +224,7 @@ export function FloatingPanel({
   // ancestor — which means drag deltas come in viewport-scaled space and
   // the modal renders at a scaled size on the playground. Portaling
   // escapes both problems in one move.
-  const portalTarget = typeof document !== 'undefined' ? document.body : null;
+  const portalTarget = resolvedPortal || (typeof document !== 'undefined' ? document.body : null);
   if (!portalTarget) return null;
   return createPortal(
     <AnimatePresence onExitComplete={onClose}>
@@ -204,22 +243,27 @@ export function FloatingPanel({
             animate={{ opacity: visible ? 1 : 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
-            onClick={!draggable && visible ? requestClose : undefined}
+            // In contained (guide-embed) mode the backdrop never closes —
+            // the demo modal should stay put inside its box.
+            onClick={!isDraggable && !isContained && visible ? requestClose : undefined}
             style={{
-              position: 'fixed', inset: 0, zIndex: 999990,
+              position: posFixed, inset: 0, zIndex: isContained ? 5 : 999990,
               // Draggable mode = click-through so the page stays usable.
               // Centered modal mode = click-to-close: capture pointer events
               // and route any click on the backdrop to the close handler.
-              pointerEvents: draggable ? 'none' : 'auto',
+              pointerEvents: isDraggable ? "none" : (isContained ? "none" : "auto"),
               // Visual treatment differs too: draggable uses the soft
               // page-tint backdrop (so the page underneath stays legible),
               // centered modal uses a darker scrim + slight blur to push
               // the page back and focus attention on the modal.
-              background: backdrop
-                ? (draggable ? 'var(--gb-backdrop)' : 'rgba(0, 0, 0, 0.55)')
+              // Contained (guide-embed) mode: no scrim — the framed stage
+              // already provides the surround, and a dark overlay would
+              // just dim the bench + the demo modal.
+              background: (backdrop && !isContained)
+                ? (draggable ? 'var(--gb-backdrop)' : 'var(--gb-overlay-strong)')
                 : 'transparent',
-              backdropFilter: backdrop && !draggable ? 'blur(4px)' : 'none',
-              WebkitBackdropFilter: backdrop && !draggable ? 'blur(4px)' : 'none',
+              backdropFilter: backdrop && !draggable && !isContained ? 'var(--gb-blur-subtle)' : 'none',
+              WebkitBackdropFilter: backdrop && !draggable && !isContained ? 'blur(4px)' : 'none',
             }}
           />
           <FloatingPanelContext.Provider value={ctx}>
@@ -237,7 +281,7 @@ export function FloatingPanel({
                 pointerEvents: visible ? 'auto' : 'none',
               }}
             >
-            {draggable ? (
+            {isDraggable ? (
               /* Throwable owns position — physics loop integrates velocity,
                  bounces off viewport walls, decays via friction. The
                  modal's own mount/unmount animation (scale+fade) wraps
@@ -266,10 +310,10 @@ export function FloatingPanel({
                  card itself re-enables them. */
               <div
                 style={{
-                  position: 'fixed', inset: 0, zIndex: 999999,
+                  position: posFixed, inset: 0, zIndex: isContained ? 6 : 999999,
                   pointerEvents: 'none',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  padding: 16,
+                  padding: isContained ? 0 : 16,
                 }}
               >
                 <div style={{ pointerEvents: 'auto' }}>

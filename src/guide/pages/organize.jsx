@@ -1,66 +1,31 @@
-import React, { useState } from 'react';
-import { I, Btn, Input, Tag, Switch, Segmented } from '../../ui/index.js';
-import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
+import React from 'react';
+import { I, Tag } from '../../ui/index.js';
+import { LiveModal } from '../lib/live-modal.jsx';
+import { WatchList } from '../../modals/WatchList.jsx';
+import { TaskList } from '../../modals/TaskList.jsx';
+import { QuickTask } from '../../modals/QuickTask.jsx';
+import { CallLog } from '../../modals/CallLog.jsx';
+import { CalendarModal } from '../../modals/CalendarModal.jsx';
 
 /* ───────────────────────────────────────────────────────────────
-   organize.jsx — the Stay Organized pages: Watch List, Task List,
-   Quick Task, Call Log, Order Dates. Design-pattern TourBoxes;
-   every list, category, and keyboard rule from the verified
-   articles (watch-list, task-list, quick-task, call-log,
-   order-date-manager, note-templates).
+   organize.jsx — Stay Organized pages. Each leads with the REAL
+   modal component mounted live (contained + scaled) on sample data,
+   followed by reference prose/tables from the verified articles.
 ─────────────────────────────────────────────────────────────── */
 
-/* ════════ shared bits ════════ */
+const demoSubmit = async () => ({ ok: true });
 
 const TASK_CATEGORIES = ['Other', 'Order History Special', 'Proposal Follow-up', 'Order day call', 'Customer Request', 'High Priority', '15 Day Call/Email', '5 Day Follow-Up to Email', 'Workflow Task', 'Courier Claims', 'High Priority Opportunity', 'Replacement Contact'];
 const CALL_CATEGORIES = ['Product Question', 'Order Status', 'Place Order', 'Transfer', 'Order Payment', 'Turnaround Time', 'Art', 'Prior Year Followup', 'Returning VoiceMail', 'Tournament Lead', 'Form Lead Followup', 'General Question', 'Order Issues', 'CSR Backup', 'Discovery', 'Opportunity', 'Returns/Reprints', 'Charge Error', 'Fraud Inquiry', 'International Orders', 'Profanity', 'Order Change', 'Cancelation', 'Website Concerns'];
 
 function CatGrid({ items }) {
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-      {items.map((c) => <Tag key={c} tone="neutral" size="xs">{c}</Tag>)}
-    </div>
-  );
-}
-
-/* The composer's word-snap, live: type a priority word + space and it
-   becomes a chip — the exact behavior in Quick Task / Call Log. */
-const SNAP_WORDS = { high: ['High', 'error'], medium: ['Medium', 'warning'], low: ['Low', 'info'] };
-function WordSnapSnippet() {
-  const [chip, setChip] = useState(null);
-  const [text, setText] = useState('');
-  const onChange = (v) => {
-    if (v.endsWith(' ')) {
-      const w = v.trim().split(/\s+/).pop().toLowerCase();
-      if (SNAP_WORDS[w]) {
-        setChip(SNAP_WORDS[w]);
-        setText(v.trim().split(/\s+/).slice(0, -1).join(' '));
-        return;
-      }
-    }
-    setText(v);
-  };
-  return (
-    <MiniFrame width={360} label="composer · word snap" pad>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, minHeight: 24 }}>
-        <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--gb-text-muted)' }}>Chips</span>
-        {chip
-          ? <Tag tone={chip[1]} size="xs">{chip[0]} priority ×</Tag>
-          : <span style={{ fontSize: 10.5, color: 'var(--gb-text-ghost)', fontStyle: 'italic' }}>none yet</span>}
-        {chip && <button onClick={() => setChip(null)} style={{ border: 'none', background: 'transparent', color: 'var(--gb-text-muted)', cursor: 'pointer', fontSize: 10 }}>clear</button>}
-      </div>
-      <Input size="sm" value={text} onChange={onChange} placeholder='Try typing  high  (with a trailing space)…' />
-      <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 8, textAlign: 'center' }}>
-        Type <span className="kbd">high</span>, <span className="kbd">medium</span>, or <span className="kbd">low</span> + space — the word snaps into a chip mid-sentence.
-      </div>
-    </MiniFrame>
-  );
+  return <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>{items.map((c) => <Tag key={c} tone="neutral" size="xs">{c}</Tag>)}</div>;
 }
 
 function ComposerKeysTable({ submitLabel }) {
   const rows = [
     ['/', 'Open the composer / token menu (categories, priorities, …)'],
-    ['word + space', 'Snap a recognized word into its chip'],
+    ['word + space', 'Snap a recognized word into its chip (try “high ” in the modal above)'],
     ['1–9', 'Fire the Nth filtered template'],
     ['↑ ↓ · Enter', 'Walk the filtered list · pick'],
     ['Shift+Enter', 'Load the highlighted template into the composer to tweak first'],
@@ -78,36 +43,6 @@ function ComposerKeysTable({ submitLabel }) {
 }
 
 /* ════════ WATCH LIST ════════ */
-
-const WATCH_ROWS = [
-  { id: 1, title: 'Verify reprint shipped', ctx: 'Order #29103', due: 'today', age: '7h', urgency: 'var(--gb-error-fg)', prio: 'var(--gb-error-fg)' },
-  { id: 2, title: 'Confirm logo colors with Marcus', ctx: 'Contact #4421 · Marcus Chen', due: 'Jun 12', age: '5h', urgency: 'var(--gb-warning-fg)', prio: 'var(--gb-warning-fg)' },
-  { id: 3, title: 'Check stock before quoting', ctx: 'Account #2188 · Acme Industries', due: '—', age: '40m', urgency: 'transparent', prio: 'var(--gb-info-fg)' },
-];
-function WatchRowsSnippet() {
-  const [done, setDone] = useState({});
-  return (
-    <MiniFrame width={420} label="watch list · rows" pad={false}>
-      <div style={{ padding: 6 }}>
-        {WATCH_ROWS.map((r) => (
-          <div key={r.id} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px 8px 16px', borderRadius: 'var(--gb-r-sm)', opacity: done[r.id] ? 0.55 : 1 }}>
-            <span style={{ position: 'absolute', left: 6, top: 8, bottom: 8, width: 3, borderRadius: 2, background: done[r.id] ? 'transparent' : r.urgency }} />
-            <button onClick={() => setDone((d) => ({ ...d, [r.id]: !d[r.id] }))} style={{ width: 18, height: 18, borderRadius: 5, border: '1px solid var(--gb-border-strong)', background: done[r.id] ? 'var(--gb-brand-tint-medium)' : 'transparent', color: 'var(--gb-brand-label)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{done[r.id] && <I.check size={11} />}</button>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: r.prio, flexShrink: 0 }} />
-                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', textDecoration: done[r.id] ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</span>
-              </div>
-              <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 1 }}>{r.ctx} · due {r.due}</div>
-            </div>
-            <span style={{ fontSize: 10, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)', flexShrink: 0 }}>{done[r.id] ? 'done' : r.age}</span>
-          </div>
-        ))}
-      </div>
-    </MiniFrame>
-  );
-}
-
 export function WatchListPage() {
   return (
     <div className="prose">
@@ -116,15 +51,16 @@ export function WatchListPage() {
       <p className="lede">
         Your private, cross-session list of orders and contacts to keep an eye on. Watch something from
         the popup's TRACKING section or the shelf, and it lands here with a link back to where it came
-        from. It's local to your browser — nothing reaches the CRM or teammates.
+        from. It's local to your browser — nothing reaches the CRM or teammates. Below is the real
+        modal on sample data — tick items, edit them, switch the filter chips.
       </p>
 
-      <TourBox n={1} eyebrow="Reading a row" title="The urgency stripe ages in real time" live={<WatchRowsSnippet />} wide>
-        <p>Each row: a checkbox, the priority dot + title, the context line (<em>Order #29103</em>, <em>Contact #4421 · Marcus Chen</em>, or <em>Standalone</em>) with the due date, and the item's age on the right — hovering swaps the age for Edit and Remove.</p>
-        <p>The colored stripe on the left tracks <strong>how long the item has been waiting</strong>: nothing under 1 hour, blue at 1–4h, amber at 4–6h, <strong>red at 6h+</strong> — and once anything goes red, the modal header tints red and the popup's Watch List badge starts pulsing. Tick the checkboxes — the rows are live.</p>
-      </TourBox>
+      <LiveModal w={560} h={560} frameLabel="watch list · sample data"
+        note="The live Watch List modal. One item is 7h old, so its stripe is red and the header tints."
+        render={(box, onClosed) => <WatchList contained portalContainer={box} onClosed={onClosed} />} />
 
-      <h2 className="sec">The rest of the modal</h2>
+      <h2 className="sec">Reading a row</h2>
+      <p>The colored stripe on the left tracks <strong>how long the item has been waiting</strong>: nothing under 1 hour, blue at 1–4h, amber at 4–6h, <strong>red at 6h+</strong> — and once anything goes red, the modal header tints red and the popup's Watch List badge starts pulsing. Each row has the priority dot + title, the context line (<em>Order #…</em>, <em>Contact #… · Name</em>, or <em>Standalone</em>) with the due date, and the item's age on the right; hovering swaps the age for Edit and Remove.</p>
       <ul>
         <li><strong>Filter chips</strong> — All / Active / High priority / Completed, each with a live count; the search box matches title, context, and due date.</li>
         <li><strong>Watch button</strong> — opens the inline editor: title, priority (High/Med/Low), optional due date, and the context picker (Standalone, or Order / Contact / Account with an ID).</li>
@@ -143,47 +79,6 @@ export function WatchListPage() {
 }
 
 /* ════════ TASK LIST ════════ */
-
-function TaskToolbarSnippet() {
-  const [status, setStatus] = useState('new');
-  const [prio, setPrio] = useState('all');
-  return (
-    <MiniFrame width={430} label="task list · toolbar" pad>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Input size="sm" placeholder="Search account, contact, subject…" leading={<I.search />} />
-        <div style={{ display: 'flex', gap: 6 }}>
-          <Segmented value={status} onChange={setStatus} options={[{ id: 'new', label: 'New tasks' }, { id: 'done', label: 'Completed' }, { id: 'all', label: 'All' }]} />
-          <Segmented value={prio} onChange={setPrio} options={[{ id: 'all', label: 'All' }, { id: 'hi', label: 'High' }, { id: 'med', label: 'Med' }, { id: 'lo', label: 'Low' }]} />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', fontSize: 11 }}>
-          <b style={{ color: 'var(--gb-brand-label)' }}>3 selected</b>
-          <span style={{ color: 'var(--gb-text-muted)' }}>of 41 tasks</span>
-          <span style={{ flex: 1 }} />
-          <Btn size="xs" variant="ghost" icon={<I.megaphone />}>Run campaign</Btn>
-          <Btn size="xs" variant="ghost" icon={<I.mail />}>Email selected</Btn>
-          <Btn size="xs" variant="ghost" icon={<I.copy />}>Export CSV</Btn>
-        </div>
-      </div>
-    </MiniFrame>
-  );
-}
-
-function PushDueSnippet() {
-  const [picked, setPicked] = useState('+1w');
-  const chips = ['+1d', '+3d', '+1w', '+2w', '+1mo', 'Other'];
-  return (
-    <MiniFrame width={330} label="task popover · push due date" pad>
-      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-primary)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}><I.clock size={12} /> Push due date</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-        {chips.map((c) => (
-          <button key={c} onClick={() => setPicked(c)} style={{ cursor: 'pointer', padding: '5px 10px', borderRadius: 'var(--gb-r-pill)', border: '1px solid ' + (picked === c ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'), background: picked === c ? 'var(--gb-brand-tint-soft)' : 'var(--gb-surface-1)', color: picked === c ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', fontFamily: 'inherit', fontSize: 11, fontWeight: 600 }}>{c}</button>
-        ))}
-      </div>
-      <div style={{ marginTop: 10 }}><Btn full size="sm" variant="tinted" status="brand">Apply push</Btn></div>
-    </MiniFrame>
-  );
-}
-
 export function TasksPage() {
   return (
     <div className="prose">
@@ -192,23 +87,16 @@ export function TasksPage() {
       <p className="lede">
         Press <span className="kbd">Ctrl+X</span> anywhere and your CRM tasks open in a fast, sortable
         table — no navigating to the task page. Search, filter, chain sorts, and act on many tasks at
-        once.
+        once. The real modal is below on sample tasks.
       </p>
 
-      <TourBox n={1} eyebrow="Find & select" title="Toolbar, filters, and the selection bar" live={<TaskToolbarSnippet />} wide>
-        <p>The toolbar: search (account, contact, or subject), a <strong>Status</strong> filter (New tasks / Completed / All statuses), a <strong>Priority</strong> filter (All / High / Medium / Low), and Refresh.</p>
-        <p>Click a column header to sort, again for descending — and <strong>Shift+click a second column to chain sorts</strong> (Due Date, then Priority). Tick rows and the selection bar slides in with <strong>Run campaign</strong>, <strong>Email selected</strong>, and <strong>Export CSV</strong>; the footer adds <strong>Open Tabs</strong> (every selected record in its own tab) and <strong>Quick Task</strong>.</p>
-      </TourBox>
+      <LiveModal w={1000} h={640} frameLabel="task list · sample tasks"
+        note="Tick rows to reveal the selection bar; click a column header to sort, Shift+click to chain."
+        render={(box, onClosed) => <TaskList useMock contained portalContainer={box} onClosed={onClosed} />} />
 
-      <TourBox n={2} eyebrow="Acting on a task" title="The task popover" live={<PushDueSnippet />} flip>
-        <p>Acting on a task (or a bulk selection) opens a compact popover with three panes:</p>
-        <ul>
-          <li><strong>Main</strong> — Mark complete / Reopen, plus the <em>Push due date</em> card: +1d, +3d, +1w, +2w, +1mo, or Other with a day stepper, then Apply push.</li>
-          <li><strong>Set date</strong> — a mini calendar (today outlined, pick a day, "Save · Jun 12").</li>
-          <li><strong>Add task</strong> — a quick custom task or one of your templates; in bulk mode the button reads "Add to all N".</li>
-        </ul>
-        <p>Bulk runs show progress ("Completing 14 tasks…" → checkmark) with a Try-again on failures.</p>
-      </TourBox>
+      <h2 className="sec">Find, select, act</h2>
+      <p>The toolbar: search (account, contact, or subject), a <strong>Status</strong> filter (New tasks / Completed / All statuses), a <strong>Priority</strong> filter (All / High / Medium / Low), and Refresh. Click a column header to sort, again for descending — and <strong>Shift+click a second column to chain sorts</strong> (Due Date, then Priority).</p>
+      <p>Tick rows and the selection bar slides in with <strong>Run campaign</strong>, <strong>Email selected</strong>, and <strong>Export CSV</strong>; the footer adds <strong>Open Tabs</strong> (every selected record in its own tab) and <strong>Quick Task</strong>. Acting on a task opens a compact popover with three panes: <strong>Main</strong> (Mark complete / Reopen + the Push-due card: +1d, +3d, +1w, +2w, +1mo, or Other with a day stepper), <strong>Set date</strong> (a mini calendar), and <strong>Add task</strong> (a quick custom task or a template; "Add to all N" in bulk).</p>
 
       <div className="docnote brand">
         <span className="dn-ico"><I.megaphone size={15} /></span>
@@ -222,7 +110,6 @@ export function TasksPage() {
 }
 
 /* ════════ QUICK TASK ════════ */
-
 export function QuickTaskCreatePage() {
   return (
     <div className="prose">
@@ -230,14 +117,16 @@ export function QuickTaskCreatePage() {
       <h1 className="title">Quick Task</h1>
       <p className="lede">
         A CRM task in seconds, two ways: fire a saved template with one keystroke, or press
-        <span className="kbd">/</span> and compose from scratch without touching the mouse. Opens from
-        the shelf ("Quick task for &lt;name&gt;") on contact, account, and order pages.
+        <span className="kbd">/</span> and compose from scratch without touching the mouse. The real
+        modal is below — type to filter, press <span className="kbd">/</span> to compose, and try typing
+        <span className="kbd">high </span> (with a trailing space) to watch the word snap into a chip.
       </p>
 
-      <TourBox n={1} eyebrow="The grammar" title="Words become chips" live={<WordSnapSnippet />} wide>
-        <p>The modal opens in <strong>filter mode</strong> — type to filter your task templates, press <span className="kbd">1–9</span> to fire one, or <span className="kbd">Shift+Enter</span> to load it into the composer for tweaking.</p>
-        <p>Press <span className="kbd">/</span> for the composer: a chips row (Category, Priority), Subject ("What needs doing?"), Note, and Due. The trick that makes it fast: <strong>type a recognized word + space and it snaps into a chip</strong> — try it in the live input. The <span className="kbd">/</span> menu also lists every category and priority for arrow-key picking.</p>
-      </TourBox>
+      <LiveModal w={480} h={540} frameLabel="quick task · Marcus Chen (sample)"
+        note="The live Quick Task composer. Submitting here is a sample — nothing is written to a real CRM."
+        render={(box, onClosed) => (
+          <QuickTask contained portalContainer={box} contactName="Marcus Chen" contactType="contact" onSubmit={demoSubmit} onClosed={onClosed} />
+        )} />
 
       <h3 className="sub">Due dates</h3>
       <p>The Due control takes quick chips — <strong>Today, Tomorrow, In 3 days, Next week</strong> — or a typed date (<code>mm/dd/yy</code>, or shorthand like <code>+1d</code> / <code>+1w</code>). A live preview pane mirrors exactly what will be created and flags any missing required field; a toast confirms "Task created: &lt;name&gt;".</p>
@@ -261,30 +150,6 @@ export function QuickTaskCreatePage() {
 }
 
 /* ════════ CALL LOG ════════ */
-
-function CallRowSnippet() {
-  const rows = [
-    { dir: '↗', name: 'Left VM — promo follow-up', cat: 'Returning VoiceMail', vm: true },
-    { dir: '↙', name: 'Order status inquiry', cat: 'Order Status', vm: false },
-    { dir: '↗', name: 'Discovery call — tournament', cat: 'Discovery', vm: false },
-  ];
-  return (
-    <MiniFrame width={380} label="call log · templates" pad={false}>
-      <div style={{ padding: 6 }}>
-        {rows.map((r, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 9px', borderRadius: 'var(--gb-r-sm)' }}>
-            <span className="kbd" style={{ fontSize: 9.5 }}>{i + 1}</span>
-            <span style={{ fontSize: 13, color: r.dir === '↙' ? 'var(--gb-info-fg)' : 'var(--gb-brand-label)', fontWeight: 700 }}>{r.dir}</span>
-            <span style={{ flex: 1, fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)' }}>{r.name}</span>
-            {r.vm && <Tag tone="warning" size="xs">VM</Tag>}
-            <Tag tone="neutral" size="xs">{r.cat}</Tag>
-          </div>
-        ))}
-      </div>
-    </MiniFrame>
-  );
-}
-
 export function CallsPage() {
   return (
     <div className="prose">
@@ -292,15 +157,19 @@ export function CallsPage() {
       <h1 className="title">Call Log</h1>
       <p className="lede">
         The same keyboard-first composer as Quick Task, tuned for calls. From the shelf,
-        <strong> "Call &lt;name&gt;"</strong> dials the contact (the row hints the exact number) and opens
-        the logger; <strong>"Log incoming call"</strong> opens it without dialing. Submitting writes
-        straight to the CRM activity log.
+        <strong> "Call &lt;name&gt;"</strong> dials the contact and opens the logger;
+        <strong> "Log incoming call"</strong> opens it without dialing. Submitting writes straight to the
+        CRM activity log. The real modal is below.
       </p>
 
-      <TourBox n={1} eyebrow="Templates first" title="One keystroke per common call" live={<CallRowSnippet />}>
-        <p>The filter bar lists your call templates — each row shows its direction glyph (<span style={{ color: 'var(--gb-info-fg)', fontWeight: 700 }}>↙ inbound</span> / <span style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>↗ outbound</span>), a VM tag when it pre-sets the voicemail flag, and its category chip. Same keys as Quick Task: <span className="kbd">1–9</span>, <span className="kbd">↑↓</span> + <span className="kbd">Enter</span>, <span className="kbd">Shift+Enter</span> to customize, <span className="kbd">/</span> to compose.</p>
-        <p>In the composer the chips row holds <strong>Category, Direction, and the Voicemail flag</strong> — and word-snap works here too: typing <code>inbound␣</code> or <code>out␣</code> becomes the Direction chip. Subject placeholder: "What was the call about?".</p>
-      </TourBox>
+      <LiveModal w={480} h={540} frameLabel="call log · Marcus Chen (sample)"
+        note="The live Call Log composer — direction, category, and a voicemail flag. Sample data only."
+        render={(box, onClosed) => (
+          <CallLog contained portalContainer={box} contactName="Marcus Chen" contactType="contact" phone="(415) 555-0142" onSubmit={demoSubmit} onClosed={onClosed} />
+        )} />
+
+      <h2 className="sec">Templates and the composer</h2>
+      <p>The filter bar lists your call templates — each row shows its direction glyph (<span style={{ color: 'var(--gb-info-fg)', fontWeight: 700 }}>↙ inbound</span> / <span style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>↗ outbound</span>), a VM tag when it pre-sets the voicemail flag, and its category chip. Same keys as Quick Task: <span className="kbd">1–9</span>, <span className="kbd">↑↓</span> + <span className="kbd">Enter</span>, <span className="kbd">Shift+Enter</span> to customize, <span className="kbd">/</span> to compose. In the composer the chips row holds <strong>Category, Direction, and the Voicemail flag</strong>; word-snap works here too (typing <code>inbound␣</code> or <code>out␣</code> becomes the Direction chip).</p>
 
       <h3 className="sub">Call categories (the CRM's list)</h3>
       <CatGrid items={CALL_CATEGORIES} />
@@ -309,36 +178,33 @@ export function CallsPage() {
         <span className="dn-ico"><I.phone size={15} /></span>
         <div className="dn-b">
           <div className="dn-t">Build templates for outcomes, not openers</div>
-          <p style={{ margin: 0 }}>Call templates (Manager → Notes tab) carry direction, category, voicemail flag, subject, description, and up to four numbered next-step actions. With templates for your recurring outcomes, logging takes under ten seconds — you only type the note. No phone on the contact? The shelf offers <strong>Find phone</strong>, which scans their orders for one.</p>
+          <p style={{ margin: 0 }}>Call templates (Manager → Notes tab) carry direction, category, voicemail flag, subject, description, and up to four numbered next-step actions. With templates for your recurring outcomes, logging takes under ten seconds. No phone on the contact? The shelf offers <strong>Find phone</strong>, which scans their orders for one.</p>
         </div>
       </div>
     </div>
   );
 }
 
-/* ════════ ORDER DATES (calendar) ════════ */
-
+/* ════════ ORDER DATES ════════ */
 const CHAIN_STEPS = [
   { label: 'Load delivery calendar', state: 'done' },
   { label: 'Select approval date', state: 'done' },
   { label: 'Select commitment date', state: 'active' },
   { label: 'Submit update', state: 'todo' },
 ];
-function StepChainSnippet() {
+function StepChain() {
   return (
-    <MiniFrame width={340} label="order dates · save progress" pad>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-        {CHAIN_STEPS.map((s, i) => (
-          <div key={s.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-              <span style={{ width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, flexShrink: 0, background: s.state === 'done' ? 'var(--gb-brand-tint-medium)' : s.state === 'active' ? 'var(--gb-warning-tint-medium)' : 'var(--gb-fill-subtle)', border: '1px solid ' + (s.state === 'done' ? 'var(--gb-brand-tint-border)' : s.state === 'active' ? 'var(--gb-warning-tint-border)' : 'var(--gb-border-default)'), color: s.state === 'done' ? 'var(--gb-brand-label)' : s.state === 'active' ? 'var(--gb-warning-fg)' : 'var(--gb-text-ghost)' }}>{s.state === 'done' ? <I.check size={11} /> : i + 1}</span>
-              {i < CHAIN_STEPS.length - 1 && <span style={{ width: 2, height: 16, background: 'var(--gb-border-subtle)' }} />}
-            </div>
-            <span style={{ fontSize: 12, fontWeight: 600, paddingTop: 2, color: s.state === 'todo' ? 'var(--gb-text-ghost)' : 'var(--gb-text-primary)' }}>{s.label}{s.state === 'active' && <span style={{ color: 'var(--gb-warning-fg)', fontWeight: 500 }}> — running…</span>}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0, maxWidth: 360, margin: '8px 0 0' }}>
+      {CHAIN_STEPS.map((s, i) => (
+        <div key={s.label} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <span style={{ width: 20, height: 20, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, flexShrink: 0, background: s.state === 'done' ? 'var(--gb-brand-tint-medium)' : s.state === 'active' ? 'var(--gb-warning-tint-medium)' : 'var(--gb-fill-subtle)', border: '1px solid ' + (s.state === 'done' ? 'var(--gb-brand-tint-border)' : s.state === 'active' ? 'var(--gb-warning-tint-border)' : 'var(--gb-border-default)'), color: s.state === 'done' ? 'var(--gb-brand-label)' : s.state === 'active' ? 'var(--gb-warning-fg)' : 'var(--gb-text-ghost)' }}>{s.state === 'done' ? <I.check size={11} /> : i + 1}</span>
+            {i < CHAIN_STEPS.length - 1 && <span style={{ width: 2, height: 16, background: 'var(--gb-border-subtle)' }} />}
           </div>
-        ))}
-      </div>
-    </MiniFrame>
+          <span style={{ fontSize: 13, fontWeight: 600, paddingTop: 1, color: s.state === 'todo' ? 'var(--gb-text-ghost)' : 'var(--gb-text-primary)' }}>{s.label}{s.state === 'active' && <span style={{ color: 'var(--gb-warning-fg)', fontWeight: 500 }}> — running…</span>}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -349,14 +215,20 @@ export function CalendarPage() {
       <h1 className="title">Order Dates</h1>
       <p className="lede">
         Approval and commitment dates without the form maze. On an order page, the notes-area toolbar
-        gets a calendar button — it opens the Order Date Manager: two mini-calendars side by side,
-        approval on the left, commitment on the right, with readouts under each.
+        gets a calendar button — it opens the Order Date Manager: two mini-calendars, approval on the
+        left, commitment on the right. The real modal is below; pick a date on each.
       </p>
 
-      <TourBox n={1} eyebrow="What Update Dates does" title="A multi-step save, narrated" live={<StepChainSnippet />}>
-        <p>Saving dates on the admin site is really a <strong>multi-step form sequence</strong>. Update Dates runs the whole chain for you and shows a step-by-step progress toast — you watch each step check off, and a confirmation lands when both dates are committed.</p>
-        <p>If a step fails (usually an expired admin session), <strong>the toast names the failing step</strong> and the chain stops — nothing half-saves silently. Re-open the calendar and run it again; the chain restarts from the top and is safe to repeat. Repeated failure at step one means the session expired — reload the order page.</p>
-      </TourBox>
+      <LiveModal w={560} h={460} frameLabel="order dates · #284910 (sample)"
+        note="The live Order Date Manager. Pick an approval and a commitment date on the two calendars."
+        render={(box, onClosed) => (
+          <CalendarModal contained portalContainer={box} orderID="284910" onSubmit={demoSubmit} onClosed={onClosed} />
+        )} />
+
+      <h2 className="sec">What “Update Dates” does</h2>
+      <p>Saving dates on the admin site is really a <strong>multi-step form sequence</strong>. Update Dates runs the whole chain for you and shows a step-by-step progress toast — you watch each step check off, and a confirmation lands when both dates are committed:</p>
+      <StepChain />
+      <p style={{ marginTop: 16 }}>If a step fails (usually an expired admin session), <strong>the toast names the failing step</strong> and the chain stops — nothing half-saves silently. Re-open the calendar and run it again; the chain restarts from the top and is safe to repeat. Repeated failure at step one means the session expired — reload the order page.</p>
 
       <h2 className="sec">The notes toolbar around it</h2>
       <ul>

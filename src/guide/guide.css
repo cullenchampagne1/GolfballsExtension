@@ -320,3 +320,47 @@ h3.sub { font-size: 15.5px; font-weight: 700; color: var(--gb-text-primary); mar
 .searchpop .sr-t { font-size: 12px; font-weight: 600; color: var(--gb-text-primary); }
 .searchpop .sr-g { font-size: 10px; color: var(--gb-text-muted); }
 .searchpop .sr-empty { padding: 14px; font-size: 12px; color: var(--gb-text-muted); text-align: center; }
+
+/* ===================================================================
+   LiveModal — a real modal scaled into a framed stage
+=================================================================== */
+.gb-livemodal { margin: 22px 0 26px; border: 1px solid var(--gb-border-default); border-radius: var(--gb-r-xl); background: var(--gb-surface-canvas); overflow: hidden; }
+.gb-livemodal-chrome { display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: var(--gb-surface-1); border-bottom: 1px solid var(--gb-border-subtle); }
+.gb-livemodal-stage {
+  position: relative; margin: 0 auto;
+  display: block;
+  /* same dotted "device bench" backdrop as the popup LiveStage */
+  background:
+    radial-gradient(120% 120% at 50% 0%, color-mix(in srgb, var(--gb-brand-label) 5%, transparent) 0%, transparent 55%),
+    repeating-linear-gradient(45deg, var(--gb-surface-deep) 0 11px, color-mix(in srgb, var(--gb-surface-canvas) 60%, var(--gb-surface-deep)) 11px 22px);
+}
+.gb-livemodal-box { position: absolute; top: 0; left: 0; }
+.gb-livemodal-reopen {
+  position: absolute; inset: 0; margin: auto; width: max-content; height: max-content;
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 16px; border-radius: var(--gb-r-pill);
+  background: var(--gb-brand-tint-medium); border: 1px solid var(--gb-brand-tint-border);
+  color: var(--gb-brand-label); font-family: var(--gb-font-sans); font-size: 12.5px; font-weight: 700;
+  cursor: pointer; box-shadow: var(--gb-shadow-popover);
+}
+.gb-livemodal-reopen:hover { background: var(--gb-brand-tint-strong); }
+.gb-livemodal .gb-ls-note { padding: 10px 14px 12px; }
+
+/* Embedded real modals: the box IS the frame, so the card fills it
+   exactly (the centered-flex chain would otherwise collapse the card to
+   content width, and motion's mount-opacity can stall inside the portal).
+   These overrides make the demo render at its intended size, visible. */
+.gb-livemodal-box .gb-modal-card {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  opacity: 1 !important;
+}
+/* framer-motion mount springs (opacity 0 → 1) can stall mid-flight inside
+   the portaled, transform-scaled stage, leaving rows/sections faded.
+   motion writes `opacity` as an INLINE style, so force exactly those
+   elements to their final visible state — CSS-class-based dimming
+   (disabled, completed) is untouched. */
+.gb-livemodal-box .gb-modal-card [style*="opacity"] { opacity: 1 !important; }
