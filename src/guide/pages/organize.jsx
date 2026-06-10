@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { I, Tag } from '../../ui/index.js';
-import { LiveModal } from '../lib/live-modal.jsx';
 import { LiveStage } from '../lib/stage.jsx';
 import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
 import {
@@ -16,15 +15,13 @@ import {
 import {
   CallLogLive, ClTemplateRow, ClComposeBar, ClTokenMenu, SAMPLE_CALL_TEMPLATES,
 } from '../lib/calllog-live.jsx';
-import { CalendarModal } from '../../modals/CalendarModal.jsx';
+import { CalendarLive, MiniCalendar, addDays } from '../lib/calendar-live.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    organize.jsx — Stay Organized pages. Each leads with the REAL
    modal component mounted live (contained + scaled) on sample data,
    followed by reference prose/tables from the verified articles.
 ─────────────────────────────────────────────────────────────── */
-
-const demoSubmit = async () => ({ ok: true });
 
 const TASK_CATEGORIES = ['Other', 'Order History Special', 'Proposal Follow-up', 'Order day call', 'Customer Request', 'High Priority', '15 Day Call/Email', '5 Day Follow-Up to Email', 'Workflow Task', 'Courier Claims', 'High Priority Opportunity', 'Replacement Contact'];
 const CALL_CATEGORIES = ['Product Question', 'Order Status', 'Place Order', 'Transfer', 'Order Payment', 'Turnaround Time', 'Art', 'Prior Year Followup', 'Returning VoiceMail', 'Tournament Lead', 'Form Lead Followup', 'General Question', 'Order Issues', 'CSR Backup', 'Discovery', 'Opportunity', 'Returns/Reprints', 'Charge Error', 'Fraud Inquiry', 'International Orders', 'Profanity', 'Order Change', 'Cancelation', 'Website Concerns'];
@@ -549,31 +546,65 @@ function StepChain() {
   );
 }
 
+const OD_CALLOUTS = [
+  { n: 1, target: 'approval', title: 'Approval date', text: 'A full month grid — today is dotted, the picked day glows; the readout shows it spelled out.' },
+  { n: 2, target: 'commitment', title: 'Commitment date', text: 'The second calendar. A warning appears if you set it before the approval date.' },
+  { n: 3, target: 'footer', title: 'Update Dates', text: 'Hands both dates to the multi-step save chain; disabled until both are picked.' },
+];
+const OD_STEPS = [
+  { target: 'header', caption: 'On an order page the notes toolbar has a calendar button — it opens the Order Date Manager for that order.', hold: 2400 },
+  { target: 'approval', caption: 'Pick the approval date on the left calendar. Today is dotted; the chosen day glows and the readout fills in.', run: (api) => api.pickApproval(4), hold: 2800 },
+  { target: 'commitment', caption: 'Then the commitment date on the right — set it before approval and a warning flags it.', run: (api) => api.pickCommitment(9), hold: 2800 },
+  { target: 'footer', caption: 'Update Dates runs the save. It lights up only once both dates are picked.', hold: 2600 },
+];
+
+function CalendarSnippet() {
+  const [value, setValue] = useState(() => addDays(new Date(), 4));
+  return (
+    <MiniFrame width={280} label="order dates · one calendar" pad>
+      <div style={{ display: 'flex', justifyContent: 'center' }}><MiniCalendar value={value} onChange={setValue} /></div>
+      <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 8, textAlign: 'center' }}>Today is dotted; pick a day and it glows. The arrows page months.</div>
+    </MiniFrame>
+  );
+}
+
 export function CalendarPage() {
   return (
     <div className="prose">
       <div className="eyebrow">Stay Organized</div>
       <h1 className="title">Order Dates</h1>
       <p className="lede">
-        Approval and commitment dates without the form maze. On an order page, the notes-area toolbar
+        Approval and commitment dates without the form maze. On an order page the notes-area toolbar
         gets a calendar button — it opens the Order Date Manager: two mini-calendars, approval on the
-        left, commitment on the right. The real modal is below; pick a date on each.
+        left, commitment on the right. Watch it work below, then read each piece beside its live control.
       </p>
 
-      <LiveModal w={560} h={460} frameLabel="order dates · #284910 (sample)"
-        note="The live Order Date Manager. Pick an approval and a commitment date on the two calendars."
-        render={(box, onClosed) => (
-          <CalendarModal contained portalContainer={box} orderID="284910" onSubmit={demoSubmit} onClosed={onClosed} />
-        )} />
+      <LiveStage
+        width={620}
+        frameKind="modal"
+        frameLabel="golfballs.com · order #284910"
+        render={(apiRef) => <CalendarLive ref={apiRef} orderID="284910" />}
+        callouts={OD_CALLOUTS}
+        steps={OD_STEPS}
+        note="Live Order Date Manager on a sample order — hover the pins, press Play, or pick dates yourself."
+      />
 
-      <h2 className="sec">What “Update Dates” does</h2>
-      <p>Saving dates on the admin site is really a <strong>multi-step form sequence</strong>. Update Dates runs the whole chain for you and shows a step-by-step progress toast — you watch each step check off, and a confirmation lands when both dates are committed:</p>
-      <StepChain />
-      <p style={{ marginTop: 16 }}>If a step fails (usually an expired admin session), <strong>the toast names the failing step</strong> and the chain stops — nothing half-saves silently. Re-open the calendar and run it again; the chain restarts from the top and is safe to repeat. Repeated failure at step one means the session expired — reload the order page.</p>
+      <h2 className="sec">Walk through it, piece by piece</h2>
+      <p>Each block pairs the real control with what it does. The snippets are live.</p>
+
+      <TourBox n={1} eyebrow="The picker" title="A month calendar" live={<CalendarSnippet />} flip>
+        <p>Each side is a full month grid. <strong>Today</strong> carries a small dot; the <strong>selected day</strong> glows brand-green with its readout spelled out below (“Jun 14, 2026”). The chevrons page through months, and days from adjacent months sit greyed at the edges.</p>
+        <p>The two readouts — Approval and Commitment — are what get written to the order.</p>
+      </TourBox>
+
+      <TourBox stack eyebrow="What Update Dates does" title="A narrated multi-step save" live={<MiniFrame width={360} label="order dates · save progress" pad><StepChain /></MiniFrame>}>
+        <p>Saving dates on the admin site is really a <strong>multi-step form sequence</strong>. Update Dates runs the whole chain for you and shows a <strong>step-by-step progress toast</strong> — you watch each step check off, and a confirmation lands when both dates are committed.</p>
+        <p>If a step fails (usually an expired admin session) <strong>the toast names the failing step</strong> and the chain stops — nothing half-saves silently. Re-open the calendar and run it again; the chain restarts from the top and is safe to repeat. Repeated failure at step one means your session expired — reload the order page.</p>
+      </TourBox>
 
       <h2 className="sec">The notes toolbar around it</h2>
       <ul>
-        <li><strong>Quick note</strong> — a one-click save button for order notes, with your note templates a click away (a note template can also auto-shift dates via its "push dates forward" setting).</li>
+        <li><strong>Quick note</strong> — a one-click save button for order notes, with your note templates a click away (a note template can also auto-shift dates via its “push dates forward” setting).</li>
         <li><strong>Auto Push</strong> — the Settings toggle that lets date and note updates push to the order automatically as part of the save chain.</li>
       </ul>
     </div>
