@@ -57,6 +57,7 @@ function folderColor(folder) {
 const FolderIcon = (p) => <Icon {...p}><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></Icon>;
 const PenIcon    = (p) => <Icon {...p}><path d="M17 3a2.85 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5z"/></Icon>;
 const CogIcon    = (p) => <Icon {...p}><path d="M10.3 4.3c.4-1.7 2.9-1.7 3.3 0a1.7 1.7 0 002.6 1.1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 001 2.5c1.8.5 1.8 3 0 3.4a1.7 1.7 0 00-1 2.6c.9 1.5-.9 3.3-2.4 2.4a1.7 1.7 0 00-2.6 1c-.4 1.8-2.9 1.8-3.3 0a1.7 1.7 0 00-2.6-1c-1.5.9-3.3-.8-2.4-2.4a1.7 1.7 0 00-1-2.6c-1.8-.4-1.8-2.9 0-3.4a1.7 1.7 0 001-2.5c-.9-1.6.9-3.3 2.4-2.4 1 .6 2.3.1 2.6-1.1z"/><circle cx="12" cy="12" r="3"/></Icon>;
+const HelpIcon   = (p) => <Icon {...p}><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 015.8 1c0 2-3 2.5-3 4.5"/><path d="M12 17.5h.01"/></Icon>;
 
 /* ── Storage helpers ────────────────────────────────────────────── */
 const STORAGE_KEYS = ['templates', 'noteTemplates', 'templateFolders', 'noteFolders'];
@@ -637,6 +638,15 @@ function TemplateSidebar() {
     if (typeof window.openSettings === 'function') window.openSettings();
     else document.getElementById('btn-settings')?.click();
   }
+  function openGuide() {
+    try {
+      chrome.runtime.sendMessage({ action: 'openGuide' }, () => {
+        if (chrome.runtime.lastError) window.open(chrome.runtime.getURL('guide.html'));
+      });
+    } catch {
+      window.open('guide.html');
+    }
+  }
 
   /* Drop on the bottom Uncategorized region → clear folderId. */
   const [uncatHot, setUncatHot] = useState(false);
@@ -702,7 +712,10 @@ function TemplateSidebar() {
             Manager
           </div>
         </div>
-        <IconBtn size="sm" icon={<CogIcon />} onClick={openSettings} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <IconBtn size="sm" icon={<HelpIcon />} title="Operator's Guide" onClick={openGuide} />
+          <IconBtn size="sm" icon={<CogIcon />} onClick={openSettings} />
+        </div>
       </div>
 
       {/* Controls: tabs + search + new template + new folder */}

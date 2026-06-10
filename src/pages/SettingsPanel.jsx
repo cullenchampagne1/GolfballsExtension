@@ -800,44 +800,6 @@ export function SettingsPanel() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, fontFamily: 'var(--gb-font-sans)' }}>
 
-      {/* Operator's Guide — standalone help page, opens in its own tab. */}
-      <section>
-        <SectionLabel>Help</SectionLabel>
-        <Card>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 12 }}>
-            <div style={{
-              width: 34, height: 34, borderRadius: 'var(--gb-r-md)', flexShrink: 0,
-              background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)',
-              color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <I.bolt />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Operator's Guide</div>
-              <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1 }}>
-                Interactive walkthrough of every tool — live screens, guided tours, and a searchable manual.
-              </div>
-            </div>
-            <Btn
-              size="sm"
-              variant="tinted"
-              status="brand"
-              onClick={() => {
-                try {
-                  chrome.runtime.sendMessage({ action: 'openGuide' }, () => {
-                    if (chrome.runtime.lastError) window.open(chrome.runtime.getURL('guide.html'));
-                  });
-                } catch {
-                  window.open('guide.html');
-                }
-              }}
-            >
-              Open guide
-            </Btn>
-          </div>
-        </Card>
-      </section>
-
       {/* User Presets */}
       <UserPresetsManager onPresetLoad={() => setRefreshKey(k => k + 1)} />
 
