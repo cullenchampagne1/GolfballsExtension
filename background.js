@@ -23,6 +23,7 @@ importScripts('defaults.js');
 })();
 
 let editorWindowId   = null;
+let guideTabId       = null;   // the Operator's Guide tab (guide.html) — focus-or-create
 
 // ── Per-product customizer config helpers ────────────────────────────────────
 // The real per-product options are driven by the product page's __NEXT_DATA__
@@ -1286,6 +1287,30 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // ── Operator's Guide: focus the existing tab or open a new one ─
+  if (msg.action === 'openGuide') {
+    const url = chrome.runtime.getURL('guide.html') + (msg.hash || '');
+    const createGuideTab = () => {
+      chrome.tabs.create({ url, active: true }, (tab) => { guideTabId = tab?.id ?? null; });
+    };
+    if (guideTabId !== null) {
+      chrome.tabs.get(guideTabId, (tab) => {
+        if (chrome.runtime.lastError || !tab) {
+          guideTabId = null;
+          createGuideTab();
+        } else {
+          chrome.tabs.update(guideTabId, { active: true });
+          chrome.windows.update(tab.windowId, { focused: true });
+        }
+        sendResponse({ success: true });
+      });
+    } else {
+      createGuideTab();
+      sendResponse({ success: true });
+    }
+    return true;
+  }
+
   if (msg.action === 'openEditor') {
     if (editorWindowId !== null) {
       chrome.windows.get(editorWindowId, (win) => {
@@ -1688,6 +1713,10 @@ function createEditorWindow() {
 
 chrome.windows.onRemoved.addListener((windowId) => {
   if (windowId === editorWindowId) editorWindowId = null;
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (tabId === guideTabId) guideTabId = null;
 });
 
 

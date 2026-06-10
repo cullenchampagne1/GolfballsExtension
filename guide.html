@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operator's Guide — Golfballs Extension</title>
+<script src="theme-init.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; margin: 0; padding: 0;
+    background: #0e0f10;          /* matches --gb-surface-deep; theme tokens take over once guide.js mounts */
+    color: rgba(255,255,255,.8);
+    font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  #guide-root { width: 100%; min-height: 100vh; }
+</style>
+</head>
+<body>
+  <div id="guide-root"></div>
+  <script src="react-dist/guide/guide.js"></script>
+</body>
+</html>
