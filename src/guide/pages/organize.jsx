@@ -1,7 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { I, Tag } from '../../ui/index.js';
 import { LiveModal } from '../lib/live-modal.jsx';
-import { WatchList } from '../../modals/WatchList.jsx';
+import { LiveStage } from '../lib/stage.jsx';
+import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
+import {
+  WatchListLive, WatchRow, WatchEditor, FilterChips, sampleTasks, URGENCY_TINT,
+} from '../lib/watchlist-live.jsx';
 import { TaskList } from '../../modals/TaskList.jsx';
 import { QuickTask } from '../../modals/QuickTask.jsx';
 import { CallLog } from '../../modals/CallLog.jsx';
@@ -43,6 +47,83 @@ function ComposerKeysTable({ submitLabel }) {
 }
 
 /* ════════ WATCH LIST ════════ */
+
+const WL_CALLOUTS = [
+  { n: 1, target: 'header', title: 'Title & status', text: 'The active count, and a red “N critical” flag the moment anything has waited 6+ hours.' },
+  { n: 2, target: 'filters', title: 'Filter chips', text: 'All / Active / High priority / Completed, each with a live count. Sliding indicator.' },
+  { n: 3, target: 'search', title: 'Search + Watch', text: 'Search matches title, context, and due date. Watch opens the inline editor.' },
+  { n: 4, target: 'row', title: 'A watch row', text: 'Urgency stripe · checkbox · priority dot + title · linked record · due date · age.' },
+  { n: 5, target: 'row-actions', title: 'Age / actions', text: 'Resting it shows the age; on hover it swaps to Edit and Remove in place.' },
+  { n: 6, target: 'footer', title: 'Clear all', text: 'A two-tap confirm before the whole list is wiped.' },
+];
+const WL_STEPS = [
+  { target: 'header', caption: 'Your private watch list. One item has been waiting 7 hours, so it’s flagged critical and the count turns red.', hold: 2600 },
+  { target: 'filters', caption: 'Filter chips carry live counts. Switch to Completed to see resolved items…', run: (api) => api.setFilter('done'), hold: 2200 },
+  { target: 'filters', caption: '…and back to Active for the live queue.', run: (api) => api.setFilter('active'), hold: 1500 },
+  { target: 'row', caption: 'Each row reads at a glance: the colored urgency stripe, a checkbox, the priority dot + title, the linked record, the due date, and how long it has waited.', hold: 3200 },
+  { target: 'search', caption: 'Add one — the Watch button opens the inline editor.', run: (api) => api.startNew(), hold: 1500 },
+  { target: 'editor', caption: 'Title, priority, due date, and what it links to — all inline. “Add to watch list” when done.', hold: 3000 },
+  { target: 'footer', caption: 'Clear all asks for a second click before wiping everything.', hold: 2400 },
+];
+
+function OneRowSnippet() {
+  const [tasks] = useState(() => sampleTasks());
+  return (
+    <MiniFrame width={420} label="watch list · one row" pad>
+      <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <WatchRow task={tasks[0]} />
+        <WatchRow task={tasks[1]} forceHover />
+      </ul>
+      <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 8, textAlign: 'center' }}>Top: resting (shows age). Bottom: hovered (Edit / Remove swap in).</div>
+    </MiniFrame>
+  );
+}
+
+function StripeScale() {
+  const rows = [
+    ['normal', 'Under 1 hour', 'no stripe'],
+    ['moderate', '1–4 hours', 'blue'],
+    ['high', '4–6 hours', 'amber'],
+    ['critical', '6+ hours', 'red — header tints, popup badge pulses'],
+  ];
+  return (
+    <MiniFrame width={300} label="urgency stripe" pad>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {rows.map(([level, age, label]) => (
+          <div key={level} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ width: 3, height: 26, borderRadius: 2, background: level === 'normal' ? 'transparent' : URGENCY_TINT[level], border: level === 'normal' ? '1px dashed var(--gb-border-default)' : 'none' }} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{age}</div>
+              <div style={{ fontSize: 10, color: 'var(--gb-text-muted)' }}>{label}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </MiniFrame>
+  );
+}
+
+function FilterChipsSnippet() {
+  const [value, setValue] = useState('active');
+  return (
+    <MiniFrame width={360} label="watch list · filters" pad>
+      <FilterChips value={value} onChange={setValue} counts={{ all: 4, active: 3, high: 1, done: 1 }} />
+      <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 8, textAlign: 'center' }}>Click a chip — it's live. Counts update with the list.</div>
+    </MiniFrame>
+  );
+}
+
+function EditorSnippet() {
+  const [draft, setDraft] = useState({ title: 'Confirm logo colors with Marcus', priority: 'med', due: '', context: { type: 'contact', id: '4421', name: 'Marcus Chen' } });
+  return (
+    <MiniFrame width={420} label="watch list · inline editor" pad>
+      <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+        <WatchEditor draft={draft} onChange={setDraft} onCommit={() => {}} onCancel={() => {}} />
+      </ul>
+    </MiniFrame>
+  );
+}
+
 export function WatchListPage() {
   return (
     <div className="prose">
@@ -51,27 +132,54 @@ export function WatchListPage() {
       <p className="lede">
         Your private, cross-session list of orders and contacts to keep an eye on. Watch something from
         the popup's TRACKING section or the shelf, and it lands here with a link back to where it came
-        from. It's local to your browser — nothing reaches the CRM or teammates. Below is the real
-        modal on sample data — tick items, edit them, switch the filter chips.
+        from. It's local to your browser — nothing reaches the CRM or teammates. Watch it work below,
+        then read each piece beside its live control.
       </p>
 
-      <LiveModal w={560} h={560} frameLabel="watch list · sample data"
-        note="The live Watch List modal. One item is 7h old, so its stripe is red and the header tints."
-        render={(box, onClosed) => <WatchList contained portalContainer={box} onClosed={onClosed} />} />
+      <LiveStage
+        width={560}
+        frameKind="modal"
+        frameLabel="golfballs.com · watch list"
+        render={(apiRef) => <WatchListLive ref={apiRef} />}
+        callouts={WL_CALLOUTS}
+        steps={WL_STEPS}
+        note="Live Watch List on sample data — hover the pins, press Play, or Try it yourself."
+      />
 
-      <h2 className="sec">Reading a row</h2>
-      <p>The colored stripe on the left tracks <strong>how long the item has been waiting</strong>: nothing under 1 hour, blue at 1–4h, amber at 4–6h, <strong>red at 6h+</strong> — and once anything goes red, the modal header tints red and the popup's Watch List badge starts pulsing. Each row has the priority dot + title, the context line (<em>Order #…</em>, <em>Contact #… · Name</em>, or <em>Standalone</em>) with the due date, and the item's age on the right; hovering swaps the age for Edit and Remove.</p>
-      <ul>
-        <li><strong>Filter chips</strong> — All / Active / High priority / Completed, each with a live count; the search box matches title, context, and due date.</li>
-        <li><strong>Watch button</strong> — opens the inline editor: title, priority (High/Med/Low), optional due date, and the context picker (Standalone, or Order / Contact / Account with an ID).</li>
-        <li><strong>Clear all</strong> — asks for a second click to confirm ("Click again to remove all N items").</li>
-      </ul>
+      <h2 className="sec">Walk through it, piece by piece</h2>
+      <p>Each block pairs the real control with what it does. The snippets are live.</p>
 
-      <div className="docnote info">
+      <TourBox n={1} eyebrow="Anatomy" title="A single watch row" live={<OneRowSnippet />} flip>
+        <p>Every row reads in one glance: a <strong>checkbox</strong> to mark it done, the <strong>priority dot</strong> + title, the <strong>linked record</strong> (<em>Order #29103</em>, <em>Contact #4421 · Marcus Chen</em>, or <em>Standalone</em>), and the <strong>due date</strong> (amber when due soon, red when overdue).</p>
+        <p>The right edge shows <strong>how long it has waited</strong> at rest, and swaps to <strong>Edit</strong> and <strong>Remove</strong> on hover — so the resting list stays quiet but the actions are one mouse-move away.</p>
+      </TourBox>
+
+      <TourBox n={2} eyebrow="The signal" title="The urgency stripe" live={<StripeScale />}>
+        <p>The colored bar on a row's left edge tracks <strong>how long the item has been sitting unresolved</strong>. It climbs from nothing, through blue and amber, to <strong>red at 6+ hours</strong>.</p>
+        <p>When anything goes red the modal header tints red and the popup's <a href="#popup">Watch List badge</a> starts pulsing — so an aging follow-up is impossible to miss without opening the list.</p>
+      </TourBox>
+
+      <TourBox n={3} eyebrow="Filtering" title="Filter chips + search" live={<FilterChipsSnippet />} flip>
+        <p><strong>All / Active / High priority / Completed</strong>, each with a live count. Active hides done items; High priority narrows to red-dot items; Completed shows what you've resolved.</p>
+        <p>The search box beside them matches title, linked record, and due date — type “Acme” or “29103” to jump straight to it.</p>
+      </TourBox>
+
+      <TourBox n={4} eyebrow="The line-item settings" title="The inline editor" live={<EditorSnippet />} wide>
+        <p>Watch (or Edit on a row) opens the editor right in place — no separate dialog. It carries everything a watch item needs:</p>
+        <ul>
+          <li><strong>Title</strong> — what you're watching for.</li>
+          <li><strong>Priority</strong> — High / Med / Low, the colored dot on the row.</li>
+          <li><strong>Due</strong> — an optional date; the row colors it amber/red as it approaches.</li>
+          <li><strong>Linked to</strong> — Standalone, or Order / Contact / Account with an ID (and an optional name) so the row deep-links back to the record.</li>
+        </ul>
+        <p>The snippet is live — change the priority, pick a due date, switch what it links to.</p>
+      </TourBox>
+
+      <div className="docnote info" style={{ marginTop: 26 }}>
         <span className="dn-ico"><I.eye size={15} /></span>
         <div className="dn-b">
           <div className="dn-t">Housekeeping is automatic</div>
-          <p style={{ margin: 0 }}>Completed items delete themselves after 5 days (tunable in Developer Settings). Use Watch List for private follow-ups; when the <em>team</em> needs to see it, create a real CRM task with <a href="#quicktask">Quick Task</a> instead.</p>
+          <p style={{ margin: 0 }}>Completed items delete themselves after 5 days (tunable in Developer Settings → “Auto-delete completed watch items”). <strong>Clear all</strong> wipes the list but asks for a second click first. Use Watch List for private follow-ups; when the <em>team</em> needs to see it, create a real CRM task with <a href="#quicktask">Quick Task</a> instead.</p>
         </div>
       </div>
     </div>
