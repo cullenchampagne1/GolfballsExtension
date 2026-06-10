@@ -28,6 +28,10 @@
     "https://d1tp32r8b76g0z.cloudfront.net/*",
     "https://brmth7.a.searchspring.io/*",
     "https://*.execute-api.us-east-2.amazonaws.com/*",
+    "https://s3.amazonaws.com/*",
+    "https://s3.us-east-2.amazonaws.com/*",
+    "https://*.s3.amazonaws.com/*",
+    "https://*.s3.us-east-2.amazonaws.com/*",
     "https://graph.microsoft.com/*",
     "https://login.microsoftonline.com/*"
   ],

@@ -533,13 +533,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   
   // ── 1. Image Proxy ─────────────────────────────────────────
   if (msg.action === 'proxyFetchImage' && msg.url) {
-    if (!gbIsAllowedFetchHost(msg.url)) { sendResponse({ ok: false, error: 'Blocked host' }); return true; }
-    // credentials:'include' so session-gated render endpoints succeed: the
-    // express Render.aspx (icustomize / customizationapplications) only
-    // returns the composited image when the logged-in cookie is sent —
-    // without it the fetch gets a non-image auth response and the preview
-    // hangs. Harmless for public images (cookies just ignored).
-    fetch(msg.url, { credentials: 'include' })
+    // First-party hosts fetch WITH the session — render endpoints (express
+    // Render.aspx on icustomize / customizationapplications) only return the
+    // composited image when the logged-in cookie rides along. Any OTHER host
+    // is fetched with credentials OMITTED instead of hard-blocked: the
+    // hardening's exfil vector was the session cookie riding on an arbitrary
+    // URL — a cookie-less image GET leaks nothing a plain <img> tag couldn't —
+    // and this keeps legitimate ingest working (custom-item thumbnails pasted
+    // from supplier sites get re-hosted to S3). Hosts outside host_permissions
+    // are still subject to CORS, so this succeeds only where the host allows
+    // cross-origin reads.
+    const cred = gbIsAllowedFetchHost(msg.url) ? 'include' : 'omit';
+    fetch(msg.url, { credentials: cred })
       .then(async r => {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const buf = await r.arrayBuffer();

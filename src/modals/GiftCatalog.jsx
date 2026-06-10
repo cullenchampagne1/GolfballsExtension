@@ -2462,9 +2462,17 @@ function CustomItemForm({ initial, onCancel, onSave, onDelete }) {
       let rec = f;
       // Safety net: if a link is still un-hosted at save time, ingest it first.
       if (needsIngest(f.thumbnail)) {
-        const s3 = await ingestImageUrl(f.thumbnail);
-        rec = { ...f, thumbnail: s3 };
-        setF(rec);
+        try {
+          const s3 = await ingestImageUrl(f.thumbnail);
+          rec = { ...f, thumbnail: s3 };
+          setF(rec);
+        } catch (e) {
+          // Re-hosting failed (CORS-less host, S3 hiccup) — save with the
+          // external link rather than refusing the save. The catalog renders
+          // it fine; only proposal emails need the hosted copy, and editing
+          // the item later retries the ingest.
+          console.warn('[GB] custom-item image ingest failed, keeping external URL:', (e && e.message) || e);
+        }
       }
       await onSave(rec);
     } catch (e) { setUploadErr((e && e.message) || 'couldn’t save'); setSaving(false); }
