@@ -132,14 +132,61 @@ function _proof(l, withPhoto, square) {
 // Bulletproof buttons: the BACKGROUND lives on the <td> (with a bgcolor attr) —
 // Outlook's Word engine ignores background on an inline <a>, so a button styled
 // on the <a> renders as bare text. The <a> keeps only color/font + padding.
-const _ctaBtn = (label, pill) => `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:24px;"><tbody><tr><td align="center"><table border="0" cellpadding="0" cellspacing="0"><tbody><tr><td bgcolor="${T.acc}" align="center" style="background:${T.acc}; border-radius:${pill ? '30px' : '8px'};"><a href="{{CART_LINK}}" style="display:inline-block; color:#fff; text-decoration:none; font-family:${SANS}; font-size:15px; font-weight:700; padding:14px 42px;">${label}</a></td></tr></tbody></table></td></tr></tbody></table>`;
-const _ctaBar = (label) => `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:24px;"><tbody><tr><td bgcolor="${T.acc}" align="center" style="background:${T.acc}; border-radius:8px;"><a href="{{CART_LINK}}" style="display:block; text-align:center; color:#fff; text-decoration:none; font-family:${SANS}; font-size:15px; font-weight:700; padding:16px;">${label}</a></td></tr></tbody></table>`;
+// Vertical spacer that Outlook's Word engine actually honours (it ignores
+// margin between block tables, collapsing cards/sections together). font-size:0
+// + mso-line-height-rule:exactly pins the exact height across clients. Use this
+// in place of margin-top/margin-bottom for gaps between blocks.
+const _vspace = (h) => `<div style="height:${h}px; line-height:${h}px; font-size:0; mso-line-height-rule:exactly;">&nbsp;</div>`;
+const _ctaBtn = (label, pill) => `${_vspace(24)}<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td align="center"><table border="0" cellpadding="0" cellspacing="0"><tbody><tr><td bgcolor="${T.acc}" align="center" style="background:${T.acc}; border-radius:${pill ? '30px' : '8px'};"><a href="{{CART_LINK}}" style="display:inline-block; color:#fff; text-decoration:none; font-family:${SANS}; font-size:15px; font-weight:700; padding:14px 42px;">${label}</a></td></tr></tbody></table></td></tr></tbody></table>`;
+const _ctaBar = (label) => `${_vspace(24)}<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td bgcolor="${T.acc}" align="center" style="background:${T.acc}; border-radius:8px;"><a href="{{CART_LINK}}" style="display:block; text-align:center; color:#fff; text-decoration:none; font-family:${SANS}; font-size:15px; font-weight:700; padding:16px;">${label}</a></td></tr></tbody></table>`;
 const _wordmark = (align) => `<table border="0" cellpadding="0" cellspacing="0"${align === 'center' ? ' align="center"' : ''}><tbody><tr><td valign="middle"><span style="display:inline-block; width:9px; height:9px; border-radius:9px; background:${T.acc}; margin-right:7px; vertical-align:middle;"></span></td><td valign="middle"><span style="font-family:${SANS}; font-size:13px; font-weight:800; letter-spacing:2.5px; text-transform:uppercase; color:${T.ink};">Golfballs</span></td></tr></tbody></table>`;
 // Footer wordmark/tagline removed per design — proposals carry the header
 // branding only, no bottom "Golfballs · Corporate Gifting" strip.
 const _foot = () => '';
 const _expLine = (m, align) => m.show.expiration ? `<p style="font-family:${SANS}; font-size:13px; color:${T.mut}; margin:18px 0 0;${align ? ' text-align:' + align + ';' : ''}">This proposal expires on <strong style="color:${T.ink};">${_esc(m.expiration)}</strong></p>` : '';
 const _discLine = (m, align) => m.show.disclaimer ? `<p style="font-family:${SANS}; font-style:italic; font-size:12px; color:${T.faint}; margin:5px 0 0;${align ? ' text-align:' + align + ';' : ''}">*shipping &amp; sales tax are calculated in the shopping cart</p>` : '';
+
+/* Wrap a built template (a bare 600px <table>) in a full email document that
+   Outlook DESKTOP (Word engine) renders correctly. Bare table fragments paste/
+   send without a width constraint or centering, and Word needs the MSO scaffold
+   to size the page. This is applied ONLY to the copied / sent HTML — the in-app
+   preview keeps rendering the bare fragment.
+     • DOCTYPE + xmlns:v/o so Word enters the right rendering mode.
+     • OfficeDocumentSettings PixelsPerInch:96 → stops Outlook upscaling the
+       whole email ~120% (the classic "everything is huge / overflows" bug).
+     • An [if mso] ghost table pins the body to 600px and centers it (Word
+       ignores max-width / margin:auto), while non-Outlook clients use <center>.
+     • A head <style> with the standard resets (collapse, no table spacing,
+       image rendering) Word honours. */
+function wrapEmailDocument(inner) {
+  return `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office" lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+<meta name="x-apple-disable-message-reformatting"/>
+<title>Proposal</title>
+<!--[if mso]>
+<noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
+<![endif]-->
+<style>
+  html,body{margin:0 !important;padding:0 !important;background:#ffffff;}
+  *{-ms-text-size-adjust:100%;-webkit-text-size-adjust:100%;}
+  table,td{mso-table-lspace:0pt;mso-table-rspace:0pt;border-collapse:collapse;}
+  img{-ms-interpolation-mode:bicubic;border:0;outline:none;text-decoration:none;}
+  a{text-decoration:none;}
+</style>
+</head>
+<body style="margin:0;padding:0;background:#ffffff;">
+<center style="width:100%;background:#ffffff;">
+<!--[if mso]><table role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" align="center"><tr><td width="600"><![endif]-->
+${inner}
+<!--[if mso]></td></tr></table><![endif]-->
+</center>
+</body>
+</html>`;
+}
 
 /* ── TEMPLATE 1 — CLASSIC ── */
 function tplClassic(m) {
@@ -190,8 +237,8 @@ function tplCatalog(m) {
     const sub = l.subtitle ? `<div style="font-size:12px; color:${T.mut}; margin-top:4px;">${_esc(l.subtitle)}</div>` : '';
     const qtyLine = show.cost ? `Qty ${l.qty} &nbsp;&middot;&nbsp; ${_money(l.unitPrice)} ea` : `Qty ${l.qty}`;
     const proof = (show.previews && (l.imprint || _hasPrev(l))) ? `<tr><td colspan="${show.images ? 3 : 2}" style="padding:0 16px 16px;">${_proof(l, false)}</td></tr>` : '';
-    return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:12px; margin-bottom:13px;"><tbody><tr>${photo}<td valign="middle" style="padding:16px ${show.images ? '14px' : '16px'};">${_brandLine(l, T.acc)}<div style="font-size:16px; color:${T.ink}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${T.mut}; margin-top:8px;">${qtyLine}</div></td><td width="112" valign="middle" align="right" style="padding:16px;"><span style="display:inline-block; background:${T.priceSoft}; color:${T.price}; font-size:15px; font-weight:800; padding:7px 13px; border-radius:8px;">${_ltot(l)}</span></td></tr>${proof}</tbody></table>`;
-  }).join('\n');
+    return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:12px;"><tbody><tr>${photo}<td valign="middle" style="padding:16px ${show.images ? '14px' : '16px'};">${_brandLine(l, T.acc)}<div style="font-size:16px; color:${T.ink}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${T.mut}; margin-top:8px;">${qtyLine}</div></td><td width="112" valign="middle" align="right" style="padding:16px;"><span style="display:inline-block; background:${T.priceSoft}; color:${T.price}; font-size:15px; font-weight:800; padding:7px 13px; border-radius:8px;">${_ltot(l)}</span></td></tr>${proof}</tbody></table>`;
+  }).join(_vspace(13));
   const totalBox = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:4px;"><tbody><tr><td bgcolor="${T.accSoft}" style="background:${T.accSoft}; border-left:4px solid ${T.acc}; border-radius:8px; padding:16px 18px;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:13px; font-weight:700; color:${T.ink};">Estimated total${_star(m)}</span></td><td align="right" valign="middle"><span style="font-size:23px; font-weight:800; color:${T.price};">${_money(total - (m.discount || 0))}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
   return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody>
     <tr><td bgcolor="${T.acc}" style="background:${T.acc}; border-radius:14px 14px 0 0; padding:22px 26px;"><div style="font-size:11px; letter-spacing:1.4px; text-transform:uppercase; color:#d9ecce; font-weight:700;">${_esc(groupName)}</div><div style="font-size:24px; font-weight:800; color:#fff; margin-top:4px; letter-spacing:-.4px;">${_esc(optionName)}</div></td></tr>
@@ -240,8 +287,8 @@ function tplLookbook(m) {
     const sub = l.subtitle ? `<div style="font-size:12px; color:${T.mut}; margin-top:4px;">${_esc(l.subtitle)}</div>` : '';
     const qtyLine = show.cost ? `Qty ${l.qty} &nbsp;&middot;&nbsp; ${_money(l.unitPrice)} ea` : `Qty ${l.qty}`;
     const proof = show.previews ? _proof(l, false) : '';
-    return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:14px; margin-bottom:15px;"><tbody>${imgRow}<tr><td style="padding:${show.images ? '8px' : '18px'} 20px 18px;"><table width="100%"><tbody><tr><td valign="middle">${_brandLine(l, T.acc)}<div style="font-size:18px; color:${T.ink}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${T.mut}; margin-top:6px;">${qtyLine}</div></td><td valign="middle" align="right" width="96"><span style="font-size:20px; font-weight:800; color:${T.price};">${_ltot(l)}</span></td></tr></tbody></table>${proof}</td></tr></tbody></table>`;
-  }).join('\n');
+    return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:14px;"><tbody>${imgRow}<tr><td style="padding:${show.images ? '8px' : '18px'} 20px 18px;"><table width="100%"><tbody><tr><td valign="middle">${_brandLine(l, T.acc)}<div style="font-size:18px; color:${T.ink}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${T.mut}; margin-top:6px;">${qtyLine}</div></td><td valign="middle" align="right" width="96"><span style="font-size:20px; font-weight:800; color:${T.price};">${_ltot(l)}</span></td></tr></tbody></table>${proof}</td></tr></tbody></table>`;
+  }).join(_vspace(15));
   const totalBox = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td style="border-top:2px solid ${T.acc}; padding:18px 2px 0;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:12px; letter-spacing:.6px; text-transform:uppercase; color:${T.mut}; font-weight:700;">Estimated total${_star(m)}</span></td><td align="right" valign="middle"><span style="font-size:26px; font-weight:800; color:${T.price};">${_money(total - (m.discount || 0))}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
   return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="padding:6px 6px 8px;">
     <div align="center">${_wordmark('center')}</div>
@@ -278,11 +325,11 @@ function tplSeparated(m) {
     const qtyLine = show.cost ? `Qty ${l.qty} &nbsp;&middot;&nbsp; ${_money(l.unitPrice)} ea` : `Qty ${l.qty}`;
     const proof = show.previews ? _proof(l, false) : '';
     const freeStrips = freeFor(l.lineId).map(_freeStrip).join('');
-    return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:14px; margin-bottom:16px;"><tbody>
+    return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:14px;"><tbody>
       <tr><td bgcolor="${T.plate}" style="background:${T.plate}; border-bottom:1px solid ${T.line}; border-radius:14px 14px 0 0; padding:11px 18px;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:${T.acc}; font-weight:800;">Option ${String.fromCharCode(65 + i)}</span></td><td align="right" valign="middle"><span style="font-size:11px; color:${T.mut}; font-weight:600;">${qtyLine}</span></td></tr></tbody></table></td></tr>
       <tr><td style="padding:18px;"><table width="100%"><tbody><tr>${photo}<td valign="middle">${_brandLine(l, T.mut)}<div style="font-size:18px; color:${T.ink}; font-weight:800; letter-spacing:-.3px;">${_esc(l.title)}</div>${sub}</td><td valign="middle" align="right" width="118"><div style="font-size:10px; letter-spacing:.6px; text-transform:uppercase; color:${T.mut}; font-weight:700;">Price</div><div style="font-size:23px; font-weight:800; color:${T.price}; letter-spacing:-.6px; margin-top:2px;">${_ltot(l)}</div></td></tr></tbody></table>${freeStrips}${proof}</td></tr>
     </tbody></table>`;
-  }).join('\n');
+  }).join(_vspace(16));
   const totalBox = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:2px;"><tbody><tr><td bgcolor="${T.accSoft}" style="background:${T.accSoft}; border:1px solid #d6e8c9; border-radius:12px; padding:16px 20px;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:12px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:${T.ink};">Estimated total${_star(m)}</span><div style="font-size:11px; color:${T.mut}; margin-top:2px;">All options combined</div></td><td align="right" valign="middle"><span style="font-size:24px; font-weight:800; color:${T.price};">${_money(total - (m.discount || 0))}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
   return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="padding:8px 6px;">
     ${_wordmark()}
@@ -553,6 +600,10 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
   // Substitute the real cart link (only present when valid); otherwise the CTA
   // isn't rendered, so no {{CART_LINK}} leaks into the copy.
   const emailHtml = useMemo(() => (hasLink ? builtHtml.split('{{CART_LINK}}').join(source.cartLink) : builtHtml), [builtHtml, hasLink, source.cartLink]);
+  // What we actually COPY / SEND: the bare template wrapped in a full Outlook-
+  // desktop-safe email document (MSO scaffold, 600px ghost table, centering).
+  // The preview below stays on the bare fragment (it renders in a browser).
+  const outboundHtml = useMemo(() => wrapEmailDocument(emailHtml), [emailHtml]);
   // Preview is wrapped so the 600px email centers in the (wider) pane. It's a
   // VIEW-only wrapper — the copied HTML stays the untouched `emailHtml`.
   const previewHtml = useMemo(() => `<div style="text-align:center;"><div style="display:inline-block; text-align:left;">${emailHtml}</div></div>`, [emailHtml]);
@@ -565,19 +616,19 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
     try {
       if (navigator.clipboard && window.ClipboardItem) {
         await navigator.clipboard.write([new window.ClipboardItem({
-          'text/html': new Blob([emailHtml], { type: 'text/html' }),
-          'text/plain': new Blob([emailHtml], { type: 'text/plain' }),
+          'text/html': new Blob([outboundHtml], { type: 'text/html' }),
+          'text/plain': new Blob([outboundHtml], { type: 'text/plain' }),
         })]);
       } else {
-        await navigator.clipboard.writeText(emailHtml);
+        await navigator.clipboard.writeText(outboundHtml);
       }
     } catch (e) {
-      try { await navigator.clipboard.writeText(emailHtml); } catch (e2) { /* no-op */ }
+      try { await navigator.clipboard.writeText(outboundHtml); } catch (e2) { /* no-op */ }
     }
     flash();
   };
   // Copy the raw HTML source (for pasting into an HTML editor / code field).
-  const copySource = async () => { try { await navigator.clipboard.writeText(emailHtml); } catch (e) { /* */ } };
+  const copySource = async () => { try { await navigator.clipboard.writeText(outboundHtml); } catch (e) { /* */ } };
   // Current Proposals: "Submit" tracks the proposal server-side (just like
   // creating it on the web) via source.onSubmit, then copies. If tracking fails
   // it stays on "Submit" (the caller surfaces the error) and does NOT copy.
@@ -585,7 +636,7 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
     if (submitting) return;
     if (source.onSubmit) {
       setSubmitting(true);
-      try { await source.onSubmit({ html: emailHtml, message, expiration }); }
+      try { await source.onSubmit({ html: outboundHtml, message, expiration }); }
       catch (e) { setSubmitting(false); return; }
       setSubmitting(false);
     }
