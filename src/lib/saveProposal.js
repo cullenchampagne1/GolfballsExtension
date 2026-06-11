@@ -145,19 +145,23 @@ export async function buildProposalLines(proposal) {
     // carry them on the decoration (__base); other products on line.variant.
     const selValues = (decoration && decoration.baseSelection) || (line.variant && line.variant.values) || null;
     const selection = selValues ? { values: selValues } : {};
-    // Price ladder that matches the line: retail-flat when there's no imprint,
-    // the custom-logo ladder (+ second-pole upcharge) when there is — so the
-    // cart's ItemPriceBreak agrees with ItemPrice.
-    const imprinted = !!(decoration && decoration.engine && decoration.engine !== 'none');
+    // Price ladder that matches the line. The discriminator is the PRODUCT,
+    // not the presence of art: a custom-logo product keeps its commissionable
+    // ladder (+ second-pole upcharge when a pole2 imprint exists) whether or
+    // not a logo is attached yet — saving an art-less custom-logo ball as a
+    // retail-flat line was re-writing it as the plain golfball (wrong pricing
+    // and deals, and a "duplicate" non-custom product on reload). Only a
+    // genuinely retail product gets the flat price.
+    const isLogoLine = !!cat.customLogo;
     const fee = (decoration && decoration.pole2 && decoration.pole2.kind) ? (SECOND_POLE_FEE[decoration.pole2.kind] || 0) : 0;
-    const lineBreaks = (imprinted && cat.customLogo && breaks.length)
+    const lineBreaks = (isLogoLine && breaks.length)
       ? breaks.map((b) => ({ q: b.q, p: Math.round((b.p + fee) * 100) / 100 }))
       : [{ q: 1, p: cat.price || 0 }];
-    // Commissionable custom-logo path ("…_1") for an imprinted line; strip the
-    // "_1" slug for a plain/retail line so it references the base product (the
+    // Commissionable custom-logo path ("…_1") for a custom-logo product; strip
+    // the "_1" slug for a retail line so it references the base product (the
     // base and "_1" pages serve the same product — only the line URL differs).
     const urlPath = cat.urlPath || '';
-    const lineUrl = urlPath ? (imprinted ? urlPath : urlPath.replace(/_1$/, '')) : undefined;
+    const lineUrl = urlPath ? (isLogoLine ? urlPath : urlPath.replace(/_1$/, '')) : undefined;
     for (const split of (line.splits || [])) {
       items.push(assembleLine({
         product: raw,
@@ -399,7 +403,23 @@ function cartItemToLine(it, i) {
   let price = it.ItemPrice;
   if (price == null) { let p = breaks[0] ? breaks[0].p : 0; for (const b of breaks) if (b.q <= qty) p = b.p; price = p; }
   const decoration = decorationFromCartItem(it);     // read the saved imprint back
-  const isLogo = decoration && (decoration.engine === 'ballLogo' || decoration.engine === 'logoOverlay');
+  // Custom-logo identity comes from the PRODUCT, not the attached art. A cart
+  // saved on the custom-logo product with NO logo uploaded yet has no logo
+  // decoration to reverse-map — but it must still reload as the custom-logo
+  // item (commissionable ladder + deals), not its retail twin, or re-saving
+  // duplicates it as a plain golfball at the wrong pricing. Signals, any of:
+  //   • the custom-logo configurator namespace on the modification state
+  //     (present whether or not art was uploaded),
+  //   • "Custom Logo" in the product title / nameFormat (the site's own
+  //     naming for the commissionable products),
+  //   • a custom-logo product URL,
+  //   • a reverse-mapped logo imprint (the old signal — art attached).
+  const _is = (it.modification && it.modification.interfaceState) || {};
+  const _title = String(it.productTitle || it.nameFormat || '');
+  const isLogo = !!_is.GolfBallCustomLogo
+    || /custom\s*logo/i.test(_title)
+    || /custom-?logo/i.test(String(it.url || ''))
+    || !!(decoration && (decoration.engine === 'ballLogo' || decoration.engine === 'logoOverlay'));
   // FREE_QUANTITY promos add the free dozens as a separate line whose guid ends
   // "-PROMO" (billed at full price in the cart, then zeroed by the promotion
   // discount). We surface it as a $0 "free" line so the proposal reads like the
