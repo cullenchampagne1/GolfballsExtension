@@ -40,8 +40,10 @@ const _msgBlock = (m, align) => (m.show.message && m.message)
   ? `<p style="color:${T.body}; font-size:14px; line-height:1.6; margin:0 0 4px;${align ? ' text-align:' + align + ';' : ''}">${_esc(m.message).replace(/\n/g, '<br/>')}</p>` : '';
 const _swatch = (hex, light) => `<span style="display:inline-block; width:10px; height:10px; border-radius:3px; background:${hex};${light ? ' border:1px solid #cfcfc8;' : ''} vertical-align:middle;"></span>`;
 const _star = (m) => m.show.disclaimer ? '*' : '';
-// Red strike for a "was" price (sale / volume break). #d11 reads on light + dark.
-const _wasUnit = (l) => l.origUnit ? `<span style="color:#d11; text-decoration:line-through; font-weight:600;">${_money(l.origUnit)}</span> ` : '';
+// Red strike for a "was" price (sale / volume break). Uses the <s> TAG, not CSS
+// text-decoration:line-through — Outlook's paste sanitiser drops the CSS form
+// (struck prices then read as full price) but keeps the tag's strikethrough.
+const _wasUnit = (l) => l.origUnit ? `<span style="color:#d11; font-weight:600;"><s>${_money(l.origUnit)}</s></span> ` : '';
 const _qtyLine = (l, show) => {
   // A free (promo-granted) line shows its FULL cost like the cart does — the
   // promotion nets it at the bottom — plus a green FREE marker on the qty line.
@@ -52,8 +54,13 @@ const _qtyLine = (l, show) => {
 // The line-total cell value: a red strike + new price for a discounted line,
 // else the plain total. Free lines show their full value (HAR cart layout) —
 // the FREE marker lives on the qty line, the netting on the Promotion row.
-const _ltot = (l) =>
-  (l.origTotal ? `<span style="color:#d11; text-decoration:line-through; font-weight:600; font-size:.85em;">${_money(l.origTotal)}</span> ${_money(l.lineTotal)}` : _money(l.lineTotal));
+const _ltot = (l) => {
+  // Free promo line: strike the full value and mark it FREE in EVERY template's
+  // price cell (not just Separated), so a giveaway never reads as a charge — the
+  // promotion still nets it in the totals. <s> tag survives Outlook paste.
+  if (l.free) return `<span style="color:#8a8a82; font-weight:600;"><s>${_money(l.lineTotal)}</s></span> <span style="color:${T.acc}; font-weight:800;">FREE</span>`;
+  return l.origTotal ? `<span style="color:#d11; font-weight:600; font-size:.85em;"><s>${_money(l.origTotal)}</s></span> ${_money(l.lineTotal)}` : _money(l.lineTotal);
+};
 // Totals block above the final total — HAR cart layout: when a promotion is
 // applied, show Subtotal (free lines included at full price) and the netted
 // Promotion (CODE) −$X; the template's own total row then renders the final.
@@ -139,7 +146,10 @@ function _proof(l, withPhoto, square) {
 const _vspace = (h) => `<div style="height:${h}px; line-height:${h}px; font-size:0; mso-line-height-rule:exactly;">&nbsp;</div>`;
 const _ctaBtn = (label, pill) => `${_vspace(24)}<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td align="center"><table border="0" cellpadding="0" cellspacing="0"><tbody><tr><td bgcolor="${T.acc}" align="center" style="background:${T.acc}; border-radius:${pill ? '30px' : '8px'};"><a href="{{CART_LINK}}" style="display:inline-block; color:#fff; text-decoration:none; font-family:${SANS}; font-size:15px; font-weight:700; padding:14px 42px;">${label}</a></td></tr></tbody></table></td></tr></tbody></table>`;
 const _ctaBar = (label) => `${_vspace(24)}<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td bgcolor="${T.acc}" align="center" style="background:${T.acc}; border-radius:8px;"><a href="{{CART_LINK}}" style="display:block; text-align:center; color:#fff; text-decoration:none; font-family:${SANS}; font-size:15px; font-weight:700; padding:16px;">${label}</a></td></tr></tbody></table>`;
-const _wordmark = (align) => `<table border="0" cellpadding="0" cellspacing="0"${align === 'center' ? ' align="center"' : ''}><tbody><tr><td valign="middle"><span style="display:inline-block; width:9px; height:9px; border-radius:9px; background:${T.acc}; margin-right:7px; vertical-align:middle;"></span></td><td valign="middle"><span style="font-family:${SANS}; font-size:13px; font-weight:800; letter-spacing:2.5px; text-transform:uppercase; color:${T.ink};">Golfballs</span></td></tr></tbody></table>`;
+// Top "Golfballs" wordmark removed per request — templates lead with the group
+// label + option title, no brand mark. Kept as a no-op so the call sites (and
+// their surrounding spacing) stay intact.
+const _wordmark = (_align) => '';
 // Footer wordmark/tagline removed per design — proposals carry the header
 // branding only, no bottom "Golfballs · Corporate Gifting" strip.
 const _foot = () => '';
@@ -179,11 +189,9 @@ function wrapEmailDocument(inner) {
 </style>
 </head>
 <body style="margin:0;padding:0;background:#ffffff;">
-<center style="width:100%;background:#ffffff;">
-<!--[if mso]><table role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" align="center"><tr><td width="600"><![endif]-->
+<!--[if mso]><table role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" align="left"><tr><td width="600"><![endif]-->
 ${inner}
 <!--[if mso]></td></tr></table><![endif]-->
-</center>
 </body>
 </html>`;
 }
@@ -218,13 +226,18 @@ function tplMinimal(m) {
     const proof = show.previews ? _proof(l, false) : '';
     return `<tr style="border-top:1px solid ${T.line};">${photo}<td valign="top" style="padding:18px 0;">${_brandLine(l, T.mut)}<div style="font-size:16px; color:${T.ink}; font-weight:700;">${_esc(l.title)}</div>${sub}${proof}</td><td valign="top" align="right" style="padding:18px 0;"><div style="font-size:11px; color:${T.mut};">${_qtyLine(l, show)}</div><div style="font-size:17px; color:${T.price}; font-weight:800; margin-top:4px;">${_ltot(l)}</div></td></tr>`;
   }).join('\n');
-  const totalsRow = show.total ? `<tr style="border-top:2px solid ${T.ink};"><td colspan="${show.images ? 2 : 1}" valign="middle" style="padding:18px 0;"><span style="font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:${T.mut}; font-weight:700;">Estimated total${_star(m)}</span></td><td align="right" valign="middle" style="padding:18px 0;"><span style="font-size:26px; font-weight:800; color:${T.price}; letter-spacing:-.6px;">${_money(total - (m.discount || 0))}</span></td></tr>` : '';
+  const span = show.images ? 2 : 1;
+  // Subtotal + Promotion rows (HAR layout) — as <tr>s so they sit in the same
+  // schedule table, right above the total. Every template carries this when a
+  // discount applies (Minimal previously skipped it).
+  const discRows = (m.discount > 0) ? `<tr><td colspan="${span}" style="padding:14px 0 2px; font-size:13px; color:${T.body};">Subtotal</td><td align="right" style="padding:14px 0 2px; font-size:14px; font-weight:700; color:${T.body};">${_money(m.total)}</td></tr><tr><td colspan="${span}" style="padding:2px 0 6px; font-size:13px; color:${T.body};">Promotion${m.promoCode ? ` (${_esc(m.promoCode)})` : ''}</td><td align="right" style="padding:2px 0 6px; font-size:14px; font-weight:700; color:#2e9e5b;">&minus;${_money(m.discount)}</td></tr>` : '';
+  const totalsRow = show.total ? `<tr style="border-top:2px solid ${T.ink};"><td colspan="${span}" valign="middle" style="padding:18px 0;"><span style="font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:${T.mut}; font-weight:700;">Estimated total${_star(m)}</span></td><td align="right" valign="middle" style="padding:18px 0;"><span style="font-size:26px; font-weight:800; color:${T.price}; letter-spacing:-.6px;">${_money(total - (m.discount || 0))}</span></td></tr>` : '';
   return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="padding:8px 6px;">
     ${_wordmark()}
     <div style="font-size:12px; letter-spacing:1.6px; text-transform:uppercase; color:${T.acc}; font-weight:700; margin-top:18px;">${_esc(groupName)}</div>
     <div style="font-size:30px; font-weight:800; color:${T.ink}; letter-spacing:-.8px; margin:7px 0 20px;">${_esc(optionName)}</div>
     ${_msgBlock(m)}
-    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:8px;"><tbody>${rows}${totalsRow}</tbody></table>
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:8px;"><tbody>${rows}${discRows}${totalsRow}</tbody></table>
     ${_expLine(m)}${_discLine(m)}${show.cta ? _ctaBar('View this option') : ''}${_foot()}
   </td></tr></tbody></table>`;
 }
@@ -317,7 +330,7 @@ function tplSeparated(m) {
   const freeFor = (lineId) => lines.filter((l) => isGrouped(l) && l.parentLineId === lineId);
   const _freeStrip = (f) => `<table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#e1f5d1" style="background:#e1f5d1; border:1px solid #b9dd9e; border-radius:10px; margin-top:12px;"><tbody><tr>
       <td style="padding:10px 14px;"><span style="display:inline-block; background:#46781b; color:#ffffff; font-size:10px; font-weight:800; letter-spacing:.6px; border-radius:4px; padding:2px 7px; vertical-align:middle;">FREE</span> <span style="font-size:12px; font-weight:700; color:#2c4a10; vertical-align:middle;">&nbsp;Qty ${f.qty} &middot; ${_esc(f.title)}</span>${f.subtitle ? `<div style="font-size:11px; color:#46781b; margin-top:3px;">${_esc(f.subtitle)}</div>` : ''}</td>
-      <td align="right" valign="middle" style="padding:10px 14px; white-space:nowrap;"><span style="font-size:12px; color:#46781b; text-decoration:line-through; font-weight:600;">${_money(f.lineTotal)}</span> <span style="font-size:12px; font-weight:800; color:#2c4a10;">included</span></td>
+      <td align="right" valign="middle" style="padding:10px 14px; white-space:nowrap;"><span style="font-size:12px; color:#46781b; font-weight:600;"><s>${_money(f.lineTotal)}</s></span> <span style="font-size:12px; font-weight:800; color:#2c4a10;">included</span></td>
     </tr></tbody></table>`;
   const cards = mains.map((l, i) => {
     const photo = show.images ? `<td width="92" valign="top" style="padding-right:16px;">${_photoPlate(l.img, 92)}</td>` : '';
