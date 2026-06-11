@@ -2660,16 +2660,27 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     addKnownPromo(code).catch(() => {});            // remember codes the rep uses
     return promotion;
   };
-  const clearPromo = () => setProposalPromo(null);
+  const clearPromo = () => { setProposalPromo(null); setLoadedFree([]); };
   // Validate a code against the current cart WITHOUT applying it — drives the
   // picker's "which codes apply" check.
   const checkPromo = (code) => validatePromo(proposal, code);
+  // Free dozens snapshotted from a loaded saved proposal. The live promo engine
+  // only grants free items for IMPRINTED balls that still qualify, so a re-derive
+  // on load can legitimately come back empty (or lag the 500ms re-validate) — the
+  // snapshot guarantees the free lines stay visible exactly as saved. Cleared
+  // once the live derive succeeds (it supersedes) or the promo/cart is cleared.
+  const [loadedFree, setLoadedFree] = useState([]);
   // $0 "free" lines a FREE_QUANTITY coupon grants on the working proposal (cloned
   // from the matching line) — shown in the breakdown/email like the site's cart.
   const proposalFreeLines = useMemo(
     () => (proposalPromo && proposalPromo.promotion) ? freeLinesFromPromo(proposalPromo.promotion, proposal) : [],
     [proposalPromo, proposal]);
-  const proposalWithFree = proposalFreeLines.length ? [...proposal, ...proposalFreeLines] : proposal;
+  // Live-derived free lines win; the loaded snapshot is the fallback until/unless
+  // the derive produces its own (so loading and applying look identical).
+  const effectiveFreeLines = proposalFreeLines.length ? proposalFreeLines : loadedFree;
+  // Once the live derive yields free lines, drop the snapshot so they can't double.
+  useEffect(() => { if (proposalFreeLines.length && loadedFree.length) setLoadedFree([]); }, [proposalFreeLines.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const proposalWithFree = effectiveFreeLines.length ? [...proposal, ...effectiveFreeLines] : proposal;
   const [proposalOpen, setProposalOpen] = useState(false);
   const [detail, setDetail] = useState(null);   // proposal-breakdown drill-in: { kind:'saved'|'current', item? }
   // ── Verified DISPLAY pricing ───────────────────────────────────────────────
@@ -2842,11 +2853,15 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     // re-resolve the coupon against the loaded cart, regenerating the free lines
     // with fresh ids. (The stored free lines are kept only for the static saved-
     // proposal overview, which renders them directly.)
-    const incoming = linesFromSaved(entry, rid).filter((l) => !l.free);
+    const all = linesFromSaved(entry, rid);
+    const incoming = all.filter((l) => !l.free);
     setProposal((prev) => {
       const have = new Set(prev.map((l) => l.productId));
       return [...prev, ...incoming.filter((l) => !have.has(l.productId))];
     });
+    // Keep the saved free dozens visible (as proper free items) regardless of
+    // whether the live re-validate re-grants them — see loadedFree.
+    setLoadedFree(all.filter((l) => l.free));
     setLoadedId(entry.id);
     // Carry the loaded proposal's coupon into the working set (or clear a stale
     // one) — otherwise a previously-applied code persists and shows "requirements
@@ -3481,7 +3496,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               pageContext={pageContext} onSaveToAccount={saveToAccount} onAddOpportunity={addOpportunity} accountSaveSeq={accountSaveSeq}
               onEmail={() => openProposalEmail(proposalWithFree, '', { promotion: proposalPromo && proposalPromo.promotion })}
               promo={proposalPromo} onApplyPromo={applyPromo} onClearPromo={clearPromo} onCheckPromo={checkPromo}
-              onClear={() => { setProposal([]); setProposalOpen(false); }} />
+              onClear={() => { setProposal([]); setLoadedFree([]); setProposalOpen(false); }} />
           </div>
         </div>
         </div>{/* /flex row */}
