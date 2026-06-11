@@ -394,7 +394,13 @@ function TemplateThumb({ id, accent }) {
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div style={{ ...bar(13, LT, 2), borderRadius: 0 }} /><div style={{ ...bar(9, DK, 2), borderRadius: 0 }} /></div>
   </div>;
   if (id === 'classic') return <div style={{ ...wrap, border: `1.5px solid ${G}`, alignItems: 'center' }}><div style={{ ...bar(20, accent), marginTop: 1 }} /><div style={bar(26, LT, 2)} /><div style={{ display: 'flex', gap: 2, width: '100%', marginTop: 1 }}><div style={bar(10, G, 8)} /><div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}><div style={bar('100%', LT, 2)} /><div style={bar('70%', LT, 2)} /></div></div></div>;
-  if (id === 'quote') return <div style={{ ...wrap, gap: 3 }}><div style={{ ...bar('100%', accent, 14), borderRadius: 3, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 2, boxSizing: 'border-box' }}><div style={bar(11, 'rgba(255,255,255,.8)', 6)} /></div><div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 1 }}><div style={bar(18, LT, 2)} /><div style={bar(7, PR, 2)} /></div><div style={{ display: 'flex', justifyContent: 'space-between' }}><div style={bar(16, LT, 2)} /><div style={bar(7, PR, 2)} /></div></div>;
+  if (id === 'quote') return <div style={{ ...wrap, padding: 0, gap: 0 }}>
+    <div style={{ width: '100%', height: 13, background: accent, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 3, boxSizing: 'border-box', flexShrink: 0 }}><div style={bar(11, 'rgba(255,255,255,.85)', 5)} /></div>
+    <div style={{ padding: 4, display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}><div style={bar(18, LT, 2)} /><div style={bar(7, PR, 2)} /></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}><div style={bar(16, LT, 2)} /><div style={bar(7, PR, 2)} /></div>
+    </div>
+  </div>;
   if (id === 'lookbook') return <div style={{ ...wrap, alignItems: 'center', gap: 2 }}><div style={{ width: 9, height: 2, background: accent, borderRadius: 1, marginTop: 1 }} /><div style={{ width: '100%', border: `1px solid ${G}`, borderRadius: 2, padding: 2, display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'center', boxSizing: 'border-box' }}><div style={bar(16, G, 9)} /><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><div style={bar(12, LT, 2)} /><div style={bar(6, PR, 2)} /></div></div><div style={{ ...bar('100%', accent, 3), marginTop: 'auto' }} /></div>;
   if (id === 'separated') return <div style={{ ...wrap, gap: 3, justifyContent: 'center' }}>
     <div style={{ width: '100%', border: `1px solid ${G}`, borderRadius: 2, overflow: 'hidden' }}>
