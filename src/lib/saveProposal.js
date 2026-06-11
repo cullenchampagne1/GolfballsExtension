@@ -625,6 +625,10 @@ export async function saveProposalDraft(name, proposal, promotion = null) {
       decoration: l.decoration || null,
       variant: l.variant || null,
       free: !!l.free,
+      // The site-authoritative full value of a free dozen, kept so the email's
+      // HAR totals net it off at the right amount on reload. (The parent link is
+      // rebuilt from product identity in linesFromSaved — see there.)
+      freeValue: l.freeValue != null ? l.freeValue : null,
       splits: (l.splits || []).map((s) => ({ qty: s.qty, price: s.price })),
     })),
   };
@@ -688,13 +692,22 @@ export function saveCurrentProposal(lines) {
 /* Rebuild live proposal lines (with fresh ids) from a saved entry's snapshot. */
 export function linesFromSaved(entry, ridFn) {
   const mk = ridFn || _rid;
-  return (entry.lines || []).map((l) => ({
+  const out = (entry.lines || []).map((l) => ({
     id: mk(),
     productId: l.product && l.product.id,
     product: l.product,
     decoration: l.decoration || undefined,
     variant: l.variant || undefined,
     free: !!l.free,
+    freeValue: l.freeValue != null ? l.freeValue : undefined,
     splits: (l.splits || []).map((s) => ({ id: mk(), qty: s.qty, price: s.price })),
   }));
+  // Re-link each free giveaway to the paid line that earned it (same product) so
+  // the email's Separated-theme grouping survives a reload. Stored ids are
+  // regenerated above, so we rebuild the relationship from product identity —
+  // the free dozen is always the same product as its qualifying line.
+  const paidByProduct = new Map();
+  for (const l of out) if (!l.free && l.productId != null) { const k = String(l.productId); if (!paidByProduct.has(k)) paidByProduct.set(k, l.id); }
+  for (const l of out) if (l.free && l.productId != null) { const pid = paidByProduct.get(String(l.productId)); if (pid) l.parentLineId = pid; }
+  return out;
 }

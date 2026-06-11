@@ -2819,7 +2819,12 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // confirm button can drive its success flash.
   const saveDraft = (name) => {
     if (!proposal.length) return Promise.resolve();
-    return saveProposalDraft(name, proposal, proposalPromo && proposalPromo.promotion)
+    // Snapshot the free giveaway lines ALONGSIDE the paid ones: the promotion's
+    // freeItems key off split ids that don't survive a reload, so the only way
+    // the saved overview can show the free dozens is to persist them (flagged
+    // `free`). The cart-load path filters them back out and lets the site
+    // re-grant them from the promotion (see copySaved).
+    return saveProposalDraft(name, [...proposal, ...proposalFreeLines], proposalPromo && proposalPromo.promotion)
       .then((r) => { setSavedProposals(r.list); toast?.success?.(`Saved “${r.entry.name}” to Saved Proposals`); })
       .catch((e) => { toast?.error?.('Couldn’t save — ' + ((e && e.message) || 'unknown error')); throw e; });
   };
@@ -2845,7 +2850,13 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
 
   // Copy a saved draft as a paste-and-run console command (loads it into the
   // golfballs.com cart). This is the "copy as a command" action on each card.
-  const copySaved = (entry) => buildProposalDraft(linesFromSaved(entry, rid))
+  const copySaved = (entry) => buildProposalDraft(
+      // Cart = PAID lines + the promotion; the site re-grants the free dozens on
+      // load (they're stored only for the overview, so drop them here). Carry the
+      // coupon through so the loaded cart actually applies it — without this the
+      // proposal loaded as PromotionEmpty and lost its free items.
+      linesFromSaved(entry, rid).filter((l) => !l.free),
+      { promotion: (entry.promotion && entry.promotion.promo) ? entry.promotion : null })
     .then((r) => copyToClipboard(r.command).then(() => {
       const skip = r.skipped && r.skipped.length ? ` · ${r.skipped.length} skipped` : '';
       toast?.success?.(`“${entry.name}” copied — paste in the golfballs.com console to load ${r.itemCount} item${r.itemCount > 1 ? 's' : ''}${skip}`);
@@ -3403,8 +3414,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                 <SavedDetail key={'bd-' + it.id} title={it.name} subtitle={`${fmtSavedDate(it.date)} · ${r.units} units`}
                   badge={<Tag tone="neutral" size="sm" icon={<I.bookmark size={9} />}>Draft</Tag>}
                   entries={r.entries} loaded={loadedId === it.id} onClose={close}
+                  promo={it.promotion && it.promotion.promo ? { code: it.promotion.promo, promotion: it.promotion } : null}
                   onPatchSplit={(_entryIndex, srcIndex, splitIndex, price) => editSavedSplitPrice(it, srcIndex, splitIndex, price)}
-                  buildEmailSource={() => proposalToEmailSource(linesFromSaved(it, rid), it.name)}
+                  buildEmailSource={() => proposalToEmailSource(linesFromSaved(it, rid), it.name, { promotion: it.promotion })}
                   onCopy={() => copySaved(it)} onSaveToAccount={() => { close(); loadSavedToAccount(it); }}
                   onLoad={() => { close(); loadSaved(it); }} />
               );
