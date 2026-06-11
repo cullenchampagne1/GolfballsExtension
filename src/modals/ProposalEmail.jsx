@@ -153,7 +153,12 @@ const _ctaBar = (label) => `${_vspace(24)}<table border="0" cellpadding="0" cell
 // Top-left logo (the GBC corporate signature mark, a public CloudFront asset so
 // it loads directly in Outlook). Always left-aligned per request.
 const _LOGO = 'https://d1tp32r8b76g0z.cloudfront.net/images/gbc-2021/email-signature/GBC2021Corporate_GrayDept.png';
-const _wordmark = (_align) => `<img src="${_LOGO}" width="180" height="40" alt="Golfballs Corporate" style="display:block; border:0; outline:none; text-decoration:none;" />`;
+const _logoImg = (disp) => `<img src="${_LOGO}" width="180" height="40" alt="Golfballs Corporate" style="display:${disp}; border:0; outline:none; text-decoration:none;" />`;
+// align: 'center' centers the logo (text-align on a div + inline-block img, which
+// Outlook honours); anything else is a left-aligned block.
+const _wordmark = (align) => align === 'center' ? `<div style="text-align:center;">${_logoImg('inline-block')}</div>`
+  : align === 'right' ? _logoImg('inline-block')   // parent <td align="right"> right-aligns it
+  : _logoImg('block');
 // Footer wordmark/tagline removed per design — proposals carry the header
 // branding only, no bottom "Golfballs · Corporate Gifting" strip.
 const _foot = () => '';
@@ -234,7 +239,7 @@ function tplMinimal(m) {
   // Subtotal / savings / Promotion rows fold into the same schedule table.
   const discRows = _savingsTrs(m, span);
   const totalsRow = show.total ? `<tr style="border-top:2px solid ${T.ink};"><td colspan="${span}" valign="middle" style="padding:18px 0;"><span style="font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:${T.mut}; font-weight:700;">Estimated total${_star(m)}</span></td><td align="right" valign="middle" style="padding:18px 0;"><span style="font-size:26px; font-weight:800; color:${T.price}; letter-spacing:-.6px;">${_money(total - (m.discount || 0))}</span></td></tr>` : '';
-  return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="padding:8px 6px;">
+  return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="border:1px solid ${T.line}; border-radius:14px; padding:28px 30px;">
     ${_wordmark()}
     <div style="font-size:12px; letter-spacing:1.6px; text-transform:uppercase; color:${T.ink}; font-weight:700; margin-top:18px;">${_esc(groupName)}</div>
     <div style="font-size:30px; font-weight:800; color:${T.ink}; letter-spacing:-.8px; margin:7px 0 20px;">${_esc(optionName)}</div>
@@ -287,10 +292,15 @@ function tplQuote(m) {
   }).join('\n');
   const th = (label, w, align) => `<th style="font-family:${SANS}; font-weight:700; font-size:10px; letter-spacing:.6px; text-transform:uppercase; color:${T.mut}; border-bottom:2px solid ${T.acc}; padding:0 0 9px;${w ? ' width:' + w + 'px;' : ''}" align="${align || 'left'}">${label}</th>`;
   const head = `<tr>${th('Item')}${th('Qty', 54)}${show.cost ? th('Unit', 86, 'right') : ''}${th('Total', 92, 'right')}</tr>`;
-  return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td>
-    ${panel}${_msgBlock(m) ? '<div style="height:18px; line-height:18px; font-size:0;">&nbsp;</div>' + _msgBlock(m) : ''}
-    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:22px;"><tbody>${head}${rows}</tbody></table>
-    ${_discRow(m)}${_discLine(m)}${show.cta ? _ctaBar('Approve &amp; view in cart &rsaquo;') : ''}${_foot()}
+  // Framed like a proposal: a border around the whole thing, the green panel
+  // full-bleed at the top, the schedule + totals padded inside.
+  return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="border:1px solid ${T.line};">
+    ${panel}
+    <table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td style="padding:22px 26px 26px;">
+      ${_msgBlock(m) ? _msgBlock(m) + '<div style="height:18px; line-height:18px; font-size:0;">&nbsp;</div>' : ''}
+      <table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody>${head}${rows}</tbody></table>
+      ${_discRow(m)}${_discLine(m)}${show.cta ? _ctaBar('Approve &amp; view in cart &rsaquo;') : ''}${_foot()}
+    </td></tr></tbody></table>
   </td></tr></tbody></table>`;
 }
 
@@ -306,7 +316,7 @@ function tplLookbook(m) {
   }).join(_vspace(15));
   const totalBox = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td style="border-top:2px solid ${T.acc}; padding:18px 2px 0;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:12px; letter-spacing:.6px; text-transform:uppercase; color:${T.mut}; font-weight:700;">Estimated total${_star(m)}</span></td><td align="right" valign="middle"><span style="font-size:26px; font-weight:800; color:${T.price};">${_money(total - (m.discount || 0))}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
   return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="padding:6px 6px 8px;">
-    ${_wordmark()}
+    ${_wordmark('center')}
     <div align="center" style="font-size:12px; letter-spacing:1.6px; text-transform:uppercase; color:${T.ink}; font-weight:800; margin-top:16px;">${_esc(groupName)}</div>
     <div align="center" style="font-size:27px; font-weight:800; color:${T.ink}; margin:7px 0 0; letter-spacing:-.5px;">${_esc(optionName)}</div>
     <div style="width:46px; height:4px; background:${T.acc}; border-radius:2px; margin:14px auto 0;"></div>
@@ -347,10 +357,11 @@ function tplSeparated(m) {
   }).join(_vspace(16));
   const totalBox = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:2px;"><tbody><tr><td bgcolor="${T.accSoft}" style="background:${T.accSoft}; border:1px solid #d6e8c9; border-radius:12px; padding:16px 20px;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:12px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:${T.ink};">Estimated total${_star(m)}</span><div style="font-size:11px; color:${T.mut}; margin-top:2px;">All options combined</div></td><td align="right" valign="middle"><span style="font-size:24px; font-weight:800; color:${T.price};">${_money(total - (m.discount || 0))}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
   return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="padding:8px 6px;">
-    ${_wordmark()}
-    <div style="font-size:12px; letter-spacing:1.6px; text-transform:uppercase; color:${T.ink}; font-weight:700; margin-top:18px;">${_esc(groupName)}</div>
-    <div style="font-size:28px; font-weight:800; color:${T.ink}; letter-spacing:-.6px; margin:7px 0 4px;">${_esc(optionName)}</div>
-    <div style="font-size:13px; color:${T.mut}; margin:0 0 22px;">${mains.length} option${mains.length === 1 ? '' : 's'} &middot; priced individually</div>
+    <table width="100%" border="0" cellpadding="0" cellspacing="0"><tbody><tr>
+      <td valign="middle"><div style="font-size:12px; letter-spacing:1.6px; text-transform:uppercase; color:${T.ink}; font-weight:700;">${_esc(groupName)}</div><div style="font-size:28px; font-weight:800; color:${T.ink}; letter-spacing:-.6px; margin:5px 0 0;">${_esc(optionName)}</div></td>
+      <td valign="middle" align="right" width="190">${_wordmark('right')}</td>
+    </tr></tbody></table>
+    <div style="font-size:13px; color:${T.mut}; margin:6px 0 22px;">${mains.length} option${mains.length === 1 ? '' : 's'} &middot; priced individually</div>
     ${_msgBlock(m) ? _msgBlock(m) + '<div style="height:18px; line-height:18px; font-size:0;">&nbsp;</div>' : ''}
     ${cards}${_discRow(m)}${totalBox}${_expLine(m)}${_discLine(m)}${show.cta ? _ctaBar('View these options') : ''}${_foot()}
   </td></tr></tbody></table>`;
