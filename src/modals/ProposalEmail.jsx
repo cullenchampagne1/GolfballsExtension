@@ -40,10 +40,11 @@ const _msgBlock = (m, align) => (m.show.message && m.message)
   ? `<p style="color:${T.body}; font-size:14px; line-height:1.6; margin:0 0 4px;${align ? ' text-align:' + align + ';' : ''}">${_esc(m.message).replace(/\n/g, '<br/>')}</p>` : '';
 const _swatch = (hex, light) => `<span style="display:inline-block; width:10px; height:10px; border-radius:3px; background:${hex};${light ? ' border:1px solid #cfcfc8;' : ''} vertical-align:middle;"></span>`;
 const _star = (m) => m.show.disclaimer ? '*' : '';
-// Red strike for a "was" price (sale / volume break). Uses the <s> TAG, not CSS
-// text-decoration:line-through — Outlook's paste sanitiser drops the CSS form
-// (struck prices then read as full price) but keeps the tag's strikethrough.
-const _wasUnit = (l) => l.origUnit ? `<span style="color:#d11; font-weight:600;"><s>${_money(l.origUnit)}</s></span> ` : '';
+// "Was" price for a sale / volume break. Outlook's paste sanitiser strips BOTH
+// CSS line-through AND the <s> tag, so the strike can't be relied on — the word
+// "was" carries the meaning, and the <s> is kept only for clients that honour it
+// (and the in-app preview).
+const _wasUnit = (l) => l.origUnit ? `<span style="color:#8a8a82; font-weight:600;">was <s>${_money(l.origUnit)}</s></span> ` : '';
 const _qtyLine = (l, show) => {
   // A free (promo-granted) line shows its FULL cost like the cart does — the
   // promotion nets it at the bottom — plus a green FREE marker on the qty line.
@@ -55,11 +56,12 @@ const _qtyLine = (l, show) => {
 // else the plain total. Free lines show their full value (HAR cart layout) —
 // the FREE marker lives on the qty line, the netting on the Promotion row.
 const _ltot = (l) => {
-  // Free promo line: strike the full value and mark it FREE in EVERY template's
-  // price cell (not just Separated), so a giveaway never reads as a charge — the
-  // promotion still nets it in the totals. <s> tag survives Outlook paste.
-  if (l.free) return `<span style="color:#8a8a82; font-weight:600;"><s>${_money(l.lineTotal)}</s></span> <span style="color:${T.acc}; font-weight:800;">FREE</span>`;
-  return l.origTotal ? `<span style="color:#d11; font-weight:600; font-size:.85em;"><s>${_money(l.origTotal)}</s></span> ${_money(l.lineTotal)}` : _money(l.lineTotal);
+  // Free promo line: bold "FREE" + the value IN WORDS, in EVERY template's price
+  // cell. Strike/color don't survive Outlook paste, so "FREE ($X value)" carries
+  // the meaning on its own; the promotion still nets it in the totals.
+  if (l.free) return `<span style="color:${T.acc}; font-weight:800;">FREE</span> <span style="color:#8a8a82; font-weight:600;">(${_money(l.lineTotal)} value)</span>`;
+  // Discounted line: bold current price + "was $X" (the word, not just a strike).
+  return l.origTotal ? `${_money(l.lineTotal)} <span style="color:#8a8a82; font-weight:600; font-size:.85em;">was <s>${_money(l.origTotal)}</s></span>` : _money(l.lineTotal);
 };
 // Totals block above the final total — HAR cart layout: when a promotion is
 // applied, show Subtotal (free lines included at full price) and the netted
@@ -330,7 +332,7 @@ function tplSeparated(m) {
   const freeFor = (lineId) => lines.filter((l) => isGrouped(l) && l.parentLineId === lineId);
   const _freeStrip = (f) => `<table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#e1f5d1" style="background:#e1f5d1; border:1px solid #b9dd9e; border-radius:10px; margin-top:12px;"><tbody><tr>
       <td style="padding:10px 14px;"><span style="display:inline-block; background:#46781b; color:#ffffff; font-size:10px; font-weight:800; letter-spacing:.6px; border-radius:4px; padding:2px 7px; vertical-align:middle;">FREE</span> <span style="font-size:12px; font-weight:700; color:#2c4a10; vertical-align:middle;">&nbsp;Qty ${f.qty} &middot; ${_esc(f.title)}</span>${f.subtitle ? `<div style="font-size:11px; color:#46781b; margin-top:3px;">${_esc(f.subtitle)}</div>` : ''}</td>
-      <td align="right" valign="middle" style="padding:10px 14px; white-space:nowrap;"><span style="font-size:12px; color:#46781b; font-weight:600;"><s>${_money(f.lineTotal)}</s></span> <span style="font-size:12px; font-weight:800; color:#2c4a10;">included</span></td>
+      <td align="right" valign="middle" style="padding:10px 14px; white-space:nowrap;"><span style="font-size:12px; font-weight:800; color:#2c4a10;">included</span> <span style="font-size:12px; color:#46781b; font-weight:600;">(${_money(f.lineTotal)} value)</span></td>
     </tr></tbody></table>`;
   const cards = mains.map((l, i) => {
     const photo = show.images ? `<td width="92" valign="top" style="padding-right:16px;">${_photoPlate(l.img, 92)}</td>` : '';
