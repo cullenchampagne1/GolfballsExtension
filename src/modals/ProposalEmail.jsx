@@ -48,10 +48,9 @@ const _qtyLine = (l, show) => {
   if (!show.cost) return `Qty ${l.qty}`;
   return `${l.qty} &times; ${_money(l.unitPrice)}`;
 };
-// Line-total cell: a free promo line reads "FREE ($X value)" (bold word, no
-// strike/color — survives Outlook paste); everything else is just the total.
-const _ltot = (l) =>
-  l.free ? `<strong>FREE</strong> <span style="font-size:.85em;">(${_money(l.lineTotal)} value)</span>` : _money(l.lineTotal);
+// Line-total cell: a free promo line just reads "FREE" (bold word, survives
+// Outlook paste); everything else is its total.
+const _ltot = (l) => l.free ? `<strong>FREE</strong>` : _money(l.lineTotal);
 // Total retail savings across the quote (how far the quoted prices sit below
 // retail/MSRP), shown as ONE discount line instead of per-item strikethroughs.
 const _retailSavings = (m) => Math.round((m.lines || []).reduce((s, l) => s + (!l.free && l.origTotal && l.origTotal > l.lineTotal ? l.origTotal - l.lineTotal : 0), 0) * 100) / 100;
@@ -342,7 +341,7 @@ function tplSeparated(m) {
   const freeFor = (lineId) => lines.filter((l) => isGrouped(l) && l.parentLineId === lineId);
   const _freeStrip = (f) => `<table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#e1f5d1" style="background:#e1f5d1; border:1px solid #b9dd9e; border-radius:10px; margin-top:12px;"><tbody><tr>
       <td style="padding:10px 14px;"><span style="display:inline-block; background:#46781b; color:#ffffff; font-size:10px; font-weight:800; letter-spacing:.6px; border-radius:4px; padding:2px 7px; vertical-align:middle;">FREE</span> <span style="font-size:12px; font-weight:700; color:#2c4a10; vertical-align:middle;">&nbsp;Qty ${f.qty} &middot; ${_esc(f.title)}</span>${f.subtitle ? `<div style="font-size:11px; color:#46781b; margin-top:3px;">${_esc(f.subtitle)}</div>` : ''}</td>
-      <td align="right" valign="middle" style="padding:10px 14px; white-space:nowrap;"><span style="font-size:12px; font-weight:800; color:#2c4a10;">included</span> <span style="font-size:12px; color:#46781b; font-weight:600;">(${_money(f.lineTotal)} value)</span></td>
+      <td align="right" valign="middle" style="padding:10px 14px; white-space:nowrap;"><span style="font-size:12px; font-weight:800; color:#2c4a10;">included</span></td>
     </tr></tbody></table>`;
   const cards = mains.map((l, i) => {
     const photo = show.images ? `<td width="92" valign="top" style="padding-right:16px;">${_photoPlate(l.img, 92)}</td>` : '';
@@ -378,7 +377,7 @@ function tplCorporate(m) {
     const photo = show.images ? `<td valign="top" width="62" style="padding:15px 14px 15px 0;">${_photoPlate(l.img, 54, true)}</td>` : '';
     const sub = l.subtitle ? `<div style="font-size:11px; color:${MUT}; margin-top:3px;">${_esc(l.subtitle)}</div>` : '';
     const unit = show.cost ? `<td valign="top" align="right" style="padding:15px 0; font-size:13px; color:${INK};">${_money(l.unitPrice)}</td>` : '';
-    const proof = show.previews ? `<tr><td colspan="${cols}" style="padding:0 0 15px ${show.images ? '76px' : '0'};">${_proof(l, false, true)}</td></tr>` : '';
+    const proof = show.previews ? `<tr><td colspan="${cols}" style="padding:0 0 15px 0;">${_proof(l, false, true)}</td></tr>` : '';
     return `<tr>${photo}<td valign="top" style="padding:15px 14px 15px 0;">${_brandLine(l, MUT)}<div style="font-size:14px; color:${INK}; font-weight:700;">${_esc(l.title)}</div>${sub}</td><td valign="top" align="right" style="padding:15px 0; font-size:13px; color:${INK};">${l.qty}</td>${unit}<td valign="top" align="right" style="padding:15px 0; font-size:14px; font-weight:800; color:${INK};">${_ltot(l)}</td></tr><tr><td colspan="${cols}" style="border-bottom:1px solid ${LINE}; font-size:0; line-height:0;">&nbsp;</td></tr>${proof}`;
   }).join('');
   const totalsBlock = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:18px;"><tbody><tr><td></td><td width="240"><table width="100%" border="0" cellpadding="0" cellspacing="0"><tbody><tr><td style="border-top:2px solid ${RULE}; padding:12px 0 0; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:${MUT}; font-weight:700;">Estimated total${_star(m)}</td><td align="right" style="border-top:2px solid ${RULE}; padding:12px 0 0; font-size:22px; font-weight:800; color:${INK};">${_money(total - (m.discount || 0))}</td></tr></tbody></table></td></tr></tbody></table>` : '';
