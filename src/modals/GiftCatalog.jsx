@@ -13,6 +13,7 @@ import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, c
 import { importHpgCatalog } from '../lib/hpgImport.js';
 import { importSnugzCatalog } from '../lib/snugzImport.js';
 import { getInventory, peekInventory, cachedCostForSku, primeCostCache, importCosts } from '../lib/inventory.js';
+import { bundleSingle, setBundleCatalog } from '../lib/bundleCost.js';
 import { ProposalEmailModal, ProposalEmailComposer } from './ProposalEmail.jsx';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
@@ -1059,6 +1060,12 @@ const ASSUMED_MARGIN = 1 - COST_RATIO;
    (customData.parentSku, e.g. "B3273") — NOT parentCode_s, which is an internal
    product code ("P00G6B") the endpoint 404s on. Prefer sku, fall back to code. */
 const invSkuOf = (p) => (p && (p.sku || p.parentCode)) || '';
+/* The SKU whose synced cost actually prices this line. For a "Double Dozen"
+   (and other ball multipacks) that's its single sibling's SKU — the bundle's
+   own SKU carries no inventory cost (see bundleCost.js); everything else uses
+   its own SKU. Drives both the proactive cost fetch and the "couldn't price"
+   asterisk so both follow the SKU we really read the cost from. */
+const costSkuOf = (p) => { const b = bundleSingle(p); return b ? b.sku : invSkuOf(p); };
 const unitCostOf = (product, unitPrice, qty) => {
   const p = product || {};
   if (p.isCustom) {
@@ -1069,6 +1076,9 @@ const unitCostOf = (product, unitPrice, qty) => {
     const c = p.cost != null ? p.cost : (p.custom && p.custom.cost);
     if (c != null && c > 0) return Math.round(c * 100) / 100;
   } else {
+    // Ball multipack → single dozen's cost × the pack count (a double dozen = 2×).
+    const b = bundleSingle(p);
+    if (b) { const c = cachedCostForSku(b.sku); if (c != null && c > 0) return Math.round(c * b.multiple * 100) / 100; }
     const c = cachedCostForSku(invSkuOf(p));
     if (c != null && c > 0) return Math.round(c * 100) / 100;
   }
@@ -1084,7 +1094,7 @@ const hasRealCost = (product) => {
     const c = p.cost != null ? p.cost : (p.custom && p.custom.cost);
     return c != null && c > 0;
   }
-  const c = cachedCostForSku(invSkuOf(p));
+  const c = cachedCostForSku(costSkuOf(p));   // bundle → single's cost
   return c != null && c > 0;
 };
 
@@ -1432,7 +1442,7 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
   const toFetch = Array.from(new Set(
     (entries || [])
       .filter((e) => e && e.product && !e.product.isCustom && !hasRealCost(e.product))
-      .map((e) => invSkuOf(e.product))
+      .map((e) => costSkuOf(e.product))   // bundle lines fetch their single sibling's SKU
       .filter((s) => s && !costFailed.has(s))
   )).sort();
   const fetchKey = toFetch.join(',');
@@ -1447,7 +1457,7 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
   }, [fetchKey]);
   // A line gets a "couldn't price" asterisk when it has no real cost and either
   // it's a custom item (nothing to fetch) or the fetch failed.
-  const starLine = (e) => !!e && !hasRealCost(e.product) && (!!(e.product && e.product.isCustom) || costFailed.has(invSkuOf(e.product)));
+  const starLine = (e) => !!e && !hasRealCost(e.product) && (!!(e.product && e.product.isCustom) || costFailed.has(costSkuOf(e.product)));
   const M = useMemo(() => marginReport(entries), [entries, costTick]);
   // Order-level promo discount (if a coupon is applied) → nets revenue/profit/margin.
   const _promoDisc = (promo && promo.promotion) ? promoDiscount(promo.promotion) : 0;
@@ -2564,6 +2574,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   const scale = useCatalogScale(); // loaded before first paint to avoid a resize snap
   const toast = useToast();
   const [catalog, setCatalog] = useState(GIFT_CATALOG_SEED);
+  // Index the catalog for bundle-cost resolution (Double Dozen → single dozen's
+  // cost × 2) whenever it changes, so the margin breakdown can price multipacks.
+  useEffect(() => { setBundleCatalog(catalog); }, [catalog]);
   const [loading, setLoading] = useState(true);        // first paint pending (no data yet)
   const [refreshing, setRefreshing] = useState(false); // a live pull is in flight
   const [progress, setProgress] = useState(null);      // { loaded, total } during a pull, else null
