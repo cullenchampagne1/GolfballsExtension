@@ -103,12 +103,16 @@ const _PREVIEW_BD = '#aed694';
 /* a real 3D-render tile (transparent PNG on a green wash). bgcolor mirrors the
    style background so Outlook (which prefers the attribute) fills the cell. */
 function _renderTile(src, size, square) {
-  // No border / plate — the render zooms to fill its box (object-fit:cover).
-  return `<img src="${_esc(src)}" width="${size}" height="${size}" border="0" alt="preview" style="display:block; width:${size}px; height:${size}px; object-fit:cover; border-radius:${square ? 0 : Math.round(size * 0.18)}px;" />`;
+  // Borderless, zoom-to-fill image — BUT kept inside its own fixed-width table so
+  // the deep nesting in _proof can't negotiate the image column down to nothing
+  // (a bare <img> got squished there, which is why only Quote's flatter layout
+  // showed the mockups).
+  return `<table role="presentation" border="0" cellpadding="0" cellspacing="0" width="${size}" style="width:${size}px;"><tbody><tr><td width="${size}" height="${size}" style="padding:0; font-size:0; line-height:0;"><img src="${_esc(src)}" width="${size}" height="${size}" border="0" alt="preview" style="display:block; width:${size}px; height:${size}px; object-fit:cover; border-radius:${square ? 0 : Math.round(size * 0.18)}px;" /></td></tr></tbody></table>`;
 }
-/* product photo — borderless, fills its box (zoom-to-fill via object-fit:cover) */
+/* product photo — borderless, fills its box (zoom-to-fill via object-fit:cover),
+   in a fixed-width table so it holds its size in any column. */
 function _photoPlate(img, plate, square) {
-  return `<img src="${_esc(img)}" width="${plate}" height="${plate}" border="0" style="display:block; width:${plate}px; height:${plate}px; object-fit:cover; border-radius:${square ? 0 : 8}px;" />`;
+  return `<table role="presentation" border="0" cellpadding="0" cellspacing="0" width="${plate}" style="width:${plate}px;"><tbody><tr><td width="${plate}" height="${plate}" style="padding:0; font-size:0; line-height:0;"><img src="${_esc(img)}" width="${plate}" height="${plate}" border="0" style="display:block; width:${plate}px; height:${plate}px; object-fit:cover; border-radius:${square ? 0 : 8}px;" /></td></tr></tbody></table>`;
 }
 /* the imprint PROOF visual cell — real render(s) when we have them (Front +
    Reverse for dual-pole), else the synthetic chip. */
