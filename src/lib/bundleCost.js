@@ -17,11 +17,15 @@
    clean sibling resolve to null and keep the existing estimate (never worse).
    ─────────────────────────────────────────────────────────────────────────── */
 
-/* Pack multiple from a product title. "Double/Two Dozen" → 2, "Triple Dozen"
-   → 3, otherwise 1 (not a multipack). Matches the phrase anywhere, so a
-   "Duo Soft Double Dozen Fan Pack" still reads as ×2. */
+/* The dozen-count a multipack is PRICED as (and therefore cost as): the single
+   dozen's cost × this. "Double/Two Dozen" → 2, "Triple Dozen" → 3, and a
+   "Buy N DZ Get M DZ Free" → N (it's priced as the N paid dozens — e.g.
+   $61.98 = 2 × the $30.99 dozen — with the giveaway baked into the deal).
+   1 = not a multipack. Matches the phrase anywhere in the title. */
 export function packMultiple(title) {
   const t = String(title || '').toLowerCase();
+  const buy = /\bbuy\s*(\d+)\s*(?:dz|dozen)\b/.exec(t);
+  if (buy) return parseInt(buy[1], 10) || 1;
   if (/\btriple\s+dozen\b/.test(t)) return 3;
   if (/\b(?:double|two)\s+dozen\b/.test(t)) return 2;
   return 1;
@@ -44,6 +48,7 @@ export function isBall(p) {
 export function ballModelKey(title) {
   let t = String(title || '').toLowerCase();
   t = t.replace(/[({[][^)}\]]*[)}\]]/g, ' ');             // drop {Decoration} / (Custom Logo)
+  t = t.replace(/[-–—]?\s*buy\s*\d+\s*(?:dz|dozen)\s*get\s*\d+\s*(?:dz|dozen)\s*free\b/g, ' '); // "- Buy 2 DZ Get 1 DZ Free"
   t = t.replace(/\b(?:double|triple|two|three)\s+dozen\b/g, ' ');
   t = t.replace(/\b(?:fan\s+pack|box)\b/g, ' ');
   t = t.replace(/[-–—]\s*\d{4}\s*model\b/g, ' ');         // "- 2026 Model"
@@ -63,6 +68,17 @@ function skuNum(sku) {
   return m ? parseInt(m[1], 10) : -1;
 }
 
+/* The (brand, modelKey) join key. A catalog product carries the brand in a
+   SEPARATE field (title_s = "Soft Feel 14 Golf Balls"), but a saved-proposal /
+   cart line bakes it into the title ("Srixon Soft Feel 14 Golf Balls …"); strip
+   a leading brand so both sides key the same. */
+function bundleKey(brand, title) {
+  const b = String(brand || '').trim();
+  let t = String(title || '');
+  if (b && t.toLowerCase().startsWith(b.toLowerCase())) t = t.slice(b.length);
+  return b.toLowerCase() + '|' + ballModelKey(t);
+}
+
 /* (brand|modelKey) → best single SKU, rebuilt whenever the catalog loads. */
 let _index = new Map();
 
@@ -74,7 +90,7 @@ export function setBundleCatalog(catalog) {
     if (!p || packMultiple(p.title) > 1 || !isBall(p)) continue;
     const sku = p.sku || p.parentCode;
     if (!sku) continue;
-    const k = String(p.brand || '').toLowerCase() + '|' + ballModelKey(p.title);
+    const k = bundleKey(p.brand, p.title);
     const cur = idx.get(k);
     if (cur == null || skuNum(sku) > skuNum(cur)) idx.set(k, sku);
   }
@@ -89,6 +105,6 @@ export function bundleSingle(product) {
   if (p.isCustom) return null;
   const multiple = packMultiple(p.title);
   if (multiple <= 1 || !isBall(p)) return null;
-  const sku = _index.get(String(p.brand || '').toLowerCase() + '|' + ballModelKey(p.title));
+  const sku = _index.get(bundleKey(p.brand, p.title));
   return sku ? { sku, multiple } : null;
 }
