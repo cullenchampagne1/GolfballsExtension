@@ -61,9 +61,14 @@ const _savingsTrs = (m, span = 1) => {
   const save = _retailSavings(m);
   const coupon = m.discount > 0 ? m.discount : 0;
   if (save <= 0 && coupon <= 0) return '';
-  const row = (label, val, neg) => `<tr><td colspan="${span}" style="padding:3px 0; font-size:13px; color:${T.ink};">${label}</td><td align="right" style="padding:3px 0; font-size:14px; font-weight:700; color:${T.ink};">${neg ? '&minus;' : ''}${_money(val)}</td></tr>`;
-  let out = save > 0 ? row('Retail value', Math.round((m.total + save) * 100) / 100) + row('Volume savings', save, true) : row('Subtotal', m.total);
-  if (coupon > 0) out += row(`Promotion${m.promoCode ? ` (${_esc(m.promoCode)})` : ''}`, coupon, true);
+  // Plain reference row (Retail value / Subtotal).
+  const row = (label, val) => `<tr><td colspan="${span}" style="padding:4px 0; font-size:13px; color:${T.ink};">${label}</td><td align="right" style="padding:4px 0; font-size:14px; font-weight:700; color:${T.ink};">${_money(val)}</td></tr>`;
+  // Savings rows get a green highlight band so the discount visibly pops (the bg
+  // survives Outlook where text color won't).
+  const HL = '#dcf0c9';
+  const save_row = (label, val) => `<tr><td colspan="${span}" bgcolor="${HL}" style="background:${HL}; padding:7px 10px; font-size:13px; font-weight:700; color:#234d12;">${label}</td><td align="right" bgcolor="${HL}" style="background:${HL}; padding:7px 10px; font-size:14px; font-weight:800; color:#234d12;">&minus;${_money(val)}</td></tr>`;
+  let out = save > 0 ? row('Retail value', Math.round((m.total + save) * 100) / 100) + save_row('Volume savings', save) : row('Subtotal', m.total);
+  if (coupon > 0) out += save_row(`Promotion${m.promoCode ? ` (${_esc(m.promoCode)})` : ''}`, coupon);
   return out;
 };
 // Standalone version (its own table) for templates that don't fold the rows into
@@ -302,7 +307,7 @@ function tplSeparated(m) {
   const mains = lines.filter((l) => !isGrouped(l));
   const freeFor = (lineId) => lines.filter((l) => isGrouped(l) && l.parentLineId === lineId);
   const _freeStrip = (f) => `<table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#e1f5d1" style="background:#e1f5d1; border:1px solid #b9dd9e; border-radius:10px; margin-top:12px;"><tbody><tr>
-      <td style="padding:10px 14px;"><span style="display:inline-block; background:#46781b; color:#ffffff; font-size:10px; font-weight:800; letter-spacing:.6px; border-radius:4px; padding:2px 7px; vertical-align:middle;">FREE</span> <span style="font-size:12px; font-weight:700; color:#2c4a10; vertical-align:middle;">&nbsp;Qty ${f.qty} &middot; ${_esc(f.title)}</span>${f.subtitle ? `<div style="font-size:11px; color:#46781b; margin-top:3px;">${_esc(f.subtitle)}</div>` : ''}</td>
+      <td style="padding:10px 14px;"><span style="font-size:12px; font-weight:700; color:#2c4a10; vertical-align:middle;">Qty ${f.qty} &middot; ${_esc(f.title)}</span>${f.subtitle ? `<div style="font-size:11px; color:#46781b; margin-top:3px;">${_esc(f.subtitle)}</div>` : ''}</td>
       <td align="right" valign="middle" style="padding:10px 14px; white-space:nowrap;"><span style="font-size:12px; font-weight:800; color:#2c4a10;">included</span></td>
     </tr></tbody></table>`;
   const cards = mains.map((l, i) => {
