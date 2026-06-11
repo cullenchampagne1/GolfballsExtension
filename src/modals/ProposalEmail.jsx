@@ -98,11 +98,12 @@ const _PREVIEW_BD = '#aed694';
 /* a real 3D-render tile (transparent PNG on a green wash). bgcolor mirrors the
    style background so Outlook (which prefers the attribute) fills the cell. */
 function _renderTile(src, size, square) {
-  return `<table border="0" cellpadding="0" cellspacing="0" width="${size}" height="${size}" bgcolor="${_PREVIEW_BG}" style="width:${size}px; height:${size}px; background:${_PREVIEW_BG}; border:1px solid ${_PREVIEW_BD}; border-radius:${square ? 0 : Math.round(size * 0.18)}px;"><tbody><tr><td align="center" valign="middle" height="${size}" style="text-align:center;"><img src="${_esc(src)}" width="${size - 6}" height="${size - 6}" border="0" alt="preview" style="display:inline-block; width:${size - 6}px; height:${size - 6}px;" /></td></tr></tbody></table>`;
+  // No border / plate — the render zooms to fill its box (object-fit:cover).
+  return `<img src="${_esc(src)}" width="${size}" height="${size}" border="0" alt="preview" style="display:block; width:${size}px; height:${size}px; object-fit:cover; border-radius:${square ? 0 : Math.round(size * 0.18)}px;" />`;
 }
-/* product photo on a soft plate */
+/* product photo — borderless, fills its box (zoom-to-fill via object-fit:cover) */
 function _photoPlate(img, plate, square) {
-  return `<table border="0" cellpadding="0" cellspacing="0" width="${plate}" style="background:${T.card}; border:1px solid ${T.line}; border-radius:${square ? 0 : 10}px;"><tbody><tr><td align="center" valign="middle" height="${plate}" style="padding:6px;"><img src="${_esc(img)}" width="${plate - 16}" border="0" style="display:block; border-radius:${square ? 0 : 6}px;" /></td></tr></tbody></table>`;
+  return `<img src="${_esc(img)}" width="${plate}" height="${plate}" border="0" style="display:block; width:${plate}px; height:${plate}px; object-fit:cover; border-radius:${square ? 0 : 8}px;" />`;
 }
 /* the imprint PROOF visual cell — real render(s) when we have them (Front +
    Reverse for dual-pole), else the synthetic chip. */
@@ -225,29 +226,6 @@ function tplClassic(m) {
   </td></tr></tbody></table>`;
 }
 
-/* ── TEMPLATE 2 — MINIMAL — editorial, borderless ── */
-function tplMinimal(m) {
-  const { groupName, optionName, lines, total, show } = m;
-  const rows = lines.map((l) => {
-    const photo = show.images ? `<td width="60" valign="top" style="padding:18px 14px 0 0;"><img src="${_esc(l.img)}" width="52" border="0" style="border-radius:7px; display:block;" /></td>` : '';
-    const sub = l.subtitle ? `<div style="font-size:12px; color:${T.mut}; margin-top:3px;">${_esc(l.subtitle)}</div>` : '';
-    const proof = show.previews ? _proof(l, false) : '';
-    return `<tr style="border-top:1px solid ${T.line};">${photo}<td valign="top" style="padding:18px 0;">${_brandLine(l, T.mut)}<div style="font-size:16px; color:${T.ink}; font-weight:700;">${_esc(l.title)}</div>${sub}${proof}</td><td valign="top" align="right" style="padding:18px 0;"><div style="font-size:11px; color:${T.mut};">${_qtyLine(l, show)}</div><div style="font-size:17px; color:${T.price}; font-weight:800; margin-top:4px;">${_ltot(l)}</div></td></tr>`;
-  }).join('\n');
-  const span = show.images ? 2 : 1;
-  // Subtotal / savings / Promotion rows fold into the same schedule table.
-  const discRows = _savingsTrs(m, span);
-  const totalsRow = show.total ? `<tr style="border-top:2px solid ${T.ink};"><td colspan="${span}" valign="middle" style="padding:18px 0;"><span style="font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:${T.mut}; font-weight:700;">Estimated total${_star(m)}</span></td><td align="right" valign="middle" style="padding:18px 0;"><span style="font-size:26px; font-weight:800; color:${T.price}; letter-spacing:-.6px;">${_money(total - (m.discount || 0))}</span></td></tr>` : '';
-  return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="border:1px solid ${T.line}; border-radius:14px; padding:28px 30px;">
-    ${_wordmark()}
-    <div style="font-size:12px; letter-spacing:1.6px; text-transform:uppercase; color:${T.ink}; font-weight:700; margin-top:18px;">${_esc(groupName)}</div>
-    <div style="font-size:30px; font-weight:800; color:${T.ink}; letter-spacing:-.8px; margin:7px 0 20px;">${_esc(optionName)}</div>
-    ${_msgBlock(m)}
-    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:8px;"><tbody>${rows}${discRows}${totalsRow}</tbody></table>
-    ${_expLine(m)}${_discLine(m)}${show.cta ? _ctaBar('View this option') : ''}${_foot()}
-  </td></tr></tbody></table>`;
-}
-
 /* ── TEMPLATE 3 — CATALOG CARDS — header band, preview per card ── */
 function tplCatalog(m) {
   const { groupName, optionName, lines, total, show } = m;
@@ -300,28 +278,6 @@ function tplQuote(m) {
       <table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody>${head}${rows}</tbody></table>
       ${_discRow(m)}${_discLine(m)}${show.cta ? _ctaBar('Approve &amp; view in cart &rsaquo;') : ''}${_foot()}
     </td></tr></tbody></table>
-  </td></tr></tbody></table>`;
-}
-
-/* ── TEMPLATE 5 — LOOKBOOK — image-top cards, preview under each ── */
-function tplLookbook(m) {
-  const { groupName, optionName, lines, total, show } = m;
-  const cards = lines.map((l) => {
-    const imgRow = show.images ? `<tr><td align="center" style="padding:20px 20px 6px;"><img src="${_esc(l.img)}" width="220" border="0" style="border-radius:10px; display:block; margin:0 auto;" /></td></tr>` : '';
-    const sub = l.subtitle ? `<div style="font-size:12px; color:${T.mut}; margin-top:4px;">${_esc(l.subtitle)}</div>` : '';
-    const qtyLine = show.cost ? `Qty ${l.qty} &nbsp;&middot;&nbsp; ${_money(l.unitPrice)} ea` : `Qty ${l.qty}`;
-    const proof = show.previews ? _proof(l, false) : '';
-    return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:14px;"><tbody>${imgRow}<tr><td style="padding:${show.images ? '8px' : '18px'} 20px 18px;"><table width="100%"><tbody><tr><td valign="middle">${_brandLine(l, T.mut)}<div style="font-size:18px; color:${T.ink}; font-weight:700; margin-top:2px;">${_esc(l.title)}</div>${sub}<div style="font-size:12px; color:${T.mut}; margin-top:6px;">${qtyLine}</div></td><td valign="middle" align="right" width="96"><span style="font-size:20px; font-weight:800; color:${T.price};">${_ltot(l)}</span></td></tr></tbody></table>${proof}</td></tr></tbody></table>`;
-  }).join(_vspace(15));
-  const totalBox = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td style="border-top:2px solid ${T.acc}; padding:18px 2px 0;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:12px; letter-spacing:.6px; text-transform:uppercase; color:${T.mut}; font-weight:700;">Estimated total${_star(m)}</span></td><td align="right" valign="middle"><span style="font-size:26px; font-weight:800; color:${T.price};">${_money(total - (m.discount || 0))}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
-  return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="padding:6px 6px 8px;">
-    ${_wordmark('center')}
-    <div align="center" style="font-size:12px; letter-spacing:1.6px; text-transform:uppercase; color:${T.ink}; font-weight:800; margin-top:16px;">${_esc(groupName)}</div>
-    <div align="center" style="font-size:27px; font-weight:800; color:${T.ink}; margin:7px 0 0; letter-spacing:-.5px;">${_esc(optionName)}</div>
-    <div style="width:46px; height:4px; background:${T.acc}; border-radius:2px; margin:14px auto 0;"></div>
-    ${_msgBlock(m, 'center')}
-    <div style="height:22px; line-height:22px; font-size:0;">&nbsp;</div>
-    ${cards}${_discRow(m)}${totalBox}${_expLine(m, 'center')}${_discLine(m, 'center')}${show.cta ? _ctaBtn('View this option &rsaquo;', true) : ''}${_foot()}
   </td></tr></tbody></table>`;
 }
 
@@ -401,9 +357,7 @@ function tplCorporate(m) {
 export const PROPOSAL_TEMPLATES = [
   { id: 'corporate', name: 'Corporate', sub: 'Squared letterhead · ruled', accent: '#339900', build: tplCorporate },
   { id: 'classic', name: 'Classic', sub: 'Formal letter · imprint previews', accent: '#339900', build: tplClassic },
-  { id: 'minimal', name: 'Minimal', sub: 'Editorial · borderless', accent: '#339900', build: tplMinimal },
   { id: 'quote', name: 'Quote', sub: 'Total panel · imprint previews', accent: '#339900', build: tplQuote },
-  { id: 'lookbook', name: 'Lookbook', sub: 'Image-top · preview under each', accent: '#339900', build: tplLookbook },
   { id: 'separated', name: 'Separated', sub: 'Detached option cards · per-price', accent: '#339900', build: tplSeparated },
 ];
 const tplById = (id) => PROPOSAL_TEMPLATES.find((t) => t.id === id) || PROPOSAL_TEMPLATES[0];
