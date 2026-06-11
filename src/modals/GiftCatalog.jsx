@@ -2834,7 +2834,15 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // just open the proposal panel beside it, so the load is visible in place
   // rather than dumping the user back into the All Items grid.
   const loadSaved = (entry) => {
-    const incoming = linesFromSaved(entry, rid);
+    // Only the PAID lines enter the live working set. The free dozens are DERIVED
+    // from the promo (proposalFreeLines), the same as when a coupon is applied
+    // live — so they render identically (the "Free" badge, not an editable $0
+    // line) whether loaded or freshly applied, and they don't pollute the promo
+    // re-validation. Setting proposalPromo below makes the [proposal] effect
+    // re-resolve the coupon against the loaded cart, regenerating the free lines
+    // with fresh ids. (The stored free lines are kept only for the static saved-
+    // proposal overview, which renders them directly.)
+    const incoming = linesFromSaved(entry, rid).filter((l) => !l.free);
     setProposal((prev) => {
       const have = new Set(prev.map((l) => l.productId));
       return [...prev, ...incoming.filter((l) => !have.has(l.productId))];
