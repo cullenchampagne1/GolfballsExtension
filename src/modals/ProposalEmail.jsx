@@ -148,8 +148,14 @@ function _proof(l, withPhoto, square) {
 // + mso-line-height-rule:exactly pins the exact height across clients. Use this
 // in place of margin-top/margin-bottom for gaps between blocks.
 const _vspace = (h) => `<div style="height:${h}px; line-height:${h}px; font-size:0; mso-line-height-rule:exactly;">&nbsp;</div>`;
-const _ctaBtn = (label, pill) => `${_vspace(24)}<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td align="center"><table border="0" cellpadding="0" cellspacing="0"><tbody><tr><td bgcolor="${T.acc}" align="center" style="background:${T.acc}; border-radius:${pill ? '30px' : '8px'};"><a href="{{CART_LINK}}" style="display:inline-block; color:#fff; text-decoration:none; font-family:${SANS}; font-size:15px; font-weight:700; padding:14px 42px;">${label}</a></td></tr></tbody></table></td></tr></tbody></table>`;
-const _ctaBar = (label) => `${_vspace(24)}<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td bgcolor="${T.acc}" align="center" style="background:${T.acc}; border-radius:8px;"><a href="{{CART_LINK}}" style="display:block; text-align:center; color:#fff; text-decoration:none; font-family:${SANS}; font-size:15px; font-weight:700; padding:16px;">${label}</a></td></tr></tbody></table>`;
+// CTA = the golfballs "View This Option" button IMAGE (the same asset their own
+// proposal emails use). Rounded corners are baked into the PNG, so they survive
+// Outlook intact — a CSS border-radius button squares off on paste. High-
+// contrast green/white, fixed 214×42, centered, with space above and below.
+const _CTA_IMG = 'https://d1tp32r8b76g0z.cloudfront.net/images/gbc2/templateMailers/cta-view-this-option@2x.png';
+const _cta = () => `${_vspace(24)}<table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td align="center"><a href="{{CART_LINK}}" style="text-decoration:none;"><img src="${_CTA_IMG}" width="214" height="42" alt="View This Option" style="display:inline-block; border:0; outline:none; text-decoration:none;" /></a></td></tr></tbody></table>${_vspace(20)}`;
+const _ctaBtn = (_label, _pill) => _cta();
+const _ctaBar = (_label) => _cta();
 // Top-left logo (the GBC corporate signature mark, a public CloudFront asset so
 // it loads directly in Outlook). Always left-aligned per request.
 const _LOGO = 'https://d1tp32r8b76g0z.cloudfront.net/images/gbc-2021/email-signature/GBC2021Corporate_GrayDept.png';
@@ -337,7 +343,7 @@ function tplCorporate(m) {
     return `<tr>${photo}<td valign="top" style="padding:15px 14px 15px 0;">${_brandLine(l, MUT)}<div style="font-size:14px; color:${INK}; font-weight:700;">${_esc(l.title)}</div>${sub}</td><td valign="top" align="right" style="padding:15px 0; font-size:13px; color:${INK};">${l.qty}</td>${unit}<td valign="top" align="right" style="padding:15px 0; font-size:14px; font-weight:800; color:${INK};">${_ltot(l)}</td></tr><tr><td colspan="${cols}" style="border-bottom:1px solid ${LINE}; font-size:0; line-height:0;">&nbsp;</td></tr>${proof}`;
   }).join('');
   const totalsBlock = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:18px;"><tbody><tr><td></td><td width="240"><table width="100%" border="0" cellpadding="0" cellspacing="0"><tbody><tr><td style="border-top:2px solid ${RULE}; padding:12px 0 0; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:${MUT}; font-weight:700;">Estimated total${_star(m)}</td><td align="right" style="border-top:2px solid ${RULE}; padding:12px 0 0; font-size:22px; font-weight:800; color:${INK};">${_money(total - (m.discount || 0))}</td></tr></tbody></table></td></tr></tbody></table>` : '';
-  const cta = show.cta ? `<table border="0" cellpadding="0" cellspacing="0" style="margin-top:26px;"><tbody><tr><td bgcolor="${T.acc}" style="background:${T.acc};"><a href="{{CART_LINK}}" style="display:inline-block; color:#fff; text-decoration:none; font-family:${SANS}; font-size:14px; font-weight:700; letter-spacing:.4px; padding:14px 38px;">Review this proposal &rsaquo;</a></td></tr></tbody></table>` : '';
+  const cta = show.cta ? _cta() : '';
   return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="border:1px solid ${LINE}; border-top:3px solid ${T.acc};">
     <table width="100%" border="0" cellpadding="0" cellspacing="0"><tbody>
     <tr><td style="padding:26px 30px 0;">
