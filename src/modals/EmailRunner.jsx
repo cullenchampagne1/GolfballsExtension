@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Btn, DraggablePopup, PopupDragContext, Dot, Field, RangeSlider, Tag, TemplatePicker, TemplateSplits, I, Spinner } from '../ui/index.js';
+import { Btn, DraggablePopup, PopupDragContext, Dot, Field, RangeSlider, Tag, TemplatePicker, TemplateSplits, I, Spinner, Switch, Input } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { pickFromAddress } from '../lib/sender.js';
 import { sendEmail } from '../lib/emailSender.js';
@@ -109,6 +109,22 @@ const sendBg = (msg) => new Promise((resolve) => {
     });
   } catch { resolve(null); }
 });
+
+/* Per-recipient send log (email → last-sent ms), persisted so the "skip if
+   emailed in the last N days" rule survives across runs/sessions. Keyed by the
+   lowercased recipient address. */
+const EMAIL_LOG_KEY = 'gbEmailSendLog';
+const DAY_MS = 86400000;
+function readEmailLog() {
+  return new Promise((resolve) => {
+    try {
+      if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) { resolve({}); return; }
+      chrome.storage.local.get(EMAIL_LOG_KEY, (d) => resolve((d && d[EMAIL_LOG_KEY]) || {}));
+    } catch { resolve({}); }
+  });
+}
+function writeEmailLog(log) { try { chrome.storage.local.set({ [EMAIL_LOG_KEY]: log }); } catch { /* */ } }
+const _dnc = (s) => /do\s*not\s*contact/i.test(String(s || ''));
 
 /* Delegates to the shared renderer so OR-blocks (`{{a|b}}`) and
    conditional drop-out behave identically to the popup's
@@ -245,9 +261,14 @@ export function EmailRunner({
   const [selectedId, setSelectedId] = useState('');
   const [selectedVariationId, setSelectedVariationId] = useState(null);
   const [delay, setDelay] = useState([15, 45]); // seconds
+  // Skip rules — contacts that match are quietly skipped (not emailed) and
+  // counted/tagged as "skipped" rather than sent.
+  const [skipDnc, setSkipDnc] = useState(true);            // name/email says "do not contact"
+  const [skipRecent, setSkipRecent] = useState(false);     // emailed within N days
+  const [skipRecentDays, setSkipRecentDays] = useState(30);
   const [status, setStatus] = useState('idle');  // 'idle' | 'running' | 'done'
   const [progress, setProgress] = useState({ current: 0, total: 0 });
-  const [counts, setCounts] = useState({ sent: 0, failed: 0 });
+  const [counts, setCounts] = useState({ sent: 0, failed: 0, skipped: 0 });
   /* Per-row tail shown inside the panel — last 4 names with status
      badges. Kept short on purpose; the full per-row truth lives on
      the parent list (CRMSearch / TaskList) via the row callbacks. */
@@ -320,7 +341,7 @@ export function EmailRunner({
          hard-closing the parent list to remount us. */
       runTokenRef.current += 1;
       setStatus('idle');
-      setCounts({ sent: 0, failed: 0 });
+      setCounts({ sent: 0, failed: 0, skipped: 0 });
       setProgress({ current: 0, total: 0 });
       setTrail([]);
       setCurrent(null);
@@ -433,7 +454,7 @@ export function EmailRunner({
     onRowsQueued?.(contacts.map((c) => c.contactId));
     runTokenRef.current += 1;
     const token = runTokenRef.current;
-    setCounts({ sent: 0, failed: 0 });
+    setCounts({ sent: 0, failed: 0, skipped: 0 });
     setProgress({ current: 0, total: contacts.length });
     setTrail([]);
     setCurrent(null);
@@ -466,6 +487,11 @@ export function EmailRunner({
        as Quick Actions. */
     const lo = Math.max(0, Number(delay[0]) || 0);
     const hi = Math.max(lo, Number(delay[1]) || lo);
+
+    // Skip-rule inputs, read once per run. The send log is loaded up front and
+    // updated in memory as we go so "emailed in N days" reflects this run too.
+    const emailLog = useMock ? {} : await readEmailLog();
+    const recentCutoff = Math.max(1, Number(skipRecentDays) || 30) * DAY_MS;
 
     for (let i = 0; i < contacts.length; i++) {
       if (runTokenRef.current !== token) return; // cancelled
@@ -556,6 +582,12 @@ export function EmailRunner({
           outcome = { status: 'error', error: `Resolve failed: ${resolved.error}`, name: pageName };
         } else if (!toEmail) {
           outcome = { status: 'error', error: 'No recipient email resolved', name: pageName };
+        } else if (skipDnc && (_dnc(pageName) || _dnc(toEmail))) {
+          // Do-not-contact flag baked into the name or email → never send.
+          outcome = { status: 'skipped', reason: 'Do not contact', email: toEmail, name: pageName };
+        } else if (skipRecent && emailLog[toEmail.toLowerCase()] && (Date.now() - emailLog[toEmail.toLowerCase()]) < recentCutoff) {
+          const days = Math.floor((Date.now() - emailLog[toEmail.toLowerCase()]) / DAY_MS);
+          outcome = { status: 'skipped', reason: `Emailed ${days}d ago`, email: toEmail, name: pageName };
         } else {
           // 3. Render template strings. The signature is applied by
           //    emailSender on the PA path (and dropped on the mailto
@@ -584,6 +616,7 @@ export function EmailRunner({
           );
           if (res.state === 'sent' || res.state === 'opened') {
             outcome = { status: 'sent', email: toEmail, name: pageName };
+            if (!useMock && toEmail) { emailLog[toEmail.toLowerCase()] = Date.now(); writeEmailLog(emailLog); }
           } else {
             outcome = { status: 'error', error: res.error || 'Send failed', email: toEmail, name: pageName };
           }
@@ -597,7 +630,9 @@ export function EmailRunner({
       setCounts((cur) => (
         outcome.status === 'sent'
           ? { ...cur, sent: cur.sent + 1 }
-          : { ...cur, failed: cur.failed + 1 }
+          : outcome.status === 'skipped'
+            ? { ...cur, skipped: cur.skipped + 1 }
+            : { ...cur, failed: cur.failed + 1 }
       ));
       setTrail((cur) => {
         /* Display name preference: engine-extracted (firstName +
@@ -616,16 +651,17 @@ export function EmailRunner({
           name: displayName,
           status: outcome.status,
           email: outcome.email,
+          reason: outcome.reason,
         }];
         /* Keep a short buffer for the count chips upstream — the
            render slice below caps the visible window at 2. */
         return next.length > 8 ? next.slice(next.length - 8) : next;
       });
 
-      // 5. Random delay between sends — skip after the last one. Drive a
-      //    live countdown so the panel's pacing bar animates (clearing the
-      //    in-flight contact so the card flips to the "next send in …" view).
-      if (i < contacts.length - 1) {
+      // 5. Random delay between sends — skip after the last one, and skip
+      //    entirely for a skipped contact (no message went out, no need to
+      //    pace). Drive a live countdown so the panel's pacing bar animates.
+      if (i < contacts.length - 1 && outcome.status !== 'skipped') {
         setCurrent(null);
         const ms = (lo + Math.random() * (hi - lo)) * 1000;
         const waitStart = Date.now();
@@ -654,14 +690,14 @@ export function EmailRunner({
   const failedCount = counts.failed;
   const variationCount = selectedTpl?.variations?.length || 0;
 
-  const settled = counts.sent + counts.failed;
+  const settled = counts.sent + counts.failed + (counts.skipped || 0);
   const running = status === 'running';
   const panelW = status === 'idle' ? 384 : 424;
   const subtitle = status === 'idle'
     ? `${contacts.length} contact${contacts.length === 1 ? '' : 's'} selected`
     : running
       ? `Sending… · ${settled} of ${contacts.length}`
-      : counts.failed > 0 ? `${counts.sent} sent · ${counts.failed} failed` : `All ${counts.sent} delivered`;
+      : [counts.sent ? `${counts.sent} sent` : '', counts.skipped ? `${counts.skipped} skipped` : '', counts.failed ? `${counts.failed} failed` : ''].filter(Boolean).join(' · ') || `All ${counts.sent} delivered`;
 
   return (
     <DraggablePopup
@@ -705,10 +741,10 @@ export function EmailRunner({
                   placeholder={templates.length ? 'Pick a template' : 'No templates'}
                   disabled={status === 'running'}
                   floating={false}
-                  /* No inner scroll on the list — let it grow full-width and
-                     let the runner body (its scrollbar is hidden) handle any
-                     overflow, so rows aren't narrowed by a gutter. */
-                  listMaxHeight={2000}
+                  /* Cap the open list so a long template library scrolls inside
+                     the dropdown (like a dropdown should) instead of stretching
+                     the whole popup. */
+                  listMaxHeight={300}
                 />
               </Field>
 
@@ -729,6 +765,32 @@ export function EmailRunner({
 
               <Field label="Delay between sends" hint={`${fmtSeconds(delay[0])}–${fmtSeconds(delay[1])}, random per contact — keeps the blast looking human.`}>
                 <RangeSlider values={delay} min={5} max={80} step={5} unit="s" onChange={(next) => setDelay(next)} disabled={status === 'running'} />
+              </Field>
+
+              <Field label="Skip rules" hint="Matching contacts are quietly skipped — not emailed — and counted as skipped.">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <SkipRow
+                    on={skipDnc} onChange={setSkipDnc} disabled={status === 'running'}
+                    title="Do-not-contact"
+                    desc={'Skip when the first name, last name, or email contains “do not contact”.'}
+                  />
+                  <SkipRow
+                    on={skipRecent} onChange={setSkipRecent} disabled={status === 'running'}
+                    title="Recently emailed"
+                    desc="Skip anyone already emailed from here within the window."
+                    trailing={(
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <Input
+                          size="sm" type="number" min={1} max={365} value={String(skipRecentDays)}
+                          onChange={(val) => setSkipRecentDays(Math.max(1, Math.min(365, Number(val) || 1)))}
+                          disabled={status === 'running'}
+                          style={{ width: 52, textAlign: 'center' }}
+                        />
+                        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--gb-text-tertiary)' }}>days</span>
+                      </div>
+                    )}
+                  />
+                </div>
               </Field>
             </div>
           )}
@@ -751,7 +813,7 @@ export function EmailRunner({
             <Btn size="sm" variant="tinted" status="error" icon={<StopIcon size={11} />} onClick={() => {
               runTokenRef.current += 1;
               setStatus('idle');
-              setCounts({ sent: 0, failed: 0 });
+              setCounts({ sent: 0, failed: 0, skipped: 0 });
               setProgress({ current: 0, total: 0 });
               setTrail([]);
               setCurrent(null);
@@ -921,10 +983,27 @@ function NowSending({ current, delay }) {
   );
 }
 
+/* One skip-rule row: a switch + title/description, with an optional trailing
+   control (e.g. the days input) that only shows when the rule is on. Tints amber
+   when active so it reads as "this will quietly skip contacts." */
+function SkipRow({ on, onChange, title, desc, disabled, trailing }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', border: '1px solid ' + (on ? 'var(--gb-warning-tint-border)' : 'var(--gb-border-subtle)'), background: on ? 'var(--gb-warning-tint-soft)' : 'var(--gb-surface-1)', transition: 'background .2s, border-color .2s' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{title}</div>
+        <div style={{ fontSize: 10.5, lineHeight: 1.35, color: 'var(--gb-text-muted)', marginTop: 2 }}>{desc}</div>
+      </div>
+      {on && trailing}
+      <Switch on={on} onChange={onChange} disabled={disabled} size="sm" tone="warning" />
+    </div>
+  );
+}
+
 function CountChip({ tone, value, label }) {
   const tones = {
     success: { bg: 'var(--gb-success-tint-medium)', fg: 'var(--gb-success-fg)' },
     neutral: { bg: 'var(--gb-fill-subtle)', fg: 'var(--gb-text-tertiary)' },
+    warning: { bg: 'var(--gb-warning-tint-medium)', fg: 'var(--gb-warning-fg)' },
     error: { bg: 'var(--gb-error-tint-medium)', fg: 'var(--gb-error-fg)' },
   }[tone] || { bg: 'var(--gb-fill-subtle)', fg: 'var(--gb-text-tertiary)' };
   return (
@@ -963,31 +1042,37 @@ function Trail({ trail }) {
 }
 
 function TrailRow({ r, dim, last, fresh }) {
-  const sent = r.status === 'sent';
+  const tone = r.status === 'sent' ? 'success' : r.status === 'skipped' ? 'warning' : 'error';
+  const C = {
+    success: { dot: 'var(--gb-success-tint-medium)', ic: 'var(--gb-success)', tag: 'var(--gb-success-tint-soft)', fg: 'var(--gb-success-fg)', label: 'sent', icon: <I.check size={10} /> },
+    warning: { dot: 'var(--gb-warning-tint-medium)', ic: 'var(--gb-warning-fg)', tag: 'var(--gb-warning-tint-soft)', fg: 'var(--gb-warning-fg)', label: 'skip', icon: <span style={{ fontSize: 12, fontWeight: 800, lineHeight: 1 }}>–</span> },
+    error:   { dot: 'var(--gb-error-tint-medium)', ic: 'var(--gb-error)', tag: 'var(--gb-error-tint-soft)', fg: 'var(--gb-error-fg)', label: 'fail', icon: <I.close size={10} /> },
+  }[tone];
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '20px minmax(0,1fr) auto', gap: 10, alignItems: 'center', height: QS_ROW_H, padding: '0 13px', borderBottom: last ? 'none' : '1px solid var(--gb-border-subtle)', opacity: 1 - dim * 0.5, animation: fresh ? 'qs-fade-in .4s ease both' : 'none' }}>
-      <span style={{ width: 18, height: 18, borderRadius: '50%', display: 'grid', placeItems: 'center', background: sent ? 'var(--gb-success-tint-medium)' : 'var(--gb-error-tint-medium)', color: sent ? 'var(--gb-success)' : 'var(--gb-error)', animation: fresh ? 'qs-pop .42s cubic-bezier(.34,1.5,.64,1) both' : 'none' }}>
-        {sent ? <I.check size={10} /> : <I.close size={10} />}
+      <span style={{ width: 18, height: 18, borderRadius: '50%', display: 'grid', placeItems: 'center', background: C.dot, color: C.ic, animation: fresh ? 'qs-pop .42s cubic-bezier(.34,1.5,.64,1) both' : 'none' }}>
+        {C.icon}
       </span>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
-        <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.email}</div>
+        <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.status === 'skipped' && r.reason ? r.reason : r.email}</div>
       </div>
-      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', fontFamily: 'var(--gb-font-mono)', padding: '2px 7px', borderRadius: 4, background: sent ? 'var(--gb-success-tint-soft)' : 'var(--gb-error-tint-soft)', color: sent ? 'var(--gb-success-fg)' : 'var(--gb-error-fg)' }}>
-        {sent ? 'sent' : 'fail'}
+      <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', fontFamily: 'var(--gb-font-mono)', padding: '2px 7px', borderRadius: 4, background: C.tag, color: C.fg }}>
+        {C.label}
       </span>
     </div>
   );
 }
 
 function RunningView({ current, delay, counts, progress, trail }) {
-  const queued = Math.max(0, progress.total - counts.sent - counts.failed);
+  const queued = Math.max(0, progress.total - counts.sent - counts.failed - (counts.skipped || 0));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <NowSending current={current} delay={delay} />
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <CountChip tone="success" value={counts.sent} label="sent" />
         <CountChip tone="neutral" value={queued} label="queued" />
+        {counts.skipped > 0 && <CountChip tone="warning" value={counts.skipped} label="skip" />}
         {counts.failed > 0 && <CountChip tone="error" value={counts.failed} label="fail" />}
       </div>
       <Trail trail={trail} />
@@ -996,7 +1081,7 @@ function RunningView({ current, delay, counts, progress, trail }) {
 }
 
 function StatTile({ value, label, tone = 'neutral' }) {
-  const fg = { success: 'var(--gb-success)', error: 'var(--gb-error)', brand: 'var(--gb-brand-label)', neutral: 'var(--gb-text-primary)' }[tone];
+  const fg = { success: 'var(--gb-success)', error: 'var(--gb-error)', warning: 'var(--gb-warning-fg)', brand: 'var(--gb-brand-label)', neutral: 'var(--gb-text-primary)' }[tone];
   return (
     <div style={{ flex: 1, minWidth: 0, padding: '12px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)' }}>
       <div style={{ fontSize: 24, fontWeight: 800, color: fg, fontFamily: 'var(--gb-font-mono)', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{value}</div>
@@ -1006,9 +1091,10 @@ function StatTile({ value, label, tone = 'neutral' }) {
 }
 
 function DoneView({ counts, trail, meta }) {
-  const total = counts.sent + counts.failed;
+  const skipped = counts.skipped || 0;
+  const attempted = counts.sent + counts.failed;
   const secs = meta.finishedAt && meta.startedAt ? (meta.finishedAt - meta.startedAt) / 1000 : 0;
-  const rate = total > 0 ? Math.round((counts.sent / total) * 100) : 100;
+  const rate = attempted > 0 ? Math.round((counts.sent / attempted) * 100) : 100;
   const mm = Math.floor(secs / 60), ss = Math.round(secs % 60);
   const timeStr = mm > 0 ? `${mm}:${String(ss).padStart(2, '0')}` : `${ss}s`;
   return (
@@ -1016,11 +1102,12 @@ function DoneView({ counts, trail, meta }) {
       <div style={{ textAlign: 'center', animation: 'qs-fade-in .45s ease both' }}>
         <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -0.3 }}>{counts.failed === 0 ? 'All sent' : 'Run complete'}</div>
         <div style={{ fontSize: 12, color: 'var(--gb-text-tertiary)', marginTop: 3 }}>
-          {counts.sent} message{counts.sent === 1 ? '' : 's'} delivered{counts.failed > 0 ? ` · ${counts.failed} need a retry` : ''}
+          {counts.sent} message{counts.sent === 1 ? '' : 's'} delivered{skipped > 0 ? ` · ${skipped} skipped` : ''}{counts.failed > 0 ? ` · ${counts.failed} need a retry` : ''}
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
         <StatTile value={counts.sent} label="Sent" tone="success" />
+        {skipped > 0 && <StatTile value={skipped} label="Skipped" tone="warning" />}
         {counts.failed > 0 && <StatTile value={counts.failed} label="Failed" tone="error" />}
         <StatTile value={`${rate}%`} label="Success" tone={counts.failed === 0 ? 'success' : 'neutral'} />
         <StatTile value={timeStr} label="Elapsed" tone="brand" />
@@ -1029,7 +1116,7 @@ function DoneView({ counts, trail, meta }) {
         <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--gb-text-muted)', marginBottom: 9 }}>Send timeline</div>
         <div style={{ display: 'flex', gap: 3, alignItems: 'flex-end', height: 30 }}>
           {trail.map((r, i) => (
-            <div key={r.seq} style={{ flex: 1, minWidth: 0, borderRadius: 2, height: r.status === 'sent' ? '100%' : '46%', background: r.status === 'sent' ? 'var(--gb-success)' : 'var(--gb-error)', opacity: 0.85, animation: `qs-grow-up .4s cubic-bezier(.34,1.3,.64,1) ${i * 0.02}s both`, transformOrigin: 'bottom' }} title={`${r.name} · ${r.status}`} />
+            <div key={r.seq} style={{ flex: 1, minWidth: 0, borderRadius: 2, height: r.status === 'sent' ? '100%' : r.status === 'skipped' ? '70%' : '46%', background: r.status === 'sent' ? 'var(--gb-success)' : r.status === 'skipped' ? 'var(--gb-warning-fg)' : 'var(--gb-error)', opacity: 0.85, animation: `qs-grow-up .4s cubic-bezier(.34,1.3,.64,1) ${i * 0.02}s both`, transformOrigin: 'bottom' }} title={`${r.name} · ${r.status}`} />
           ))}
         </div>
       </div>
