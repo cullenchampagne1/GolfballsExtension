@@ -570,6 +570,11 @@ export function EmailRunner({
            the row came from an account-page list with no contact
            text, this still produces a real name for the trail. */
         const pageName = (resolved?.displayName || '').trim();
+        /* Last time this contact was emailed — the more recent of the contact
+           page's Email-history date (the rep's real CRM record, extracted by the
+           page engine) and our own local send log. Drives the "recently emailed"
+           skip rule. */
+        const lastEmailedMs = Math.max(Number(resolved?.lastEmailMs) || 0, (toEmail && emailLog[toEmail.toLowerCase()]) || 0);
         /* Enrich the "Now sending" card with the resolved name + recipient
            as soon as they're known (the row started with just the task-row
            text). */
@@ -585,9 +590,9 @@ export function EmailRunner({
         } else if (skipDnc && (_dnc(pageName) || _dnc(toEmail))) {
           // Do-not-contact flag baked into the name or email → never send.
           outcome = { status: 'skipped', reason: 'Do not contact', email: toEmail, name: pageName };
-        } else if (skipRecent && emailLog[toEmail.toLowerCase()] && (Date.now() - emailLog[toEmail.toLowerCase()]) < recentCutoff) {
-          const days = Math.floor((Date.now() - emailLog[toEmail.toLowerCase()]) / DAY_MS);
-          outcome = { status: 'skipped', reason: `Emailed ${days}d ago`, email: toEmail, name: pageName };
+        } else if (skipRecent && lastEmailedMs && (Date.now() - lastEmailedMs) < recentCutoff) {
+          const days = Math.floor((Date.now() - lastEmailedMs) / DAY_MS);
+          outcome = { status: 'skipped', reason: days <= 0 ? 'Emailed today' : `Emailed ${days}d ago`, email: toEmail, name: pageName };
         } else {
           // 3. Render template strings. The signature is applied by
           //    emailSender on the PA path (and dropped on the mailto
@@ -777,7 +782,7 @@ export function EmailRunner({
                   <SkipRow
                     on={skipRecent} onChange={setSkipRecent} disabled={status === 'running'}
                     title="Recently emailed"
-                    desc="Skip anyone already emailed from here within the window."
+                    desc="Skip when the contact's last email (from their CRM email history) is within the window."
                     trailing={(
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                         <Input

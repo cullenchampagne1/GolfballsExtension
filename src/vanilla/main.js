@@ -467,12 +467,25 @@ window.__gbContentReady = true;
          doing it here keeps the parse + engine call in one place
          instead of re-parsing the HTML on the React side. */
       let displayName = '';
+      /* Most-recent email date from the contact's Email history portlet
+         (contact.emails[].date) as an epoch-ms value — drives EmailRunner's
+         "skip if emailed within N days" rule off the page's real send history.
+         0 when there's no email history on the page. */
+      let lastEmailMs = 0;
       try {
         const engine = window.__gbPageEngine;
         if (engine && typeof engine.resolvePath === 'function') {
           const first = engine.resolvePath(doc, 'contact.firstName', '') || '';
           const last  = engine.resolvePath(doc, 'contact.lastName',  '') || '';
           displayName = `${first} ${last}`.trim();
+          const emails = engine.resolvePath(doc, 'contact.emails', []) || [];
+          if (Array.isArray(emails)) {
+            for (const e of emails) {
+              const d = e && e.date;
+              const t = d instanceof Date ? d.getTime() : Date.parse(String(d || ''));
+              if (Number.isFinite(t) && t > lastEmailMs) lastEmailMs = t;
+            }
+          }
         }
       } catch {}
       /* ── TEMP DEBUG (bulk send) — capture what the FETCHED html actually
@@ -524,8 +537,8 @@ window.__gbContentReady = true;
         } catch {}
       };
       return resolveAllVarsAsync(vars, toField, doc)
-        .then((res) => { logBulk({ resolved: res.resolved || {}, toEmail: res.toEmail || '' }); return { ...res, displayName }; })
-        .catch((err) => { logBulk({ error: err?.message || 'resolve failed' }); return { resolved: {}, toEmail: '', displayName, error: err?.message || 'resolve failed' }; });
+        .then((res) => { logBulk({ resolved: res.resolved || {}, toEmail: res.toEmail || '' }); return { ...res, displayName, lastEmailMs }; })
+        .catch((err) => { logBulk({ error: err?.message || 'resolve failed' }); return { resolved: {}, toEmail: '', displayName, lastEmailMs, error: err?.message || 'resolve failed' }; });
     } catch (e) {
       return Promise.resolve({ resolved: {}, toEmail: '', displayName: '', error: e?.message || 'parse failed' });
     }
