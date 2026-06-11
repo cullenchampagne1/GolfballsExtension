@@ -517,6 +517,14 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
     // generate flow never ran and the toggle appeared dead.
     return () => { cancelled = true; if (!previewsByLine) startedRef.current = false; };
   }, [show.previews, previewsByLine, source.rawLines]);
+  // Turning previews OFF resets the run state so re-enabling retries from
+  // scratch. Without this, a first pass that produced nothing (a transient
+  // render hiccup, or a cart that momentarily had no decorated lines) latched
+  // previewsByLine={} and the guard above then blocked every later attempt — the
+  // toggle looked permanently dead, stuck on logo placeholders.
+  useEffect(() => {
+    if (!show.previews) { startedRef.current = false; setShots(null); setBusy(false); setPreviewsByLine(null); }
+  }, [show.previews]);
   const onShotsDone = (res) => {
     const byLine = {};
     for (const r of res) { if (!r.image) continue; (byLine[r.lineId] = byLine[r.lineId] || []).push(r.image); }
