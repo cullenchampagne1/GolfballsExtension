@@ -754,15 +754,6 @@ function CheckoutSummary({ f, onEditCart }) {
         <Btn variant="primary" size="lg" full disabled={!f.canPlace || f.placing} state={f.placing ? 'loading' : 'idle'} icon={!f.placing && <XI.lock size={14} />} onClick={f.placeOrder}>
           {f.placing ? 'Placing order…' : 'Place Order · ' + money0(totals.total)}
         </Btn>
-        {!f.canPlace && f.missing.length > 0 && (
-          <div style={{ marginTop: 9, fontSize: 11, color: 'var(--gb-text-muted)', display: 'flex', alignItems: 'flex-start', gap: 6, lineHeight: 1.5 }}>
-            <span style={{ color: 'var(--gb-warning-fg)', display: 'flex', marginTop: 1, flexShrink: 0 }}><XI.info size={12} /></span>
-            <span>Still needed: {f.missing.join(', ')}</span>
-          </div>
-        )}
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
-          <XI.shield size={12} /> 100% Safe &amp; Secure
-        </div>
       </div>
     </div>
   );
