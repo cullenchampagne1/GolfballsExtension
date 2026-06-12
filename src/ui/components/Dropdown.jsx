@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { T, inputBaseStyle } from '../shared.jsx';
@@ -103,7 +103,11 @@ export function Dropdown({
     } catch { return 1; }
   }
   const [pos, setPos] = useState(null);
-  useEffect(() => {
+  // useLayoutEffect so `pos` is computed synchronously, BEFORE the browser
+  // paints the frame in which `open` flipped true — otherwise the menu's first
+  // frame renders with pos=null (invisible) and only appears after a follow-up
+  // effect+repaint, which reads as a click→delay→menu lag.
+  useLayoutEffect(() => {
     if (!open) { setPos(null); return undefined; }
     function update() {
       const el = rootRef.current;
@@ -339,10 +343,10 @@ export function Dropdown({
             ref={popoverRef}
             className="gb-dd-popover"
             data-gb-scale="popovers"
-            initial={{ opacity: 0, y: pos.placement === 'top' ? 4 : -4, scaleY: 0.95 }}
+            initial={{ opacity: 0, y: pos.placement === 'top' ? 3 : -3, scaleY: 0.97 }}
             animate={{ opacity: 1, y: 0, scaleY: 1 }}
-            exit={{ opacity: 0, y: pos.placement === 'top' ? 4 : -4, scaleY: 0.95, transition: T.base }}
-            transition={T.bounce}
+            exit={{ opacity: 0, y: pos.placement === 'top' ? 3 : -3, scaleY: 0.97, transition: T.fast }}
+            transition={T.fast}
             style={{
               position: 'fixed',
               ...(pos.placement === 'top' ? { bottom: pos.bottom } : { top: pos.top }),
