@@ -35,10 +35,11 @@ function shapeFeature(f) {
   const city = p.city || p.town || p.village || p.district || p.county || '';
   const state = stateAbbr(p.state);
   const zip = p.postcode || '';
-  // A compact, human one-liner for the dropdown row.
-  const label = [addr1, city, [state, zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
-  const sub = [p.country].filter(Boolean).join('');
-  return { addr1, city, state, zip, country: p.country || '', label, sub, _key: (f && f.properties && f.properties.osm_id) || label };
+  // A compact, human one-liner for the dropdown row. Street on top; city/state/zip
+  // as the secondary line (all rows are US, so country is implied).
+  const label = addr1;
+  const sub = [city, [state, zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  return { addr1, city, state, zip, country: p.country || '', label, sub, _key: (f && f.properties && f.properties.osm_id) || (addr1 + sub) };
 }
 
 /* Suggest US-biased addresses for a partial query. Resolves to an array of
@@ -55,13 +56,16 @@ export function suggestAddresses(query) {
         const seen = new Set();
         const out = [];
         (resp.features || []).forEach((f) => {
+          const p = (f && f.properties) || {};
+          // US only — the bbox lets a few Canada/Mexico edge hits through.
+          if (String(p.countrycode || '').toUpperCase() !== 'US') return;
           const s = shapeFeature(f);
           if (!s.addr1) return;                       // skip pure region/POI hits
           const k = s.label.toLowerCase();
           if (seen.has(k)) return;
           seen.add(k); out.push(s);
         });
-        resolve(out);
+        resolve(out.slice(0, 6));
       });
     } catch { resolve([]); }
   });

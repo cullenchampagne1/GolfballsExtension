@@ -591,9 +591,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'geocodeAddress' && typeof msg.q === 'string') {
     const q = msg.q.trim();
     if (q.length < 3) { sendResponse({ ok: true, features: [] }); return true; }
-    // Bias toward the US (continental centroid) so domestic streets rank first.
+    // US-only: clamp the query to a North-America bbox (covers the lower 48 +
+    // Alaska + Hawaii) and bias to the continental centroid; over-fetch so the
+    // page-side countrycode filter still has a full list after dropping the few
+    // Canada/Mexico edge hits the bbox lets through. (lon/lat order for bbox.)
     const url = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(q)
-      + '&limit=6&lang=en&lat=39.8&lon=-98.6';
+      + '&limit=20&lang=en&lat=39.8&lon=-98.6&bbox=-170,18,-66,72';
     fetch(url, { credentials: 'omit', headers: { Accept: 'application/json' } })
       .then(async (r) => {
         const data = await r.json().catch(() => ({}));
