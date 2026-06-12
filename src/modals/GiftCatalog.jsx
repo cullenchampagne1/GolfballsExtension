@@ -3155,42 +3155,8 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // Manual rebuild button — always a fresh, cache-clearing crawl.
   const refresh = () => { if (refreshing) return; runPull({ force: true }); };
 
-  // ── Bulk cost sync ────────────────────────────────────────────────────────
-  // Pulls per-unit cost (from the gbcadmin Inventory endpoint) for every catalog
-  // SKU into a persistent map so the margin breakdown uses real cost instead of
-  // the 40% placeholder. One command, runs in the page (golfballs.com) context
-  // so the gbcadmin session cookie flows. Progress + cancel; skips already-known
-  // SKUs (cost doesn't change), so re-running only fills gaps.
-  const [costSync, setCostSync] = useState(null);   // { done, total, found } while running
-  const costAbortRef = useRef(null);
-  const syncCosts = async () => {
-    if (costSync) { try { costAbortRef.current && costAbortRef.current.abort(); } catch {} return; }
-    // Unique inventory SKUs across the loaded catalog (parentCode is the base
-    // product code the endpoint keys on; fall back to sku).
-    const skus = Array.from(new Set(catalog.map(invSkuOf).filter(Boolean)));
-    if (!skus.length) { toast && toast.error && toast.error('No catalog SKUs to sync yet — let the index load first.'); return; }
-    const ctrl = new AbortController();
-    costAbortRef.current = ctrl;
-    setCostSync({ done: 0, total: skus.length, found: 0 });
-    try {
-      await importCosts(skus, {
-        signal: ctrl.signal,
-        onProgress: (p) => { if (aliveRef.current) setCostSync(p); },
-      });
-      if (aliveRef.current) {
-        await primeCostCache();
-        setProposal((pr) => pr.slice());   // re-render margins with the fresh costs
-      }
-    } catch (e) {
-      // Errors only (auth / embedding failures) — success stays silent; the
-      // button's progress already conveys completion.
-      if (aliveRef.current) toast && toast.error && toast.error('Cost sync failed: ' + (e.message || e));
-    } finally {
-      if (aliveRef.current) setCostSync(null);
-      costAbortRef.current = null;
-    }
-  };
-  const costPct = costSync && costSync.total ? Math.round((costSync.done / costSync.total) * 100) : 0;
+  // Per-line cost auto-loads on demand (the margin breakdown fetches the SKUs it
+  // needs from the gbcadmin Inventory endpoint), so there's no manual bulk sync.
 
   // Custom-logo subset: total, per-"Shop by Type" category counts, and the
   // ordered list of categories present (canonical order, extras trail).
@@ -3350,21 +3316,14 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 2, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {refreshing && progress ? (
                 <>Indexing {nfmt(progress.loaded)}{progress.total ? ' / ' + nfmt(progress.total) : ''} products…</>
-              ) : costSync ? (
-                <>Syncing costs {nfmt(costSync.done)}{costSync.total ? ' / ' + nfmt(costSync.total) : ''} SKUs…</>
               ) : (
                 <>{nfmt(catalog.length)} products{clTotal ? <> · {nfmt(clTotal)} custom-logo</> : null}{updatedTs ? <> · updated {relTime(updatedTs)}</> : null}</>
               )}
-              {(refreshing || costSync) && <span style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite', display: 'inline-block', flexShrink: 0 }} />}
+              {refreshing && <span style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite', display: 'inline-block', flexShrink: 0 }} />}
             </div>
           </div>
           <SearchBox value={query} onChange={setQuery} commands={commands} onPick={onPickCommand} filtersActive={filtersActive} onClearAll={clearAll} />
           <SortSelect value={sort} onChange={setSort} />
-          <IconBtn
-            size="md"
-            title={costSync ? `Syncing costs — ${costSync.done}/${costSync.total} (click to cancel)` : 'Sync costs for margin (from gbcadmin)'}
-            icon={<I.calc style={{ animation: costSync ? 'gb-spin .8s linear infinite' : 'none' }} />}
-            onClick={syncCosts} />
           <IconBtn size="md" title="Rebuild catalog index" icon={<I.refresh style={{ animation: refreshing ? 'gb-spin .8s linear infinite' : 'none' }} />} onClick={refresh} />
           <IconBtn size="md" icon={<I.close />} onClick={doClose} />
         </div>
@@ -3372,7 +3331,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
         {/* Re-index progress bar — determinate when numFound is known, a thin
             indeterminate sweep otherwise. Sits flush under the header so the
             grid below stays visible (no blanking) during a refresh. */}
-        <div style={{ height: 2, flexShrink: 0, position: 'relative', overflow: 'hidden', background: (refreshing || costSync) ? 'var(--gb-border-subtle)' : 'transparent' }}>
+        <div style={{ height: 2, flexShrink: 0, position: 'relative', overflow: 'hidden', background: refreshing ? 'var(--gb-border-subtle)' : 'transparent' }}>
           {refreshing ? (
             <div style={{
               position: 'absolute', top: 0, bottom: 0, left: 0,
@@ -3380,14 +3339,6 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               background: 'var(--gb-brand-label)', borderRadius: 2,
               transition: 'width .35s ease',
               animation: progress && progress.total ? 'none' : 'gc-indef 1.1s ease-in-out infinite',
-            }} />
-          ) : costSync ? (
-            <div style={{
-              position: 'absolute', top: 0, bottom: 0, left: 0,
-              width: costSync.total ? `${Math.min(100, costPct)}%` : '35%',
-              background: 'var(--gb-brand-label)', borderRadius: 2,
-              transition: 'width .35s ease',
-              animation: costSync.total ? 'none' : 'gc-indef 1.1s ease-in-out infinite',
             }} />
           ) : null}
         </div>

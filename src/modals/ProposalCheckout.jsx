@@ -339,17 +339,41 @@ function AllocBar({ allocation }) {
     </div>
   );
 }
+// Imprints whose value a recipient can vary per address (the name on a monogram,
+// the lines of personalized text). A custom logo is the same art everywhere, so
+// it isn't editable here.
+const editableImprints = (line) => (line.imprints || [])
+  .map((im, idx) => ({ im, idx }))
+  .filter(({ im }) => im.label === 'Personalized text' || im.label === 'Monogram');
+
 function DestItemRow({ line, item, onPatch }) {
+  const editable = editableImprints(line);
+  const assigned = (parseInt(item.qty, 10) || 0) > 0;
+  const ov = item.imprints || {};
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)' }}>
-      <ProductPlate src={line.product.img} size={38} />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{line.product.title}</div>
-        <ImprintList imprints={line.imprints} compact />
+    <div style={{ display: 'flex', flexDirection: 'column', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px' }}>
+        <ProductPlate src={line.product.img} size={38} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{line.product.title}</div>
+          <ImprintList imprints={line.imprints} compact />
+        </div>
+        <div style={{ width: 70, flexShrink: 0 }}>
+          <CkText value={item.qty} onChange={(v) => onPatch({ qty: v.replace(/\D/g, '') })} placeholder="Qty" mono />
+        </div>
       </div>
-      <div style={{ width: 70, flexShrink: 0 }}>
-        <CkText value={item.qty} onChange={(v) => onPatch({ qty: v.replace(/\D/g, '') })} placeholder="Qty" mono />
-      </div>
+      {editable.length > 0 && assigned && (
+        <div style={{ padding: '9px 12px 11px', borderTop: '1px dashed var(--gb-border-subtle)', background: 'var(--gb-fill-subtle)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .7, color: 'var(--gb-text-muted)' }}>Personalization for this address</div>
+          {editable.map(({ im, idx }) => (
+            <CkText key={idx}
+              label={im.label}
+              value={ov[idx] != null ? ov[idx] : (im.detail || '')}
+              onChange={(v) => onPatch({ imprints: { ...ov, [idx]: im.label === 'Monogram' ? v.toUpperCase() : v } })}
+              placeholder={im.label === 'Monogram' ? 'e.g. JDM' : 'Name or message for this recipient'} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
