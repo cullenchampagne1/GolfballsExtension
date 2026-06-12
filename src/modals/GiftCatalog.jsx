@@ -1724,13 +1724,13 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelet
           <I.eye size={12} /> View breakdown
         </span>
         <div style={{ flex: 1 }} />
-        {/* Multi-select checkbox — selecting 1+ proposals reveals an "Open"
-            action to view/email them together. */}
+        {/* Multi-select — selecting 1+ proposals reveals an "Open" action to
+            view/email them together. */}
         {onToggleSelect && (
-          <button onClick={(e) => { e.stopPropagation(); onToggleSelect(item); }} title={selected ? 'Selected — click to deselect' : 'Select for a combined view / email'}
-            style={{ width: 28, height: 28, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', background: selected ? 'var(--gb-brand-label)' : 'var(--gb-fill-subtle)', border: '1px solid ' + (selected ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: selected ? 'var(--gb-surface-deep)' : 'var(--gb-text-muted)', transition: 'all var(--gb-anim)' }}>
-            {selected ? <I.check size={14} strokeWidth={3} /> : <span style={{ width: 13, height: 13, borderRadius: 3, border: '1.5px solid currentColor' }} />}
-          </button>
+          <span onClick={(e) => e.stopPropagation()} title={selected ? 'Selected — click to deselect' : 'Select for a combined view / email'}
+            style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
+            <Checkbox checked={selected} onChange={() => onToggleSelect(item)} />
+          </span>
         )}
         <button onClick={(e) => { e.stopPropagation(); onLoad(item); }} title={loaded ? 'Added to proposal' : 'Load these items into the proposal'}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 28, padding: '0 11px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, flexShrink: 0, background: loaded ? 'var(--gb-brand-label)' : 'var(--gb-brand-tint-medium)', color: loaded ? 'var(--gb-surface-deep)' : 'var(--gb-brand-label)', border: '1px solid var(--gb-brand-tint-border)', transition: 'all var(--gb-anim)' }}>
@@ -1882,11 +1882,12 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
         {selectedIds && selectedIds.size > 0 && (
           <motion.div key="multibar" initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 60, opacity: 0 }} transition={{ duration: .22, ease: [.34, 1.4, .64, 1] }}
             style={{ position: 'absolute', left: 0, right: 0, bottom: 14, display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 5 }}>
-            <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 9px 9px 16px', borderRadius: 999, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', boxShadow: '0 8px 28px -6px rgba(0,0,0,.4)' }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{selectedIds.size} selected</span>
+            <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px 7px 10px', borderRadius: 999, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', boxShadow: '0 8px 28px -6px rgba(0,0,0,.4)' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: 22, height: 22, padding: '0 7px', borderRadius: 999, background: 'var(--gb-brand-label)', color: 'var(--gb-surface-deep)', fontSize: 11.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', lineHeight: 1 }}>{selectedIds.size}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>selected</span>
               <button onClick={() => onClearSelection && onClearSelection()} title="Clear selection"
-                style={{ fontSize: 11, fontWeight: 600, color: 'var(--gb-text-muted)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 2px' }}>Clear</button>
-              <Btn size="sm" variant="tinted" status="brand" icon={<I.eye size={12} />} onClick={() => onOpenMulti && onOpenMulti()}>Open {selectedIds.size}</Btn>
+                style={{ fontSize: 11, fontWeight: 600, color: 'var(--gb-text-muted)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 4px' }}>Clear</button>
+              <Btn size="sm" variant="tinted" status="brand" icon={<I.eye size={12} />} style={{ borderRadius: 999, paddingLeft: 14, paddingRight: 16 }} onClick={() => onOpenMulti && onOpenMulti()}>Open</Btn>
             </div>
           </motion.div>
         )}
