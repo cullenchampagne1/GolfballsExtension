@@ -2,7 +2,7 @@
   "templates": [
     {
       "type": "account",
-      "name": "Srixon Promotion",
+      "name": "Srixon Promotion Campaign",
       "subject": "Time to restock your Srixon, {{first_name}}?",
       "accountConditions": {
         "outerJoiner": "AND",
@@ -21,7 +21,7 @@
           }
         ]
       },
-      "body": "<p>Hey {{first_name}},</p>\n<p>Time for another round of Srixon golf balls? They are running their <b>BUY 12, GET 6 FREE</b> promo on every golf ball model right now — and it will not be around long.</p>\n<p>{{srixon_line}}</p>\n<p>Whether it is the Z-Star line or a value option like the Soft Feel, this is genuinely one of the best deals Srixon runs all year. Want me to put pricing together while it is live?</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free — single golf balls</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free — by the dozen</a></p>\n<p><a href=\"{{pdf_url}}\">{{logo_ball_img}}</a></p>\n<p>Best,</p>",
+      "body": "<p>Hey {{first_name}},</p>\n<p>Time for another round of Srixon golf balls? They are running their <b>BUY 12, GET 6 FREE</b> promo on every golf ball model right now — and it will not be around long.</p>\n<p>{{srixon_line}}</p>\n<p>Whether it is the Z-Star line or a value option like the Soft Feel, this is genuinely one of the best deals Srixon runs all year. Want me to put pricing together while it is live?</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free</a></p>\n<p>{{logo_proof}}</p>\n<p>Best,</p>",
       "vars": {
         "first_name": {
           "type": "schema",
@@ -64,18 +64,13 @@
             "conditionalScope": "line"
           }
         },
-        "logo_ball_img": {
-          "type": "attachment",
-          "mode": "inline",
-          "source": "schema",
-          "path": "proofs[0].logo_ball",
-          "filename": "your-logo-ball.png",
-          "width": 320,
-          "align": "center"
-        },
-        "pdf_url": {
-          "type": "schema",
-          "path": "proofs[0].pdf"
+        "logo_proof": {
+          "type": "code",
+          "body": "const p = (ctx.proofs && ctx.proofs[0]) || null;\nif (!p || !p.logo_ball) return '';\nconst img = '<img src=\"' + p.logo_ball + '\" width=\"320\" alt=\"Your logo on a Srixon ball\" style=\"display:block; height:auto; max-width:100%; margin:8px auto;\" />';\nreturn p.pdf ? ('<a href=\"' + p.pdf + '\">' + img + '</a>') : img;",
+          "smart": {
+            "conditional": true,
+            "conditionalScope": "line"
+          }
         }
       },
       "varOrder": [
@@ -86,25 +81,24 @@
         "last_item",
         "srixon_line",
         "ps_line",
-        "pdf_url",
-        "logo_ball_img"
+        "logo_proof"
       ],
       "variations": [
         {
           "label": "Events / tournaments",
           "subject": "A heads-up on Srixon before it ends, {{first_name}}",
-          "body": "<p>Hey {{first_name}},</p>\n<p>Wanted to make sure you saw this — Srixon is offering <b>BUY 12, GET 6 FREE</b> on every golf ball model right now, for a limited time.</p>\n<p>{{srixon_line}}</p>\n<p>If you have tournaments, events, or client gifts coming up, this is the time to restock. Want me to send pricing or rough out an order?</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free — single golf balls</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free — by the dozen</a></p>\n<p><a href=\"{{pdf_url}}\">{{logo_ball_img}}</a></p>\n<p>Best,</p>"
+          "body": "<p>Hey {{first_name}},</p>\n<p>Wanted to make sure you saw this — Srixon is offering <b>BUY 12, GET 6 FREE</b> on every golf ball model right now, for a limited time.</p>\n<p>{{srixon_line}}</p>\n<p>If you have tournaments, events, or client gifts coming up, this is the time to restock. Want me to send pricing or rough out an order?</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free</a></p>\n<p>{{logo_proof}}</p>\n<p>Best,</p>"
         },
         {
           "label": "Past buyer",
           "subject": "Your Srixon deal is live, {{first_name}}",
-          "body": "<p>Hey {{first_name}},</p>\n<p>Time for another order of Srixon? They are running their popular <b>BUY 12, GET 6 FREE</b> promo across all golf ball models for a limited time.</p>\n<p>{{srixon_line}}</p>\n<p>Since you have ordered from us before, I wanted to make sure you had a chance to take advantage before the window closes. Want me to send pricing or help put an order together?</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free — single golf balls</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free — by the dozen</a></p>\n<p><a href=\"{{pdf_url}}\">{{logo_ball_img}}</a></p>\n<p>Best,</p>"
+          "body": "<p>Hey {{first_name}},</p>\n<p>Time for another order of Srixon? They are running their popular <b>BUY 12, GET 6 FREE</b> promo across all golf ball models for a limited time.</p>\n<p>{{srixon_line}}</p>\n<p>Since you have ordered from us before, I wanted to make sure you had a chance to take advantage before the window closes. Want me to send pricing or help put an order together?</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free</a></p>\n<p>{{logo_proof}}</p>\n<p>Best,</p>"
         }
       ]
     },
     {
       "type": "account",
-      "name": "Follow Up #1",
+      "name": "#1 Srixon Promotion Campaign Follow Up",
       "subject": "Still time on the Srixon deal, {{first_name}}",
       "accountConditions": {
         "outerJoiner": "AND",
@@ -123,7 +117,7 @@
           }
         ]
       },
-      "body": "<p>Hi {{first_name}},</p>\n<p>Just following up on my last note — the Srixon <b>BUY 12, GET 6 FREE</b> promo is still active, but it is time-sensitive.</p>\n<p>{{srixon_line}}</p>\n<p>It covers every model, so whether you lean toward the Z-Star line or a value option like the Soft Feel, it is a great window to lock in pricing. Want me to run numbers on your preferred model?</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free — single golf balls</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free — by the dozen</a></p>\n<p><a href=\"{{pdf_url}}\">{{logo_ball_img}}</a></p>\n<p>Best,</p>",
+      "body": "<p>Hi {{first_name}},</p>\n<p>Just following up on my last note — the Srixon <b>BUY 12, GET 6 FREE</b> promo is still active, but it is time-sensitive.</p>\n<p>{{srixon_line}}</p>\n<p>It covers every model, so whether you lean toward the Z-Star line or a value option like the Soft Feel, it is a great window to lock in pricing. Want me to run numbers on your preferred model?</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free</a></p>\n<p>{{logo_proof}}</p>\n<p>Best,</p>",
       "vars": {
         "first_name": {
           "type": "schema",
@@ -166,18 +160,13 @@
             "conditionalScope": "line"
           }
         },
-        "logo_ball_img": {
-          "type": "attachment",
-          "mode": "inline",
-          "source": "schema",
-          "path": "proofs[0].logo_ball",
-          "filename": "your-logo-ball.png",
-          "width": 320,
-          "align": "center"
-        },
-        "pdf_url": {
-          "type": "schema",
-          "path": "proofs[0].pdf"
+        "logo_proof": {
+          "type": "code",
+          "body": "const p = (ctx.proofs && ctx.proofs[0]) || null;\nif (!p || !p.logo_ball) return '';\nconst img = '<img src=\"' + p.logo_ball + '\" width=\"320\" alt=\"Your logo on a Srixon ball\" style=\"display:block; height:auto; max-width:100%; margin:8px auto;\" />';\nreturn p.pdf ? ('<a href=\"' + p.pdf + '\">' + img + '</a>') : img;",
+          "smart": {
+            "conditional": true,
+            "conditionalScope": "line"
+          }
         }
       },
       "varOrder": [
@@ -188,25 +177,24 @@
         "last_item",
         "srixon_line",
         "ps_line",
-        "pdf_url",
-        "logo_ball_img"
+        "logo_proof"
       ],
       "variations": [
         {
           "label": "Planning ahead",
           "subject": "Before the Srixon promo closes, {{first_name}}",
-          "body": "<p>Hey {{first_name}},</p>\n<p>Wanted to circle back — the Srixon promo is still running, but it will not last much longer.</p>\n<p>{{srixon_line}}</p>\n<p>The BUY 12, GET 6 FREE deal on all models is a strong offer, especially if you are planning ahead for events, gifts, or an inventory restock. Happy to send options or run pricing — just say the word.</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free — single golf balls</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free — by the dozen</a></p>\n<p><a href=\"{{pdf_url}}\">{{logo_ball_img}}</a></p>\n<p>Best,</p>"
+          "body": "<p>Hey {{first_name}},</p>\n<p>Wanted to circle back — the Srixon promo is still running, but it will not last much longer.</p>\n<p>{{srixon_line}}</p>\n<p>The BUY 12, GET 6 FREE deal on all models is a strong offer, especially if you are planning ahead for events, gifts, or an inventory restock. Happy to send options or run pricing — just say the word.</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free</a></p>\n<p>{{logo_proof}}</p>\n<p>Best,</p>"
         },
         {
           "label": "Model-specific",
           "subject": "Want me to price your Srixon, {{first_name}}?",
-          "body": "<p>Hi {{first_name}},</p>\n<p>Just checking back in on the Srixon promotion — the BUY 12, GET 6 FREE offer across all models is still available, but limited.</p>\n<p>{{srixon_line}}</p>\n<p>With the Z-Star line and Q-Star Tour all included, it is a great time to lock in pricing before the deal ends. Let me know if you want me to run some numbers or narrow down the best options for you.</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free — single golf balls</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free — by the dozen</a></p>\n<p><a href=\"{{pdf_url}}\">{{logo_ball_img}}</a></p>\n<p>Best,</p>"
+          "body": "<p>Hi {{first_name}},</p>\n<p>Just checking back in on the Srixon promotion — the BUY 12, GET 6 FREE offer across all models is still available, but limited.</p>\n<p>{{srixon_line}}</p>\n<p>With the Z-Star line and Q-Star Tour all included, it is a great time to lock in pricing before the deal ends. Let me know if you want me to run some numbers or narrow down the best options for you.</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free</a></p>\n<p>{{logo_proof}}</p>\n<p>Best,</p>"
         }
       ]
     },
     {
       "type": "account",
-      "name": "Follow Up #2",
+      "name": "#2 Srixon Promotion Campaign Follow Up",
       "subject": "Staying on your radar, {{first_name}}",
       "accountConditions": {
         "outerJoiner": "AND",
@@ -225,7 +213,7 @@
           }
         ]
       },
-      "body": "<p>Hi {{first_name}},</p>\n<p>Circling back one more time! I wanted to stay on your radar — we regularly get access to brand deals and seasonal promos from the top golf brands like Srixon.</p>\n<p>If you are planning ahead, these can be game-changers for client gifting, corporate events, or building out tournament kits. I would love to help with any custom golf ball or logo projects you have coming up.</p>\n<p><i>{{ps_line}}</i></p>\n<p><a href=\"{{pdf_url}}\">{{logo_ball_img}}</a></p>\n<p>Hope to reconnect soon!</p>\n<p>Best,</p>",
+      "body": "<p>Hi {{first_name}},</p>\n<p>Circling back one more time! I wanted to stay on your radar — we regularly get access to brand deals and seasonal promos from the top golf brands like Srixon.</p>\n<p>If you are planning ahead, these can be game-changers for client gifting, corporate events, or building out tournament kits. I would love to help with any custom golf ball or logo projects you have coming up.</p>\n<p><i>{{ps_line}}</i></p>\n<p>{{logo_proof}}</p>\n<p>Hope to reconnect soon!</p>\n<p>Best,</p>",
       "vars": {
         "first_name": {
           "type": "schema",
@@ -243,25 +231,19 @@
             "conditionalScope": "line"
           }
         },
-        "logo_ball_img": {
-          "type": "attachment",
-          "mode": "inline",
-          "source": "schema",
-          "path": "proofs[0].logo_ball",
-          "filename": "your-logo-ball.png",
-          "width": 320,
-          "align": "center"
-        },
-        "pdf_url": {
-          "type": "schema",
-          "path": "proofs[0].pdf"
+        "logo_proof": {
+          "type": "code",
+          "body": "const p = (ctx.proofs && ctx.proofs[0]) || null;\nif (!p || !p.logo_ball) return '';\nconst img = '<img src=\"' + p.logo_ball + '\" width=\"320\" alt=\"Your logo on a Srixon ball\" style=\"display:block; height:auto; max-width:100%; margin:8px auto;\" />';\nreturn p.pdf ? ('<a href=\"' + p.pdf + '\">' + img + '</a>') : img;",
+          "smart": {
+            "conditional": true,
+            "conditionalScope": "line"
+          }
         }
       },
       "varOrder": [
         "first_name",
         "ps_line",
-        "pdf_url",
-        "logo_ball_img"
+        "logo_proof"
       ]
     }
   ]

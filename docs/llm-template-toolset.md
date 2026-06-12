@@ -121,6 +121,15 @@ Pipeline order: fallback → extract → transform → format.
 ### 3.7 OR-blocks in the body
 `{{nickname|first_name}}` — uses the first non-empty candidate. Both names must exist in `vars`.
 
+### 3.8 NEVER put a variable inside an HTML attribute
+Do **not** write `<a href="{{url}}">` or `<img src="{{img}}">` — the editor chip-ifies every `{{...}}`, including ones inside attributes, which corrupts the tag. To build a link or image **from** a variable, return the COMPLETE tag from a `code` variable and drop that one placeholder on its own line:
+```js
+// code var "shop_link":
+const u = vars.product_url || 'https://www.golfballs.com/';
+return '<a href="' + u + '">' + (vars.product_name || 'our shop') + '</a>';
+```
+Body: `<p>{{shop_link}}</p>`. Same for a linked image — return `'<a href="..."><img src="..." width="320" /></a>'` from code. (Static links with no variable, e.g. `<a href="https://fixed-url">Shop</a>`, are fine in the body.) Inline images returned from `code` are still CID-embedded on the PA send path.
+
 ---
 
 ## 4 · Per-type specifics
