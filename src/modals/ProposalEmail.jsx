@@ -716,6 +716,33 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
                 <OptionToggle checked={show.message} label="Show personal message" hint="Include your note above the items" onClick={() => toggle('message')} />
               </div>
             </ConfigGroup>
+
+            {/* Multi-proposal: show the cart link wired into EACH proposal's
+                "View this option" button, so the rep can confirm every button
+                points at the right proposal (and spot any draft with no cart). */}
+            {sections && (
+              <ConfigGroup title={`Proposal links · ${sections.length}`}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {sections.map((s, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 11.5 }}>
+                      <span style={{ marginTop: 4, width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: s.cartLink ? 'var(--gb-success-fg)' : 'var(--gb-warning-fg)' }} />
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontWeight: 600, color: 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {String.fromCharCode(65 + i)} · {s.optionName || s.name || `Proposal ${i + 1}`}
+                        </div>
+                        {s.cartLink ? (
+                          <a href={s.cartLink} target="_blank" rel="noreferrer" style={{ display: 'block', fontSize: 10.5, color: 'var(--gb-brand-label)', wordBreak: 'break-all', textDecoration: 'none' }}>
+                            {s.cartLink.replace(/^https?:\/\/(www\.)?/, '')}
+                          </a>
+                        ) : (
+                          <div style={{ fontSize: 10.5, color: 'var(--gb-warning-fg)' }}>No cart link — save it to the account first</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ConfigGroup>
+            )}
           </div>
 
           {/* preview column */}
