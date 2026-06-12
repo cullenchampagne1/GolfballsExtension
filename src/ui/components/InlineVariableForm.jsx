@@ -33,6 +33,8 @@ const RegexIcon   = (p) => <Icon {...p}><circle cx="12" cy="12" r="3"/><path d="
 const VariableIcon = (p) => <Icon {...p}><path d="M5 4 a14 14 0 000 16M19 4a14 14 0 010 16"/><path d="M9 9l6 6M9 15l6-6"/></Icon>;
 const CodeIcon = (p) => <Icon {...p}><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></Icon>;
 
+const ClipIcon = (p) => <Icon {...p}><path d="M21.4 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></Icon>;
+
 const KIND_LABELS = {
   code:    'Code',
   builtin: 'Built-in',
@@ -40,6 +42,7 @@ const KIND_LABELS = {
   dom:     'DOM',
   literal: 'Literal',
   regex:   'Regex',
+  attachment: 'Attachment',
 };
 const KIND_ICONS = {
   code:    <CodeIcon />,
@@ -48,11 +51,12 @@ const KIND_ICONS = {
   dom:     <I.search />,
   literal: <I.edit />,
   regex:   <RegexIcon />,
+  attachment: <ClipIcon />,
 };
 
 const SOFT = { duration: 0.22, ease: [0.32, 0.72, 0, 1] };
 
-export function InlineVariableForm({ typeId, onAdd, onCancel, varNames = [] }) {
+export function InlineVariableForm({ typeId, onAdd, onCancel, varNames = [], paEnabled = false }) {
   const [name,         setName]         = useState('');
   const [kind,         setKind]         = useState(SOURCE_KINDS[typeId]?.[0] ?? 'literal');
   const [config,       setConfig]       = useState('');
@@ -63,6 +67,15 @@ export function InlineVariableForm({ typeId, onAdd, onCancel, varNames = [] }) {
   const [regexGroup,   setRegexGroup]   = useState('1');
   const [regexScope,   setRegexScope]   = useState('');
   const [pickingScope, setPickingScope] = useState(false);
+  // Attachment config — inline image (placed in the body, sized/aligned) vs an
+  // attached file (rides the email as a real attachment). Source mirrors the
+  // main kinds: a fixed URL, a schema path that resolves to a URL, or a code
+  // block that returns a URL / data: URL.
+  const [attMode,      setAttMode]      = useState('inline');   // 'inline' | 'attach'
+  const [attSource,    setAttSource]    = useState('url');      // 'url' | 'schema' | 'code'
+  const [attFilename,  setAttFilename]  = useState('');
+  const [attWidth,     setAttWidth]     = useState(220);
+  const [attAlign,     setAttAlign]     = useState('left');
 
   // Reset kind/config when the template type changes.
   useEffect(() => {
@@ -168,7 +181,14 @@ export function InlineVariableForm({ typeId, onAdd, onCancel, varNames = [] }) {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [kind, config, picking]);
 
-  const kindOptions = (SOURCE_KINDS[typeId] || []).map((id) => ({
+  /* Attachment only exists on the Power-Automate direct-send path (mailto
+     can't carry attachments), and only for page-driven templates (order /
+     account) — case replies go out as mailto. */
+  const kinds = [
+    ...(SOURCE_KINDS[typeId] || []),
+    ...(paEnabled && typeId !== 'case' ? ['attachment'] : []),
+  ];
+  const kindOptions = kinds.map((id) => ({
     id, label: KIND_LABELS[id] || id, icon: KIND_ICONS[id],
   }));
 
@@ -179,6 +199,7 @@ export function InlineVariableForm({ typeId, onAdd, onCancel, varNames = [] }) {
     : kind === 'dom'     ? (liveResolved || (config ? '(querying…)' : '— enter a selector —'))
     : kind === 'regex'   ? (config ? '(first capture group)' : '— enter a regex —')
     : kind === 'code'    ? (config ? '(resolves on load)' : '— write code —')
+    : kind === 'attachment' ? (config ? (attMode === 'inline' ? `(inline image · ${attWidth}px)` : '(file attachment)') : '— point at a file —')
     : '—';
 
   const canAdd = !!name && !!config;
@@ -442,6 +463,83 @@ export function InlineVariableForm({ typeId, onAdd, onCancel, varNames = [] }) {
                 />
               </Field>
             )}
+
+            {kind === 'attachment' && (
+              <>
+                {/* Placement: inline = an image placed in the body where the
+                    {{chip}} sits (scalable / movable); attach = a real file
+                    attachment listed on the email. */}
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--gb-text-muted)', marginBottom: 6 }}>
+                    Placement
+                  </div>
+                  <Segmented
+                    size="sm" full value={attMode}
+                    onChange={setAttMode}
+                    options={[
+                      { id: 'inline', label: 'Inline image' },
+                      { id: 'attach', label: 'Attached file' },
+                    ]}
+                  />
+                </div>
+                {/* Where the file comes from. */}
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, color: 'var(--gb-text-muted)', marginBottom: 6 }}>
+                    File source
+                  </div>
+                  <Segmented
+                    size="sm" full value={attSource}
+                    onChange={(id) => { setAttSource(id); setConfig(''); }}
+                    options={[
+                      { id: 'url',    label: 'URL' },
+                      { id: 'schema', label: 'Schema' },
+                      { id: 'code',   label: 'Code' },
+                    ]}
+                  />
+                </div>
+                {attSource === 'url' && (
+                  <Field label="File URL" hint="Direct link to the image / file (https or data:)">
+                    <Input size="sm" mono value={config} placeholder="https://static.golfballs.com/…/logo.png" leading={<ClipIcon />} onChange={setConfig} />
+                  </Field>
+                )}
+                {attSource === 'schema' && (
+                  <Field label="Schema path" hint="A field that resolves to a file URL (e.g. an uploaded logo)">
+                    <VariableSchemaPicker
+                      value={config}
+                      onChange={setConfig}
+                      placeholder="Pick a field…"
+                      schema={typeId === 'order' ? orderSchema : undefined}
+                    />
+                  </Field>
+                )}
+                {attSource === 'code' && (
+                  <Field label="Code" hint="Return a URL or data: URL · ctx = page data · vars · h = helpers">
+                    <CodeVarEditor value={config} onChange={setConfig} typeId={typeId} varNames={varNames} />
+                  </Field>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: attMode === 'inline' ? '1fr 90px 110px' : '1fr', gap: 6 }}>
+                  <Field label="Filename" hint={attMode === 'attach' ? 'Shown on the attachment' : 'Alt text / fallback name'}>
+                    <Input size="sm" value={attFilename} placeholder="logo.png" onChange={setAttFilename} />
+                  </Field>
+                  {attMode === 'inline' && (
+                    <>
+                      <Field label="Width (px)">
+                        <Input size="sm" mono value={String(attWidth)} onChange={(v) => setAttWidth(Math.max(24, Math.min(600, parseInt(v.replace(/\D/g, ''), 10) || 0)) || 220)} />
+                      </Field>
+                      <Field label="Align">
+                        <Dropdown size="sm" value={attAlign} onChange={setAttAlign}
+                          options={[{ id: 'left', label: 'Left' }, { id: 'center', label: 'Center' }, { id: 'right', label: 'Right' }]} />
+                      </Field>
+                    </>
+                  )}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>
+                  {attMode === 'inline'
+                    ? <>Place <b style={{ color: 'var(--gb-text-secondary)' }}>{'{{' + (name || 'name') + '}}'}</b> in the body — it renders as a resizable image block. The image data is embedded into the email at send (works without the recipient loading remote images).</>
+                    : <>The file is fetched at send time and attached to the email (sent as data, not a link). Place <b style={{ color: 'var(--gb-text-secondary)' }}>{'{{' + (name || 'name') + '}}'}</b> at the end of the body — it shows as an attachment chip.</>}
+                </div>
+              </>
+            )}
           </motion.div>
         </AnimatePresence>
 
@@ -493,6 +591,14 @@ export function InlineVariableForm({ typeId, onAdd, onCancel, varNames = [] }) {
                 ...(typeId !== 'case' && regexScope ? { scope: regexScope } : {}),
               } : {}),
               ...(kind === 'code' ? { async: isAsyncBody(config) } : {}),
+              ...(kind === 'attachment' ? {
+                attach: {
+                  mode: attMode, source: attSource,
+                  filename: attFilename || 'attachment',
+                  ...(attMode === 'inline' ? { width: attWidth, align: attAlign } : {}),
+                },
+                ...(attSource === 'code' ? { async: isAsyncBody(config) } : {}),
+              } : {}),
             })}
           >
             Add

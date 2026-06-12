@@ -11,6 +11,7 @@ const KindIcons = {
   pick:    (p) => <Icon {...p}><path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/></Icon>,
   regex:   (p) => <Icon {...p}><circle cx="12" cy="12" r="3"/><path d="M12 5v6M12 12v6M6 12h12"/></Icon>,
   literal: (p) => <Icon {...p}><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M18.5 2.5a2.1 2.1 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></Icon>,
+  attachment: (p) => <Icon {...p}><path d="M21.4 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></Icon>,
 };
 
 const KIND_LABELS = {
@@ -21,6 +22,7 @@ const KIND_LABELS = {
   pick:    'Pick',
   regex:   'Regex',
   literal: 'Literal',
+  attachment: 'Attach',
 };
 
 /**

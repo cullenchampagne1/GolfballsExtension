@@ -8,6 +8,7 @@ import {
   TYPE_ICONS, TYPE_COLORS,
   useSettingNotification,
 } from '../ui/index.js';
+import { parseTemplateBlob, importTemplates } from '../lib/templateImport.js';
 
 /* ────────────────────────────────────────────────────────────────
    editor-sidebar.jsx
@@ -55,6 +56,7 @@ function folderColor(folder) {
 }
 
 const FolderIcon = (p) => <Icon {...p}><path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></Icon>;
+const ImportIcon = (p) => <Icon {...p}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></Icon>;
 const PenIcon    = (p) => <Icon {...p}><path d="M17 3a2.85 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5z"/></Icon>;
 const CogIcon    = (p) => <Icon {...p}><path d="M10.3 4.3c.4-1.7 2.9-1.7 3.3 0a1.7 1.7 0 002.6 1.1c1.5-.9 3.3.8 2.4 2.4a1.7 1.7 0 001 2.5c1.8.5 1.8 3 0 3.4a1.7 1.7 0 00-1 2.6c.9 1.5-.9 3.3-2.4 2.4a1.7 1.7 0 00-2.6 1c-.4 1.8-2.9 1.8-3.3 0a1.7 1.7 0 00-2.6-1c-1.5.9-3.3-.8-2.4-2.4a1.7 1.7 0 00-1-2.6c-1.8-.4-1.8-2.9 0-3.4a1.7 1.7 0 001-2.5c-.9-1.6.9-3.3 2.4-2.4 1 .6 2.3.1 2.6-1.1z"/><circle cx="12" cy="12" r="3"/></Icon>;
 const HelpIcon   = (p) => <Icon {...p}><circle cx="12" cy="12" r="9"/><path d="M9.1 9a3 3 0 015.8 1c0 2-3 2.5-3 4.5"/><path d="M12 17.5h.01"/></Icon>;
@@ -513,11 +515,90 @@ function FolderGroup({ folder, tpls, isNote, currentId, onOpen, onMove, onRename
 }
 
 /* ── Root ───────────────────────────────────────────────────────── */
+/* ── Import-templates modal — paste an LLM-generated JSON blob ────
+   The blob contract lives in docs/llm-template-toolset.md (the toolset
+   file handed to a model so it can author full multi-variation,
+   variable-driven templates). Validates live as you paste; Import
+   appends with fresh ids (never overwrites). */
+function ImportTemplatesModal({ onClose, onDone }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const parsed = useMemo(() => {
+    const t = text.trim();
+    if (!t) return null;
+    try { return { ok: true, templates: parseTemplateBlob(t) }; }
+    catch (e) { return { ok: false, error: e.message }; }
+  }, [text]);
+  const doImport = async () => {
+    if (!parsed || !parsed.ok || busy) return;
+    setBusy(true);
+    try { await importTemplates(parsed.templates); onDone(parsed.templates.length); }
+    catch (e) { onDone(0, e.message); }
+  };
+  return createPortal(
+    <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: 'fixed', inset: 0, zIndex: 2147483000, background: 'rgba(10,12,8,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ width: 560, maxWidth: '92vw', maxHeight: '86vh', display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden', fontFamily: 'var(--gb-font-sans)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+          <span style={{ width: 28, height: 28, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ImportIcon size={14} /></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Import templates</div>
+            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>Paste a generated template JSON blob — single template, array, or {'{ templates: […] }'}</div>
+          </div>
+          <IconBtn size="sm" icon={<I.close />} onClick={onClose} />
+        </div>
+        <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
+          <textarea
+            autoFocus
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder='Paste the JSON here…'
+            spellCheck={false}
+            style={{ width: '100%', boxSizing: 'border-box', height: 220, resize: 'vertical', padding: 10,
+              background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)',
+              outline: 'none', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 11, lineHeight: 1.5 }}
+          />
+          {parsed && (
+            parsed.ok ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '9px 11px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint-soft)', border: '1px solid var(--gb-success-tint-border)' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-success-fg)' }}>
+                  {parsed.templates.length} template{parsed.templates.length === 1 ? '' : 's'} ready to import
+                </div>
+                {parsed.templates.map((t, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: 'var(--gb-text-secondary)', minWidth: 0 }}>
+                    <Tag tone="neutral" size="xs">{t.type}</Tag>
+                    <span style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
+                    <span style={{ color: 'var(--gb-text-muted)', flexShrink: 0 }}>
+                      {Object.keys(t.vars || {}).length || (t.caseVars || []).length} vars{t.variations ? ` · ${t.variations.length} variations` : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ padding: '9px 11px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-error-tint-soft, var(--gb-warning-tint-soft))', border: '1px solid var(--gb-error-tint-border, var(--gb-warning-tint-border))', fontSize: 11, color: 'var(--gb-error-fg, var(--gb-warning-fg))', lineHeight: 1.5 }}>
+                {parsed.error}
+              </div>
+            )
+          )}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '11px 14px', borderTop: '1px solid var(--gb-border-subtle)' }}>
+          <Btn variant="ghost" size="sm" onClick={onClose}>Cancel</Btn>
+          <Btn variant="primary" size="sm" icon={<ImportIcon />} disabled={!parsed || !parsed.ok || busy} state={busy ? 'loading' : 'idle'} onClick={doImport}>
+            Import{parsed && parsed.ok ? ` ${parsed.templates.length}` : ''}
+          </Btn>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function TemplateSidebar() {
   // No local SettingNotificationHost — the hook below picks up
   // window.__gbNotify (mounted globally by editor-notifications.jsx),
   // so confirm/prompt overlays the whole window, not the sidebar.
   const notify = useSettingNotification();
+  const [importOpen,  setImportOpen]  = useState(false);
   const [tab,         setTab]         = useState('templates');
   const [templates,   setTemplates]   = useState([]);
   const [notes,       setNotes]       = useState([]);
@@ -713,10 +794,22 @@ function TemplateSidebar() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <IconBtn size="sm" icon={<ImportIcon />} title="Import templates (paste JSON)" onClick={() => setImportOpen(true)} />
           <IconBtn size="sm" icon={<HelpIcon />} title="Operator's Guide" onClick={openGuide} />
           <IconBtn size="sm" icon={<CogIcon />} onClick={openSettings} />
         </div>
       </div>
+
+      {importOpen && (
+        <ImportTemplatesModal
+          onClose={() => setImportOpen(false)}
+          onDone={(n, err) => {
+            setImportOpen(false);
+            if (err) notify.notify('Import failed — ' + err, { tone: 'warning' });
+            else notify.notify(`Imported ${n} template${n === 1 ? '' : 's'}.`);
+          }}
+        />
+      )}
 
       {/* Controls: tabs + search + new template + new folder */}
       <div style={{ padding: '10px 10px 8px', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>

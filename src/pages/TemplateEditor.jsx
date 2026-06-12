@@ -76,12 +76,25 @@ function convertVars(tpl) {
     } else if (v.type === 'regex') {
       kind   = 'regex';
       config = v.pattern  || '';
+    } else if (v.type === 'attachment') {
+      /* Attachment: config is the file source (url / schema path / code
+         body, per attach.source); placement + sizing ride in `attach`. */
+      kind   = 'attachment';
+      config = v.url || v.path || v.body || '';
     } else {
       kind   = 'literal';
       config = v.value || v.selector || '';
     }
     return {
       name, kind, config,
+      ...(v.type === 'attachment' ? {
+        attach: {
+          mode: v.mode || 'inline', source: v.source || 'url',
+          filename: v.filename || 'attachment',
+          ...(v.width ? { width: v.width } : {}),
+          ...(v.align ? { align: v.align } : {}),
+        },
+      } : {}),
       ...(v.type === 'regex' ? { source: v.source || 'body' } : {}),
       ...(v.group ? { group: v.group } : {}),
       ...(v.scope ? { scope: v.scope } : {}),
@@ -110,6 +123,23 @@ function varDef(v) {
      resolver picks the timeout-guarded AsyncFunction path for bodies
      that await h.server / h.fetchJson. */
   if (v.kind === 'code')    return { type: 'code', body: v.config, ...(v.async ? { async: true } : {}) };
+  /* 'attachment' stores the file source under the key its source kind
+     expects (url / path / body) plus the placement block. PA-only: the
+     resolver renders inline mode as an <img> (CID-embedded at send) and
+     attach mode as a hidden marker the background turns into a real
+     fileAttachment — both ship the image DATA, not a link. */
+  if (v.kind === 'attachment') {
+    const a = v.attach || {};
+    return {
+      type: 'attachment',
+      mode: a.mode || 'inline',
+      source: a.source || 'url',
+      ...(a.source === 'schema' ? { path: v.config } : a.source === 'code' ? { body: v.config } : { url: v.config }),
+      filename: a.filename || 'attachment',
+      ...(a.mode === 'inline' ? { width: a.width || 220, align: a.align || 'left' } : {}),
+      ...(v.async ? { async: true } : {}),
+    };
+  }
   if (v.kind === 'regex')   return {
     type: 'regex',
     pattern:  v.config,
@@ -360,14 +390,23 @@ export function TemplateEditor({ tpl, onDelete }) {
     setVars(vs => vs.map(v => v.name === name ? { ...v, smart } : v));
     setSmartTarget(null);
   };
-  const handleAddVar    = ({ name, kind, config, source, group, scope }) => {
+  const handleAddVar    = ({ name, kind, config, source, group, scope, async: isAsync, attach }) => {
     setVars(vs => [...vs, {
       name, kind, config,
       ...(source ? { source } : {}),
       ...(group ? { group } : {}),
       ...(scope ? { scope } : {}),
+      ...(isAsync ? { async: true } : {}),
+      ...(attach ? { attach } : {}),
       resolved: null, status: 'miss', smart: {},
     }]);
+  };
+  /* RichTextEditor inline-attachment block resize → persist the new width
+     onto the variable so the sent <img> matches the editor placeholder. */
+  const handleAttachmentResize = (name, width) => {
+    setVars(vs => vs.map(v => (v.name === name && v.kind === 'attachment')
+      ? { ...v, attach: { ...(v.attach || {}), width } }
+      : v));
   };
   const handleEditVar = ({ oldName, newName }) => {
     // Rename only — VariableTable no longer offers kind-change because each
@@ -687,6 +726,7 @@ export function TemplateEditor({ tpl, onDelete }) {
             onChange={setBody}
             onChipClick={openSmartByName}
             variables={vars}
+            onAttachmentResize={handleAttachmentResize}
             minHeight={150}
             placeholder="Write the email body — format with the toolbar, insert variables from the menu. Click a variable chip to set fallbacks, transforms, or formatting."
           />
@@ -760,6 +800,7 @@ export function TemplateEditor({ tpl, onDelete }) {
         <VariableTable
           typeId={typeId}
           vars={displayVars}
+          paEnabled={paEnabled}
           onAdd={handleAddVar}
           onEdit={handleEditVar}
           onDelete={handleDeleteVar}

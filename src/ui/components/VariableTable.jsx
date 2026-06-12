@@ -50,7 +50,7 @@ const COL_GRID = 'minmax(0, 1fr) 84px 120px 120px 28px';
  *                delete and re-add. Reduces the rename UI to a native prompt.
  *   onOpenSmart  (variable) => void — opens the smart-options modal
  */
-export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOpenSmart }) {
+export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOpenSmart, paEnabled = false }) {
   const [adding, setAdding] = useState(false);
   const notify = useSettingNotification();
 
@@ -235,6 +235,7 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
           <InlineVariableForm
             key="inline-add"
             typeId={typeId}
+            paEnabled={paEnabled}
             varNames={vars.map((v) => v.name)}
             onAdd={(payload) => { onAdd?.(payload); setAdding(false); }}
             onCancel={() => setAdding(false)}

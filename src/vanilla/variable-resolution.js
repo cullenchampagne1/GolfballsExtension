@@ -100,6 +100,24 @@
           }
         }
 
+        /* Attachment (PA-only): resolves the FILE SOURCE to a URL / data:
+           URL, then renders the placement HTML. Inline mode emits an <img>
+           that the background's CID pass embeds as real image data; attach
+           mode emits a hidden marker span the background converts into a
+           non-inline fileAttachment (also sent as data — links rot and mail
+           clients block remote images by default). A `code` source resolves
+           in resolveAllVarsAsync (needs the async engine). */
+        case 'attachment': {
+          let src = '';
+          if (def.source === 'schema' && def.path) {
+            const engine = (typeof window !== 'undefined' && window.__gbPageEngine) || null;
+            src = engine ? String(engine.toDisplayString(engine.resolvePath(doc, def.path, '')) || '') : '';
+          } else if (def.source !== 'code') {
+            src = def.url || '';
+          }
+          return attachmentHtml(def, src);
+        }
+
         /* A literal variable is fixed text — there's nothing to resolve,
            so it must return its own value (was falling through to the
            default '' and showing as "unresolved"). The value lives in
@@ -113,6 +131,30 @@
         default: return '';
       }
     } catch { return ''; }
+  }
+
+  /* Render an attachment variable's placement HTML from its resolved file
+     source. Empty source → '' (so smart.conditional can drop the sentence).
+     - inline: a sized <img>. The src may be https or data: — either way the
+       background's extractEmailImages pass converts it to a CID inline
+       attachment, so the recipient sees the image without "load remote
+       images". Width/align come from the variable config (and the editor's
+       drag-resize keeps them in sync with the placeholder block).
+     - attach: an invisible marker span; the background strips it and turns
+       it into a real (non-inline) fileAttachment with the file's DATA. */
+  function attachmentHtml(def, src) {
+    const s = String(src || '').trim();
+    if (!s || !/^(https?:|data:)/i.test(s)) return '';
+    const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const fname = def.filename || 'attachment';
+    if ((def.mode || 'inline') === 'inline') {
+      const w = Math.max(24, Math.min(600, Number(def.width) || 220));
+      const align = def.align === 'center' ? 'margin:8px auto;'
+        : def.align === 'right' ? 'margin:8px 0 8px auto;'
+        : 'margin:8px auto 8px 0;';
+      return `<img src="${esc(s)}" width="${w}" alt="${esc(fname)}" style="display:block; height:auto; max-width:100%; ${align}" />`;
+    }
+    return `<span data-gb-attach="${esc(s)}" data-gb-attach-name="${esc(fname)}" style="display:none">&#8203;</span>`;
   }
 
   /* Find which OTHER variables a code body reads via `vars.foo` /
@@ -243,6 +285,20 @@
             const value = await engine.evaluateCode(doc, def.body || '', rawValues);
             raw = value;                              // keep intact (could be an object/array) for downstream vars
             display = engine.toDisplayString(value);  // stringify only for template substitution
+          } catch (e) {
+            raw = ''; display = `<code-var error: ${e.message}>`;
+          }
+        }
+      } else if (def.type === 'attachment' && def.source === 'code') {
+        /* Attachment with a code source: the body returns the file URL /
+           data: URL; the placement HTML wraps whatever it returns. Runs
+           through the same sandboxed async engine as code vars. */
+        if (!engine) { raw = ''; display = ''; }
+        else {
+          try {
+            const value = await engine.evaluateCode(doc, def.body || '', rawValues);
+            raw = engine.toDisplayString(value);
+            display = attachmentHtml(def, raw);
           } catch (e) {
             raw = ''; display = `<code-var error: ${e.message}>`;
           }

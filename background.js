@@ -1471,10 +1471,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (payload && Array.isArray(payload.emails)) {
           for (const em of payload.emails) {
             if (em && typeof em.htmlBody === 'string') {
-              const r = await extractEmailImages(em.htmlBody);
+              // Attached-file markers FIRST (they're stripped from the html),
+              // then the CID image pass over what remains.
+              const fa = await extractEmailFileAttachments(em.htmlBody);
+              const r  = await extractEmailImages(fa.html);
               em.htmlBody = r.html;
-              if (r.attachments.length) {
-                em.attachments = [...(em.attachments || []), ...r.attachments];
+              const extra = [...fa.attachments, ...r.attachments];
+              if (extra.length) {
+                em.attachments = [...(em.attachments || []), ...extra];
               }
             }
           }
@@ -1925,6 +1929,66 @@ async function extractEmailImages(html) {
   return result;
 }
 
+/* ── Attached-file extraction (attachment variables, attach mode) ─────────────
+   The template resolver renders an attach-mode attachment variable as an
+   invisible marker:
+     <span data-gb-attach="<url-or-dataurl>" data-gb-attach-name="file.pdf" …></span>
+   Here we strip every marker from the html and turn each one into a REAL
+   (non-inline) fileAttachment — fetched and sent as DATA (contentBytes), not a
+   link: links rot, need auth, and Graph's fileAttachment requires contentBytes
+   anyway. Any content type is allowed (PDF/PNG/etc.), capped at 8 MB. */
+const GB_MAX_ATTACH_BYTES = 8 * 1024 * 1024;
+async function extractEmailFileAttachments(html) {
+  const result = { html, attachments: [] };
+  if (!html || typeof html !== 'string' || html.indexOf('data-gb-attach=') === -1) return result;
+  const markRe = /<span\b[^>]*\bdata-gb-attach\s*=\s*"([^"]*)"[^>]*>[\s\S]*?<\/span>/gi;
+  const nameRe = /\bdata-gb-attach-name\s*=\s*"([^"]*)"/i;
+  const unesc = (s) => String(s || '').replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&amp;/g, '&');
+  const specs = [];
+  let m;
+  while ((m = markRe.exec(html))) {
+    const nm = m[0].match(nameRe);
+    specs.push({ tag: m[0], src: unesc(m[1]), name: unesc((nm && nm[1]) || '') || 'attachment' });
+  }
+  if (!specs.length) return result;
+  let out = html;
+  await Promise.all(specs.map(async (spec) => {
+    out = out.split(spec.tag).join('');                 // marker never reaches the recipient
+    try {
+      let contentType = '';
+      let base64 = '';
+      if (/^data:/i.test(spec.src)) {
+        const dm = spec.src.match(/^data:([^;,]*);base64,([\s\S]*)$/i);
+        if (!dm) return;
+        contentType = dm[1] || 'application/octet-stream';
+        base64 = dm[2].replace(/\s/g, '');
+      } else {
+        let fetchUrl = spec.src.replace(/&amp;/gi, '&');
+        if (fetchUrl.startsWith('//')) fetchUrl = 'https:' + fetchUrl;
+        if (!/^https?:\/\//i.test(fetchUrl)) return;
+        const resp = await fetch(fetchUrl, { referrerPolicy: 'no-referrer' });
+        if (!resp.ok) { console.warn('[GB PA] attachment fetch failed', resp.status, fetchUrl); return; }
+        contentType = resp.headers.get('content-type') || 'application/octet-stream';
+        const buf = await resp.arrayBuffer();
+        if (buf.byteLength > GB_MAX_ATTACH_BYTES) { console.warn('[GB PA] attachment too large, skipped', fetchUrl); return; }
+        base64 = gbBufToBase64(buf);
+      }
+      if (!base64) return;
+      result.attachments.push({
+        '@odata.type': '#microsoft.graph.fileAttachment',   // MUST be first — see extractEmailImages
+        name:          spec.name,
+        contentType:   contentType.split(';')[0],
+        contentBytes:  base64,
+        isInline:      false,
+      });
+    } catch (e) {
+      console.warn('[GB PA] attachment extract error', e.message);
+    }
+  }));
+  result.html = out;
+  return result;
+}
+
 
 // ── Email blast helpers ─────────────────────────────────────────────────────
 //
@@ -2006,10 +2070,12 @@ function gbReadEmailConfig() {
    what paAutomate does for the popup path so inline images render in Outlook
    instead of getting stripped. */
 async function gbSendOnePA(paUrl, email) {
-  const ext = await extractEmailImages(email.htmlBody || '');
+  const fa  = await extractEmailFileAttachments(email.htmlBody || '');
+  const ext = await extractEmailImages(fa.html);
   email.htmlBody = ext.html;
-  if (ext.attachments.length) {
-    email.attachments = [...(email.attachments || []), ...ext.attachments];
+  const extra = [...fa.attachments, ...ext.attachments];
+  if (extra.length) {
+    email.attachments = [...(email.attachments || []), ...extra];
   }
   const r = await fetch(paUrl, {
     method:  'POST',

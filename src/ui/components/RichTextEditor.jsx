@@ -157,6 +157,48 @@ function ensureStyle() {
       opacity: 1;
       background: color-mix(in srgb, var(--gb-brand-label) 13%, transparent);
     }
+    /* Inline-attachment block — a scalable, movable image placeholder.
+       Renders at the variable's configured width; the corner handle drags
+       to resize (persisted onto the var so the sent <img> matches). The
+       block is contenteditable=false so it cuts/pastes/drags as one unit. */
+    .gb-rte-att {
+      display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+      vertical-align: bottom; position: relative; gap: 4px;
+      margin: 2px; padding: 10px 8px; box-sizing: border-box;
+      min-height: 64px;
+      border: 1.5px dashed var(--gb-brand-tint-border);
+      border-radius: var(--gb-r-md) !important;
+      background: var(--gb-brand-tint-soft);
+      color: var(--gb-brand-label);
+      user-select: all; cursor: grab;
+    }
+    .gb-rte-att-label {
+      font-family: var(--gb-font-mono); font-size: 10px; font-weight: 700;
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .gb-rte-att-size {
+      font-size: 9px; font-weight: 600; opacity: .65;
+    }
+    .gb-rte-att-resize {
+      position: absolute; right: -1px; bottom: -1px; width: 12px; height: 12px;
+      border-radius: 3px 0 var(--gb-r-md) 0;
+      background: var(--gb-brand-label); opacity: .55;
+      cursor: nwse-resize;
+    }
+    .gb-rte-att:hover .gb-rte-att-resize { opacity: .9; }
+    /* Attached-file chip — paperclip pill listed in the body (mirrors how a
+       mail client lists attachments); invisible in the sent email. */
+    .gb-rte-att-file {
+      display: inline-flex; align-items: center; gap: 5px; vertical-align: baseline;
+      margin: 0 1px; padding: 1px 8px;
+      border-radius: var(--gb-r-pill) !important;
+      border: 1px solid var(--gb-border-strong);
+      background: var(--gb-fill-subtle);
+      color: var(--gb-text-secondary);
+      font-family: var(--gb-font-mono); font-size: 0.85em; font-weight: 600;
+      line-height: 1.5; user-select: all;
+    }
+    .gb-rte-att-file svg { display: block; width: 0.85em; height: 0.85em; }
     .gb-rte-ph {
       position: absolute; pointer-events: none;
       color: var(--gb-text-ghost);
@@ -181,7 +223,32 @@ function escapeHtml(s) {
     c === '"' ? '&quot;' : '&#39;'
   ));
 }
-function chipHTML(name) {
+const CHIP_CLIP =
+  '<svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>';
+function chipHTML(name, meta) {
+  /* Attachment variables render as their placement, not a generic pill:
+     - inline image → a scalable block placeholder at the configured width
+       (corner handle drags to resize; the block moves as one unit);
+     - attached file → a paperclip chip, like a mail client's attachment list.
+     Both keep the hidden .gb-rte-chip-name span so stripChips round-trips
+     them back to {{name}} unchanged. */
+  const m = meta && meta[name];
+  if (m && m.kind === 'attachment') {
+    const a = m.attach || {};
+    if ((a.mode || 'inline') === 'inline') {
+      const w = Math.max(24, Math.min(600, Number(a.width) || 220));
+      return `<span class="gb-rte-chip gb-rte-att" contenteditable="false" data-att="${escapeHtml(name)}" style="width:${w}px">`
+        + `<span class="gb-rte-att-label">${CHIP_CLIP}&nbsp;${escapeHtml(a.filename || name)}</span>`
+        + `<span class="gb-rte-att-size">${w}px · ${escapeHtml(a.align || 'left')}</span>`
+        + `<span class="gb-rte-chip-name" style="display:none">{{${escapeHtml(name)}}}</span>`
+        + `<span class="gb-rte-att-resize" title="Drag to resize"></span>`
+        + `</span>`;
+    }
+    return `<span class="gb-rte-chip gb-rte-att-file" contenteditable="false">`
+      + `${CHIP_CLIP}${escapeHtml(a.filename || name)}`
+      + `<span class="gb-rte-chip-name" style="display:none">{{${escapeHtml(name)}}}</span>`
+      + `</span>`;
+  }
   /* Pipe → OR-block. We split on the FIRST pipe only — extra pipes
      in a 3+ candidate block flatten into the second half's label
      so the chip stays visually two-toned (the runtime renderer
@@ -200,8 +267,8 @@ function chipHTML(name) {
   }
   return `<span class="gb-rte-chip" contenteditable="false"><span class="gb-rte-chip-name">{{${name}}}</span>${CHIP_BOLT}</span>`;
 }
-function highlightVars(html) {
-  return String(html || '').replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, n) => chipHTML(n.trim()));
+function highlightVars(html, meta) {
+  return String(html || '').replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, n) => chipHTML(n.trim(), meta));
 }
 function stripChips(html) {
   const tmp = document.createElement('div');
@@ -245,7 +312,7 @@ const Sep = ({ sz }) => (
 
 export function RichTextEditor({
   initialHtml, onChange, onChipClick, variables = [], singleLine = false,
-  size = 'md', minHeight, placeholder = '',
+  size = 'md', minHeight, placeholder = '', onAttachmentResize,
 }) {
   const sz       = SIZES[size] || SIZES.md;
   const bodyMinH = minHeight != null ? minHeight : sz.minHeight;
@@ -261,12 +328,21 @@ export function RichTextEditor({
   const [textColor, setTextColor] = useState('#7db82a');
   const [bgColor,   setBgColor]   = useState('#fff170');
 
+  /* name → {kind, attach} for attachment variables — drives the chip
+     renderer (inline block vs paperclip pill). Kept in a ref so the
+     mount-once content load reads the freshest map without re-running. */
+  const varMetaRef = useRef({});
+  varMetaRef.current = (variables || []).reduce((m, v) => {
+    if (v && typeof v === 'object' && v.kind === 'attachment') m[v.name] = v;
+    return m;
+  }, {});
+
   /* Load content once on mount. */
   useEffect(() => {
     ensureStyle();
     const el = ref.current;
     if (!el) return;
-    el.innerHTML = highlightVars(normalizeInitial(initialHtml));
+    el.innerHTML = highlightVars(normalizeInitial(initialHtml), varMetaRef.current);
     setEmpty(!el.textContent.trim());
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -324,10 +400,39 @@ export function RichTextEditor({
       sel.removeAllRanges();
       sel.addRange(savedRange.current);
     }
-    document.execCommand('insertHTML', false, chipHTML(name) + ' ');
+    document.execCommand('insertHTML', false, chipHTML(name, varMetaRef.current) + ' ');
     saveSelection();
     setEmpty(false);
     emit();
+  }
+
+  /* Drag the corner handle of an inline-attachment block to resize it.
+     Width is clamped, painted live on the block, and persisted to the
+     variable (onAttachmentResize) on release so the sent <img> matches. */
+  function onContentMouseDown(e) {
+    const handle = e.target?.closest?.('.gb-rte-att-resize');
+    if (!handle) return;
+    const block = handle.closest('.gb-rte-att');
+    if (!block) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const name = block.getAttribute('data-att') || '';
+    const startX = e.clientX;
+    const startW = block.offsetWidth;
+    const sizeEl = block.querySelector('.gb-rte-att-size');
+    let w = startW;
+    const move = (ev) => {
+      w = Math.max(24, Math.min(600, Math.round(startW + (ev.clientX - startX))));
+      block.style.width = w + 'px';
+      if (sizeEl) sizeEl.textContent = w + 'px';
+    };
+    const up = () => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      if (name && w !== startW) onAttachmentResize?.(name, w);
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
   }
 
   /* Paste — strip Word/Outlook junk, keep basic formatting. */
@@ -477,6 +582,7 @@ export function RichTextEditor({
           onPaste={onPaste}
           onKeyDown={onKeyDown}
           onClick={onClickContent}
+          onMouseDown={onContentMouseDown}
           onKeyUp={() => { saveSelection(); refreshMarks(); }}
           onMouseUp={() => { saveSelection(); refreshMarks(); }}
           onBlur={saveSelection}
