@@ -144,7 +144,7 @@ function _proof(l, withPhoto, square) {
   // One compact row — image on the left, the spec info on the right, on the green
   // plate. No "Imprint preview" title (it just added height), and the info cell
   // flexes to fill the row width so it lines up with the schedule above it.
-  return `<table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#d4edc0" style="border:1px solid #b9dd9e; border-radius:${square ? 0 : 12}px; background:#d4edc0; margin-top:10px;"><tbody>
+  return `<table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#d4edc0" style="border-collapse:separate; border-spacing:0; border:1px solid #b9dd9e; border-radius:${square ? 0 : 12}px; background:#d4edc0; margin-top:10px;"><tbody>
     <tr><td style="padding:10px 14px;"><table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr>${photoCell}${visual}<td valign="middle" width="100%"><div style="font-size:12px; line-height:1.4; font-weight:700; color:${T.ink};">${_esc(typeLabel)}</div>${colorRow}${detail}</td></tr></tbody></table></td></tr>
   </tbody></table>`;
 }
@@ -230,7 +230,7 @@ function tplClassic(m) {
     return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="${i ? `border-top:1px solid ${T.line};` : ''}"><tbody><tr><td style="padding:16px 0;"><table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr>${photo}<td valign="top">${_brandLine(l, T.mut)}<div style="font-size:15px; color:${T.ink}; font-weight:700;">${_esc(l.title)}</div>${sub}<div style="font-size:11px; color:${T.mut}; margin-top:4px;">${_qtyLine(l, show)}</div></td><td valign="top" align="right" width="92"><span style="font-size:16px; font-weight:800; color:${T.price};">${_ltot(l)}</span></td></tr></tbody></table>${proof}</td></tr></tbody></table>`;
   }).join('\n');
   const totalRow = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-top:2px solid ${T.ink}; margin-top:4px;"><tbody><tr><td style="padding:16px 0;"><span style="font-size:13px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:${T.ink};">Estimated total${_star(m)}</span></td><td align="right" style="padding:16px 0;"><span style="font-size:23px; font-weight:800; color:${T.price};">${_money(total - (m.discount || 0))}</span></td></tr></tbody></table>` : '';
-  return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="border:1px solid #e0e0d6; border-radius:14px; padding:30px 30px 26px;">
+  return `<table border="0" cellpadding="0" cellspacing="0" style="border-collapse:separate; border-spacing:0; font-family:${SANS}; width:600px;"><tbody><tr><td style="border:1px solid #e0e0d6; border-radius:14px; padding:30px 30px 26px;">
     ${_wordmark('center')}
     <div style="height:16px; line-height:16px; font-size:0;">&nbsp;</div>
     <div align="center" style="font-size:11px; letter-spacing:1.6px; text-transform:uppercase; color:${T.ink}; font-weight:700;">${_esc(groupName)}</div>
@@ -310,7 +310,7 @@ function tplSeparated(m) {
   const isGrouped = (l) => !!(l.free && l.parentLineId && paidIds.has(l.parentLineId));
   const mains = lines.filter((l) => !isGrouped(l));
   const freeFor = (lineId) => lines.filter((l) => isGrouped(l) && l.parentLineId === lineId);
-  const _freeStrip = (f) => `<table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#e1f5d1" style="background:#e1f5d1; border:1px solid #b9dd9e; border-radius:10px; margin-top:12px;"><tbody><tr>
+  const _freeStrip = (f) => `<table border="0" cellpadding="0" cellspacing="0" width="100%" bgcolor="#e1f5d1" style="border-collapse:separate; border-spacing:0; background:#e1f5d1; border:1px solid #b9dd9e; border-radius:10px; margin-top:12px;"><tbody><tr>
       <td style="padding:10px 14px;"><span style="font-size:12px; font-weight:700; color:#2c4a10; vertical-align:middle;">Qty ${f.qty} &middot; ${_esc(f.title)}</span>${f.subtitle ? `<div style="font-size:11px; color:#46781b; margin-top:3px;">${_esc(f.subtitle)}</div>` : ''}</td>
       <td align="right" valign="middle" style="padding:10px 14px; white-space:nowrap;"><span style="font-size:12px; font-weight:800; color:#2c4a10;">included</span></td>
     </tr></tbody></table>`;
@@ -320,12 +320,12 @@ function tplSeparated(m) {
     const qtyLine = show.cost ? `Qty ${l.qty} &nbsp;&middot;&nbsp; ${_money(l.unitPrice)} ea` : `Qty ${l.qty}`;
     const proof = show.previews ? _proof(l, false) : '';
     const freeStrips = freeFor(l.lineId).map(_freeStrip).join('');
-    return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border:1px solid ${T.line}; border-radius:14px;"><tbody>
+    return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate; border-spacing:0; border:1px solid ${T.line}; border-radius:14px;"><tbody>
       <tr><td bgcolor="${T.plate}" style="background:${T.plate}; border-bottom:1px solid ${T.line}; border-radius:14px 14px 0 0; padding:11px 18px;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:${T.ink}; font-weight:800;">Option ${String.fromCharCode(65 + i)}</span></td><td align="right" valign="middle"><span style="font-size:11px; color:${T.mut}; font-weight:600;">${qtyLine}</span></td></tr></tbody></table></td></tr>
       <tr><td style="padding:18px;"><table width="100%"><tbody><tr>${photo}<td valign="middle">${_brandLine(l, T.mut)}<div style="font-size:18px; color:${T.ink}; font-weight:800; letter-spacing:-.3px;">${_esc(l.title)}</div>${sub}</td><td valign="middle" align="right" width="118"><div style="font-size:10px; letter-spacing:.6px; text-transform:uppercase; color:${T.mut}; font-weight:700;">Price</div><div style="font-size:23px; font-weight:800; color:${T.price}; letter-spacing:-.6px; margin-top:2px;">${_ltot(l)}</div></td></tr></tbody></table>${freeStrips}${proof}</td></tr>
     </tbody></table>`;
   }).join(_vspace(16));
-  const totalBox = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-top:2px;"><tbody><tr><td bgcolor="${T.accSoft}" style="background:${T.accSoft}; border:1px solid #d6e8c9; border-radius:12px; padding:16px 20px;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:12px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:${T.ink};">Estimated total${_star(m)}</span><div style="font-size:11px; color:${T.mut}; margin-top:2px;">All options combined</div></td><td align="right" valign="middle"><span style="font-size:24px; font-weight:800; color:${T.price};">${_money(total - (m.discount || 0))}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
+  const totalBox = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate; border-spacing:0; margin-top:2px;"><tbody><tr><td bgcolor="${T.accSoft}" style="background:${T.accSoft}; border:1px solid #d6e8c9; border-radius:12px; padding:16px 20px;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:12px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:${T.ink};">Estimated total${_star(m)}</span><div style="font-size:11px; color:${T.mut}; margin-top:2px;">All options combined</div></td><td align="right" valign="middle"><span style="font-size:24px; font-weight:800; color:${T.price};">${_money(total - (m.discount || 0))}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
   return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="padding:8px 6px;">
     <table width="100%" border="0" cellpadding="0" cellspacing="0"><tbody><tr>
       <td valign="middle"><div style="font-size:12px; letter-spacing:1.6px; text-transform:uppercase; color:${T.ink}; font-weight:700;">${_esc(groupName)}</div><div style="font-size:28px; font-weight:800; color:${T.ink}; letter-spacing:-.6px; margin:5px 0 0;">${_esc(optionName)}</div></td>
