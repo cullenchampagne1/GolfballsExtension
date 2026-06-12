@@ -63,16 +63,15 @@ if (days && hasLogo) return 'Ps — this one only runs for ' + days + ', and we 
 if (days) return 'Ps — this one only runs for ' + days + '!';
 return 'Ps — we still have your logo on file, so this can be a quick reorder.';`;
 
-/* The big logo-ball proof image, CENTERED via a table cell (margin:auto on an
-   <img> inside an inline <a> does not center in email clients — a td align is
-   the bulletproof way), linked to the proof PDF. Built whole here so no
-   variable sits inside an attribute. Drops entirely when there is no proof.
-   The <img> is CID-embedded on the PA send path. */
+/* The logo-ball proof image (bigger now), left-aligned the simple way it worked
+   before — a plain block <img>, no table — linked to the proof PDF. Built whole
+   here so no variable sits inside an attribute (that var-in-href was the only
+   thing that broke it). Drops entirely when there is no proof; CID-embedded on
+   the PA send path. */
 const LOGO_PROOF = `const p = (ctx.proofs && ctx.proofs[0]) || null;
 if (!p || !p.logo_ball) return '';
-const img = '<img src="' + p.logo_ball + '" width="440" alt="Your logo on a Srixon ball" style="display:block; width:440px; max-width:100%; height:auto; border:0;" />';
-const linked = p.pdf ? ('<a href="' + p.pdf + '">' + img + '</a>') : img;
-return '<table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr><td align="center" style="padding:12px 0;">' + linked + '</td></tr></tbody></table>';`;
+const img = '<img src="' + p.logo_ball + '" width="440" alt="Your logo on a Srixon ball" style="display:block; width:440px; max-width:100%; height:auto; border:0; margin:12px 0;" />';
+return p.pdf ? ('<a href="' + p.pdf + '">' + img + '</a>') : img;`;
 
 function promoVars() {
   return {
@@ -92,7 +91,7 @@ const promoOrder = ['first_name', 'promo_end', 'days_left', '_srixon_item', 'las
    PDF-linked logo-ball photo embedded directly beneath. */
 const FOOTER =
 `<p><b>Srixon Promos — end {{promo_end}}</b><br><a href="${SHOP}">Buy 12, Get 6 Free</a><br><a href="${SHOP}">Buy 2 DZ, Get 1 Free</a></p>
-{{logo_proof}}`;
+<p>{{logo_proof}}</p>`;
 
 const RULE = {
   outerJoiner: 'AND',
@@ -204,7 +203,7 @@ ${FOOTER}
 <p>Circling back one more time! I wanted to stay on your radar — we regularly get access to brand deals and seasonal promos from the top golf brands like Srixon.</p>
 <p>If you are planning ahead, these can be game-changers for client gifting, corporate events, or building out tournament kits. I would love to help with any custom golf ball or logo projects you have coming up.</p>
 <p><i>{{ps_line}}</i></p>
-{{logo_proof}}
+<p>{{logo_proof}}</p>
 <p>Hope to reconnect soon!</p>
 <p>Best,</p>`,
     vars: {
