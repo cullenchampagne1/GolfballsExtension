@@ -1139,7 +1139,16 @@ const _toHex = (c) => (typeof c === 'string' && c.startsWith('#')) ? c : _hexOf(
 export async function imprintToDecalUrl(chip) {
   if (!chip) return null;
   try {
-    if (chip.kind === 'logo') return chip.image || chip._localImageDataUrl || (chip.logo && (chip.logo.dataUrl || chip.logo.preview)) || null;
+    if (chip.kind === 'logo') {
+      const src = chip.image || chip._localImageDataUrl || (chip.logo && (chip.logo.dataUrl || chip.logo.preview)) || null;
+      if (!src) return null;
+      // A remote logo URL (a proposal loaded from a saved cart carries the
+      // uploaded art's static.golfballs.com URL) would taint the canvas and
+      // break the snapshot — proxy it to a same-origin data URL first. Local
+      // data: URLs (the live upload flow) pass straight through.
+      if (/^https?:/i.test(src)) { try { return await proxyImageDataUrl(src); } catch { return null; } }
+      return src;
+    }
     if (chip.kind === 'text') {
       const lines = (chip.lines || []).map((l) => String(l || '').trim()).filter(Boolean);
       if (!lines.length) return null;

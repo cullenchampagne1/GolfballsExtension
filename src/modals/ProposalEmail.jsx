@@ -481,7 +481,6 @@ function OptionToggle({ checked, label, hint, onClick, disabled }) {
    for the rest (e.g. a quote of N logo balls with the same logo = 1 render, not
    N). Metadata like lineId / label / poleLabel is deliberately excluded. */
 const _shotSig = (s) => [
-  s.readyImage || '',
   s.shape || '', s.tint || '', s.chipTint || '',
   s.giftSet ? JSON.stringify(s.giftSet) : '',
   s.decalDataUrl || '', s.secondDecalDataUrl || '',
@@ -513,22 +512,10 @@ function SnapshotRenderer({ shots, size = 640, onProgress, onDone }) {
   // can't get stuck on "loading" forever.
   useEffect(() => {
     if (!shot) return undefined;
-    // A `readyImage` shot is an already-rendered proof (loaded from the cart) —
-    // record it directly and advance, no off-screen 3D render needed.
-    if (shot.readyImage) {
-      if (lockRef.current < i) {
-        lockRef.current = i;
-        results.current.push({ ...shot, image: shot.readyImage });
-        onProgress && onProgress(results.current.length, shots.length);
-        if (i + 1 < shots.length) setI(i + 1);
-        else if (!finished.current) { finished.current = true; onDone(results.current); }
-      }
-      return undefined;
-    }
     const t = setTimeout(advance, 12000);
     return () => clearTimeout(t);
   }, [i]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (!shot || shot.readyImage) return null;
+  if (!shot) return null;
   return (
     <div aria-hidden style={{ position: 'fixed', left: -99999, top: 0, width: 560, height: 560, opacity: 0, pointerEvents: 'none', zIndex: -1 }}>
       <div style={{ position: 'relative', width: 560, height: 560 }}>

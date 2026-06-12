@@ -624,7 +624,13 @@ export function decorationFromCartItem(it) {
     const fp = (poleObj && poleObj.filePath) || (cuiPole && cuiPole.filePath) || '';
     const fn = (poleObj && poleObj.fileName) || (cuiPole && cuiPole.fileName) || '';
     if (!fp && !fn) return null;
-    return { filePath: fp, fileName: fn, cropFilePath: (poleObj && poleObj.cropFilePath) || '' };
+    // The uploaded logo art lives under static.golfballs.com (the same
+    // Source/CustomerUploads path the cart stores). Surface it as `preview` so
+    // decoImprints' logo chip has a fetchable image and OUR 3D preview pipeline
+    // can render the ball from the customer's uploaded art (imprintToDecalUrl
+    // proxies the cross-origin URL to a canvas-safe data URL).
+    const preview = fp ? (/^https?:/i.test(fp) ? fp : 'https://static.golfballs.com/' + fp.replace(/^\//, '')) : '';
+    return { filePath: fp, fileName: fn, cropFilePath: (poleObj && poleObj.cropFilePath) || '', preview };
   };
 
   // Tee text (modID 15)
