@@ -5,7 +5,7 @@ import { Icon, I } from '../ui/icons.jsx';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { loadCatalog, clearCatalogCache, readCatalogCache, GIFT_CATALOG_SEED, CATEGORY_ORDER, DEPT_ORDER, BRAND_ORDER } from '../lib/giftCatalog.js';
 import { loadDevSettings, useDevSetting, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
-import { CustomizeBlock, ProductOptions, colorNameOf } from './giftCustomize.jsx';
+import { CustomizeBlock, ProductOptions, colorNameOf, ImageAlignModal } from './giftCustomize.jsx';
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposalEntries, proposalCartUrl, loadKnownPromos, addKnownPromo, submitProposalEmail } from '../lib/saveProposal.js';
 import { promoDiscount, freeLinesFromPromo } from '../lib/cartSerializer.js';
 import { usd, onSale, hasPromo, isDeal, money, rid, nfmt, relTime, priceAtQty, isTierPrice, SECOND_POLE_FEE, lineHasImprint, lineSecondPoleFee, linePriceAt, lineIsTierPrice, priceAtBreaks, topPrice, lowPrice, saleCut, netP, netTop, netLow } from '../lib/giftCatalogMath.js';
@@ -17,7 +17,7 @@ import { bundleSingle, setBundleCatalog } from '../lib/bundleCost.js';
 import { ProposalEmailModal, ProposalEmailComposer } from './ProposalEmail.jsx';
 import { CheckoutComposer } from './ProposalCheckout.jsx';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
-import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
+import { ballish, supportsLogo, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
 import { decoratedPricingForLine, giftSetPreviewUrl } from '../lib/cartSerializer.js';
 import { giftSetLadder, giftSetSizeLabel } from '../lib/giftSets.js';
 
@@ -418,11 +418,13 @@ function ProductCard({ p, compact, showRating, active, inProposal, onAdd, onClic
         <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8, marginTop: 2 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
             <span style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-              {/* Custom-logo items headline the "from" (first-ladder) imprint price;
-                  everything else headlines retail. The PROPOSAL re-prices each line
-                  accurately (retail when no imprint, ladder + 2nd-pole when added). */}
-              <span style={{ fontSize: compact ? 16 : 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.5, fontFamily: 'var(--gb-font-mono)' }}>{usd(p.customLogo ? netTop(p) : p.price)}</span>
-              {onSale(p) && <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-ghost)', textDecoration: 'line-through', fontFamily: 'var(--gb-font-mono)' }}>{usd(p.customLogo ? topPrice(p) : p.orig)}</span>}
+              {/* Any logo-capable product headlines the custom-logo "from"
+                  (first-ladder) imprint price by default; everything else headlines
+                  retail. The PROPOSAL re-prices each line accurately (retail when no
+                  imprint, ladder + 2nd-pole when added). netTop falls back to retail
+                  when a product has no custom-logo ladder, so this is safe. */}
+              <span style={{ fontSize: compact ? 16 : 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.5, fontFamily: 'var(--gb-font-mono)' }}>{usd(supportsLogo(p) ? netTop(p) : p.price)}</span>
+              {onSale(p) && <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-ghost)', textDecoration: 'line-through', fontFamily: 'var(--gb-font-mono)' }}>{usd(supportsLogo(p) ? topPrice(p) : p.orig)}</span>}
             </span>
             <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>each</span>
           </div>
@@ -1910,7 +1912,7 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
   );
 }
 
-function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onMergeImprint, onRemoveFront, onRemoveSecond, pageContext = {}, onSaveToAccount, onAddOpportunity, accountSaveSeq = 0, onEmail, promo, onApplyPromo, onClearPromo, onCheckPromo }) {
+function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSplit, onRemoveLine, onClear, onSaveDraft, onMergeImprint, onApplyLogoToAll, onRemoveFront, onRemoveSecond, pageContext = {}, onSaveToAccount, onAddOpportunity, accountSaveSeq = 0, onEmail, promo, onApplyPromo, onClearPromo, onCheckPromo }) {
   const total = proposal.reduce((s, l) => s + l.splits.reduce((a, x) => a + x.qty * x.price, 0), 0);
   const promoDisc = (promo && promo.promotion) ? promoDiscount(promo.promotion) : 0;
   // Free giveaway lines a FREE_QUANTITY coupon grants (shown read-only, $0).
@@ -1923,6 +1925,25 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
   const endDrag = () => setDrag(null);
   const dropDeco = (toLineId) => { if (drag) onMergeImprint(drag.fromLineId, toLineId, drag.imprint); setDrag(null); };
   const canCopy = proposal.length >= 2 && proposal.some((l) => decoImprints(l.decoration).length > 0);
+  // Drag an image FILE onto the sidebar → align/scale it → apply to every blank
+  // custom-logo line at once. `blankLogos` counts the lines that would receive it.
+  const blankLogos = proposal.filter((l) => { const d = l.decoration; return d && (d.engine === 'ballLogo' || d.engine === 'logoOverlay') && !(d._localImageDataUrl || (d.logo && d.logo.filePath)); }).length;
+  const [fileOver, setFileOver] = useState(false);
+  const [pendingLogo, setPendingLogo] = useState(null);   // { url, name } awaiting alignment
+  const fileDragDepth = useRef(0);
+  const hasFile = (e) => { try { return Array.from(e.dataTransfer.types || []).includes('Files'); } catch { return false; } };
+  const onFileDragEnter = (e) => { if (!hasFile(e) || !onApplyLogoToAll) return; fileDragDepth.current += 1; setFileOver(true); };
+  const onFileDragOver = (e) => { if (!hasFile(e) || !onApplyLogoToAll) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; };
+  const onFileDragLeave = (e) => { if (!hasFile(e)) return; fileDragDepth.current = Math.max(0, fileDragDepth.current - 1); if (fileDragDepth.current === 0) setFileOver(false); };
+  const onFileDrop = (e) => {
+    if (!hasFile(e) || !onApplyLogoToAll) return;
+    e.preventDefault(); fileDragDepth.current = 0; setFileOver(false);
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f || !f.type.startsWith('image/')) return;
+    const r = new FileReader();
+    r.onload = () => setPendingLogo({ url: r.result, name: f.name || 'logo.png' });
+    r.readAsDataURL(f);
+  };
   // Save-draft flow: an inline name box → confirm → success flash.
   const [saveMode, setSaveMode] = useState(false);
   const [name, setName] = useState('');
@@ -1991,12 +2012,30 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
     /* In-flow side card (not an overlay) — sits BESIDE the catalog so the
        proposal and item details are visible at once. The slide/resize is
        driven by the parent column's flex-basis + opacity transition. */
-    <div style={{
-      width: '100%', height: '100%',
+    <div
+      onDragEnter={onFileDragEnter} onDragOver={onFileDragOver} onDragLeave={onFileDragLeave} onDrop={onFileDrop}
+      style={{
+      width: '100%', height: '100%', position: 'relative',
       background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)',
       borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', boxShadow: 'var(--gb-shadow-modal)',
       display: 'flex', flexDirection: 'column',
     }}>
+        {/* Drop-a-logo overlay — appears while dragging an image file over the
+            sidebar; dropping opens the align/scale flow then fills every blank
+            custom-logo line. */}
+        {fileOver && onApplyLogoToAll && (
+          <div style={{ position: 'absolute', inset: 0, zIndex: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, textAlign: 'center', padding: 24,
+            background: 'var(--gb-brand-tint-soft)', border: '2px dashed var(--gb-brand-label)', borderRadius: 'var(--gb-r-xl)', pointerEvents: 'none' }}>
+            <div style={{ width: 46, height: 46, borderRadius: '50%', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.upload size={20} /></div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Drop logo to apply</div>
+            <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', maxWidth: 230, lineHeight: 1.5 }}>{blankLogos ? `Fills the ${blankLogos} blank custom-logo item${blankLogos === 1 ? '' : 's'} after you align it.` : 'No blank custom-logo items to fill yet.'}</div>
+          </div>
+        )}
+        {pendingLogo && (
+          <ImageAlignModal image={pendingLogo.url}
+            onCancel={() => setPendingLogo(null)}
+            onApply={(composited) => { onApplyLogoToAll(composited, pendingLogo.name); setPendingLogo(null); }} />
+        )}
         <div style={{ padding: '13px 14px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0, background: 'var(--gb-fill-inverse-strong)' }}>
           <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <I.card size={15} />
@@ -2022,6 +2061,12 @@ function ProposalPanel({ proposal, onClose, onPatchSplit, onAddSplit, onRemoveSp
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 9px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px dashed var(--gb-border-default)', color: 'var(--gb-text-tertiary)', fontSize: 10, fontWeight: 600 }}>
                   <I.copy size={11} style={{ flexShrink: 0, color: 'var(--gb-text-muted)' }} />
                   Drag an imprint tag onto another item to copy it.
+                </div>
+              )}
+              {onApplyLogoToAll && blankLogos > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 9px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-soft)', border: '1px dashed var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', fontSize: 10, fontWeight: 600 }}>
+                  <I.upload size={11} style={{ flexShrink: 0 }} />
+                  Drag a logo image here to fill {blankLogos} blank custom-logo item{blankLogos === 1 ? '' : 's'}.
                 </div>
               )}
               <AnimatePresence initial={false} mode="popLayout">
@@ -2824,12 +2869,21 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     // than once so the rep can quote different customizations/quantities. The
     // decoration descriptor (from the detail panel's CustomizeBlock) and the
     // selected base variant (e.g. Tee Count → its price) ride along so Save
-    // draft serializes the real imprint + price; the card quick-add omits both.
+    // draft serializes the real imprint + price.
+    // Quick-add (no explicit decoration) DEFAULTS a logo-capable product to a
+    // blank custom-logo imprint (ballLogo/logoOverlay, no art yet) instead of
+    // stock — the rep's common case. Drop a logo onto the sidebar later to fill
+    // the art for every blank custom-logo line at once.
+    let deco = decoration || null;
+    if (!deco && supportsLogo(p)) {
+      deco = { engine: ballish(p) ? 'ballLogo' : 'logoOverlay', baseColor: '#FFFFFF',
+        finish: { MFS: '279', SecondMFS: '279' }, dualPole: false, pole2: null, logo: null, _localImageDataUrl: null };
+    }
     const qty = p.minQty || 1;
     // Accurate per-unit price: retail when no imprint, custom-logo ladder when
     // imprinted, a chosen variant's price, + the second-pole upcharge if dual.
-    const startPrice = linePriceAt({ product: p, decoration, variant }, qty);
-    return [...prev, { id: rid(), productId: p.id, product: p, decoration: decoration || null, variant: variant || null, splits: [{ id: rid(), qty, price: startPrice }] }];
+    const startPrice = linePriceAt({ product: p, decoration: deco, variant }, qty);
+    return [...prev, { id: rid(), productId: p.id, product: p, decoration: deco, variant: variant || null, splits: [{ id: rid(), qty, price: startPrice }] }];
   });
   const patchSplit = (lineId, splitId, patch) => setProposal((prev) => prev.map((l) => l.id === lineId ? { ...l, splits: l.splits.map((s) => s.id === splitId ? { ...s, ...patch } : s) } : l));
   const addSplit = (lineId) => setProposal((prev) => prev.map((l) => { if (l.id !== lineId) return l; const last = l.splits[l.splits.length - 1]; return { ...l, splits: [...l.splits, { id: rid(), qty: last.qty, price: last.price }] }; }));
@@ -2853,6 +2907,27 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
     setProposal((prev) => prev.map((l) => l.id === toLineId
       ? { ...l, decoration: next, splits: l.splits.map((s) => ({ ...s, price: linePriceAt({ product: l.product, decoration: next, variant: l.variant }, s.qty) })) }
       : l));
+  };
+
+  // Drop a logo image (from the sidebar drag-drop) onto EVERY blank custom-logo
+  // line at once: a line whose decoration is a logo engine (ballLogo/logoOverlay)
+  // with no art yet. The image is the aligned/scaled composite from the align
+  // flow, so the scale is baked into the pixels. Lines that already carry art are
+  // left untouched. Returns the count applied (for the sidebar toast/flash).
+  const applyLogoToAllEmpty = (imageDataUrl, fileName = 'logo.png') => {
+    let n = 0;
+    setProposal((prev) => prev.map((l) => {
+      const d = l.decoration;
+      const isLogoEngine = d && (d.engine === 'ballLogo' || d.engine === 'logoOverlay');
+      const hasArt = d && (d._localImageDataUrl || (d.logo && d.logo.filePath));
+      if (!isLogoEngine || hasArt) return l;
+      n += 1;
+      const next = { ...d, _localImageDataUrl: imageDataUrl, logo: { filePath: '', fileName, cropFilePath: '' } };
+      return { ...l, decoration: next, splits: l.splits.map((s) => ({ ...s, price: linePriceAt({ product: l.product, decoration: next, variant: l.variant }, s.qty) })) };
+    }));
+    if (n) toast?.success?.(`Applied logo to ${n} item${n === 1 ? '' : 's'}`);
+    else toast?.error?.('No blank custom-logo items to apply the logo to');
+    return n;
   };
 
   // Re-price a line after its decoration changed (imprint removed / promoted).
@@ -3543,6 +3618,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             <ProposalPanel proposal={proposal} onClose={() => setProposalOpen(false)}
               onPatchSplit={patchSplit} onAddSplit={addSplit} onRemoveSplit={removeSplit}
               onRemoveLine={removeLine} onSaveDraft={saveDraft} onMergeImprint={mergeImprintOnLine}
+              onApplyLogoToAll={applyLogoToAllEmpty}
               onRemoveFront={removeFrontImprint} onRemoveSecond={removeSecondPole}
               pageContext={pageContext} onSaveToAccount={saveToAccount} onAddOpportunity={addOpportunity} accountSaveSeq={accountSaveSeq}
               onEmail={() => openProposalEmail(proposalWithFree, '', { promotion: proposalPromo && proposalPromo.promotion })}

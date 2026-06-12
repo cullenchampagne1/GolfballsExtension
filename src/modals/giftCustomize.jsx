@@ -493,7 +493,7 @@ function ARotationSlider({ value, onChange }) {
   );
 }
 
-function ImageAlignModal({ image, initial, onCancel, onApply }) {
+export function ImageAlignModal({ image, initial, onCancel, onApply }) {
   const [nat, setNat] = useState(null);
   const [zoomLevel, setZoomLevel] = useState(Math.round((initial?.scale ?? 1) * 100));
   const [rotation, setRotation] = useState(initial?.rot ?? 0);
