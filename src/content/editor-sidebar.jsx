@@ -794,7 +794,6 @@ function TemplateSidebar() {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <IconBtn size="sm" icon={<ImportIcon />} title="Import templates (paste JSON)" onClick={() => setImportOpen(true)} />
           <IconBtn size="sm" icon={<HelpIcon />} title="Operator's Guide" onClick={openGuide} />
           <IconBtn size="sm" icon={<CogIcon />} onClick={openSettings} />
         </div>
@@ -939,14 +938,16 @@ function TemplateSidebar() {
         </LayoutGroup>
       </div>
 
-      {/* Pinned signature button */}
+      {/* Pinned footer — signature + import-templates (paste JSON) */}
       <div style={{
         padding: 10, borderTop: '1px solid var(--gb-border-subtle)', flexShrink: 0,
-        background: 'var(--gb-surface-canvas)',
+        background: 'var(--gb-surface-canvas)', display: 'flex', gap: 6,
       }}>
-        <Btn variant="ghost" size="sm" icon={<PenIcon />} full onClick={openSignature}>
+        <Btn variant="ghost" size="sm" icon={<PenIcon />} onClick={openSignature} style={{ flex: 1, minWidth: 0 }}>
           Email signature
         </Btn>
+        <Btn variant="ghost" size="sm" icon={<ImportIcon />} onClick={() => setImportOpen(true)}
+          title="Import templates (paste JSON)" style={{ flexShrink: 0, padding: '0 9px' }} />
       </div>
     </div>
   );
