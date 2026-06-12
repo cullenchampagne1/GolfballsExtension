@@ -21,7 +21,7 @@
           }
         ]
       },
-      "body": "<p>Hey {{first_name}},</p>\n<p>Time for another round of Srixon golf balls? They are running their <b>BUY 12, GET 6 FREE</b> promo on every golf ball model right now — and it will not be around long.</p>\n<p>{{srixon_line}}</p>\n<p>Whether it is the Z-Star line or a value option like the Soft Feel, this is genuinely one of the best deals Srixon runs all year. Want me to put pricing together while it is live?</p>\n<p><a href=\"{{reorder_url}}\">{{logo_ball_img}}</a></p>\n<p>{{logo_links}}</p>\n<p><i>Ps — this one only runs for {{days_left}}!</i></p>\n<p>{{logo_ps}}</p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br>12 + 6 FREE — every Srixon golf ball<br>2 + 1 FREE — every Srixon golf ball</p>\n<p>Best,</p>",
+      "body": "<p>Hey {{first_name}},</p>\n<p>Time for another round of Srixon golf balls? They are running their <b>BUY 12, GET 6 FREE</b> promo on every golf ball model right now — and it will not be around long.</p>\n<p>{{srixon_line}}</p>\n<p>Whether it is the Z-Star line or a value option like the Soft Feel, this is genuinely one of the best deals Srixon runs all year. Want me to put pricing together while it is live?</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free — single golf balls</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free — by the dozen</a></p>\n<p><a href=\"{{pdf_url}}\">{{logo_ball_img}}</a></p>\n<p>Best,</p>",
       "vars": {
         "first_name": {
           "type": "schema",
@@ -31,30 +31,34 @@
             "transform": "titleCase"
           }
         },
+        "promo_end": {
+          "type": "literal",
+          "value": "6/22/2026"
+        },
+        "days_left": {
+          "type": "code",
+          "body": "const end = new Date(vars.promo_end);\nif (isNaN(end.getTime())) return '';\nconst now = new Date();\nend.setHours(0, 0, 0, 0); now.setHours(0, 0, 0, 0);\nconst d = Math.round((end.getTime() - now.getTime()) / 86400000);\nif (d < 0) return '';\nif (d === 0) return 'just today';\nreturn d === 1 ? '1 more day' : (d + ' more days');"
+        },
         "_srixon_item": {
           "type": "code",
-          "body": "// Newest-first scan (cap 4) for the latest Srixon ball; capture its product URL.\nconst orders = (Array.isArray(ctx.orders) ? ctx.orders : []).slice()\n  .sort((a, b) => new Date(b.date) - new Date(a.date));\nlet scanned = 0;\nfor (const o of orders) {\n  if (!o || !o.href) continue;\n  if (scanned++ >= 4) break;\n  let items = [];\n  try {\n    const r = await h.parse(await h.fetchText(o.href));\n    const data = r && r.data;\n    items = (data && data.order && Array.isArray(data.order.items)) ? data.order.items : [];\n  } catch (e) { continue; }\n  const hits = items.filter(it => /srixon/i.test(it.name || '') && /golf ball/i.test(it.name || ''));\n  if (hits.length) {\n    let best = hits[0];\n    for (const it of hits) if ((h.parseNumber(it.lineTotal) || 0) > (h.parseNumber(best.lineTotal) || 0)) best = it;\n    return { name: best.name, url: best.url || '', order: o.number, href: o.href, date: o.date };\n  }\n}\nreturn null;",
+          "body": "// Newest-first scan (cap 4) for the latest Srixon ball, then resolve a CLEAN\n// shop URL for it (catalog product page — not the configured/personalized link).\nconst orders = (Array.isArray(ctx.orders) ? ctx.orders : []).slice()\n  .sort((a, b) => new Date(b.date) - new Date(a.date));\nlet scanned = 0;\nfor (const o of orders) {\n  if (!o || !o.href) continue;\n  if (scanned++ >= 4) break;\n  let items = [];\n  try {\n    const r = await h.parse(await h.fetchText(o.href));\n    const data = r && r.data;\n    items = (data && data.order && Array.isArray(data.order.items)) ? data.order.items : [];\n  } catch (e) { continue; }\n  const hits = items.filter(it => /srixon/i.test(it.name || '') && /golf ball/i.test(it.name || ''));\n  if (hits.length) {\n    let best = hits[0];\n    for (const it of hits) if ((h.parseNumber(it.lineTotal) || 0) > (h.parseNumber(best.lineTotal) || 0)) best = it;\n    let shopUrl = '';\n    try { if (best.url) { const m = await h.catalog.byUrl(best.url); if (m && m.url) shopUrl = m.url; } } catch (e) {}\n    if (!shopUrl) { try { const m = await h.catalog.find(best.name); if (m && m.url) shopUrl = m.url; } catch (e) {} }\n    return { name: best.name, shopUrl: shopUrl, order: o.number, date: o.date };\n  }\n}\nreturn null;",
           "async": true
         },
         "last_item": {
           "type": "code",
           "body": "let n = String((vars._srixon_item && vars._srixon_item.name) || '');\nif (!n) return '';\nn = n.split(/ [-–] /)[0];\nn = n.replace(/custom logo/ig, '').replace(/double dozen/ig, '').replace(/  +/g, ' ');\nreturn n.trim();"
         },
-        "reorder_url": {
-          "type": "code",
-          "body": "const it = vars._srixon_item;\nif (it && it.url) return it.url;\nif (it && it.href) return it.href;\nreturn '';"
-        },
         "srixon_line": {
           "type": "code",
-          "body": "const it = vars._srixon_item;\nif (!it) return '';\nconst name = vars.last_item || it.name;\nconst link = it.url ? ('<a href=\"' + it.url + '\">' + name + '</a>') : name;\nreturn 'I saw the ' + link + ' on your account from last time — those are included in this deal too, so it is an easy one to restock.';",
+          "body": "const it = vars._srixon_item;\nif (!it) return '';\nconst name = vars.last_item || it.name;\nconst url = it.shopUrl || 'https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon';\nreturn 'I saw the <a href=\"' + url + '\">' + name + '</a> on your account from last time — those are included in this deal too, so it is an easy one to restock.';",
           "smart": {
             "conditional": true,
             "conditionalScope": "line"
           }
         },
-        "logo_ps": {
+        "ps_line": {
           "type": "code",
-          "body": "const p = (ctx.proofs && ctx.proofs[0]) || null;\nif (!p || !p.id) return '';\nreturn 'And good news — we still have your logo on file, so this can be a quick reorder.';",
+          "body": "const days = vars.days_left || '';\nconst p = (ctx.proofs && ctx.proofs[0]) || null;\nconst hasLogo = !!(p && p.id);\nif (!days && !hasLogo) return '';\nif (days && hasLogo) return 'Ps — this one only runs for ' + days + ', and we still have your logo on file, so it can be a quick reorder!';\nif (days) return 'Ps — this one only runs for ' + days + '!';\nreturn 'Ps — we still have your logo on file, so this can be a quick reorder.';",
           "smart": {
             "conditional": true,
             "conditionalScope": "line"
@@ -66,28 +70,12 @@
           "source": "schema",
           "path": "proofs[0].logo_ball",
           "filename": "your-logo-ball.png",
-          "width": 200,
-          "align": "left"
+          "width": 320,
+          "align": "center"
         },
-        "logo_links": {
-          "type": "code",
-          "body": "const p = (ctx.proofs && ctx.proofs[0]) || null;\nif (!p || !p.id) return '';\nconst it = vars._srixon_item;\nconst reorder = (it && it.url) ? it.url : (it && it.href) ? it.href : '';\nconst parts = [];\nif (reorder) parts.push('<a href=\"' + reorder + '\">reorder your last order</a>');\nif (p.instant_mockup) parts.push('<a href=\"' + p.instant_mockup + '\">see your logo on a ball</a>');\nif (p.apparel_mockup) parts.push('<a href=\"' + p.apparel_mockup + '\">on apparel</a>');\nif (!parts.length) return '';\nreturn 'Quick links: ' + parts.join(' &middot; ') + '.';",
-          "smart": {
-            "conditional": true,
-            "conditionalScope": "line"
-          }
-        },
-        "promo_end": {
-          "type": "literal",
-          "value": "6/22/2026"
-        },
-        "days_left": {
-          "type": "code",
-          "body": "const end = new Date(vars.promo_end);\nif (isNaN(end.getTime())) return '';\nconst now = new Date();\nend.setHours(0, 0, 0, 0); now.setHours(0, 0, 0, 0);\nconst d = Math.round((end.getTime() - now.getTime()) / 86400000);\nif (d < 0) return '';\nif (d === 0) return 'just today';\nreturn d === 1 ? '1 more day' : (d + ' more days');",
-          "smart": {
-            "conditional": true,
-            "conditionalScope": "line"
-          }
+        "pdf_url": {
+          "type": "schema",
+          "path": "proofs[0].pdf"
         }
       },
       "varOrder": [
@@ -96,22 +84,21 @@
         "days_left",
         "_srixon_item",
         "last_item",
-        "reorder_url",
         "srixon_line",
-        "logo_ps",
-        "logo_ball_img",
-        "logo_links"
+        "ps_line",
+        "pdf_url",
+        "logo_ball_img"
       ],
       "variations": [
         {
           "label": "Events / tournaments",
           "subject": "A heads-up on Srixon before it ends, {{first_name}}",
-          "body": "<p>Hey {{first_name}},</p>\n<p>Wanted to make sure you saw this — Srixon is offering <b>BUY 12, GET 6 FREE</b> on every golf ball model right now, for a limited time.</p>\n<p>{{srixon_line}}</p>\n<p>If you have tournaments, events, or client gifts coming up, this is the time to restock. Want me to send pricing or rough out an order?</p>\n<p><a href=\"{{reorder_url}}\">{{logo_ball_img}}</a></p>\n<p>{{logo_links}}</p>\n<p><i>Ps — only around for {{days_left}}!</i></p>\n<p>{{logo_ps}}</p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br>12 + 6 FREE — every Srixon golf ball<br>2 + 1 FREE — every Srixon golf ball</p>\n<p>Best,</p>"
+          "body": "<p>Hey {{first_name}},</p>\n<p>Wanted to make sure you saw this — Srixon is offering <b>BUY 12, GET 6 FREE</b> on every golf ball model right now, for a limited time.</p>\n<p>{{srixon_line}}</p>\n<p>If you have tournaments, events, or client gifts coming up, this is the time to restock. Want me to send pricing or rough out an order?</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free — single golf balls</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free — by the dozen</a></p>\n<p><a href=\"{{pdf_url}}\">{{logo_ball_img}}</a></p>\n<p>Best,</p>"
         },
         {
           "label": "Past buyer",
           "subject": "Your Srixon deal is live, {{first_name}}",
-          "body": "<p>Hey {{first_name}},</p>\n<p>Time for another order of Srixon? They are running their popular <b>BUY 12, GET 6 FREE</b> promo across all golf ball models for a limited time.</p>\n<p>{{srixon_line}}</p>\n<p>Since you have ordered from us before, I wanted to make sure you had a chance to take advantage before the window closes. Want me to send pricing or help put an order together?</p>\n<p><a href=\"{{reorder_url}}\">{{logo_ball_img}}</a></p>\n<p>{{logo_links}}</p>\n<p><i>Ps — only {{days_left}} left!</i></p>\n<p>{{logo_ps}}</p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br>12 + 6 FREE — every Srixon golf ball<br>2 + 1 FREE — every Srixon golf ball</p>\n<p>Best,</p>"
+          "body": "<p>Hey {{first_name}},</p>\n<p>Time for another order of Srixon? They are running their popular <b>BUY 12, GET 6 FREE</b> promo across all golf ball models for a limited time.</p>\n<p>{{srixon_line}}</p>\n<p>Since you have ordered from us before, I wanted to make sure you had a chance to take advantage before the window closes. Want me to send pricing or help put an order together?</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free — single golf balls</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free — by the dozen</a></p>\n<p><a href=\"{{pdf_url}}\">{{logo_ball_img}}</a></p>\n<p>Best,</p>"
         }
       ]
     },
@@ -136,7 +123,7 @@
           }
         ]
       },
-      "body": "<p>Hi {{first_name}},</p>\n<p>Just following up on my last note — the Srixon <b>BUY 12, GET 6 FREE</b> promo is still active, but it is time-sensitive.</p>\n<p>{{srixon_line}}</p>\n<p>It covers every model, so whether you lean toward the Z-Star line or a value option like the Soft Feel, it is a great window to lock in pricing. Want me to run numbers on your preferred model?</p>\n<p><a href=\"{{reorder_url}}\">{{logo_ball_img}}</a></p>\n<p>{{logo_links}}</p>\n<p><i>Ps — about {{days_left}} left.</i></p>\n<p>{{logo_ps}}</p>\n<p>Best,</p>",
+      "body": "<p>Hi {{first_name}},</p>\n<p>Just following up on my last note — the Srixon <b>BUY 12, GET 6 FREE</b> promo is still active, but it is time-sensitive.</p>\n<p>{{srixon_line}}</p>\n<p>It covers every model, so whether you lean toward the Z-Star line or a value option like the Soft Feel, it is a great window to lock in pricing. Want me to run numbers on your preferred model?</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free — single golf balls</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free — by the dozen</a></p>\n<p><a href=\"{{pdf_url}}\">{{logo_ball_img}}</a></p>\n<p>Best,</p>",
       "vars": {
         "first_name": {
           "type": "schema",
@@ -146,30 +133,34 @@
             "transform": "titleCase"
           }
         },
+        "promo_end": {
+          "type": "literal",
+          "value": "6/22/2026"
+        },
+        "days_left": {
+          "type": "code",
+          "body": "const end = new Date(vars.promo_end);\nif (isNaN(end.getTime())) return '';\nconst now = new Date();\nend.setHours(0, 0, 0, 0); now.setHours(0, 0, 0, 0);\nconst d = Math.round((end.getTime() - now.getTime()) / 86400000);\nif (d < 0) return '';\nif (d === 0) return 'just today';\nreturn d === 1 ? '1 more day' : (d + ' more days');"
+        },
         "_srixon_item": {
           "type": "code",
-          "body": "// Newest-first scan (cap 4) for the latest Srixon ball; capture its product URL.\nconst orders = (Array.isArray(ctx.orders) ? ctx.orders : []).slice()\n  .sort((a, b) => new Date(b.date) - new Date(a.date));\nlet scanned = 0;\nfor (const o of orders) {\n  if (!o || !o.href) continue;\n  if (scanned++ >= 4) break;\n  let items = [];\n  try {\n    const r = await h.parse(await h.fetchText(o.href));\n    const data = r && r.data;\n    items = (data && data.order && Array.isArray(data.order.items)) ? data.order.items : [];\n  } catch (e) { continue; }\n  const hits = items.filter(it => /srixon/i.test(it.name || '') && /golf ball/i.test(it.name || ''));\n  if (hits.length) {\n    let best = hits[0];\n    for (const it of hits) if ((h.parseNumber(it.lineTotal) || 0) > (h.parseNumber(best.lineTotal) || 0)) best = it;\n    return { name: best.name, url: best.url || '', order: o.number, href: o.href, date: o.date };\n  }\n}\nreturn null;",
+          "body": "// Newest-first scan (cap 4) for the latest Srixon ball, then resolve a CLEAN\n// shop URL for it (catalog product page — not the configured/personalized link).\nconst orders = (Array.isArray(ctx.orders) ? ctx.orders : []).slice()\n  .sort((a, b) => new Date(b.date) - new Date(a.date));\nlet scanned = 0;\nfor (const o of orders) {\n  if (!o || !o.href) continue;\n  if (scanned++ >= 4) break;\n  let items = [];\n  try {\n    const r = await h.parse(await h.fetchText(o.href));\n    const data = r && r.data;\n    items = (data && data.order && Array.isArray(data.order.items)) ? data.order.items : [];\n  } catch (e) { continue; }\n  const hits = items.filter(it => /srixon/i.test(it.name || '') && /golf ball/i.test(it.name || ''));\n  if (hits.length) {\n    let best = hits[0];\n    for (const it of hits) if ((h.parseNumber(it.lineTotal) || 0) > (h.parseNumber(best.lineTotal) || 0)) best = it;\n    let shopUrl = '';\n    try { if (best.url) { const m = await h.catalog.byUrl(best.url); if (m && m.url) shopUrl = m.url; } } catch (e) {}\n    if (!shopUrl) { try { const m = await h.catalog.find(best.name); if (m && m.url) shopUrl = m.url; } catch (e) {} }\n    return { name: best.name, shopUrl: shopUrl, order: o.number, date: o.date };\n  }\n}\nreturn null;",
           "async": true
         },
         "last_item": {
           "type": "code",
           "body": "let n = String((vars._srixon_item && vars._srixon_item.name) || '');\nif (!n) return '';\nn = n.split(/ [-–] /)[0];\nn = n.replace(/custom logo/ig, '').replace(/double dozen/ig, '').replace(/  +/g, ' ');\nreturn n.trim();"
         },
-        "reorder_url": {
-          "type": "code",
-          "body": "const it = vars._srixon_item;\nif (it && it.url) return it.url;\nif (it && it.href) return it.href;\nreturn '';"
-        },
         "srixon_line": {
           "type": "code",
-          "body": "const it = vars._srixon_item;\nif (!it) return '';\nconst name = vars.last_item || it.name;\nconst link = it.url ? ('<a href=\"' + it.url + '\">' + name + '</a>') : name;\nreturn 'I saw the ' + link + ' on your account from last time — those are included in this deal too, so it is an easy one to restock.';",
+          "body": "const it = vars._srixon_item;\nif (!it) return '';\nconst name = vars.last_item || it.name;\nconst url = it.shopUrl || 'https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon';\nreturn 'I saw the <a href=\"' + url + '\">' + name + '</a> on your account from last time — those are included in this deal too, so it is an easy one to restock.';",
           "smart": {
             "conditional": true,
             "conditionalScope": "line"
           }
         },
-        "logo_ps": {
+        "ps_line": {
           "type": "code",
-          "body": "const p = (ctx.proofs && ctx.proofs[0]) || null;\nif (!p || !p.id) return '';\nreturn 'And good news — we still have your logo on file, so this can be a quick reorder.';",
+          "body": "const days = vars.days_left || '';\nconst p = (ctx.proofs && ctx.proofs[0]) || null;\nconst hasLogo = !!(p && p.id);\nif (!days && !hasLogo) return '';\nif (days && hasLogo) return 'Ps — this one only runs for ' + days + ', and we still have your logo on file, so it can be a quick reorder!';\nif (days) return 'Ps — this one only runs for ' + days + '!';\nreturn 'Ps — we still have your logo on file, so this can be a quick reorder.';",
           "smart": {
             "conditional": true,
             "conditionalScope": "line"
@@ -181,28 +172,12 @@
           "source": "schema",
           "path": "proofs[0].logo_ball",
           "filename": "your-logo-ball.png",
-          "width": 200,
-          "align": "left"
+          "width": 320,
+          "align": "center"
         },
-        "logo_links": {
-          "type": "code",
-          "body": "const p = (ctx.proofs && ctx.proofs[0]) || null;\nif (!p || !p.id) return '';\nconst it = vars._srixon_item;\nconst reorder = (it && it.url) ? it.url : (it && it.href) ? it.href : '';\nconst parts = [];\nif (reorder) parts.push('<a href=\"' + reorder + '\">reorder your last order</a>');\nif (p.instant_mockup) parts.push('<a href=\"' + p.instant_mockup + '\">see your logo on a ball</a>');\nif (p.apparel_mockup) parts.push('<a href=\"' + p.apparel_mockup + '\">on apparel</a>');\nif (!parts.length) return '';\nreturn 'Quick links: ' + parts.join(' &middot; ') + '.';",
-          "smart": {
-            "conditional": true,
-            "conditionalScope": "line"
-          }
-        },
-        "promo_end": {
-          "type": "literal",
-          "value": "6/22/2026"
-        },
-        "days_left": {
-          "type": "code",
-          "body": "const end = new Date(vars.promo_end);\nif (isNaN(end.getTime())) return '';\nconst now = new Date();\nend.setHours(0, 0, 0, 0); now.setHours(0, 0, 0, 0);\nconst d = Math.round((end.getTime() - now.getTime()) / 86400000);\nif (d < 0) return '';\nif (d === 0) return 'just today';\nreturn d === 1 ? '1 more day' : (d + ' more days');",
-          "smart": {
-            "conditional": true,
-            "conditionalScope": "line"
-          }
+        "pdf_url": {
+          "type": "schema",
+          "path": "proofs[0].pdf"
         }
       },
       "varOrder": [
@@ -211,22 +186,21 @@
         "days_left",
         "_srixon_item",
         "last_item",
-        "reorder_url",
         "srixon_line",
-        "logo_ps",
-        "logo_ball_img",
-        "logo_links"
+        "ps_line",
+        "pdf_url",
+        "logo_ball_img"
       ],
       "variations": [
         {
           "label": "Planning ahead",
           "subject": "Before the Srixon promo closes, {{first_name}}",
-          "body": "<p>Hey {{first_name}},</p>\n<p>Wanted to circle back — the Srixon promo is still running, but it will not last much longer.</p>\n<p>{{srixon_line}}</p>\n<p>The BUY 12, GET 6 FREE deal on all models is a strong offer, especially if you are planning ahead for events, gifts, or an inventory restock. Happy to send options or run pricing — just say the word.</p>\n<p><a href=\"{{reorder_url}}\">{{logo_ball_img}}</a></p>\n<p>{{logo_links}}</p>\n<p><i>Ps — roughly {{days_left}} left.</i></p>\n<p>{{logo_ps}}</p>\n<p>Best,</p>"
+          "body": "<p>Hey {{first_name}},</p>\n<p>Wanted to circle back — the Srixon promo is still running, but it will not last much longer.</p>\n<p>{{srixon_line}}</p>\n<p>The BUY 12, GET 6 FREE deal on all models is a strong offer, especially if you are planning ahead for events, gifts, or an inventory restock. Happy to send options or run pricing — just say the word.</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free — single golf balls</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free — by the dozen</a></p>\n<p><a href=\"{{pdf_url}}\">{{logo_ball_img}}</a></p>\n<p>Best,</p>"
         },
         {
           "label": "Model-specific",
           "subject": "Want me to price your Srixon, {{first_name}}?",
-          "body": "<p>Hi {{first_name}},</p>\n<p>Just checking back in on the Srixon promotion — the BUY 12, GET 6 FREE offer across all models is still available, but limited.</p>\n<p>{{srixon_line}}</p>\n<p>With the Z-Star line and Q-Star Tour all included, it is a great time to lock in pricing before the deal ends. Let me know if you want me to run some numbers or narrow down the best options for you.</p>\n<p><a href=\"{{reorder_url}}\">{{logo_ball_img}}</a></p>\n<p>{{logo_links}}</p>\n<p><i>Ps — about {{days_left}} left.</i></p>\n<p>{{logo_ps}}</p>\n<p>Best,</p>"
+          "body": "<p>Hi {{first_name}},</p>\n<p>Just checking back in on the Srixon promotion — the BUY 12, GET 6 FREE offer across all models is still available, but limited.</p>\n<p>{{srixon_line}}</p>\n<p>With the Z-Star line and Q-Star Tour all included, it is a great time to lock in pricing before the deal ends. Let me know if you want me to run some numbers or narrow down the best options for you.</p>\n<p><i>{{ps_line}}</i></p>\n<p><b>Srixon Promos — end {{promo_end}}</b><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 12, Get 6 Free — single golf balls</a><br><a href=\"https://www.golfballs.com/Custom-Logo/Logo-Golf-Balls.html?Decoration=Custom+Logo&amp;Brand=Srixon\">Buy 2 DZ, Get 1 Free — by the dozen</a></p>\n<p><a href=\"{{pdf_url}}\">{{logo_ball_img}}</a></p>\n<p>Best,</p>"
         }
       ]
     },
@@ -251,7 +225,7 @@
           }
         ]
       },
-      "body": "<p>Hi {{first_name}},</p>\n<p>Circling back one more time! I wanted to stay on your radar — we regularly get access to brand deals and seasonal promos from the top golf brands like Srixon.</p>\n<p>{{logo_ps}}</p>\n<p><a href=\"{{reorder_url}}\">{{logo_ball_img}}</a></p>\n<p>{{logo_links}}</p>\n<p>If you are planning ahead, these can be game-changers for client gifting, corporate events, or building out tournament kits. I would love to help with any custom golf ball or logo projects you have coming up.</p>\n<p>Hope to reconnect soon!</p>\n<p>Best,</p>",
+      "body": "<p>Hi {{first_name}},</p>\n<p>Circling back one more time! I wanted to stay on your radar — we regularly get access to brand deals and seasonal promos from the top golf brands like Srixon.</p>\n<p>If you are planning ahead, these can be game-changers for client gifting, corporate events, or building out tournament kits. I would love to help with any custom golf ball or logo projects you have coming up.</p>\n<p><i>{{ps_line}}</i></p>\n<p><a href=\"{{pdf_url}}\">{{logo_ball_img}}</a></p>\n<p>Hope to reconnect soon!</p>\n<p>Best,</p>",
       "vars": {
         "first_name": {
           "type": "schema",
@@ -261,30 +235,9 @@
             "transform": "titleCase"
           }
         },
-        "_srixon_item": {
+        "ps_line": {
           "type": "code",
-          "body": "// Newest-first scan (cap 4) for the latest Srixon ball; capture its product URL.\nconst orders = (Array.isArray(ctx.orders) ? ctx.orders : []).slice()\n  .sort((a, b) => new Date(b.date) - new Date(a.date));\nlet scanned = 0;\nfor (const o of orders) {\n  if (!o || !o.href) continue;\n  if (scanned++ >= 4) break;\n  let items = [];\n  try {\n    const r = await h.parse(await h.fetchText(o.href));\n    const data = r && r.data;\n    items = (data && data.order && Array.isArray(data.order.items)) ? data.order.items : [];\n  } catch (e) { continue; }\n  const hits = items.filter(it => /srixon/i.test(it.name || '') && /golf ball/i.test(it.name || ''));\n  if (hits.length) {\n    let best = hits[0];\n    for (const it of hits) if ((h.parseNumber(it.lineTotal) || 0) > (h.parseNumber(best.lineTotal) || 0)) best = it;\n    return { name: best.name, url: best.url || '', order: o.number, href: o.href, date: o.date };\n  }\n}\nreturn null;",
-          "async": true
-        },
-        "last_item": {
-          "type": "code",
-          "body": "let n = String((vars._srixon_item && vars._srixon_item.name) || '');\nif (!n) return '';\nn = n.split(/ [-–] /)[0];\nn = n.replace(/custom logo/ig, '').replace(/double dozen/ig, '').replace(/  +/g, ' ');\nreturn n.trim();"
-        },
-        "reorder_url": {
-          "type": "code",
-          "body": "const it = vars._srixon_item;\nif (it && it.url) return it.url;\nif (it && it.href) return it.href;\nreturn '';"
-        },
-        "srixon_line": {
-          "type": "code",
-          "body": "const it = vars._srixon_item;\nif (!it) return '';\nconst name = vars.last_item || it.name;\nconst link = it.url ? ('<a href=\"' + it.url + '\">' + name + '</a>') : name;\nreturn 'I saw the ' + link + ' on your account from last time — those are included in this deal too, so it is an easy one to restock.';",
-          "smart": {
-            "conditional": true,
-            "conditionalScope": "line"
-          }
-        },
-        "logo_ps": {
-          "type": "code",
-          "body": "const p = (ctx.proofs && ctx.proofs[0]) || null;\nif (!p || !p.id) return '';\nreturn 'And good news — we still have your logo on file, so this can be a quick reorder.';",
+          "body": "const days = vars.days_left || '';\nconst p = (ctx.proofs && ctx.proofs[0]) || null;\nconst hasLogo = !!(p && p.id);\nif (!days && !hasLogo) return '';\nif (days && hasLogo) return 'Ps — this one only runs for ' + days + ', and we still have your logo on file, so it can be a quick reorder!';\nif (days) return 'Ps — this one only runs for ' + days + '!';\nreturn 'Ps — we still have your logo on file, so this can be a quick reorder.';",
           "smart": {
             "conditional": true,
             "conditionalScope": "line"
@@ -296,27 +249,19 @@
           "source": "schema",
           "path": "proofs[0].logo_ball",
           "filename": "your-logo-ball.png",
-          "width": 200,
-          "align": "left"
+          "width": 320,
+          "align": "center"
         },
-        "logo_links": {
-          "type": "code",
-          "body": "const p = (ctx.proofs && ctx.proofs[0]) || null;\nif (!p || !p.id) return '';\nconst it = vars._srixon_item;\nconst reorder = (it && it.url) ? it.url : (it && it.href) ? it.href : '';\nconst parts = [];\nif (reorder) parts.push('<a href=\"' + reorder + '\">reorder your last order</a>');\nif (p.instant_mockup) parts.push('<a href=\"' + p.instant_mockup + '\">see your logo on a ball</a>');\nif (p.apparel_mockup) parts.push('<a href=\"' + p.apparel_mockup + '\">on apparel</a>');\nif (!parts.length) return '';\nreturn 'Quick links: ' + parts.join(' &middot; ') + '.';",
-          "smart": {
-            "conditional": true,
-            "conditionalScope": "line"
-          }
+        "pdf_url": {
+          "type": "schema",
+          "path": "proofs[0].pdf"
         }
       },
       "varOrder": [
         "first_name",
-        "_srixon_item",
-        "last_item",
-        "reorder_url",
-        "srixon_line",
-        "logo_ps",
-        "logo_ball_img",
-        "logo_links"
+        "ps_line",
+        "pdf_url",
+        "logo_ball_img"
       ]
     }
   ]
