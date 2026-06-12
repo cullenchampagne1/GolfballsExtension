@@ -55,6 +55,12 @@ function normalizeVarDef(raw) {
     if (raw.smart.extract && typeof raw.smart.extract === 'object') s.extract = raw.smart.extract;
     if (Object.keys(s).length) out.smart = s;
   }
+  /* Attachment vars default to conditional (line scope) so an empty file
+     source drops the line instead of leaking a literal {{name}}. Mirrors
+     the editor's save-time default; explicit conditional:false opts out. */
+  if (type === 'attachment' && (raw.smart || {}).conditional === undefined) {
+    out.smart = { conditionalScope: 'line', ...(out.smart || {}), conditional: true };
+  }
   return out;
 }
 

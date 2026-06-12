@@ -512,6 +512,69 @@ const FIELDS = {
     },
   },
 
+  /* ── Logo proofs (#Table2) ─────────────────────────────────────
+     The account's proof history. Rows found by their logoProofing link
+     (works on static fetches too) and sorted NEWEST FIRST, so
+     proofs[0].logo_ball is "the most recent logo ball on the account".
+     Every asset URL is derived from the row's logoGUID — no off-page
+     fetch (pattern verified against the proofing-flow HAR). These URL
+     fields are what attachment variables point at (schema source). */
+  proofs: {
+    type: 'array',
+    label: 'Logo proofs',
+    extract: { fn: 'contactProofRows' },
+    itemFields: {
+      name: {
+        type: 'string',
+        label: 'Proof name',
+        extract: { cell: 0, attr: 'innerText' },
+        transform: 'trim',
+      },
+      date: {
+        type: 'date',
+        label: 'Proof date',
+        extract: { cell: 1, attr: 'innerText' },
+      },
+      kind: {
+        type: 'string',
+        label: 'Type',
+        extract: { cell: 2, attr: 'innerText' },
+        transform: 'trim',
+      },
+      status: {
+        type: 'string',
+        label: 'Status',
+        extract: { cell: 3, attr: 'innerText' },
+        transform: 'trim',
+      },
+      id: {
+        type: 'string',
+        label: 'Logo ID',
+        extract: { rowFn: 'proofLogoUrl', args: ['id'] },
+      },
+      logo_ball: {
+        type: 'string',
+        label: 'Logo ball image URL',
+        extract: { rowFn: 'proofLogoUrl', args: ['logo_ball'] },
+      },
+      logo: {
+        type: 'string',
+        label: 'Logo image URL',
+        extract: { rowFn: 'proofLogoUrl', args: ['logo'] },
+      },
+      instant_mockup: {
+        type: 'string',
+        label: 'Instant mockup URL',
+        extract: { rowFn: 'proofLogoUrl', args: ['mockup'] },
+      },
+      pdf: {
+        type: 'string',
+        label: 'Proof PDF URL',
+        extract: { rowFn: 'proofLogoUrl', args: ['pdf'] },
+      },
+    },
+  },
+
   /* ── Tasks: open + completed ──────────────────────────────────
       Contact page → unique table ids (#TableTasks / #TableCompletedTasks).
       Account page → BOTH portlets render `#TableTasks` (CRM bug,

@@ -469,7 +469,15 @@ export function TemplateEditor({ tpl, onDelete }) {
       const obj = {};
       vars.forEach((v) => {
         const base = (tpl.vars && tpl.vars[v.name]) ? { ...tpl.vars[v.name] } : {};
-        obj[v.name] = { ...base, ...varDef(v), smart: v.smart || {} };
+        let smart = v.smart || {};
+        /* Attachment vars default to conditional (line scope): an empty file
+           source — e.g. proofs[0].logo_ball on an account with no proofs —
+           silently drops the line instead of leaving a literal {{name}} in
+           the sent email. Explicit smart.conditional === false opts out. */
+        if (v.kind === 'attachment' && smart.conditional === undefined) {
+          smart = { conditionalScope: 'line', ...smart, conditional: true };
+        }
+        obj[v.name] = { ...base, ...varDef(v), smart };
       });
       next.vars = obj;
       next.varOrder = vars.map((v) => v.name);

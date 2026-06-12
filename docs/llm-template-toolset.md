@@ -188,6 +188,15 @@ stats.mailerPoints (number)  stats.mailerRemoved (number)  stats.mailerRemoveDat
 stats.mailerTouchDate (date)  stats.lastBounceCode
 orders[] — array of { number, url, href, summary, date (date), revenue (currency), status }
 items[]  — aggregate ordered items: { name, quantity (number), revenue (currency), orderCount (number) }
+proofs[] — the account's logo-proof history, SORTED NEWEST FIRST (proofs[0] = most recent):
+           { name, date (date), kind, status, id,
+             logo_ball (URL — the ball wearing the logo, PNG),
+             logo (URL — logo thumbnail JPG),
+             instant_mockup (URL — live LogoOverlay render),
+             pdf (URL — the proof PDF) }
+           These URL fields are made for ATTACHMENT variables (source "schema"), e.g.
+           { "type": "attachment", "mode": "inline", "source": "schema", "path": "proofs[0].logo_ball", "filename": "logo-ball.png", "width": 220, "align": "left" }
+           Attachment variables are conditional by default: an account with no proofs drops the line silently.
 tasks.open[] — { id, subject, category, status, priority, liveDate (date), dueDate (date) }
 tasks.done[] — { id, subject, category, priority, liveDate (date), dueDate (date) }
 opportunities[] — { id, subject, estimatedValue (currency), estimatedCloseDate (date), stage }

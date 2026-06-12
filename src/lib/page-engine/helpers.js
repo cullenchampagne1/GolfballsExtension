@@ -183,6 +183,48 @@ export function contactOrderRows(doc) {
   }).slice(0, 50);
 }
 
+/** Logo-proof table rows (#Table2 on contact/account pages). Keyed off each
+ *  row's "View History" link (logoProofing?logoGUID=…) — not the table id —
+ *  so it works on a statically-fetched page too. Sorted newest-first by the
+ *  date cell (col 1) so proofs[0] is RELIABLY the most recent proof: the live
+ *  page is date-desc via DataTables, but a fetched page is server order. */
+export function contactProofRows(doc) {
+  if (!doc || typeof doc.querySelectorAll !== 'function') return [];
+  const rows = Array.from(doc.querySelectorAll('tr')).filter((tr) =>
+    tr.querySelector('a[href*="logoProofing?logoGUID=" i]'));
+  const dateOf = (tr) => {
+    const t = ((tr.children && tr.children[1] && tr.children[1].textContent) || '').trim();
+    const d = new Date(t);
+    return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+  };
+  return rows.sort((a, b) => dateOf(b) - dateOf(a)).slice(0, 50);
+}
+
+/** One proof row → a derived asset URL. Every asset is a pure function of the
+ *  row's logoGUID (verified live against the proofing flow HAR), so NO
+ *  off-page fetch is needed:
+ *    logo_ball → cloudfront /logo/<id[0:2]>/<id>_1.png   (ball wearing the logo)
+ *    logo      → cloudfront /logo/<id[0:2]>/<id>-150.jpg (logo thumbnail)
+ *    mockup    → customizationapplications render.aspx LogoOverlay (instant mockup)
+ *    pdf       → cloudfront /logo/<id[0:2]>/<id>_1.pdf   (proof PDF)
+ *    id        → the bare GUID */
+export function proofLogoUrl(rowEl, kind) {
+  const a = rowEl && rowEl.querySelector && rowEl.querySelector('a[href*="logoGUID=" i]');
+  const m = /logoGUID=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
+    .exec((a && (a.getAttribute('href') || a.href)) || '');
+  if (!m) return '';
+  const id = m[1].toLowerCase();
+  const dir = id.slice(0, 2);
+  switch (kind) {
+    case 'logo_ball': return `https://d1tp32r8b76g0z.cloudfront.net/logo/${dir}/${id}_1.png`;
+    case 'logo':      return `https://d1tp32r8b76g0z.cloudfront.net/logo/${dir}/${id}-150.jpg`;
+    case 'mockup':    return `https://www.customizationapplications.com/render.aspx?template=LogoOverlay&XMLFile=virtualproofbtn&LogoID=${id}`;
+    case 'pdf':       return `https://d1tp32r8b76g0z.cloudfront.net/logo/${dir}/${id}_1.pdf`;
+    case 'id':        return id;
+    default:          return '';
+  }
+}
+
 /** Aggregate ordered-items table rows. Same DataTables-id problem as the
  *  orders grid (#DataTables_Table_1 is assigned in the browser, absent in a
  *  fetched page) — but this one has no link to key off. Live page: use the
@@ -641,6 +683,8 @@ export const FN_REGISTRY = {
   readHrefParam,
   contactOrderRows,
   contactItemRows,
+  contactProofRows,
+  proofLogoUrl,
   keyedField,
   accountContactRows,
   firstAccountContactField,
