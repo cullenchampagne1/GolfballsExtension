@@ -335,7 +335,7 @@ function tplSeparated(m) {
     </tr></tbody></table>
     <div style="font-size:13px; color:${T.mut}; margin:6px 0 22px;">${mains.length} option${mains.length === 1 ? '' : 's'} &middot; priced individually</div>
     ${_msgBlock(m) ? _msgBlock(m) + '<div style="height:18px; line-height:18px; font-size:0;">&nbsp;</div>' : ''}
-    ${cards}${disc ? _vspace(18) + disc : ''}${totalBox}${_expLine(m)}${_discLine(m)}${show.cta ? _ctaBar('View these options') : ''}
+    ${cards}${disc ? _vspace(18) + disc : ''}${totalBox ? _vspace(14) + totalBox : ''}${_expLine(m)}${_discLine(m)}${show.cta ? _ctaBar('View these options') : ''}
     </td></tr></tbody></table>
     ${_foot()}
   </td></tr></tbody></table>`;
