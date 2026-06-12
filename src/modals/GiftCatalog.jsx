@@ -15,6 +15,7 @@ import { importSnugzCatalog } from '../lib/snugzImport.js';
 import { getInventory, peekInventory, cachedCostForSku, primeCostCache, importCosts } from '../lib/inventory.js';
 import { bundleSingle, setBundleCatalog } from '../lib/bundleCost.js';
 import { ProposalEmailModal, ProposalEmailComposer } from './ProposalEmail.jsx';
+import { CheckoutComposer } from './ProposalCheckout.jsx';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
 import { ballish, decoImprints, canApplyImprint, mergeImprint } from '../lib/giftImprints.js';
 import { decoratedPricingForLine, giftSetPreviewUrl } from '../lib/cartSerializer.js';
@@ -1432,7 +1433,7 @@ function PromoBlock({ promo, onApply, onClear, onCheck }) {
   );
 }
 
-function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose, onLoad, onOpenProposal, onCopy, onSaveToAccount, buildEmailSource, onPatchSplit, promo, onApplyPromo, onClearPromo, onCheckPromo }) {
+function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose, onLoad, onOpenProposal, onCopy, onSaveToAccount, buildEmailSource, buildCheckoutSource, onPatchSplit, promo, onApplyPromo, onClearPromo, onCheckPromo }) {
   // Proactively fetch a cost for any catalog line that has none yet, so the
   // breakdown fills in real numbers on open. `costTick` re-renders once the cost
   // map updates; `costFailed` records SKUs we tried and couldn't price (→ they
@@ -1474,6 +1475,14 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
   const emailMode = !!emailSource;
   const setEmailMode = (on) => setEmailSource(on && buildEmailSource ? buildEmailSource() : null);
   const canEmail = !!buildEmailSource && M.count > 0;
+  // Checkout sub-panel — single-proposal only (buildCheckoutSource is omitted for
+  // the multi-proposal overview).
+  const [checkoutSrc, setCheckoutSrc] = useState(null);
+  const checkoutMode = !!checkoutSrc;
+  const setCheckoutMode = (on) => setCheckoutSrc(on && buildCheckoutSource ? buildCheckoutSource() : null);
+  const canCheckout = !!buildCheckoutSource && M.count > 0;
+  const inSub = emailMode || checkoutMode;
+  const exitSub = () => { setEmailMode(false); setCheckoutMode(false); };
   // Copy-as-command spins while artwork uploads, mirroring the card behaviour.
   const [copying, setCopying] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -1492,20 +1501,25 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
       style={{ position: 'absolute', inset: 0, zIndex: 25, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-canvas)' }}>
       {/* header — morphs to an email-composer header in emailMode */}
       <div style={{ padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 11, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
-        <IconBtn size="sm" variant="ghost" icon={<ArrowL />} onClick={emailMode ? () => setEmailMode(false) : onClose} />
-        <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: emailMode ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)', border: '1px solid ' + (emailMode ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'), color: emailMode ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background var(--gb-anim), border-color var(--gb-anim), color var(--gb-anim)' }}>
-          {emailMode ? <I.mail size={16} /> : current ? <I.card size={16} /> : <I.bookmark size={16} />}
+        <IconBtn size="sm" variant="ghost" icon={<ArrowL />} onClick={inSub ? exitSub : onClose} />
+        <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: inSub ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)', border: '1px solid ' + (inSub ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'), color: inSub ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background var(--gb-anim), border-color var(--gb-anim), color var(--gb-anim)' }}>
+          {checkoutMode ? <I.card size={16} /> : emailMode ? <I.mail size={16} /> : current ? <I.card size={16} /> : <I.bookmark size={16} />}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
-          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{emailMode ? `Compose proposal email · ${M.count} ${M.count === 1 ? 'item' : 'items'}` : subtitle}</div>
+          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{checkoutMode ? `Checkout · ${M.count} ${M.count === 1 ? 'item' : 'items'} · ${M.units} units` : emailMode ? `Compose proposal email · ${M.count} ${M.count === 1 ? 'item' : 'items'}` : subtitle}</div>
         </div>
-        {!emailMode && badge}
+        {!inSub && badge}
         <IconBtn size="sm" icon={<I.close />} onClick={onClose} />
       </div>
 
       <AnimatePresence mode="wait" initial={false}>
-      {emailMode && emailSource ? (
+      {checkoutMode && checkoutSrc ? (
+      <motion.div key="checkout" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+        initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 18 }} transition={{ duration: .2 }}>
+        <CheckoutComposer source={checkoutSrc} onBack={() => setCheckoutMode(false)} />
+      </motion.div>
+      ) : emailMode && emailSource ? (
       <motion.div key="email" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
         initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 18 }} transition={{ duration: .2 }}>
         <ProposalEmailComposer source={emailSource} onBack={() => setEmailMode(false)} backLabel="Back to breakdown" />
@@ -1602,14 +1616,14 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
         {current ? (
           <>
             <Btn variant="ghost" size="md" icon={<I.card />} onClick={onOpenProposal}>Open proposal</Btn>
-            {canEmail && <Btn variant="primary" size="md" icon={<I.mail />} onClick={() => setEmailMode(true)}>Generate email</Btn>}
+            {canEmail && <Btn variant={canCheckout ? 'secondary' : 'primary'} size="md" icon={<I.mail />} onClick={() => setEmailMode(true)}>Generate email</Btn>}
+            {canCheckout && <Btn variant="primary" size="md" icon={<I.card />} onClick={() => setCheckoutMode(true)}>Checkout</Btn>}
           </>
         ) : (
           <>
-            {onCopy && <Btn variant="ghost" size="md" icon={copyIcon} onClick={doCopy}>{copied ? 'Copied' : 'Copy command'}</Btn>}
-            {onSaveToAccount && <Btn variant="ghost" size="md" icon={<I.send />} onClick={onSaveToAccount}>Save to account</Btn>}
             {onLoad && <Btn variant="secondary" size="md" icon={loaded ? <I.check /> : <I.plus />} onClick={onLoad}>{loaded ? 'Loaded' : 'Load'}</Btn>}
-            {canEmail && <Btn variant="primary" size="md" icon={<I.mail />} onClick={() => setEmailMode(true)}>Generate email</Btn>}
+            {canEmail && <Btn variant={canCheckout ? 'secondary' : 'primary'} size="md" icon={<I.mail />} onClick={() => setEmailMode(true)}>Generate email</Btn>}
+            {canCheckout && <Btn variant="primary" size="md" icon={<I.card />} onClick={() => setCheckoutMode(true)}>Checkout</Btn>}
           </>
         )}
       </div>
@@ -3069,6 +3083,16 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // proposal (each rendered with the chosen template, stacked + divided), plus a
   // merged rawLines so the 3D-preview generator covers every line.
   const cartLinkOf = (it) => it.cartID ? `https://www.golfballs.com/cart?cartID=${it.cartID}&utm_medium=Proposal&utm_source=Proposal-${it.cartID}` : null;
+  // Checkout source model from resolved proposal entries → priced rows the
+  // CheckoutComposer consumes. Single proposal only.
+  const checkoutSourceFromEntries = (entries, name, company) => {
+    const lines = (entries || []).filter((e) => !e.free && e.product).map((e, i) => {
+      const qty = (e.splits || []).reduce((a, x) => a + (x.qty || 0), 0);
+      const goods = (e.splits || []).reduce((a, x) => a + (x.qty || 0) * (x.price || 0), 0);
+      return { id: (e.product.id || 'p') + '-' + i, product: e.product, qty, unitPrice: qty ? goods / qty : 0, setup: 0, goods, lineTotal: goods, decorated: decoImprints(e.decoration).length > 0 };
+    });
+    return { name: name || 'Proposal', company: company || '', lines, subtotal: lines.reduce((a, l) => a + l.goods, 0), setupTotal: 0, units: lines.reduce((a, l) => a + l.qty, 0) };
+  };
   const buildMultiEmailSource = (items) => {
     const sections = (items || []).map((it) => proposalToEmailSource(linesFromSaved(it, rid), it.name, { promotion: it.promotion, cartLink: cartLinkOf(it) }));
     return {
@@ -3476,7 +3500,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                         } catch (e) { toast?.error?.('Couldn’t track proposal — ' + ((e && e.message) || 'unknown error')); throw e; }
                       },
                     })}
-                    onCopy={() => copySaved(it)} onSaveToAccount={() => { close(); loadSavedToAccount(it); }}
+                    buildCheckoutSource={() => checkoutSourceFromEntries(r.entries, it.name, it.opportunitySubject || it.contactName || '')}
                     onLoad={() => { close(); loadSaved(it); }} />
                 );
               }
@@ -3489,6 +3513,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                     onPatchSplit={(entryIndex, _src, splitIndex, price) => setProposal((prev) => prev.map((pl, li) => li !== entryIndex ? pl
                       : { ...pl, splits: pl.splits.map((s, si) => si !== splitIndex ? s : { ...s, price, priceEdited: true }) }))}
                     buildEmailSource={() => proposalToEmailSource(proposalWithFree, '', { promotion: proposalPromo && proposalPromo.promotion })}
+                    buildCheckoutSource={() => checkoutSourceFromEntries(proposalWithFree, 'Current proposal', '')}
                     onOpenProposal={() => { close(); setProposalOpen(true); }} />
                 );
               }
@@ -3500,7 +3525,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
                   promo={it.promotion && it.promotion.promo ? { code: it.promotion.promo, promotion: it.promotion } : null}
                   onPatchSplit={(_entryIndex, srcIndex, splitIndex, price) => editSavedSplitPrice(it, srcIndex, splitIndex, price)}
                   buildEmailSource={() => proposalToEmailSource(linesFromSaved(it, rid), it.name, { promotion: it.promotion })}
-                  onCopy={() => copySaved(it)} onSaveToAccount={() => { close(); loadSavedToAccount(it); }}
+                  buildCheckoutSource={() => checkoutSourceFromEntries(r.entries, it.name, it.company || '')}
                   onLoad={() => { close(); loadSaved(it); }} />
               );
             })()}
