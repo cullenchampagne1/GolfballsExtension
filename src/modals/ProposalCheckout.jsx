@@ -1,15 +1,15 @@
 import React, { useState, useMemo, useEffect, useContext, useRef } from 'react';
-import { Btn, I, Tag, Checkbox, Icon } from '../ui/index.js';
+import { Btn, IconBtn, I, Tag, Checkbox, Icon, Dropdown } from '../ui/index.js';
 
 /* ───────────────────────────────────────────────────────────────────────────
    Proposal Checkout — embeddable composer (ported from the design bundle).
-   Shipping → Billing → Payment (+ rep-only Admin) + a "Your Purchase" rail with
-   the Place Order action. Single-address for now (multi-business drop-ship is a
-   follow-up). The actual order POST is stubbed in placeOrder() — same TODO the
-   design carried — and returns a mock order number for the confirmation screen.
+   Shipping (one address OR multiple drop-ship businesses) → Billing → Payment
+   (+ rep-only Admin) with an animated step progress bar, a "Your Purchase" rail
+   that lists each line's personalization, and Place Order → confirmation.
+   The order POST is stubbed in placeOrder() (returns a mock order #) — same TODO
+   the design carried.
    ─────────────────────────────────────────────────────────────────────────── */
 
-/* local icons not in the shared `I` set */
 const XI = {
   truck:   (p) => <Icon {...p}><path d="M1 3h13v10H1zM14 7h4l3 3v3h-7M5.5 18.5a2 2 0 100-4 2 2 0 000 4zM17.5 18.5a2 2 0 100-4 2 2 0 000 4z"/></Icon>,
   pin:     (p) => <Icon {...p}><path d="M21 10c0 6-9 12-9 12s-9-6-9-12a9 9 0 1118 0z"/><circle cx="12" cy="10" r="3"/></Icon>,
@@ -23,21 +23,25 @@ const XI = {
   info:    (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></Icon>,
   arrow:   (p) => <Icon {...p} strokeWidth={2.2}><path d="M5 12h14M13 6l6 6-6 6"/></Icon>,
   check:   (p) => <Icon {...p} strokeWidth={2.6}><path d="M20 6L9 17l-5-5"/></Icon>,
+  doc:     (p) => <Icon {...p}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></Icon>,
+  upload:  (p) => <Icon {...p}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></Icon>,
+  copy:    (p) => <Icon {...p}><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></Icon>,
+  plus:    (p) => <Icon {...p} strokeWidth={2.4}><path d="M12 5v14M5 12h14"/></Icon>,
+  trash:   (p) => <Icon {...p}><path d="M3 6h18M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></Icon>,
 };
 
 const CheckoutCtx = React.createContext({ dense: false });
 const money = (n) => '$' + (n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const money0 = (n) => '$' + Math.round(n || 0).toLocaleString('en-US');
-
 const CK_STATES = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
-const CK_TAX_RATE = 0.0811;
-const CK_STD_SHIP = 19.95;
-const ART_EMAIL = 'art@golfballs.com';
-const SAVED_ADDRESSES = [];   // populated from the account in a later pass
-const SAVED_CARDS = [];
-const SALES_REPS = ['House account'];
-
+const CK_TAX_RATE = 0.0811, CK_STD_SHIP = 19.95;
+const SAVED_ADDRESSES = [], SAVED_CARDS = [], SALES_REPS = ['House account'];
+const rid = () => Math.random().toString(36).slice(2, 9);
 const emptyAddr = () => ({ saved: '', first: '', last: '', company: '', addr1: '', addr2: '', country: 'United States', city: '', state: '', zip: '', phone: '', setDefault: false });
+function makeDest(lines) {
+  return { id: rid(), business: '', attn: '', addr1: '', addr2: '', country: 'United States', city: '', state: '', zip: '', phone: '', note: '',
+    items: (lines || []).reduce((m, l) => { m[l.id] = { qty: '' }; return m; }, {}) };
+}
 
 /* ── form state hook ──────────────────────────────────────────────────────── */
 function useCheckoutForm(source, opts = {}) {
@@ -45,6 +49,8 @@ function useCheckoutForm(source, opts = {}) {
   const companyName = (source.company || '').split(' · ')[0];
   const [ship, setShipRaw] = useState(emptyAddr());
   const [delivery, setDelivery] = useState('ship');
+  const [shipMode, setShipMode] = useState('single');
+  const [destinations, setDestinations] = useState([]);
   const [billSame, setBillSame] = useState(true);
   const [bill, setBillRaw] = useState(emptyAddr());
   const [promo, setPromo] = useState('');
@@ -62,6 +68,7 @@ function useCheckoutForm(source, opts = {}) {
     setShipRaw({ ...emptyAddr(), company: companyName });
     setBillRaw(emptyAddr()); setBillSame(true); setPromoApplied(''); setSavedCard('');
     setCardRaw({ name: '', num: '', cvc: '', exp: '' }); setGiftOpen(false); setGiftCert(''); setOrderNo(null);
+    setShipMode('single'); setDestinations([]);
   }, [companyName, source]);
 
   const patchShip = (p) => setShipRaw((s) => ({ ...s, ...p }));
@@ -69,19 +76,39 @@ function useCheckoutForm(source, opts = {}) {
   const setCard = (p) => setCardRaw((c) => ({ ...c, ...p }));
   const setAdmin = (p) => setAdminRaw((c) => ({ ...c, ...p }));
 
+  // multi-destination helpers
+  const addDestination = () => { const d = makeDest(source.lines); setDestinations((a) => [...a, d]); return d.id; };
+  const removeDestination = (id) => setDestinations((a) => a.filter((d) => d.id !== id));
+  const duplicateDestination = (id) => {
+    let newId = null;
+    setDestinations((a) => { const src = a.find((d) => d.id === id); if (!src) return a; newId = rid();
+      const copy = JSON.parse(JSON.stringify(src)); copy.id = newId; copy.business = src.business ? src.business + ' (copy)' : '';
+      const idx = a.findIndex((d) => d.id === id); const next = [...a]; next.splice(idx + 1, 0, copy); return next; });
+    return newId;
+  };
+  const patchDestination = (id, p) => setDestinations((a) => a.map((d) => (d.id === id ? { ...d, ...p } : d)));
+  const patchDestItem = (id, lineId, p) => setDestinations((a) => a.map((d) => d.id !== id ? d : { ...d, items: { ...d.items, [lineId]: { ...(d.items[lineId] || { qty: '' }), ...p } } }));
+  const autoSplit = () => setDestinations((a) => { if (!a.length) return a;
+    return a.map((d, di) => { const items = { ...d.items };
+      source.lines.forEach((l) => { const base = Math.floor(l.qty / a.length); const extra = di < (l.qty % a.length) ? 1 : 0; items[l.id] = { ...(items[l.id] || {}), qty: String(base + extra) }; });
+      return { ...d, items }; });
+  });
+  const allocation = useMemo(() => source.lines.map((l) => ({ id: l.id, title: l.product.title, total: l.qty,
+    allocated: destinations.reduce((a, d) => a + (parseInt(d.items[l.id] && d.items[l.id].qty, 10) || 0), 0) })), [destinations, source.lines]);
+  const allocationComplete = allocation.every((a) => a.allocated === a.total);
+
   const totals = useMemo(() => {
     const subtotal = (source.subtotal || 0) + (source.setupTotal || 0);
-    const tax = subtotal * CK_TAX_RATE;
-    const shipping = CK_STD_SHIP;
-    return { subtotal, tax, shipping, total: subtotal + tax + shipping };
+    return { subtotal, tax: subtotal * CK_TAX_RATE, shipping: CK_STD_SHIP, total: subtotal + subtotal * CK_TAX_RATE + CK_STD_SHIP };
   }, [source.subtotal, source.setupTotal]);
 
   const addrOk = (a) => !!(a.saved || (a.first && a.last && a.addr1 && a.city && a.state && a.zip));
-  const shipOk = addrOk(ship);
+  const destOk = (d) => !!(d.business && d.addr1 && d.city && d.state && d.zip);
+  const shipOk = shipMode === 'single' ? addrOk(ship) : (destinations.length > 0 && destinations.every(destOk) && allocationComplete);
   const billOk = billSame || addrOk(bill);
   const payOk = !!savedCard || !!(card.name && card.num && card.cvc && card.exp);
   const missing = [];
-  if (!shipOk) missing.push('shipping address');
+  if (!shipOk) missing.push(shipMode === 'single' ? 'shipping address' : 'destinations & allocation');
   if (!billOk) missing.push('billing address');
   if (!payOk) missing.push('payment');
   const canPlace = missing.length === 0;
@@ -89,11 +116,8 @@ function useCheckoutForm(source, opts = {}) {
 
   const applyPromo = () => { if (promo.trim()) setPromoApplied(promo.trim().toUpperCase()); };
   const removePromo = () => { setPromoApplied(''); setPromo(''); };
-
   const placeOrder = () => {
-    // TODO(backend): POST the assembled order (ship, bill, payType, card/savedCard,
-    // promoApplied, giftCert, admin overrides, source lines) to the golfballs order
-    // endpoint. Stubbed for now — mirrors the design.
+    // TODO(backend): POST the assembled order to the golfballs order endpoint.
     if (!canPlace) return;
     setPlacing(true);
     setTimeout(() => { setPlacing(false); setOrderNo('GB' + (1840000 + Math.floor(Math.random() * 9999))); }, 1100);
@@ -103,6 +127,8 @@ function useCheckoutForm(source, opts = {}) {
   return {
     source, totals, showAdmin,
     ship, patchShip, delivery, setDelivery, billSame, setBillSame, bill, patchBill,
+    shipMode, setShipMode, destinations, addDestination, removeDestination, duplicateDestination,
+    patchDestination, patchDestItem, autoSplit, allocation, allocationComplete,
     promo, setPromo, promoApplied, applyPromo, removePromo,
     giftOpen, setGiftOpen, giftCert, setGiftCert,
     payType, setPayType, savedCard, setSavedCard, card, setCard, admin, setAdmin,
@@ -144,20 +170,13 @@ function CkText({ label, value, onChange, placeholder, required, hint, type = 't
     </div>
   );
 }
+/* Select → the design-system Dropdown (custom, not a native <select>). */
 function CkSelect({ label, value, onChange, options, required, placeholder, width }) {
-  const [focus, setFocus] = useState(false);
-  const { dense } = useContext(CheckoutCtx);
+  const opts = (options || []).map((o) => (o && typeof o === 'object') ? { id: o.value ?? o.id, label: o.label } : { id: o, label: o });
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: width || '100%', minWidth: 0 }}>
       {label && <FieldLabel required={required}>{label}</FieldLabel>}
-      <div style={{ position: 'relative' }}>
-        <select value={value} onChange={(e) => onChange(e.target.value)} onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
-          style={{ ...baseFieldStyle(focus, false, dense), appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer', color: value ? 'var(--gb-text-primary)' : 'var(--gb-text-ghost)', paddingRight: 30 }}>
-          {placeholder && <option value="">{placeholder}</option>}
-          {options.map((o) => <option key={o.value ?? o} value={o.value ?? o}>{o.label ?? o}</option>)}
-        </select>
-        <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--gb-text-muted)', pointerEvents: 'none', display: 'flex' }}><I.chevd size={12} /></span>
-      </div>
+      <Dropdown value={value} onChange={onChange} options={opts} placeholder={placeholder || 'Select…'} size="sm" />
     </div>
   );
 }
@@ -173,6 +192,33 @@ function CkArea({ label, value, onChange, placeholder, rows = 3, hint }) {
     </div>
   );
 }
+/* Segmented control */
+function CkSeg({ value, onChange, options, full }) {
+  return (
+    <div style={{ display: 'inline-flex', padding: 3, gap: 3, background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', width: full ? '100%' : 'auto' }}>
+      {options.map((o) => {
+        const on = value === (o.value ?? o);
+        return (
+          <button key={o.value ?? o} onClick={() => onChange(o.value ?? o)} style={{
+            flex: full ? 1 : 'none', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            padding: '7px 13px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', whiteSpace: 'nowrap',
+            fontFamily: 'var(--gb-font-sans)', fontSize: 12, fontWeight: 600,
+            background: on ? 'var(--gb-surface-1)' : 'transparent', color: on ? 'var(--gb-text-primary)' : 'var(--gb-text-tertiary)',
+            border: '1px solid ' + (on ? 'var(--gb-border-default)' : 'transparent'),
+            boxShadow: on ? '0 1px 3px rgba(40,32,16,.12)' : 'none', transition: 'all var(--gb-anim)',
+          }}>
+            {o.icon && <span style={{ display: 'flex' }}>{o.icon}</span>}{o.label ?? o}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+/* checkbox — use the design-system Checkbox directly (top-aligned with its
+   label); onClick is the toggle. */
+function CkCheck({ checked, onClick, label }) {
+  return <Checkbox checked={checked} label={label} onChange={() => onClick()} />;
+}
 function ProductPlate({ src, size = 44 }) {
   return (
     <div style={{ width: size, height: size, borderRadius: 'var(--gb-r-sm)', flexShrink: 0, background: '#ffffff', border: '1px solid var(--gb-border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', padding: 4, boxSizing: 'border-box' }}>
@@ -181,10 +227,43 @@ function ProductPlate({ src, size = 44 }) {
   );
 }
 
-/* ── layout pieces ────────────────────────────────────────────────────────── */
-function CkSection({ n, icon, title, sub, done, optional, children }) {
+/* ── animated step progress bar ───────────────────────────────────────────── */
+function CkProgress({ progress = 0, scrolled }) {
+  const labels = ['Shipping', 'Billing', 'Payment'];
+  const frontier = Math.min(2, Math.floor(progress + 1e-6));
+  const els = [];
+  labels.forEach((label, i) => {
+    const state = i < frontier ? 'done' : i === frontier ? 'active' : 'todo';
+    els.push(
+      <div key={'n' + i} style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <span style={{ width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, fontFamily: 'var(--gb-font-mono)',
+          background: state === 'done' ? 'var(--gb-success)' : state === 'active' ? 'var(--gb-brand-label)' : 'var(--gb-fill-subtle)',
+          color: state === 'todo' ? 'var(--gb-text-muted)' : '#fff',
+          border: '1px solid ' + (state === 'done' ? 'var(--gb-success)' : state === 'active' ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
+          boxShadow: state === 'active' ? '0 0 0 4px var(--gb-brand-tint-soft)' : 'none', transform: state === 'active' ? 'scale(1.08)' : 'scale(1)',
+          transition: 'background .35s ease, color .35s ease, border-color .35s ease, box-shadow .35s ease, transform .35s ease' }}>{state === 'done' ? <XI.check size={12} /> : i + 1}</span>
+        <span style={{ fontSize: 12, fontWeight: state === 'active' ? 800 : 600, color: state === 'active' ? 'var(--gb-brand-label)' : state === 'done' ? 'var(--gb-success-fg)' : 'var(--gb-text-muted)', whiteSpace: 'nowrap', transition: 'color .35s ease' }}>{label}</span>
+      </div>
+    );
+    if (i < labels.length - 1) {
+      const fill = Math.max(0, Math.min(1, progress - i));
+      els.push(
+        <div key={'c' + i} style={{ flex: 1, height: 3, margin: '0 10px', borderRadius: 3, background: 'var(--gb-border-default)', position: 'relative', overflow: 'hidden', minWidth: 18 }}>
+          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: (fill * 100) + '%', background: 'var(--gb-success)', borderRadius: 3, transition: 'width .14s linear' }} />
+        </div>
+      );
+    }
+  });
   return (
-    <section style={{ background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', flexShrink: 0 }}>
+    <div style={{ background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', padding: '12px 18px', display: 'flex', alignItems: 'center', flexShrink: 0,
+      boxShadow: scrolled ? '0 10px 26px rgba(40,32,16,.14)' : 'none', transition: 'box-shadow .4s cubic-bezier(.4,0,.2,1)' }}>{els}</div>
+  );
+}
+
+/* ── layout pieces ────────────────────────────────────────────────────────── */
+function CkSection({ n, icon, title, sub, done, optional, children, secRef }) {
+  return (
+    <section ref={secRef} style={{ background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', flexShrink: 0, scrollMarginTop: 84 }}>
       <header style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '15px 18px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
         <span style={{ width: 28, height: 28, borderRadius: 'var(--gb-r-md)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)',
           background: done ? 'var(--gb-success-tint-medium)' : 'var(--gb-brand-tint-medium)', color: done ? 'var(--gb-success-fg)' : 'var(--gb-brand-label)',
@@ -203,16 +282,18 @@ function CkSection({ n, icon, title, sub, done, optional, children }) {
   );
 }
 const CkRow2 = ({ children }) => <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{children}</div>;
-function CkCheck({ checked, onClick, label }) {
-  return <div onClick={onClick} style={{ cursor: 'pointer', display: 'inline-flex', maxWidth: '100%' }}><Checkbox checked={checked} label={label} /></div>;
+function SubLabel({ icon, children }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 800, letterSpacing: .5, textTransform: 'uppercase', color: 'var(--gb-text-tertiary)' }}>
+      <span style={{ display: 'flex', color: 'var(--gb-text-muted)' }}>{icon}</span>{children}
+    </div>
+  );
 }
-function CkAddress({ a, set, savedAddresses }) {
+function CkAddress({ a, set }) {
   const usingSaved = !!a.saved;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {savedAddresses.length > 0 && (
-        <CkSelect label="Saved addresses" value={a.saved} onChange={(v) => set({ saved: v })} options={savedAddresses.map((s) => ({ value: s.id, label: s.label }))} placeholder="Use a new address" />
-      )}
+      {SAVED_ADDRESSES.length > 0 && <CkSelect label="Saved addresses" value={a.saved} onChange={(v) => set({ saved: v })} options={SAVED_ADDRESSES.map((s) => ({ value: s.id, label: s.label }))} placeholder="Use a new address" />}
       {!usingSaved && (
         <>
           <CkRow2>
@@ -238,30 +319,189 @@ function CkAddress({ a, set, savedAddresses }) {
   );
 }
 
-/* ── left column — sections ───────────────────────────────────────────────── */
-function CheckoutSections({ f }) {
+/* ── multi-destination drop-ship ──────────────────────────────────────────── */
+function AllocBar({ allocation }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '11px 13px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)' }}>
+      <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: .6, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>Allocation across destinations</div>
+      {allocation.map((a) => {
+        const ok = a.allocated === a.total, over = a.allocated > a.total, pct = a.total ? Math.min(100, (a.allocated / a.total) * 100) : 0;
+        return (
+          <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 11.5, fontWeight: 500, color: 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.title}</span>
+            <div style={{ width: 90, height: 5, borderRadius: 3, background: 'var(--gb-border-default)', overflow: 'hidden', flexShrink: 0 }}>
+              <div style={{ width: pct + '%', height: '100%', borderRadius: 3, background: over ? 'var(--gb-error)' : ok ? 'var(--gb-success)' : 'var(--gb-warning)', transition: 'width .2s ease' }} />
+            </div>
+            <span style={{ width: 56, textAlign: 'right', fontSize: 11, fontFamily: 'var(--gb-font-mono)', fontWeight: 700, color: over ? 'var(--gb-error)' : ok ? 'var(--gb-success-fg)' : 'var(--gb-text-tertiary)' }}>{a.allocated}/{a.total}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+function DestItemRow({ line, item, onPatch }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)' }}>
+      <ProductPlate src={line.product.img} size={38} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{line.product.title}</div>
+        <ImprintList imprints={line.imprints} compact />
+      </div>
+      <div style={{ width: 70, flexShrink: 0 }}>
+        <CkText value={item.qty} onChange={(v) => onPatch({ qty: v.replace(/\D/g, '') })} placeholder="Qty" mono />
+      </div>
+    </div>
+  );
+}
+function DestinationCard({ index, dest, lines, expanded, onToggle, onPatch, onPatchItem, onRemove, onDuplicate }) {
+  const units = lines.reduce((a, l) => a + (parseInt(dest.items[l.id] && dest.items[l.id].qty, 10) || 0), 0);
+  const place = [dest.city, dest.state].filter(Boolean).join(', ');
+  const title = dest.business || dest.attn || 'Untitled destination';
+  return (
+    <div style={{ borderRadius: 'var(--gb-r-md)', border: '1px solid ' + (expanded ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), background: 'var(--gb-fill-inverse-medium)', overflow: 'hidden', transition: 'border-color var(--gb-anim)' }}>
+      <div onClick={onToggle} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 12px', cursor: 'pointer' }}>
+        <span style={{ width: 22, height: 22, borderRadius: 'var(--gb-r-sm)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10.5, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', background: 'var(--gb-brand-tint-medium)', color: 'var(--gb-brand-label)', border: '1px solid var(--gb-brand-tint-border)' }}>{index + 1}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: title === 'Untitled destination' ? 'var(--gb-text-muted)' : 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+          <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{place || 'No address yet'}</div>
+        </div>
+        <span style={{ flexShrink: 0, fontSize: 10.5, fontFamily: 'var(--gb-font-mono)', fontWeight: 700, color: units ? 'var(--gb-text-secondary)' : 'var(--gb-text-ghost)', padding: '3px 8px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)' }}>{units} units</span>
+        <IconBtn size="sm" variant="ghost" icon={<XI.copy />} onClick={(e) => { e.stopPropagation(); onDuplicate(); }} title="Duplicate" />
+        <IconBtn size="sm" variant="ghost" icon={<XI.trash />} onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove" />
+        <span style={{ flexShrink: 0, display: 'flex', color: 'var(--gb-text-muted)', transform: expanded ? 'rotate(90deg)' : 'none', transition: 'transform var(--gb-anim)' }}><XI.arrow size={14} /></span>
+      </div>
+      {expanded && (
+        <div style={{ padding: '4px 12px 14px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+            <SubLabel icon={<XI.pin size={12} />}>Ship-to address</SubLabel>
+            <CkRow2>
+              <CkText label="Business name" value={dest.business} onChange={(v) => onPatch({ business: v })} placeholder="Dallas Regional Office" width="calc(60% - 6px)" />
+              <CkText label="Attn" value={dest.attn} onChange={(v) => onPatch({ attn: v })} placeholder="Front desk" width="calc(40% - 6px)" />
+            </CkRow2>
+            <CkText label="Address 1" value={dest.addr1} onChange={(v) => onPatch({ addr1: v })} placeholder="100 Market St" />
+            <CkText label="Address 2" value={dest.addr2} onChange={(v) => onPatch({ addr2: v })} placeholder="Suite 400 (optional)" />
+            <CkRow2>
+              <CkText label="City" value={dest.city} onChange={(v) => onPatch({ city: v })} placeholder="Dallas" width="calc(40% - 8px)" />
+              <CkSelect label="State" value={dest.state} onChange={(v) => onPatch({ state: v })} options={CK_STATES} placeholder="—" width="calc(28% - 8px)" />
+              <CkText label="Zip" value={dest.zip} onChange={(v) => onPatch({ zip: v.replace(/\D/g, '') })} placeholder="75201" mono width="calc(32% - 8px)" />
+            </CkRow2>
+            <CkText label="Phone" value={dest.phone} onChange={(v) => onPatch({ phone: v })} placeholder="(555) 010-0142" mono leading={<XI.phone size={13} />} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+            <SubLabel icon={<XI.gift size={12} />}>Items for this location</SubLabel>
+            {lines.map((l) => <DestItemRow key={l.id} line={l} item={dest.items[l.id] || { qty: '' }} onPatch={(p) => onPatchItem(l.id, p)} />)}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+            <SubLabel icon={<XI.doc size={12} />}>Destination notes</SubLabel>
+            <CkArea value={dest.note} onChange={(v) => onPatch({ note: v })} placeholder="Delivery window, dock instructions, gift message for this location…" rows={2} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+function DestinationManager({ f }) {
+  const { source, destinations, addDestination, removeDestination, duplicateDestination, patchDestination, patchDestItem, autoSplit, allocation } = f;
+  const [openId, setOpenId] = useState(destinations[0] && destinations[0].id);
+  const totalUnits = source.units;
+  const allocated = allocation.reduce((a, x) => a + x.allocated, 0);
+  const off = allocated !== totalUnits;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{destinations.length} {destinations.length === 1 ? 'destination' : 'destinations'}</div>
+          <div style={{ fontSize: 11, color: off ? 'var(--gb-warning-fg)' : 'var(--gb-success-fg)', marginTop: 1, fontWeight: 500 }}>
+            <b style={{ fontFamily: 'var(--gb-font-mono)' }}>{allocated}</b> of <b style={{ fontFamily: 'var(--gb-font-mono)' }}>{totalUnits}</b> units allocated{off ? ` · ${Math.abs(totalUnits - allocated)} ${allocated > totalUnits ? 'over' : 'unassigned'}` : ' · balanced'}
+          </div>
+        </div>
+        <Btn variant="ghost" size="sm" icon={<XI.info />} onClick={autoSplit}>Split evenly</Btn>
+        <Btn variant="primary" size="sm" icon={<XI.plus />} onClick={() => { const id = addDestination(); setOpenId(id); }}>Add destination</Btn>
+      </div>
+      {destinations.length > 0 && <AllocBar allocation={allocation} />}
+      {destinations.length === 0 ? (
+        <div style={{ padding: '26px 16px', textAlign: 'center', borderRadius: 'var(--gb-r-md)', border: '1.5px dashed var(--gb-border-strong)', background: 'var(--gb-fill-subtle)' }}>
+          <div style={{ color: 'var(--gb-text-muted)', display: 'flex', justifyContent: 'center', marginBottom: 8 }}><XI.users size={22} /></div>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>No destinations yet</div>
+          <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 3 }}>Add a destination to drop-ship to multiple businesses.</div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+          {destinations.map((d, i) => (
+            <DestinationCard key={d.id} index={i} dest={d} lines={source.lines} expanded={openId === d.id}
+              onToggle={() => setOpenId(openId === d.id ? null : d.id)}
+              onPatch={(p) => patchDestination(d.id, p)} onPatchItem={(lineId, p) => patchDestItem(d.id, lineId, p)}
+              onRemove={() => removeDestination(d.id)} onDuplicate={() => { const id = duplicateDestination(d.id); setOpenId(id); }} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── left column ──────────────────────────────────────────────────────────── */
+function CheckoutSections({ f, scrollRef }) {
+  const secRefs = useRef([]);
+  const [progress, setProgress] = useState(0);
+  const [scrolled, setScrolled] = useState(false);
+  useEffect(() => {
+    const scroller = (scrollRef && scrollRef.current) || window;
+    const BAR = 84;
+    const onScroll = () => {
+      const isWin = scroller === window;
+      const scTop = isWin ? 0 : scroller.getBoundingClientRect().top;
+      const cur = isWin ? window.scrollY : scroller.scrollTop;
+      setScrolled(cur > 6);
+      const tops = [0, 1, 2].map((i) => { const el = secRefs.current[i]; return el ? el.getBoundingClientRect().top - scTop + cur : 0; });
+      let prog = 0;
+      for (let i = 0; i < tops.length - 1; i++) {
+        const start = tops[i] - BAR, end = tops[i + 1] - BAR;
+        if (cur >= end) { prog = i + 1; continue; }
+        if (cur > start && end > start) { prog = i + (cur - start) / (end - start); }
+        break;
+      }
+      setProgress(Math.max(0, Math.min(2, prog)));
+    };
+    onScroll();
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => { scroller.removeEventListener('scroll', onScroll); window.removeEventListener('resize', onScroll); };
+  }, [scrollRef, f.shipMode, f.showAdmin]);
+
   let n = 0; const sn = () => (++n);
   return (
     <>
-      <CkSection n={sn()} icon={<XI.truck size={16} />} title="Shipping Address" sub="Where the order ships" done={f.stepDone.shipping}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 6, margin: '0 -16px', padding: '16px 16px 0', background: 'var(--gb-surface-canvas)' }}>
+        <CkProgress progress={progress} scrolled={scrolled} />
+      </div>
+
+      <CkSection secRef={(el) => (secRefs.current[0] = el)} n={sn()} icon={<XI.truck size={16} />} title="Shipping Address" sub={f.shipMode === 'single' ? 'Where the order ships' : 'Drop-ship to multiple businesses'} done={f.stepDone.shipping}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <CkAddress a={f.ship} set={f.patchShip} savedAddresses={SAVED_ADDRESSES} />
-          <div style={{ height: 1, background: 'var(--gb-border-subtle)' }} />
-          <CkSelect label="Delivery method" value={f.delivery} onChange={f.setDelivery} options={[
-            { value: 'ship', label: 'Please ship my packages' },
-            { value: 'pickup', label: 'Pick up at Golfballs.com' },
+          <CkSeg full value={f.shipMode} onChange={f.setShipMode} options={[
+            { value: 'single', label: 'One address', icon: <XI.pin size={13} /> },
+            { value: 'multi', label: 'Multiple businesses', icon: <XI.users size={13} /> },
           ]} />
+          {f.shipMode === 'single' ? (
+            <>
+              <CkAddress a={f.ship} set={f.patchShip} />
+              <div style={{ height: 1, background: 'var(--gb-border-subtle)' }} />
+              <CkSelect label="Delivery method" value={f.delivery} onChange={f.setDelivery} options={[
+                { value: 'ship', label: 'Please ship my packages' },
+                { value: 'pickup', label: 'Pick up at Golfballs.com' },
+              ]} />
+            </>
+          ) : <DestinationManager f={f} />}
         </div>
       </CkSection>
 
-      <CkSection n={sn()} icon={<XI.receipt size={16} />} title="Billing Address" sub="Where the invoice goes" done={f.stepDone.billing}>
+      <CkSection secRef={(el) => (secRefs.current[1] = el)} n={sn()} icon={<XI.receipt size={16} />} title="Billing Address" sub="Where the invoice goes" done={f.stepDone.billing}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <CkCheck checked={f.billSame} onClick={() => f.setBillSame(!f.billSame)} label="Same as shipping address" />
-          {!f.billSame && <CkAddress a={f.bill} set={f.patchBill} savedAddresses={SAVED_ADDRESSES} />}
+          {!f.billSame && <CkAddress a={f.bill} set={f.patchBill} />}
         </div>
       </CkSection>
 
-      <CkSection n={sn()} icon={<I.card size={16} />} title="Payment Options" sub="Promotion, gift certificate and payment" done={f.stepDone.payment}>
+      <CkSection secRef={(el) => (secRefs.current[2] = el)} n={sn()} icon={<I.card size={16} />} title="Payment Options" sub="Promotion, gift certificate and payment" done={f.stepDone.payment}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
             <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .8, color: 'var(--gb-text-muted)', marginBottom: 6 }}>Promotion code</div>
@@ -278,7 +518,6 @@ function CheckoutSections({ f }) {
               </div>
             )}
           </div>
-
           <div style={{ borderTop: '1px solid var(--gb-border-subtle)', paddingTop: 14 }}>
             {!f.giftOpen ? (
               <button onClick={() => f.setGiftOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12.5, color: 'var(--gb-text-secondary)' }}>
@@ -293,7 +532,6 @@ function CheckoutSections({ f }) {
               </div>
             )}
           </div>
-
           <div style={{ borderTop: '1px solid var(--gb-border-subtle)', paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-text-tertiary)' }}>Billing Information</div>
             <CkSelect label="Payment type" value={f.payType} onChange={f.setPayType} options={['Credit Card']} />
@@ -329,6 +567,25 @@ function CheckoutSections({ f }) {
   );
 }
 
+/* ── personalization list (replaces the generic "send artwork" note) ──────── */
+function ImprintList({ imprints, compact }) {
+  if (!imprints || !imprints.length) {
+    return <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontStyle: 'italic', marginTop: 3 }}>Blank</div>;
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
+      {imprints.map((im, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: compact ? 10 : 10.5, color: 'var(--gb-text-muted)', minWidth: 0 }}>
+          {im.colorHex && <span style={{ width: 8, height: 8, borderRadius: 2, flexShrink: 0, background: im.colorHex, border: '1px solid var(--gb-border-strong)' }} />}
+          <span style={{ fontWeight: 700, color: 'var(--gb-text-secondary)', whiteSpace: 'nowrap' }}>{im.label}</span>
+          {im.detail && <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>· {im.detail}</span>}
+          {im.color && !im.colorHex && <span style={{ whiteSpace: 'nowrap' }}>· {im.color}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ── purchase rail ────────────────────────────────────────────────────────── */
 function PurchaseLine({ line }) {
   return (
@@ -340,11 +597,7 @@ function PurchaseLine({ line }) {
           <span>Qty <b style={{ color: 'var(--gb-text-secondary)' }}>{line.qty}</b></span>
           <span>Cost/Pack <b style={{ color: 'var(--gb-text-secondary)' }}>{money(line.unitPrice)}</b></span>
         </div>
-        {line.decorated && (
-          <div style={{ fontSize: 10, color: 'var(--gb-brand-label)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
-            <XI.info size={10} /> Send artwork to {ART_EMAIL}
-          </div>
-        )}
+        <ImprintList imprints={line.imprints} />
       </div>
       <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', whiteSpace: 'nowrap' }}>{money(line.lineTotal)}</div>
     </div>
@@ -361,11 +614,16 @@ function CostRow({ label, value, strong }) {
 function CheckoutSummary({ f, onEditCart }) {
   const { source, totals } = f;
   return (
-    <div className="gl-card" style={{ background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', flexShrink: 0 }}>
+    <div style={{ background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', flexShrink: 0 }}>
       <div style={{ padding: '15px 18px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-subtle)' }}>
         <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gb-brand-label)' }}>Your Purchase</div>
         <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--gb-text-primary)', marginTop: 3, letterSpacing: -.2 }}>{source.name}</div>
         {source.company && <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>{source.company}</div>}
+        {f.shipMode === 'multi' && f.destinations.length > 0 && (
+          <div style={{ fontSize: 10.5, color: 'var(--gb-brand-label)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 5, fontWeight: 600 }}>
+            <XI.users size={11} /> Drop-ship to {f.destinations.length} {f.destinations.length === 1 ? 'business' : 'businesses'}
+          </div>
+        )}
       </div>
       <div style={{ padding: '4px 18px', maxHeight: 220, overflowY: 'auto' }}>
         {source.lines.map((l) => <PurchaseLine key={l.id} line={l} />)}
@@ -397,16 +655,14 @@ function CheckoutSummary({ f, onEditCart }) {
 
 /* ── confirmation ─────────────────────────────────────────────────────────── */
 function Confirmation({ f, onBack }) {
-  const { orderNo, source, totals, ship, payType, savedCard } = f;
-  const dest = [ship.city, ship.state].filter(Boolean).join(', ') || '—';
+  const { orderNo, source, totals, ship, shipMode, destinations, payType, savedCard } = f;
+  const dest = shipMode === 'multi' ? `${destinations.length} businesses` : ([ship.city, ship.state].filter(Boolean).join(', ') || '—');
   const payLabel = savedCard ? (SAVED_CARDS.find((c) => c.id === savedCard) || {}).label : payType;
   return (
     <div style={{ maxWidth: 620, margin: '0 auto', padding: '24px 0 50px' }}>
       <div style={{ background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden' }}>
         <div style={{ padding: '32px 30px 26px', textAlign: 'center', borderBottom: '1px solid var(--gb-border-subtle)' }}>
-          <div style={{ width: 58, height: 58, borderRadius: '50%', margin: '0 auto 18px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-success-tint-medium)', border: '1px solid var(--gb-success-tint-border)', color: 'var(--gb-success-fg)' }}>
-            <XI.check size={28} />
-          </div>
+          <div style={{ width: 58, height: 58, borderRadius: '50%', margin: '0 auto 18px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-success-tint-medium)', border: '1px solid var(--gb-success-tint-border)', color: 'var(--gb-success-fg)' }}><XI.check size={28} /></div>
           <h1 style={{ margin: 0, fontSize: 23, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -.4 }}>Order placed</h1>
           <p style={{ margin: '8px 0 0', fontSize: 13.5, color: 'var(--gb-text-tertiary)', lineHeight: 1.5 }}>{source.name} is confirmed.</p>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 16, padding: '8px 14px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)' }}>
@@ -434,6 +690,7 @@ function Confirmation({ f, onBack }) {
 /* ── embeddable composer ──────────────────────────────────────────────────── */
 export function CheckoutComposer({ source, onBack }) {
   const f = useCheckoutForm(source, { showAdmin: true });
+  const scrollRef = useRef(null);
   return (
     <CheckoutCtx.Provider value={{ dense: true }}>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-canvas)' }}>
@@ -443,8 +700,8 @@ export function CheckoutComposer({ source, onBack }) {
           </div>
         ) : (
           <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-            <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <CheckoutSections f={f} />
+            <div ref={scrollRef} style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <CheckoutSections f={f} scrollRef={scrollRef} />
             </div>
             <div style={{ width: 332, flexShrink: 0, borderLeft: '1px solid var(--gb-border-subtle)', overflowY: 'auto', padding: 16, background: 'var(--gb-fill-faint)' }}>
               <CheckoutSummary f={f} onEditCart={onBack} />

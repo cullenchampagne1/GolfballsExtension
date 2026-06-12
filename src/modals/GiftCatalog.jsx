@@ -3083,13 +3083,28 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // proposal (each rendered with the chosen template, stacked + divided), plus a
   // merged rawLines so the 3D-preview generator covers every line.
   const cartLinkOf = (it) => it.cartID ? `https://www.golfballs.com/cart?cartID=${it.cartID}&utm_medium=Proposal&utm_source=Proposal-${it.cartID}` : null;
+  // A render-ready imprint chip → the {label, detail, colorHex} shape the
+  // checkout's ImprintList consumes (replaces the generic "send artwork" note).
+  const imprintRow = (chip) => {
+    if (chip.kind === 'text') {
+      const detail = (chip.lines || []).filter((l) => l != null && String(l).trim() !== '').join(' / ');
+      return { label: 'Personalized text', detail, colorHex: chip.color };
+    }
+    if (chip.kind === 'monogram') {
+      return { label: 'Monogram', detail: String(chip.text || '').toUpperCase(), colorHex: chip.color };
+    }
+    // logo / icon
+    return { label: chip.icon ? `Icon · ${chip.iconName}` : 'Custom logo', detail: chip.fileName || '' };
+  };
+
   // Checkout source model from resolved proposal entries → priced rows the
   // CheckoutComposer consumes. Single proposal only.
   const checkoutSourceFromEntries = (entries, name, company) => {
     const lines = (entries || []).filter((e) => !e.free && e.product).map((e, i) => {
       const qty = (e.splits || []).reduce((a, x) => a + (x.qty || 0), 0);
       const goods = (e.splits || []).reduce((a, x) => a + (x.qty || 0) * (x.price || 0), 0);
-      return { id: (e.product.id || 'p') + '-' + i, product: e.product, qty, unitPrice: qty ? goods / qty : 0, setup: 0, goods, lineTotal: goods, decorated: decoImprints(e.decoration).length > 0 };
+      const chips = decoImprints(e.decoration);
+      return { id: (e.product.id || 'p') + '-' + i, product: e.product, qty, unitPrice: qty ? goods / qty : 0, setup: 0, goods, lineTotal: goods, decorated: chips.length > 0, imprints: chips.map(imprintRow) };
     });
     return { name: name || 'Proposal', company: company || '', lines, subtotal: lines.reduce((a, l) => a + l.goods, 0), setupTotal: 0, units: lines.reduce((a, l) => a + l.qty, 0) };
   };
