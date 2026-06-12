@@ -738,7 +738,7 @@ function CostRow({ label, value, strong }) {
 function CheckoutSummary({ f, onEditCart }) {
   const { source, totals } = f;
   return (
-    <div style={{ background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', overflow: 'hidden', flexShrink: 0 }}>
+    <div style={{ background: 'var(--gb-surface-1)', overflow: 'hidden', flexShrink: 0 }}>
       <div style={{ padding: '15px 18px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-subtle)' }}>
         <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gb-brand-label)' }}>Your Purchase</div>
         <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--gb-text-primary)', marginTop: 3, letterSpacing: -.2 }}>{source.name}</div>
@@ -827,7 +827,7 @@ export function CheckoutComposer({ source, onBack }) {
             <div ref={scrollRef} style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
               <CheckoutSections f={f} scrollRef={scrollRef} />
             </div>
-            <div style={{ width: 332, flexShrink: 0, borderLeft: '1px solid var(--gb-border-subtle)', overflowY: 'auto', padding: 16, background: 'var(--gb-fill-faint)' }}>
+            <div style={{ width: 340, flexShrink: 0, borderLeft: '1px solid var(--gb-border-subtle)', overflowY: 'auto', background: 'var(--gb-surface-1)' }}>
               <CheckoutSummary f={f} onEditCart={onBack} />
             </div>
           </div>
