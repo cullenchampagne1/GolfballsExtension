@@ -394,11 +394,33 @@ const _PROD_IMG = 'https://static.golfballs.com/C/300x300/';
 /* One cart line (itemsInCart[i]) → a proposal/saved line { product, decoration,
    variant, splits }. The cart carries the real qty + price, so margin/totals are
    exact; the imprint decoration isn't reverse-mapped (shown as a plain line). */
+// The server-rendered preview of a CUSTOMIZED line (the printed-ball/box image)
+// already saved on the cart item — `modification[…].dynamicImage[0]
+// .renderedPreviewImage` for balls/accessories, `bundle.renderedPreviewImage`
+// for gift sets. This is "where the image is" for a personalized line, so we
+// prefer it over the plain catalog photo (and reuse it instead of re-rendering
+// a 3D mockup downstream — see `decoration.renderedPreviewImage`).
+function cartItemPreviewImage(it) {
+  if (!it) return '';
+  const mods = [];
+  if (it.modification) mods.push(it.modification);
+  if (Array.isArray(it.modificationHistory)) mods.push(...it.modificationHistory);
+  for (const m of mods) {
+    const di = m && Array.isArray(m.dynamicImage) ? m.dynamicImage[0] : null;
+    if (di && di.renderedPreviewImage) return di.renderedPreviewImage;
+  }
+  if (it.bundle && it.bundle.renderedPreviewImage) return it.bundle.renderedPreviewImage;
+  return '';
+}
+
 function cartItemToLine(it, i) {
   const breaks = (((it.ItemPriceBreak && it.ItemPriceBreak.PriceBreak) || [])
     .map((b) => ({ q: Number(b.Quantity) || 0, p: Number(b.Price) || 0 })).filter((b) => b.q > 0));
   const cd = it.CustomData || {};
-  const img0 = ((it.images || [])[0] || {}).URL || '';
+  const preview = cartItemPreviewImage(it);
+  // Catalog photo as the base; the customized render (when present) wins so a
+  // personalized line shows its actual proof instead of the blank product shot.
+  const img0 = preview || ((it.images || [])[0] || {}).URL || '';
   const qty = Number(it.totalQty) || (breaks[0] && breaks[0].q) || 1;
   let price = it.ItemPrice;
   if (price == null) { let p = breaks[0] ? breaks[0].p : 0; for (const b of breaks) if (b.q <= qty) p = b.p; price = p; }
@@ -445,7 +467,9 @@ function cartItemToLine(it, i) {
       price,
       minQty: (breaks[0] && breaks[0].q) || qty,
     },
-    decoration,
+    // Carry the saved render so the snapshot pipeline reuses it instead of
+    // re-rendering a 3D mockup for a line we already have a proof image for.
+    decoration: (decoration && preview) ? { ...decoration, renderedPreviewImage: preview } : decoration,
     variant: null,
     splits: [{ id: 'crms-' + (it.itemGuid || i), qty, price }],
   };

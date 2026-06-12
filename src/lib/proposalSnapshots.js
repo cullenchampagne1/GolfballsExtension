@@ -24,6 +24,14 @@ export async function lineToShots(line) {
   const chips = decoImprints(deco);   // front (+ second pole) imprints
   const baseTitle = p.title || p.brand || 'Item';
 
+  // Loaded-from-cart lines already carry the server-rendered proof image — reuse
+  // it as a ready single shot instead of re-rendering a 3D mockup. SnapshotRenderer
+  // treats a shot with `readyImage` as already-resolved (no off-screen render).
+  if (deco.renderedPreviewImage) {
+    const front = chips.find((c) => c.slot === 'front') || chips[0];
+    return [{ lineId: line.id, key: line.id + ':ready', readyImage: deco.renderedPreviewImage, label: baseTitle, poleLabel: slotLabel((front && front.slot) || 'front', chips.length || 1) }];
+  }
+
   // Gift set: a single shot of the assembled box wearing the front logo.
   if (deco.giftSet) {
     const layout = giftSetLayout(deco.giftSet);
