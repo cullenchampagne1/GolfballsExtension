@@ -34,7 +34,7 @@
     "https://*.s3.us-east-2.amazonaws.com/*",
     "https://graph.microsoft.com/*",
     "https://login.microsoftonline.com/*",
-    "https://photon.komoot.io/*"
+    "https://api.geoapify.com/*"
   ],
   "web_accessible_resources": [
     {

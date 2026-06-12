@@ -584,25 +584,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  // ── Address autocomplete (Photon / Komoot — free OSM geocoder, no API key) ──
+  // ── Address autocomplete (Geoapify — free tier, strong US residential data) ──
   // Typeahead for checkout shipping addresses. Routed through the worker so the
-  // page CSP (connect-src) can't block it; Photon sends ACAO:* and needs no
-  // cookies, so credentials are omitted. Returns the raw GeoJSON feature list.
+  // host-page CSP (connect-src) can't block it; Geoapify needs no cookies (the
+  // key is the credential), so credentials are omitted. US-only via the
+  // countrycode filter. The API key comes from the page (devSettings) per call.
   if (msg.action === 'geocodeAddress' && typeof msg.q === 'string') {
     const q = msg.q.trim();
-    if (q.length < 3) { sendResponse({ ok: true, features: [] }); return true; }
-    // US-only: clamp the query to a North-America bbox (covers the lower 48 +
-    // Alaska + Hawaii) and bias to the continental centroid; over-fetch so the
-    // page-side countrycode filter still has a full list after dropping the few
-    // Canada/Mexico edge hits the bbox lets through. (lon/lat order for bbox.)
-    const url = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(q)
-      + '&limit=20&lang=en&lat=39.8&lon=-98.6&bbox=-170,18,-66,72';
+    const key = (msg.key || '').trim();
+    if (q.length < 3) { sendResponse({ ok: true, results: [] }); return true; }
+    if (!key) { sendResponse({ ok: false, error: 'no-key', results: [] }); return true; }
+    const url = 'https://api.geoapify.com/v1/geocode/autocomplete?text=' + encodeURIComponent(q)
+      + '&format=json&filter=countrycode:us&bias=countrycode:us&limit=6&apiKey=' + encodeURIComponent(key);
     fetch(url, { credentials: 'omit', headers: { Accept: 'application/json' } })
       .then(async (r) => {
         const data = await r.json().catch(() => ({}));
-        sendResponse({ ok: r.ok, features: (data && data.features) || [] });
+        sendResponse({ ok: r.ok, results: (data && data.results) || [], error: r.ok ? undefined : (data && data.message) });
       })
-      .catch((err) => sendResponse({ ok: false, error: String(err), features: [] }));
+      .catch((err) => sendResponse({ ok: false, error: String(err), results: [] }));
     return true;
   }
 

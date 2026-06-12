@@ -113,6 +113,20 @@ export const DEV_SETTINGS = [
     placeholder: 'cullen',
   },
 
+  /* ── Address autocomplete (Geoapify) ──────────────────────────
+     The checkout shipping-address typeahead is powered by Geoapify
+     (geoapify.com) — a free tier (~3,000 lookups/day) with strong
+     US residential coverage. Paste your project API key here; empty
+     disables the typeahead (the fields still work as plain inputs). */
+  {
+    key:     'geoapify.apiKey',
+    label:   'Geoapify API key (address autocomplete)',
+    desc:    'API key for the checkout address typeahead. Get a free one at geoapify.com → create a project → copy the API key. Empty disables address suggestions.',
+    type:    'string',
+    default: '',
+    placeholder: 'paste your Geoapify API key',
+  },
+
   /* ── 3D viewer ball defaults ──────────────────────────────────
      Camera is fixed now (straight-on, floor aligns with the panel
      bottom). The remaining tunables are the BALL — initial scale +

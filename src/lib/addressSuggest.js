@@ -1,72 +1,70 @@
 /* ───────────────────────────────────────────────────────────────────────────
-   addressSuggest — checkout address typeahead backed by Photon (Komoot), a free
-   OpenStreetMap geocoder that needs no API key. The network call runs in the
-   background worker (see background.js `geocodeAddress`) so the host-page CSP
-   can't block it; here we just shape the GeoJSON features into the flat
+   addressSuggest — checkout address typeahead backed by Geoapify, a geocoder
+   with strong US residential coverage (free tier ~3,000/day). The API key lives
+   in devSettings ('geoapify.apiKey'); the network call runs in the background
+   worker (see background.js `geocodeAddress`) so the host-page CSP can't block
+   it. Here we read the key, fire the lookup, and shape the results into the flat
    { addr1, city, state, zip, … } the checkout form fields consume.
    ─────────────────────────────────────────────────────────────────────────── */
 
-const US_STATE_ABBR = {
-  alabama: 'AL', alaska: 'AK', arizona: 'AZ', arkansas: 'AR', california: 'CA',
-  colorado: 'CO', connecticut: 'CT', delaware: 'DE', 'district of columbia': 'DC',
-  florida: 'FL', georgia: 'GA', hawaii: 'HI', idaho: 'ID', illinois: 'IL',
-  indiana: 'IN', iowa: 'IA', kansas: 'KS', kentucky: 'KY', louisiana: 'LA',
-  maine: 'ME', maryland: 'MD', massachusetts: 'MA', michigan: 'MI', minnesota: 'MN',
-  mississippi: 'MS', missouri: 'MO', montana: 'MT', nebraska: 'NE', nevada: 'NV',
-  'new hampshire': 'NH', 'new jersey': 'NJ', 'new mexico': 'NM', 'new york': 'NY',
-  'north carolina': 'NC', 'north dakota': 'ND', ohio: 'OH', oklahoma: 'OK',
-  oregon: 'OR', pennsylvania: 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
-  'south dakota': 'SD', tennessee: 'TN', texas: 'TX', utah: 'UT', vermont: 'VT',
-  virginia: 'VA', washington: 'WA', 'west virginia': 'WV', wisconsin: 'WI', wyoming: 'WY',
-};
-const stateAbbr = (name) => {
-  if (!name) return '';
-  const n = String(name).trim();
-  if (/^[A-Za-z]{2}$/.test(n)) return n.toUpperCase();
-  return US_STATE_ABBR[n.toLowerCase()] || '';
-};
+import { loadDevSettings } from './devSettings.js';
 
-// One Photon feature → the flat address shape the form consumes. `addr1` is the
-// street line (house number + street, or the place name when there's no street).
-function shapeFeature(f) {
-  const p = (f && f.properties) || {};
-  const street = [p.housenumber, p.street].filter(Boolean).join(' ').trim();
-  const addr1 = street || p.name || '';
-  const city = p.city || p.town || p.village || p.district || p.county || '';
-  const state = stateAbbr(p.state);
-  const zip = p.postcode || '';
-  // A compact, human one-liner for the dropdown row. Street on top; city/state/zip
-  // as the secondary line (all rows are US, so country is implied).
-  const label = addr1;
-  const sub = [city, [state, zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
-  return { addr1, city, state, zip, country: p.country || '', label, sub, _key: (f && f.properties && f.properties.osm_id) || (addr1 + sub) };
+/* The configured Geoapify key (trimmed), or '' if none. */
+async function geoapifyKey() {
+  try { const s = await loadDevSettings(); return String(s['geoapify.apiKey'] || '').trim(); }
+  catch { return ''; }
 }
 
-/* Suggest US-biased addresses for a partial query. Resolves to an array of
-   shaped suggestions (possibly empty); never rejects — typeahead should fail
-   quiet, so network/extension errors resolve to []. */
+/* Has the user pasted a Geoapify key? Lets the field show a "set it up" hint. */
+export async function geoapifyConfigured() {
+  return !!(await geoapifyKey());
+}
+
+// Result types that aren't a usable street address (we want buildings/streets,
+// not a bare city/region/postcode/country row).
+const NON_ADDRESS = new Set(['country', 'state', 'county', 'city', 'postcode', 'region']);
+
+// One Geoapify result → the flat address shape the form consumes. `addr1` is the
+// street line (Geoapify's address_line1 is already "housenumber street").
+function shapeResult(r) {
+  if (!r) return null;
+  if (NON_ADDRESS.has(r.result_type)) return null;
+  const street = [r.housenumber, r.street].filter(Boolean).join(' ').trim();
+  const addr1 = r.address_line1 || street || r.name || '';
+  if (!addr1) return null;
+  const city = r.city || r.town || r.village || r.county || '';
+  const state = r.state_code || r.state || '';           // Geoapify gives a 2-letter state_code
+  const zip = r.postcode || '';
+  // Street on the primary line; city/state/zip beneath (all rows are US).
+  const sub = [city, [state, zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  return { addr1, city, state, zip, label: addr1, sub, _key: r.place_id || (addr1 + sub) };
+}
+
+/* Suggest US addresses for a partial query. Resolves to an array of shaped
+   suggestions (possibly empty); never rejects — typeahead should fail quiet, so
+   a missing key / network / extension error all resolve to []. */
 export function suggestAddresses(query) {
   const q = (query || '').trim();
   return new Promise((resolve) => {
     if (q.length < 3) { resolve([]); return; }
     if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) { resolve([]); return; }
-    try {
-      chrome.runtime.sendMessage({ action: 'geocodeAddress', q }, (resp) => {
-        if (chrome.runtime.lastError || !resp || !resp.ok) { resolve([]); return; }
-        const seen = new Set();
-        const out = [];
-        (resp.features || []).forEach((f) => {
-          const p = (f && f.properties) || {};
-          // US only — the bbox lets a few Canada/Mexico edge hits through.
-          if (String(p.countrycode || '').toUpperCase() !== 'US') return;
-          const s = shapeFeature(f);
-          if (!s.addr1) return;                       // skip pure region/POI hits
-          const k = s.label.toLowerCase();
-          if (seen.has(k)) return;
-          seen.add(k); out.push(s);
+    geoapifyKey().then((key) => {
+      if (!key) { resolve([]); return; }
+      try {
+        chrome.runtime.sendMessage({ action: 'geocodeAddress', q, key }, (resp) => {
+          if (chrome.runtime.lastError || !resp || !resp.ok) { resolve([]); return; }
+          const seen = new Set();
+          const out = [];
+          (resp.results || []).forEach((r) => {
+            const s = shapeResult(r);
+            if (!s) return;
+            const k = s.label.toLowerCase() + '|' + s.sub.toLowerCase();
+            if (seen.has(k)) return;
+            seen.add(k); out.push(s);
+          });
+          resolve(out.slice(0, 6));
         });
-        resolve(out.slice(0, 6));
-      });
-    } catch { resolve([]); }
+      } catch { resolve([]); }
+    });
   });
 }

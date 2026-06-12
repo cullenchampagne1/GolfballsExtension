@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useContext, useRef } from 'react';
 import { Btn, IconBtn, I, Tag, Checkbox, Icon, Dropdown } from '../ui/index.js';
-import { suggestAddresses } from '../lib/addressSuggest.js';
+import { suggestAddresses, geoapifyConfigured } from '../lib/addressSuggest.js';
 
 /* ───────────────────────────────────────────────────────────────────────────
    Proposal Checkout — embeddable composer (ported from the design bundle).
@@ -180,15 +180,19 @@ function CkAutocomplete({ label, value, onChange, onPick, placeholder, required,
   const [sugg, setSugg] = useState([]);
   const [active, setActive] = useState(-1);
   const [loading, setLoading] = useState(false);
+  const [keyMissing, setKeyMissing] = useState(false);
   const { dense } = useContext(CheckoutCtx);
   const boxRef = useRef(null);
   const justPicked = useRef(false);
+
+  // One-time: is a Geoapify key configured? Drives the "set it up" hint.
+  useEffect(() => { let a = true; geoapifyConfigured().then((ok) => { if (a) setKeyMissing(!ok); }); return () => { a = false; }; }, []);
 
   // Debounced lookup; skips the fetch right after a pick (the value change is ours).
   useEffect(() => {
     if (justPicked.current) { justPicked.current = false; return undefined; }
     const q = (value || '').trim();
-    if (q.length < 3) { setSugg([]); setOpen(false); setLoading(false); return undefined; }
+    if (q.length < 3 || keyMissing) { setSugg([]); setOpen(false); setLoading(false); return undefined; }
     setLoading(true);
     const t = setTimeout(async () => {
       const list = await suggestAddresses(q);
@@ -196,7 +200,7 @@ function CkAutocomplete({ label, value, onChange, onPick, placeholder, required,
       if (focus) setOpen(list.length > 0);
     }, 260);
     return () => clearTimeout(t);
-  }, [value]); // eslint-disable-line
+  }, [value, keyMissing]); // eslint-disable-line
 
   // Close on outside click.
   useEffect(() => {
@@ -231,6 +235,11 @@ function CkAutocomplete({ label, value, onChange, onPick, placeholder, required,
           style={{ ...baseFieldStyle(focus, false, dense), paddingLeft: leading ? 34 : 11, paddingRight: 30 }} />
         {loading && <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', width: 12, height: 12, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} />}
       </div>
+      {keyMissing && (value || '').trim().length >= 3 && (
+        <div style={{ marginTop: 5, fontSize: 10.5, color: 'var(--gb-text-muted)', lineHeight: 1.45 }}>
+          Address suggestions need a free <b style={{ color: 'var(--gb-text-secondary)' }}>Geoapify API key</b> — add one in Settings → Developer (“Geoapify API key”).
+        </div>
+      )}
       {open && sugg.length > 0 && (
         <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 40, maxHeight: 232, overflowY: 'auto',
           background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', boxShadow: 'var(--gb-shadow-pop, 0 12px 30px rgba(40,32,16,.18))', padding: 4 }}>
@@ -248,7 +257,7 @@ function CkAutocomplete({ label, value, onChange, onPick, placeholder, required,
               </span>
             </button>
           ))}
-          <div style={{ padding: '5px 10px 3px', fontSize: 9, color: 'var(--gb-text-ghost)', letterSpacing: .3 }}>Address data © OpenStreetMap · Photon</div>
+          <div style={{ padding: '5px 10px 3px', fontSize: 9, color: 'var(--gb-text-ghost)', letterSpacing: .3 }}>Addresses via Geoapify</div>
         </div>
       )}
     </div>
