@@ -203,11 +203,13 @@ export function contactProofRows(doc) {
 /** One proof row → a derived asset URL. Every asset is a pure function of the
  *  row's logoGUID (verified live against the proofing flow HAR), so NO
  *  off-page fetch is needed:
- *    logo_ball → cloudfront /logo/<id[0:2]>/<id>_1.png   (ball wearing the logo)
- *    logo      → cloudfront /logo/<id[0:2]>/<id>-150.jpg (logo thumbnail)
- *    mockup    → customizationapplications render.aspx LogoOverlay (instant mockup)
- *    pdf       → cloudfront /logo/<id[0:2]>/<id>_1.pdf   (proof PDF)
- *    id        → the bare GUID */
+ *    logo_ball      → cloudfront /logo/<id[0:2]>/<id>_1.png   (ball wearing the logo)
+ *    logo           → cloudfront /logo/<id[0:2]>/<id>-150.jpg (logo thumbnail)
+ *    mockup         → render.aspx LogoOverlay XMLFile=virtualproofbtn (ball mockup)
+ *    apparel_mockup → render.aspx LogoOverlay XMLFile=virtualproof    (apparel mockup)
+ *    pdf            → cloudfront /logo/<id[0:2]>/<id>_1.pdf   (proof PDF)
+ *    id             → the bare GUID
+ *  The two mockups share one render.aspx call — only the XMLFile differs. */
 export function proofLogoUrl(rowEl, kind) {
   const a = rowEl && rowEl.querySelector && rowEl.querySelector('a[href*="logoGUID=" i]');
   const m = /logoGUID=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i
@@ -215,13 +217,15 @@ export function proofLogoUrl(rowEl, kind) {
   if (!m) return '';
   const id = m[1].toLowerCase();
   const dir = id.slice(0, 2);
+  const render = (xml) => `https://www.customizationapplications.com/render.aspx?template=LogoOverlay&XMLFile=${xml}&LogoID=${id}`;
   switch (kind) {
-    case 'logo_ball': return `https://d1tp32r8b76g0z.cloudfront.net/logo/${dir}/${id}_1.png`;
-    case 'logo':      return `https://d1tp32r8b76g0z.cloudfront.net/logo/${dir}/${id}-150.jpg`;
-    case 'mockup':    return `https://www.customizationapplications.com/render.aspx?template=LogoOverlay&XMLFile=virtualproofbtn&LogoID=${id}`;
-    case 'pdf':       return `https://d1tp32r8b76g0z.cloudfront.net/logo/${dir}/${id}_1.pdf`;
-    case 'id':        return id;
-    default:          return '';
+    case 'logo_ball':      return `https://d1tp32r8b76g0z.cloudfront.net/logo/${dir}/${id}_1.png`;
+    case 'logo':           return `https://d1tp32r8b76g0z.cloudfront.net/logo/${dir}/${id}-150.jpg`;
+    case 'mockup':         return render('virtualproofbtn');
+    case 'apparel_mockup': return render('virtualproof');
+    case 'pdf':            return `https://d1tp32r8b76g0z.cloudfront.net/logo/${dir}/${id}_1.pdf`;
+    case 'id':             return id;
+    default:               return '';
   }
 }
 

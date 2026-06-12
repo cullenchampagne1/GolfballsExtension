@@ -564,8 +564,13 @@ const FIELDS = {
       },
       instant_mockup: {
         type: 'string',
-        label: 'Instant mockup URL',
+        label: 'Instant ball mockup URL',
         extract: { rowFn: 'proofLogoUrl', args: ['mockup'] },
+      },
+      apparel_mockup: {
+        type: 'string',
+        label: 'Apparel mockup URL',
+        extract: { rowFn: 'proofLogoUrl', args: ['apparel_mockup'] },
       },
       pdf: {
         type: 'string',

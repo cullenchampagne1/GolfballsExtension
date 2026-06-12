@@ -192,7 +192,8 @@ proofs[] — the account's logo-proof history, SORTED NEWEST FIRST (proofs[0] = 
            { name, date (date), kind, status, id,
              logo_ball (URL — the ball wearing the logo, PNG),
              logo (URL — logo thumbnail JPG),
-             instant_mockup (URL — live LogoOverlay render),
+             instant_mockup (URL — live LogoOverlay ball render),
+             apparel_mockup (URL — live LogoOverlay apparel render),
              pdf (URL — the proof PDF) }
            These URL fields are made for ATTACHMENT variables (source "schema"), e.g.
            { "type": "attachment", "mode": "inline", "source": "schema", "path": "proofs[0].logo_ball", "filename": "logo-ball.png", "width": 220, "align": "left" }
