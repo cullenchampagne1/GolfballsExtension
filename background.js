@@ -260,8 +260,41 @@ async function gbUploadCustomLogo({ dataUrl, fileName = 'logo.png' }) {
   return { filePath, fileName, cropFilePath, userImage };
 }
 
+// ── Smarty address autocomplete: stamp the golfballs Referer ─────────────────
+// golfballs.com's checkout uses Smarty US-Autocomplete-Pro with an embedded
+// "website key" that's authorized by Referer/host. fetch() can't set Referer
+// (it's a forbidden header), so a declarativeNetRequest rule forces the golfballs
+// Referer + Origin onto our requests to that host — making them identical to the
+// site's own calls. Re-applied on every worker startup (dynamic rules persist,
+// but this keeps it self-healing).
+const GB_SMARTY_RULE_ID = 9171;
+function gbInstallSmartyHeaderRule() {
+  if (!chrome.declarativeNetRequest || !chrome.declarativeNetRequest.updateDynamicRules) return;
+  chrome.declarativeNetRequest.updateDynamicRules({
+    removeRuleIds: [GB_SMARTY_RULE_ID],
+    addRules: [{
+      id: GB_SMARTY_RULE_ID,
+      priority: 1,
+      action: {
+        type: 'modifyHeaders',
+        requestHeaders: [
+          { header: 'referer', operation: 'set', value: 'https://www.golfballs.com/' },
+          { header: 'origin', operation: 'set', value: 'https://www.golfballs.com' },
+        ],
+      },
+      condition: {
+        urlFilter: '||us-autocomplete-pro.api.smartystreets.com/',
+        resourceTypes: ['xmlhttprequest'],
+      },
+    }],
+  }).catch(() => {});
+}
+gbInstallSmartyHeaderRule();
+if (chrome.runtime.onStartup) chrome.runtime.onStartup.addListener(gbInstallSmartyHeaderRule);
+
 // ── Seed default state on first install ──────────────────────────────────────
 chrome.runtime.onInstalled.addListener(({ reason }) => {
+  gbInstallSmartyHeaderRule();
   if (reason !== 'install') return; // skip updates and browser_update
 
   // Only write keys that don't already exist — never overwrite user data
@@ -584,24 +617,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  // ── Address autocomplete (Geoapify — free tier, strong US residential data) ──
-  // Typeahead for checkout shipping addresses. Routed through the worker so the
-  // host-page CSP (connect-src) can't block it; Geoapify needs no cookies (the
-  // key is the credential), so credentials are omitted. US-only via the
-  // countrycode filter. The API key comes from the page (devSettings) per call.
+  // ── Address autocomplete (Smarty US-Autocomplete-Pro — golfballs' own feed) ──
+  // The exact endpoint + embedded website key golfballs.com uses; a DNR rule
+  // (above) stamps the golfballs Referer so the key authorizes. Routed through
+  // the worker so the host-page CSP can't block it; no cookies needed.
   if (msg.action === 'geocodeAddress' && typeof msg.q === 'string') {
     const q = msg.q.trim();
-    const key = (msg.key || '').trim();
-    if (q.length < 3) { sendResponse({ ok: true, results: [] }); return true; }
-    if (!key) { sendResponse({ ok: false, error: 'no-key', results: [] }); return true; }
-    const url = 'https://api.geoapify.com/v1/geocode/autocomplete?text=' + encodeURIComponent(q)
-      + '&format=json&filter=countrycode:us&bias=countrycode:us&limit=6&apiKey=' + encodeURIComponent(key);
-    fetch(url, { credentials: 'omit', headers: { Accept: 'application/json' } })
+    if (q.length < 2) { sendResponse({ ok: true, suggestions: [] }); return true; }
+    const url = 'https://us-autocomplete-pro.api.smartystreets.com/lookup?key=25666478969040630'
+      + '&search=' + encodeURIComponent(q) + '&max_results=6'
+      + (msg.selected ? '&selected=' + encodeURIComponent(msg.selected) : '');
+    fetch(url, { credentials: 'omit', headers: { Accept: 'application/json, text/plain, */*' } })
       .then(async (r) => {
         const data = await r.json().catch(() => ({}));
-        sendResponse({ ok: r.ok, results: (data && data.results) || [], error: r.ok ? undefined : (data && data.message) });
+        sendResponse({ ok: r.ok, suggestions: (data && data.suggestions) || [], error: r.ok ? undefined : ('HTTP ' + r.status) });
       })
-      .catch((err) => sendResponse({ ok: false, error: String(err), results: [] }));
+      .catch((err) => sendResponse({ ok: false, error: String(err), suggestions: [] }));
     return true;
   }
 

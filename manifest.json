@@ -12,7 +12,8 @@
     "clipboardWrite",
     "webNavigation",
     "identity",
-    "downloads"
+    "downloads",
+    "declarativeNetRequest"
   ],
   "host_permissions": [
     "*://*.golfballs.com/*",
@@ -34,7 +35,7 @@
     "https://*.s3.us-east-2.amazonaws.com/*",
     "https://graph.microsoft.com/*",
     "https://login.microsoftonline.com/*",
-    "https://api.geoapify.com/*"
+    "https://us-autocomplete-pro.api.smartystreets.com/*"
   ],
   "web_accessible_resources": [
     {
