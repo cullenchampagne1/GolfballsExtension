@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useContext, useRef } from 'react';
 import { Btn, IconBtn, I, Tag, Checkbox, Icon, Dropdown } from '../ui/index.js';
+import { suggestAddresses } from '../lib/addressSuggest.js';
 
 /* ───────────────────────────────────────────────────────────────────────────
    Proposal Checkout — embeddable composer (ported from the design bundle).
@@ -170,6 +171,90 @@ function CkText({ label, value, onChange, placeholder, required, hint, type = 't
     </div>
   );
 }
+/* Address line 1 with a stylized typeahead. Behaves like CkText (label, leading
+   pin, focus ring) but debounces into the free Photon/OSM geocoder and drops a
+   suggestion panel; picking one fills addr1 + city/state/zip via onPick. */
+function CkAutocomplete({ label, value, onChange, onPick, placeholder, required, leading, width }) {
+  const [focus, setFocus] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [sugg, setSugg] = useState([]);
+  const [active, setActive] = useState(-1);
+  const [loading, setLoading] = useState(false);
+  const { dense } = useContext(CheckoutCtx);
+  const boxRef = useRef(null);
+  const justPicked = useRef(false);
+
+  // Debounced lookup; skips the fetch right after a pick (the value change is ours).
+  useEffect(() => {
+    if (justPicked.current) { justPicked.current = false; return undefined; }
+    const q = (value || '').trim();
+    if (q.length < 3) { setSugg([]); setOpen(false); setLoading(false); return undefined; }
+    setLoading(true);
+    const t = setTimeout(async () => {
+      const list = await suggestAddresses(q);
+      setSugg(list); setActive(-1); setLoading(false);
+      if (focus) setOpen(list.length > 0);
+    }, 260);
+    return () => clearTimeout(t);
+  }, [value]); // eslint-disable-line
+
+  // Close on outside click.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDoc = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const choose = (s) => {
+    justPicked.current = true;
+    onPick && onPick(s);
+    setOpen(false); setSugg([]); setActive(-1);
+  };
+  const onKey = (e) => {
+    if (!open || !sugg.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => Math.min(i + 1, sugg.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
+    else if (e.key === 'Enter' && active >= 0) { e.preventDefault(); choose(sugg[active]); }
+    else if (e.key === 'Escape') { setOpen(false); }
+  };
+
+  return (
+    <div ref={boxRef} style={{ display: 'flex', flexDirection: 'column', gap: 6, width: width || '100%', minWidth: 0, position: 'relative' }}>
+      {label && <FieldLabel required={required}>{label}</FieldLabel>}
+      <div style={{ position: 'relative' }}>
+        {leading && <span style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--gb-text-muted)', display: 'flex', pointerEvents: 'none' }}>{leading}</span>}
+        <input type="text" value={value} placeholder={placeholder} autoComplete="off"
+          onChange={(e) => onChange(e.target.value)} onKeyDown={onKey}
+          onFocus={() => { setFocus(true); if (sugg.length) setOpen(true); }}
+          onBlur={() => setFocus(false)}
+          style={{ ...baseFieldStyle(focus, false, dense), paddingLeft: leading ? 34 : 11, paddingRight: 30 }} />
+        {loading && <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', width: 12, height: 12, borderRadius: '50%', border: '1.5px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} />}
+      </div>
+      {open && sugg.length > 0 && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 40, maxHeight: 232, overflowY: 'auto',
+          background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', boxShadow: 'var(--gb-shadow-pop, 0 12px 30px rgba(40,32,16,.18))', padding: 4 }}>
+          {sugg.map((s, i) => (
+            <button key={s._key || i} type="button"
+              onMouseDown={(e) => { e.preventDefault(); choose(s); }}
+              onMouseEnter={() => setActive(i)}
+              style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left', cursor: 'pointer',
+                padding: '8px 10px', borderRadius: 'var(--gb-r-sm)', border: 'none',
+                background: i === active ? 'var(--gb-fill-inverse-medium)' : 'transparent', transition: 'background var(--gb-anim)' }}>
+              <span style={{ flexShrink: 0, color: 'var(--gb-text-muted)', display: 'flex' }}><XI.pin size={13} /></span>
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label}</span>
+                {s.sub && <span style={{ display: 'block', fontSize: 10.5, color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.sub}</span>}
+              </span>
+            </button>
+          ))}
+          <div style={{ padding: '5px 10px 3px', fontSize: 9, color: 'var(--gb-text-ghost)', letterSpacing: .3 }}>Address data © OpenStreetMap · Photon</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* Select → the design-system Dropdown (custom, not a native <select>). */
 function CkSelect({ label, value, onChange, options, required, placeholder, width }) {
   const opts = (options || []).map((o) => (o && typeof o === 'object') ? { id: o.value ?? o.id, label: o.label } : { id: o, label: o });
@@ -214,10 +299,10 @@ function CkSeg({ value, onChange, options, full }) {
     </div>
   );
 }
-/* checkbox — use the design-system Checkbox directly (top-aligned with its
-   label); onClick is the toggle. */
+/* checkbox — design-system Checkbox; our labels are single-line, so center the
+   box with the label (the component defaults to top-align for label+hint). */
 function CkCheck({ checked, onClick, label }) {
-  return <Checkbox checked={checked} label={label} onChange={() => onClick()} />;
+  return <Checkbox checked={checked} label={label} onChange={() => onClick()} style={{ alignItems: 'center' }} />;
 }
 function ProductPlate({ src, size = 44 }) {
   return (
@@ -301,7 +386,10 @@ function CkAddress({ a, set }) {
             <CkText label="Last name" required value={a.last} onChange={(v) => set({ last: v })} placeholder="Grimley" width="calc(50% - 6px)" />
           </CkRow2>
           <CkText label="Company" value={a.company} onChange={(v) => set({ company: v })} placeholder="Acme Corp" leading={<XI.building size={14} />} />
-          <CkText label="Address 1" required value={a.addr1} onChange={(v) => set({ addr1: v })} placeholder="103 Guadalupe Palm Dr" leading={<XI.pin size={14} />} />
+          <CkAutocomplete label="Address 1" required value={a.addr1}
+            onChange={(v) => set({ addr1: v })}
+            onPick={(s) => set({ addr1: s.addr1, city: s.city || a.city, state: s.state || a.state, zip: s.zip || a.zip })}
+            placeholder="Start typing an address…" leading={<XI.pin size={14} />} />
           <CkText label="Address 2" value={a.addr2} onChange={(v) => set({ addr2: v })} placeholder="Suite, unit, building (optional)" />
           <CkRow2>
             <CkSelect label="Country" value={a.country} onChange={(v) => set({ country: v })} options={['United States', 'Canada']} width="calc(50% - 6px)" />
@@ -402,7 +490,10 @@ function DestinationCard({ index, dest, lines, expanded, onToggle, onPatch, onPa
               <CkText label="Business name" value={dest.business} onChange={(v) => onPatch({ business: v })} placeholder="Dallas Regional Office" width="calc(60% - 6px)" />
               <CkText label="Attn" value={dest.attn} onChange={(v) => onPatch({ attn: v })} placeholder="Front desk" width="calc(40% - 6px)" />
             </CkRow2>
-            <CkText label="Address 1" value={dest.addr1} onChange={(v) => onPatch({ addr1: v })} placeholder="100 Market St" />
+            <CkAutocomplete label="Address 1" value={dest.addr1}
+              onChange={(v) => onPatch({ addr1: v })}
+              onPick={(s) => onPatch({ addr1: s.addr1, city: s.city || dest.city, state: s.state || dest.state, zip: s.zip || dest.zip })}
+              placeholder="Start typing an address…" leading={<XI.pin size={13} />} />
             <CkText label="Address 2" value={dest.addr2} onChange={(v) => onPatch({ addr2: v })} placeholder="Suite 400 (optional)" />
             <CkRow2>
               <CkText label="City" value={dest.city} onChange={(v) => onPatch({ city: v })} placeholder="Dallas" width="calc(40% - 8px)" />

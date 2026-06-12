@@ -584,6 +584,25 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // ── Address autocomplete (Photon / Komoot — free OSM geocoder, no API key) ──
+  // Typeahead for checkout shipping addresses. Routed through the worker so the
+  // page CSP (connect-src) can't block it; Photon sends ACAO:* and needs no
+  // cookies, so credentials are omitted. Returns the raw GeoJSON feature list.
+  if (msg.action === 'geocodeAddress' && typeof msg.q === 'string') {
+    const q = msg.q.trim();
+    if (q.length < 3) { sendResponse({ ok: true, features: [] }); return true; }
+    // Bias toward the US (continental centroid) so domestic streets rank first.
+    const url = 'https://photon.komoot.io/api/?q=' + encodeURIComponent(q)
+      + '&limit=6&lang=en&lat=39.8&lon=-98.6';
+    fetch(url, { credentials: 'omit', headers: { Accept: 'application/json' } })
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        sendResponse({ ok: r.ok, features: (data && data.features) || [] });
+      })
+      .catch((err) => sendResponse({ ok: false, error: String(err), features: [] }));
+    return true;
+  }
+
   // ── Inventory (office.gbcadmin.com) — MUST be SAME-ORIGIN to gbcadmin ──────
   // The Dynamics Inventory endpoint needs the gbcadmin session cookie AND returns
   // Access-Control-Allow-Origin:* — which the browser rejects for any credentialed
