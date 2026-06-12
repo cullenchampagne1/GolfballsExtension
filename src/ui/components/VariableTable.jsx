@@ -50,9 +50,24 @@ const COL_GRID = 'minmax(0, 1fr) 84px 120px 120px 28px';
  *                delete and re-add. Reduces the rename UI to a native prompt.
  *   onOpenSmart  (variable) => void — opens the smart-options modal
  */
-export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOpenSmart, paEnabled = false }) {
+export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOpenSmart, paEnabled = false, onExport }) {
   const [adding, setAdding] = useState(false);
+  const [exported, setExported] = useState(false);
   const notify = useSettingNotification();
+
+  // Copy the variables as an import-shaped JSON blob — for pasting into a
+  // model conversation as context ("here's a previous version and the
+  // variables we used"). Same shape the toolset doc + Import dialog use.
+  const exportVars = async () => {
+    if (!onExport) return;
+    try {
+      await navigator.clipboard.writeText(onExport());
+      setExported(true);
+      setTimeout(() => setExported(false), 1600);
+    } catch {
+      notify.notify('Couldn’t write to the clipboard.', { tone: 'warning' });
+    }
+  };
 
   // Open the rename prompt with a "Delete" tertiary action. This is the
   // SINGLE entry point for both rename and delete — collapsing two icon
@@ -122,6 +137,14 @@ export function VariableTable({ typeId, vars = [], onAdd, onDelete, onEdit, onOp
           </span>
         )}
         <div style={{ flex: 1 }} />
+        {vars.length > 0 && onExport && (
+          <IconBtn
+            size="xs"
+            icon={exported ? <I.check /> : <I.copy />}
+            tooltip="Copy variables as JSON — paste into a model chat as context"
+            onClick={exportVars}
+          />
+        )}
         <span style={{ fontSize: 9.5, color: 'var(--gb-text-muted)' }}>
           Live
         </span>

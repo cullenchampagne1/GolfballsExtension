@@ -408,6 +408,25 @@ export function TemplateEditor({ tpl, onDelete }) {
       ? { ...v, attach: { ...(v.attach || {}), width } }
       : v));
   };
+  /* Variables → import-shaped JSON blob (same schema as the LLM toolset doc
+     + the Import dialog), for pasting into a model conversation as context.
+     Case templates export caseVars; others the stored vars map + varOrder. */
+  const exportVarsJson = () => {
+    if (typeId === 'case') {
+      return JSON.stringify({
+        caseVars: vars.map(({ resolved, status, ...v }) => v),
+      }, null, 2);
+    }
+    const obj = {};
+    vars.forEach((v) => {
+      let smart = v.smart || {};
+      if (v.kind === 'attachment' && smart.conditional === undefined) {
+        smart = { conditionalScope: 'line', ...smart, conditional: true };
+      }
+      obj[v.name] = { ...varDef(v), ...(Object.keys(smart).length ? { smart } : {}) };
+    });
+    return JSON.stringify({ vars: obj, varOrder: vars.map((v) => v.name) }, null, 2);
+  };
   const handleEditVar = ({ oldName, newName }) => {
     // Rename only — VariableTable no longer offers kind-change because each
     // kind stores config in a different shape (path vs regex vs literal), so
@@ -813,6 +832,7 @@ export function TemplateEditor({ tpl, onDelete }) {
           onEdit={handleEditVar}
           onDelete={handleDeleteVar}
           onOpenSmart={openSmartFromTable}
+          onExport={exportVarsJson}
         />
       </div>
 
