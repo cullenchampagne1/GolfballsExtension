@@ -326,14 +326,18 @@ function tplSeparated(m) {
     </tbody></table>`;
   }).join(_vspace(16));
   const totalBox = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate; border-spacing:0; margin-top:2px;"><tbody><tr><td bgcolor="${T.accSoft}" style="background:${T.accSoft}; border:1px solid #d6e8c9; border-radius:12px; padding:16px 20px;"><table width="100%"><tbody><tr><td valign="middle"><span style="font-size:12px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:${T.ink};">Estimated total${_star(m)}</span><div style="font-size:11px; color:${T.mut}; margin-top:2px;">All options combined</div></td><td align="right" valign="middle"><span style="font-size:24px; font-weight:800; color:${T.price};">${_money(total - (m.discount || 0))}</span></td></tr></tbody></table></td></tr></tbody></table>` : '';
+  const disc = _discRow(m);
   return `<table border="0" cellpadding="0" cellspacing="0" style="font-family:${SANS}; width:600px;"><tbody><tr><td style="padding:8px 6px;">
+    <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate; border-spacing:0; border:1px solid ${T.line}; border-radius:16px;"><tbody><tr><td style="padding:24px;">
     <table width="100%" border="0" cellpadding="0" cellspacing="0"><tbody><tr>
       <td valign="middle"><div style="font-size:12px; letter-spacing:1.6px; text-transform:uppercase; color:${T.ink}; font-weight:700;">${_esc(groupName)}</div><div style="font-size:28px; font-weight:800; color:${T.ink}; letter-spacing:-.6px; margin:5px 0 0;">${_esc(optionName)}</div></td>
       <td valign="middle" align="right" width="190">${_wordmark('right')}</td>
     </tr></tbody></table>
     <div style="font-size:13px; color:${T.mut}; margin:6px 0 22px;">${mains.length} option${mains.length === 1 ? '' : 's'} &middot; priced individually</div>
     ${_msgBlock(m) ? _msgBlock(m) + '<div style="height:18px; line-height:18px; font-size:0;">&nbsp;</div>' : ''}
-    ${cards}${_discRow(m)}${totalBox}${_expLine(m)}${_discLine(m)}${show.cta ? _ctaBar('View these options') : ''}${_foot()}
+    ${cards}${disc ? _vspace(18) + disc : ''}${totalBox}${_expLine(m)}${_discLine(m)}${show.cta ? _ctaBar('View these options') : ''}
+    </td></tr></tbody></table>
+    ${_foot()}
   </td></tr></tbody></table>`;
 }
 
