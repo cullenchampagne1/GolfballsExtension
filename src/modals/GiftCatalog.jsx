@@ -1608,7 +1608,7 @@ function SavedDetail({ title, subtitle, badge, entries, current, loaded, onClose
           <>
             {onCopy && <Btn variant="ghost" size="md" icon={copyIcon} onClick={doCopy}>{copied ? 'Copied' : 'Copy command'}</Btn>}
             {onSaveToAccount && <Btn variant="ghost" size="md" icon={<I.send />} onClick={onSaveToAccount}>Save to account</Btn>}
-            <Btn variant="secondary" size="md" icon={loaded ? <I.check /> : <I.plus />} onClick={onLoad}>{loaded ? 'Loaded' : 'Load'}</Btn>
+            {onLoad && <Btn variant="secondary" size="md" icon={loaded ? <I.check /> : <I.plus />} onClick={onLoad}>{loaded ? 'Loaded' : 'Load'}</Btn>}
             {canEmail && <Btn variant="primary" size="md" icon={<I.mail />} onClick={() => setEmailMode(true)}>Generate email</Btn>}
           </>
         )}
@@ -1637,7 +1637,7 @@ function ThumbStack({ entries, max = 4, size = 44 }) {
   );
 }
 
-function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelete, moveAnim, readOnly, subtitle }) {
+function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelete, moveAnim, readOnly, subtitle, selected, onToggleSelect }) {
   const [hover, setHover] = useState(false);
   const [tagHover, setTagHover] = useState(false);
   const cardRef = useRef(null);
@@ -1724,6 +1724,14 @@ function SavedCard({ item, loaded, pos, colW, onMeasure, onOpen, onLoad, onDelet
           <I.eye size={12} /> View breakdown
         </span>
         <div style={{ flex: 1 }} />
+        {/* Multi-select checkbox — selecting 1+ proposals reveals an "Open"
+            action to view/email them together. */}
+        {onToggleSelect && (
+          <button onClick={(e) => { e.stopPropagation(); onToggleSelect(item); }} title={selected ? 'Selected — click to deselect' : 'Select for a combined view / email'}
+            style={{ width: 28, height: 28, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', background: selected ? 'var(--gb-brand-label)' : 'var(--gb-fill-subtle)', border: '1px solid ' + (selected ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'), color: selected ? 'var(--gb-surface-deep)' : 'var(--gb-text-muted)', transition: 'all var(--gb-anim)' }}>
+            {selected ? <I.check size={14} strokeWidth={3} /> : <span style={{ width: 13, height: 13, borderRadius: 3, border: '1.5px solid currentColor' }} />}
+          </button>
+        )}
         <button onClick={(e) => { e.stopPropagation(); onLoad(item); }} title={loaded ? 'Added to proposal' : 'Load these items into the proposal'}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 28, padding: '0 11px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, fontWeight: 700, flexShrink: 0, background: loaded ? 'var(--gb-brand-label)' : 'var(--gb-brand-tint-medium)', color: loaded ? 'var(--gb-surface-deep)' : 'var(--gb-brand-label)', border: '1px solid var(--gb-brand-tint-border)', transition: 'all var(--gb-anim)' }}>
           {loaded ? <><I.check size={12} strokeWidth={3} /> Added</> : <><I.plus size={12} /> Load</>}
@@ -1781,7 +1789,8 @@ function CurrentProposalCard({ entries, onOpen }) {
 }
 
 function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad, onCopy, onDelete, onSaveToAccount, onEmail,
-  title = 'Saved Proposals', subtitleText, headerIcon, hideCurrent, readOnly, loading, error, onRefresh, emptyTitle, emptyText, subtitleOf }) {
+  title = 'Saved Proposals', subtitleText, headerIcon, hideCurrent, readOnly, loading, error, onRefresh, emptyTitle, emptyText, subtitleOf,
+  selectedIds, onToggleSelect, onOpenMulti, onClearSelection }) {
   const scrollRef = useRef(null);
   const [width, setWidth] = useState(0);
   const [heights, setHeights] = useState({});
@@ -1819,7 +1828,7 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
     /* minHeight:0 lets this flex child shrink below its content so the inner
        scroll area (overflowY:auto) actually scrolls instead of the whole
        gallery growing past the modal — the Current Proposals "can't scroll" bug. */
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 16px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
         <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {headerIcon || <I.bookmark size={16} />}
@@ -1860,12 +1869,28 @@ function SavedGallery({ items, loadedId, current, onOpen, onOpenCurrent, onLoad,
                 <SavedCard key={it.id} item={it} loaded={loadedId === it.id}
                   pos={positions[it.id] || { x: 0, y: 0 }} colW={colW} onMeasure={setHeight} moveAnim={moveAnim}
                   readOnly={readOnly} subtitle={subtitleOf ? subtitleOf(it) : undefined}
+                  selected={selectedIds ? selectedIds.has(it.id) : false} onToggleSelect={onToggleSelect}
                   onOpen={onOpen} onLoad={onLoad} onDelete={onDelete} />
               ))}
             </AnimatePresence>
           </div>
         )}
       </div>
+      {/* Floating action bar — appears once 1+ proposals are checked; opens the
+          combined overview + multi-proposal email. */}
+      <AnimatePresence>
+        {selectedIds && selectedIds.size > 0 && (
+          <motion.div key="multibar" initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 60, opacity: 0 }} transition={{ duration: .22, ease: [.34, 1.4, .64, 1] }}
+            style={{ position: 'absolute', left: 0, right: 0, bottom: 14, display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 5 }}>
+            <div style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 9px 9px 16px', borderRadius: 999, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', boxShadow: '0 8px 28px -6px rgba(0,0,0,.4)' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{selectedIds.size} selected</span>
+              <button onClick={() => onClearSelection && onClearSelection()} title="Clear selection"
+                style={{ fontSize: 11, fontWeight: 600, color: 'var(--gb-text-muted)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 2px' }}>Clear</button>
+              <Btn size="sm" variant="tinted" status="brand" icon={<I.eye size={12} />} onClick={() => onOpenMulti && onOpenMulti()}>Open {selectedIds.size}</Btn>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -2682,7 +2707,12 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   useEffect(() => { if (proposalFreeLines.length && loadedFree.length) setLoadedFree([]); }, [proposalFreeLines.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const proposalWithFree = effectiveFreeLines.length ? [...proposal, ...effectiveFreeLines] : proposal;
   const [proposalOpen, setProposalOpen] = useState(false);
-  const [detail, setDetail] = useState(null);   // proposal-breakdown drill-in: { kind:'saved'|'current', item? }
+  const [detail, setDetail] = useState(null);   // proposal-breakdown drill-in: { kind:'saved'|'current'|'crm'|'multi', item? items? }
+  // Multi-select across the Saved / Current galleries → a combined overview + one
+  // email with every proposal stacked.
+  const [selProps, setSelProps] = useState([]);
+  const selPropIds = useMemo(() => new Set(selProps.map((p) => p.id)), [selProps]);
+  const toggleSelProp = useCallback((item) => setSelProps((prev) => prev.some((p) => p.id === item.id) ? prev.filter((p) => p.id !== item.id) : [...prev, item]), []);
   // ── Verified DISPLAY pricing ───────────────────────────────────────────────
   // The catalog only carries the custom-logo ladder, so a monogram / embroidery /
   // tee line can't be priced from it. Pull each DECORATED line's raw product page
@@ -2729,7 +2759,7 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
   // Saved Proposals library (chrome.storage). `view` swaps the catalog grid
   // for the gallery; `loadedId` flags the last draft copied into the proposal.
   const [view, setView] = useState('catalog');        // 'catalog' | 'proposals' | 'custom' | 'current'
-  useEffect(() => { if (view !== 'proposals' && view !== 'current') setDetail(null); }, [view]);  // close breakdown on view change
+  useEffect(() => { if (view !== 'proposals' && view !== 'current') setDetail(null); setSelProps([]); }, [view]);  // close breakdown + clear multi-select on view change
   const [savedProposals, setSavedProposals] = useState([]);
   const [loadedId, setLoadedId] = useState(null);
   // Current Proposals — live, pulled from the CRM for the account in context.
@@ -3034,6 +3064,20 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
       total: Math.round(total * 100) / 100, discount, savings, freePromo, promoCode: (promotion && promotion.promo) || '', cartLink: opts.cartLink || null, onSubmit: opts.onSubmit || null };
   };
   const openProposalEmail = (lines, name, opts) => { if (lines && lines.length) setEmailSource(proposalToEmailSource(lines, name, opts)); };
+  // Combined email source for several proposals at once: one `section` per
+  // proposal (each rendered with the chosen template, stacked + divided), plus a
+  // merged rawLines so the 3D-preview generator covers every line.
+  const cartLinkOf = (it) => it.cartID ? `https://www.golfballs.com/cart?cartID=${it.cartID}&utm_medium=Proposal&utm_source=Proposal-${it.cartID}` : null;
+  const buildMultiEmailSource = (items) => {
+    const sections = (items || []).map((it) => proposalToEmailSource(linesFromSaved(it, rid), it.name, { promotion: it.promotion, cartLink: cartLinkOf(it) }));
+    return {
+      sections,
+      rawLines: sections.flatMap((s) => s.rawLines || []),
+      lines: [],
+      total: Math.round(sections.reduce((a, s) => a + (s.total || 0), 0) * 100) / 100,
+      groupName: 'Your Custom Order', optionName: `${sections.length} proposals`,
+    };
+  };
 
   /* One shared live pull, with progress. `force` clears the cache first
      (manual rebuild — stale items/sales can't survive as a fallback);
@@ -3321,7 +3365,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
             <SavedGallery items={savedProposals} loadedId={loadedId}
               current={proposal} onOpen={(item) => setDetail({ kind: 'saved', item })} onOpenCurrent={() => setDetail({ kind: 'current' })}
               onLoad={loadSaved} onCopy={copySaved} onDelete={deleteSaved} onSaveToAccount={loadSavedToAccount}
-              onEmail={(entry) => openProposalEmail(linesFromSaved(entry, rid), entry.name)} />
+              onEmail={(entry) => openProposalEmail(linesFromSaved(entry, rid), entry.name)}
+              selectedIds={selPropIds} onToggleSelect={toggleSelProp} onClearSelection={() => setSelProps([])}
+              onOpenMulti={() => { if (selProps.length) setDetail({ kind: 'multi', items: selProps }); }} />
           </motion.div>
           ) : view === 'current' ? (
             <motion.div key="current" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
@@ -3332,7 +3378,9 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
               onRefresh={pageContext.accountId ? loadCurrentProposals : undefined}
               emptyTitle="No active proposals" emptyText="This account’s open opportunities have no saved proposals yet."
               subtitleOf={(it) => it.opportunitySubject || (it.contactName) || ''}
-              onOpen={(item) => setDetail({ kind: 'crm', item })} onLoad={loadSaved} />
+              onOpen={(item) => setDetail({ kind: 'crm', item })} onLoad={loadSaved}
+              selectedIds={selPropIds} onToggleSelect={toggleSelProp} onClearSelection={() => setSelProps([])}
+              onOpenMulti={() => { if (selProps.length) setDetail({ kind: 'multi', items: selProps }); }} />
           </motion.div>
           ) : view === 'custom' ? (
             <motion.div key="custom" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .14, ease: 'easeOut' }} style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0 }}>
@@ -3398,6 +3446,17 @@ export function GiftCatalog({ onClose, density = 'comfortable', showRating = tru
           <AnimatePresence>
             {(view === 'proposals' || view === 'current') && detail && (() => {
               const close = () => setDetail(null);
+              if (detail.kind === 'multi') {
+                const its = detail.items || [];
+                const entries = its.flatMap((it) => resolveSavedEntry(it).entries);
+                const units = entries.reduce((s, e) => s + e.splits.reduce((a, x) => a + (x.qty || 0), 0), 0);
+                return (
+                  <SavedDetail key="bd-multi" title={`${its.length} proposals`} subtitle={`Combined · ${units} units · ${entries.length} lines`}
+                    badge={<Tag tone="brand" size="sm" icon={<I.bookmark size={9} />}>{its.length} selected</Tag>}
+                    entries={entries} onClose={close}
+                    buildEmailSource={() => buildMultiEmailSource(its)} />
+                );
+              }
               if (detail.kind === 'crm') {
                 const it = detail.item; const r = resolveSavedEntry(it);
                 return (

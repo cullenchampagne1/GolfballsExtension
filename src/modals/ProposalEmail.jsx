@@ -608,23 +608,34 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
 
   const toggle = (k) => setShow((s) => ({ ...s, [k]: !s[k] }));
   const tpl = tplById(templateId);
-  // Attach rendered previews to the display rows (matched by lineId) so the
-  // templates can render them; null when previews are off / still rendering.
-  const modelLines = useMemo(
-    () => source.lines.map((r) => ({ ...r, previews: previewsReady ? (previewsByLine[r.lineId] || []) : null })),
-    [source.lines, previewsReady, previewsByLine],
-  );
+  // Multi-proposal mode: source.sections holds 2+ proposals, each rendered with
+  // the SAME template and stacked, separated by a single divider line.
+  const sections = Array.isArray(source.sections) && source.sections.length > 1 ? source.sections : null;
+  // Attach rendered previews to a line set (matched by lineId).
+  const attachPreviews = (lines) => (lines || []).map((r) => ({ ...r, previews: previewsReady ? (previewsByLine[r.lineId] || []) : null }));
   // The "View this option" cart link is ONLY valid for a real proposal saved to
-  // the account (Current Proposals carry a cartLink). Saved drafts / the unsaved
-  // working set can't link, so the CTA is forced off + disabled there.
-  const hasLink = !!source.cartLink;
+  // the account (Current Proposals carry a cartLink). Saved drafts can't link.
+  const hasLink = sections ? sections.some((s) => !!s.cartLink) : !!source.cartLink;
   useEffect(() => { setSubmitted(false); }, [source.cartLink]);   // reset Submit→Copy when the proposal changes
   const effShow = useMemo(() => ({ ...show, cta: show.cta && hasLink }), [show, hasLink]);
+  // A single hairline divider between stacked proposals.
+  const SECTION_DIVIDER = '<div style="height:26px; line-height:26px; font-size:0; mso-line-height-rule:exactly;">&nbsp;</div><div style="border-top:1px solid #d6dace;"></div><div style="height:26px; line-height:26px; font-size:0; mso-line-height-rule:exactly;">&nbsp;</div>';
+  const modelLines = useMemo(() => attachPreviews(source.lines), [source.lines, previewsReady, previewsByLine]); // eslint-disable-line react-hooks/exhaustive-deps
   const model = useMemo(() => ({ groupName, optionName, expiration, message, lines: modelLines, total: source.total, discount: source.discount || 0, savings: source.savings || 0, freePromo: !!source.freePromo, promoCode: source.promoCode || '', show: effShow }), [groupName, optionName, expiration, message, modelLines, source.total, source.discount, source.savings, source.freePromo, source.promoCode, effShow]);
-  const builtHtml = useMemo(() => tpl.build(model), [tpl, model]);
-  // Substitute the real cart link (only present when valid); otherwise the CTA
-  // isn't rendered, so no {{CART_LINK}} leaks into the copy.
-  const emailHtml = useMemo(() => (hasLink ? builtHtml.split('{{CART_LINK}}').join(source.cartLink) : builtHtml), [builtHtml, hasLink, source.cartLink]);
+  const emailHtml = useMemo(() => {
+    if (sections) {
+      // Each proposal: its own model (its name/lines/totals), shared message
+      // (first only) + expiration + toggles; cart link substituted per section.
+      return sections.map((s, i) => {
+        const m = { groupName: s.groupName || groupName, optionName: s.optionName || s.name || optionName, expiration, message: i === 0 ? message : '', lines: attachPreviews(s.lines), total: s.total, discount: s.discount || 0, savings: s.savings || 0, freePromo: !!s.freePromo, promoCode: s.promoCode || '', show: effShow };
+        let h = tpl.build(m);
+        h = h.split('{{CART_LINK}}').join(s.cartLink || '#');
+        return h;
+      }).join(SECTION_DIVIDER);
+    }
+    const built = tpl.build(model);
+    return hasLink ? built.split('{{CART_LINK}}').join(source.cartLink) : built;
+  }, [sections, tpl, model, message, optionName, groupName, expiration, effShow, previewsReady, previewsByLine, hasLink, source.cartLink]);
   // What we actually COPY / SEND: the bare template wrapped in a full Outlook-
   // desktop-safe email document (MSO scaffold, 600px ghost table, centering).
   // The preview below stays on the bare fragment (it renders in a browser).
