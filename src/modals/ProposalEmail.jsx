@@ -475,6 +475,17 @@ function OptionToggle({ checked, label, hint, onClick, disabled }) {
    ready. The viewer's own framing is irrelevant: snapshot() uses the fixed
    per-model dev pose + scene-3 HDRI. Calls onProgress as it goes and onDone with
    [{...shot, image}] when finished. */
+/* A shot's VISUAL signature — everything that determines the rendered pixels
+   (model, ball/chip tint, gift-set layout, the decal art itself). Two shots with
+   the same signature produce an identical image, so we render one and reuse it
+   for the rest (e.g. a quote of N logo balls with the same logo = 1 render, not
+   N). Metadata like lineId / label / poleLabel is deliberately excluded. */
+const _shotSig = (s) => [
+  s.shape || '', s.tint || '', s.chipTint || '',
+  s.giftSet ? JSON.stringify(s.giftSet) : '',
+  s.decalDataUrl || '', s.secondDecalDataUrl || '',
+].join('');
+
 function SnapshotRenderer({ shots, size = 640, onProgress, onDone }) {
   const [i, setI] = useState(0);
   const viewerRef = useRef(null);
@@ -537,10 +548,11 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
   // When the toggle turns on we (1) resolve each line's decoration into shot
   // specs, (2) render them off-screen via SnapshotRenderer, (3) cache the images
   // per line. Cached after the first run so re-toggling is instant.
-  const [shots, setShots] = useState(null);                 // specs queued for the renderer
+  const [shots, setShots] = useState(null);                 // UNIQUE specs queued for the renderer
   const [previewsByLine, setPreviewsByLine] = useState(null); // lineId → [dataUrl]; null until rendered
   const [busy, setBusy] = useState(false);
   const [prog, setProg] = useState({ n: 0, t: 0 });
+  const allShotsRef = useRef([]);                           // every shot (deduped for rendering, mapped back on done)
   // `startedRef` (not `busy`) guards re-entry — keeping `busy` out of the dep
   // list is essential: depending on it made setBusy(true) re-run this effect,
   // whose cleanup cancelled the in-flight linesToShots() before it could
@@ -554,8 +566,13 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
     linesToShots(source.rawLines || []).then((s) => {
       if (cancelled) return;
       if (!s.length) { setPreviewsByLine({}); setBusy(false); return; }
-      setProg({ n: 0, t: s.length });
-      setShots(s);   // mounts SnapshotRenderer
+      allShotsRef.current = s;
+      // Render each UNIQUE visual once; identical shots (same logo/side/ball)
+      // reuse that one render in onShotsDone.
+      const seen = new Set(); const uniq = [];
+      for (const sh of s) { const k = _shotSig(sh); if (!seen.has(k)) { seen.add(k); uniq.push(sh); } }
+      setProg({ n: 0, t: uniq.length });
+      setShots(uniq);   // mounts SnapshotRenderer
     }).catch(() => { if (!cancelled) { setPreviewsByLine({}); setBusy(false); } });
     // Cleanup UNLATCHES the guard: if a dep change (e.g. the source object was
     // rebuilt by the parent) cancels this run before it finished, the next
@@ -573,8 +590,16 @@ export function ProposalEmailComposer({ source, onBack, backLabel }) {
     if (!show.previews) { startedRef.current = false; setShots(null); setBusy(false); setPreviewsByLine(null); }
   }, [show.previews]);
   const onShotsDone = (res) => {
+    // `res` holds the UNIQUE shots with their rendered image. Map each image back
+    // onto EVERY original shot that shares its visual signature, so all lines with
+    // the same logo/side get the one render (in original per-line order).
+    const bySig = new Map();
+    for (const r of res) { if (r.image) bySig.set(_shotSig(r), r.image); }
     const byLine = {};
-    for (const r of res) { if (!r.image) continue; (byLine[r.lineId] = byLine[r.lineId] || []).push(r.image); }
+    for (const sh of (allShotsRef.current || [])) {
+      const img = bySig.get(_shotSig(sh));
+      if (img) (byLine[sh.lineId] = byLine[sh.lineId] || []).push(img);
+    }
     setPreviewsByLine(byLine);
     setShots(null);   // unmount renderer
     setBusy(false);
