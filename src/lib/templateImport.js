@@ -127,10 +127,18 @@ export function normalizeTemplate(raw, index = 0) {
     }
     out.vars = vars;
     out.varOrder = order;
-    if (type === 'account' && Array.isArray(raw.accountConditions)) {
-      out.accountConditions = raw.accountConditions
-        .filter((r) => r && r.field && r.op)
-        .map((r) => ({ field: String(r.field), op: String(r.op), value: r.value != null ? String(r.value) : '' }));
+    if (type === 'account' && raw.accountConditions) {
+      // Two accepted shapes: a grouped tree ({ outerJoiner, groups }) — which
+      // the matcher evaluates via evalTree and which supports schema paths +
+      // array quantifiers like items[any].name — or the legacy flat array.
+      const ac = raw.accountConditions;
+      if (ac && typeof ac === 'object' && Array.isArray(ac.groups)) {
+        out.accountConditions = ac;
+      } else if (Array.isArray(ac)) {
+        out.accountConditions = ac
+          .filter((r) => r && r.field && r.op)
+          .map((r) => ({ field: String(r.field), op: String(r.op), value: r.value != null ? String(r.value) : '' }));
+      }
     }
     if (type === 'order' && raw.rules && typeof raw.rules === 'object') out.rules = raw.rules;
   }

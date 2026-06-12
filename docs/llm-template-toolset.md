@@ -235,13 +235,28 @@ Array refs support quantifiers: `orders[any].status`, `orders[none].status`, plu
 - date: `before, after, relBefore (older than), relAfter (within the last), beforeToday, afterToday, exists, notExists` — for relBefore/relAfter, `value` is like `"30 days"` / `"2 weeks"` / `"1 months"` / `"1 years"`.
 
 ### 6.2 Account templates — `accountConditions`
+Two accepted shapes:
+
+**(a) Flat array** (all AND-ed; `field` = schema path from §5.2):
 ```json
 "accountConditions": [
   { "field": "stats.ytdRevenue", "op": "gt", "value": "5000" },
   { "field": "contact.email",    "op": "exists", "value": "" }
 ]
 ```
-(All conditions AND-ed. `field` = schema path from §5.2; same operator vocabulary as above.)
+
+**(b) Grouped tree** — REQUIRED when you need an array quantifier (e.g. "has ever ordered a Srixon item"). Same shape as the order tree (§6.1), with `source: "schema"`:
+```json
+"accountConditions": {
+  "outerJoiner": "AND",
+  "groups": [
+    { "joiner": "AND", "conditions": [
+      { "source": "schema", "ref": "items[any].name", "op": "contains", "value": "srixon", "not": false }
+    ] }
+  ]
+}
+```
+`items[any].name` = ANY of the account's aggregate ordered-item names. Use `[any]`/`[none]` for array conditions; the flat array form does NOT support quantifiers.
 
 ### 6.3 Case templates — `caseRules`
 ```json
