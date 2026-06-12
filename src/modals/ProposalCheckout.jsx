@@ -729,8 +729,8 @@ function CostRow({ label, value, strong }) {
 function CheckoutSummary({ f, onEditCart }) {
   const { source, totals } = f;
   return (
-    <div style={{ background: 'var(--gb-surface-1)', overflow: 'hidden', flexShrink: 0 }}>
-      <div style={{ padding: '15px 18px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-subtle)' }}>
+    <div style={{ background: 'var(--gb-surface-1)', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      <div style={{ padding: '15px 18px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-subtle)', flexShrink: 0 }}>
         <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gb-brand-label)' }}>Your Purchase</div>
         <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--gb-text-primary)', marginTop: 3, letterSpacing: -.2 }}>{source.name}</div>
         {source.company && <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>{source.company}</div>}
@@ -740,17 +740,17 @@ function CheckoutSummary({ f, onEditCart }) {
           </div>
         )}
       </div>
-      <div style={{ padding: '4px 18px', maxHeight: 220, overflowY: 'auto' }}>
+      <div style={{ padding: '4px 18px', flex: 1, minHeight: 80, overflowY: 'auto' }}>
         {source.lines.map((l) => <PurchaseLine key={l.id} line={l} />)}
       </div>
-      <div style={{ padding: '15px 18px', display: 'flex', flexDirection: 'column', gap: 9, borderTop: '1px solid var(--gb-border-subtle)' }}>
+      <div style={{ padding: '15px 18px', display: 'flex', flexDirection: 'column', gap: 9, borderTop: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
         <CostRow label={`Subtotal · ${source.units} units`} value={money(source.subtotal + source.setupTotal)} />
         <CostRow label="Tax Total" value={money(totals.tax)} />
         <CostRow label="Standard Shipping" value={money(totals.shipping)} />
         <div style={{ height: 1, background: 'var(--gb-border-default)', margin: '4px 0' }} />
         <CostRow label="Order Total" value={money(totals.total)} strong />
       </div>
-      <div style={{ padding: '0 18px 18px' }}>
+      <div style={{ padding: '0 18px 18px', flexShrink: 0 }}>
         <Btn variant="primary" size="lg" full disabled={!f.canPlace || f.placing} state={f.placing ? 'loading' : 'idle'} icon={!f.placing && <XI.lock size={14} />} onClick={f.placeOrder}>
           {f.placing ? 'Placing order…' : 'Place Order · ' + money0(totals.total)}
         </Btn>
@@ -818,7 +818,7 @@ export function CheckoutComposer({ source, onBack }) {
             <div ref={scrollRef} style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
               <CheckoutSections f={f} scrollRef={scrollRef} />
             </div>
-            <div style={{ width: 340, flexShrink: 0, borderLeft: '1px solid var(--gb-border-subtle)', overflowY: 'auto', background: 'var(--gb-surface-1)' }}>
+            <div style={{ width: 340, flexShrink: 0, borderLeft: '1px solid var(--gb-border-subtle)', background: 'var(--gb-surface-1)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               <CheckoutSummary f={f} onEditCart={onBack} />
             </div>
           </div>
