@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
   Btn, IconBtn, Tag, Dot, Input, Textarea, Checkbox, Field, Dropdown, Switch, Slider, RangeSlider,
   Callout, SectionLabel, PillTag, TemplateSplits, equalWeights, ModalShell,
-  TemplatePicker, parseTemplateValue, I, Icon,
+  TemplatePicker, parseTemplateValue, variationLabel, I, Icon,
 } from '../ui/index.js';
 import { CampaignConditions } from '../ui/components/template-rules/CampaignConditions.jsx';
 import { CodeVarEditor } from '../ui/components/CodeVarEditor.jsx';
@@ -432,7 +432,7 @@ function StepInspector({ step, allSteps, templateLib, onChange, onDelete }) {
   const variationItems = (() => {
     const vs = Array.isArray(selectedTpl?.variations) ? selectedTpl.variations : [];
     if (!isEmailKind || vs.length === 0) return [];
-    return [{ id: '__original', label: 'Original' }, ...vs.map((v, i) => ({ id: v.id, label: v.label || `Variation ${i + 2}` }))];
+    return [{ id: '__original', label: 'Original' }, ...vs.map((v, i) => ({ id: v.id, label: variationLabel(v, i) }))];
   })();
   const variationWeights = variationItems.length
     ? (Object.keys(step.variationWeights || {}).length ? step.variationWeights : equalWeights(variationItems.map((it) => it.id)))

@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Btn, DraggablePopup, PopupDragContext, Dot, Field, RangeSlider, Tag, TemplatePicker, TemplateSplits, I, Spinner, Switch, Input } from '../ui/index.js';
+import { Btn, DraggablePopup, PopupDragContext, Dot, Field, RangeSlider, Tag, TemplatePicker, TemplateSplits, I, Spinner, Switch, Input, variationLabel } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { pickFromAddress } from '../lib/sender.js';
 import { sendEmail } from '../lib/emailSender.js';
@@ -409,11 +409,10 @@ export function EmailRunner({
       { id: ORIGINAL_PIN, label: 'Variation 1', variation: null },
       ...variations.map((v, i) => ({
         id: v.id,
-        /* Positional name only — saved templates can carry a
-           stored v.label like "Variation 1" that would collide
-           with the synthetic Variation 1 above. Force the
-           picker's numbering so the weights table matches. */
-        label: `Variation ${i + 2}`,
+        /* Show the variation's custom label when it has one; auto/empty
+           labels fall back to positional numbering (the synthetic Variation
+           1 above is the base body). */
+        label: variationLabel(v, i),
         variation: v,
       })),
     ];

@@ -67,6 +67,16 @@ const TINT_LIGHT = 'color-mix(in srgb, var(--gb-brand-label) 30%, transparent)';
    to tpl.subject / tpl.body. */
 export const ORIGINAL_VARIATION_ID = '__original';
 
+/* Display name for a saved variation. Honor a real custom label (e.g. "Warm",
+   imported via `label`); fall back to positional "Variation N+2" only when the
+   label is empty OR itself an auto-generated "Variation N" — those would
+   collide with the synthetic "Variation 1" (the base body) shown above the
+   list. The base occupies slot 1, so saved variations number from 2. */
+export function variationLabel(v, i) {
+  const lbl = ((v && v.label) || '').trim();
+  return lbl && !/^variation\s*\d+$/i.test(lbl) ? lbl : `Variation ${i + 2}`;
+}
+
 /** Split a composite value into [tplId, varId]. */
 export function parseTemplateValue(value) {
   if (!value) return [null, null];
@@ -172,13 +182,12 @@ export function TemplatePicker({
   const selectedVar = selectedVarIdx >= 0
     ? selectedTpl.variations[selectedVarIdx]
     : null;
-  /* Always positional — saved labels can collide with "Variation
-     1" (the synthetic original), so the displayed name comes from
-     the row's slot in the unified pool. */
+  /* The base (synthetic original) is always "Variation 1"; saved variations
+     show their custom label when they have one, else a positional name. */
   const pinnedDisplayName = isOriginalPinned
     ? 'Variation 1'
     : selectedVar
-      ? `Variation ${selectedVarIdx + 2}`
+      ? variationLabel(selectedVar, selectedVarIdx)
       : null;
 
   const toggleExpand = (id, e) => {
@@ -667,13 +676,10 @@ function Row({
             {tpl.variations.map((v, vi) => (
               <SubRow
                 key={v.id}
-                /* Saved variations always renumber positionally
-                   from 2 — the original took Variation 1. We
-                   intentionally ignore v.label / v.name here
-                   because legacy templates can carry stored
-                   labels like "Variation 1" that would collide
-                   with the synthetic Variation 1 row above. */
-                label={`Variation ${vi + 2}`}
+                /* Show the variation's custom label ("Warm", "Value-first")
+                   when it has one; auto/empty labels fall back to positional
+                   numbering (from 2 — the original took Variation 1). */
+                label={variationLabel(v, vi)}
                 meta={v.preview || ''}
                 isPicked={pinnedVarId === v.id}
                 onPick={() => onPickVariation(v.id)}
