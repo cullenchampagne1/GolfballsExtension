@@ -156,6 +156,14 @@ export function normalizeTemplate(raw, index = 0) {
     if (!out.variations.length) delete out.variations;
   }
 
+  // When a template has variations, the initial email is also a named block —
+  // carry an optional label for it so the picker shows it like the others
+  // instead of a forced "Variation 1" (display-only; the base still resolves
+  // from tpl.subject/body).
+  if (out.variations && (raw.baseLabel || raw.originalLabel)) {
+    out.baseLabel = String(raw.baseLabel || raw.originalLabel);
+  }
+
   // PA fields
   if (type !== 'case') out.replyMode = raw.replyMode === 'reply' ? 'reply' : 'standalone';
   if (raw.senderAccount) out.senderAccount = String(raw.senderAccount);

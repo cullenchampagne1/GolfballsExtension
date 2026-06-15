@@ -406,7 +406,7 @@ export function EmailRunner({
     const variations = Array.isArray(selectedTpl?.variations) ? selectedTpl.variations : [];
     if (variations.length === 0) return [];
     return [
-      { id: ORIGINAL_PIN, label: 'Variation 1', variation: null },
+      { id: ORIGINAL_PIN, label: selectedTpl?.baseLabel || 'Variation 1', variation: null },
       ...variations.map((v, i) => ({
         id: v.id,
         /* Show the variation's custom label when it has one; auto/empty

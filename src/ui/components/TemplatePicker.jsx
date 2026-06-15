@@ -182,10 +182,11 @@ export function TemplatePicker({
   const selectedVar = selectedVarIdx >= 0
     ? selectedTpl.variations[selectedVarIdx]
     : null;
-  /* The base (synthetic original) is always "Variation 1"; saved variations
-     show their custom label when they have one, else a positional name. */
+  /* The base (synthetic original) shows its own label when the template names
+     it (baseLabel), else "Variation 1"; saved variations show their custom
+     label when they have one, else a positional name. */
   const pinnedDisplayName = isOriginalPinned
-    ? 'Variation 1'
+    ? (selectedTpl?.baseLabel || 'Variation 1')
     : selectedVar
       ? variationLabel(selectedVar, selectedVarIdx)
       : null;
@@ -669,7 +670,7 @@ function Row({
                 change is needed. */}
             <SubRow
               key={ORIGINAL_VARIATION_ID}
-              label="Variation 1"
+              label={tpl.baseLabel || 'Variation 1'}
               isPicked={pinnedVarId === ORIGINAL_VARIATION_ID}
               onPick={() => onPickVariation(ORIGINAL_VARIATION_ID)}
             />

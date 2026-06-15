@@ -432,7 +432,7 @@ function StepInspector({ step, allSteps, templateLib, onChange, onDelete }) {
   const variationItems = (() => {
     const vs = Array.isArray(selectedTpl?.variations) ? selectedTpl.variations : [];
     if (!isEmailKind || vs.length === 0) return [];
-    return [{ id: '__original', label: 'Original' }, ...vs.map((v, i) => ({ id: v.id, label: variationLabel(v, i) }))];
+    return [{ id: '__original', label: selectedTpl.baseLabel || 'Original' }, ...vs.map((v, i) => ({ id: v.id, label: variationLabel(v, i) }))];
   })();
   const variationWeights = variationItems.length
     ? (Object.keys(step.variationWeights || {}).length ? step.variationWeights : equalWeights(variationItems.map((it) => it.id)))
