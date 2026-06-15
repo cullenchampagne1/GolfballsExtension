@@ -275,9 +275,10 @@ export function TemplateEditor({ tpl, onDelete }) {
   const recipOpt = meta.recipientOptions[recipientIdx] || meta.recipientOptions[0];
 
   function addVariation() {
+    // The initial email is block "Variation 1", so added blocks number from 2.
     setVariations((vs) => [
       ...vs,
-      { id: `var_${Date.now()}`, label: `Variation ${vs.length + 1}`, subject: '', body: '' },
+      { id: `var_${Date.now()}`, label: `Variation ${vs.length + 2}`, subject: '', body: '' },
     ]);
   }
   function removeVariation(id) {
@@ -735,63 +736,85 @@ export function TemplateEditor({ tpl, onDelete }) {
         />
       </div>
 
-      {/* ── Subject ── */}
-      <div style={S.mb12}>
-        <Field label="Subject">
-          <RichTextEditor
-            singleLine
-            size="sm"
-            initialHtml={subject}
-            onChange={setSubject}
-            onChipClick={openSmartByName}
-            variables={vars}
-            placeholder="Email subject line"
-          />
-        </Field>
-      </div>
-
-      {/* ── Body — compact 'sm' editor to fit the ~700px panel ── */}
-      <div style={S.mb12}>
-        <Field label="Email body">
-          <RichTextEditor
-            size="sm"
-            initialHtml={body}
-            onChange={setBody}
-            onChipClick={openSmartByName}
-            variables={vars}
-            onAttachmentResize={handleAttachmentResize}
-            minHeight={150}
-            placeholder="Write the email body — format with the toolbar, insert variables from the menu. Click a variable chip to set fallbacks, transforms, or formatting."
-          />
-        </Field>
-      </div>
-
-      {/* ── Variations — explicit sub-templates; animated in/out ── */}
-      {/* The initial email shown as a labeled block so it sits consistently
-          alongside the variations (its content is the Subject & Body above —
-          rename only). Only appears once there's at least one variation. */}
-      {variations.length > 0 && (
+      {/* ── Subject + Body ──
+          With no variations: plain Subject/Body fields. Once a variation is
+          added, the initial email BECOMES the first block (default name
+          "Variation 1") so every option is a uniform, renameable block — its
+          subject/body stay the canonical tpl.subject/body. */}
+      {variations.length === 0 ? (
+        <>
+          <div style={S.mb12}>
+            <Field label="Subject">
+              <RichTextEditor
+                singleLine
+                size="sm"
+                initialHtml={subject}
+                onChange={setSubject}
+                onChipClick={openSmartByName}
+                variables={vars}
+                placeholder="Email subject line"
+              />
+            </Field>
+          </div>
+          <div style={S.mb12}>
+            <Field label="Email body">
+              <RichTextEditor
+                size="sm"
+                initialHtml={body}
+                onChange={setBody}
+                onChipClick={openSmartByName}
+                variables={vars}
+                onAttachmentResize={handleAttachmentResize}
+                minHeight={150}
+                placeholder="Write the email body — format with the toolbar, insert variables from the menu. Click a variable chip to set fallbacks, transforms, or formatting."
+              />
+            </Field>
+          </div>
+        </>
+      ) : (
         <div style={S.mb12}>
           <div style={{
             padding: 12, borderRadius: 'var(--gb-r-md)',
             background: 'var(--gb-fill-faint)',
             border: '1px solid var(--gb-brand-tint-border)',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <I.mail size={11} style={{ color: 'var(--gb-brand-label)' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+              <I.bolt size={11} style={{ color: 'var(--gb-brand-label)' }} />
               <div style={{ flex: 1 }}>
-                <Input value={baseLabel} size="sm" onChange={setBaseLabel} placeholder="Initial email" />
+                <Input value={baseLabel} size="sm" onChange={setBaseLabel} placeholder="Variation 1" />
               </div>
-              <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--gb-text-muted)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-pill)', padding: '1px 7px' }}>
-                Initial
-              </span>
             </div>
-            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 7, lineHeight: 1.4 }}>
-              This is the initial email (the Subject &amp; Body above). Name it here so it appears as a labeled option alongside the variations.
+            <div style={S.mb8}>
+              <Field label="Subject">
+                <RichTextEditor
+                  singleLine size="sm"
+                  initialHtml={subject}
+                  onChange={setSubject}
+                  onChipClick={openSmartByName}
+                  variables={vars}
+                  placeholder="Email subject line"
+                />
+              </Field>
+            </div>
+            <div>
+              <Field label="Body">
+                <RichTextEditor
+                  size="sm"
+                  initialHtml={body}
+                  onChange={setBody}
+                  onChipClick={openSmartByName}
+                  variables={vars}
+                  onAttachmentResize={handleAttachmentResize}
+                  minHeight={150}
+                  placeholder="Write the email body — format with the toolbar, insert variables from the menu."
+                />
+              </Field>
             </div>
           </div>
         </div>
       )}
+
+      {/* ── Variations — explicit sub-templates; animated in/out ── */}
       <AnimatePresence initial={false}>
         {variations.map((v, i) => (
           <motion.div
@@ -810,7 +833,7 @@ export function TemplateEditor({ tpl, onDelete }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
                 <I.bolt size={11} style={{ color: 'var(--gb-brand-label)' }} />
                 <div style={{ flex: 1 }}>
-                  <Input value={v.label} size="sm" onChange={(val) => updateVariation(v.id, { label: val })} placeholder={`Variation ${i + 1}`} />
+                  <Input value={v.label} size="sm" onChange={(val) => updateVariation(v.id, { label: val })} placeholder={`Variation ${i + 2}`} />
                 </div>
                 <Btn variant="ghost" size="xs" icon={<I.trash />} onClick={() => removeVariation(v.id)}>
                   Remove
