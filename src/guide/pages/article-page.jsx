@@ -69,6 +69,7 @@ function ArticleSection({ slug, lead, single }) {
   const a = getArticle(slug);
   if (!a) return null;
   const blocks = TIERS.flatMap((t) => (a.body && a.body[t]) || []);
+  const faq = Array.isArray(a.faq) ? a.faq : [];
   return (
     <>
       {!single && !lead && <h2 className="sec">{a.title}</h2>}
@@ -76,6 +77,16 @@ function ArticleSection({ slug, lead, single }) {
         <p style={{ color: 'var(--gb-text-muted)', fontStyle: 'italic', marginTop: -2 }}>{a.summary}</p>
       )}
       <Blocks blocks={blocks} />
+      {faq.length > 0 && (
+        <div style={{ marginTop: 8, borderTop: '1px solid var(--gb-border-subtle)' }}>
+          {faq.map((f, i) => (
+            <div key={i} style={{ borderBottom: '1px solid var(--gb-border-subtle)', padding: '16px 2px' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--gb-text-primary)', marginBottom: 7 }}>{f.q}</div>
+              <p style={{ margin: 0 }}>{f.a}</p>
+            </div>
+          ))}
+        </div>
+      )}
     </>
   );
 }
