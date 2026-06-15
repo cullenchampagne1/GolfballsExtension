@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import { useDevSetting } from '../lib/devSettings.js';
@@ -27,9 +27,11 @@ function fmtTime(ts) {
 
 /* The full, copy-paste-ready dump of one request — everything needed to
    diff our call against the website's. */
+const srcLabel = (e) => (e.source === 'website' ? 'WEBSITE' : 'OUR EXTENSION');
+
 function fmtEntry(e) {
   const L = [];
-  L.push('=== ' + e.label + '  [' + e.cat + '] ===');
+  L.push('=== ' + e.label + '  [' + e.cat + ' · ' + srcLabel(e) + '] ===');
   L.push('time:     ' + new Date(e.ts).toISOString() + '  (duration ' + e.durationMs + 'ms)');
   L.push('request:  ' + e.method + ' ' + e.url);
   L.push('status:   ' + (e.status || (e.error ? 'ERROR' : '—')) + (e.ok ? '  OK' : (e.error ? '  FAIL' : '')));
@@ -56,9 +58,11 @@ function Row({ e }) {
   const copy = async () => {
     try { await navigator.clipboard.writeText(fmtEntry(e)); setCopied(true); setTimeout(() => setCopied(false), 1400); } catch { /* */ }
   };
+  const web = e.source === 'website';
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-1)', border: '1px solid ' + (web ? 'var(--gb-info-tint-border, var(--gb-border-default))' : 'var(--gb-border-subtle)') }}>
       <StatusBadge e={e} />
+      <span style={{ flexShrink: 0, fontSize: 8.5, fontWeight: 800, letterSpacing: .4, padding: '1px 5px', borderRadius: 'var(--gb-r-pill)', color: web ? 'var(--gb-info-fg, var(--gb-brand-label))' : 'var(--gb-text-tertiary)', background: web ? 'var(--gb-info-tint-soft, var(--gb-brand-tint-soft))' : 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)' }}>{web ? 'WEB' : 'EXT'}</span>
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.label}</div>
         <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -141,6 +145,19 @@ function ProposalDebugRoot() {
   const enabled = useDevSetting('proposalDebug.enabled');
   const [open, setOpen] = useState(true);
   const [log, setLog] = useState([]);
+  // Bridge: the MAIN-world page hook posts the WEBSITE's matched requests here;
+  // forward them to the background (the single log writer) when debug is on.
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
+  useEffect(() => {
+    const onMsg = (e) => {
+      if (e.source !== window || !e.data || !e.data.__gbProposalNet || !e.data.entry) return;
+      if (!enabledRef.current) return;
+      try { chrome.runtime.sendMessage({ action: 'gbProposalNet', entry: e.data.entry }); } catch { /* */ }
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
   useEffect(() => {
     let alive = true;
     try { chrome.storage.local.get(LOG_KEY, (d) => { if (alive) setLog(Array.isArray(d && d[LOG_KEY]) ? d[LOG_KEY] : []); }); } catch { /* */ }

@@ -91,6 +91,18 @@
       ],
       "css": ["theme.css"],
       "all_frames": true
+    },
+    {
+      "matches": ["*://*.golfballs.com/*", "*://*.gbcadmin.com/*"],
+      "js": ["src/vanilla/proposal-net-hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": ["*://*.gbcadmin.com/*"],
+      "js": ["theme.js", "react-dist/content/proposal-debug.js"],
+      "all_frames": false
     }
   ],
   "background": {

@@ -52,8 +52,10 @@ function gbDebugPush(entry) {
   if (gbDebugLog.length > GB_DBG_MAX) gbDebugLog.length = GB_DBG_MAX;
   try { chrome.storage.local.set({ [GB_DBG_KEY]: gbDebugLog }); } catch { /* */ }
 }
-/* Public helper so non-fetch handlers (openMailto) can record too. */
-function gbDebugRecord({ cat, label, method, url, reqBody, status, ok, respBody, error, started }) {
+/* Public helper so non-fetch handlers (openMailto) can record too. `source`
+   distinguishes OUR requests ('extension') from the website's page requests
+   ('website', forwarded from the MAIN-world hook) so they can be compared. */
+function gbDebugRecord({ cat, label, method, url, reqBody, status, ok, respBody, error, started, source }) {
   if (!gbDebugOn) return;
   const t0 = started || Date.now();
   gbDebugPush({
@@ -63,6 +65,7 @@ function gbDebugRecord({ cat, label, method, url, reqBody, status, ok, respBody,
     method: method || 'GET', url: String(url || ''),
     reqBody: _gbCap(reqBody), status: status || 0, ok: !!ok,
     respBody: _gbCap(respBody), error: error ? String(error) : null,
+    source: source || 'extension',
   });
 }
 const _gbOrigFetch = globalThis.fetch.bind(globalThis);
@@ -1608,6 +1611,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
      calls, which matters for a bulk run opening one window per contact.
      active:false so a bulk run doesn't yank focus on every send. The
      popup's own path already does the same chrome.tabs.create. */
+  /* Website page requests forwarded from the MAIN-world hook (via the
+     proposal-debug content-script bridge). Background is the SINGLE writer of
+     the debug log, so these route through here instead of the content script
+     touching storage directly (avoids clobbering concurrent extension writes). */
+  if (msg.action === 'gbProposalNet' && msg.entry) {
+    if (gbDebugOn) {
+      const e = msg.entry;
+      gbDebugPush({
+        id: 'w' + (e.ts || Date.now()) + '_' + Math.random().toString(36).slice(2, 6),
+        ts: e.ts || Date.now(), durationMs: e.durationMs || 0,
+        cat: e.cat || 'proposal', label: e.label || 'Request',
+        method: e.method || 'GET', url: String(e.url || ''),
+        reqBody: _gbCap(e.reqBody), status: e.status || 0, ok: !!e.ok,
+        respBody: _gbCap(e.respBody), error: e.error || null, source: 'website',
+      });
+    }
+    sendResponse({ ok: true });
+    return true;
+  }
+
   if (msg.action === 'openMailto') {
     gbDebugRecord({ cat: 'email', label: 'Open Mailto (Power Automate off)', method: 'MAILTO', url: msg.url, reqBody: null, status: 0, ok: true, respBody: null });
     try { chrome.tabs.create({ url: msg.url, active: false }); sendResponse({ ok: true }); }
