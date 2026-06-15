@@ -220,25 +220,93 @@ ${inner}
 </html>`;
 }
 
-/* ── TEMPLATE 1 — CLASSIC ── */
+/* ── TEMPLATE 1 — CLASSIC ──
+   A faithful reproduction of the golfballs.com-generated proposal email: a
+   rounded #ccc box, the "Your Custom Order" heading, the item/qty/cost/total
+   schedule (each line a product photo + the imprint, with hairline separators),
+   then Subtotal / Promotion / Promotion code / Estimated total, the expiry +
+   tax disclaimer, and the green "View This Option" CTA. Per request: where the
+   site prints the imprint's LOGO NAME, we show the rendered PREVIEW PHOTO
+   instead whenever "Imprint previews" (show.previews) is on. */
 function tplClassic(m) {
   const { groupName, optionName, lines, total, show } = m;
-  const rows = lines.map((l, i) => {
-    const photo = show.images ? `<td width="66" valign="top" style="padding-right:14px;">${_photoPlate(l.img, 66)}</td>` : '';
-    const sub = l.subtitle ? `<div style="font-size:12px; color:${T.mut}; margin-top:3px;">${_esc(l.subtitle)}</div>` : '';
-    const proof = show.previews ? _proof(l, false) : '';
-    return `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="${i ? `border-top:1px solid ${T.line};` : ''}"><tbody><tr><td style="padding:16px 0;"><table border="0" cellpadding="0" cellspacing="0" width="100%"><tbody><tr>${photo}<td valign="top">${_brandLine(l, T.mut)}<div style="font-size:15px; color:${T.ink}; font-weight:700;">${_esc(l.title)}</div>${sub}<div style="font-size:11px; color:${T.mut}; margin-top:4px;">${_qtyLine(l, show)}</div></td><td valign="top" align="right" width="92"><span style="font-size:16px; font-weight:800; color:${T.price};">${_ltot(l)}</span></td></tr></tbody></table>${proof}</td></tr></tbody></table>`;
+  // The exact tokens the site uses, so a paste matches its own emails.
+  const F = 'Aptos, Aptos_EmbeddedFont, Aptos_MSFontService, Calibri, Helvetica, sans-serif';
+  const TXT = 'rgb(0, 0, 0)', ORANGE = 'rgb(255, 102, 0)', RED = 'rgb(222, 1, 30)';
+  const GRAY = 'rgb(127, 127, 127)', SEP = 'rgb(165, 165, 165)', BORDER = 'rgb(204, 204, 204)';
+  const PROMO_BG = 'rgb(225, 245, 209)', PROMO_FG = 'rgb(70, 120, 27)';
+  const SPACER = 'https://d1tp32r8b76g0z.cloudfront.net/images/spacer.gif';
+  const cdiv = (content, extra = '') => `<div style="font-family:${F}; font-size:12pt; color:${TXT};${extra}">${content}</div>`;
+  // The site prints the imprint's name in the item cell; we swap in the photo.
+  const _logoName = (l) => { const imp = l.imprint; return imp ? (imp.typeLabel || imp.frontLabel || imp.text || '') : ''; };
+
+  // Column layout (toggle-aware): [photo?] item qty [cost?] total.
+  const hasPhoto = !!show.images, hasCost = !!show.cost;
+  const nCols = (hasPhoto ? 1 : 0) + 1 + 1 + (hasCost ? 1 : 0) + 1;
+  const row2Span = 1 + (hasCost ? 1 : 0) + 1;           // qty + cost? + total (filler row)
+  const leftPad = (hasPhoto ? 1 : 0) + 1;               // photo? + item (summary indent)
+  const labelSpan = 1 + (hasCost ? 1 : 0);              // qty + cost? (summary label width)
+
+  const thCell = (label, w, align) => `<th align="${align || 'left'}" style="border-bottom:2px solid ${GRAY}; padding-top:5px; padding-bottom:5px; color:${GRAY};${w ? ` width:${w}px;` : ''}">${label ? cdiv(label) : ''}</th>`;
+  const head = `<tr>${hasPhoto ? thCell('', 150) : ''}${thCell('item', 200)}${thCell('qty', 80)}${hasCost ? thCell('cost') : ''}${thCell('total', 80, 'right')}</tr>`;
+
+  // The imprint cell: photo(s) when previews are on, else the logo name.
+  const imprintCell = (l) => {
+    const imgs = (show.previews && l.previews && l.previews.length) ? l.previews : null;
+    if (imgs) {
+      const pics = imgs.slice(0, 2).map((src) => `<img width="103" height="103" style="width:103px; height:103px;" src="${_esc(src)}">`).join('&nbsp;');
+      return cdiv(`<b>${pics}</b>`, ' margin-top:1em; margin-bottom:1em;');
+    }
+    const name = _logoName(l);
+    return name ? cdiv(`<b>${_esc(name)}</b>`, ' margin-top:1em; margin-bottom:1em;') : '';
+  };
+
+  const rows = lines.map((l) => {
+    const costStr = l.free ? '$0' : _money(l.unitPrice);
+    const totStr = l.free ? '$0' : _money(l.lineTotal);
+    const photo = hasPhoto ? `<td rowspan="2" style="padding-top:10px; padding-bottom:10px;">${cdiv(`<img width="150" style="width:150px;" src="${_esc(l.img)}">`)}</td>` : '';
+    const subtitle = l.subtitle ? cdiv(_esc(l.subtitle), ' margin-top:0; margin-bottom:1em;') : '';
+    const cost = hasCost ? `<td style="padding-top:10px; padding-bottom:10px; vertical-align:top;">${cdiv(costStr)}</td>` : '';
+    return `<tr>
+      ${photo}
+      <td rowspan="2" style="padding-top:10px; padding-bottom:10px; padding-left:10px; vertical-align:top;">${cdiv(_esc(l.title), ' margin-top:1em; margin-bottom:1em;')}${subtitle}${imprintCell(l)}</td>
+      <td style="padding-top:10px; padding-bottom:10px; padding-left:10px; vertical-align:top;">${cdiv(String(l.qty))}</td>
+      ${cost}
+      <td align="right" style="padding-top:10px; padding-bottom:10px; vertical-align:top; color:${ORANGE};">${cdiv(`<b>${totStr}</b>`)}</td>
+    </tr>
+    <tr><td colspan="${row2Span}" style="padding-top:10px; padding-bottom:10px; vertical-align:top;"></td></tr>
+    <tr><td colspan="${nCols}" style="border-bottom:1px solid ${SEP}; vertical-align:top;">${cdiv(`<img alt="spacer" height="1" style="height:1px;" src="${SPACER}">`)}</td></tr>`;
   }).join('\n');
-  const totalRow = show.total ? `<table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-top:2px solid ${T.ink}; margin-top:4px;"><tbody><tr><td style="padding:16px 0;"><span style="font-size:13px; font-weight:700; letter-spacing:.4px; text-transform:uppercase; color:${T.ink};">Estimated total${_star(m)}</span></td><td align="right" style="padding:16px 0;"><span style="font-size:23px; font-weight:800; color:${T.price};">${_money(total - (m.discount || 0))}</span></td></tr></tbody></table>` : '';
-  return `<table border="0" cellpadding="0" cellspacing="0" style="border-collapse:separate; border-spacing:0; font-family:${SANS}; width:600px;"><tbody><tr><td style="border:1px solid #e0e0d6; border-radius:14px; padding:30px 30px 26px;">
-    ${_wordmark('center')}
-    <div style="height:16px; line-height:16px; font-size:0;">&nbsp;</div>
-    <div align="center" style="font-size:11px; letter-spacing:1.6px; text-transform:uppercase; color:${T.ink}; font-weight:700;">${_esc(groupName)}</div>
-    <div align="center" style="font-size:25px; font-weight:800; color:${T.ink}; letter-spacing:-.5px; margin:6px 0 16px;">${_esc(optionName)}</div>
-    ${_msgBlock(m)}
-    <div style="height:6px; line-height:6px; font-size:0;">&nbsp;</div>
-    ${rows}${_discRow(m)}${totalRow}${_expLine(m, 'right')}${_discLine(m, 'right')}${show.cta ? _ctaBtn('View this option &rsaquo;', false) : ''}${_foot()}
-  </td></tr></tbody></table>`;
+
+  // Subtotal / Promotion / Promotion code / Estimated total.
+  let summary = '';
+  if (show.total) {
+    const pad = `<td colspan="${leftPad}" style="padding-top:10px; padding-bottom:10px; vertical-align:top;"></td>`;
+    summary += `<tr>${pad}<td colspan="${labelSpan}" style="border-bottom:1px solid ${SEP}; padding-top:10px; padding-bottom:10px; vertical-align:top;">${cdiv('Subtotal')}</td><td align="right" style="border-bottom:1px solid ${SEP}; padding-top:10px; padding-bottom:10px; vertical-align:top;">${cdiv(_money(total))}</td></tr>`;
+    if ((m.discount || 0) > 0) {
+      summary += `<tr>${pad}<td colspan="${labelSpan}" style="padding-top:10px; padding-bottom:10px; vertical-align:top;">${cdiv('Promotion')}</td><td align="right" style="padding-top:10px; padding-bottom:10px; vertical-align:top; color:${RED};">${cdiv(`(${_money(m.discount)})`)}</td></tr>`;
+      if (m.promoCode) summary += `<tr>${pad}<td colspan="${labelSpan + 1}" style="border-bottom:1px solid ${SEP}; background-color:${PROMO_BG}; padding:4px 7px; color:${PROMO_FG};">${cdiv(`Promotion code <b>${_esc(m.promoCode)}</b>`)}</td></tr>`;
+    }
+    summary += `<tr>${pad}<td colspan="${labelSpan}" style="padding-top:10px; padding-bottom:10px; vertical-align:top;">${cdiv(`<b>Estimated total${_star(m)}</b>`)}</td><td align="right" style="padding-top:10px; padding-bottom:10px; vertical-align:top; color:${ORANGE};">${cdiv(`<b>${_money(total - (m.discount || 0))}</b>`)}</td></tr>`;
+  }
+
+  const msg = (show.message && m.message) ? cdiv(_esc(m.message).replace(/\n/g, '<br>'), ' margin:0 0 1em;') : '';
+  const exp = show.expiration ? `<div align="right" style="margin:0px 0px 1.5em; font-family:${F}; font-size:12pt; color:${TXT};"><b>This proposal expires on ${_esc(m.expiration)}</b></div>` : '';
+  const disc = show.disclaimer ? `<div align="right" style="margin:0px 0px 1.5em; font-family:${F}; font-size:12pt; color:${TXT};"><i>*shipping and sales tax will be added in shopping cart</i></div>` : '';
+  const cta = show.cta ? `<table cellspacing="0" cellpadding="0" border="0" style="width:600px;"><tbody><tr><td align="center">${cdiv(`<a href="{{CART_LINK}}" style="text-decoration:none;"><img alt="View This Option" width="214" height="42" style="width:214px; height:42px;" src="${_CTA_IMG}"></a>`)}</td></tr></tbody></table>` : '';
+
+  return `${msg}<table cellspacing="0" cellpadding="0" border="0" style="width:600px;"><tbody><tr>
+    <td style="border:2px solid ${BORDER}; border-radius:10px; padding:10px;">
+      <div align="center" style="margin:0px; font-family:${F}; font-size:12pt; color:${TXT};"><b>${_esc(groupName)}</b></div>
+      <div align="center" style="margin:0px 0px 1em; font-family:${F}; font-size:12pt; color:${TXT};">${_esc(optionName)}</div>
+      <table cellspacing="0" cellpadding="0" border="0" style="width:100%;"><tbody>
+        ${head}
+        ${rows}
+        ${summary}
+      </tbody></table>
+      ${exp}${disc}${cta}
+    </td>
+  </tr></tbody></table>`;
 }
 
 /* ── TEMPLATE 3 — CATALOG CARDS — header band, preview per card ── */
