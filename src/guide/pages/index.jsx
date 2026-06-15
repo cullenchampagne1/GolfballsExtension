@@ -13,9 +13,9 @@ import { makeArticlePage } from './article-page.jsx';
    to override the generic one for a route. */
 const ARTICLE_ROUTES = [
   'charge', 'proof', 'themes', 'shortcuts',
-  'viewer-email', 'viewer-image', 'viewer-3d', 'margin',
+  'viewer-email', 'viewer-image', 'viewer-3d', 'margin', 'order-extras',
   'catalog', 'proposals', 'quicksend', 'campaigns',
-  'troubleshooting', 'faq', 'power',
+  'troubleshooting', 'faq', 'power', 'whatsnew',
 ];
 
 export const PAGES = {

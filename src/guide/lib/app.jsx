@@ -130,6 +130,7 @@ export const NAV = [
     { id: 'viewer-image', title: 'Image Viewer', icon: 'eye', slugs: ['image-viewer', 'mockup-composer'] },
     { id: 'viewer-3d', title: '3D Product Viewer', icon: 'cube', slugs: ['3d-product-viewer'] },
     { id: 'margin', title: 'Margin Calculator', icon: 'calc', slugs: ['margin-calculator'] },
+    { id: 'order-extras', title: 'Order IDs & Risk Glow', icon: 'copy', slugs: ['copy-order-ids', 'signifyd-glow'] },
   ]},
   { group: 'Catalog & Proposals', items: [
     { id: 'catalog', title: 'Gift Catalog', icon: 'gift', slugs: ['gift-catalog', 'customizing-item', 'gift-sets', 'custom-service-items', 'supplier-import', 'gifting-glossary'] },
@@ -143,6 +144,7 @@ export const NAV = [
     { id: 'troubleshooting', title: 'Troubleshooting', icon: 'alert', slugs: ['ts-outlook-opened', 'ts-variable-unresolved', 'ts-catalog-stale', 'ts-modal-not-appearing', 'ts-no-cost', 'ts-date-update-failed', 'ts-3d-blank', 'ts-settings-vanished'] },
     { id: 'faq', title: 'FAQ', icon: 'more', slugs: ['faq'] },
     { id: 'power', title: 'Power User', icon: 'zap', slugs: ['code-variables', 'console-commands', 'hidden-settings', 'modal-playground', 'debug-storage'] },
+    { id: 'whatsnew', title: "What's New", icon: 'sparkle', slugs: ['whats-new'] },
   ]},
 ];
 
