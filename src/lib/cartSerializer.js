@@ -1091,38 +1091,107 @@ export function freeLinesFromPromo(promotion, lines) {
   return out;
 }
 
-export function buildCartData(itemsInCart, { proposalID = null, promotion = null } = {}) {
-  const subTotal = round2(itemsInCart.reduce((s, l) => s + lineTotal(l), 0));
-  const totalQty = itemsInCart.reduce((s, l) => s + (l.totalQty || 0), 0);
+/* A FREE_QUANTITY promo (e.g. EVERY12GETS6) is stored by the site as REAL cart
+   lines: a "<guid>-PROMO" twin of each qualifying paid line, at the granted
+   quantity, priced from that line's OWN break ladder (qty 6 → the q1/low break,
+   not the paid q12 price) with no setup re-charged — and their value is netted
+   back out via the promotion's totalPromoDiscount. A `promotion` blob ALONE does
+   NOT re-grant the dozens on load; without the twin lines the loaded cart shows
+   no free items (the bug this fixes). Returns the paid+twin item list (twins
+   interleaved after their parent), the granted-value discount, and the twin
+   guids. Guards against double-materializing if a twin is already present. */
+function materializeFreePromo(itemsInCart, promotion) {
+  const none = { items: itemsInCart, discount: 0, twinGuids: [] };
+  if (!promotion || promotion.promoType !== 'FREE_QUANTITY') return none;
+  const free = promotion.freeItems || [];
+  if (!free.length) return none;
+  const present = new Set(itemsInCart.map((l) => String(l.itemGuid)));
+  // Free amount per qualifying line, keyed by the bare itemGuid.
+  const amtByGuid = new Map();
+  for (const f of free) {
+    const g = String((f && f.itemGuid) || '').replace(/-PROMO$/i, '');
+    if (g) amtByGuid.set(g, (amtByGuid.get(g) || 0) + (Number(f.amount) || 0));
+  }
+  const items = [];
+  const twinGuids = [];
+  let discount = 0;
+  for (const line of itemsInCart) {
+    items.push(line);
+    const baseGuid = String(line.itemGuid || '');
+    const qty = amtByGuid.get(baseGuid) || 0;
+    const twinGuid = baseGuid + '-PROMO';
+    if (qty > 0 && !present.has(twinGuid)) {
+      const breaks = (line.ItemPriceBreak && line.ItemPriceBreak.PriceBreak) || [];
+      let price = (breaks[0] && breaks[0].Price) || line.ItemPrice || 0;
+      for (const b of breaks) if ((b.Quantity || 0) <= qty) price = b.Price;
+      // The free dozens share the paid line's one-time imprint setup — don't
+      // re-charge it (twin value = price × qty, fully netted by the discount).
+      items.push({ ...line, itemGuid: twinGuid, totalQty: qty, ItemPrice: price, SetupPrice: 0, SelectedItemPriceBreakQty: qty });
+      twinGuids.push(twinGuid);
+      discount = round2(discount + price * qty);
+    }
+  }
+  return { items, discount, twinGuids };
+}
+
+export function buildCartData(itemsInCart, { proposalID = null, promotion = null, adminOverride = false } = {}) {
   // A resolved promo (from /user/promotion) is stored on the cart so the site
-  // re-applies it on load; cartTotal nets the order-level discount. The empty
-  // sentinel keeps a no-coupon cart byte-identical to the verified capture.
+  // re-applies it on load; cartTotal nets the discount. The empty sentinel keeps
+  // a no-coupon cart byte-identical to the verified capture.
   const hasPromo = promotion && promotion.promo;
-  const discount = hasPromo ? fullPromoDiscount(promotion) : 0;
+  const freeQty = hasPromo && promotion.promoType === 'FREE_QUANTITY';
+  // FREE_QUANTITY: materialize the granted dozens as "-PROMO" cart lines.
+  const mat = freeQty ? materializeFreePromo(itemsInCart, promotion) : { items: itemsInCart, discount: 0, twinGuids: [] };
+  const items = mat.items;
+  const subTotal = round2(items.reduce((s, l) => s + lineTotal(l), 0));
+  const totalQty = items.reduce((s, l) => s + (l.totalQty || 0), 0);
+  const discount = freeQty ? mat.discount : (hasPromo ? fullPromoDiscount(promotion) : 0);
+  // Stored promotion: the site marks a resolved FREE_QUANTITY promo with
+  // type:"PromotionValue" + promoCodeStatus:"showResult", puts the granted value
+  // in totalPromoDiscount/totalDiscount, and lists every line guid (paid +
+  // "-PROMO") in eligibleItemGuids. A bare /user/promotion result stored verbatim
+  // (totalDiscount 0, no type) loads as no-promo — which is what dropped the
+  // coupon + free items off our saved proposals.
+  let storedPromo;
+  if (!hasPromo) storedPromo = { type: 'PromotionEmpty' };
+  else if (freeQty) storedPromo = {
+    ...promotion,
+    totalPromoDiscount: discount,
+    totalDiscount: discount,
+    totalSubscriptionDiscount: promotion.totalSubscriptionDiscount || 0,
+    type: 'PromotionValue',
+    promoCodeStatus: 'showResult',
+    eligibleItemGuids: Array.from(new Set([...(promotion.eligibleItemGuids || []), ...mat.twinGuids])),
+  };
+  else storedPromo = promotion;
   return {
     cartStateVersion: 5,
     stateProperty: 'test value',
-    itemsInCart,
+    itemsInCart: items,
     cartTotal: round2(subTotal - discount),
     cartSubTotal: subTotal,
     shippingPrice: 0,
     popupType: '',
     cartTotalQty: totalQty,
-    promotion: hasPromo ? promotion : { type: 'PromotionEmpty' },
+    promotion: storedPromo,
     shippingEstimate: null,
     requestInProgress: false,
-    showPromoBanner: hasPromo ? promotion.promo : '',
+    // The site clears the input banner once the promo is resolved into lines.
+    showPromoBanner: freeQty ? '' : (hasPromo ? promotion.promo : ''),
     vipSignup: false,
     proposalID,
     vipSignupPrice: 16.95,
+    // Admin/CRM proposal saves carry adminOverride (matches the verified body);
+    // off by default so the storefront-shaped saveCart stays byte-identical.
+    ...(adminOverride ? { adminOverride: true } : {}),
   };
 }
 
 /* The combined `cartData` blob the app actually saves: the cart slice spread
    at the top level, PLUS a nested `shoppingCart` copy, the `asCartContents`
    mirror, and `updated:true`. (Verified against the real saveCart payload.) */
-export function buildSaveCartData(itemsInCart, { proposalID = null, promotion = null } = {}) {
-  const cart = buildCartData(itemsInCart, { proposalID, promotion });
+export function buildSaveCartData(itemsInCart, { proposalID = null, promotion = null, adminOverride = false } = {}) {
+  const cart = buildCartData(itemsInCart, { proposalID, promotion, adminOverride });
   return { ...cart, shoppingCart: cart, asCartContents: buildAsCartContents(itemsInCart), updated: true };
 }
 
@@ -1148,7 +1217,7 @@ export function buildSaveProposalBody(itemsInCart, {
   customerID = 0, salesRepID = 0, proposalID = null, promotion = null,
 } = {}) {
   return {
-    cartData: JSON.stringify(buildSaveCartData(itemsInCart, { proposalID, promotion })),
+    cartData: JSON.stringify(buildSaveCartData(itemsInCart, { proposalID, promotion, adminOverride: true })),
     customerID,
     salesRepID,
     opportunityID,
