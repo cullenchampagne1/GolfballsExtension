@@ -83,6 +83,13 @@ export const DEV_SETTINGS = [
     default: false,
   },
   {
+    key:     'proposalDebug.enabled',
+    label:   'Proposal Debug: intercept submit requests',
+    desc:    'Records every proposal- and email-submit network request (full request + response bodies, timing) and shows them in a draggable panel on golfballs.com pages, each with a Copy button. Use it to compare our requests vs the website. Off = no interception.',
+    type:    'bool',
+    default: false,
+  },
+  {
     key:     'golfballViewer.showDebugHud',
     label:   'Golfball viewer: camera debug HUD',
     desc:    'Overlay the 3D viewer with a live camera-position / orbit-angle readout plus a copy button. Use it to dial in a default camera framing.',

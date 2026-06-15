@@ -75,6 +75,7 @@
         "react-dist/content/crm-create-contact.js",
         "react-dist/content/actions-shelf.js",
         "react-dist/content/calendar.js",
+        "react-dist/content/proposal-debug.js",
         "src/vanilla/main.js"
       ],
       "all_frames": false

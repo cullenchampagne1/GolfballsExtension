@@ -1,6 +1,91 @@
 // background.js
 importScripts('defaults.js');
 
+/* ── Proposal/Email debug interceptor ────────────────────────────────────────
+   When devSettings['proposalDebug.enabled'] is on, wrap the worker's fetch and
+   record every PROPOSAL- and EMAIL-submit request (full request body + response
+   body + timing) into chrome.storage.local. The in-page debug panel
+   (content/proposal-debug) reads + lists them so the rep can copy any one and
+   show exactly what differs vs the website. Capture is OFF by default and
+   matches only the relevant endpoints (catalog/upload/image traffic is ignored).
+   ─────────────────────────────────────────────────────────────────────────── */
+const GB_DBG_KEY = 'gbProposalDebugLog';
+const GB_DBG_MAX = 60;                 // ring-buffer cap (newest first)
+const GB_DBG_BODY_CAP = 1200000;       // per-body char cap (saveProposal ~200KB)
+let gbDebugOn = false;
+let gbDebugLog = [];
+try {
+  chrome.storage.local.get([GB_DBG_KEY, 'devSettings'], (d) => {
+    gbDebugLog = Array.isArray(d && d[GB_DBG_KEY]) ? d[GB_DBG_KEY] : [];
+    gbDebugOn = !!(d && d.devSettings && d.devSettings['proposalDebug.enabled']);
+  });
+} catch { /* */ }
+chrome.storage.onChanged.addListener((ch, area) => {
+  if (area !== 'local') return;
+  if (ch.devSettings) gbDebugOn = !!(ch.devSettings.newValue && ch.devSettings.newValue['proposalDebug.enabled']);
+  // Keep the in-memory copy in sync when the panel clears the log.
+  if (ch[GB_DBG_KEY] && Array.isArray(ch[GB_DBG_KEY].newValue)) gbDebugLog = ch[GB_DBG_KEY].newValue;
+});
+const _gbCap = (s) => (s == null ? null : (String(s).length > GB_DBG_BODY_CAP ? String(s).slice(0, GB_DBG_BODY_CAP) + '\n…[truncated]' : String(s)));
+/* Classify a request → { cat: 'proposal'|'email', label } or null (ignore). */
+function gbDebugClassify(url, bodyStr) {
+  const u = String(url || '');
+  if (bodyStr && bodyStr.indexOf('"emails"') !== -1) {
+    try { const b = JSON.parse(bodyStr); if (b && Array.isArray(b.emails)) return { cat: 'email', label: 'Send Email — Power Automate' }; } catch { /* */ }
+  }
+  const P = [
+    [/\/user\/saveProposal\b/i,         'Save Proposal → opportunity'],
+    [/\/user\/saveCart\b/i,             'Save Cart'],
+    [/\/user\/promotion\b/i,            'Apply Promotion'],
+    [/\/user\/getCart\//i,              'Load Cart'],
+    [/\/user\/getPackageUpsellData\b/i, 'Gift-set Upsell Data'],
+    [/CreateProposalEmail/i,            'CRM · Create Proposal Email'],
+    [/TrackProposal/i,                  'CRM · Track Proposal'],
+    [/Opportunity\/Update/i,            'CRM · Update Opportunity'],
+    [/Opportunity\/Get/i,               'CRM · Get Opportunity'],
+  ];
+  for (const [re, label] of P) if (re.test(u)) return { cat: 'proposal', label };
+  return null;
+}
+function gbDebugPush(entry) {
+  gbDebugLog.unshift(entry);
+  if (gbDebugLog.length > GB_DBG_MAX) gbDebugLog.length = GB_DBG_MAX;
+  try { chrome.storage.local.set({ [GB_DBG_KEY]: gbDebugLog }); } catch { /* */ }
+}
+/* Public helper so non-fetch handlers (openMailto) can record too. */
+function gbDebugRecord({ cat, label, method, url, reqBody, status, ok, respBody, error, started }) {
+  if (!gbDebugOn) return;
+  const t0 = started || Date.now();
+  gbDebugPush({
+    id: 'd' + t0 + '_' + Math.random().toString(36).slice(2, 6),
+    ts: t0, durationMs: Math.max(0, Date.now() - t0),
+    cat: cat || 'proposal', label: label || 'Request',
+    method: method || 'GET', url: String(url || ''),
+    reqBody: _gbCap(reqBody), status: status || 0, ok: !!ok,
+    respBody: _gbCap(respBody), error: error ? String(error) : null,
+  });
+}
+const _gbOrigFetch = globalThis.fetch.bind(globalThis);
+globalThis.fetch = function (url, opts) {
+  if (!gbDebugOn) return _gbOrigFetch(url, opts);
+  let reqUrl = url;
+  try { if (url && typeof url === 'object' && url.url) reqUrl = url.url; } catch { /* */ }
+  const bodyStr = (opts && opts.body != null) ? String(opts.body) : '';
+  const cls = gbDebugClassify(reqUrl, bodyStr);
+  if (!cls) return _gbOrigFetch(url, opts);
+  const started = Date.now();
+  const method = (opts && opts.method) || 'GET';
+  return _gbOrigFetch(url, opts).then(async (resp) => {
+    let txt = '';
+    try { txt = await resp.clone().text(); } catch { /* */ }
+    gbDebugRecord({ ...cls, method, url: reqUrl, reqBody: bodyStr || null, status: resp.status, ok: resp.ok, respBody: txt, started });
+    return resp;
+  }).catch((e) => {
+    gbDebugRecord({ ...cls, method, url: reqUrl, reqBody: bodyStr || null, status: 0, ok: false, respBody: null, error: e, started });
+    throw e;
+  });
+};
+
 /* Admin-only secret-settings console command, mirrored from
    src/lib/secretSettings.js so it's also reachable from the service-worker
    console (chrome://extensions → this extension → "service worker"):
@@ -1524,6 +1609,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
      active:false so a bulk run doesn't yank focus on every send. The
      popup's own path already does the same chrome.tabs.create. */
   if (msg.action === 'openMailto') {
+    gbDebugRecord({ cat: 'email', label: 'Open Mailto (Power Automate off)', method: 'MAILTO', url: msg.url, reqBody: null, status: 0, ok: true, respBody: null });
     try { chrome.tabs.create({ url: msg.url, active: false }); sendResponse({ ok: true }); }
     catch (e) { sendResponse({ ok: false, error: String(e?.message || e) }); }
     return true;
