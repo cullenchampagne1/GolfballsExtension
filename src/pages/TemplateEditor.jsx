@@ -268,6 +268,10 @@ export function TemplateEditor({ tpl, onDelete }) {
       body:    v.body    || '',
     })),
   );
+  // Optional name for the INITIAL email when the template has variations, so
+  // the original shows as a labeled block alongside the alternates (display
+  // only — the base still sends tpl.subject/body).
+  const [baseLabel, setBaseLabel] = useState(tpl.baseLabel || '');
   const recipOpt = meta.recipientOptions[recipientIdx] || meta.recipientOptions[0];
 
   function addVariation() {
@@ -277,10 +281,9 @@ export function TemplateEditor({ tpl, onDelete }) {
     ]);
   }
   function removeVariation(id) {
-    // Re-label sequentially so labels stay tidy after a delete.
-    setVariations((vs) =>
-      vs.filter((v) => v.id !== id).map((v, i) => ({ ...v, label: `Variation ${i + 1}` })),
-    );
+    // Preserve each variation's custom label on delete (no auto-renumber, or a
+    // renamed "Warm"/"Value-first" would get clobbered back to "Variation N").
+    setVariations((vs) => vs.filter((v) => v.id !== id));
   }
   function updateVariation(id, patch) {
     setVariations((vs) => vs.map((v) => (v.id === id ? { ...v, ...patch } : v)));
@@ -461,6 +464,9 @@ export function TemplateEditor({ tpl, onDelete }) {
       name: name.trim() || 'Untitled',
       enabled, subject, body,
       variations: variations.length ? variations : undefined,
+      // Name for the initial email — only meaningful (and only persisted) when
+      // the template has variations to sit alongside.
+      baseLabel: variations.length && baseLabel.trim() ? baseLabel.trim() : undefined,
       // Only account templates persist a presetTaskId — other types
       // explicitly clear it so type-switching doesn't strand stale data.
       presetTaskId: typeId === 'account' ? (presetTaskId || '') : undefined,
@@ -520,7 +526,7 @@ export function TemplateEditor({ tpl, onDelete }) {
       if (typeof window.__gbSaveTemplate === 'function') window.__gbSaveTemplate(buildTemplate());
     }, 500);
     return () => clearTimeout(saveTimer.current);
-  }, [name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId, replyMode, senderAccount, senderRandomize, caseTagsData, variations]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [name, enabled, vars, ruleData, subject, body, recipientIdx, toFieldValue, presetTaskId, replyMode, senderAccount, senderRandomize, caseTagsData, variations, baseLabel]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Type changes bypass the 500ms debounce — the sidebar's row-teleport
      spring is keyed on tpl.type, so we save the new type immediately and
@@ -761,8 +767,33 @@ export function TemplateEditor({ tpl, onDelete }) {
       </div>
 
       {/* ── Variations — explicit sub-templates; animated in/out ── */}
+      {/* The initial email shown as a labeled block so it sits consistently
+          alongside the variations (its content is the Subject & Body above —
+          rename only). Only appears once there's at least one variation. */}
+      {variations.length > 0 && (
+        <div style={S.mb12}>
+          <div style={{
+            padding: 12, borderRadius: 'var(--gb-r-md)',
+            background: 'var(--gb-fill-faint)',
+            border: '1px solid var(--gb-brand-tint-border)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <I.mail size={11} style={{ color: 'var(--gb-brand-label)' }} />
+              <div style={{ flex: 1 }}>
+                <Input value={baseLabel} size="sm" onChange={setBaseLabel} placeholder="Initial email" />
+              </div>
+              <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: 'var(--gb-text-muted)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-pill)', padding: '1px 7px' }}>
+                Initial
+              </span>
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 7, lineHeight: 1.4 }}>
+              This is the initial email (the Subject &amp; Body above). Name it here so it appears as a labeled option alongside the variations.
+            </div>
+          </div>
+        </div>
+      )}
       <AnimatePresence initial={false}>
-        {variations.map((v) => (
+        {variations.map((v, i) => (
           <motion.div
             key={v.id}
             initial={{ opacity: 0, height: 0, marginBottom: 0 }}
@@ -778,9 +809,9 @@ export function TemplateEditor({ tpl, onDelete }) {
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
                 <I.bolt size={11} style={{ color: 'var(--gb-brand-label)' }} />
-                <span style={{ flex: 1, fontSize: 11, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: 0.2 }}>
-                  {v.label}
-                </span>
+                <div style={{ flex: 1 }}>
+                  <Input value={v.label} size="sm" onChange={(val) => updateVariation(v.id, { label: val })} placeholder={`Variation ${i + 1}`} />
+                </div>
                 <Btn variant="ghost" size="xs" icon={<I.trash />} onClick={() => removeVariation(v.id)}>
                   Remove
                 </Btn>
