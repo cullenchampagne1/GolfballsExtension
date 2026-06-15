@@ -1036,22 +1036,35 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // ── Load a saved cart / proposal (GET /user/getCart/<number>) ───────
   // Returns the stored cartData (the `d` field is a JSON string or object).
+  // The getCart Lambda 502s ("Internal server error") on cold/slow carts —
+  // a transient timeout, not a bad cart (the same id loads fine on retry).
+  // Retry 5xx with backoff so a single slow cart doesn't surface as a null/
+  // line-less proposal. (The caller also caps concurrency to avoid stampeding
+  // the backend into these timeouts in the first place.)
   if (msg.action === 'giftLoadCart' && msg.cartNumber != null) {
-    fetch('https://master.api.icustomize.com/user/getCart/' + encodeURIComponent(msg.cartNumber), {
-      method: 'GET',
-      headers: { 'Accept': 'application/json', 'sitekey': 'golfballs' },
-    })
-      .then(async r => {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const j = await r.json();
-        const d = j && j.d !== undefined ? j.d : j;
-        const cartData = typeof d === 'string' ? JSON.parse(d) : d;
-        sendResponse({ ok: true, cartData });
-      })
-      .catch(err => {
-        console.warn('[GB] giftLoadCart error:', err.message);
-        sendResponse({ ok: false, error: String(err) });
-      });
+    (async () => {
+      const url = 'https://master.api.icustomize.com/user/getCart/' + encodeURIComponent(msg.cartNumber);
+      const attempts = 3;
+      let lastErr = null;
+      for (let i = 0; i < attempts; i++) {
+        if (i > 0) await new Promise((res) => setTimeout(res, 600 * i)); // 0, 600, 1200ms
+        try {
+          const r = await fetch(url, { method: 'GET', headers: { 'Accept': 'application/json', 'sitekey': 'golfballs' } });
+          if (!r.ok) {
+            lastErr = new Error('HTTP ' + r.status);
+            if (r.status >= 500) continue;   // transient — retry
+            throw lastErr;                    // 4xx — don't retry
+          }
+          const j = await r.json();
+          const d = j && j.d !== undefined ? j.d : j;
+          const cartData = typeof d === 'string' ? JSON.parse(d) : d;
+          sendResponse({ ok: true, cartData });
+          return;
+        } catch (err) { lastErr = err; }      // network/parse error — retry
+      }
+      console.warn('[GB] giftLoadCart error after ' + attempts + ' tries:', lastErr && lastErr.message);
+      sendResponse({ ok: false, error: String(lastErr) });
+    })();
     return true;
   }
 

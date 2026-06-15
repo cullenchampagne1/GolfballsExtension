@@ -528,16 +528,35 @@ export async function submitProposalEmail(p = {}) {
   return { ok: true };
 }
 
+/* Run `fn` over `items` with at most `limit` in flight at once — preserves
+   input order in the result. Used to throttle the getCart fan-out below. */
+async function mapLimit(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
 /* Full Current Proposals pull: list each active opportunity's proposals, load
-   each cart, and convert to saved-entry shape. Carts load in parallel; a cart
-   that fails to load still yields a (line-less) entry so the card shows. */
+   each cart, and convert to saved-entry shape. Carts load with BOUNDED
+   concurrency — firing every getCart at once stampedes the icustomize Lambda
+   into 502 "Internal server error" timeouts, which surfaced as carts that
+   "came back null" until reloaded one at a time on the site. A cart that still
+   fails (after the relay's 5xx retries) yields a (line-less) entry so the card
+   shows. */
 export async function fetchActiveProposalEntries(opts = {}) {
   const list = await fetchActiveProposals(opts);
-  return Promise.all(list.map(async (p) => {
+  return mapLimit(list, 3, async (p) => {
     const meta = { cartID: p.cartID, name: p.name, date: p.date, expiration: p.expiration, opportunityID: p.opportunityID, opportunitySubject: p.opportunitySubject, adminId: p.adminId, contactId: p.contactId };
     try { return cartToEntry(await loadProposalCart(p.cartID), meta); }
     catch { return cartToEntry(null, meta); }
-  }));
+  });
 }
 
 /* ── Known promo codes (rep-curated, persisted) ─────────────────────────────

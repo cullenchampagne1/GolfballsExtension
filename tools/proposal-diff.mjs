@@ -18,9 +18,10 @@ import { readFileSync } from 'node:fs';
 
 function extractRequestBody(text) {
   // Debug-panel dump: pull the block between the REQUEST BODY marker and the
-  // next marker (RESPONSE BODY) or EOF.
-  const m = text.match(/----- REQUEST BODY -----\n([\s\S]*?)(?:\n----- RESPONSE BODY -----|\s*$)/);
-  const raw = m ? m[1] : text;
+  // next marker (RESPONSE BODY) or EOF. Tolerant of CRLF and LF line endings.
+  const norm = text.replace(/\r\n/g, '\n');
+  const m = norm.match(/----- REQUEST BODY -----\n([\s\S]*?)(?:\n----- RESPONSE BODY -----|\s*$)/);
+  const raw = m ? m[1] : norm;
   return raw.trim();
 }
 
