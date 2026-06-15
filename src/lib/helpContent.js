@@ -5,7 +5,7 @@
 
 export const HELP_CONTENT = {
   "version": "3.3",
-  "generatedAt": "2026-06-10",
+  "generatedAt": "2026-06-15",
   "tree": [
     {
       "title": "Getting Started",
@@ -1537,7 +1537,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "A template can carry variations — alternate subject/body versions. In the picker, a parent template with variations shows a shuffle badge: selecting the parent means each send randomly picks one of the original + all variations. Expand the parent's sub-list and click a specific variation to pin it (check badge) so every send uses exactly that version."
+            "text": "A template can carry variations — alternate subject/body versions. In the picker, a parent template with variations shows a shuffle badge: selecting the parent means each send randomly picks one of the original + all variations. Expand the parent's sub-list and click a specific variation to pin it (check badge) so every send uses exactly that version. Each row shows the variation's own name (e.g. 'Warm', 'Value-first') when it has one, including the initial email's name — so you can tell the versions apart at a glance."
           },
           {
             "type": "callout",
@@ -1673,7 +1673,16 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "The dashed 'Add variation' button adds an alternate subject + body (auto-labeled Variation 1, 2, …) that can use the same variables. At send time the popup picks randomly among original + variations unless one is pinned — and the Campaign Runner lets you set weighted splits instead of uniform odds."
+            "text": "The dashed 'Add variation' button adds an alternate subject + body that uses the same variables. The moment you add the first one, the initial email itself converts into the first block (named 'Variation 1' by default) so every option is a uniform, renameable block — the original is no longer a special case."
+          },
+          {
+            "type": "p",
+            "text": "Each block carries an editable name field: type a label like 'Warm' or 'Value-first' and it shows everywhere the variation is offered (the popup picker, the Email Runner, and the Campaign Manager split) instead of a generic 'Variation N'. Renaming sticks — deleting a variation no longer renumbers or clobbers the others' names. Added blocks number from 2 (the initial email holds slot 1)."
+          },
+          {
+            "type": "callout",
+            "kind": "info",
+            "text": "Names are part of the template, so an imported template carries its variation names too (the import accepts a 'baseLabel' for the initial email plus a 'label' on each variation). At send time the popup picks randomly among all blocks unless one is pinned; the Campaign Runner lets you set weighted splits instead of uniform odds."
           }
         ]
       },
@@ -3349,7 +3358,9 @@ export const HELP_CONTENT = {
         "tracked",
         "templates",
         "classic",
-        "minimal",
+        "corporate",
+        "quote",
+        "separated",
         "imprint preview"
       ],
       "summary": "Generate the customer-facing email: four layout templates, content toggles (costs, images, 3D previews, CTA), and the tracked server-side send.",
@@ -3363,7 +3374,15 @@ export const HELP_CONTENT = {
         "intermediate": [
           {
             "type": "p",
-            "text": "'Generate email' (from the proposal panel or a breakdown) opens the composer in place. At the top, a template selector with four layouts — Classic (detailed rows), Minimal (editorial), Catalog Cards (card grid), Quote (grouped table). Then the message fields: recipient (pre-filled from the page's contact when available), subject (pre-filled 'Corporate Gift Proposal — …'), and an editable intro body."
+            "text": "'Generate email' (from the proposal panel or a breakdown) opens the composer in place. At the top, a template selector with four layouts: Corporate (squared, ruled letterhead), Classic (the golfballs.com cart-style schedule), Quote (a total panel over a lined table), and Separated (detached option cards priced individually). Then the message fields: recipient (pre-filled from the page's contact when available), subject (pre-filled 'Corporate Gift Proposal — …'), and an editable intro body."
+          },
+          {
+            "type": "heading",
+            "text": "Classic — matches the website's own proposal email"
+          },
+          {
+            "type": "p",
+            "text": "Classic reproduces the email golfballs.com generates itself: a rounded bordered box with an item / qty / cost / total schedule, orange line totals, then Subtotal → Promotion → Promotion code → Estimated total, the expiry line, the tax disclaimer, and the green 'View This Option' button. With 'Imprint previews' on, the rendered preview photo drops into each line in place of the imprint's logo name (turn it off to show the logo name as text). Free promo dozens appear as their own $0 lines, exactly as the site lays them out."
           },
           {
             "type": "heading",
@@ -3377,12 +3396,8 @@ export const HELP_CONTENT = {
             ],
             "rows": [
               [
-                "Expiration date",
-                "Adds 'This proposal expires on <date>' with a date picker"
-              ],
-              [
-                "Disclaimer",
-                "Adds the footnote '*shipping & sales tax are calculated in the shopping cart'"
+                "Imprint previews",
+                "Includes real 3D render snapshots of each decoration (and, on Classic, swaps the preview photo in for the logo name)"
               ],
               [
                 "Show cost",
@@ -3393,18 +3408,30 @@ export const HELP_CONTENT = {
                 "Product photos on/off"
               ],
               [
-                "Show previews",
-                "Includes IMPRINT PREVIEW cards — real 3D render snapshots of each decoration"
+                "Show total",
+                "Off hides the Subtotal/Promotion/Estimated-total summary"
+              ],
+              [
+                "Expiration date",
+                "Adds 'This proposal expires on <date>' with a date picker"
+              ],
+              [
+                "Disclaimer",
+                "Adds the footnote about shipping & sales tax being calculated in the cart"
               ],
               [
                 "Show CTA",
-                "Adds the 'View this option →' button linking to the live cart"
+                "Adds the 'View this option' button linking to the live cart (only when the proposal saved)"
+              ],
+              [
+                "Include message",
+                "Adds your typed intro paragraph above the schedule"
               ]
             ]
           },
           {
             "type": "p",
-            "text": "The rendered email shows each line with brand, title, 'Qty N × $X ea' and the line total; sale and volume pricing render with the old price struck through; promo discounts appear as a green '−$X' line and free items as 'Qty X · FREE'."
+            "text": "The rendered email shows each line with brand, title, quantity, unit price and the line total; sale and volume pricing render with the old price struck through; promo discounts appear as a Promotion line with the code, and free items as $0 / FREE lines that still count toward the pre-discount subtotal."
           }
         ],
         "advanced": [
@@ -4845,6 +4872,34 @@ export const HELP_CONTENT = {
                 "popup.ignoreContext.orderEdit",
                 "popup.ignoreContext.watch",
                 "popup.ignoreContext.submitProof"
+              ]
+            }
+          },
+          {
+            "type": "heading",
+            "text": "proposalDebug"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Setting",
+              "Type",
+              "Default",
+              "Range",
+              "What it does"
+            ],
+            "rows": [
+              [
+                "Proposal Debug: intercept submit requests",
+                "bool",
+                "Off",
+                "",
+                "Records every proposal- and email-submit network request (full request + response bodies, timing) and shows them in a draggable panel on golfballs.com pages, each with a Copy button. Use it to compare our requests vs the website. Off = no interception."
+              ]
+            ],
+            "meta": {
+              "settingKeys": [
+                "proposalDebug.enabled"
               ]
             }
           },
@@ -7777,7 +7832,9 @@ export const HELP_CONTENT = {
         "tracked",
         "templates",
         "classic",
-        "minimal",
+        "corporate",
+        "quote",
+        "separated",
         "imprint preview"
       ],
       "description": "Generate the customer-facing email: four layout templates, content toggles (costs, images, 3D previews, CTA), and the tracked server-side send.",
@@ -8671,6 +8728,16 @@ export const HELP_CONTENT = {
         "popup.ignorePageContext"
       ],
       "description": "Show all order + account templates in the popup regardless of the current page. Variables resolve as unmatched.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:proposalDebug.enabled",
+      "category": "Settings",
+      "title": "Proposal Debug: intercept submit requests",
+      "keywords": [
+        "proposalDebug.enabled"
+      ],
+      "description": "Records every proposal- and email-submit network request (full request + response bodies, timing) and shows them in a draggable panel on golfballs.com pages, each with a Copy button. Use it to compare our requests vs the website. Off = no interception.",
       "article": "developer-settings"
     },
     {

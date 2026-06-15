@@ -40,7 +40,7 @@
             ["Copy", "Outlook mode only", "Copies the rendered email as rich HTML — pasting into Outlook/Gmail keeps the formatting the mailto window strips"]
           ] },
           { "type": "heading", "text": "Variations: A/B testing a template" },
-          { "type": "p", "text": "A template can carry variations — alternate subject/body versions. In the picker, a parent template with variations shows a shuffle badge: selecting the parent means each send randomly picks one of the original + all variations. Expand the parent's sub-list and click a specific variation to pin it (check badge) so every send uses exactly that version." },
+          { "type": "p", "text": "A template can carry variations — alternate subject/body versions. In the picker, a parent template with variations shows a shuffle badge: selecting the parent means each send randomly picks one of the original + all variations. Expand the parent's sub-list and click a specific variation to pin it (check badge) so every send uses exactly that version. Each row shows the variation's own name (e.g. 'Warm', 'Value-first') when it has one, including the initial email's name — so you can tell the versions apart at a glance." },
           { "type": "callout", "kind": "proTip", "text": "When Power Automate is on with multiple senders configured, a sender picker appears in the editor header — including a Random option that rotates the From identity per send." }
         ]
       },
@@ -84,7 +84,9 @@
           { "type": "p", "text": "Subject and Body are rich-text editors. Toolbar: Bold, Italic, Underline, Strikethrough, bullet/numbered lists, Link, alignment, and Clear formatting. The Insert menu drops any of the template's variables in as a chip at the caret." },
           { "type": "p", "text": "Variable chips are color-coded live against the active page: green = resolves, yellow = unresolved but has a fallback set, red = unresolved with no fallback (the literal {{name}} would leak). Click a chip's lightning bolt to open its smart options." },
           { "type": "heading", "text": "Variations" },
-          { "type": "p", "text": "The dashed 'Add variation' button adds an alternate subject + body (auto-labeled Variation 1, 2, …) that can use the same variables. At send time the popup picks randomly among original + variations unless one is pinned — and the Campaign Runner lets you set weighted splits instead of uniform odds." }
+          { "type": "p", "text": "The dashed 'Add variation' button adds an alternate subject + body that uses the same variables. The moment you add the first one, the initial email itself converts into the first block (named 'Variation 1' by default) so every option is a uniform, renameable block — the original is no longer a special case." },
+          { "type": "p", "text": "Each block carries an editable name field: type a label like 'Warm' or 'Value-first' and it shows everywhere the variation is offered (the popup picker, the Email Runner, and the Campaign Manager split) instead of a generic 'Variation N'. Renaming sticks — deleting a variation no longer renumbers or clobbers the others' names. Added blocks number from 2 (the initial email holds slot 1)." },
+          { "type": "callout", "kind": "info", "text": "Names are part of the template, so an imported template carries its variation names too (the import accepts a 'baseLabel' for the initial email plus a 'label' on each variation). At send time the popup picks randomly among all blocks unless one is pinned; the Campaign Runner lets you set weighted splits instead of uniform odds." }
         ]
       },
       "related": ["template-variables", "email-templates-popup", "note-templates", "bulk-email-selection"]
