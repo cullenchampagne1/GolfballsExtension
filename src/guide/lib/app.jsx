@@ -105,13 +105,13 @@ export const NAV = [
   { group: 'Daily Driver', items: [
     { id: 'popup', title: 'The Popup', icon: 'mail', slugs: ['email-templates-popup', 'how-email-sending-works'] },
     { id: 'templates', title: 'Email Templates', icon: 'edit', slugs: ['template-editor', 'template-variables', 'note-templates'] },
-    { id: 'charge', title: 'Charge & Order Edit', icon: 'card', wip: true, slugs: ['charge-refund', 'order-edit'] },
-    { id: 'proof', title: 'Submit Proof', icon: 'send', wip: true, slugs: ['submit-proof'] },
+    { id: 'charge', title: 'Charge & Order Edit', icon: 'card', slugs: ['charge-refund', 'order-edit'] },
+    { id: 'proof', title: 'Submit Proof', icon: 'send', slugs: ['submit-proof'] },
   ]},
   { group: 'Configuration', items: [
     { id: 'settings', title: 'Settings & Manager', icon: 'cog', slugs: ['feature-toggles', 'email-integrations', 'presets', 'custom-crm-pages', 'developer-settings'] },
-    { id: 'themes', title: 'Themes & UI Scale', icon: 'sun', wip: true, slugs: ['theme-appearance'] },
-    { id: 'shortcuts', title: 'Keyboard Shortcuts', icon: 'code', wip: true, slugs: ['keyboard-shortcuts', 'shortcuts-settings'] },
+    { id: 'themes', title: 'Themes & UI Scale', icon: 'sun', slugs: ['theme-appearance'] },
+    { id: 'shortcuts', title: 'Keyboard Shortcuts', icon: 'code', slugs: ['keyboard-shortcuts', 'shortcuts-settings'] },
   ]},
   { group: 'Stay Organized', items: [
     { id: 'watchlist', title: 'Watch List', icon: 'eye', slugs: ['watch-list'] },
@@ -126,23 +126,23 @@ export const NAV = [
     { id: 'crm-new', title: 'New Contact', icon: 'user', slugs: ['new-contact'] },
   ]},
   { group: 'On-page Helpers', items: [
-    { id: 'viewer-email', title: 'Email / Chat Viewer', icon: 'mail', wip: true, slugs: ['email-thread-preview', 'text-note-preview'] },
-    { id: 'viewer-image', title: 'Image Viewer', icon: 'eye', wip: true, slugs: ['image-viewer', 'mockup-composer'] },
-    { id: 'viewer-3d', title: '3D Product Viewer', icon: 'cube', wip: true, slugs: ['3d-product-viewer'] },
-    { id: 'margin', title: 'Margin Calculator', icon: 'calc', wip: true, slugs: ['margin-calculator'] },
+    { id: 'viewer-email', title: 'Email / Chat Viewer', icon: 'mail', slugs: ['email-thread-preview', 'text-note-preview'] },
+    { id: 'viewer-image', title: 'Image Viewer', icon: 'eye', slugs: ['image-viewer', 'mockup-composer'] },
+    { id: 'viewer-3d', title: '3D Product Viewer', icon: 'cube', slugs: ['3d-product-viewer'] },
+    { id: 'margin', title: 'Margin Calculator', icon: 'calc', slugs: ['margin-calculator'] },
   ]},
   { group: 'Catalog & Proposals', items: [
-    { id: 'catalog', title: 'Gift Catalog', icon: 'gift', wip: true, slugs: ['gift-catalog', 'customizing-item', 'gift-sets', 'custom-service-items', 'supplier-import', 'gifting-glossary'] },
-    { id: 'proposals', title: 'Proposals & Quotes', icon: 'sparkle', wip: true, slugs: ['proposal-panel', 'proposal-breakdown', 'promo-codes', 'build-email-proposal'] },
+    { id: 'catalog', title: 'Gift Catalog', icon: 'gift', slugs: ['gift-catalog', 'customizing-item', 'gift-sets', 'custom-service-items', 'supplier-import', 'gifting-glossary'] },
+    { id: 'proposals', title: 'Proposals & Quotes', icon: 'sparkle', slugs: ['proposal-panel', 'proposal-breakdown', 'promo-codes', 'build-email-proposal'] },
   ]},
   { group: 'Campaigns', items: [
-    { id: 'quicksend', title: 'Quick Send (Bulk)', icon: 'megaphone', wip: true, slugs: ['bulk-email-selection'] },
-    { id: 'campaigns', title: 'Campaign Manager', icon: 'flow', wip: true, slugs: ['campaign-manager', 'campaign-conditions'] },
+    { id: 'quicksend', title: 'Quick Send (Bulk)', icon: 'megaphone', slugs: ['bulk-email-selection'] },
+    { id: 'campaigns', title: 'Campaign Manager', icon: 'flow', slugs: ['campaign-manager', 'campaign-conditions'] },
   ]},
   { group: 'Reference', items: [
-    { id: 'troubleshooting', title: 'Troubleshooting', icon: 'alert', wip: true, slugs: ['ts-outlook-opened', 'ts-variable-unresolved', 'ts-catalog-stale', 'ts-modal-not-appearing', 'ts-no-cost', 'ts-date-update-failed', 'ts-3d-blank', 'ts-settings-vanished'] },
-    { id: 'faq', title: 'FAQ', icon: 'more', wip: true, slugs: ['faq'] },
-    { id: 'power', title: 'Power User', icon: 'zap', wip: true, slugs: ['code-variables', 'console-commands', 'hidden-settings', 'modal-playground', 'debug-storage'] },
+    { id: 'troubleshooting', title: 'Troubleshooting', icon: 'alert', slugs: ['ts-outlook-opened', 'ts-variable-unresolved', 'ts-catalog-stale', 'ts-modal-not-appearing', 'ts-no-cost', 'ts-date-update-failed', 'ts-3d-blank', 'ts-settings-vanished'] },
+    { id: 'faq', title: 'FAQ', icon: 'more', slugs: ['faq'] },
+    { id: 'power', title: 'Power User', icon: 'zap', slugs: ['code-variables', 'console-commands', 'hidden-settings', 'modal-playground', 'debug-storage'] },
   ]},
 ];
 
