@@ -139,9 +139,9 @@ function RunningSnippet() {
 function DoneStatTile({ value, label, tone }) {
   const fg = { success: 'var(--gb-success)', error: 'var(--gb-error)', warning: 'var(--gb-warning-fg)', brand: 'var(--gb-brand-label)', neutral: 'var(--gb-text-primary)' }[tone] || 'var(--gb-text-primary)';
   return (
-    <div style={{ flex: 1, minWidth: 0, padding: '12px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)' }}>
-      <div style={{ fontSize: 24, fontWeight: 800, color: fg, fontFamily: 'var(--gb-font-mono)', lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--gb-text-muted)', marginTop: 6 }}>{label}</div>
+    <div style={{ flex: 1, minWidth: 0, padding: '11px 8px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)' }}>
+      <div style={{ fontSize: 19, fontWeight: 800, color: fg, fontFamily: 'var(--gb-font-mono)', lineHeight: 1, letterSpacing: -0.5, whiteSpace: 'nowrap' }}>{value}</div>
+      <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.3, textTransform: 'uppercase', color: 'var(--gb-text-muted)', marginTop: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
     </div>
   );
 }
@@ -155,7 +155,7 @@ function DoneSnippet() {
         <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -0.3 }}>Run complete</div>
         <div style={{ fontSize: 12, color: 'var(--gb-text-tertiary)', marginTop: 3 }}>6 messages delivered · 1 skipped · 1 need a retry</div>
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 6 }}>
         <DoneStatTile value={6} label="Sent" tone="success" />
         <DoneStatTile value={1} label="Skipped" tone="warning" />
         <DoneStatTile value={1} label="Failed" tone="error" />
