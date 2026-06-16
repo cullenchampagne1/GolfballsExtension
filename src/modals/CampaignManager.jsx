@@ -14,6 +14,7 @@ import {
 import { loadCallTemplates, CALL_CATEGORY_OPTIONS } from '../lib/callLog.js';
 import { loadTaskTemplates, PRIORITY_OPTIONS, DEFAULT_PRIORITY } from '../lib/quickTask.js';
 import { runCampaign } from '../lib/campaign/engine.js';
+import { parseCampaignBlob, importCampaigns } from '../lib/campaign/campaignImport.js';
 import { readEmailConfig } from '../lib/emailSender.js';
 import { pickFromAddress } from '../lib/sender.js';
 
@@ -630,7 +631,7 @@ function CampaignInspector({ campaign, onChange }) {
 }
 
 /* ── Sidebar ── */
-function CampaignSidebar({ library, currentId, onSelect, onNew, onDelete }) {
+function CampaignSidebar({ library, currentId, onSelect, onNew, onDelete, onImport }) {
   const [q, setQ] = useState('');
   const [confirmId, setConfirmId] = useState(null);   // row pending delete-confirm
   const filtered = library.filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()));
@@ -647,6 +648,7 @@ function CampaignSidebar({ library, currentId, onSelect, onNew, onDelete }) {
           <div style={{ fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Campaigns</div>
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{library.length} total</div>
         </div>
+        <IconBtn size="sm" variant="ghost" icon={<I.download />} title="Import campaign (paste AI JSON)" onClick={onImport} />
         <IconBtn size="sm" variant="secondary" icon={<I.plus />} onClick={onNew} />
       </div>
       <div style={{ padding: '0 12px 10px', flexShrink: 0 }}>
@@ -980,6 +982,89 @@ function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit
   );
 }
 
+/* ── Import campaigns — paste an AI-generated JSON blob ──────────
+   Shape contract lives in docs/llm-campaign-toolset.md (the toolset file
+   handed to a model so it can author full campaigns). Validates live as
+   you paste; Import appends with fresh ids (never overwrites) and
+   resolves saved-template references by name. */
+function ImportCampaignsModal({ onClose, onDone }) {
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const parsed = useMemo(() => {
+    const t = text.trim();
+    if (!t) return null;
+    try { return { ok: true, items: parseCampaignBlob(t) }; }
+    catch (e) { return { ok: false, error: e.message }; }
+  }, [text]);
+  const doImport = async () => {
+    if (!parsed || !parsed.ok || busy) return;
+    setBusy(true);
+    try { onDone(await importCampaigns(parsed.items)); }
+    catch (e) { onDone({ error: e.message }); }
+  };
+  return (
+    <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position: 'fixed', inset: 0, zIndex: 2147483600, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div style={{ width: 600, maxWidth: '92vw', maxHeight: '86vh', display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden', fontFamily: 'var(--gb-font-sans)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+          <span style={{ width: 28, height: 28, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.download size={14} /></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Import campaign</div>
+            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>Paste an AI-generated JSON blob — single campaign, array, or {'{ campaigns: […] }'} · spec in docs/llm-campaign-toolset.md</div>
+          </div>
+          <IconBtn size="sm" icon={<I.close />} onClick={onClose} />
+        </div>
+        <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0, overflow: 'auto' }}>
+          <textarea
+            autoFocus
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder='Paste the campaign JSON here…'
+            spellCheck={false}
+            style={{ width: '100%', boxSizing: 'border-box', height: 240, resize: 'vertical', padding: 10,
+              background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)',
+              outline: 'none', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 11, lineHeight: 1.5 }}
+          />
+          {parsed && (
+            parsed.ok ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint-soft)', border: '1px solid var(--gb-success-tint-border)' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-success-fg)' }}>
+                  {parsed.items.length} campaign{parsed.items.length === 1 ? '' : 's'} ready to import
+                </div>
+                {parsed.items.map(({ campaign: c, warnings }, i) => {
+                  const branches = c.steps.filter((s) => s.branch).length;
+                  return (
+                    <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: 'var(--gb-text-secondary)', minWidth: 0 }}>
+                        <Tag tone="brand" size="xs">{c.steps.length} step{c.steps.length === 1 ? '' : 's'}</Tag>
+                        <span style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
+                        <span style={{ color: 'var(--gb-text-muted)', flexShrink: 0 }}>{branches ? `${branches} branch${branches === 1 ? '' : 'es'} · ` : ''}{c.audienceOrder}</span>
+                      </div>
+                      {warnings.map((w, j) => (
+                        <div key={j} style={{ fontSize: 10, color: 'var(--gb-warning-fg)', paddingLeft: 4 }}>⚠ {w}</div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ padding: '9px 11px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-error-tint-soft, var(--gb-warning-tint-soft))', border: '1px solid var(--gb-error-tint-border, var(--gb-warning-tint-border))', fontSize: 11, color: 'var(--gb-error-fg, var(--gb-warning-fg))', lineHeight: 1.5 }}>
+                {parsed.error}
+              </div>
+            )
+          )}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '11px 14px', borderTop: '1px solid var(--gb-border-subtle)' }}>
+          <Btn variant="ghost" size="sm" onClick={onClose}>Cancel</Btn>
+          <Btn variant="primary" size="sm" icon={<I.download />} disabled={!parsed || !parsed.ok || busy} state={busy ? 'loading' : 'idle'} onClick={doImport}>
+            Import{parsed && parsed.ok ? ` ${parsed.items.length}` : ''}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Root ── */
 export function CampaignManager({ onClose, contacts = [] }) {
   ensureCampaignKeyframes();
@@ -992,8 +1077,24 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const [templateLib, setTemplateLib] = useState({ email: [], call: [], task: [] });
   const [dryRun, setDryRun] = useState(false);
   const [runMode, setRunMode] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const runner = useCampaignRunner();
   const simTimer = useRef(null);
+
+  // Import result from the paste dialog: refresh the library, open the first
+  // imported campaign, and surface anything the importer couldn't resolve.
+  const onImported = (r) => {
+    setImportOpen(false);
+    if (!r || r.error) { toast?.error?.('Import failed — ' + (r?.error || 'unknown')); return; }
+    setLibrary(r.list);
+    const first = r.list[0];
+    if (first) { setCampaign(first); setSelectedId(null); setDirty(false); }
+    if (r.unresolved?.length) {
+      toast?.warning?.(`Imported ${r.count} — ${r.unresolved.length} template${r.unresolved.length === 1 ? '' : 's'} need picking in the editor`, { duration: 5000 });
+    } else {
+      toast?.success?.(`Imported ${r.count} campaign${r.count === 1 ? '' : 's'}`);
+    }
+  };
 
   // Load campaigns + the template stores once.
   useEffect(() => {
@@ -1133,7 +1234,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
         ) : (
         <>
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-          <CampaignSidebar library={library} currentId={campaign.id} onSelect={selectCampaign} onNew={createCampaign} onDelete={deleteCampaign} />
+          <CampaignSidebar library={library} currentId={campaign.id} onSelect={selectCampaign} onNew={createCampaign} onDelete={deleteCampaign} onImport={() => setImportOpen(true)} />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid var(--gb-border-default)' }}>
             <Timeline steps={steps} selectedId={selectedId} sim={sim} templateLib={templateLib} onSelect={setSelectedId} onAdd={addStep} onDelete={deleteStep} onDuplicate={duplicateStep} />
           </div>
@@ -1147,6 +1248,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
         </>
         )}
       </ModalShell>
+      {importOpen && <ImportCampaignsModal onClose={() => setImportOpen(false)} onDone={onImported} />}
     </div>
   );
 }
