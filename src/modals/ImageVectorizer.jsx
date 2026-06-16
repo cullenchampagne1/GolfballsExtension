@@ -148,10 +148,16 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
           for (let i = 0; i < d.length; i += 4) {
             const a = d[i + 3];
             const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-            // Shape = opaque black; everything else = fully-zeroed transparent
-            // (RGB zeroed too, so it maps to the transparent palette entry
-            // rather than the black one — otherwise the whole canvas fills black).
-            if (a > 10 && lum < threshold) { d[i] = d[i + 1] = d[i + 2] = 0; d[i + 3] = 255; }
+            // Shape test: when the background was already removed, every
+            // surviving (opaque) pixel is part of the silhouette — don't also
+            // luminance-gate, or light-but-colored art (e.g. a teal lotus at
+            // lum≈129) drops out. Without bg removal, fall back to the
+            // luminance threshold to separate dark art from a light field.
+            const isShape = a > 128 && (removeBg || lum < threshold);
+            // Shape = opaque black; else = fully-zeroed transparent (RGB
+            // zeroed too, so it maps to the transparent palette entry rather
+            // than the black one — otherwise the whole canvas fills black).
+            if (isShape) { d[i] = d[i + 1] = d[i + 2] = 0; d[i + 3] = 255; }
             else { d[i] = d[i + 1] = d[i + 2] = 0; d[i + 3] = 0; }
           }
           options = {
@@ -324,8 +330,9 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
               {svg && !traceErr && (
                 <div
                   style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: tracing ? 0.4 : 1, ...fxStyle }}
-                  // ImageTracer returns a complete <svg>; size it to fit.
-                  dangerouslySetInnerHTML={{ __html: svg.replace('<svg ', '<svg style="max-width:100%;max-height:100%;height:auto;width:auto" ') }}
+                  // ImageTracer returns a complete <svg> with no viewBox;
+                  // fitSvg adds one so it scales (not clips) into the frame.
+                  dangerouslySetInnerHTML={{ __html: fitSvg(svg) }}
                 />
               )}
             </div>
@@ -373,7 +380,7 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
                 <SliderRow label="BG tolerance" value={bgTol} min={0} max={120} step={1} onChange={setBgTol} hint="How close to the corner color counts as background" />
               )}
               {mode === 'mono' ? (
-                <SliderRow label="Threshold" value={threshold} min={1} max={254} step={1} onChange={setThreshold} hint="Luminance cut for the shape" />
+                !removeBg && <SliderRow label="Threshold" value={threshold} min={1} max={254} step={1} onChange={setThreshold} hint="Luminance cut for the shape" />
               ) : (
                 <SliderRow label="Colors" value={numColors} min={2} max={16} step={1} onChange={setNumColors} hint="Palette size" />
               )}
@@ -415,6 +422,21 @@ function SliderRow({ label, value, min, max, step, onChange, hint }) {
       <Slider value={value} min={min} max={max} step={step} onChange={onChange} showValue={false} />
       {hint && <span style={{ fontSize: 9.5, color: 'var(--gb-text-tertiary)' }}>{hint}</span>}
     </div>
+  );
+}
+
+/* ImageTracer emits <svg width="W" height="H" …> with NO viewBox, so the
+   coordinate system is pinned 1:1 to those pixel dimensions. Shrinking the
+   element with max-width then CLIPS the drawing to the top-left corner
+   instead of scaling it — a centered logo with margins shows only empty
+   corner (blank). Inject a viewBox (from the width/height) + responsive
+   sizing so the whole drawing scales to fit the preview. */
+function fitSvg(svgString) {
+  const m = svgString.match(/<svg[^>]*\bwidth="([\d.]+)"[^>]*\bheight="([\d.]+)"/);
+  const vb = m ? ` viewBox="0 0 ${m[1]} ${m[2]}"` : '';
+  return svgString.replace(
+    '<svg ',
+    `<svg preserveAspectRatio="xMidYMid meet"${vb} style="display:block;max-width:100%;max-height:100%;width:auto;height:auto" `,
   );
 }
 
