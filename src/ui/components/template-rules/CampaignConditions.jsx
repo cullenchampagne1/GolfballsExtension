@@ -141,7 +141,7 @@ function renderCampaignSubject(condition, patch) {
             {condition.arrayMode === 'index' && (
               <input type="number" min={0} value={String(condition.arrayIndex ?? 0)}
                 onChange={(e) => patch({ arrayIndex: Math.max(0, parseInt(e.target.value, 10) || 0) })}
-                style={{ width: 52, height: 26, padding: '0 8px', boxSizing: 'border-box', background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', borderRadius: 4, color: 'var(--gb-text-primary)', fontSize: 11.5, outline: 'none' }} />
+                style={{ width: 52, height: 28, padding: '0 8px', boxSizing: 'border-box', background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', borderRadius: 4, color: 'var(--gb-text-primary)', fontSize: 11.5, outline: 'none' }} />
             )}
           </>
         )}

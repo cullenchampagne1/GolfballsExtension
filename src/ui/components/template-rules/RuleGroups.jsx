@@ -430,7 +430,9 @@ function JoinerDivider({ value, onChange, label, small, large }) {
 
 function baseControlStyle({ width, minWidth, flex }) {
   return {
-    height: 26, width, minWidth, flex, padding: '0 8px',
+    // 28 to match the `sm` Dropdowns sat next to these inputs in a condition
+    // row — at 26 the text input read a touch short and sat slightly raised.
+    height: 28, width, minWidth, flex, padding: '0 8px', lineHeight: '26px',
     background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', borderRadius: 4,
     color: 'var(--gb-text-primary)', fontSize: 11.5, fontFamily: 'var(--gb-font-sans)', outline: 'none', boxSizing: 'border-box',
   };
