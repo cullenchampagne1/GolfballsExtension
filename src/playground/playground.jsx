@@ -26,7 +26,6 @@ import { GiftCatalog } from '../modals/GiftCatalog.jsx';
 import { CampaignManager } from '../modals/CampaignManager.jsx';
 import { runOrderDateUpdate } from '../lib/submitOrderDates.js';
 import { TextPreview } from '../modals/TextPreview.jsx';
-import { ImageVectorizer } from '../modals/ImageVectorizer.jsx';
 import { parseChat } from '../lib/parseChat.js';
 import { ActionsShelf } from '../ui/components/ActionsShelf.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
@@ -59,7 +58,6 @@ const MODAL_REGISTRY = [
   { id: 'emailPreview', label: 'Email Preview',   icon: 'mail',    wired: true,  flag: 'emailPreviewEnabled' },
   { id: 'textPreview',  label: 'Text Preview',    icon: 'mail',    wired: true,  flag: 'textPreviewEnabled'  },
   { id: 'imageViewer',  label: 'Image Viewer',    icon: 'eye',     wired: true,  flag: 'imagePreviewEnabled' },
-  { id: 'vectorizer',   label: 'Vectorizer',      icon: 'image',   wired: true   },
   { id: 'submitProof',  label: 'Submit Proof',    icon: 'send',    wired: true,  flag: 'submitProofEnabled'  },
   { id: 'crmSearch',    label: 'CRM Search',      icon: 'search',  wired: true,  flag: 'crmSearchEnabled'    },
   { id: 'crmQuery',     label: 'CRM Query',       icon: 'filter',  wired: true,  flag: 'crmSearchEnabled'    },
@@ -884,12 +882,6 @@ function PlaygroundSurface() {
               setProofImage(payload || null);
               setMounted('submitProofForm');
             }}
-          />
-        )}
-        {mounted === 'vectorizer' && (
-          <ImageVectorizer
-            key="vectorizer"
-            onClosed={() => setMounted(null)}
           />
         )}
         {mounted === 'watchList' && (
