@@ -799,121 +799,44 @@ const sendBg = (msg) => new Promise((resolve) => {
   catch { resolve(null); }
 });
 
-/* Compare a fired step's outcome to its declared expectation. `_expect`
-   is { status, reason? } — reason is only checked when the expectation
-   pins one (so `ran` ignores reason). Used only by logic-test campaigns. */
-function expectMatches(expect, status, reason) {
-  if (!expect) return null;
-  if (status !== expect.status) return false;
-  if (expect.reason != null && reason !== expect.reason) return false;
-  return true;
-}
-
 function useCampaignRunner() {
   const [running, setRunning] = useState(false);
   const [paused, setPaused] = useState(false);
   const [complete, setComplete] = useState(false);
   const [rows, setRows] = useState({});            // key -> { status, label, ran }
   const [progress, setProgress] = useState({ done: 0, total: 0 });
-  const [log, setLog] = useState([]);              // live run-log feed (capped)
   const controlRef = useRef({ paused: false, stopped: false });
   const lastArgsRef = useRef(null);
-  const logSeqRef = useRef(0);
-  const assertRef = useRef({});                    // stepId -> { label, expect, pass, fail }
-  const emittedRef = useRef({});                   // contactKey -> Set(stepId emitted)
-
-  // Append a log line. Stamped with a monotonic id + wall-clock ts; the
-  // feed is capped so a big audience can't grow it without bound.
-  const pushLog = (entry) => setLog((l) => {
-    const next = l.length > 2000 ? l.slice(l.length - 2000) : l.slice();
-    next.push({ id: ++logSeqRef.current, ts: Date.now(), ...entry });
-    return next;
-  });
-  const clearLog = () => { setLog([]); };
 
   const start = async (args) => {
     lastArgsRef.current = args;
     const { campaign, audience, lookupTemplate, deps } = args;
-    const isTest = !!campaign?._test;
     controlRef.current = { paused: false, stopped: false };
     setPaused(false); setComplete(false); setRunning(true);
     const init = {};
     audience.forEach((c) => { init[c._key] = { status: 'queued', label: '', ran: 0 }; });
     setRows(init);
     setProgress({ done: 0, total: audience.length });
-    setLog([]); logSeqRef.current = 0; assertRef.current = {}; emittedRef.current = {};
-    const mode = isTest ? 'Logic test' : deps.dryRun ? 'Dry run' : 'Run';
-    pushLog({ kind: 'run', tone: 'brand', msg: `${mode} · ${campaign.name} · ${audience.length} contact${audience.length === 1 ? '' : 's'}` });
-
-    const nameOf = (c) => c?.contactName || c?.name || c?.contactId || '(contact)';
-
-    // Tally one assertion for a step against this contact's actual outcome.
-    const recordAssert = (step, status, reason, contact) => {
-      const ok = expectMatches(step._expect, status, reason);
-      if (ok == null) return;
-      const a = (assertRef.current[step.id] ||= { label: step.label, expect: step._expect, pass: 0, fail: 0 });
-      ok ? a.pass++ : a.fail++;
-      const want = `${step._expect.status}${step._expect.reason ? '/' + step._expect.reason : ''}`;
-      const got = `${status}${reason ? '/' + reason : ''}`;
-      pushLog({ kind: 'assert', pass: ok, name: nameOf(contact), label: step.label, detail: ok ? `✓ ${want}` : `want ${want}, got ${got}` });
-    };
 
     await runCampaign({
       campaign, audience, lookupTemplate, deps,
       control: { isPaused: () => controlRef.current.paused, isStopped: () => controlRef.current.stopped },
       on: {
-        contactStart: (c) => {
-          emittedRef.current[c._key] = new Set();
-          setRows((r) => ({ ...r, [c._key]: { ...(r[c._key] || {}), status: 'sending' } }));
-          pushLog({ kind: 'contact', name: nameOf(c), key: c._key });
-        },
-        stepResult: ({ contact, step, status, reason, detail, error }) => {
-          setRows((r) => {
-            const cur = r[contact._key] || { ran: 0 };
-            return { ...r, [contact._key]: { ...cur, label: step.label, ran: status === 'ran' ? (cur.ran || 0) + 1 : (cur.ran || 0) } };
-          });
-          (emittedRef.current[contact._key] ||= new Set()).add(step.id);
-          pushLog({ kind: 'step', status, name: nameOf(contact), label: step.label, reason, detail, error });
-          if (step._expect) recordAssert(step, status, reason, contact);
-        },
-        contactDone: (s) => {
-          setRows((r) => ({
-            ...r,
-            [s.contact._key]: {
-              ...(r[s.contact._key] || {}),
-              ran: s.ran,
-              status: s.suppressed ? 'suppressed' : s.failed ? 'failed' : s.stoppedAtBranch ? 'stopped' : s.ran > 0 ? 'sent' : 'skipped',
-            },
-          }));
-          if (s.suppressed) {
-            pushLog({ kind: 'step', status: 'suppressed', name: nameOf(s.contact), label: 'Suppressed', reason: s.suppressReason });
-          }
-          // Cut-step expectations: a step expecting to be unreachable (after a
-          // taken branch / kill) is verified by the ABSENCE of a stepResult.
-          if (isTest) {
-            const emitted = emittedRef.current[s.contact._key] || new Set();
-            for (const step of (campaign.steps || [])) {
-              if (step._expect?.status !== 'cut') continue;
-              const wasCut = !emitted.has(step.id);
-              const a = (assertRef.current[step.id] ||= { label: step.label, expect: step._expect, pass: 0, fail: 0 });
-              wasCut ? a.pass++ : a.fail++;
-              pushLog({ kind: 'assert', pass: wasCut, name: nameOf(s.contact), label: step.label, detail: wasCut ? '✓ never reached (cut)' : 'want cut, but it ran' });
-            }
-          }
-          pushLog({ kind: 'done', name: nameOf(s.contact), ran: s.ran, skipped: s.skipped, failed: s.failed, stoppedAtBranch: s.stoppedAtBranch, suppressed: s.suppressed });
-        },
+        contactStart: (c) => setRows((r) => ({ ...r, [c._key]: { ...(r[c._key] || {}), status: 'sending' } })),
+        stepResult: ({ contact, step, status }) => setRows((r) => {
+          const cur = r[contact._key] || { ran: 0 };
+          return { ...r, [contact._key]: { ...cur, label: step.label, ran: status === 'ran' ? (cur.ran || 0) + 1 : (cur.ran || 0) } };
+        }),
+        contactDone: (s) => setRows((r) => ({
+          ...r,
+          [s.contact._key]: {
+            ...(r[s.contact._key] || {}),
+            ran: s.ran,
+            status: s.suppressed ? 'suppressed' : s.failed ? 'failed' : s.stoppedAtBranch ? 'stopped' : s.ran > 0 ? 'sent' : 'skipped',
+          },
+        })),
         progress: (p) => setProgress(p),
-        complete: ({ stopped }) => {
-          setRunning(false); setComplete(!stopped);
-          if (isTest) {
-            const gates = Object.values(assertRef.current);
-            const okGates = gates.filter((a) => a.fail === 0).length;
-            const allOk = gates.length > 0 && okGates === gates.length;
-            pushLog({ kind: 'complete', tone: allOk ? 'success' : 'error', msg: `Logic test — ${okGates}/${gates.length} gates passed` });
-          } else {
-            pushLog({ kind: 'complete', tone: stopped ? 'warning' : 'success', msg: stopped ? 'Run stopped' : 'Run complete' });
-          }
-        },
+        complete: ({ stopped }) => { setRunning(false); setComplete(!stopped); },
       },
     });
   };
@@ -921,10 +844,10 @@ function useCampaignRunner() {
   const pause = () => { controlRef.current.paused = true; setPaused(true); };
   const resume = () => { controlRef.current.paused = false; setPaused(false); };
   const stop = () => { controlRef.current.stopped = true; setRunning(false); };
-  const reset = () => { setRows({}); setProgress({ done: 0, total: 0 }); setComplete(false); setLog([]); };
+  const reset = () => { setRows({}); setProgress({ done: 0, total: 0 }); setComplete(false); };
   const again = () => { if (lastArgsRef.current) start(lastArgsRef.current); };
 
-  return { running, paused, complete, rows, progress, log, clearLog, start, pause, resume, stop, reset, again };
+  return { running, paused, complete, rows, progress, start, pause, resume, stop, reset, again };
 }
 
 function RunInitials({ name, size = 28 }) {
@@ -962,131 +885,8 @@ function RunPipeline({ mainCount, ran, status }) {
   );
 }
 
-/* ── Run-log sidebar ──────────────────────────────────────────
-   A live, filterable feed of the engine's per-contact / per-step
-   events (and, for logic-test campaigns, the ✓/✗ assertions). Docks
-   on the right of the run view; auto-scrolls as lines land. */
-const LOG_STEP_TONE = {
-  ran:        { fg: 'var(--gb-success-fg)', dot: 'success', tag: 'RAN' },
-  skipped:    { fg: 'var(--gb-text-muted)', dot: 'muted',   tag: 'SKIP' },
-  failed:     { fg: 'var(--gb-error-fg)',   dot: 'error',   tag: 'FAIL' },
-  suppressed: { fg: 'var(--gb-warning-fg)', dot: 'warning', tag: 'SUPP' },
-};
-const SKIP_REASON_LABEL = {
-  conditions: 'conditions not met',
-  'branch-not-taken': 'branch not taken',
-  'group-already-fired': 'group already fired',
-  cap: 'send cap reached',
-};
-function fmtClock(ts) {
-  const d = new Date(ts);
-  const p = (n) => String(n).padStart(2, '0');
-  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-}
-const LOG_FILTERS = [
-  { id: 'all', label: 'All' },
-  { id: 'steps', label: 'Steps' },
-  { id: 'skipped', label: 'Skipped' },
-  { id: 'issues', label: 'Issues' },
-  { id: 'tests', label: 'Tests' },
-];
-function logPassesFilter(e, f) {
-  if (f === 'all') return true;
-  if (f === 'steps') return e.kind === 'contact' || (e.kind === 'step');
-  if (f === 'skipped') return e.kind === 'step' && (e.status === 'skipped' || e.status === 'suppressed');
-  if (f === 'issues') return (e.kind === 'step' && e.status === 'failed') || (e.kind === 'assert' && !e.pass);
-  if (f === 'tests') return e.kind === 'assert' || e.kind === 'run' || e.kind === 'complete';
-  return true;
-}
-
-function RunLogSidebar({ log, onClear, onClose }) {
-  const [filter, setFilter] = useState('all');
-  const scrollRef = useRef(null);
-  const stickRef = useRef(true);   // keep pinned to bottom unless the user scrolls up
-  const shown = useMemo(() => log.filter((e) => logPassesFilter(e, filter)), [log, filter]);
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
-  }, [shown.length]);
-  const onScroll = (e) => {
-    const el = e.currentTarget;
-    stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-  };
-
-  return (
-    <div style={{ width: 332, flexShrink: 0, borderLeft: '1px solid var(--gb-border-default)', background: 'var(--gb-surface-1)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-      <div style={{ padding: '9px 10px 8px 12px', borderBottom: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-        <I.history size={13} style={{ color: 'var(--gb-text-tertiary)' }} />
-        <div style={{ fontSize: 11, fontWeight: 800, color: 'var(--gb-text-primary)', flex: 1 }}>Run log</div>
-        <span style={{ fontSize: 10, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)' }}>{log.length}</span>
-        <IconBtn size="xs" variant="ghost" icon={<I.trash />} title="Clear log" onClick={onClear} />
-        <IconBtn size="xs" variant="ghost" icon={<I.close />} title="Hide log" onClick={onClose} />
-      </div>
-      <div style={{ display: 'flex', gap: 4, padding: '7px 10px', borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0 }}>
-        {LOG_FILTERS.map((f) => (
-          <PillTag key={f.id} on={filter === f.id} onClick={() => setFilter(f.id)}>{f.label}</PillTag>
-        ))}
-      </div>
-      <div ref={scrollRef} onScroll={onScroll} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 0 10px', fontFamily: 'var(--gb-font-mono)' }}>
-        {shown.length === 0 && (
-          <div style={{ padding: '26px 14px', textAlign: 'center', fontSize: 11, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-sans)' }}>
-            {log.length ? 'Nothing matches this filter.' : 'Events appear here as the campaign runs.'}
-          </div>
-        )}
-        {shown.map((e) => <LogLine key={e.id} e={e} />)}
-      </div>
-    </div>
-  );
-}
-
-function LogLine({ e }) {
-  const ts = <span style={{ fontSize: 9, color: 'var(--gb-text-ghost)', flexShrink: 0, paddingTop: 1 }}>{fmtClock(e.ts)}</span>;
-  const wrap = (children, extra = {}) => (
-    <div style={{ display: 'flex', gap: 7, alignItems: 'flex-start', padding: '2px 12px', ...extra }}>{ts}<div style={{ flex: 1, minWidth: 0 }}>{children}</div></div>
-  );
-
-  if (e.kind === 'run') {
-    return wrap(<span style={{ fontSize: 10.5, fontWeight: 800, color: 'var(--gb-brand-label)' }}>▶ {e.msg}</span>, { paddingTop: 6 });
-  }
-  if (e.kind === 'complete') {
-    const c = e.tone === 'success' ? 'var(--gb-success-fg)' : e.tone === 'error' ? 'var(--gb-error-fg)' : 'var(--gb-warning-fg)';
-    return wrap(<span style={{ fontSize: 10.5, fontWeight: 800, color: c }}>■ {e.msg}</span>, { paddingTop: 5, paddingBottom: 6 });
-  }
-  if (e.kind === 'contact') {
-    return wrap(<span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>{e.name}</span>, { marginTop: 5, borderTop: '1px solid var(--gb-border-subtle)', paddingTop: 6 });
-  }
-  if (e.kind === 'done') {
-    if (e.suppressed) return null; // already logged as a suppressed step
-    return wrap(<span style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)' }}>↳ ran {e.ran} · skip {e.skipped}{e.failed ? ` · fail ${e.failed}` : ''}{e.stoppedAtBranch ? ' · stopped' : ''}</span>);
-  }
-  if (e.kind === 'assert') {
-    const c = e.pass ? 'var(--gb-success-fg)' : 'var(--gb-error-fg)';
-    return wrap(
-      <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
-        <span style={{ color: c, fontWeight: 800, fontSize: 11 }}>{e.pass ? '✓' : '✗'}</span>
-        <span style={{ fontSize: 10.5, color: 'var(--gb-text-secondary)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.label}</span>
-        <span style={{ fontSize: 9.5, color: c, flexShrink: 0 }}>{e.detail}</span>
-      </div>
-    );
-  }
-  // step
-  const tone = LOG_STEP_TONE[e.status] || LOG_STEP_TONE.skipped;
-  const sub = e.status === 'failed' ? (e.error || 'failed')
-    : e.status === 'skipped' ? (SKIP_REASON_LABEL[e.reason] || e.reason || '')
-    : e.status === 'suppressed' ? (e.reason || '')
-    : (e.detail || '');
-  return wrap(
-    <div style={{ display: 'flex', gap: 6, alignItems: 'baseline', minWidth: 0 }}>
-      <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: .5, color: tone.fg, flexShrink: 0, width: 30 }}>{tone.tag}</span>
-      <span style={{ fontSize: 10.5, color: 'var(--gb-text-secondary)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1 }}>{e.label}</span>
-      {sub && <span style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>· {sub}</span>}
-    </div>
-  );
-}
-
 function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit }) {
   const { rows, progress, paused, complete, running, pause, resume, again } = runner;
-  const [showLog, setShowLog] = useState(true);
   const exit = () => { runner.stop(); onExit?.(); };
   const counts = useMemo(() => {
     const c = { queued: 0, sending: 0, sent: 0, stopped: 0, skipped: 0, failed: 0 };
@@ -1134,7 +934,6 @@ function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit
           {counts.failed > 0 && <Tally label="Failed" value={counts.failed} tone="var(--gb-error-fg)" />}
         </div>
         <div style={{ flex: 1 }} />
-        <IconBtn size="md" variant="ghost" active={showLog} icon={<I.history />} title="Run log" onClick={() => setShowLog((v) => !v)} />
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: 3, background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>
           {paused
             ? <Btn size="sm" variant="tinted" status="brand" icon={<I.play />} onClick={resume}>Resume</Btn>
@@ -1148,9 +947,6 @@ function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit
       <div style={{ height: 4, background: 'var(--gb-fill-inverse-medium)', borderBottom: '1px solid var(--gb-border-default)', flexShrink: 0, overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${pct}%`, background: 'linear-gradient(90deg, var(--gb-brand) 0%, var(--gb-brand-label) 100%)', boxShadow: '0 0 8px var(--gb-brand-label)', transition: 'width .35s ease' }} />
       </div>
-      {/* Body — audience table + optional run-log sidebar */}
-      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
       {/* Column headers */}
       <div style={{ display: 'grid', gridTemplateColumns: '36px 1.4fr 1.1fr auto 1.1fr 120px', gap: 14, padding: '9px 22px', background: 'var(--gb-surface-1)', borderBottom: '1px solid var(--gb-border-subtle)', fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flexShrink: 0 }}>
         <div /><div>Contact</div><div>Email</div><div>Pipeline · {mainCount} steps</div><div>Current step</div><div style={{ textAlign: 'right' }}>State</div>
@@ -1179,9 +975,6 @@ function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit
             </div>
           );
         })}
-      </div>
-        </div>
-        {showLog && <RunLogSidebar log={runner.log} onClear={runner.clearLog} onClose={() => setShowLog(false)} />}
       </div>
     </motion.div>
   );
