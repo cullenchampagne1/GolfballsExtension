@@ -6,9 +6,9 @@ import { ensureScales } from './scales.js';
    theme.js — the design-system theme runtime.
 
    A theme is { variant, colors }:
-   - variant — one of the shells (dark/midnight/light/cream +
-     nord/dracula/rose/ocean/gruvbox/tokyo/monokai/mint) that
-     supplies surfaces, text, borders, and an accent.
+   - variant — one of eight shells (dark/midnight/light/cream/
+     nord/dracula/rose/tokyo), each with its own surfaces, text,
+     borders, and signature accent color.
    - colors  — overrides for the 8 tone-driving "Theme" colors.
 
    Because every tint derives from these via color-mix(), applying
@@ -24,20 +24,16 @@ const STORAGE_KEY = 'gbTheme';
 /** The shell variants. */
 export const THEME_VARIANTS = [
   // ids kept stable (stored settings reference them); only display names changed.
-  { id: 'dark', name: 'Dark' },
-  { id: 'midnight', name: 'Slate' },
-  { id: 'light', name: 'Light' },
-  { id: 'cream', name: 'Cream' },
-  // Curated accent shells — ownAccent: their card previews under the
-  // variant's own signature color instead of the user's brand.
+  // Every shell carries its own accent (ownAccent), so each card previews
+  // under its signature color rather than the user's customized brand.
+  { id: 'dark', name: 'Dark', ownAccent: true },
+  { id: 'midnight', name: 'Slate', ownAccent: true },
+  { id: 'light', name: 'Light', ownAccent: true },
+  { id: 'cream', name: 'Cream', ownAccent: true },
   { id: 'nord', name: 'Nord', ownAccent: true },
   { id: 'dracula', name: 'Dracula', ownAccent: true },
   { id: 'rose', name: 'Rosé', ownAccent: true },
-  { id: 'ocean', name: 'Ocean', ownAccent: true },
-  { id: 'gruvbox', name: 'Gruvbox', ownAccent: true },
   { id: 'tokyo', name: 'Tokyo Night', ownAccent: true },
-  { id: 'monokai', name: 'Monokai', ownAccent: true },
-  { id: 'mint', name: 'Mint', ownAccent: true },
 ];
 
 /** The 8 adjustable Theme colors layered on top of a variant. */

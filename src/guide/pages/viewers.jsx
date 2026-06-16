@@ -3,6 +3,7 @@ import { I, Icon, Tag, Btn, IconBtn, Dropdown, Slider, CategorizeRail } from '..
 import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
 import { LiveModal } from '../lib/live-modal.jsx';
 import { ImagePreview } from '../../modals/ImagePreview.jsx';
+import { GolfballViewer } from '../../modals/GolfballViewer.jsx';
 import { categorySections, CASE_CATEGORIES } from '../../lib/caseMatch.js';
 
 /* A template logo (data URL) so the real Image Viewer renders exactly like
@@ -746,6 +747,40 @@ const DECO_TABLE = [
   ['Dual-pole pair', 'A second decoration on the opposite pole (logo one side, personalization the other).'],
 ];
 
+/* The REAL GolfballViewer (live three.js/WebGL) with a template decal, wrapped
+   in the faithful control chrome (Image button, model dropdown wired to the real
+   shape, scene / tint, Copy / Download). Falls back to the styled surface if
+   WebGL/assets fail. So it looks — and behaves — exactly like production. */
+function Real3DViewer() {
+  const [err, setErr] = useState(false);
+  const [shape, setShape] = useState('ball');
+  return (
+    <div style={{ margin: '22px 0 6px' }}>
+      <div style={{ position: 'relative', height: 360, width: '100%', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md) var(--gb-r-md) 0 0', overflow: 'hidden', background: 'radial-gradient(120% 120% at 50% 30%, #2a2d31 0%, #161719 60%, #0c0d0e 100%)' }}>
+        {err
+          ? <Viewer3DSurface height={360} tint={shape === 'chip' ? '#b23b3b' : '#f6f6f6'} />
+          : <GolfballViewer key={shape} decalDataUrl={TEMPLATE_LOGO} shape={shape} autoRotate minimal onError={() => setErr(true)} />}
+        <div style={{ position: 'absolute', top: 10, left: 12, display: 'flex', gap: 5, pointerEvents: 'none' }}>
+          <GlassBtn icon={<I.sun size={13} />} label="Scene / HDRI" />
+          <GlassBtn icon={<I.bolt size={13} />} label="Throw / physics" />
+        </div>
+        <div style={{ position: 'absolute', bottom: 10, left: 12, pointerEvents: 'none' }}><GlassChip mono={false}>drag to orbit · scroll to zoom</GlassChip></div>
+        <div style={{ position: 'absolute', bottom: 10, right: 12, pointerEvents: 'none' }}>
+          <span title="Ball color" style={{ width: 30, height: 30, borderRadius: 8, background: GLASS.bg, border: `1px solid ${GLASS.border}`, boxShadow: GLASS.shadow, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ width: 16, height: 16, borderRadius: 4, background: '#f6f6f6', border: '1px solid var(--gb-border-strong)' }} />
+          </span>
+        </div>
+      </div>
+      <div style={{ padding: 9, background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderTop: 'none', borderRadius: '0 0 var(--gb-r-md) var(--gb-r-md)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Btn size="sm" variant="secondary" icon={<I.chevd size={11} style={{ transform: 'rotate(90deg)' }} />}>Image</Btn>
+        <Dropdown size="sm" value={shape} options={MODELS.slice(0, 5)} onChange={setShape} style={{ flex: 1, minWidth: 130 }} />
+        <Btn size="sm" variant="secondary" icon={<I.copy />}>Copy</Btn>
+        <Btn size="sm" variant="tinted" status="brand" icon={<I.download />}>Download</Btn>
+      </div>
+    </div>
+  );
+}
+
 export function Viewer3DPage() {
   return (
     <div className="prose">
@@ -758,10 +793,10 @@ export function Viewer3DPage() {
         makes proposal emails look composed rather than screenshotted.
       </p>
 
-      <Viewer3DSnippet />
-      <p style={{ fontSize: 12.5, color: 'var(--gb-text-muted)', fontStyle: 'italic', marginTop: -2 }}>
-        A faithful reproduction of the viewer chrome — the model picker, tint, scene/HDRI and throw controls,
-        and the snapshot strip. The canvas itself is a styled stand-in; the real viewer is live three.js/WebGL.
+      <Real3DViewer />
+      <p style={{ fontSize: 12.5, color: 'var(--gb-text-muted)', fontStyle: 'italic', marginTop: 4 }}>
+        The real three.js viewer with a template logo — drag to orbit, scroll to zoom, switch models in the strip.
+        It’s the same component the Image Viewer, catalog customizer, and proposal renders use.
       </p>
 
       <h2 className="sec">The controls around the canvas</h2>
