@@ -738,7 +738,15 @@ function StatsStrip({ steps, campaign, selectedId, onClearSelection, dirty, onSa
 }
 
 /* ── Top bar ── */
-function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, dirty, audienceCount, onRun, onClose, dryRun, onDryRunChange }) {
+/* Compact money for the audience-value chip ($12.3k / $1.2M). */
+function fmtMoney(n) {
+  const v = Number(n) || 0;
+  if (v >= 1e6) return `$${(v / 1e6).toFixed(v >= 1e7 ? 0 : 1)}M`;
+  if (v >= 1e3) return `$${(v / 1e3).toFixed(v >= 1e4 ? 0 : 1)}k`;
+  return `$${Math.round(v)}`;
+}
+
+function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, dirty, audienceCount, audienceValue, onRun, onClose, dryRun, onDryRunChange }) {
   return (
     <div style={{ padding: '12px 22px', background: 'var(--gb-surface-1)', borderBottom: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
@@ -756,6 +764,17 @@ function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, di
           <span style={{ fontSize: 8.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Audience</span>
           <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)' }}>{audienceCount}</span>
         </div>
+        {/* Total audience value — summed handed-off revenue. Hidden when the
+            selection carried no value (e.g. a Task List launch ⇒ $0). */}
+        {audienceValue > 0 && (
+          <>
+            <div style={{ width: 1, height: 20, background: 'var(--gb-border-default)' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
+              <span style={{ fontSize: 8.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--gb-text-muted)' }}>Value</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--gb-success-fg)', fontFamily: 'var(--gb-font-mono)' }}>{fmtMoney(audienceValue)}</span>
+            </div>
+          </>
+        )}
       </div>
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: 3, background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>
         <IconBtn size="sm" variant="ghost" icon={<I.rewind />} onClick={onSimReset} />
@@ -879,6 +898,7 @@ function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit
     return c;
   }, [rows, audience]);
   const total = audience.length;
+  const audValue = useMemo(() => audience.reduce((s, c) => s + (Number(c.value) || 0), 0), [audience]);
   const finished = counts.sent + counts.stopped + counts.skipped + counts.failed;
   const pct = total > 0 ? (finished / total) * 100 : 0;
 
@@ -906,6 +926,7 @@ function AudienceRunView({ campaign, audience, mainCount, runner, dryRun, onExit
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginLeft: 18, paddingLeft: 18, borderLeft: '1px solid var(--gb-border-default)' }}>
           <Tally label="Audience" value={total} />
+          {audValue > 0 && <Tally label="Value" value={fmtMoney(audValue)} tone="var(--gb-success-fg)" />}
           <Tally label="Running" value={counts.sending} tone="var(--gb-brand-label)" />
           <Tally label="Sent" value={counts.sent} tone="var(--gb-success-fg)" />
           <Tally label="Stopped" value={counts.stopped} tone="var(--gb-warning-fg)" />
@@ -1087,6 +1108,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
   };
 
   const mainCount = steps.filter((s) => !s.parentId).length;
+  const audienceValue = useMemo(() => contacts.reduce((s, c) => s + (Number(c.value) || 0), 0), [contacts]);
 
   return (
     <div style={{ position: 'fixed', inset: 0, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', zIndex: 'var(--gb-z-max)' }}>
@@ -1097,7 +1119,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
           on top of whatever the modal scaler is set to. */}
       <ModalShell width={1280} height={760} style={{ maxWidth: 'calc(94vw / 1.2)', maxHeight: 'calc(90vh / 1.2)', zoom: 1.2, color: 'var(--gb-text-secondary)' }}>
         <TopBar campaign={campaign} onChange={patchCampaign} sim={sim} onSimStart={startSim} onSimStop={stopSim} onSimReset={resetSim}
-          dirty={dirty} audienceCount={contacts.length} onRun={startRun} onClose={onClose}
+          dirty={dirty} audienceCount={contacts.length} audienceValue={audienceValue} onRun={startRun} onClose={onClose}
           dryRun={dryRun} onDryRunChange={setDryRun} />
         {runMode ? (
           <AudienceRunView

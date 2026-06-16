@@ -813,6 +813,10 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
       contactId:   t.id,
       contactName: t.contact || '',
       contactUrl:  t.contactUrl || (useMock ? `mock://contact/${t.id}` : ''),
+      // Carry a value so the Campaign Manager's audience total + "Highest
+      // value" ordering work from a task selection too. Task rows have no
+      // revenue field, so this is 0 unless one rides along.
+      value:       Number(t.value ?? t.revenue) || 0,
     })), [visibleTasks, selected, useMock]);
 
   return (
