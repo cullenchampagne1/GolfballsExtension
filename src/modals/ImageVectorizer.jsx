@@ -375,7 +375,7 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
                 <img
                   src={wovenUrl}
                   alt="embroidery preview"
-                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', filter: 'url(#emb-raise)', opacity: tracing ? 0.4 : 1 }}
+                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', opacity: tracing ? 0.4 : 1 }}
                 />
               )}
               {fx !== 'woven' && svg && !traceErr && (
@@ -594,48 +594,56 @@ function buildEmbroidery(img, doRemoveBg, bgTol, opts = {}) {
   const D = distanceTransform(mask, w, h);
   const { lab, angle } = components(mask, w, h);
   const PI2 = Math.PI * 2;
-  const ribSp = Math.max(1.6, w / (120 + density * 22));   // higher density → thinner rows
-  const strandSp = Math.max(1.2, w / 470);                 // floss-strand frequency
+  const ribSp = Math.max(2.0, w / (120 + density * 22));   // higher density → thinner rows
   const borderW = Math.max(0, Math.round(w / 110 * (border / 5)));
-  const lightRad = light * Math.PI / 180;
   const fallback = -52 * Math.PI / 180;
   const sA = 0.6 + strand;                                 // strand-driven warp/fiber strength
+  const col = d.slice();                                   // original colors (lighting reads these)
+  // ── pass A: HEIGHT FIELD (puffed patch + raised border + warped thread
+  //    cylinders + fiber roughness). Rg records the thread cross-section for
+  //    the see-through pass. ──
+  const Hf = new Float32Array(w * h), Rg = new Float32Array(w * h);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const i = y * w + x, o = i * 4; if (d[o + 3] === 0) continue;
+    const i = y * w + x; if (!mask[i]) continue;
     const inBorder = borderW > 0 && D[i] <= borderW;
     let phi;
-    if (inBorder) {                                  // border column runs ALONG the contour
+    if (inBorder) {
       const gx = D[i + (x < w - 1 ? 1 : 0)] - D[i - (x > 0 ? 1 : 0)];
       const gy = D[i + (y < h - 1 ? w : 0)] - D[i - (y > 0 ? w : 0)];
       phi = Math.atan2(gy, gx) + Math.PI / 2;
-    } else { phi = angle[lab[i]] || fallback; }      // fill: straight per-component direction
+    } else { phi = angle[lab[i]] || fallback; }
     const cphi = Math.cos(phi), sphi = Math.sin(phi);
-    const pA = -x * sphi + y * cphi;                 // along the rows (thread separation axis)
-    const pT = x * cphi + y * sphi;                  // along each thread (strand axis)
-    // DOMAIN WARP — low-freq value noise wobbles the rows so threads aren't
-    // dead-straight (two octaves); a second warp jitters along the thread.
-    const wob = (vnoise(pT * 0.035 + 11, pA * 0.05 + 5) - 0.5) * ribSp * 1.1 * sA
-              + (vnoise(pT * 0.18 + 3, pA * 0.10) - 0.5) * ribSp * 0.5 * sA;
+    const pA = -x * sphi + y * cphi, pT = x * cphi + y * sphi;
+    const wob = (vnoise(pT * 0.035 + 11, pA * 0.05 + 5) - 0.5) * ribSp * 1.0 * sA
+              + (vnoise(pT * 0.18 + 3, pA * 0.10) - 0.5) * ribSp * 0.45 * sA;
     const pAw = pA + wob;
-    const pTw = pT + (vnoise(pA * 0.09, pT * 0.03) - 0.5) * 5 * sA;
-    const thick = 0.72 + 0.6 * vnoise(pT * 0.05 + 21, pA * 0.16);   // thread thickness varies
+    const thick = 0.7 + 0.6 * vnoise(pT * 0.05 + 21, pA * 0.16);
     const ridge = Math.cos(pAw / ribSp * PI2);
-    const crest = Math.max(0, ridge);
-    const strandWave = Math.cos((pTw / strandSp + (vnoise(pT * 0.3, pA * 0.3) - 0.5) * 0.8) * PI2);
-    // FIBER noise stretched ALONG the thread → stray little strands off the rows
-    const fiber = vnoise(pAw * 0.9, pTw * 0.22) * 0.6 + vnoise(pAw * 2.1, pTw * 0.5) * 0.4;
-    const sheen = 0.5 + 0.5 * Math.cos(2 * (phi - lightRad));   // strokes catch light by angle
-    const base = inBorder ? 1.14 : 1.04;
-    const gain = base + 0.22 * crest * thick + 0.24 * sheen + 0.06 * (fiber - 0.5);
-    const add = (inBorder ? 22 : 13) * crest * thick
-              + strand * 6 * Math.max(0, strandWave)
-              + strand * 16 * Math.max(0, fiber - 0.72) * crest;   // bright stray strands
-    d[o] = Math.max(0, Math.min(255, d[o] * gain + add));
-    d[o + 1] = Math.max(0, Math.min(255, d[o + 1] * gain + add));
-    d[o + 2] = Math.max(0, Math.min(255, d[o + 2] * gain + add));
-    // SEE-THROUGH: irregular grooves (modulated by fiber) drop alpha → fabric peeks.
-    const groove = Math.max(0, -ridge) * (0.7 + 0.6 * fiber);
-    if (!inBorder && groove > 0.6) d[o + 3] = Math.round(255 * (1 - seeThrough * Math.min(1, (groove - 0.6) / 0.4)));
+    const fiber = vnoise(pAw * 0.9, pT * 0.22) * 0.6 + vnoise(pAw * 2.1, pT * 0.5) * 0.4;
+    const mound = Math.min(1, D[i] / (borderW + 2));       // patch puffs up from the edge
+    Hf[i] = 1.5 * mound + 0.9 * thick * (ridge * 0.5 + 0.5) + (inBorder ? 1.0 : 0) + 0.4 * (fiber - 0.5);
+    Rg[i] = ridge;
+  }
+  // ── pass B: NORMALS from the height field → Lambert(wrap) + Blinn-Phong, so
+  //    threads are lit raised cylinders (real relief), not flat hatching. ──
+  const az = light * Math.PI / 180, el = 42 * Math.PI / 180;
+  const Lx = Math.cos(az) * Math.cos(el), Ly = Math.sin(az) * Math.cos(el), Lz = Math.sin(el);
+  let Hx = Lx, Hy = Ly, Hz = Lz + 1; const hl = Math.hypot(Hx, Hy, Hz); Hx /= hl; Hy /= hl; Hz /= hl;
+  const NZ = 2.4, amb = 0.82, kd = 0.32, ks = 0.6, shin = 16, lift = 1.28;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x, o = i * 4; if (d[o + 3] === 0) continue;
+    const hL = mask[i - 1] ? Hf[i - 1] : Hf[i], hR = mask[i + 1] ? Hf[i + 1] : Hf[i];
+    const hU = mask[i - w] ? Hf[i - w] : Hf[i], hD = mask[i + w] ? Hf[i + w] : Hf[i];
+    let nx = hL - hR, ny = hU - hD, nz = NZ; const nl = Math.hypot(nx, ny, nz); nx /= nl; ny /= nl; nz /= nl;
+    const diff = (nx * Lx + ny * Ly + nz * Lz) * 0.5 + 0.5;     // half-Lambert — shadows never crush to black
+    const sp = Math.pow(Math.max(0, nx * Hx + ny * Hy + nz * Hz), shin);
+    const sh = amb + kd * diff, spc = ks * sp * 255;
+    d[o] = Math.max(0, Math.min(255, col[o] * lift * sh + spc));
+    d[o + 1] = Math.max(0, Math.min(255, col[o + 1] * lift * sh + spc));
+    d[o + 2] = Math.max(0, Math.min(255, col[o + 2] * lift * sh + spc));
+    // SEE-THROUGH: deepest thread valleys (not in border) drop alpha → fabric peeks.
+    const v = Math.max(0, -Rg[i]);
+    if (!(borderW > 0 && D[i] <= borderW) && v > 0.55) d[o + 3] = Math.round(255 * (1 - seeThrough * 0.6 * (v - 0.55) / 0.45));
   }
   ctx.putImageData(id, 0, 0);
   return c.toDataURL('image/png');
