@@ -17,6 +17,7 @@ import { runCampaign } from '../lib/campaign/engine.js';
 import { parseCampaignBlob, importCampaigns } from '../lib/campaign/campaignImport.js';
 import { readEmailConfig } from '../lib/emailSender.js';
 import { pickFromAddress } from '../lib/sender.js';
+import { useDevSettings } from '../lib/devSettings.js';
 
 /* ───────────────────────────────────────────────────────────────
    CampaignManager — full-page campaign editor.
@@ -1069,6 +1070,10 @@ function ImportCampaignsModal({ onClose, onDone }) {
 export function CampaignManager({ onClose, contacts = [] }) {
   ensureCampaignKeyframes();
   const toast = useToast();
+  // Modal zoom is a dev setting (mirrors the Gifting Catalog), live-updating
+  // from Settings without a reload. Falls back to the long-standing 1.2.
+  const [devSettings] = useDevSettings();
+  const scale = Number(devSettings['campaignManager.scale']) || 1.2;
   const [library, setLibrary] = useState([]);
   const [campaign, setCampaign] = useState(() => newCampaign('Untitled campaign'));
   const [selectedId, setSelectedId] = useState(null);
@@ -1218,7 +1223,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
           vw/vh) so the modal-scale `zoom` on the mount host scales it
           cleanly; the inline 1.2 zoom is the default size bump and composes
           on top of whatever the modal scaler is set to. */}
-      <ModalShell width={1280} height={760} style={{ maxWidth: 'calc(94vw / 1.2)', maxHeight: 'calc(90vh / 1.2)', zoom: 1.2, color: 'var(--gb-text-secondary)' }}>
+      <ModalShell width={1280} height={760} style={{ maxWidth: `calc(94vw / ${scale})`, maxHeight: `calc(90vh / ${scale})`, zoom: scale, color: 'var(--gb-text-secondary)' }}>
         <TopBar campaign={campaign} onChange={patchCampaign} sim={sim} onSimStart={startSim} onSimStop={stopSim} onSimReset={resetSim}
           dirty={dirty} audienceCount={contacts.length} audienceValue={audienceValue} onRun={startRun} onClose={onClose}
           dryRun={dryRun} onDryRunChange={setDryRun} />

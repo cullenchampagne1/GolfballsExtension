@@ -326,6 +326,17 @@ export const DEV_SETTINGS = [
     unit:    '×',
   },
   {
+    key:     'campaignManager.scale',
+    label:   'Campaign Manager: zoom scale',
+    desc:    'Magnification of the Campaign Manager modal (1 = 100%). Default 1.2; lower it if the modal overflows on a smaller screen.',
+    type:    'number',
+    default: 1.2,
+    min:     1,
+    max:     2,
+    step:    0.05,
+    unit:    '×',
+  },
+  {
     key:     'giftCatalog.previewScale',
     label:   'Gifting Catalog: live preview ball scale',
     desc:    'Initial zoom of the ball in the catalog customization preview (separate from the Image Viewer). Wheel zoom still overrides during use.',
