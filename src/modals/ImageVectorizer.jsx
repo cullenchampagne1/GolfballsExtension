@@ -370,7 +370,7 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingBottom: 2, borderBottom: '1px solid var(--gb-border-subtle)' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--gb-text-primary)' }}>Remove background</span>
-                <span style={{ fontSize: 9.5, color: 'var(--gb-text-tertiary)' }}>Flood-fill the field connected to the edges to transparent before tracing</span>
+                <span style={{ fontSize: 9.5, color: 'var(--gb-text-tertiary)' }}>Key out the corner/background color everywhere (incl. inside letters) before tracing</span>
               </div>
               <Switch on={removeBg} onChange={setRemoveBg} />
             </div>
@@ -440,42 +440,32 @@ function fitSvg(svgString) {
   );
 }
 
-/* Edge flood-fill background knockout. Samples the background color from
-   the four corners, then floods inward from every border pixel, setting
-   alpha→0 for connected pixels within `tol` (rectilinear RGB) of that color.
-   Flooding from the edges (rather than a global color match) preserves
-   background-colored regions ENCLOSED by the art — e.g. the white counter
-   inside a 'B' or 'O' — so letters don't fall apart. Mutates idata. */
+/* Background knockout via color key. Samples the background color from the
+   four corners, then removes EVERY pixel within `tol` (rectilinear RGB) of
+   it — globally, not just the edge-connected field. Going global is what
+   drops background-colored regions ENCLOSED by the art (the white counter
+   inside a 'B'/'O', the gaps between lotus petals); an edge flood-fill left
+   those behind, so they showed as a white fill in color mode and filled in
+   solid black in silhouette mode.
+
+   RGB is zeroed along with alpha (not alpha alone): ImageTracer's k-means
+   assigns every pixel — transparent included — by rectilinear RGBA distance,
+   and the transparent palette seed is (0,0,0,0). Leaving RGB at the bg color
+   (e.g. white) would put the huge transparent field closer to the COLOR
+   seeds than the transparent one, flooding into them — collapsing distinct
+   hues and painting a full-canvas background layer (the "traces blank" bug).
+   Mutates idata. */
 function removeBackground(idata, tol) {
-  const w = idata.width, h = idata.height, d = idata.data;
+  const d = idata.data;
+  const w = idata.width, h = idata.height;
   const corners = [0, w - 1, (h - 1) * w, (h - 1) * w + (w - 1)];
   let br = 0, bg = 0, bb = 0;
   for (const p of corners) { const o = p * 4; br += d[o]; bg += d[o + 1]; bb += d[o + 2]; }
   br = Math.round(br / 4); bg = Math.round(bg / 4); bb = Math.round(bb / 4);
-  const visited = new Uint8Array(w * h);
-  const stack = [];
-  for (let x = 0; x < w; x++) { stack.push(x, (h - 1) * w + x); }
-  for (let y = 0; y < h; y++) { stack.push(y * w, y * w + (w - 1)); }
-  while (stack.length) {
-    const p = stack.pop();
-    if (visited[p]) continue;
-    visited[p] = 1;
-    const o = p * 4;
-    const dist = Math.abs(d[o] - br) + Math.abs(d[o + 1] - bg) + Math.abs(d[o + 2] - bb);
-    if (dist > tol) continue;          // hit the art — stop flooding here
-    // Knock the pixel out AND zero its RGB. Alpha alone isn't enough:
-    // ImageTracer's k-means assigns every pixel (transparent included) by
-    // rectilinear RGBA distance, and the transparent palette seed is
-    // (0,0,0,0). If we left the RGB at the background color (e.g. white),
-    // the huge transparent field would be closer to the COLOR seeds than to
-    // the transparent one, flooding into them — collapsing distinct hues and
-    // painting a full-canvas background layer (the "traces blank" bug).
-    d[o] = 0; d[o + 1] = 0; d[o + 2] = 0; d[o + 3] = 0;
-    const x = p % w, y = (p / w) | 0;
-    if (x > 0) stack.push(p - 1);
-    if (x < w - 1) stack.push(p + 1);
-    if (y > 0) stack.push(p - w);
-    if (y < h - 1) stack.push(p + w);
+  for (let i = 0; i < d.length; i += 4) {
+    if (Math.abs(d[i] - br) + Math.abs(d[i + 1] - bg) + Math.abs(d[i + 2] - bb) <= tol) {
+      d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = 0;
+    }
   }
 }
 
