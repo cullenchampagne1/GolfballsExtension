@@ -1,7 +1,15 @@
 import React, { useState } from 'react';
 import { I, Icon, Tag, Btn, IconBtn, Dropdown, Slider, CategorizeRail } from '../../ui/index.js';
 import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
+import { LiveModal } from '../lib/live-modal.jsx';
+import { ImagePreview } from '../../modals/ImagePreview.jsx';
 import { categorySections, CASE_CATEGORIES } from '../../lib/caseMatch.js';
+
+/* A template logo (data URL) so the real Image Viewer renders exactly like
+   production without a network/CORS fetch. */
+const TEMPLATE_LOGO = 'data:image/svg+xml;utf8,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect width="512" height="512" fill="#ffffff"/><circle cx="256" cy="256" r="150" fill="none" stroke="#0b4f2c" stroke-width="22"/><text x="256" y="232" font-family="Georgia, serif" font-size="120" font-weight="700" text-anchor="middle" fill="#0b4f2c">P</text><text x="256" y="330" font-family="Arial, sans-serif" font-size="44" letter-spacing="6" text-anchor="middle" fill="#0b4f2c">PEBBLE</text></svg>'
+);
 
 /* ───────────────────────────────────────────────────────────────
    viewers.jsx — On-page Helpers → the three "look at this" modals
@@ -579,7 +587,9 @@ export function ImageViewerPage() {
         straight onto the surface.
       </p>
 
-      <ImageSnippet />
+      <LiveModal w={900} h={620} frameLabel="order · image viewer"
+        note="The real Image Viewer on a template logo — exactly as it appears in production. Drag to pan, scroll to zoom, and try the Align / 3D / Mockup toggles. It’s live."
+        render={(box, onClosed) => <ImagePreview url={TEMPLATE_LOGO} onClosed={onClosed} />} />
 
       <h2 className="sec">Walk the surface, control by control</h2>
       <p>The preview floats its controls in the four corners so the image stays unobstructed. Every one is reproduced live below.</p>
