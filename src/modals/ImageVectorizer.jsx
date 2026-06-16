@@ -512,6 +512,16 @@ function fitSvg(svgString) {
   );
 }
 
+/* Cheap deterministic value noise (hash-based, bilinear-smoothed) for the
+   thread domain-warp + fiber detail. Deterministic → stable across re-renders. */
+function nhash(x, y) { let h = (x | 0) * 374761393 + (y | 0) * 668265263; h = (h ^ (h >> 13)); h = Math.imul(h, 1274126177); return ((h ^ (h >> 16)) >>> 0) / 4294967295; }
+function vnoise(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
+  const a = nhash(xi, yi), b = nhash(xi + 1, yi), c = nhash(xi, yi + 1), e = nhash(xi + 1, yi + 1);
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + e) * u * v;
+}
+
 /* Connected-component labeling of a binary mask + each component's satin fill
    angle (perpendicular to its principal axis, via PCA moments). One uniform
    direction per shape keeps the fill straight (no swirly per-pixel "curls"). */
@@ -585,10 +595,11 @@ function buildEmbroidery(img, doRemoveBg, bgTol, opts = {}) {
   const { lab, angle } = components(mask, w, h);
   const PI2 = Math.PI * 2;
   const ribSp = Math.max(1.6, w / (120 + density * 22));   // higher density → thinner rows
-  const strandSp = Math.max(1.2, w / 460);                 // floss-strand frequency
+  const strandSp = Math.max(1.2, w / 470);                 // floss-strand frequency
   const borderW = Math.max(0, Math.round(w / 110 * (border / 5)));
   const lightRad = light * Math.PI / 180;
   const fallback = -52 * Math.PI / 180;
+  const sA = 0.6 + strand;                                 // strand-driven warp/fiber strength
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const i = y * w + x, o = i * 4; if (d[o + 3] === 0) continue;
     const inBorder = borderW > 0 && D[i] <= borderW;
@@ -601,19 +612,30 @@ function buildEmbroidery(img, doRemoveBg, bgTol, opts = {}) {
     const cphi = Math.cos(phi), sphi = Math.sin(phi);
     const pA = -x * sphi + y * cphi;                 // along the rows (thread separation axis)
     const pT = x * cphi + y * sphi;                  // along each thread (strand axis)
-    const ridge = Math.cos(pA / ribSp * PI2);        // -1..1 across the thin rows
-    const strandWave = Math.cos(pT / strandSp * PI2);// fine floss strands along the thread
+    // DOMAIN WARP — low-freq value noise wobbles the rows so threads aren't
+    // dead-straight (two octaves); a second warp jitters along the thread.
+    const wob = (vnoise(pT * 0.035 + 11, pA * 0.05 + 5) - 0.5) * ribSp * 1.1 * sA
+              + (vnoise(pT * 0.18 + 3, pA * 0.10) - 0.5) * ribSp * 0.5 * sA;
+    const pAw = pA + wob;
+    const pTw = pT + (vnoise(pA * 0.09, pT * 0.03) - 0.5) * 5 * sA;
+    const thick = 0.72 + 0.6 * vnoise(pT * 0.05 + 21, pA * 0.16);   // thread thickness varies
+    const ridge = Math.cos(pAw / ribSp * PI2);
     const crest = Math.max(0, ridge);
+    const strandWave = Math.cos((pTw / strandSp + (vnoise(pT * 0.3, pA * 0.3) - 0.5) * 0.8) * PI2);
+    // FIBER noise stretched ALONG the thread → stray little strands off the rows
+    const fiber = vnoise(pAw * 0.9, pTw * 0.22) * 0.6 + vnoise(pAw * 2.1, pTw * 0.5) * 0.4;
     const sheen = 0.5 + 0.5 * Math.cos(2 * (phi - lightRad));   // strokes catch light by angle
-    const base = inBorder ? 1.14 : 1.05;
-    const gain = base + 0.22 * crest + 0.26 * sheen + strand * 0.07 * strandWave;
-    const add = (inBorder ? 22 : 13) * crest + strand * 6 * Math.max(0, strandWave);
+    const base = inBorder ? 1.14 : 1.04;
+    const gain = base + 0.22 * crest * thick + 0.24 * sheen + 0.06 * (fiber - 0.5);
+    const add = (inBorder ? 22 : 13) * crest * thick
+              + strand * 6 * Math.max(0, strandWave)
+              + strand * 16 * Math.max(0, fiber - 0.72) * crest;   // bright stray strands
     d[o] = Math.max(0, Math.min(255, d[o] * gain + add));
     d[o + 1] = Math.max(0, Math.min(255, d[o + 1] * gain + add));
     d[o + 2] = Math.max(0, Math.min(255, d[o + 2] * gain + add));
-    // SEE-THROUGH: drop alpha in the deepest grooves so the fabric shows.
-    const groove = Math.max(0, -ridge);
-    if (!inBorder && groove > 0.6) d[o + 3] = Math.round(255 * (1 - seeThrough * (groove - 0.6) / 0.4));
+    // SEE-THROUGH: irregular grooves (modulated by fiber) drop alpha → fabric peeks.
+    const groove = Math.max(0, -ridge) * (0.7 + 0.6 * fiber);
+    if (!inBorder && groove > 0.6) d[o + 3] = Math.round(255 * (1 - seeThrough * Math.min(1, (groove - 0.6) / 0.4)));
   }
   ctx.putImageData(id, 0, 0);
   return c.toDataURL('image/png');
