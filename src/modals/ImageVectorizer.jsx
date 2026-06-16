@@ -148,11 +148,16 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
           for (let i = 0; i < d.length; i += 4) {
             const a = d[i + 3];
             const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            // Shape = opaque black; everything else = fully-zeroed transparent
+            // (RGB zeroed too, so it maps to the transparent palette entry
+            // rather than the black one — otherwise the whole canvas fills black).
             if (a > 10 && lum < threshold) { d[i] = d[i + 1] = d[i + 2] = 0; d[i + 3] = 255; }
-            else { d[i + 3] = 0; }
+            else { d[i] = d[i + 1] = d[i + 2] = 0; d[i + 3] = 0; }
           }
           options = {
-            numberofcolors: 2, colorsampling: 0, pal: [{ r: 0, g: 0, b: 0, a: 255 }],
+            colorsampling: 0, colorquantcycles: 1,
+            // Two entries: transparent (background) + opaque black (shape).
+            pal: [{ r: 0, g: 0, b: 0, a: 0 }, { r: 0, g: 0, b: 0, a: 255 }],
             ltres: smooth, qtres: smooth, pathomit: despeckle, blurradius: blur, blurdelta: 20,
             strokewidth: 0, linefilter: true, rightangleenhance: false, scale: 1 / (scale || 1),
           };
@@ -436,7 +441,14 @@ function removeBackground(idata, tol) {
     const o = p * 4;
     const dist = Math.abs(d[o] - br) + Math.abs(d[o + 1] - bg) + Math.abs(d[o + 2] - bb);
     if (dist > tol) continue;          // hit the art — stop flooding here
-    d[o + 3] = 0;                       // knock the background pixel out
+    // Knock the pixel out AND zero its RGB. Alpha alone isn't enough:
+    // ImageTracer's k-means assigns every pixel (transparent included) by
+    // rectilinear RGBA distance, and the transparent palette seed is
+    // (0,0,0,0). If we left the RGB at the background color (e.g. white),
+    // the huge transparent field would be closer to the COLOR seeds than to
+    // the transparent one, flooding into them — collapsing distinct hues and
+    // painting a full-canvas background layer (the "traces blank" bug).
+    d[o] = 0; d[o + 1] = 0; d[o + 2] = 0; d[o + 3] = 0;
     const x = p % w, y = (p / w) | 0;
     if (x > 0) stack.push(p - 1);
     if (x < w - 1) stack.push(p + 1);
