@@ -1074,6 +1074,10 @@ export function CampaignManager({ onClose, contacts = [] }) {
   // from Settings without a reload. Falls back to the long-standing 1.2.
   const [devSettings] = useDevSettings();
   const scale = Number(devSettings['campaignManager.scale']) || 1.2;
+  // Drive an exit animation: requestClose flips `open` false, the
+  // AnimatePresence plays the fade/scale-out, then onExitComplete unmounts.
+  const [open, setOpen] = useState(true);
+  const requestClose = () => setOpen(false);
   const [library, setLibrary] = useState([]);
   const [campaign, setCampaign] = useState(() => newCampaign('Untitled campaign'));
   const [selectedId, setSelectedId] = useState(null);
@@ -1217,15 +1221,22 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const audienceValue = useMemo(() => contacts.reduce((s, c) => s + (Number(c.value) || 0), 0), [contacts]);
 
   return (
-    <div style={{ position: 'fixed', inset: 0, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', zIndex: 'var(--gb-z-max)' }}>
+    <AnimatePresence onExitComplete={onClose}>
+    {open && (
+    <motion.div key="cm-backdrop"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}
+      style={{ position: 'fixed', inset: 0, padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)', zIndex: 'var(--gb-z-max)' }}>
       {/* The shared ModalShell (non-draggable card) keeps chrome + the
           bounce-in consistent with every other modal. Fixed-pixel size (not
           vw/vh) so the modal-scale `zoom` on the mount host scales it
           cleanly; the inline 1.2 zoom is the default size bump and composes
-          on top of whatever the modal scaler is set to. */}
+          on top of whatever the modal scaler is set to. The motion wrapper
+          (initial=false ⇒ no entrance, ModalShell owns the bounce-in) plays
+          the scale/fade exit on close. */}
+      <motion.div initial={false} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }} style={{ display: 'flex' }}>
       <ModalShell width={1280} height={760} style={{ maxWidth: `calc(94vw / ${scale})`, maxHeight: `calc(90vh / ${scale})`, zoom: scale, color: 'var(--gb-text-secondary)' }}>
         <TopBar campaign={campaign} onChange={patchCampaign} sim={sim} onSimStart={startSim} onSimStop={stopSim} onSimReset={resetSim}
-          dirty={dirty} audienceCount={contacts.length} audienceValue={audienceValue} onRun={startRun} onClose={onClose}
+          dirty={dirty} audienceCount={contacts.length} audienceValue={audienceValue} onRun={startRun} onClose={requestClose}
           dryRun={dryRun} onDryRunChange={setDryRun} />
         {runMode ? (
           <AudienceRunView
@@ -1253,8 +1264,11 @@ export function CampaignManager({ onClose, contacts = [] }) {
         </>
         )}
       </ModalShell>
+      </motion.div>
       {importOpen && <ImportCampaignsModal onClose={() => setImportOpen(false)} onDone={onImported} />}
-    </div>
+    </motion.div>
+    )}
+    </AnimatePresence>
   );
 }
 
