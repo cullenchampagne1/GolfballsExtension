@@ -51,6 +51,18 @@ const VIEW_OPTIONS = [
 
 const MAX_TRACE_DIM = 700;   // downscale longest edge before tracing (perf)
 
+// Dark twill-fabric backdrop for the woven (embroidery) treatment — diagonal
+// weave lines + a faint cross-grain, so the satin-stitch logo reads as sewn
+// onto a cap/garment rather than floating on the graph-paper grid.
+const WOVEN_FABRIC = {
+  backgroundColor: '#272a30',
+  backgroundImage: [
+    'repeating-linear-gradient(48deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 5px)',
+    'repeating-linear-gradient(48deg, rgba(0,0,0,0.30) 0 2px, transparent 2px 6px)',
+    'repeating-linear-gradient(-42deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 7px)',
+  ].join(', '),
+};
+
 export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
   const toast = useToast();
 
@@ -218,7 +230,9 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
 
-  const fxStyle = fx === 'flat' ? undefined : { filter: `url(#fx-${fx})` };
+  // Woven renders as generated stitch geometry (stitchify) with its own inline
+  // bevel filter; engrave/emboss stay as CSS post-filters; flat is the bare trace.
+  const fxStyle = (fx === 'flat' || fx === 'woven') ? undefined : { filter: `url(#fx-${fx})` };
   const hasImage = !!src;
 
   return (
@@ -230,17 +244,17 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
           the preview references them via CSS filter:url(#fx-…). */}
       <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
         <defs>
-          {/* Woven — turbulence-driven displacement frays the edges into a
-              threaded look, with a soft inner relief. */}
-          <filter id="fx-woven">
-            <feTurbulence type="turbulence" baseFrequency="0.55 0.55" numOctaves="2" seed="7" result="n" />
-            <feDisplacementMap in="SourceGraphic" in2="n" scale="4" xChannelSelector="R" yChannelSelector="G" result="d" />
-            <feGaussianBlur in="d" stdDeviation="0.5" result="b" />
-            <feSpecularLighting in="b" surfaceScale="2" specularConstant="0.5" specularExponent="10" lightingColor="#ffffff" result="s">
-              <feDistantLight azimuth="235" elevation="55" />
+          {/* Woven — embroidery is rendered as real stitch geometry by
+              stitchify() (parallel satin/tatami thread lines per region). This
+              filter only adds the raised, puffed-thread bevel on top of those
+              stitches; the stitched <svg> references it via filter=url(#emb-raise). */}
+          <filter id="emb-raise" x="-8%" y="-8%" width="116%" height="116%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="1.1" result="b" />
+            <feSpecularLighting in="b" surfaceScale="1.6" specularConstant="0.5" specularExponent="18" lightingColor="#ffffff" result="s">
+              <feDistantLight azimuth="235" elevation="60" />
             </feSpecularLighting>
-            <feComposite in="s" in2="d" operator="in" result="sl" />
-            <feComposite in="d" in2="sl" operator="arithmetic" k1="0" k2="1" k3="0.5" k4="0" />
+            <feComposite in="s" in2="SourceAlpha" operator="in" result="sc" />
+            <feComposite in="SourceGraphic" in2="sc" operator="arithmetic" k1="0" k2="1" k3="0.55" k4="0" />
           </filter>
           {/* Engrave — convolution carves shadowed grooves (light top-left,
               dark bottom-right is inverted vs emboss). */}
@@ -318,6 +332,8 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
               position: view === 'split' ? 'absolute' : 'relative',
               inset: view === 'split' ? '0 0 0 50%' : 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12,
+              // Embroidery sits on dark twill fabric; other treatments keep the grid.
+              ...(fx === 'woven' ? WOVEN_FABRIC : null),
             }}>
               {tracing && (
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 12, zIndex: 2 }}>
@@ -330,9 +346,9 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
               {svg && !traceErr && (
                 <div
                   style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: tracing ? 0.4 : 1, ...fxStyle }}
-                  // ImageTracer returns a complete <svg> with no viewBox;
-                  // fitSvg adds one so it scales (not clips) into the frame.
-                  dangerouslySetInnerHTML={{ __html: fitSvg(svg) }}
+                  // Woven → generated stitch geometry; otherwise the fitted
+                  // trace (fitSvg adds a viewBox so it scales, not clips).
+                  dangerouslySetInnerHTML={{ __html: fx === 'woven' ? stitchify(svg) : fitSvg(svg) }}
                 />
               )}
             </div>
@@ -440,6 +456,57 @@ function fitSvg(svgString) {
   );
 }
 
+/* ── embroidery (woven) via real stitch geometry ──────────────────────────
+   PEmbroider/Photoshop approach: don't fake thread with a post-filter — GENERATE
+   it. Each traced color region is filled with parallel satin/tatami stitch
+   lines (clipped to the region, dashed into individual stitches, two-tone for
+   sheen) plus a running-stitch outline; a light raised bevel (#emb-raise) gives
+   the puffed-thread look. Returns a self-contained <svg> string. */
+const STITCH = { angleDeg: -52, spacing: 3.0, width: 2.0, dash: '7 1.6' };
+function shadeRgb(rgb, f) {
+  const m = rgb.match(/\d+/g).map(Number);
+  return `rgb(${m.map((v) => Math.max(0, Math.min(255, Math.round(v * f)))).join(',')})`;
+}
+function pathBBox(d) {
+  const nums = d.match(/-?[\d.]+/g)?.map(Number) || [];
+  let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
+  for (let i = 0; i + 1 < nums.length; i += 2) {
+    const x = nums[i], y = nums[i + 1];
+    if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
+  }
+  return { minX, minY, maxX, maxY };
+}
+function satinFill(d, fill, idx) {
+  const b = pathBBox(d);
+  const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
+  const ext = Math.hypot(b.maxX - b.minX, b.maxY - b.minY) / 2 + 4;
+  const ang = (STITCH.angleDeg + (idx % 2 ? 8 : -6)) * Math.PI / 180;  // slight per-region jitter
+  const dx = Math.cos(ang), dy = Math.sin(ang);     // thread direction
+  const nx = -Math.sin(ang), ny = Math.cos(ang);    // step direction
+  const light = shadeRgb(fill, 1.18), dark = shadeRgb(fill, 0.82);
+  let lines = '', k = 0;
+  for (let s = -ext; s <= ext; s += STITCH.spacing) {
+    const mx = cx + nx * s, my = cy + ny * s;
+    lines += `<line x1="${(mx - dx * ext).toFixed(1)}" y1="${(my - dy * ext).toFixed(1)}" x2="${(mx + dx * ext).toFixed(1)}" y2="${(my + dy * ext).toFixed(1)}" stroke="${k % 2 ? light : dark}"/>`;
+    k++;
+  }
+  return {
+    def: `<clipPath id="cp${idx}"><path d="${d}"/></clipPath>`,
+    body: `<g clip-path="url(#cp${idx})" stroke-width="${STITCH.width}" stroke-linecap="round" stroke-dasharray="${STITCH.dash}">${lines}</g>`
+      + `<path d="${d}" fill="none" stroke="${dark}" stroke-width="1.4" stroke-linejoin="round" opacity="0.85"/>`,
+  };
+}
+function stitchify(tracedSvg) {
+  const m = tracedSvg.match(/<svg[^>]*\bwidth="([\d.]+)"[^>]*\bheight="([\d.]+)"/);
+  const W = m ? m[1] : 600, H = m ? m[2] : 600;
+  const paths = [...tracedSvg.matchAll(/<path fill="(rgb\([^)]+\))"[^>]*opacity="([\d.]+)"[^>]*d="([^"]+)"/g)]
+    .map((mm) => ({ fill: mm[1], opacity: +mm[2], d: mm[3] }))
+    .filter((p) => p.opacity > 0.05);
+  let defs = '', body = '';
+  paths.forEach((p, i) => { const seg = satinFill(p.d, p.fill, i); defs += seg.def; body += seg.body; });
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="display:block;max-width:100%;max-height:100%;width:auto;height:auto" filter="url(#emb-raise)"><defs>${defs}</defs>${body}</svg>`;
+}
+
 /* Background knockout via color key. Samples the background color from the
    four corners, then removes EVERY pixel within `tol` (rectilinear RGB) of
    it — globally, not just the edge-connected field. Going global is what
@@ -458,12 +525,20 @@ function fitSvg(svgString) {
 function removeBackground(idata, tol) {
   const d = idata.data;
   const w = idata.width, h = idata.height;
-  const corners = [0, w - 1, (h - 1) * w, (h - 1) * w + (w - 1)];
-  let br = 0, bg = 0, bb = 0;
-  for (const p of corners) { const o = p * 4; br += d[o]; bg += d[o + 1]; bb += d[o + 2]; }
-  br = Math.round(br / 4); bg = Math.round(bg / 4); bb = Math.round(bb / 4);
+  // Sample the background color from the OPAQUE border pixels (not just the 4
+  // corners): a transparent or rounded-badge source has transparent corners,
+  // so corner-only sampling picks the wrong color and leaves an opaque white
+  // field behind. Average the opaque edge pixels instead.
+  let sr = 0, sg = 0, sb = 0, sn = 0;
+  const sample = (p) => { const o = p * 4; if (d[o + 3] > 128) { sr += d[o]; sg += d[o + 1]; sb += d[o + 2]; sn++; } };
+  for (let x = 0; x < w; x++) { sample(x); sample((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { sample(y * w); sample(y * w + (w - 1)); }
   for (let i = 0; i < d.length; i += 4) {
-    if (Math.abs(d[i] - br) + Math.abs(d[i + 1] - bg) + Math.abs(d[i + 2] - bb) <= tol) {
+    // Already-transparent pixels ARE background — normalize their RGB to 0 so
+    // they cluster to the transparent palette seed.
+    if (d[i + 3] < 128) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = 0; continue; }
+    // Otherwise key out anything within tolerance of the sampled bg color.
+    if (sn && Math.abs(d[i] - sr / sn) + Math.abs(d[i + 1] - sg / sn) + Math.abs(d[i + 2] - sb / sn) <= tol) {
       d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = 0;
     }
   }
