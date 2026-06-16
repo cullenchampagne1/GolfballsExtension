@@ -91,6 +91,90 @@ const ImageIcon = (p) => (
   </svg>
 );
 
+/* Eyedropper magnifier loupe. Draws a pixel-doubled crop of the live
+   <img> centered on the hovered source pixel, with a center reticle marking
+   the exact pixel that a click will sample and a hex readout. The crop is
+   drawn straight off the <img> element (imageSmoothing off → crisp blocks),
+   so it stays honest with whatever the sampler reads. Display works even on
+   a CORS-tainted source — only the hex readout (a canvas read-back) is
+   suppressed there. */
+const LOUPE_SIZE = 104;   // loupe diameter (CSS px)
+const LOUPE_SRC  = 13;    // source pixels across the loupe (odd → true center)
+function EyedropperLoupe({ wrapRef, loupe }) {
+  const canvasRef = useRef(null);
+  const { x, y, pxX, pxY, color } = loupe;
+  useEffect(() => {
+    const cv = canvasRef.current;
+    const img = wrapRef.current?.querySelector('img');
+    if (!cv || !img) return;
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = LOUPE_SIZE * dpr;
+    cv.height = LOUPE_SIZE * dpr;
+    const ctx = cv.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    const half = LOUPE_SRC / 2;
+    // Center the crop on the hovered pixel's CENTER (pxX is fractional).
+    ctx.drawImage(
+      img,
+      Math.floor(pxX) + 0.5 - half, Math.floor(pxY) + 0.5 - half, LOUPE_SRC, LOUPE_SRC,
+      0, 0, cv.width, cv.height,
+    );
+  }, [wrapRef, pxX, pxY]);
+
+  // Offset the loupe up-left of the cursor, flipping to stay inside the
+  // wrapper so it never spills past the preview surface.
+  const wrap = wrapRef.current;
+  const wrapW = wrap?.clientWidth || 0;
+  const wrapH = wrap?.clientHeight || 0;
+  const GAP = 18;
+  let left = x - LOUPE_SIZE - GAP;
+  let top  = y - LOUPE_SIZE - GAP;
+  if (left < 4) left = x + GAP;
+  if (top < 4)  top  = y + GAP;
+  left = Math.max(4, Math.min(left, wrapW - LOUPE_SIZE - 4));
+  top  = Math.max(4, Math.min(top,  wrapH - LOUPE_SIZE - 4));
+
+  const hex = color
+    ? '#' + [color.r, color.g, color.b].map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase()
+    : null;
+  const reticle = LOUPE_SIZE / LOUPE_SRC;   // one source pixel, in CSS px
+
+  return (
+    <div
+      data-viewer-ui="true"
+      style={{
+        position: 'absolute', left, top,
+        width: LOUPE_SIZE, height: LOUPE_SIZE,
+        borderRadius: '50%', overflow: 'hidden',
+        boxShadow: '0 0 0 2px var(--gb-surface-modal), 0 0 0 3px rgba(0,0,0,0.35), 0 6px 20px -6px rgba(0,0,0,0.5)',
+        pointerEvents: 'none', zIndex: 30,
+        background: 'var(--gb-surface-canvas)',
+      }}
+    >
+      <canvas ref={canvasRef} style={{ width: LOUPE_SIZE, height: LOUPE_SIZE, display: 'block' }} />
+      {/* center reticle — outlines the exact pixel a click samples */}
+      <div style={{
+        position: 'absolute',
+        left: '50%', top: '50%',
+        width: reticle, height: reticle,
+        transform: 'translate(-50%, -50%)',
+        boxShadow: '0 0 0 1px rgba(0,0,0,0.9), inset 0 0 0 1px rgba(255,255,255,0.9)',
+        pointerEvents: 'none',
+      }} />
+      {hex && (
+        <div style={{
+          position: 'absolute', left: 0, right: 0, bottom: 0,
+          textAlign: 'center', padding: '2px 0',
+          fontFamily: 'var(--gb-font-mono)', fontSize: 9.5, fontWeight: 700,
+          letterSpacing: 0.4, color: '#fff',
+          background: 'rgba(0,0,0,0.55)',
+        }}>{hex}</div>
+      )}
+    </div>
+  );
+}
+
 export function ImagePreview({
   url, dataUrl, itemLink, onClosed, bindClose,
   // Open straight into the loading state with no image yet — the opener pops
@@ -158,6 +242,10 @@ export function ImagePreview({
   //     null when no swaps applied yet (use the original effectiveUrl).
   //   colorSwaps: history of { from, to } for the Reset button.
   const [eyedropping, setEyedropping] = useState(false);
+  // Magnifier loupe shown while the eyedropper is armed and hovering the
+  // image: { x, y } wrapper-layout coords of the cursor, { pxX, pxY } the
+  // source pixel under it, and the read-back color (null if CORS-tainted).
+  const [loupe, setLoupe] = useState(null);
   const [pendingPick, setPendingPick] = useState(null);
   const [editedDataUrl, setEditedDataUrl] = useState(null);
   // Filename to use for Download / snapshotName when the displayed image
@@ -423,40 +511,70 @@ export function ImagePreview({
     return () => clearTimeout(t);
   }, [status, displayUrl]);
 
-  /* Sample a pixel color from the loaded <img>. Returns {r,g,b} from
-     the natural-pixel space (intrinsic source resolution), regardless
-     of zoom/pan. Coordinates are CSS pixels in the wrapRef space. */
-  function samplePixelAt(cssX, cssY) {
-    const wrap = wrapRef.current;
-    const img = wrap?.querySelector('img');
-    if (!wrap || !img || !imageSize) return null;
-    // Convert CSS point → image natural pixel coords using the same
-    // math as captureAlignment.
-    const wrapperW = wrap.clientWidth;
-    const wrapperH = wrap.clientHeight;
+  /* Map a viewport (clientX/clientY) point → the image's natural-pixel
+     coords by going straight through the live <img>'s on-screen rect.
+     getBoundingClientRect already bakes in pan + zoom, the contain-fit,
+     the wrapper's 1px border AND the modal's CSS `zoom` (data-gb-scale).
+     The old approach rebuilt that chain by hand (fit/tx/ty/scale vs
+     clientWidth) and drifted whenever the source rendered at its natural
+     size (max-width:85% only shrinks) or the modal was scaled. Returns
+     null when the point is off the image. */
+  function clientToSourcePx(clientX, clientY) {
+    const img = wrapRef.current?.querySelector('img');
+    if (!img || !imageSize) return null;
+    const r = img.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
     const natW = imageSize.w;
     const natH = imageSize.h;
-    const fit = Math.min(0.85 * wrapperW / natW, 0.85 * wrapperH / natH);
-    const scale = scaleRef.current;
-    const tx = txRef.current;
-    const ty = tyRef.current;
-    const pxX = (cssX - wrapperW / 2 - tx) / scale / fit + natW / 2;
-    const pxY = (cssY - wrapperH / 2 - ty) / scale / fit + natH / 2;
+    const pxX = (clientX - r.left) / r.width * natW;
+    const pxY = (clientY - r.top) / r.height * natH;
     if (pxX < 0 || pxX >= natW || pxY < 0 || pxY >= natH) return null;
-    // Draw the source image to a 1×1 canvas at the picked pixel.
-    const c = document.createElement('canvas');
-    c.width = natW; c.height = natH;
-    const ctx = c.getContext('2d');
-    try {
-      ctx.drawImage(img, 0, 0, natW, natH);
-      const d = ctx.getImageData(Math.floor(pxX), Math.floor(pxY), 1, 1).data;
-      return { r: d[0], g: d[1], b: d[2] };
-    } catch (e) {
-      // CORS-tainted canvas — same caveat as captureAlignment.
-      console.warn('[ImagePreview] eyedropper read failed:', e);
-      return null;
-    }
+    return { pxX, pxY, natW, natH };
   }
+
+  /* Read {r,g,b} at a natural-pixel coord. Backed by a one-shot read of
+     the whole source into an ImageData buffer (cached, keyed by src) so
+     per-frame loupe hovers don't redraw a full-size canvas each move.
+     Returns null on a CORS-tainted source or an out-of-range pixel. */
+  const pixelCacheRef = useRef({ src: null, data: null, w: 0, h: 0 });
+  function readPixel(pxX, pxY) {
+    const img = wrapRef.current?.querySelector('img');
+    if (!img || !imageSize) return null;
+    const cache = pixelCacheRef.current;
+    if (cache.src !== img.src || !cache.data) {
+      cache.src = img.src; cache.data = null;
+      try {
+        const natW = imageSize.w, natH = imageSize.h;
+        const c = document.createElement('canvas');
+        c.width = natW; c.height = natH;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0, natW, natH);
+        cache.data = ctx.getImageData(0, 0, natW, natH).data;
+        cache.w = natW; cache.h = natH;
+      } catch (e) {
+        // CORS-tainted canvas — same caveat as captureAlignment.
+        console.warn('[ImagePreview] eyedropper read failed:', e);
+        return null;
+      }
+    }
+    const x = Math.floor(pxX), y = Math.floor(pxY);
+    if (x < 0 || x >= cache.w || y < 0 || y >= cache.h) return null;
+    const i = (y * cache.w + x) * 4;
+    const d = cache.data;
+    return { r: d[i], g: d[i + 1], b: d[i + 2] };
+  }
+
+  /* Sample a pixel color from the loaded <img>. Returns {r,g,b} from the
+     natural-pixel space, regardless of zoom/pan. `clientX/clientY` are
+     raw viewport coordinates. */
+  function samplePixelAt(clientX, clientY) {
+    const p = clientToSourcePx(clientX, clientY);
+    if (!p) return null;
+    return readPixel(p.pxX, p.pxY);
+  }
+
+  // Disarming the eyedropper (or leaving 'ready') retracts the loupe.
+  useEffect(() => { if (!eyedropping) setLoupe(null); }, [eyedropping]);
 
   /* Run a color swap on a given source image URL and return a new
      dataURL with all matching pixels recolored. Pixels within
@@ -561,11 +679,13 @@ export function ImagePreview({
   const onPointerDown = (e) => {
     if (e.button !== 0 || status !== 'ready') return;
     if (inViewerMode) return;
-    // Popovers (color-swap, etc.) portal to <body> but their JSX lives under
-    // this wrapper, so React synthetic events still bubble here. Ignore any
-    // pointerdown that originates inside a DraggablePopup so dragging in/around
-    // the popover never pans the image.
-    if (e.target?.closest?.('button, input, textarea, select, a, [data-viewer-ui="true"], .gb-draggable-popup')) return;
+    // Popovers (color-swap, color picker, etc.) portal to <body> but their
+    // JSX lives under this wrapper, so React synthetic events still bubble
+    // here. Every popover root carries data-gb-scale="popovers" — ignore any
+    // pointerdown that originates inside one so dragging in/around the popover
+    // (including the color picker's S/V square + hue slider) never pans the
+    // image.
+    if (e.target?.closest?.('button, input, textarea, select, a, [data-viewer-ui="true"], [data-gb-scale="popovers"]')) return;
     // Eyedropper mode — clicking the image samples a pixel and opens
     // the color-picker popover instead of starting a drag.
     if (eyedropping) {
@@ -574,10 +694,11 @@ export function ImagePreview({
       const r = wrap.getBoundingClientRect();
       const cssX = e.clientX - r.left;
       const cssY = e.clientY - r.top;
-      const sample = samplePixelAt(cssX, cssY);
+      const sample = samplePixelAt(e.clientX, e.clientY);
       if (sample) {
         setPendingPick({ color: sample, x: cssX, y: cssY });
         setEyedropping(false);
+        setLoupe(null);
       } else {
         toast?.warning?.('No pixel here — click on the image');
       }
@@ -587,11 +708,30 @@ export function ImagePreview({
     try { e.currentTarget.setPointerCapture?.(e.pointerId); } catch {}
   };
   const onPointerMove = (e) => {
-    if (!dragRef.current) return;
-    txRef.current = dragRef.current.tx + (e.clientX - dragRef.current.x);
-    tyRef.current = dragRef.current.ty + (e.clientY - dragRef.current.y);
-    clampPan();
-    applyTransform(false);
+    if (dragRef.current) {
+      txRef.current = dragRef.current.tx + (e.clientX - dragRef.current.x);
+      tyRef.current = dragRef.current.ty + (e.clientY - dragRef.current.y);
+      clampPan();
+      applyTransform(false);
+      return;
+    }
+    // Eyedropper hover — drive the magnifier loupe. Map the cursor to a
+    // source pixel, read its color, and place the loupe in wrapper-layout
+    // coords (divide the visual offset by the modal's effective CSS zoom
+    // so it lands right even when data-gb-scale shrinks/grows the modal).
+    if (eyedropping && status === 'ready') {
+      const wrap = wrapRef.current;
+      const p = wrap && clientToSourcePx(e.clientX, e.clientY);
+      if (!p) { setLoupe(null); return; }
+      const r = wrap.getBoundingClientRect();
+      const z = (r.width / wrap.clientWidth) || 1;
+      setLoupe({
+        x: (e.clientX - r.left) / z,
+        y: (e.clientY - r.top) / z,
+        pxX: p.pxX, pxY: p.pxY,
+        color: readPixel(p.pxX, p.pxY),
+      });
+    }
   };
   const onPointerUp = (e) => {
     dragRef.current = null;
@@ -605,7 +745,7 @@ export function ImagePreview({
     // rapid clicks on the zoom button were bubbling up and treating
     // the wrapper as the dblclick target, snapping zoom back to 1x. The
     // same applies to popovers, whose portaled JSX still bubbles here.
-    if (e.target?.closest?.('button, input, textarea, select, a, [data-viewer-ui="true"], .gb-draggable-popup')) return;
+    if (e.target?.closest?.('button, input, textarea, select, a, [data-viewer-ui="true"], [data-gb-scale="popovers"]')) return;
     // Toggle 1x ↔ 2x for a quick zoom-in shortcut.
     if (scaleRef.current !== 1 || txRef.current !== 0 || tyRef.current !== 0) {
       resetZoom();
@@ -954,6 +1094,7 @@ export function ImagePreview({
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
+          onPointerLeave={() => setLoupe(null)}
           onDoubleClick={onDoubleClick}
           onDragOver={onWrapDragOver}
           onDragEnter={onWrapDragEnter}
@@ -1135,6 +1276,14 @@ export function ImagePreview({
               />
             )}
           </div>
+
+          {/* Eyedropper magnifier loupe — a crisp, pixel-doubled crop of
+              the source centered on the cursor with a 1px reticle, so the
+              user can land the sample on an exact pixel even when the
+              logo is rendered small. */}
+          {eyedropping && loupe && (
+            <EyedropperLoupe wrapRef={wrapRef} loupe={loupe} />
+          )}
 
           {/* Floating zoom controls — only visible once the image is
               actually viewable. Use the design-system IconBtn so the
