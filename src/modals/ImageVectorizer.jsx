@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import ImageTracer from 'imagetracerjs';
 import {
-  FloatingPanel, ModalHeader, Btn, Segmented, Slider, Spinner, Callout, SectionLabel, Switch,
+  FloatingPanel, ModalHeader, Btn, Segmented, Slider, Spinner, Callout, SectionLabel, Switch, ColorPicker,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { PREVIEW_GRID } from '../ui/components/ImageColorSwap.jsx';
@@ -51,17 +51,19 @@ const VIEW_OPTIONS = [
 
 const MAX_TRACE_DIM = 700;   // downscale longest edge before tracing (perf)
 
-// Dark twill-fabric backdrop for the woven (embroidery) treatment — diagonal
-// weave lines + a faint cross-grain, so the satin-stitch logo reads as sewn
-// onto a cap/garment rather than floating on the graph-paper grid.
-const WOVEN_FABRIC = {
-  backgroundColor: '#272a30',
-  backgroundImage: [
-    'repeating-linear-gradient(48deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 5px)',
-    'repeating-linear-gradient(48deg, rgba(0,0,0,0.30) 0 2px, transparent 2px 6px)',
-    'repeating-linear-gradient(-42deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 7px)',
-  ].join(', '),
-};
+// Twill-fabric backdrop for the woven (embroidery) treatment — diagonal weave
+// lines + faint cross-grain over the chosen base color, so the satin-stitch
+// logo reads as sewn onto a cap/garment rather than floating on the grid.
+function fabricStyle(color) {
+  return {
+    backgroundColor: color,
+    backgroundImage: [
+      'repeating-linear-gradient(48deg, rgba(255,255,255,0.05) 0 1px, transparent 1px 5px)',
+      'repeating-linear-gradient(48deg, rgba(0,0,0,0.30) 0 2px, transparent 2px 6px)',
+      'repeating-linear-gradient(-42deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 7px)',
+    ].join(', '),
+  };
+}
 
 export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
   const toast = useToast();
@@ -87,6 +89,14 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
   const [svg, setSvg] = useState(null);
   const [wovenUrl, setWovenUrl] = useState(null);   // canvas embroidery dataURL (woven mode)
   const [pathCount, setPathCount] = useState(0);
+
+  // Woven (embroidery) tunables — exposed as sliders when fx==='woven'.
+  const [wovDensity, setWovDensity] = useState(4);     // thread thinness/density
+  const [wovStrand, setWovStrand] = useState(0.5);     // floss-strand amount
+  const [wovBorder, setWovBorder] = useState(5);       // satin border width
+  const [wovSeeThru, setWovSeeThru] = useState(0.5);   // fabric show-through in grooves
+  const [wovLight, setWovLight] = useState(120);       // sheen light angle (deg)
+  const [wovFabric, setWovFabric] = useState('#23262b');// fabric backdrop color
   const [tracing, setTracing] = useState(false);
   const [traceErr, setTraceErr] = useState(false);
 
@@ -218,9 +228,13 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
   // Woven embroidery is generated straight from the raster (no vectorization).
   useEffect(() => {
     if (fx !== 'woven' || !loaded) { setWovenUrl(null); return; }
-    const t = setTimeout(() => { setWovenUrl(buildEmbroidery(imgRef.current, removeBg, bgTol)); }, 120);
+    const t = setTimeout(() => {
+      setWovenUrl(buildEmbroidery(imgRef.current, removeBg, bgTol, {
+        density: wovDensity, strand: wovStrand, border: wovBorder, seeThrough: wovSeeThru, light: wovLight,
+      }));
+    }, 120);
     return () => clearTimeout(t);
-  }, [fx, loaded, src, removeBg, bgTol]);
+  }, [fx, loaded, src, removeBg, bgTol, wovDensity, wovStrand, wovBorder, wovSeeThru, wovLight]);
 
   /* ── export ────────────────────────────────────────────────── */
   const copySvg = async () => {
@@ -344,8 +358,8 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
               position: view === 'split' ? 'absolute' : 'relative',
               inset: view === 'split' ? '0 0 0 50%' : 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12,
-              // Embroidery sits on dark twill fabric; other treatments keep the grid.
-              ...(fx === 'woven' ? WOVEN_FABRIC : null),
+              // Embroidery sits on twill fabric; other treatments keep the grid.
+              ...(fx === 'woven' ? fabricStyle(wovFabric) : null),
             }}>
               {tracing && (
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--gb-text-muted)', fontSize: 12, zIndex: 2 }}>
@@ -417,21 +431,41 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
               {removeBg && (
                 <SliderRow label="BG tolerance" value={bgTol} min={0} max={120} step={1} onChange={setBgTol} hint="How close to the corner color counts as background" />
               )}
-              {mode === 'mono' ? (
-                !removeBg && <SliderRow label="Threshold" value={threshold} min={1} max={254} step={1} onChange={setThreshold} hint="Luminance cut for the shape" />
+              {fx === 'woven' ? (
+                <>
+                  <SliderRow label="Thread density" value={wovDensity} min={1} max={10} step={1} onChange={setWovDensity} hint="Higher = thinner threads" />
+                  <SliderRow label="Strands" value={wovStrand} min={0} max={1} step={0.05} onChange={setWovStrand} hint="Floss strand texture" />
+                  <SliderRow label="Border width" value={wovBorder} min={0} max={12} step={1} onChange={setWovBorder} hint="Satin outline thickness" />
+                  <SliderRow label="See-through" value={wovSeeThru} min={0} max={1} step={0.05} onChange={setWovSeeThru} hint="Fabric showing between stitches" />
+                  <SliderRow label="Light angle" value={wovLight} min={0} max={360} step={5} onChange={setWovLight} hint="Sheen direction (°)" />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <span style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>Fabric color</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <ColorPicker value={wovFabric} onChange={setWovFabric} size="sm" />
+                      {['#23262b', '#0f0f12', '#1b2a3a', '#3a3a3a', '#5a4632', '#f4f1ea'].map((sw) => (
+                        <button key={sw} type="button" onClick={() => setWovFabric(sw)} title={sw}
+                          style={{ width: 16, height: 16, borderRadius: '50%', padding: 0, cursor: 'pointer', background: sw, border: '1px solid var(--gb-border-default)' }} />
+                      ))}
+                    </div>
+                  </div>
+                </>
               ) : (
-                <SliderRow label="Colors" value={numColors} min={2} max={16} step={1} onChange={setNumColors} hint="Palette size" />
+                <>
+                  {mode === 'mono'
+                    ? (!removeBg && <SliderRow label="Threshold" value={threshold} min={1} max={254} step={1} onChange={setThreshold} hint="Luminance cut for the shape" />)
+                    : <SliderRow label="Colors" value={numColors} min={2} max={16} step={1} onChange={setNumColors} hint="Palette size" />}
+                  <SliderRow label="Smoothing" value={smooth} min={0} max={5} step={0.25} onChange={setSmooth} hint="Curve fit tolerance" />
+                  <SliderRow label="Despeckle" value={despeckle} min={0} max={40} step={1} onChange={setDespeckle} hint="Drop paths smaller than" />
+                  <SliderRow label="Pre-blur" value={blur} min={0} max={5} step={1} onChange={setBlur} hint="Soften before tracing" />
+                </>
               )}
-              <SliderRow label="Smoothing" value={smooth} min={0} max={5} step={0.25} onChange={setSmooth} hint="Curve fit tolerance" />
-              <SliderRow label="Despeckle" value={despeckle} min={0} max={40} step={1} onChange={setDespeckle} hint="Drop paths smaller than" />
-              <SliderRow label="Pre-blur" value={blur} min={0} max={5} step={1} onChange={setBlur} hint="Soften before tracing" />
             </div>
           </div>
         )}
 
-        {hasImage && fx !== 'flat' && (
-          <Callout tone="info" title="Treatments are an early scaffold">
-            Woven / engrave / emboss are SVG-filter approximations applied to the traced shape — a starting point to tune. The clean shape from the trace is the real foundation for material + lighting work.
+        {hasImage && (fx === 'engrave' || fx === 'emboss') && (
+          <Callout tone="info" title="Treatment is an early scaffold">
+            Engrave / emboss are SVG-filter approximations applied to the traced shape — a starting point to tune.
           </Callout>
         )}
       </div>
@@ -531,7 +565,8 @@ function distanceTransform(mask, w, h) {
    • SEE-THROUGH — the deep grooves between threads drop alpha so the dark
      fabric peeks through, like real embroidery.
    Robust on any logo. Returns a PNG dataURL. */
-function buildEmbroidery(img, doRemoveBg, bgTol) {
+function buildEmbroidery(img, doRemoveBg, bgTol, opts = {}) {
+  const { density = 4, strand = 0.5, border = 5, seeThrough = 0.5, light = 120 } = opts;
   const nw = img?.naturalWidth, nh = img?.naturalHeight;
   if (!nw || !nh) return null;
   const sc = Math.min(1, 1100 / Math.max(nw, nh));   // cap longest edge for perf/sharpness
@@ -549,13 +584,14 @@ function buildEmbroidery(img, doRemoveBg, bgTol) {
   const D = distanceTransform(mask, w, h);
   const { lab, angle } = components(mask, w, h);
   const PI2 = Math.PI * 2;
-  const ribSp = Math.max(2.2, w / 200);              // THIN thread rows
-  const strandSp = Math.max(1.4, w / 460);           // finer floss-strand frequency
-  const borderW = Math.max(3, Math.round(w / 110));
+  const ribSp = Math.max(1.6, w / (120 + density * 22));   // higher density → thinner rows
+  const strandSp = Math.max(1.2, w / 460);                 // floss-strand frequency
+  const borderW = Math.max(0, Math.round(w / 110 * (border / 5)));
+  const lightRad = light * Math.PI / 180;
   const fallback = -52 * Math.PI / 180;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const i = y * w + x, o = i * 4; if (d[o + 3] === 0) continue;
-    const inBorder = D[i] <= borderW;
+    const inBorder = borderW > 0 && D[i] <= borderW;
     let phi;
     if (inBorder) {                                  // border column runs ALONG the contour
       const gx = D[i + (x < w - 1 ? 1 : 0)] - D[i - (x > 0 ? 1 : 0)];
@@ -566,17 +602,18 @@ function buildEmbroidery(img, doRemoveBg, bgTol) {
     const pA = -x * sphi + y * cphi;                 // along the rows (thread separation axis)
     const pT = x * cphi + y * sphi;                  // along each thread (strand axis)
     const ridge = Math.cos(pA / ribSp * PI2);        // -1..1 across the thin rows
-    const strand = Math.cos(pT / strandSp * PI2);    // fine floss strands along the thread
+    const strandWave = Math.cos(pT / strandSp * PI2);// fine floss strands along the thread
     const crest = Math.max(0, ridge);
+    const sheen = 0.5 + 0.5 * Math.cos(2 * (phi - lightRad));   // strokes catch light by angle
     const base = inBorder ? 1.14 : 1.05;
-    const gain = base + 0.26 * crest + 0.05 * strand;            // bright crest + strand grain
-    const add = (inBorder ? 24 : 14) * crest + 4 * Math.max(0, strand);
+    const gain = base + 0.22 * crest + 0.26 * sheen + strand * 0.07 * strandWave;
+    const add = (inBorder ? 22 : 13) * crest + strand * 6 * Math.max(0, strandWave);
     d[o] = Math.max(0, Math.min(255, d[o] * gain + add));
     d[o + 1] = Math.max(0, Math.min(255, d[o + 1] * gain + add));
     d[o + 2] = Math.max(0, Math.min(255, d[o + 2] * gain + add));
     // SEE-THROUGH: drop alpha in the deepest grooves so the fabric shows.
     const groove = Math.max(0, -ridge);
-    if (!inBorder && groove > 0.62) d[o + 3] = Math.round(255 * (1 - 0.5 * (groove - 0.62) / 0.38));
+    if (!inBorder && groove > 0.6) d[o + 3] = Math.round(255 * (1 - seeThrough * (groove - 0.6) / 0.4));
   }
   ctx.putImageData(id, 0, 0);
   return c.toDataURL('image/png');
