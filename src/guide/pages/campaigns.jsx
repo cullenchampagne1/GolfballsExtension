@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { I, Tag, Dot, Btn, Input, Field, Switch, PillTag, TemplatePicker, RangeSlider } from '../../ui/index.js';
 import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
-import { QuickSendPanel } from '../lib/quicksend-live.jsx';
+import { LiveStage } from '../lib/stage.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    campaigns.jsx — the Campaigns section of the Operator's Guide.
 
    Two hand-built, visually-faithful pages:
      • QuickSendPage   — the Quick Send / Bulk Email runner. Leads
-       with the REAL <QuickSendPanel> (interactive — press Run), then
-       deep TourBox sections rebuilding each phase's controls.
+       with a LiveStage walkthrough (Tour / Play / Try) over a scaled
+       Quick Send setup view, then deep TourBox sections rebuilding
+       each phase's controls.
      • CampaignsPage   — the Campaign Manager. Faithful MiniFrame
        reproductions of the step timeline, the step inspector, the
        conditions builder, and the live audience run view (the real
@@ -177,6 +178,59 @@ const QS_PHASES = [
   ['Done', 'A checkmark burst, then stat tiles (Sent, Skipped, Failed, Success %, Elapsed) and a per-contact timeline bar chart. Close or Send again.'],
 ];
 
+/* Scaled Quick Send "Setup" view for the LiveStage walkthrough, with data-demo
+   targets on each control. */
+function QsWalkSnippet() {
+  const [tpl, setTpl] = useState('t_winback');
+  const [delay, setDelay] = useState([15, 45]);
+  const [dnc, setDnc] = useState(false);
+  const [recent, setRecent] = useState(true);
+  return (
+    <div style={{ width: 380, maxWidth: '100%', background: 'var(--gb-surface-modal)', borderRadius: 'inherit', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+        <span style={{ width: 22, height: 22, borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><I.megaphone size={12} /></span>
+        <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Quick Send</span>
+        <Tag size="xs" tone="brand">3 contacts</Tag>
+      </div>
+      <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 13 }}>
+        <div data-demo="qs-template">
+          <Field label="Template" hint="Each contact gets a weighted-random pick · 1 of 3 variations">
+            <TemplatePicker mode="random" templates={SETUP_TPLS} value={tpl} onChange={setTpl} placeholder="Pick a template" floating={false} listMaxHeight={2000} />
+          </Field>
+        </div>
+        <div data-demo="qs-delay">
+          <Field label="Delay between sends" hint="random per contact — keeps a blast looking human">
+            <RangeSlider values={delay} min={5} max={80} step={5} unit="s" onChange={setDelay} />
+          </Field>
+        </div>
+        <div data-demo="qs-skip" style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--gb-text-muted)' }}>Skip rules</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', borderRadius: 'var(--gb-r-sm)', border: '1px solid ' + (dnc ? 'var(--gb-warning-tint-border)' : 'var(--gb-border-subtle)'), background: dnc ? 'var(--gb-warning-tint-soft)' : 'var(--gb-surface-1)' }}>
+            <Switch on={dnc} size="sm" onChange={setDnc} /><span style={{ flex: 1, fontSize: 11, color: 'var(--gb-text-secondary)' }}>Do-not-contact</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 9px', borderRadius: 'var(--gb-r-sm)', border: '1px solid ' + (recent ? 'var(--gb-warning-tint-border)' : 'var(--gb-border-subtle)'), background: recent ? 'var(--gb-warning-tint-soft)' : 'var(--gb-surface-1)' }}>
+            <Switch on={recent} size="sm" onChange={setRecent} /><span style={{ flex: 1, fontSize: 11, color: 'var(--gb-text-secondary)' }}>Recently emailed</span>
+            {recent && <span style={{ fontSize: 10, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)' }}>≤ 14 days</span>}
+          </div>
+        </div>
+        <div data-demo="qs-run"><Btn full variant="primary" size="md" icon={<I.send />} onClick={() => {}}>Run · 3</Btn></div>
+      </div>
+    </div>
+  );
+}
+const QS_CALLOUTS = [
+  { n: 1, target: 'qs-template', title: 'Template', text: 'The single email everyone gets. With variations, weight sliders appear (always summing to 100%); each contact rolls one, weighted.' },
+  { n: 2, target: 'qs-delay', title: 'Delay between sends', text: 'A two-handle range (5–80s). Each send waits a random time inside it, so the blast looks human.' },
+  { n: 3, target: 'qs-skip', title: 'Skip rules', text: 'Quietly leave people out without removing them: skip do-not-contact names, or anyone emailed within the day window. Matches count as skipped, not sent.' },
+  { n: 4, target: 'qs-run', title: 'Run', text: 'Opens each contact in a background tab, resolves the template’s variables against THAT contact, sends, and closes the tab — then the progress ring takes over.' },
+];
+const QS_STEPS = [
+  { target: 'qs-template', caption: 'Pick the one template everyone gets — with variations, weight sliders appear (sum 100%).', hold: 2600 },
+  { target: 'qs-delay', caption: 'Set a random delay range between sends so the blast looks human, not robotic.', hold: 2400 },
+  { target: 'qs-skip', caption: 'Optionally skip do-not-contact names or recently-emailed contacts — counted as skipped.', hold: 2600 },
+  { target: 'qs-run', caption: 'Press Run — each contact opens in a background tab, personalizes, sends, and closes.', hold: 2400 },
+];
+
 export function QuickSendPage() {
   return (
     <div className="prose">
@@ -185,16 +239,19 @@ export function QuickSendPage() {
       <p className="lede">
         Tick rows in <a href="#tasks">Task List</a> or <a href="#crm">CRM Search</a> and the selection bar
         offers <strong>Email selected</strong> — that opens <strong>Quick Send</strong>, a one-template blast
-        with a big progress ring and three phases. The panel below is the <strong>real runner</strong> on three
-        sample contacts: <strong>press Run</strong> and watch it go, then read each phase beside its live control.
+        with a big progress ring and three phases. Walk through the setup below — hover the numbered pins (Tour),
+        press Play, or switch to Try it — then read each phase in depth.
       </p>
 
-      <div className="cardgrid" style={{ display: 'grid', placeItems: 'center', margin: '8px 0 4px' }}>
-        <QuickSendPanel contactCount={3} />
-      </div>
-      <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)', fontStyle: 'italic' }}>
-        The live Quick Send runner on sample data — press <strong>Run · 3</strong>. Nothing is actually emailed.
-      </p>
+      <LiveStage
+        width={380}
+        frameKind="modal"
+        frameLabel="bulk · quick send"
+        render={() => <QsWalkSnippet />}
+        callouts={QS_CALLOUTS}
+        steps={QS_STEPS}
+        note="The Quick Send setup — pick the template, pacing, and skip rules, then Run kicks off the progress ring."
+      />
 
       <h2 className="sec">The three phases, control by control</h2>
       <p>Each block pairs a faithful piece of the runner with what it does. The snippets are live.</p>

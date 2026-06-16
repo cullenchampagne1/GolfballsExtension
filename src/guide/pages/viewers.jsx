@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import { I, Icon, Tag, Btn, IconBtn, Dropdown, Slider, CategorizeRail } from '../../ui/index.js';
 import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
 import { LiveStage } from '../lib/stage.jsx';
-import { LiveModal } from '../lib/live-modal.jsx';
-import { ImagePreview } from '../../modals/ImagePreview.jsx';
 import { GolfballViewer } from '../../modals/GolfballViewer.jsx';
 import { categorySections, CASE_CATEGORIES } from '../../lib/caseMatch.js';
 
@@ -669,12 +667,6 @@ export function ImageViewerPage() {
         steps={IV_STEPS}
         note="The viewer floats its controls in the four corners so the image stays unobstructed — hover the pins (Tour), press Play, or Try it."
       />
-
-      <h2 className="sec">The genuine viewer, live</h2>
-      <p>Below is the real Image Viewer on a template logo — exactly as it appears in production. Drag to pan, scroll to zoom, and try the Align / 3D / Mockup toggles.</p>
-      <LiveModal w={500} h={600} frameLabel="order · image viewer"
-        note="The real ImagePreview modal, running live on a template logo."
-        render={(box, onClosed) => <ImagePreview url={TEMPLATE_LOGO} onClosed={onClosed} />} />
 
       <h2 className="sec">Walk the surface, control by control</h2>
       <p>The preview floats its controls in the four corners so the image stays unobstructed. Every one is reproduced live below.</p>

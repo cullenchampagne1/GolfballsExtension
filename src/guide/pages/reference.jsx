@@ -555,16 +555,94 @@ export function PowerUserPage() {
 
 const RELEASES = [
   {
-    version: '3.3',
+    version: '3.3.7',
     tag: 'Latest',
-    summary: 'Server-side proposals, real promo codes, and a new theme.',
+    date: 'Jun 13–15',
+    summary: 'The Operator’s Guide goes live, plus template-variation naming and proposal polish.',
     highlights: [
-      { icon: 'send', text: 'Proposals are now tracked server-side exactly like web quotes — sending creates the proposal email record, registers tracking, and updates the opportunity value.', link: ['#templates', 'Build an email proposal'] },
+      { icon: 'bolt', text: 'Operator’s Guide: a full in-app manual — every feature has its own page with the real interface running live on sample data, in Tour, Play, or Try-it modes. Open it from the help icon beside the gear.', link: ['#start', 'Getting Started'] },
+      { icon: 'edit', text: 'Template editor: the initial email becomes a named “Variation 1” block; rename variations inline and the custom names are honored in the picker, runner, and campaigns.', link: ['#templates', 'Email Templates'] },
+      { icon: 'mail', text: 'The Classic proposal email now matches the website-generated layout exactly.' },
+      { icon: 'card', text: 'Proposal reliability: free-quantity promo lines no longer drop from saved proposals, and carts no longer come back empty under concurrent load.' },
+      { icon: 'search', text: 'New Proposal Debug tool: intercept and compare proposal and email submits in a draggable panel.', link: ['#power', 'Power User'] },
+    ],
+  },
+  {
+    version: '3.3.6',
+    date: 'Jun 10–12',
+    summary: 'Checkout autocomplete, richer templates, and one-click catalog logos.',
+    highlights: [
+      { icon: 'edit', text: 'Checkout: US address autocomplete wired through golfballs’ own address feed (no key setup), an order-summary rail that fills its pane, and personalization wired straight into the imprint list.' },
+      { icon: 'mail', text: 'Templates: attachment variables, grouped account-condition import, an assisted template importer, and a full Srixon template set.', link: ['#templates', 'Email Templates'] },
+      { icon: 'gift', text: 'Gift Catalog: items default to custom-logo, and you can drag one logo onto every blank line at once.', link: ['#catalog', 'Gift Catalog'] },
+      { icon: 'calc', text: 'Margin: recognizes Buy-N-Dozen-Get-M-Free multipacks and prices them off the single dozen’s cost.', link: ['#margin', 'Margin Calculator'] },
+      { icon: 'megaphone', text: 'Quick Send: a scrollable template dropdown plus skip rules for do-not-contact and recently-emailed contacts.', link: ['#quicksend', 'Quick Send'] },
+    ],
+  },
+  {
+    version: '3.3.5',
+    date: 'Jun 9',
+    summary: 'Server-side tracked proposals and real promo codes.',
+    highlights: [
+      { icon: 'send', text: 'Proposals are now tracked server-side exactly like web quotes — sending creates the proposal email record, registers tracking, and updates the opportunity value.', link: ['#proposals', 'Proposals & Quotes'] },
       { icon: 'card', text: 'Promo codes: apply real promotions to proposals, including free-quantity promos with genuine free-item lines; the picker only offers codes that apply to your cart.' },
       { icon: 'users', text: 'Current Proposals sidebar: see a contact’s existing proposals live from the CRM — open the breakdown, load one back into the builder, or re-email it.' },
       { icon: 'calc', text: 'Costs & inventory: bulk cost sync, auto-loading costs in breakdowns, editable per-split prices, and real-cost labels.' },
       { icon: 'mail', text: 'Proposal emails are now Outlook-desktop safe — solid colors, no dropped styling.' },
-      { icon: 'sun', text: 'Themes: new Slate variant (Atom One Dark) alongside Dark, Light, and Cream.', link: ['#settings', 'Theme & appearance'] },
+    ],
+  },
+  {
+    version: '3.3.4',
+    date: 'Jun 6–8',
+    summary: 'Gift Catalog, rep-defined Custom Items, and 3D gift sets.',
+    highlights: [
+      { icon: 'gift', text: 'Gift Catalog: search the whole site, save proposals to a CRM account or opportunity, and compose the email inline from the margin panel.', link: ['#catalog', 'Gift Catalog'] },
+      { icon: 'cube', text: 'Custom Items: build rep-defined items and import full supplier catalogs (HPG, SnugZ) with real per-quantity cost ladders.' },
+      { icon: 'eye', text: 'Gift sets render in 3D as an assembled box — real foam recesses, tool slots, and chrome ball markers.', link: ['#viewer-3d', '3D Product Viewer'] },
+      { icon: 'sparkle', text: 'Proposal emails gain an imprint-proof preview system: 3D personalization previews, monograms, and per-pole imprint detail under each line.' },
+      { icon: 'sun', text: 'New Slate theme (Atom One Dark) joins Dark, Light, and Cream.', link: ['#themes', 'Themes & UI Scale'] },
+    ],
+  },
+  {
+    version: '3.3.3',
+    date: 'May 31 – Jun 1',
+    summary: 'A live-config product customizer and cross-platform 3D.',
+    highlights: [
+      { icon: 'gift', text: 'The product customizer is now driven by each product’s live configuration — real option controls, correct decoration tabs, and accurate print-type gating.' },
+      { icon: 'cube', text: 'Dual-pole imprint: a full personalized second imprint with a compact hue/shade color picker, gated by the product’s tags.', link: ['#viewer-3d', '3D Product Viewer'] },
+      { icon: 'eye', text: 'The golf-ball logo now renders correctly on Windows / ARM (Adreno) machines — fixing the invisible or black decal.', link: ['#troubleshooting', 'Troubleshooting'] },
+      { icon: 'mail', text: 'Image Viewer streams the raw express upload in instantly instead of showing a frozen spinner.', link: ['#viewer-image', 'Image Viewer'] },
+    ],
+  },
+  {
+    version: '3.3.2',
+    date: 'May 28–29',
+    summary: 'A schema-driven CRM engine and native React modals.',
+    highlights: [
+      { icon: 'filter', text: 'Unified CRM schema with per-page extractors; a schema-driven picker now drives every template variable.', link: ['#templates', 'Email Templates'] },
+      { icon: 'send', text: 'Power Automate: predicate diagnostics and strict type checks make send conditions reliable.' },
+      { icon: 'megaphone', text: 'Email Runner: a weighted variation picker with sliders for bulk sends.' },
+      { icon: 'mail', text: 'Email/Chat preview, the Order Date Manager, and the Query Builder are all rebuilt as native React modals.', link: ['#viewer-email', 'Email / Chat Viewer'] },
+    ],
+  },
+  {
+    version: '3.3.1',
+    date: 'May 26–27',
+    summary: 'The Actions Shelf, instant CRM search, and bulk email.',
+    highlights: [
+      { icon: 'bolt', text: 'Actions Shelf: double-tap Shift for context-aware quick actions per page — Copy Order IDs, Open Image Viewer, Run last query, log a call, and more.', link: ['#start', 'Getting Started'] },
+      { icon: 'search', text: 'CRM Search: a local index for instant typeahead, infinite scroll, and relevance-first ranking.', link: ['#crm-search', 'CRM Search'] },
+      { icon: 'check', text: 'Keyboard-first navigation across Quick Task, Call Log, and Task List, with a marching-ants focus ring.', link: ['#shortcuts', 'Keyboard Shortcuts'] },
+      { icon: 'megaphone', text: 'Email Runner: background bulk send with weighted template variations in a draggable panel.', link: ['#quicksend', 'Quick Send'] },
+      { icon: 'sun', text: 'Per-surface UI scale sliders that persist across sessions.', link: ['#themes', 'Themes & UI Scale'] },
+    ],
+  },
+  {
+    version: '3.3.0',
+    date: 'May 22',
+    summary: 'The first release of the React-rebuilt Golfballs.com rep extension.',
+    highlights: [
+      { icon: 'sparkle', text: 'Initial release — the popup, email templates, and the design-system foundation everything since has been built on.' },
     ],
   },
 ];
@@ -584,6 +662,7 @@ function TimelineNode({ rel, last }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
           <h2 className="sec" style={{ margin: 0, fontSize: 22 }}>Version {rel.version}</h2>
           {rel.tag && <Tag tone="brand" size="sm">{rel.tag}</Tag>}
+          {rel.date && <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', whiteSpace: 'nowrap' }}>{rel.date}</span>}
         </div>
         <p style={{ marginTop: 0, marginBottom: 14, color: 'var(--gb-text-tertiary)' }}>{rel.summary}</p>
         <div style={{ border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-lg)', background: 'var(--gb-surface-canvas)', overflow: 'hidden' }}>
@@ -611,8 +690,8 @@ export function WhatsNewPage() {
       <div className="eyebrow">Reference</div>
       <h1 className="title">What’s New</h1>
       <p className="lede">
-        Highlights from recent updates, newest first — minor fixes are omitted. Each line links to the full
-        article where there’s more to learn.
+        The complete history since launch, newest first — minor fixes are omitted. Each line links to the
+        full article where there’s more to learn.
       </p>
 
       <div style={{ marginTop: 28 }}>
@@ -624,8 +703,8 @@ export function WhatsNewPage() {
       <div className="docnote brand">
         <span className="dn-ico"><I.megaphone size={15} /></span>
         <div className="dn-b">
-          <div className="dn-t">The headline this release: real, tracked proposals</div>
-          <p style={{ margin: 0 }}>Proposals now behave like first-class web quotes — they create a tracked email record, register tracking, and update the opportunity value, with real promo codes and a live Current Proposals sidebar. If you build quotes, start with <a href="#templates">Build an email proposal</a>.</p>
+          <div className="dn-t">New here? Start with the live guide</div>
+          <p style={{ margin: 0 }}>Every feature now has a walkthrough page with the real interface running on sample data — open the Operator’s Guide from the help icon beside the gear, or jump straight to <a href="#start">Getting Started</a>.</p>
         </div>
       </div>
     </div>
