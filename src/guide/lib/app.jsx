@@ -106,7 +106,7 @@ export const NAV = [
   { group: 'Daily Driver', items: [
     { id: 'popup', title: 'The Popup', icon: 'mail', slugs: ['email-templates-popup', 'how-email-sending-works'] },
     { id: 'templates', title: 'Email Templates', icon: 'edit', slugs: ['template-editor', 'template-variables', 'note-templates'] },
-    { id: 'charge', title: 'Charge & Order Edit', icon: 'card', slugs: ['charge-refund', 'order-edit'] },
+    { id: 'charge', title: 'Charge & Order Edit', icon: 'card', slugs: ['charge-refund', 'order-edit'], partial: true },
     { id: 'proof', title: 'Submit Proof', icon: 'send', slugs: ['submit-proof'] },
   ]},
   { group: 'Configuration', items: [
@@ -119,7 +119,7 @@ export const NAV = [
     { id: 'tasks', title: 'Task List', icon: 'check', slugs: ['task-list'] },
     { id: 'quicktask', title: 'Quick Task', icon: 'bolt', slugs: ['quick-task'] },
     { id: 'calls', title: 'Call Log', icon: 'phone', slugs: ['call-log'] },
-    { id: 'calendar', title: 'Order Dates', icon: 'clock', slugs: ['order-date-manager'] },
+    { id: 'calendar', title: 'Order Dates', icon: 'clock', slugs: ['order-date-manager'], partial: true },
   ]},
   { group: 'Find People', items: [
     { id: 'crm-search', title: 'CRM Search', icon: 'search', slugs: ['crm-search', 'phone-finder'] },
@@ -131,7 +131,6 @@ export const NAV = [
     { id: 'viewer-image', title: 'Image Viewer', icon: 'eye', slugs: ['image-viewer', 'mockup-composer'] },
     { id: 'viewer-3d', title: '3D Product Viewer', icon: 'cube', slugs: ['3d-product-viewer'] },
     { id: 'margin', title: 'Margin Calculator', icon: 'calc', slugs: ['margin-calculator'] },
-    { id: 'order-extras', title: 'Order IDs & Risk Glow', icon: 'copy', slugs: ['copy-order-ids', 'signifyd-glow'] },
   ]},
   { group: 'Catalog & Proposals', items: [
     { id: 'catalog', title: 'Gift Catalog', icon: 'gift', slugs: ['gift-catalog', 'customizing-item', 'gift-sets', 'custom-service-items', 'supplier-import', 'gifting-glossary'] },
@@ -160,7 +159,7 @@ for (const it of FLAT) for (const s of it.slugs || []) if (!ROUTE_FOR_SLUG[s]) R
    (165 records: articles, settings, FAQ, shortcuts — keywords already
    authored), each resolved to its guide route. */
 const SEARCH_ROWS = [
-  ...FLAT.map((it) => ({ key: `nav:${it.id}`, route: it.id, title: it.title, sub: it.group, hay: `${it.title} ${it.group}`.toLowerCase(), wip: it.wip })),
+  ...FLAT.map((it) => ({ key: `nav:${it.id}`, route: it.id, title: it.title, sub: it.group, hay: `${it.title} ${it.group}`.toLowerCase(), wip: it.wip, partial: it.partial })),
   ...HELP_SEARCH_INDEX
     .filter((r) => r.article && ROUTE_FOR_SLUG[r.article])
     .map((r) => {
@@ -172,6 +171,7 @@ const SEARCH_ROWS = [
         sub: `${nav?.group} · ${nav?.title}`,
         hay: `${r.title} ${(r.keywords || []).join(' ')} ${r.description || ''}`.toLowerCase(),
         wip: nav?.wip,
+        partial: nav?.partial,
       };
     }),
 ];
@@ -218,7 +218,7 @@ function Sidebar({ current, onNavigate, version }) {
                 : results.map((r) => (
                   <div key={r.key} className="sr" onMouseDown={() => { onNavigate(r.route); setQ(''); setOpen(false); }}>
                     <div className="sr-t">{r.title}</div>
-                    <div className="sr-g">{r.sub}{r.wip ? ' · in progress' : ''}</div>
+                    <div className="sr-g">{r.sub}{r.wip ? ' · in progress' : r.partial ? ' · not fully implemented' : ''}</div>
                   </div>
                 ))}
             </div>
@@ -234,6 +234,7 @@ function Sidebar({ current, onNavigate, version }) {
                 <span className="ico"><NavGlyph name={it.icon} /></span>
                 <span>{it.title}</span>
                 {it.wip && <span className="mini">soon</span>}
+                {it.partial && <span className="mini partial" title="Not fully implemented yet">partial</span>}
               </button>
             ))}
           </div>

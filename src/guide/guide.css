@@ -94,6 +94,9 @@ body {
   padding: 1px 5px; border-radius: 4px; text-transform: uppercase;
   background: var(--gb-warning-tint-medium); color: var(--gb-warning-fg); border: 1px solid var(--gb-warning-tint-border);
 }
+.nav-item .mini.partial {
+  background: var(--gb-info-tint-medium); color: var(--gb-info-fg); border-color: var(--gb-info-tint-border);
+}
 
 /* ---- Content ---- */
 .main { min-width: 0; display: flex; flex-direction: column; }

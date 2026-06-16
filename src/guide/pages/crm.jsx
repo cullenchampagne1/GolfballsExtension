@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { I, Tag } from '../../ui/index.js';
+import { I, Tag, Input } from '../../ui/index.js';
 import { LiveModal } from '../lib/live-modal.jsx';
 import { LiveStage } from '../lib/stage.jsx';
 import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
@@ -185,22 +185,161 @@ export function QBPage() {
 }
 
 /* ════════ NEW CONTACT ════════ */
+/* Every field in the real CRMCreateContact form, grouped by its four
+   sections, so the whole variable set is scannable at a glance even
+   though the live modal scrolls. */
+const NC_CONTACT = [
+  ['First name', 'Yes', 'The contact’s given name.'],
+  ['Last name', 'Yes', 'The contact’s surname.'],
+  ['Email', 'Yes', 'Primary email — the address your templates send to.'],
+  ['Phone', 'No', 'Direct line (formats as you type).'],
+  ['Job title', 'No', 'e.g. “Purchasing manager” — feeds segmentation.'],
+  ['Company', 'No', 'Company name on the contact record (distinct from the linked account).'],
+];
+const NC_ACCOUNT = [
+  ['Account', 'Yes*', 'Search and LINK an existing CRM account, or type a brand-new name to CREATE one on submit. *Required unless the require-account dev setting is off.'],
+  ['Account website', 'New only', 'The web address of a NEW account — required only while you’re creating one. Auto-filled and locked (“linked — website on file”) when you link an existing account.'],
+  ['LinkedIn URL', 'No', 'The contact or company LinkedIn profile.'],
+  ['Address · City · Postal', 'No', 'The account’s mailing location (three fields on one row).'],
+  ['Country', 'No', 'Country dropdown.'],
+];
+const NC_SEG = [
+  ['Industry', 'No', 'Searchable dropdown — the account’s industry.'],
+  ['Employee range', 'No', 'Company-size bracket.'],
+  ['Est. revenue', 'No', 'Estimated annual-revenue bracket.'],
+  ['Customer type', 'No', 'How the account is classified.'],
+  ['Territory', 'No', 'Sales territory (searchable).'],
+  ['Campaign', 'No', 'The source / marketing campaign (searchable).'],
+];
+const NC_SOURCE = [
+  ['Source details', 'No', 'Free text — where the lead came from (e.g. “PGA Show 2026 — booth visit”).'],
+  ['Flags', 'No', 'Quick-classification chips: Consumer · Custom · Rep · One-to-One · Retail · Delay.'],
+];
+const NC_DEV = [
+  ['crmCreateContact.requireAccount', 'On', 'Blocks Create until an account is selected or typed. Creating a contact with no account is allowed by the API but is bad practice — turn this OFF to override. (When on, a new account also makes Account website required.)'],
+  ['crmCreateContact.draggable', 'On', 'On = the modal is a draggable tool window you can reposition and that stays open. Off = it sits centered and closes on an outside click.'],
+  ['crmCreateContact.useMock', 'Off', 'Bypasses the live CRM endpoints (account search + create) and uses canned data + fake success responses — for previews or when the API is down. The modal auto-mocks anyway when it isn’t running inside the extension.'],
+];
+
+function NcFieldTable({ rows }) {
+  return (
+    <table className="spectable">
+      <thead><tr><th style={{ width: 168 }}>Field</th><th style={{ width: 92 }}>Required</th><th>What it is</th></tr></thead>
+      <tbody>{rows.map((r) => <tr key={r[0]}><td><b>{r[0]}</b></td><td>{r[1]}</td><td>{r[2]}</td></tr>)}</tbody>
+    </table>
+  );
+}
+
+/* Faithful account-autocomplete snippet: toggles between SEARCHING
+   (live results + a "create new" footer) and LINKED (existing account
+   attached, website locked) so both halves of the account flow show. */
+function AccountFlowSnippet() {
+  const [mode, setMode] = useState('search'); // 'search' | 'linked'
+  const results = [
+    ['Acme Industries', 'San Francisco, CA · 142 orders'],
+    ['Acme Golf Outfitters', 'Austin, TX · 18 orders'],
+  ];
+  return (
+    <MiniFrame width={340} label="new contact · account" pad>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
+        {[['search', 'Type a name'], ['linked', 'Linked existing']].map(([id, lbl]) => (
+          <button key={id} onClick={() => setMode(id)} style={{ flex: 1, fontSize: 10.5, fontWeight: 600, padding: '5px 8px', borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', border: '1px solid ' + (mode === id ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-subtle)'), background: mode === id ? 'var(--gb-brand-tint-soft)' : 'transparent', color: mode === id ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }}>{lbl}</button>
+        ))}
+      </div>
+      {mode === 'search' ? (
+        <>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--gb-text-muted)', marginBottom: 4 }}>Account <span style={{ color: 'var(--gb-error-fg)' }}>*</span></div>
+          <Input size="sm" value="Acme" onChange={() => {}} />
+          <div style={{ marginTop: 4, border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)', overflow: 'hidden', background: 'var(--gb-surface-modal)', boxShadow: 'var(--gb-shadow-popover)' }}>
+            {results.map(([n, sub], i) => (
+              <div key={n} style={{ padding: '7px 9px', borderBottom: '1px solid var(--gb-border-subtle)', background: i === 0 ? 'var(--gb-fill-subtle)' : 'transparent' }}>
+                <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)' }}>{n}</div>
+                <div style={{ fontSize: 10, color: 'var(--gb-text-muted)' }}>{sub}</div>
+              </div>
+            ))}
+            <div style={{ padding: '7px 9px', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--gb-brand-label)' }}>
+              <I.plus size={11} /> <span style={{ fontSize: 11, fontWeight: 600 }}>Create new account “Acme”</span>
+            </div>
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 8 }}>Account website <span style={{ color: 'var(--gb-error-fg)' }}>*</span></div>
+          <Input size="sm" value="" onChange={() => {}} placeholder="https://acme.com" />
+        </>
+      ) : (
+        <>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--gb-text-muted)', marginBottom: 4 }}>Account · linked</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 9px', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-brand-tint-border)', background: 'var(--gb-brand-tint-soft)' }}>
+            <I.check size={13} style={{ color: 'var(--gb-brand-label)' }} />
+            <span style={{ flex: 1, fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)' }}>Acme Industries</span>
+            <I.close size={12} style={{ color: 'var(--gb-text-muted)' }} />
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 8 }}>Account website · linked</div>
+          <div style={{ padding: '7px 9px', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-subtle)', fontSize: 11, color: 'var(--gb-text-muted)', fontStyle: 'italic' }}>Linked — website on file</div>
+        </>
+      )}
+    </MiniFrame>
+  );
+}
+
 export function NewPage() {
   return (
     <div className="prose">
       <div className="eyebrow">Find People</div>
       <h1 className="title">New Contact</h1>
       <p className="lede">
-        Press <span className="kbd">Ctrl+Q</span> anywhere (or use the shelf) and quick-create a CRM
-        contact without leaving the page you're on. The real form is below.
+        Press <span className="kbd">Ctrl+Q</span> anywhere (or use the shelf) to quick-create a CRM contact
+        without leaving the page you’re on — and, in the same step, <strong>link it to an existing account or
+        create a brand-new one</strong>. The real form is below; it scrolls through four sections, all of which are
+        laid out field-by-field further down so you can see every variable at a glance.
       </p>
 
-      <LiveModal w={720} h={560} frameLabel="new contact · live"
-        note="The live New Contact modal. Search an account to attach, then fill the basics."
+      <LiveModal w={720} h={620} frameLabel="new contact · live"
+        note="The live New Contact modal on sample data — scroll inside it through all four sections, search an account, or type a new one."
         render={(box, onClosed) => <CRMCreateContact contained portalContainer={box} onClosed={onClosed} />} />
 
-      <h2 className="sec">The whole form</h2>
-      <p>Search for and attach the <strong>account</strong>, then first name, last name, email, phone, and company. Create posts the contact straight to the CRM. That's deliberately all — anything richer belongs on the contact record afterwards. By default a contact <strong>must</strong> be attached to an account; admins can relax that under Developer Settings → "New Contact requires an account".</p>
+      <h2 className="sec">It creates two things: a contact AND an account</h2>
+      <p>
+        The <strong>Account</strong> field (top of the second section) is the heart of the form, and it does double duty.
+        As you type, it runs a <strong>live autocomplete</strong> against the CRM’s accounts:
+      </p>
+      <ul>
+        <li><strong>Pick a match</strong> to <strong>link</strong> the contact to that existing account. The field flips to “Account · linked,” and <strong>Account website</strong> locks to “linked — website on file” (the CRM already has it).</li>
+        <li><strong>Type a name nobody matches</strong> and leave it un-picked — on Create, the CRM <strong>makes a new account</strong> with that name. Because a new account needs a web address, <strong>Account website becomes required</strong> (red outline until filled).</li>
+      </ul>
+      <p>
+        So one Create can spin up a fresh account <em>and</em> its first contact together, or attach a contact to an account you already do business with. If account search ever fails (server hiccup), it falls back to a plain text field and still lets you submit — you just type the name by hand.
+      </p>
+
+      <TourBox n={1} eyebrow="The account field" title="Link existing · or create new" live={<AccountFlowSnippet />} flip>
+        <p>Toggle the snippet between the two states. <strong>Type a name</strong> shows the live results dropdown — each row is a real account (name + city + order count); the last row is always <strong>“Create new account …”</strong>. Pick a result and you <strong>link</strong>; ignore them and you <strong>create</strong>.</p>
+        <p><strong>Linked existing</strong> shows the resolved state: a green “Account · linked” chip (with an × to unlink) and the website field greyed to “linked — website on file.” Only a <em>new</em> account requires you to enter a website.</p>
+      </TourBox>
+
+      <h2 className="sec">Every field, by section</h2>
+      <p>The form is four sections. The three Contact fields and the Account field are the only required ones (account is gated by a dev setting — see below); everything else is optional segmentation that makes the record richer for later filtering and campaigns.</p>
+
+      <h3 className="sub">1 · Contact</h3>
+      <NcFieldTable rows={NC_CONTACT} />
+      <h3 className="sub">2 · Account &amp; Location</h3>
+      <NcFieldTable rows={NC_ACCOUNT} />
+      <h3 className="sub">3 · Segmentation &amp; Assignment</h3>
+      <NcFieldTable rows={NC_SEG} />
+      <h3 className="sub">4 · Source &amp; Flags</h3>
+      <NcFieldTable rows={NC_SOURCE} />
+
+      <h2 className="sec">Developer settings for New Contact</h2>
+      <p>Three registry knobs change how this modal behaves. They live in <a href="#settings">Settings</a> → Developer settings (or an admin can lock them via secret settings).</p>
+      <table className="spectable">
+        <thead><tr><th style={{ width: 250 }}>Setting</th><th style={{ width: 70 }}>Default</th><th>What it does</th></tr></thead>
+        <tbody>{NC_DEV.map((r) => <tr key={r[0]}><td><b>{r[0]}</b></td><td>{r[1]}</td><td>{r[2]}</td></tr>)}</tbody>
+      </table>
+
+      <div className="docnote info" style={{ marginTop: 18 }}>
+        <span className="dn-ico"><I.user size={15} /></span>
+        <div className="dn-b">
+          <div className="dn-t">Why account is required by default</div>
+          <p style={{ margin: 0 }}>A contact with no account floats free in the CRM — it won’t roll up under a company, show on an account’s contact list, or inherit territory/rep. That’s why <strong>require account</strong> ships <strong>on</strong>. Turn it off (Developer settings) only for deliberate one-off contacts; you can always attach an account on the record afterwards.</p>
+        </div>
+      </div>
     </div>
   );
 }
