@@ -124,3 +124,22 @@ for (let i = 0; i < d3.length; i += 4) {
 const monoNewPal = [{ r:0, g:0, b:0, a:0 }, { r:0, g:0, b:0, a:255 }];
 const svgNew = ImageTracer.imagedataToSVG(img3, { colorsampling:0, pal: monoNewPal, colorquantcycles:1, ltres:1, qtres:1, pathomit:8, strokewidth:0, scale: 1716/700 });
 console.log('NEW mono pal fills:', [...new Set([...svgNew.matchAll(/fill="(rgb\([^)]+\))"/g)].map(m=>m[1]))], 'opacities:', [...new Set([...svgNew.matchAll(/opacity="([^"]+)"/g)].map(m=>m[1]))]);
+
+// ---- transparent-input variant (logo already on transparent bg) ----
+console.log('\n=== TRANSPARENT INPUT (color) ===');
+function makeImageTransparentBg(w, h) {
+  const im = makeImage(w, h);
+  const d = im.data;
+  // make all near-white pixels transparent (simulate a transparent-bg PNG)
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i] > 235 && d[i+1] > 235 && d[i+2] > 235) { d[i]=d[i+1]=d[i+2]=0; d[i+3]=0; }
+  }
+  return im;
+}
+const t = makeImageTransparentBg(W, H);
+removeBackground(t, 40); // corners are transparent(0,0,0) now → floods dark? check
+const palT = medianCutPalette(t, 8);
+const svgT = ImageTracer.imagedataToSVG(t, { pal: palT, colorsampling:0, colorquantcycles:3, mincolorratio:0, ltres:1, qtres:1, pathomit:8, strokewidth:0, scale: 1716/700 });
+const visT = [...new Set([...svgT.matchAll(/fill="(rgb\([^)]+\))"/g)].map((m,idx)=>m[1]))];
+console.log('palette:', JSON.stringify(palT));
+console.log('fills:', visT, 'opacities:', [...new Set([...svgT.matchAll(/opacity="([^"]+)"/g)].map(m=>m[1]))]);
