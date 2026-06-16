@@ -286,7 +286,7 @@ function FaqItem({ q, a, link }) {
         <span style={{ flexShrink: 0, marginTop: 1, color: 'var(--gb-text-ghost)', fontFamily: 'var(--gb-font-mono)', fontWeight: 800, fontSize: 13 }}>A</span>
         <div style={{ fontSize: 13.5, lineHeight: 1.65, color: 'var(--gb-text-tertiary)' }}>
           {a}
-          {link && <> <a href={link[0]} style={{ marginLeft: 4 }}>{link[1]} <I.chevr size={10} /></a></>}
+          {link && <> <a href={link[0]} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 4, whiteSpace: 'nowrap' }}>{link[1]} <I.chevr size={10} /></a></>}
         </div>
       </div>
     </div>
@@ -673,7 +673,7 @@ function TimelineNode({ rel, last }) {
                 <span style={{ width: 28, height: 28, flexShrink: 0, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ico size={14} /></span>
                 <div style={{ fontSize: 13.5, lineHeight: 1.6, color: 'var(--gb-text-tertiary)' }}>
                   {h.text}
-                  {h.link && <> <a href={h.link[0]}>{h.link[1]} <I.chevr size={10} /></a></>}
+                  {h.link && <> <a href={h.link[0]} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, whiteSpace: 'nowrap' }}>{h.link[1]} <I.chevr size={10} /></a></>}
                 </div>
               </div>
             );
