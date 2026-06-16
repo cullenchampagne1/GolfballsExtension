@@ -7,8 +7,8 @@ import { ensureScales } from './scales.js';
 
    A theme is { variant, colors }:
    - variant — one of the shells (dark/midnight/light/cream +
-     nord/dracula/rose/solarized) that supplies surfaces, text,
-     borders, and an accent.
+     nord/dracula/rose/ocean/gruvbox/tokyo/monokai/latte) that
+     supplies surfaces, text, borders, and an accent.
    - colors  — overrides for the 8 tone-driving "Theme" colors.
 
    Because every tint derives from these via color-mix(), applying
@@ -28,11 +28,16 @@ export const THEME_VARIANTS = [
   { id: 'midnight', name: 'Slate' },
   { id: 'light', name: 'Light' },
   { id: 'cream', name: 'Cream' },
-  // Curated accent shells — each carries its own signature color.
-  { id: 'nord', name: 'Nord' },
-  { id: 'dracula', name: 'Dracula' },
-  { id: 'rose', name: 'Rosé' },
-  { id: 'solarized', name: 'Solarized' },
+  // Curated accent shells — ownAccent: their card previews under the
+  // variant's own signature color instead of the user's brand.
+  { id: 'nord', name: 'Nord', ownAccent: true },
+  { id: 'dracula', name: 'Dracula', ownAccent: true },
+  { id: 'rose', name: 'Rosé', ownAccent: true },
+  { id: 'ocean', name: 'Ocean', ownAccent: true },
+  { id: 'gruvbox', name: 'Gruvbox', ownAccent: true },
+  { id: 'tokyo', name: 'Tokyo Night', ownAccent: true },
+  { id: 'monokai', name: 'Monokai', ownAccent: true },
+  { id: 'latte', name: 'Latte', ownAccent: true },
 ];
 
 /** The 8 adjustable Theme colors layered on top of a variant. */

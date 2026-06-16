@@ -280,6 +280,80 @@ function AccountFlowSnippet() {
   );
 }
 
+/* ── Scaled-down New Contact form: every field of all four sections on
+   one screen (no scroll), so the whole variable set reads at a glance.
+   data-demo targets drive the LiveStage Tour pins + Play walkthrough. ── */
+function NcSec({ children }) {
+  return <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: 0.9, textTransform: 'uppercase', color: 'var(--gb-text-tertiary)', margin: '11px 0 5px' }}>{children}</div>;
+}
+function NcFld({ label, val, ph, req, demo }) {
+  return (
+    <div data-demo={demo} style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ fontSize: 8, fontWeight: 700, color: 'var(--gb-text-muted)', marginBottom: 3 }}>{label}{req && <span style={{ color: 'var(--gb-error-fg)' }}> *</span>}</div>
+      <div style={{ height: 23, borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-surface-2)', border: '1px solid ' + (req && !val ? 'var(--gb-error-tint-border, var(--gb-border-default))' : 'var(--gb-border-default)'), display: 'flex', alignItems: 'center', padding: '0 7px', fontSize: 9.5, color: val ? 'var(--gb-text-secondary)' : 'var(--gb-text-ghost)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{val || ph}</div>
+    </div>
+  );
+}
+const NcRow = ({ children }) => <div style={{ display: 'flex', gap: 6, marginBottom: 5 }}>{children}</div>;
+
+function NcFormDemo() {
+  return (
+    <div style={{ width: 520, background: 'var(--gb-surface-modal)', borderRadius: 'var(--gb-r-md)', border: '1px solid var(--gb-border-default)', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+        <span style={{ width: 22, height: 22, borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><I.user size={12} /></span>
+        <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>New Contact</span>
+        <I.close size={12} style={{ color: 'var(--gb-text-muted)' }} />
+      </div>
+      <div style={{ padding: '6px 13px 12px' }}>
+        <NcSec>Contact</NcSec>
+        <div data-demo="nc-contact">
+          <NcRow><NcFld label="First name" ph="First name" req /><NcFld label="Last name" ph="Last name" req /><NcFld label="Email" ph="name@example.com" req /></NcRow>
+          <NcRow><NcFld label="Phone" ph="(415) 555-0100" /><NcFld label="Job title" ph="Purchasing manager" /><NcFld label="Company" ph="Acme Industries" /></NcRow>
+        </div>
+        <NcSec>Account &amp; Location</NcSec>
+        <NcRow><NcFld demo="nc-account" label="Account" val="Acme Industries" req /><NcFld demo="nc-website" label="Account website" ph="https://acme.com" req /><NcFld label="LinkedIn URL" ph="linkedin.com/in/…" /></NcRow>
+        <NcRow><NcFld label="Address" ph="482 Brannan St #310" /><NcFld label="City" ph="San Francisco" /><NcFld label="Postal" ph="94107" /></NcRow>
+        <NcRow><NcFld label="Country" val="United States" /><div style={{ flex: 2 }} /></NcRow>
+        <NcSec>Segmentation &amp; Assignment</NcSec>
+        <div data-demo="nc-seg">
+          <NcRow><NcFld label="Industry" ph="Select…" /><NcFld label="Employee range" ph="Select…" /><NcFld label="Est. revenue" ph="Select…" /></NcRow>
+          <NcRow><NcFld label="Customer type" ph="Select…" /><NcFld label="Territory" ph="Select…" /><NcFld label="Campaign" ph="Select…" /></NcRow>
+        </div>
+        <NcSec>Source &amp; Flags</NcSec>
+        <div data-demo="nc-source">
+          <NcFld label="Source details" ph="PGA Show 2026 — booth visit" />
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
+            {['Consumer', 'Custom', 'Rep', 'One-to-One', 'Retail', 'Delay'].map((f) => (
+              <span key={f} style={{ fontSize: 9, fontWeight: 600, padding: '2px 7px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', color: 'var(--gb-text-muted)' }}>{f}</span>
+            ))}
+          </div>
+        </div>
+        <div data-demo="nc-create" style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginTop: 11 }}>
+          <span style={{ fontSize: 10, fontWeight: 600, padding: '5px 11px', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-muted)' }}>Cancel</span>
+          <span style={{ fontSize: 10, fontWeight: 700, padding: '5px 13px', borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)' }}>Create</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const NC_CALLOUTS = [
+  { n: 1, target: 'nc-contact', title: 'Contact basics', text: 'First name, Last name, and Email are required. Phone, Job title, and Company are optional but feed segmentation.' },
+  { n: 2, target: 'nc-account', title: 'Account — link OR create', text: 'Type to search existing accounts and pick one to LINK; type a brand-new name and leave it unpicked to CREATE a new account on Create.' },
+  { n: 3, target: 'nc-website', title: 'Account website', text: 'Required only when you’re creating a NEW account. Auto-filled and locked (“linked — website on file”) when you link an existing account.' },
+  { n: 4, target: 'nc-seg', title: 'Segmentation & assignment', text: 'Industry, employee range, est. revenue, customer type, territory, and campaign — all optional, used to filter and target later.' },
+  { n: 5, target: 'nc-source', title: 'Source & flags', text: 'Free-text source (where the lead came from) plus quick classification chips: Consumer · Custom · Rep · One-to-One · Retail · Delay.' },
+  { n: 6, target: 'nc-create', title: 'Create', text: 'Posts the contact — and any brand-new account — straight to the CRM. Account is required by default (a dev setting can relax it).' },
+];
+const NC_STEPS = [
+  { target: 'nc-contact', caption: 'Start with the basics — First name, Last name, and Email are the only always-required fields.', hold: 2400 },
+  { target: 'nc-account', caption: 'The Account field does double duty: search to LINK an existing account, or type a new name to CREATE one.', hold: 2800 },
+  { target: 'nc-website', caption: 'Creating a new account? Its website is required (it locks to “linked” when you attach an existing account instead).', hold: 2600 },
+  { target: 'nc-seg', caption: 'Segmentation is all optional — industry, size, revenue, type, territory, campaign — but it makes the record filterable.', hold: 2600 },
+  { target: 'nc-source', caption: 'Note where the lead came from and tag it with the quick flag chips.', hold: 2200 },
+  { target: 'nc-create', caption: 'Create posts the contact (and any new account) to the CRM — no page reload, no lost place.', hold: 2400 },
+];
+
 export function NewPage() {
   return (
     <div className="prose">
@@ -288,13 +362,20 @@ export function NewPage() {
       <p className="lede">
         Press <span className="kbd">Ctrl+Q</span> anywhere (or use the shelf) to quick-create a CRM contact
         without leaving the page you’re on — and, in the same step, <strong>link it to an existing account or
-        create a brand-new one</strong>. The real form is below; it scrolls through four sections, all of which are
-        laid out field-by-field further down so you can see every variable at a glance.
+        create a brand-new one</strong>. Below is a scaled view of the whole form with every field on one screen —
+        hover the numbered pins (Tour), press Play for a walkthrough, or switch to Try it.
       </p>
 
-      <LiveModal w={720} h={620} frameLabel="new contact · live"
-        note="The live New Contact modal on sample data — scroll inside it through all four sections, search an account, or type a new one."
-        render={(box, onClosed) => <CRMCreateContact contained portalContainer={box} onClosed={onClosed} />} />
+      <LiveStage
+        width={520}
+        frameKind="modal"
+        legend="left"
+        frameLabel="crm · new contact"
+        render={() => <NcFormDemo />}
+        callouts={NC_CALLOUTS}
+        steps={NC_STEPS}
+        note="A scaled view so all four sections fit without scrolling — the real form is the same fields, full size."
+      />
 
       <h2 className="sec">It creates two things: a contact AND an account</h2>
       <p>

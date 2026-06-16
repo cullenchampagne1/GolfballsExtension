@@ -35,7 +35,7 @@ function CursorSVG() {
   );
 }
 
-export function LiveStage({ width = 320, frameLabel, frameKind = 'popup', render, callouts = [], steps = [], note, wide = false }) {
+export function LiveStage({ width = 320, frameLabel, frameKind = 'popup', render, callouts = [], steps = [], note, wide = false, legend = 'right' }) {
   const stageRef = useRef(null);
   const apiRef = useRef(null);
   const [mode, setMode] = useState(callouts.length ? 'tour' : 'plain'); // 'tour' | 'play' | 'plain'
@@ -127,7 +127,7 @@ export function LiveStage({ width = 320, frameLabel, frameKind = 'popup', render
   const curStep = mode === 'play' && stepIdx >= 0 && stepIdx < steps.length ? steps[stepIdx] : null;
 
   return (
-    <div className={`gb-livestage${wide ? ' wide' : ''}`}>
+    <div className={`gb-livestage${wide ? ' wide' : ''}${legend === 'left' ? ' legend-left' : ''}${legend === 'bottom' ? ' legend-bottom' : ''}`}>
       {/* mode tabs */}
       <div className="gb-ls-tabs">
         {callouts.length > 0 && (

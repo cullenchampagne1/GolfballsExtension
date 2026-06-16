@@ -303,42 +303,198 @@
 }
 
 /* ════════════════════════════════════════════════════════════
-   ▼▼▼   BASE TOKENS — SOLARIZED (light · azure accent)   ▼▼▼
-   Solarized Light: the warm base3 paper, base0x ink, and the
-   fixed accent ramp. Accent is Solarized blue.
+   ▼▼▼   BASE TOKENS — OCEAN (dark · gold accent)   ▼▼▼
+   Material Ocean: near-black navy surfaces with a warm gold
+   accent and the soft Material syntax palette.
 ════════════════════════════════════════════════════════════ */
-[data-theme="solarized"] {
+[data-theme="ocean"] {
+  --gb-mode-fill-base:    255, 255, 255;
+  --gb-mode-fill-inverse: 0, 0, 0;
+
+  --gb-surface-deep:    #0b0d14;
+  --gb-surface-canvas:  #0f111a;
+  --gb-surface-1:       #1a1c25;
+  --gb-surface-2:       #232634;
+  --gb-surface-3:       #2d3043;
+  --gb-surface-modal:   #1a1c25;
+
+  --gb-text-primary:    #c3c7d1;
+  --gb-text-secondary:  #a6accd;
+  --gb-text-tertiary:   #7e849c;
+  --gb-text-muted:      #5c6370;
+  --gb-text-ghost:      #424862;
+
+  --gb-border-subtle:   #0f111a;
+  --gb-border-default:  #232634;
+  --gb-border-strong:   #3a3f58;
+
+  --gb-brand-label:     #ffcb6b;   /* amber/gold */
+  --gb-error:           #f07178;   /* red */
+  --gb-warning:         #f78c6c;   /* orange */
+  --gb-success:         #c3e88d;   /* green */
+  --gb-info:            #82aaff;   /* blue */
+
+  --gb-brand:           #ffcb6b;
+  --gb-brand-dark:      #f0bb55;
+  --gb-brand-border:    #d9a23f;
+  --gb-text-on-brand:   #0f111a;   /* dark ink on the gold button */
+  --gb-backdrop:        rgba(6, 7, 12, 0.65);
+}
+
+/* ════════════════════════════════════════════════════════════
+   ▼▼▼   BASE TOKENS — GRUVBOX (dark · orange accent)   ▼▼▼
+   Retro warm charcoal surfaces, cream text, and the earthy
+   Gruvbox status ramp. Accent is gruvbox orange.
+════════════════════════════════════════════════════════════ */
+[data-theme="gruvbox"] {
+  --gb-mode-fill-base:    255, 255, 255;
+  --gb-mode-fill-inverse: 0, 0, 0;
+
+  --gb-surface-deep:    #1d2021;
+  --gb-surface-canvas:  #282828;
+  --gb-surface-1:       #32302f;
+  --gb-surface-2:       #3c3836;
+  --gb-surface-3:       #504945;
+  --gb-surface-modal:   #282828;
+
+  --gb-text-primary:    #fbf1c7;
+  --gb-text-secondary:  #ebdbb2;
+  --gb-text-tertiary:   #d5c4a1;
+  --gb-text-muted:      #a89984;
+  --gb-text-ghost:      #7c6f64;
+
+  --gb-border-subtle:   #282828;
+  --gb-border-default:  #3c3836;
+  --gb-border-strong:   #504945;
+
+  --gb-brand-label:     #fe8019;   /* orange */
+  --gb-error:           #fb4934;   /* red */
+  --gb-warning:         #fabd2f;   /* yellow */
+  --gb-success:         #b8bb26;   /* green */
+  --gb-info:            #83a598;   /* aqua */
+
+  --gb-brand:           #d65d0e;
+  --gb-brand-dark:      #c04d0a;
+  --gb-brand-border:    #a84408;
+  --gb-text-on-brand:   #fbf1c7;
+  --gb-backdrop:        rgba(13, 14, 13, 0.6);
+}
+
+/* ════════════════════════════════════════════════════════════
+   ▼▼▼   BASE TOKENS — TOKYO NIGHT (dark · indigo accent)   ▼▼▼
+   Deep blue-violet surfaces, cool #c0caf5 text, and the
+   Tokyo Night terminal palette. Accent is tokyo blue.
+════════════════════════════════════════════════════════════ */
+[data-theme="tokyo"] {
+  --gb-mode-fill-base:    255, 255, 255;
+  --gb-mode-fill-inverse: 0, 0, 0;
+
+  --gb-surface-deep:    #16161e;
+  --gb-surface-canvas:  #1a1b26;
+  --gb-surface-1:       #1f2335;
+  --gb-surface-2:       #24283b;
+  --gb-surface-3:       #292e42;
+  --gb-surface-modal:   #1a1b26;
+
+  --gb-text-primary:    #c0caf5;
+  --gb-text-secondary:  #a9b1d6;
+  --gb-text-tertiary:   #787c99;
+  --gb-text-muted:      #565f89;
+  --gb-text-ghost:      #414868;
+
+  --gb-border-subtle:   #1a1b26;
+  --gb-border-default:  #2a2e42;
+  --gb-border-strong:   #3b4261;
+
+  --gb-brand-label:     #7aa2f7;   /* tokyo blue */
+  --gb-error:           #f7768e;   /* red */
+  --gb-warning:         #e0af68;   /* yellow */
+  --gb-success:         #9ece6a;   /* green */
+  --gb-info:            #7dcfff;   /* cyan */
+
+  --gb-brand:           #5d7fde;
+  --gb-brand-dark:      #4f6fce;
+  --gb-brand-border:    #4360b8;
+  --gb-text-on-brand:   #ffffff;
+  --gb-backdrop:        rgba(10, 10, 16, 0.65);
+}
+
+/* ════════════════════════════════════════════════════════════
+   ▼▼▼   BASE TOKENS — MONOKAI (dark · magenta accent)   ▼▼▼
+   The classic #272822 surfaces, soft #f8f8f2 text, and the
+   vibrant Monokai syntax palette. Accent is Monokai magenta.
+════════════════════════════════════════════════════════════ */
+[data-theme="monokai"] {
+  --gb-mode-fill-base:    255, 255, 255;
+  --gb-mode-fill-inverse: 0, 0, 0;
+
+  --gb-surface-deep:    #1e1f1c;
+  --gb-surface-canvas:  #272822;
+  --gb-surface-1:       #2d2e28;
+  --gb-surface-2:       #34352f;
+  --gb-surface-3:       #3e3d32;
+  --gb-surface-modal:   #272822;
+
+  --gb-text-primary:    #f8f8f2;
+  --gb-text-secondary:  #e6e6df;
+  --gb-text-tertiary:   #c9c9c0;
+  --gb-text-muted:      #75715e;
+  --gb-text-ghost:      #57543f;
+
+  --gb-border-subtle:   #272822;
+  --gb-border-default:  #3e3d32;
+  --gb-border-strong:   #75715e;
+
+  --gb-brand-label:     #f92672;   /* magenta */
+  --gb-error:           #ff5370;   /* red */
+  --gb-warning:         #e6db74;   /* yellow */
+  --gb-success:         #a6e22e;   /* green */
+  --gb-info:            #66d9ef;   /* cyan */
+
+  --gb-brand:           #e01f63;
+  --gb-brand-dark:      #cc1a59;
+  --gb-brand-border:    #b3144d;
+  --gb-text-on-brand:   #ffffff;
+  --gb-backdrop:        rgba(11, 12, 9, 0.65);
+}
+
+/* ════════════════════════════════════════════════════════════
+   ▼▼▼   BASE TOKENS — LATTE (light · teal accent)   ▼▼▼
+   Catppuccin Latte: soft cool-grey paper, slate ink, and the
+   pastel Latte ramp. Accent is Latte teal.
+════════════════════════════════════════════════════════════ */
+[data-theme="latte"] {
   --gb-mode-fill-base:    0, 0, 0;
   --gb-mode-fill-inverse: 255, 255, 255;
 
-  --gb-surface-deep:    #e9e2cd;
-  --gb-surface-canvas:  #fdf6e3;   /* base3 */
-  --gb-surface-1:       #fffbf0;
-  --gb-surface-2:       #eee8d5;   /* base2 */
-  --gb-surface-3:       #fffbf0;
-  --gb-surface-modal:   #fdf6e3;
+  --gb-surface-deep:    #dce0e8;   /* crust */
+  --gb-surface-canvas:  #eff1f5;   /* base */
+  --gb-surface-1:       #ffffff;
+  --gb-surface-2:       #e6e9ef;   /* mantle */
+  --gb-surface-3:       #ffffff;
+  --gb-surface-modal:   #ffffff;
 
-  --gb-text-primary:    #073642;   /* base02 */
-  --gb-text-secondary:  #586e75;   /* base01 */
-  --gb-text-tertiary:   #657b83;   /* base00 */
-  --gb-text-muted:      #839496;   /* base0 */
-  --gb-text-ghost:      #93a1a1;   /* base1 */
+  --gb-text-primary:    #4c4f69;   /* text */
+  --gb-text-secondary:  #5c5f77;   /* subtext1 */
+  --gb-text-tertiary:   #6c6f85;   /* subtext0 */
+  --gb-text-muted:      #8c8fa1;   /* overlay1 */
+  --gb-text-ghost:      #acb0be;   /* surface2 */
 
-  --gb-border-subtle:   #eee8d5;
-  --gb-border-default:  #ddd6c1;
-  --gb-border-strong:   #b9b294;
+  --gb-border-subtle:   #e6e9ef;
+  --gb-border-default:  #ccd0da;   /* surface0 */
+  --gb-border-strong:   #acb0be;
 
-  --gb-brand-label:     #268bd2;   /* blue */
-  --gb-error:           #dc322f;   /* red */
-  --gb-warning:         #b58900;   /* yellow */
-  --gb-success:         #859900;   /* green */
-  --gb-info:            #2aa198;   /* cyan */
+  --gb-brand-label:     #179299;   /* teal */
+  --gb-error:           #d20f39;   /* red */
+  --gb-warning:         #df8e1d;   /* yellow */
+  --gb-success:         #40a02b;   /* green */
+  --gb-info:            #1e66f5;   /* blue */
 
-  --gb-brand:           #268bd2;
-  --gb-brand-dark:      #1f79b8;
-  --gb-brand-border:    #1b6aa1;
-  --gb-text-on-brand:   #fdf6e3;
-  --gb-backdrop:        rgba(7, 54, 66, 0.35);
+  --gb-brand:           #179299;
+  --gb-brand-dark:      #11787e;
+  --gb-brand-border:    #0d6268;
+  --gb-text-on-brand:   #ffffff;
+  --gb-backdrop:        rgba(76, 79, 105, 0.3);
 }
 
 /* ════════════════════════════════════════════════════════════

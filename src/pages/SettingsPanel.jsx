@@ -83,14 +83,15 @@ function VariantCard({ variant, active, onClick }) {
       <div
         data-theme={variant.id}
         style={{
-          // Force the brand back to the user's themed value. Each
-          // [data-theme="…"] block in src/ui/theme.css re-declares
-          // --gb-brand-label to that variant's baseline; setting it to
-          // `inherit` here makes it walk back up to <html> (where
-          // applyTheme wrote the user's customized brand color). The
-          // surface/text/border tokens stay variant-specific so each
-          // card still previews the variant's chrome under YOUR brand.
-          '--gb-brand-label': 'inherit',
+          // Variants with a built-in accent (ownAccent) preview under THAT
+          // color: their [data-theme="…"] block in src/ui/theme.css declares
+          // --gb-brand-label, and we let it stand so the dot + chip show the
+          // variant's signature color. The default-green shells instead force
+          // --gb-brand-label to `inherit`, walking back up to <html> (where
+          // applyTheme wrote the user's customized brand) so they preview
+          // under YOUR brand. Either way the surface/text/border tokens stay
+          // variant-specific, so every card previews its own chrome.
+          ...(variant.ownAccent ? {} : { '--gb-brand-label': 'inherit' }),
           height: 38, borderRadius: 'var(--gb-r-sm)', padding: '0 8px',
           background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-default)',
           display: 'flex', alignItems: 'center', gap: 6,
