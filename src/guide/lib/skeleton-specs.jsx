@@ -4,6 +4,16 @@
    the verified manual (helpContent.js). Keyed by nav route id. */
 
 export const PAGE_SPECS = {
+  start: {
+    title: 'The Popup — your home base', icon: 'mail', frameLabel: 'toolbar · popup', width: 460,
+    regions: [
+      { key: 'st-matched', label: 'Matched templates', kind: 'list', lines: 2, hint: 'Templates whose type and rules fit the current page jump to the top, ready to send.' },
+      { key: 'st-vars', label: 'Live variables', kind: 'row', hint: "Each template's variables resolve against the page you're on — green chips mean they filled." },
+      { key: 'st-actions', label: 'Quick actions', kind: 'buttons', cols: 3, hint: 'Charge, watch, task, and proof actions for the current order or contact.' },
+      { key: 'st-manage', label: 'Manage gear', kind: 'row', hint: 'Opens Settings and the Template Manager — themes, toggles, shortcuts, presets.' },
+    ],
+    note: 'A wireframe of the popup (the home base). Hover the pins (Tour), press Play, or Try it — every other page in this guide works the same way.',
+  },
   charge: {
     title: 'Charge / Refund & Order Edit', icon: 'card', frameLabel: 'order · charge', width: 460,
     regions: [
