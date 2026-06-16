@@ -478,13 +478,43 @@ function fitSvg(svgString) {
   );
 }
 
+/* Separable min-filter erosion of a binary mask (shrinks the shape by `r` px).
+   Used to derive a thick edge band = mask AND NOT erode(mask). */
+function erodeMask(mask, w, h, r) {
+  const tmp = new Uint8Array(w * h), out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let m = 1; for (let k = -r; k <= r; k++) { const xx = x + k; if (xx < 0 || xx >= w || !mask[y * w + xx]) { m = 0; break; } } tmp[y * w + x] = m; }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let m = 1; for (let k = -r; k <= r; k++) { const yy = y + k; if (yy < 0 || yy >= h || !tmp[yy * w + x]) { m = 0; break; } } out[y * w + x] = m; }
+  return out;
+}
+
+/* Two-pass chamfer distance transform: distance from each foreground pixel to
+   the nearest background pixel. Drives contour-following satin threads. */
+function distanceTransform(mask, w, h) {
+  const D = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) D[i] = mask[i] ? 1e9 : 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x; if (!D[i]) continue; let d = D[i];
+    if (x > 0) d = Math.min(d, D[i - 1] + 1); if (y > 0) d = Math.min(d, D[i - w] + 1);
+    if (x > 0 && y > 0) d = Math.min(d, D[i - w - 1] + 1.4142); if (x < w - 1 && y > 0) d = Math.min(d, D[i - w + 1] + 1.4142); D[i] = d;
+  }
+  for (let y = h - 1; y >= 0; y--) for (let x = w - 1; x >= 0; x--) {
+    const i = y * w + x; if (!D[i]) continue; let d = D[i];
+    if (x < w - 1) d = Math.min(d, D[i + 1] + 1); if (y < h - 1) d = Math.min(d, D[i + w] + 1);
+    if (x < w - 1 && y < h - 1) d = Math.min(d, D[i + w + 1] + 1.4142); if (x > 0 && y < h - 1) d = Math.min(d, D[i + w - 1] + 1.4142); D[i] = d;
+  }
+  return D;
+}
+
 /* ── embroidery (woven), raster — NO vectorization ─────────────────────────
-   "Extract the shape, stitch over it": draw the source, key out the background,
-   then lay parallel satin stitch lines over the foreground with `source-atop`
-   so the threads MODULATE the logo's own pixel colors. True color, no palette,
-   robust on any logo (color vectorization breaks on complex art). The raised
-   bevel (#emb-raise) + fabric backdrop are applied where it's rendered.
-   Returns a PNG dataURL, or null if the source is empty / CORS-tainted. */
+   "Extract the shape, stitch over it": key out the background to get the
+   foreground, then shade CONTOUR-FOLLOWING satin threads onto the logo's own
+   colors. Threads are iso-distance ridges of a distance transform, so each
+   shape's threads wrap its OWN contour (per-shape, automatically) and the
+   outermost ridge forms the thick woven outline. Each thread is a rounded
+   filament (diffuse crest/valley) with a glossy specular highlight + along-
+   thread corrugation, so it reads as raised 3D thread, not a flat line. A
+   brightened edge band sharpens the border. Robust on any logo (no fragile
+   color vectorization). Returns a PNG dataURL. */
 function buildEmbroidery(img, doRemoveBg, bgTol) {
   const nw = img?.naturalWidth, nh = img?.naturalHeight;
   if (!nw || !nh) return null;
@@ -497,23 +527,32 @@ function buildEmbroidery(img, doRemoveBg, bgTol) {
   let id;
   try { id = ctx.getImageData(0, 0, w, h); } catch { return null; }   // CORS-tainted
   if (doRemoveBg) removeBackground(id, bgTol);
-  ctx.putImageData(id, 0, 0);
-  // Satin stitch lines, source-atop so they only paint over (and modulate) the
-  // opaque foreground: light rows lighten, dark rows darken → thread sheen that
-  // keeps the original hue. Dash = individual stitches along each thread.
-  ctx.globalCompositeOperation = 'source-atop';
-  const ang = -52 * Math.PI / 180, dx = Math.cos(ang), dy = Math.sin(ang), nx = -Math.sin(ang), ny = Math.cos(ang);
-  const cx = w / 2, cy = h / 2, ext = Math.hypot(w, h) / 2 + 4;
-  const step = Math.max(2.6, w / 280);
-  ctx.lineWidth = step + 0.8; ctx.lineCap = 'round'; ctx.setLineDash([step * 3, step * 0.45]);
-  let k = 0;
-  for (let s = -ext; s <= ext; s += step) {
-    const mx = cx + nx * s, my = cy + ny * s;
-    ctx.strokeStyle = k % 2 ? 'rgba(255,255,255,0.26)' : 'rgba(0,0,0,0.30)';
-    ctx.beginPath(); ctx.moveTo(mx - dx * ext, my - dy * ext); ctx.lineTo(mx + dx * ext, my + dy * ext); ctx.stroke();
-    k++;
+  const d = id.data;
+  const mask = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) mask[i] = d[i * 4 + 3] > 10 ? 1 : 0;
+  const D = distanceTransform(mask, w, h);
+  const spacing = Math.max(2.6, w / 170), PI2 = Math.PI * 2;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x, o = i * 4; if (d[o + 3] === 0) continue;
+    const ridge = Math.cos(D[i] / spacing * PI2);                 // across nested threads
+    const corrug = Math.cos((x + y) / (spacing * 2.2) * PI2);     // along-thread stitch bumps
+    const diffuse = 0.76 + 0.36 * ridge + 0.13 * corrug;          // crest bright, valley dark
+    const crest = Math.max(0, ridge);
+    const spec = crest * crest * crest * 130 * (0.7 + 0.3 * corrug);  // glossy sheen on crests
+    d[o] = Math.max(0, Math.min(255, d[o] * diffuse + spec));
+    d[o + 1] = Math.max(0, Math.min(255, d[o + 1] * diffuse + spec));
+    d[o + 2] = Math.max(0, Math.min(255, d[o + 2] * diffuse + spec));
   }
-  ctx.globalCompositeOperation = 'source-over';
+  // Brighten the edge band (mask − eroded) for a crisp thick woven outline.
+  const R = Math.max(2, Math.round(w / 180));
+  const er = erodeMask(mask, w, h, R);
+  for (let i = 0; i < w * h; i++) {
+    if (mask[i] && !er[i]) {
+      const o = i * 4, t = 0.4;
+      d[o] += (255 - d[o]) * t; d[o + 1] += (255 - d[o + 1]) * t; d[o + 2] += (255 - d[o + 2]) * t; d[o + 3] = 255;
+    }
+  }
+  ctx.putImageData(id, 0, 0);
   return c.toDataURL('image/png');
 }
 
