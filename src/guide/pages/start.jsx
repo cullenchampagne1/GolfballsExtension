@@ -1,8 +1,6 @@
 import React from 'react';
 import { I } from '../../ui/index.js';
 import { GIcon } from '../lib/app.jsx';
-import { SkeletonStage } from '../lib/skeleton.jsx';
-import { PAGE_SPECS } from '../lib/skeleton-specs.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    start.jsx — Getting Started. Layout ported from the design's
@@ -71,8 +69,6 @@ export function StartPage() {
           <span className="fc-d">Hands on the wheel. The live UI is yours to click — wired to sample data, so nothing here can touch a real order. Reset to start fresh.</span>
         </div>
       </div>
-
-      <SkeletonStage spec={PAGE_SPECS.start} />
 
       <h2 className="sec">First five minutes</h2>
       <p>Worth doing on day one, all in <a href="#settings">Settings</a> (popup → Manage gear):</p>

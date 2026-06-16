@@ -4,20 +4,16 @@ import { SettingsPage } from './settings.jsx';
 import { TemplatesPage } from './templates.jsx';
 import { WatchListPage, TasksPage, QuickTaskCreatePage, CallsPage, CalendarPage } from './organize.jsx';
 import { SearchPage, QBPage, NewPage } from './crm.jsx';
-import { makeArticlePage } from './article-page.jsx';
+import { ThemesPage, ShortcutsPage } from './config.jsx';
+import { ChargePage, ProofPage, MarginPage, OrderExtrasPage } from './ordertools.jsx';
+import { EmailViewerPage, ImageViewerPage, Viewer3DPage } from './viewers.jsx';
+import { CatalogPage, ProposalsPage } from './catalog.jsx';
+import { QuickSendPage, CampaignsPage } from './campaigns.jsx';
+import { TroubleshootingPage, FaqPage, PowerUserPage, WhatsNewPage } from './reference.jsx';
 
-/* Route → page component. Bespoke live-stage pages are imported above;
-   every other route renders the verified manual through the generic
-   ArticlePage (article-page.jsx), so the whole help menu is complete
-   and identically themed — no WIP placeholders. Add a bespoke page here
-   to override the generic one for a route. */
-const ARTICLE_ROUTES = [
-  'charge', 'proof', 'themes', 'shortcuts',
-  'viewer-email', 'viewer-image', 'viewer-3d', 'margin', 'order-extras',
-  'catalog', 'proposals', 'quicksend', 'campaigns',
-  'troubleshooting', 'faq', 'power', 'whatsnew',
-];
-
+/* Route → page component. Every route has a bespoke, hand-built page that
+   visually reproduces the real modal/surface (live snippets + TourBox deep
+   explanations), matching the Settings and Email Templates reference pages. */
 export const PAGES = {
   start: StartPage,
   popup: PopupPage,
@@ -31,5 +27,21 @@ export const PAGES = {
   'crm-search': SearchPage,
   'crm-query': QBPage,
   'crm-new': NewPage,
-  ...Object.fromEntries(ARTICLE_ROUTES.map((id) => [id, makeArticlePage(id)])),
+  themes: ThemesPage,
+  shortcuts: ShortcutsPage,
+  charge: ChargePage,
+  proof: ProofPage,
+  margin: MarginPage,
+  'order-extras': OrderExtrasPage,
+  'viewer-email': EmailViewerPage,
+  'viewer-image': ImageViewerPage,
+  'viewer-3d': Viewer3DPage,
+  catalog: CatalogPage,
+  proposals: ProposalsPage,
+  quicksend: QuickSendPage,
+  campaigns: CampaignsPage,
+  troubleshooting: TroubleshootingPage,
+  faq: FaqPage,
+  power: PowerUserPage,
+  whatsnew: WhatsNewPage,
 };
