@@ -9,7 +9,7 @@ import {
   SCALE_CATEGORIES, DEFAULT_SCALES, loadScales, saveScales, applyScales,
 } from '../lib/scales.js';
 import {
-  THEME_VARIANTS, THEME_COLORS, DEFAULT_THEME,
+  THEME_VARIANTS, THEME_COLORS, DEFAULT_THEME, DEFAULT_BRAND, BRAND_KEYS,
   loadTheme, applyTheme, saveTheme, currentColor,
 } from '../lib/theme.js';
 import {
@@ -773,14 +773,20 @@ export function SettingsPanel() {
 
   const commitTheme = (next) => { setTheme(next); applyTheme(next); saveTheme(next); };
   const pickVariant = (variant) => {
-    if (variant === theme.variant) return;
-    commitTheme({ ...theme, variant });
+    // Selecting a template (re)applies ITS accent: drop any pinned brand
+    // override so the variant's own --gb-brand-* tokens show through. Not
+    // early-returning on the active variant lets a re-click "set it again".
+    const colors = { ...theme.colors };
+    for (const k of BRAND_KEYS) delete colors[k];
+    commitTheme({ ...theme, variant, colors });
     window.__gbToast?.success(`Theme set to ${variant}`);
   };
   const setColor = (key, value) => commitTheme({ ...theme, colors: { ...theme.colors, [key]: value } });
   const resetColors = () => {
-    commitTheme({ ...theme, colors: {} });
-    window.__gbToast?.success('Colors reset to variant defaults');
+    // Reset always returns to the canonical golf-green, regardless of which
+    // template is active (pin the green brand, clear the other overrides).
+    commitTheme({ ...theme, colors: { ...DEFAULT_BRAND } });
+    window.__gbToast?.success('Colors reset to green');
   };
   const toggleFlag = (key) => { const next = { ...flags, [key]: !flags[key] }; setFlags(next); saveFlags(next); };
   const setFlagValue = (key, value) => { const next = { ...flags, [key]: value }; setFlags(next); saveFlags(next); };

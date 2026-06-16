@@ -50,6 +50,17 @@ export const THEME_COLORS = [
 
 export const DEFAULT_THEME = { variant: 'dark', colors: {} };
 
+/** The canonical golf-green brand. Used as the Reset baseline regardless of
+    the active variant: Reset re-pins this green, while picking a variant
+    clears these keys so the variant's own accent shows again. */
+export const BRAND_KEYS = ['--gb-brand-label', '--gb-brand', '--gb-brand-dark', '--gb-brand-border'];
+export const DEFAULT_BRAND = {
+  '--gb-brand-label':  '#8fce2e',
+  '--gb-brand':        '#6e901d',
+  '--gb-brand-dark':   '#5f7d18',
+  '--gb-brand-border': '#4a6b14',
+};
+
 /** Inject the token stylesheet once. */
 function injectSheet() {
   if (document.getElementById(SHEET_ID)) return;

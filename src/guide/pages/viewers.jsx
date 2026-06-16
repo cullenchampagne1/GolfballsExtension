@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { I, Icon, Tag, Btn, IconBtn, Dropdown, Slider, CategorizeRail } from '../../ui/index.js';
 import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
+import { LiveStage } from '../lib/stage.jsx';
 import { LiveModal } from '../lib/live-modal.jsx';
 import { ImagePreview } from '../../modals/ImagePreview.jsx';
 import { GolfballViewer } from '../../modals/GolfballViewer.jsx';
@@ -253,18 +254,21 @@ function RailPreview() {
 
 /* The email viewer in CASE mode (opened from a case page): thread + reply
    on the left, the categorize rail on the right. */
+/* The case-mode email viewer body, returned raw (no MiniFrame) so a LiveStage
+   can frame it and drive the Tour pins / Play cursor off the data-demo nodes. */
 function EmailCaseSnippet() {
   return (
-    <MiniFrame width={680} label="golfballs.com · email case" pad={false}>
-      <div style={{ background: 'var(--gb-surface-canvas)', borderRadius: '0 0 var(--gb-r-md) var(--gb-r-md)', overflow: 'hidden' }}>
-        <ViewerHeader
-          icon={<I.mail size={14} />}
-          title="Re: Order #4471829 — two boxes arrived crushed"
-          sub="Rob King · rdking3@bellsouth.net · Case 90214"
-          toggle={<span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>Case ⇄ Inbox view</span>}
-        />
-        <div style={{ display: 'flex', minHeight: 0 }}>
-          <div style={{ flex: 1, minWidth: 0, padding: '12px 14px' }}>
+    <div style={{ width: 680, maxWidth: '100%', background: 'var(--gb-surface-canvas)', borderRadius: 'inherit', overflow: 'hidden' }}>
+      <ViewerHeader
+        icon={<I.mail size={14} />}
+        title="Re: Order #4471829 — two boxes arrived crushed"
+        sub="Rob King · rdking3@bellsouth.net · Case 90214"
+        toggle={<span data-demo="ev-mode" style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>Case ⇄ Inbox view</span>}
+        onClose={false}
+      />
+      <div style={{ display: 'flex', minHeight: 0 }}>
+        <div style={{ flex: 1, minWidth: 0, padding: '12px 14px' }}>
+          <div data-demo="ev-thread">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>
               <span>Thread</span>
               <span style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
@@ -274,14 +278,26 @@ function EmailCaseSnippet() {
               body="Two of the dozen boxes from #4471829 showed up crushed — courier damage. Can you reship the damaged dozen before our event on the 22nd?" />
             <MailCard initials="CC" hue={130} name="Cullen (Golfballs)" addr="cullen@loyaltylogo.com" time="Wed, Jun 10 · 4:02 PM" sent
               body="Hi Rob — your order shipped today via UPS Ground…" />
-            <ReplyBar />
           </div>
-          <RailPreview />
+          <div data-demo="ev-reply"><ReplyBar /></div>
         </div>
+        <div data-demo="ev-rail"><RailPreview /></div>
       </div>
-    </MiniFrame>
+    </div>
   );
 }
+const EV_CALLOUTS = [
+  { n: 1, target: 'ev-mode', title: 'View is set by the page', text: 'A case page (caseID in the URL) opens Case mode. The Case ⇄ Inbox toggle only flips the view — there’s no manual “type” switch.' },
+  { n: 2, target: 'ev-thread', title: 'The thread', text: 'One card per message, newest first; a green SENT badge marks messages from our domains; quoted Outlook history splits into its own cards.' },
+  { n: 3, target: 'ev-reply', title: 'Reply', text: 'A case-template picker (only templates whose rules fit this email) drafts a reply addressed to the customer side of the thread.' },
+  { n: 4, target: 'ev-rail', title: 'Categorize rail', text: 'Tag the case’s category/subcategory. The ✦ Recommended chips come from the selected reply template; Junk is pinned at the bottom.' },
+];
+const EV_STEPS = [
+  { target: 'ev-mode', caption: 'You opened this from a case page, so it’s in Case mode — the page decided, not a switch.', hold: 2400 },
+  { target: 'ev-thread', caption: 'Read the thread: one card per message, newest first, with a SENT badge on our replies.', hold: 2600 },
+  { target: 'ev-rail', caption: 'Tag the case in the Categorize rail — the ✦ recommended chips are one keystroke away.', hold: 2600 },
+  { target: 'ev-reply', caption: 'Fire a matching case template back to the customer — it drafts (or sends, with Power Automate on).', hold: 2600 },
+];
 
 /* The chat / text viewer (TextPreview): a parsed SnapEngage transcript. */
 function ChatSnippet() {
@@ -367,7 +383,15 @@ export function EmailViewerPage() {
         rides along so you can tag the case and (for email) reply without leaving the page.
       </p>
 
-      <EmailCaseSnippet />
+      <LiveStage
+        width={680}
+        frameKind="modal"
+        frameLabel="golfballs.com · email case"
+        render={() => <EmailCaseSnippet />}
+        callouts={EV_CALLOUTS}
+        steps={EV_STEPS}
+        note="The case-mode email viewer — hover the numbered pins (Tour), press Play for a walkthrough, or switch to Try it."
+      />
 
       <h2 className="sec">The type is decided by the page — there’s no switch</h2>
       <p>You never choose “email vs chat” or “case vs inbox.” The extension reads it off the page you opened the preview from:</p>
@@ -401,15 +425,10 @@ export function EmailViewerPage() {
       </p>
 
       <h2 className="sec">Chat / text transcripts — the sibling viewer</h2>
-      <p>
-        The preview on a <strong>chat or note row</strong> opens the same surface in transcript form. A SnapEngage blob is parsed into a
-        real conversation: <strong>visitor</strong> messages on the left, <strong>agent</strong> messages right-aligned with a brand tint,
-        <strong> system</strong> events as centered divider badges, internal <strong>notes</strong> in amber, and a <strong>SnapEngage link</strong>
-        when one exists. It’s <strong>read-only</strong> (replies happen in SnapEngage), but on a case page the <em>same</em> Categorize rail
-        appears so you can still tag the case.
-      </p>
-
-      <ChatSnippet />
+      <TourBox eyebrow="Sibling viewer" title="A parsed SnapEngage transcript" live={<ChatSnippet />} flip>
+        <p>The preview on a <strong>chat or note row</strong> opens the same surface in transcript form. A SnapEngage blob is parsed into a real conversation: <strong>visitor</strong> messages on the left, <strong>agent</strong> messages <strong>right-aligned</strong> with a brand tint, <strong>system</strong> events as centered divider badges, and internal <strong>notes</strong> in amber.</p>
+        <p>A <strong>“View full transcript on SnapEngage”</strong> pill appears when a link exists. It’s <strong>read-only</strong> — replies happen in SnapEngage — but on a case page the <em>same</em> Categorize rail rides along so you can still tag the case.</p>
+      </TourBox>
 
       <h2 className="sec">Every case type</h2>
       <p>The full source-of-truth list the rail tags against. Categories with subcategories become rail sections; the rest are applied at the category level.</p>
@@ -560,6 +579,29 @@ function SwapSnippet() {
   );
 }
 
+/* Mockup composer — the photoreal grass scene with the ball + decal
+   composited onto the camera-facing surface (distinct from the color
+   swap, which shows the eyedropper popover). */
+function MockupSnippet() {
+  return (
+    <MiniFrame width={440} label="logo extractor · mockup" pad>
+      <div style={{ position: 'relative', height: 210, borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'linear-gradient(180deg, #8fbf57 0%, #5f8f37 50%, #3d5f23 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {/* grass blades hint */}
+        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(88deg, rgba(0,0,0,.10) 0 2px, transparent 2px 7px)', opacity: 0.5 }} />
+        {/* ground shadow */}
+        <div style={{ position: 'absolute', bottom: '30%', width: 110, height: 20, borderRadius: '50%', background: 'rgba(0,0,0,.32)', filter: 'blur(7px)' }} />
+        {/* ball with decal */}
+        <div style={{ position: 'relative', width: 122, height: 122, borderRadius: '50%', background: 'radial-gradient(circle at 36% 28%, #ffffff 0%, #ededed 58%, #d2d2d2 100%)', boxShadow: 'inset -16px -18px 30px rgba(0,0,0,.16), 0 16px 26px -6px rgba(0,0,0,.5)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+          <span style={{ width: 52, height: 52, borderRadius: '50%', border: '5px solid #0b4f2c', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Georgia, serif', fontWeight: 800, fontSize: 24, color: '#0b4f2c' }}>P</span>
+          <span style={{ fontSize: 8, letterSpacing: 2, fontWeight: 700, color: '#0b4f2c' }}>PEBBLE</span>
+        </div>
+        <div style={{ position: 'absolute', top: 8, left: 10 }}><GlassChip mono={false}>grass mockup</GlassChip></div>
+        <div style={{ position: 'absolute', bottom: 8, right: 8, display: 'flex', gap: 5 }}><GlassBtn icon={<I.copy size={13} />} label="Copy" /><GlassBtn icon={<I.download size={13} />} label="Download" /></div>
+      </div>
+    </MiniFrame>
+  );
+}
+
 const IMG_CONTROLS = [
   ['Align · 3D · Mockup', 'top right', 'Toggle alignment mode, the 3D ball view, and the grass-scene mockup'],
   ['Size chip + eyedropper', 'top left', 'Natural pixel size · pick a color off the image for swapping'],
@@ -588,7 +630,7 @@ export function ImageViewerPage() {
         straight onto the surface.
       </p>
 
-      <LiveModal w={900} h={620} frameLabel="order · image viewer"
+      <LiveModal w={500} h={600} frameLabel="order · image viewer"
         note="The real Image Viewer on a template logo — exactly as it appears in production. Drag to pan, scroll to zoom, and try the Align / 3D / Mockup toggles. It’s live."
         render={(box, onClosed) => <ImagePreview url={TEMPLATE_LOGO} onClosed={onClosed} />} />
 
@@ -610,7 +652,7 @@ export function ImageViewerPage() {
         <p>This is the <em>"what would it look like in our navy?"</em> tool. The original is always kept, so a <strong>Reset</strong> chip appears to revert. If you've already saved an alignment, the swap is applied to the decal too — so the 3D ball and mockup pick up the new color without re-aligning.</p>
       </TourBox>
 
-      <TourBox n={4} eyebrow="Sell it" title="Mockup composer (grass scene)" live={<SwapSnippet />} wide>
+      <TourBox n={4} eyebrow="Sell it" title="Mockup composer (grass scene)" live={<MockupSnippet />} wide>
         <p>The <strong>Mockup</strong> toggle (or <span className="kbd">C</span>) swaps the preview for a <strong>photoreal grass scene</strong> — the ball front and center with your aligned decal composited onto the camera-facing surface. Combine it with the color swap (recolor the logo first, then render) and you've got a client-ready mockup without ever opening a design tool. The <strong>Download</strong> / <strong>Copy</strong> snapshot buttons in the strip export the finished render.</p>
       </TourBox>
 
