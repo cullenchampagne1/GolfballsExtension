@@ -420,81 +420,81 @@
 }
 
 /* ════════════════════════════════════════════════════════════
-   ▼▼▼   BASE TOKENS — MONOKAI (dark · magenta accent)   ▼▼▼
-   The classic #272822 surfaces, soft #f8f8f2 text, and the
-   vibrant Monokai syntax palette. Accent is Monokai magenta.
+   ▼▼▼   BASE TOKENS — MONOKAI (dark · pink accent)   ▼▼▼
+   Monokai Pro: warm purple-grey surfaces, crisp #fcfcfa text, and
+   the refined Pro syntax palette. Accent is the signature pink.
 ════════════════════════════════════════════════════════════ */
 [data-theme="monokai"] {
   --gb-mode-fill-base:    255, 255, 255;
   --gb-mode-fill-inverse: 0, 0, 0;
 
-  --gb-surface-deep:    #1e1f1c;
-  --gb-surface-canvas:  #272822;
-  --gb-surface-1:       #2d2e28;
-  --gb-surface-2:       #34352f;
-  --gb-surface-3:       #3e3d32;
-  --gb-surface-modal:   #272822;
+  --gb-surface-deep:    #221f22;
+  --gb-surface-canvas:  #2d2a2e;
+  --gb-surface-1:       #353236;
+  --gb-surface-2:       #403e41;
+  --gb-surface-3:       #4a474b;
+  --gb-surface-modal:   #2d2a2e;
 
-  --gb-text-primary:    #f8f8f2;
-  --gb-text-secondary:  #e6e6df;
-  --gb-text-tertiary:   #c9c9c0;
-  --gb-text-muted:      #75715e;
-  --gb-text-ghost:      #57543f;
+  --gb-text-primary:    #fcfcfa;
+  --gb-text-secondary:  #c1c0c0;
+  --gb-text-tertiary:   #939293;
+  --gb-text-muted:      #727072;
+  --gb-text-ghost:      #5b595c;
 
-  --gb-border-subtle:   #272822;
-  --gb-border-default:  #3e3d32;
-  --gb-border-strong:   #75715e;
+  --gb-border-subtle:   #2d2a2e;
+  --gb-border-default:  #403e41;
+  --gb-border-strong:   #5b595c;
 
-  --gb-brand-label:     #f92672;   /* magenta */
-  --gb-error:           #ff5370;   /* red */
-  --gb-warning:         #e6db74;   /* yellow */
-  --gb-success:         #a6e22e;   /* green */
-  --gb-info:            #66d9ef;   /* cyan */
+  --gb-brand-label:     #ff6188;   /* Monokai Pro pink */
+  --gb-error:           #f4485d;   /* red */
+  --gb-warning:         #ffd866;   /* yellow */
+  --gb-success:         #a9dc76;   /* green */
+  --gb-info:            #78dce8;   /* cyan */
 
-  --gb-brand:           #e01f63;
-  --gb-brand-dark:      #cc1a59;
-  --gb-brand-border:    #b3144d;
+  --gb-brand:           #e84a6f;
+  --gb-brand-dark:      #d63d62;
+  --gb-brand-border:    #c03457;
   --gb-text-on-brand:   #ffffff;
-  --gb-backdrop:        rgba(11, 12, 9, 0.65);
+  --gb-backdrop:        rgba(15, 13, 15, 0.65);
 }
 
 /* ════════════════════════════════════════════════════════════
-   ▼▼▼   BASE TOKENS — LATTE (light · teal accent)   ▼▼▼
-   Catppuccin Latte: soft cool-grey paper, slate ink, and the
-   pastel Latte ramp. Accent is Latte teal.
+   ▼▼▼   BASE TOKENS — MINT (light · teal accent)   ▼▼▼
+   Crisp neutral paper with white cards, deep slate ink for strong
+   contrast, and a clean modern teal accent.
 ════════════════════════════════════════════════════════════ */
-[data-theme="latte"] {
+[data-theme="mint"] {
   --gb-mode-fill-base:    0, 0, 0;
   --gb-mode-fill-inverse: 255, 255, 255;
 
-  --gb-surface-deep:    #dce0e8;   /* crust */
-  --gb-surface-canvas:  #eff1f5;   /* base */
+  --gb-surface-deep:    #d7dbe0;
+  --gb-surface-canvas:  #eceef1;
   --gb-surface-1:       #ffffff;
-  --gb-surface-2:       #e6e9ef;   /* mantle */
+  --gb-surface-2:       #e4e7ec;
   --gb-surface-3:       #ffffff;
   --gb-surface-modal:   #ffffff;
 
-  --gb-text-primary:    #4c4f69;   /* text */
-  --gb-text-secondary:  #5c5f77;   /* subtext1 */
-  --gb-text-tertiary:   #6c6f85;   /* subtext0 */
-  --gb-text-muted:      #8c8fa1;   /* overlay1 */
-  --gb-text-ghost:      #acb0be;   /* surface2 */
+  --gb-text-primary:    #2b303b;
+  --gb-text-secondary:  #434a59;
+  --gb-text-tertiary:   #5e6675;
+  --gb-text-muted:      #828a99;
+  --gb-text-ghost:      #aeb4c0;
 
-  --gb-border-subtle:   #e6e9ef;
-  --gb-border-default:  #ccd0da;   /* surface0 */
-  --gb-border-strong:   #acb0be;
+  --gb-border-subtle:   #e6e8ed;
+  --gb-border-default:  #d2d6de;
+  --gb-border-strong:   #a8aebb;
 
-  --gb-brand-label:     #179299;   /* teal */
-  --gb-error:           #d20f39;   /* red */
-  --gb-warning:         #df8e1d;   /* yellow */
-  --gb-success:         #40a02b;   /* green */
-  --gb-info:            #1e66f5;   /* blue */
+  --gb-brand-label:     #0d9488;   /* clean teal */
+  --gb-error:           #d92d4b;   /* red */
+  --gb-warning:         #c77a13;   /* amber */
+  --gb-success:         #2f9e44;   /* green */
+  --gb-info:            #2570e0;   /* blue */
 
-  --gb-brand:           #179299;
-  --gb-brand-dark:      #11787e;
-  --gb-brand-border:    #0d6268;
+  --gb-brand:           #0d9488;
+  --gb-brand-dark:      #0b8276;
+  --gb-brand-border:    #097068;
   --gb-text-on-brand:   #ffffff;
-  --gb-backdrop:        rgba(76, 79, 105, 0.3);
+  --gb-backdrop:        rgba(40, 44, 55, 0.32);
 }
 
 /* ════════════════════════════════════════════════════════════

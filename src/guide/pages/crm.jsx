@@ -1,14 +1,11 @@
 import React, { useState } from 'react';
 import { I, Tag, Input } from '../../ui/index.js';
-import { LiveModal } from '../lib/live-modal.jsx';
 import { LiveStage } from '../lib/stage.jsx';
 import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
 import {
   CRMSearchLive, ResultRow, TableHeader, Toolbar as CSToolbar, SelectionBar, MOCK_RESULTS,
 } from '../lib/crmsearch-live.jsx';
 import { QuickSendPanel } from '../lib/quicksend-live.jsx';
-import { QueryBuilder } from '../../modals/QueryBuilder.jsx';
-import { CRMCreateContact } from '../../modals/CRMCreateContact.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    crm.jsx — Find People pages. Each leads with the REAL modal on
@@ -140,6 +137,91 @@ const PRESETS = [
   ['Tournament prospects', 'AEs or BDRs with no recent contact'],
 ];
 
+/* ── Scaled-down Query Builder: a faithful, wide reproduction of the
+   grouped condition builder + presets + live previews. data-demo
+   targets drive the LiveStage Tour pins + Play walkthrough. ── */
+function QbToken({ children, kind }) {
+  const tone = kind === 'field' ? 'var(--gb-info-tint-soft, var(--gb-fill-subtle))'
+    : kind === 'op' ? 'var(--gb-fill-subtle)' : 'var(--gb-brand-tint-soft)';
+  const bd = kind === 'value' ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)';
+  const col = kind === 'value' ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)';
+  return <span style={{ display: 'inline-flex', alignItems: 'center', height: 24, padding: '0 9px', borderRadius: 'var(--gb-r-sm)', background: tone, border: `1px solid ${bd}`, fontSize: 11, fontWeight: 600, color: col, fontFamily: kind === 'value' ? 'var(--gb-font-mono)' : 'var(--gb-font-sans)' }}>{children}</span>;
+}
+function QbBuilderDemo() {
+  const cond = (f, o, v) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-sm)' }}>
+      <QbToken kind="field">{f}</QbToken><QbToken kind="op">{o}</QbToken><QbToken kind="value">{v}</QbToken>
+      <span style={{ marginLeft: 'auto', color: 'var(--gb-text-ghost)' }}><I.trash size={12} /></span>
+    </div>
+  );
+  return (
+    <div style={{ width: 760, background: 'var(--gb-surface-modal)', borderRadius: 'var(--gb-r-md)', border: '1px solid var(--gb-border-default)', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+        <span style={{ width: 22, height: 22, borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><I.filter size={12} /></span>
+        <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Query Builder</span>
+        <span data-demo="qb-save" style={{ fontSize: 10, fontWeight: 600, padding: '4px 9px', borderRadius: 'var(--gb-r-sm)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-secondary)' }}>Save query</span>
+        <span style={{ fontSize: 10, fontWeight: 700, padding: '4px 11px', borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)' }}>Run</span>
+      </div>
+      <div style={{ padding: '11px 13px' }}>
+        <div data-demo="qb-presets" style={{ display: 'flex', gap: 6, marginBottom: 11, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', alignSelf: 'center' }}>Presets</span>
+          {['VIP accounts', 'Stale leads', 'Recent reorder', 'Tournament prospects'].map((p, i) => (
+            <span key={p} style={{ fontSize: 10, fontWeight: 600, padding: '3px 9px', borderRadius: 'var(--gb-r-pill)', background: i === 0 ? 'var(--gb-brand-tint-soft)' : 'var(--gb-fill-subtle)', border: '1px solid ' + (i === 0 ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-subtle)'), color: i === 0 ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }}>{p}</span>
+          ))}
+        </div>
+        <div style={{ border: '1px dashed var(--gb-border-strong)', borderRadius: 'var(--gb-r-md)', padding: 10 }}>
+          <div data-demo="qb-joiner" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
+            <div style={{ display: 'inline-flex', padding: 2, gap: 2, background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)' }}>
+              {['AND', 'OR'].map((j) => <span key={j} style={{ fontSize: 9.5, fontWeight: 800, padding: '2px 9px', borderRadius: 3, background: j === 'AND' ? 'var(--gb-brand-tint-medium)' : 'transparent', color: j === 'AND' ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }}>{j}</span>)}
+            </div>
+            <span style={{ fontSize: 10, color: 'var(--gb-text-muted)' }}>match all conditions in this group</span>
+            <span data-demo="qb-not" style={{ marginLeft: 'auto', fontSize: 9.5, fontWeight: 700, padding: '3px 9px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', color: 'var(--gb-text-muted)' }}>NOT</span>
+          </div>
+          <div data-demo="qb-condition" style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            {cond('Order count', '≥', '12')}
+            {cond('YTD Revenue', '≥', '$10,000')}
+            {cond('Last Order Date', 'within the last', '90 days')}
+          </div>
+          <div data-demo="qb-addgroup" style={{ display: 'flex', gap: 8, marginTop: 9 }}>
+            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--gb-brand-label)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><I.plus size={11} /> Add condition</span>
+            <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--gb-text-muted)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><I.plus size={11} /> Add group</span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 11 }}>
+          <div data-demo="qb-human" style={{ flex: 1, background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)', padding: '8px 10px' }}>
+            <div style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', marginBottom: 5 }}>Human</div>
+            <div style={{ fontSize: 10.5, lineHeight: 1.5, color: 'var(--gb-text-secondary)' }}>Contacts where order count is at least 12, <b>and</b> YTD revenue is at least $10,000, <b>and</b> last order was within the last 90 days.</div>
+          </div>
+          <div data-demo="qb-fq" style={{ flex: 1, background: 'var(--gb-surface-deep)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)', padding: '8px 10px' }}>
+            <div style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', marginBottom: 5 }}>Solr · fq</div>
+            <div style={{ fontSize: 9.5, lineHeight: 1.6, color: 'var(--gb-brand-label)', fontFamily: 'var(--gb-font-mono)', wordBreak: 'break-all' }}>orderCount_i:[12 TO *] AND ytdRev_f:[10000 TO *] AND lastOrder_dt:[NOW-90DAYS TO *]</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+const QB_CALLOUTS = [
+  { n: 1, target: 'qb-presets', title: 'Quick presets', text: 'One-click starting points (VIP accounts, Stale leads, Recent reorder, Tournament prospects). Pick one, then refine — or build from scratch.' },
+  { n: 2, target: 'qb-joiner', title: 'AND / OR joiner', text: 'Each group matches ALL of its conditions (AND) or ANY of them (OR). Toggle it per group.' },
+  { n: 3, target: 'qb-not', title: 'NOT', text: 'Negate the whole group — “none of these” — for exclusion filters.' },
+  { n: 4, target: 'qb-condition', title: 'A condition', text: 'Field + operator + value. The operators adapt to the field type: text (is / contains / is set), number (= ≠ > between), date (within the last / before / after today).' },
+  { n: 5, target: 'qb-addgroup', title: 'Add condition / group', text: 'Stack more conditions, or nest a sub-group to mix AND and OR — the same grouped logic as template rules and campaign branches.' },
+  { n: 6, target: 'qb-human', title: 'Human preview', text: 'A plain-English read-out of the query so you can sanity-check it before running.' },
+  { n: 7, target: 'qb-fq', title: 'Solr (fq) preview', text: 'The exact Solr filter query it compiles to — what actually runs against the index.' },
+  { n: 8, target: 'qb-save', title: 'Save query', text: 'Name and save it to reuse; promote it into the presets list. A saved query is a reusable campaign audience.' },
+];
+const QB_STEPS = [
+  { target: 'qb-presets', caption: 'Start from a preset like “VIP accounts,” or build from scratch.', hold: 2400 },
+  { target: 'qb-condition', caption: 'Each condition is field + operator + value — operators adapt to the field type.', hold: 2800 },
+  { target: 'qb-joiner', caption: 'The group joiner decides AND (match all) vs OR (match any)…', hold: 2200 },
+  { target: 'qb-not', caption: '…and NOT negates the whole group for exclusions.', hold: 2000 },
+  { target: 'qb-addgroup', caption: 'Add more conditions, or nest groups to mix AND and OR.', hold: 2200 },
+  { target: 'qb-human', caption: 'The Human preview reads the query back in plain English…', hold: 2400 },
+  { target: 'qb-fq', caption: '…and the Solr fq preview shows exactly what runs against the index.', hold: 2400 },
+  { target: 'qb-save', caption: 'Save it to reuse — a saved query becomes a reusable campaign audience.', hold: 2400 },
+];
+
 export function QBPage() {
   return (
     <div className="prose">
@@ -147,13 +229,20 @@ export function QBPage() {
       <h1 className="title">Query Builder</h1>
       <p className="lede">
         Open it from CRM Search's filter button. Grouped AND/OR/NOT conditions over the CRM's real
-        fields, quick presets, saved queries — with live HUMAN and Solr previews. The real builder is
-        below: add a condition, toggle NOT, watch the previews update.
+        fields, quick presets, saved queries — with live HUMAN and Solr previews. Below is a scaled view —
+        hover the numbered pins (Tour), press Play for a walkthrough, or switch to Try it.
       </p>
 
-      <LiveModal w={1080} h={620} frameLabel="query builder · live"
-        note="The live Query Builder. Build a condition; the HUMAN and FQ previews compile as you go."
-        render={(box, onClosed) => <QueryBuilder contained portalContainer={box} onClosed={onClosed} />} />
+      <LiveStage
+        width={760}
+        frameKind="modal"
+        legend="bottom"
+        frameLabel="crm · query builder"
+        render={() => <QbBuilderDemo />}
+        callouts={QB_CALLOUTS}
+        steps={QB_STEPS}
+        note="A scaled view of the builder; the explanation sits below to give the wide builder the full row. The real builder is the same, full size."
+      />
 
       <h2 className="sec">The fields</h2>
       <table className="spectable">

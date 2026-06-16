@@ -7,7 +7,7 @@ import { ensureScales } from './scales.js';
 
    A theme is { variant, colors }:
    - variant — one of the shells (dark/midnight/light/cream +
-     nord/dracula/rose/ocean/gruvbox/tokyo/monokai/latte) that
+     nord/dracula/rose/ocean/gruvbox/tokyo/monokai/mint) that
      supplies surfaces, text, borders, and an accent.
    - colors  — overrides for the 8 tone-driving "Theme" colors.
 
@@ -37,7 +37,7 @@ export const THEME_VARIANTS = [
   { id: 'gruvbox', name: 'Gruvbox', ownAccent: true },
   { id: 'tokyo', name: 'Tokyo Night', ownAccent: true },
   { id: 'monokai', name: 'Monokai', ownAccent: true },
-  { id: 'latte', name: 'Latte', ownAccent: true },
+  { id: 'mint', name: 'Mint', ownAccent: true },
 ];
 
 /** The 8 adjustable Theme colors layered on top of a variant. */
