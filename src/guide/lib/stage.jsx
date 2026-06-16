@@ -151,15 +151,18 @@ export function LiveStage({ width = 320, frameLabel, frameKind = 'popup', render
       <div className="gb-ls-body">
         {/* the device frame + stage */}
         <div className="gb-ls-framewrap">
+          {/* Chrome titlebar + frame are one window, sized together so the
+              titlebar always spans the modal width and sits flush on top.
+              Wide mode caps the window at `width` so the table reflows
+              instead of overflowing; otherwise it's the fixed device width. */}
+          <div className="gb-ls-window" style={{ width: wide ? '100%' : width, maxWidth: wide ? width : '100%' }}>
           {frameLabel && (
             <div className="gb-ls-chrome">
               <span className="gb-ls-dot r" /><span className="gb-ls-dot y" /><span className="gb-ls-dot g" />
               <span className="gb-ls-chrome-label">{frameLabel}</span>
             </div>
           )}
-          {/* Wide mode fills the (full-width) framewrap so a table modal
-              with fr columns reflows to fit instead of overflowing. */}
-          <div className={`gb-ls-frame ${frameKind}`} style={{ width: wide ? '100%' : width, maxWidth: '100%' }}>
+          <div className={`gb-ls-frame ${frameKind}`}>
             <div className="gb-ls-stage" ref={stageRef}>
               <div key={runKey}>{render(apiRef, helpers)}</div>
 
@@ -200,6 +203,7 @@ export function LiveStage({ width = 320, frameLabel, frameKind = 'popup', render
                 )}
               </AnimatePresence>
             </div>
+          </div>
           </div>
           {note && <div className="gb-ls-note">{note}</div>}
         </div>

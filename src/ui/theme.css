@@ -186,6 +186,162 @@
 }
 
 /* ════════════════════════════════════════════════════════════
+   ▼▼▼   BASE TOKENS — NORD (dark · frost-cyan accent)   ▼▼▼
+   Polar Night surfaces + Snow Storm text + Frost/Aurora status.
+   Accent is frost cyan; primary buttons use the deeper Nord blue.
+════════════════════════════════════════════════════════════ */
+[data-theme="nord"] {
+  --gb-mode-fill-base:    255, 255, 255;
+  --gb-mode-fill-inverse: 0, 0, 0;
+
+  --gb-surface-deep:    #242933;
+  --gb-surface-canvas:  #2e3440;
+  --gb-surface-1:       #353b48;
+  --gb-surface-2:       #3b4252;
+  --gb-surface-3:       #434c5e;
+  --gb-surface-modal:   #2e3440;
+
+  --gb-text-primary:    #eceff4;
+  --gb-text-secondary:  #e5e9f0;
+  --gb-text-tertiary:   #d8dee9;
+  --gb-text-muted:      #8a93a3;
+  --gb-text-ghost:      #5a6678;
+
+  --gb-border-subtle:   #2e3440;
+  --gb-border-default:  #3b4252;
+  --gb-border-strong:   #4c566a;
+
+  --gb-brand-label:     #88c0d0;   /* frost cyan — the signature accent */
+  --gb-error:           #bf616a;   /* aurora red */
+  --gb-warning:         #ebcb8b;   /* aurora yellow */
+  --gb-success:         #a3be8c;   /* aurora green */
+  --gb-info:            #81a1c1;   /* frost blue */
+
+  --gb-brand:           #5e81ac;   /* Nord10 — button fill */
+  --gb-brand-dark:      #50709a;
+  --gb-brand-border:    #45628a;
+  --gb-text-on-brand:   #eceff4;
+  --gb-backdrop:        rgba(20, 24, 32, 0.6);
+}
+
+/* ════════════════════════════════════════════════════════════
+   ▼▼▼   BASE TOKENS — DRACULA (dark · violet accent)   ▼▼▼
+   The classic #282a36 surfaces, soft #f8f8f2 text, and the
+   trademark vivid syntax palette. Accent is Dracula purple.
+════════════════════════════════════════════════════════════ */
+[data-theme="dracula"] {
+  --gb-mode-fill-base:    255, 255, 255;
+  --gb-mode-fill-inverse: 0, 0, 0;
+
+  --gb-surface-deep:    #21222c;
+  --gb-surface-canvas:  #282a36;
+  --gb-surface-1:       #2d2f3d;
+  --gb-surface-2:       #343746;
+  --gb-surface-3:       #44475a;
+  --gb-surface-modal:   #282a36;
+
+  --gb-text-primary:    #f8f8f2;
+  --gb-text-secondary:  #e2e2dc;
+  --gb-text-tertiary:   #bdbdc6;
+  --gb-text-muted:      #6272a4;   /* Dracula "comment" */
+  --gb-text-ghost:      #4a4d63;
+
+  --gb-border-subtle:   #282a36;
+  --gb-border-default:  #44475a;   /* "current line" */
+  --gb-border-strong:   #6272a4;
+
+  --gb-brand-label:     #bd93f9;   /* Dracula purple */
+  --gb-error:           #ff5555;   /* red */
+  --gb-warning:         #f1fa8c;   /* yellow */
+  --gb-success:         #50fa7b;   /* green */
+  --gb-info:            #8be9fd;   /* cyan */
+
+  --gb-brand:           #7e5fd0;   /* deepened purple — button fill */
+  --gb-brand-dark:      #6f4fc0;
+  --gb-brand-border:    #5f3fae;
+  --gb-text-on-brand:   #f8f8f2;
+  --gb-backdrop:        rgba(13, 14, 20, 0.65);
+}
+
+/* ════════════════════════════════════════════════════════════
+   ▼▼▼   BASE TOKENS — ROSÉ (dark · soft-rose accent)   ▼▼▼
+   Rosé Pine: muted plum surfaces, lavender-tinted text, and the
+   warm love/gold/foam/iris palette. Accent is the rose highlight.
+════════════════════════════════════════════════════════════ */
+[data-theme="rose"] {
+  --gb-mode-fill-base:    255, 255, 255;
+  --gb-mode-fill-inverse: 0, 0, 0;
+
+  --gb-surface-deep:    #16141f;
+  --gb-surface-canvas:  #191724;
+  --gb-surface-1:       #1f1d2e;
+  --gb-surface-2:       #26233a;
+  --gb-surface-3:       #2f2b43;
+  --gb-surface-modal:   #1f1d2e;
+
+  --gb-text-primary:    #e0def4;
+  --gb-text-secondary:  #cbc8e0;
+  --gb-text-tertiary:   #908caa;
+  --gb-text-muted:      #6e6a86;
+  --gb-text-ghost:      #4f4b67;
+
+  --gb-border-subtle:   #1f1d2e;
+  --gb-border-default:  #2f2b43;
+  --gb-border-strong:   #44415a;
+
+  --gb-brand-label:     #ebbcba;   /* rose */
+  --gb-error:           #eb6f92;   /* love */
+  --gb-warning:         #f6c177;   /* gold */
+  --gb-success:         #9ccfd8;   /* foam */
+  --gb-info:            #c4a7e7;   /* iris */
+
+  --gb-brand:           #c2697f;   /* deepened rose — button fill */
+  --gb-brand-dark:      #b05a70;
+  --gb-brand-border:    #9c4d62;
+  --gb-text-on-brand:   #faf4f3;
+  --gb-backdrop:        rgba(13, 11, 20, 0.6);
+}
+
+/* ════════════════════════════════════════════════════════════
+   ▼▼▼   BASE TOKENS — SOLARIZED (light · azure accent)   ▼▼▼
+   Solarized Light: the warm base3 paper, base0x ink, and the
+   fixed accent ramp. Accent is Solarized blue.
+════════════════════════════════════════════════════════════ */
+[data-theme="solarized"] {
+  --gb-mode-fill-base:    0, 0, 0;
+  --gb-mode-fill-inverse: 255, 255, 255;
+
+  --gb-surface-deep:    #e9e2cd;
+  --gb-surface-canvas:  #fdf6e3;   /* base3 */
+  --gb-surface-1:       #fffbf0;
+  --gb-surface-2:       #eee8d5;   /* base2 */
+  --gb-surface-3:       #fffbf0;
+  --gb-surface-modal:   #fdf6e3;
+
+  --gb-text-primary:    #073642;   /* base02 */
+  --gb-text-secondary:  #586e75;   /* base01 */
+  --gb-text-tertiary:   #657b83;   /* base00 */
+  --gb-text-muted:      #839496;   /* base0 */
+  --gb-text-ghost:      #93a1a1;   /* base1 */
+
+  --gb-border-subtle:   #eee8d5;
+  --gb-border-default:  #ddd6c1;
+  --gb-border-strong:   #b9b294;
+
+  --gb-brand-label:     #268bd2;   /* blue */
+  --gb-error:           #dc322f;   /* red */
+  --gb-warning:         #b58900;   /* yellow */
+  --gb-success:         #859900;   /* green */
+  --gb-info:            #2aa198;   /* cyan */
+
+  --gb-brand:           #268bd2;
+  --gb-brand-dark:      #1f79b8;
+  --gb-brand-border:    #1b6aa1;
+  --gb-text-on-brand:   #fdf6e3;
+  --gb-backdrop:        rgba(7, 54, 66, 0.35);
+}
+
+/* ════════════════════════════════════════════════════════════
    ▼▼▼   DERIVED TOKENS — defined once, apply everywhere   ▼▼▼
    These never need to be overridden per theme.
    color-mix() calculates them from the base tokens above.

@@ -6,8 +6,9 @@ import { ensureScales } from './scales.js';
    theme.js — the design-system theme runtime.
 
    A theme is { variant, colors }:
-   - variant — one of 4 shells (dark/midnight/light/cream) that
-     supplies surfaces, text, borders.
+   - variant — one of the shells (dark/midnight/light/cream +
+     nord/dracula/rose/solarized) that supplies surfaces, text,
+     borders, and an accent.
    - colors  — overrides for the 8 tone-driving "Theme" colors.
 
    Because every tint derives from these via color-mix(), applying
@@ -20,13 +21,18 @@ import { ensureScales } from './scales.js';
 const SHEET_ID = '__gb-ds-theme';
 const STORAGE_KEY = 'gbTheme';
 
-/** The 4 shell variants. */
+/** The shell variants. */
 export const THEME_VARIANTS = [
   // ids kept stable (stored settings reference them); only display names changed.
   { id: 'dark', name: 'Dark' },
   { id: 'midnight', name: 'Slate' },
   { id: 'light', name: 'Light' },
   { id: 'cream', name: 'Cream' },
+  // Curated accent shells — each carries its own signature color.
+  { id: 'nord', name: 'Nord' },
+  { id: 'dracula', name: 'Dracula' },
+  { id: 'rose', name: 'Rosé' },
+  { id: 'solarized', name: 'Solarized' },
 ];
 
 /** The 8 adjustable Theme colors layered on top of a variant. */

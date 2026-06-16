@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { I, Icon, Tag, Btn, IconBtn, Dropdown, Slider } from '../../ui/index.js';
+import { I, Icon, Tag, Btn, IconBtn, Dropdown, Slider, CategorizeRail } from '../../ui/index.js';
 import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
+import { categorySections, CASE_CATEGORIES } from '../../lib/caseMatch.js';
 
 /* ───────────────────────────────────────────────────────────────
    viewers.jsx — On-page Helpers → the three "look at this" modals
@@ -169,94 +170,23 @@ function MailCard({ initials, hue, name, addr, time, sent, expanded, body }) {
   );
 }
 
-function EmailSnippet() {
-  const [mode, setMode] = useState('inbox');
-  const isCase = mode === 'case';
-  return (
-    <MiniFrame width={isCase ? 620 : 460} label="golfballs.com · email preview" pad={false}>
-      <div style={{ background: 'var(--gb-surface-canvas)', borderRadius: '0 0 var(--gb-r-md) var(--gb-r-md)', overflow: 'hidden' }}>
-        <ViewerHeader
-          icon={<I.mail size={14} />}
-          title="Re: Order #4471823 — wrong shaft flex"
-          sub="Sarah Patel · sarah@pebblecreek.com · CASE-90214"
-          toggle={<PillToggle value={mode} onChange={setMode} options={[{ id: 'case', label: 'Case' }, { id: 'inbox', label: 'Inbox' }]} />}
-        />
-        <div style={{ display: 'flex', minHeight: 0 }}>
-          {/* LEFT — thread */}
-          <div style={{ flex: 1, minWidth: 0, padding: '12px 14px', borderRight: isCase ? '1px solid var(--gb-border-default)' : 'none' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>
-              <span>Thread</span>
-              <span style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
-              <span style={{ fontFamily: 'var(--gb-font-mono)', letterSpacing: 0, textTransform: 'none', color: 'var(--gb-text-tertiary)' }}>2 messages</span>
-            </div>
-            <MailCard initials="SP" hue={20} name="Sarah Patel" addr="sarah@pebblecreek.com" time="Today · 9:14 AM" expanded
-              body="Hi — the dozen we got came stiff-flex but our order says regular. Can we swap before the tournament Saturday?" />
-            <MailCard initials="GB" hue={130} name="You (Golfballs CS)" addr="cs@golfballs.com" time="Yesterday · 4:02 PM" sent
-              body="Thanks for the order, Sarah! Confirming your imprint proof is attached…" />
-            {/* reply bar */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, padding: '10px 12px',
-              background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)',
-            }}>
-              <span style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><I.send size={11} /></span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>Reply to Sarah Patel</div>
-                <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>Click to write a draft</div>
-              </div>
-              <Tag size="xs" tone="neutral" mono>DRAFT</Tag>
-            </div>
-          </div>
-          {/* RIGHT — categorize rail (case mode) */}
-          {isCase && (
-            <div style={{ width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-              <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
-                <Dropdown size="sm" value="t1" options={[{ id: 't1', label: 'Order Change · Flex swap' }]} />
-                <Btn size="sm" variant="primary" status="brand" icon={<I.send size={11} />} full style={{ marginTop: 6 }}>Send template</Btn>
-              </div>
-              <div style={{ padding: '10px 12px', flex: 1 }}>
-                <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--gb-text-muted)', marginBottom: 8 }}>Categorize</div>
-                {[
-                  { star: true, k: '1', label: 'Order Change' },
-                  { star: true, k: '2', label: 'Returns / Reprint' },
-                  { star: false, k: '3', label: 'Order Status Update' },
-                  { star: false, k: '4', label: 'Cancelation' },
-                ].map((r) => (
-                  <div key={r.k} style={{
-                    display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', marginBottom: 4,
-                    borderRadius: 'var(--gb-r-sm)', fontSize: 11.5, color: 'var(--gb-text-secondary)',
-                    background: r.star ? 'var(--gb-brand-tint-soft)' : 'var(--gb-surface-1)',
-                    border: '1px solid ' + (r.star ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-subtle)'),
-                  }}>
-                    <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 9.5, color: 'var(--gb-text-muted)' }}>{r.k}</span>
-                    {r.star && <span style={{ color: 'var(--gb-brand-label)' }}><I.sparkle size={11} /></span>}
-                    <span style={{ flex: 1 }}>{r.label}</span>
-                  </div>
-                ))}
-                <Btn size="sm" variant="secondary" status="error" icon={<I.alert size={11} />} full style={{ marginTop: 8 }}>Junk</Btn>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </MiniFrame>
-  );
-}
+/* ── The Email/Chat viewers are FloatingPanel modals that don't embed
+   cleanly into a doc page, so their bodies are reproduced 1:1 from the
+   real layout. The case-type rail, though, IS the genuine component
+   (CategorizeRail is a plain rail, not a portal) — mounted live below. ── */
 
-/* Chat / Text preview snippet — visitor left, agent right, system
-   divider, a SnapEngage link pill, an amber NOTE. */
 function ChatBubble({ side, initials, hue, name, time, body }) {
   const agent = side === 'right';
   return (
     <div style={{ display: 'flex', flexDirection: agent ? 'row-reverse' : 'row', gap: 9, marginTop: 10 }}>
       <MiniAvatar initials={initials} hue={hue} size={24} />
-      <div style={{ maxWidth: '74%', display: 'flex', flexDirection: 'column', alignItems: agent ? 'flex-end' : 'flex-start' }}>
+      <div style={{ maxWidth: '76%', display: 'flex', flexDirection: 'column', alignItems: agent ? 'flex-end' : 'flex-start' }}>
         <div style={{ display: 'flex', gap: 6, fontSize: 9.5, color: 'var(--gb-text-muted)', marginBottom: 2 }}>
           <span style={{ fontWeight: 700, color: 'var(--gb-text-secondary)' }}>{name}</span>
           <span style={{ fontFamily: 'var(--gb-font-mono)' }}>{time}</span>
         </div>
         <div style={{
-          padding: '7px 11px', fontSize: 11.5, lineHeight: 1.5,
-          borderRadius: 'var(--gb-r-md)', color: 'var(--gb-text-primary)',
+          padding: '7px 11px', fontSize: 11.5, lineHeight: 1.5, borderRadius: 'var(--gb-r-md)', color: 'var(--gb-text-primary)',
           background: agent ? 'color-mix(in srgb, var(--gb-brand-label) 10%, var(--gb-surface-1))' : 'var(--gb-surface-2)',
           border: '1px solid ' + (agent ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-subtle)'),
         }}>{body}</div>
@@ -265,32 +195,105 @@ function ChatBubble({ side, initials, hue, name, time, body }) {
   );
 }
 
-function ChatSnippet() {
+function ReplyBar() {
   return (
-    <MiniFrame width={470} label="golfballs.com · chat preview" pad={false}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8, padding: '10px 12px', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>
+      <span style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><I.send size={11} /></span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>Reply to Rob King</div>
+        <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>RE: Order #4471829 — drafts a reply, doesn't send</div>
+      </div>
+      <Tag size="xs" tone="neutral" mono>DRAFT</Tag>
+    </div>
+  );
+}
+
+/* Compact categorize rail for the lead overview snippet (the full,
+   genuine rail is mounted further down). */
+function RailPreview() {
+  const rows = [
+    { star: true, k: '1', label: 'Returns/Reprint · Damaged Package' },
+    { star: true, k: '2', label: 'Order Status Update · Carrier Issue' },
+    { star: false, k: '3', label: 'Order Change' },
+    { star: false, k: '4', label: 'Cancelation' },
+  ];
+  return (
+    <div style={{ width: 232, flexShrink: 0, display: 'flex', flexDirection: 'column', borderLeft: '1px solid var(--gb-border-default)' }}>
+      <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+        <Dropdown size="sm" value="t1" options={[{ id: 't1', label: 'Damaged — reship the dozen' }]} />
+        <Btn size="sm" variant="primary" status="brand" icon={<I.send size={11} />} full style={{ marginTop: 6 }}>Send template</Btn>
+      </div>
+      <div style={{ padding: '10px 12px', flex: 1 }}>
+        <div style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--gb-brand-label)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}><I.sparkle size={10} /> Recommended</div>
+        {rows.map((r) => (
+          <div key={r.k} style={{
+            display: 'flex', alignItems: 'center', gap: 7, padding: '6px 8px', marginBottom: 4, borderRadius: 'var(--gb-r-sm)', fontSize: 11, color: 'var(--gb-text-secondary)',
+            background: r.star ? 'var(--gb-brand-tint-soft)' : 'var(--gb-surface-1)',
+            border: '1px solid ' + (r.star ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-subtle)'),
+          }}>
+            <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 9, color: 'var(--gb-text-muted)' }}>{r.k}</span>
+            {r.star && <span style={{ color: 'var(--gb-brand-label)' }}><I.sparkle size={10} /></span>}
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
+          </div>
+        ))}
+        <Btn size="sm" variant="secondary" status="error" icon={<I.alert size={11} />} full style={{ marginTop: 8 }}>Junk</Btn>
+      </div>
+    </div>
+  );
+}
+
+/* The email viewer in CASE mode (opened from a case page): thread + reply
+   on the left, the categorize rail on the right. */
+function EmailCaseSnippet() {
+  return (
+    <MiniFrame width={680} label="golfballs.com · email case" pad={false}>
       <div style={{ background: 'var(--gb-surface-canvas)', borderRadius: '0 0 var(--gb-r-md) var(--gb-r-md)', overflow: 'hidden' }}>
         <ViewerHeader
-          icon={<ChatGlyph size={14} />}
-          title="Live Chat Transcript"
-          tag={{ label: 'READ-ONLY', tone: 'neutral' }}
-          sub="CASE-90377 · Promo code wouldn't apply"
-          toggle={<IconBtn size="sm" variant="ghost" icon={<I.copy />} />}
+          icon={<I.mail size={14} />}
+          title="Re: Order #4471829 — two boxes arrived crushed"
+          sub="Rob King · rdking3@bellsouth.net · Case 90214"
+          toggle={<span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>Case ⇄ Inbox view</span>}
         />
+        <div style={{ display: 'flex', minHeight: 0 }}>
+          <div style={{ flex: 1, minWidth: 0, padding: '12px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>
+              <span>Thread</span>
+              <span style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
+              <span style={{ fontFamily: 'var(--gb-font-mono)', letterSpacing: 0, textTransform: 'none', color: 'var(--gb-text-tertiary)' }}>2 messages</span>
+            </div>
+            <MailCard initials="RK" hue={20} name="Rob King" addr="rdking3@bellsouth.net" time="Thu, Jun 11 · 7:09 PM" expanded
+              body="Two of the dozen boxes from #4471829 showed up crushed — courier damage. Can you reship the damaged dozen before our event on the 22nd?" />
+            <MailCard initials="CC" hue={130} name="Cullen (Golfballs)" addr="cullen@loyaltylogo.com" time="Wed, Jun 10 · 4:02 PM" sent
+              body="Hi Rob — your order shipped today via UPS Ground…" />
+            <ReplyBar />
+          </div>
+          <RailPreview />
+        </div>
+      </div>
+    </MiniFrame>
+  );
+}
+
+/* The chat / text viewer (TextPreview): a parsed SnapEngage transcript. */
+function ChatSnippet() {
+  return (
+    <MiniFrame width={480} label="golfballs.com · chat case" pad={false}>
+      <div style={{ background: 'var(--gb-surface-canvas)', borderRadius: '0 0 var(--gb-r-md) var(--gb-r-md)', overflow: 'hidden' }}>
+        <ViewerHeader icon={<ChatGlyph size={14} />} title="Live Chat Transcript" tag={{ label: 'READ-ONLY', tone: 'neutral' }} sub="Case 90377 · Promo code wouldn’t apply"
+          toggle={<IconBtn size="sm" variant="ghost" icon={<I.copy />} />} />
         <div style={{ padding: '12px 16px 14px' }}>
-          {/* system divider */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '4px 0' }}>
             <div style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
-            <span style={{ padding: '3px 9px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', fontSize: 9, fontWeight: 600, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>Chat started · 2:41 PM</span>
+            <span style={{ padding: '3px 9px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', fontSize: 9, fontWeight: 600, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>Chat started · 2:14 PM</span>
             <div style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
           </div>
-          <ChatBubble side="left" initials="V" hue={200} name="Visitor" time="2:41 PM" body="The code SUMMER15 isn't taking at checkout." />
-          <ChatBubble side="right" initials="MR" hue={130} name="Maria R." time="2:42 PM" body="Happy to help! That promo ended Friday — I can apply a one-time 10% instead." />
-          {/* note */}
+          <ChatBubble side="left" initials="RK" hue={200} name="Rob King" time="2:14 PM" body="Hi — my promo code EVERY12GETS6 won't apply at checkout." />
+          <ChatBubble side="right" initials="CC" hue={130} name="Cullen · Golfballs" time="2:15 PM" body="That code needs 12+ dozen of qualifying logo balls. How many are you ordering?" />
+          <ChatBubble side="left" initials="RK" hue={200} name="Rob King" time="2:16 PM" body="Just 6 dozen Pro V1." />
           <div style={{ margin: '10px 0', padding: '8px 11px', background: 'var(--gb-warning-tint-soft)', border: '1px solid var(--gb-warning-tint-border)', borderRadius: 'var(--gb-r-md)', fontSize: 11.5, lineHeight: 1.5, color: 'var(--gb-text-secondary)' }}>
             <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--gb-warning-fg)', marginRight: 8 }}>Note</span>
-            Applied manual coupon MR-10OFF, ref #88231.
+            Customer upsold 6 → 12 dozen; promo applied.
           </div>
-          {/* link pill */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '8px 0' }}>
             <div style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', borderRadius: 'var(--gb-r-pill)', fontSize: 10, fontWeight: 700, fontFamily: 'var(--gb-font-mono)' }}><I.bolt size={10} /> View full transcript on SnapEngage</span>
@@ -298,30 +301,50 @@ function ChatSnippet() {
           </div>
         </div>
         <div style={{ padding: '8px 16px', borderTop: '1px solid var(--gb-border-default)', background: 'var(--gb-surface-1)', display: 'flex', alignItems: 'center', gap: 10, fontSize: 10.5, color: 'var(--gb-text-muted)' }}>
-          <Tag size="xs" tone="neutral">VIEW ONLY</Tag>
-          <span>replies happen in SnapEngage</span>
+          <Tag size="xs" tone="neutral">VIEW ONLY</Tag><span>replies happen in SnapEngage · the rail still tags the case</span>
         </div>
       </div>
     </MiniFrame>
   );
 }
 
+/* The REAL CategorizeRail, mounted standalone and wide so the full
+   case-type list shows at proper width (not squished). */
+function CaseRailDemo() {
+  const [focused, setFocused] = useState(null);
+  const [applied, setApplied] = useState(null);
+  const recommended = [
+    { category: 'Returns/Reprint', subcategory: 'Damaged Package Courier Error', label: 'Damaged Package Courier Error · Returns/Reprint' },
+    { category: 'Order Status Update', subcategory: 'Carrier Issue', label: 'Carrier Issue · Order Status Update' },
+  ];
+  return (
+    <MiniFrame width={460} label="email case · the real Categorize rail" pad={false}>
+      <div style={{ background: 'var(--gb-surface-canvas)', maxHeight: 520, overflowY: 'auto' }}>
+        <CategorizeRail
+          sections={categorySections()}
+          recommended={recommended}
+          applied={applied}
+          focused={focused}
+          onFocus={setFocused}
+          onApply={(category, subcategory) => setApplied({ category, subcategory })}
+          width={460}
+        />
+      </div>
+    </MiniFrame>
+  );
+}
+
 const EMAIL_KEYS = [
-  ['1 – 9', 'Apply the Nth recommended category (case mode)'],
-  ['Click category', 'Apply it with its first subcategory'],
-  ['Click subcategory', 'Apply the exact category + subcategory pair'],
+  ['Tab / Shift+Tab', 'Walk the rail’s category sections (the section is the unit of focus, not the chip)'],
+  ['1 – 9', 'Once a section is focused, pick its Nth chip'],
+  ['↑ / ↓ then ↵', 'Highlight a chip and apply it'],
+  ['Click a category', 'Apply it with its first subcategory'],
+  ['Click a subcategory', 'Apply the exact category + subcategory pair'],
   ['Esc', 'Close the viewer'],
 ];
-
-const CASE_CATALOG = [
-  ['Order Status Update', 'Lost Package · Carrier Issue · Tracking Update · Out of Stock · Drop Ships · Late Ship · Misunderstanding'],
-  ['Returns / Reprint', 'Wrong Item Ordered (Customer Error) · Wrong Item Shipped (GBC Error) · Manufacture Error/Defect · Lost in Transit · printing-defect variants'],
-  ['Charge Error', 'Fixed – System did not charge · Actual Charge Error – Resolved by CSR · Fraud · Card did not populate'],
-  ['Order Change', 'Quantity · Personalization Edit · Shipping Address · Payment Method · Product Change'],
-  ['Cancelation', 'Out of Stock · Customer Changed Mind · Delivery Delays · better price/quality found'],
-  ['Website Concerns', 'Cannot Load cart · Cannot Login · Cannot Check out · Promo Codes · Price Variance'],
-  ['Also', 'Place an Order · Product Inquiry · Transfer · Fraud Inquiry · International Orders · Profanity · General Inquiry · CSAT · Other'],
-];
+const CASE_TYPE_ROWS = Object.entries(CASE_CATEGORIES).map(([cat, subs]) => [
+  cat, subs.length ? subs.join(' · ') : '— applied at the category level (no subcategories)',
+]);
 
 export function EmailViewerPage() {
   return (
@@ -329,55 +352,74 @@ export function EmailViewerPage() {
       <div className="eyebrow">On-page Helpers</div>
       <h1 className="title">Email &amp; Chat Viewer</h1>
       <p className="lede">
-        Click the preview button on an email or chat row and the whole conversation opens in place — no
-        new tab, no hunting through Outlook. Email threads render as stacked message cards; live-chat
-        transcripts render as a proper conversation. On a case page, the same <strong>Categorize rail</strong>
-        rides along on the right so you can tag and (for email) reply without leaving the page.
+        Hover an email row (in an inbox or a case’s history) and a preview button appears; click it and the whole
+        conversation opens in place — no new tab, no digging through Outlook. Email threads render as stacked message
+        cards; live-chat transcripts render as a real conversation. On a case page the <strong>Categorize rail</strong>
+        rides along so you can tag the case and (for email) reply without leaving the page.
       </p>
 
-      <EmailSnippet />
+      <EmailCaseSnippet />
 
-      <h2 className="sec">The email viewer, card by card</h2>
-      <p>Each block pairs a piece of the real chrome with what it does. Flip the Case/Inbox toggle in the demo above to see the rail appear.</p>
+      <h2 className="sec">The type is decided by the page — there’s no switch</h2>
+      <p>You never choose “email vs chat” or “case vs inbox.” The extension reads it off the page you opened the preview from:</p>
+      <ul>
+        <li><strong>On a case page</strong> (the URL carries a <code>caseID</code>) it opens in <strong>Case mode</strong> — the Categorize rail appears on the right to tag the case and fire a reply template. A small <strong>Case ⇄ Inbox</strong> view toggle lets you glance at the raw email, but the <em>type</em> was already decided for you.</li>
+        <li><strong>On an inbox / history row</strong> (no <code>caseID</code>) it opens <strong>read-only</strong> — just the thread, narrower, no rail.</li>
+        <li><strong>Email vs chat</strong> is the row’s own kind: an email case (Page=268 with a MessageID) opens the Email Viewer; a SnapEngage chat or a notes blob opens the Chat Viewer. Same chrome, different body.</li>
+      </ul>
 
-      <TourBox n={1} eyebrow="Read" title="The thread" live={<ChatSnippet />} flip>
-        <p>Open an email row and the thread builds itself: <strong>one card per message</strong> in chronological order, each with the sender's avatar, their <code>Name &lt;email&gt;</code>, a timestamp, and a green <strong>SENT</strong> badge on messages from our side. Quoted replies are split off into their own collapsible cards — click a collapsed one to expand it. The header reads <strong>Thread · N messages</strong>.</p>
-        <p>The body renders the real HTML (dark-mode normalised, no iframe). The <strong>Case / Inbox</strong> toggle in the header flips the categorize rail on and off in place. (The snippet here is the sibling chat viewer — same chrome, conversation layout.)</p>
+      <h2 className="sec">Reading the thread</h2>
+      <p>
+        The conversation builds itself as <strong>one card per message</strong>, newest first. Each card shows the sender’s
+        <code> Name &lt;email&gt;</code>, a timestamp, and a green <strong>SENT</strong> badge on messages from our own domains
+        (golfballs.com / loyaltylogo.com). When Outlook quoted history is present, it’s <strong>split into its own card</strong> per
+        message so a long forwarded chain stays readable — click a collapsed card to expand it. The HTML is rendered directly
+        (dark-mode-normalized, no iframe), so signatures and inline images look exactly as the customer sent them.
+      </p>
+
+      <TourBox n={1} eyebrow="Assign the case type" title="The Categorize rail (the real component)" wide live={<CaseRailDemo />}>
+        <p>This is the <strong>genuine CategorizeRail</strong> shown at full width — the same one that rides the right side of the email/chat viewer on a case page. It lists every case <strong>category</strong> that has subcategories; the <strong>✦ Recommended</strong> section at the top is pre-filled from the selected reply template’s case tags, so the right classification is usually one keystroke away. The type is the page’s case — the rail just records its category.</p>
+        <p>Keyboard-first: <span className="kbd">Tab</span> walks the <em>sections</em> (the unit of focus), then <span className="kbd">1</span>–<span className="kbd">9</span> pick a chip in the focused section, or <span className="kbd">↑↓</span> + <span className="kbd">↵</span>. <strong>Clicking a category</strong> applies it with its first subcategory; <strong>clicking a subcategory</strong> applies the exact pair. A breadcrumb in the header tracks where you are; applying flips the status to <em>Saving…</em> then updates the case in the CRM.</p>
       </TourBox>
 
-      <TourBox n={2} eyebrow="Tag the case" title="The Categorize rail" live={<EmailSnippet />} wide>
-        <p>On case pages a categorize rail sits on the right. <strong>Recommended chips</strong> (marked with a ✦ star) come from the selected reply template's case tags — press <span className="kbd">1</span>–<span className="kbd">9</span> to apply the Nth recommendation, or browse the full list. <strong>Clicking a category</strong> applies it with its first subcategory; <strong>clicking a subcategory</strong> applies the exact pair. The status line shows <em>Saving…</em> then <em>Applied: &lt;subcategory&gt;</em>.</p>
-        <p>At the top of the rail sits a <strong>reply-template picker + Send</strong> (only templates whose match rules fit this email show up); picking one drives the ✦ recommendations. A red <strong>Junk</strong> button is pinned at the bottom for spam.</p>
-      </TourBox>
+      <h2 className="sec">Replying with a case template</h2>
+      <p>
+        At the top of the rail sits a <strong>reply-template picker + Send</strong>. Only <strong>case templates whose match rules fit
+        this email</strong> are offered (best match auto-selected), and the picked template drives the ✦ recommended tags below. The reply
+        resolves to the <strong>customer</strong> side of the thread automatically — our own domains are skipped, so replying to a message
+        <em> we</em> sent still addresses the customer. A red <strong>Junk</strong> button is pinned at the bottom for spam. The composer
+        writes a draft (Power Automate sends it silently if on; off, it opens a pre-filled Outlook window).
+      </p>
 
-      <TourBox n={3} eyebrow="Respond" title="The reply composer" live={<ChatSnippet />} flip>
-        <p>The bar at the bottom — <strong>Reply to &lt;address&gt;</strong> — expands into a composer with <strong>To</strong>, <strong>Subject</strong> (pre-filled <code>RE:</code>), and a rich-text body seeded with your signature, caret already at the top. The reply target is resolved automatically to the <strong>customer</strong> side of the thread; our own domains are skipped, so replying to a message we sent still drafts to them.</p>
-        <p>One thing to know: the composer writes a <strong>draft only</strong> — it does not send from here. Finish and send it from Outlook. (The snippet is the chat viewer, which is read-only by design — replies there happen in SnapEngage.)</p>
-      </TourBox>
+      <h2 className="sec">Chat / text transcripts — the sibling viewer</h2>
+      <p>
+        The preview on a <strong>chat or note row</strong> opens the same surface in transcript form. A SnapEngage blob is parsed into a
+        real conversation: <strong>visitor</strong> messages on the left, <strong>agent</strong> messages right-aligned with a brand tint,
+        <strong> system</strong> events as centered divider badges, internal <strong>notes</strong> in amber, and a <strong>SnapEngage link</strong>
+        when one exists. It’s <strong>read-only</strong> (replies happen in SnapEngage), but on a case page the <em>same</em> Categorize rail
+        appears so you can still tag the case.
+      </p>
 
-      <TourBox n={4} eyebrow="Sibling viewer" title="Chat / text transcripts" live={<ChatSnippet />} wide>
-        <p>The preview button on a <strong>chat or note row</strong> opens the same surface in transcript form: visitor messages on the left, <strong>agent messages right-aligned</strong> with a brand tint, system events as centered divider badges, internal notes in amber <strong>NOTE</strong> boxes, and a <strong>View full transcript on SnapEngage</strong> pill when a link exists. The header counts parsed messages and carries a <strong>READ-ONLY</strong> tag.</p>
-        <p>It's view-only by design (the footer says so) — replies happen in SnapEngage. On case pages the <strong>same categorize rail</strong> as the email viewer appears for tagging the case, minus the reply picker.</p>
-      </TourBox>
+      <ChatSnippet />
 
-      <h2 className="sec">The case category catalog</h2>
-      <p>What the rail offers, top to bottom. Each category carries its own subcategory list; you can apply at either level.</p>
+      <h2 className="sec">Every case type</h2>
+      <p>The full source-of-truth list the rail tags against. Categories with subcategories become rail sections; the rest are applied at the category level.</p>
       <table className="spectable">
-        <thead><tr><th style={{ width: 180 }}>Category</th><th>Subcategories (examples)</th></tr></thead>
-        <tbody>{CASE_CATALOG.map((r) => <tr key={r[0]}><td><b>{r[0]}</b></td><td>{r[1]}</td></tr>)}</tbody>
+        <thead><tr><th style={{ width: 210 }}>Case type (category)</th><th>Subcategories</th></tr></thead>
+        <tbody>{CASE_TYPE_ROWS.map((r) => <tr key={r[0]}><td><b>{r[0]}</b></td><td>{r[1]}</td></tr>)}</tbody>
       </table>
 
-      <h3 className="sub">Keyboard &amp; clicks</h3>
+      <h3 className="sub">Keyboard &amp; clicks (the rail)</h3>
       <table className="spectable">
-        <thead><tr><th style={{ width: 150 }}>Action</th><th>Does</th></tr></thead>
+        <thead><tr><th style={{ width: 160 }}>Action</th><th>Does</th></tr></thead>
         <tbody>{EMAIL_KEYS.map((r) => <tr key={r[0]}><td><b>{r[0]}</b></td><td>{r[1]}</td></tr>)}</tbody>
       </table>
 
       <div className="docnote warn" style={{ marginTop: 24 }}>
         <span className="dn-ico"><I.alert size={15} /></span>
         <div className="dn-b">
-          <div className="dn-t">The composer drafts — it doesn't send</div>
-          <p style={{ margin: 0 }}>The email reply composer writes a <strong>draft</strong> only; finish and send it from Outlook. The chat viewer never sends at all — it's read-only, and replies happen in SnapEngage. Both viewers are about <em>reading and triaging</em> fast, then handing off to the tool that actually sends.</p>
+          <div className="dn-t">The email composer drafts — the chat viewer never sends</div>
+          <p style={{ margin: 0 }}>Email replies go out through your transport (Power Automate, or a pre-filled Outlook window when it’s off). The Chat Viewer is read-only by design. Both viewers are about reading and triaging fast, then handing off to the tool that actually sends.</p>
         </div>
       </div>
     </div>
