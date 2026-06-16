@@ -478,13 +478,26 @@ function fitSvg(svgString) {
   );
 }
 
-/* Separable min-filter erosion of a binary mask (shrinks the shape by `r` px).
-   Used to derive a thick edge band = mask AND NOT erode(mask). */
-function erodeMask(mask, w, h, r) {
-  const tmp = new Uint8Array(w * h), out = new Uint8Array(w * h);
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let m = 1; for (let k = -r; k <= r; k++) { const xx = x + k; if (xx < 0 || xx >= w || !mask[y * w + xx]) { m = 0; break; } } tmp[y * w + x] = m; }
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { let m = 1; for (let k = -r; k <= r; k++) { const yy = y + k; if (yy < 0 || yy >= h || !tmp[yy * w + x]) { m = 0; break; } } out[y * w + x] = m; }
-  return out;
+/* Connected-component labeling of a binary mask + each component's satin fill
+   angle (perpendicular to its principal axis, via PCA moments). One uniform
+   direction per shape keeps the fill straight (no swirly per-pixel "curls"). */
+function components(mask, w, h) {
+  const lab = new Int32Array(w * h); let n = 0; const angle = [0]; const stack = [];
+  for (let s = 0; s < w * h; s++) {
+    if (!mask[s] || lab[s]) continue;
+    n++; let sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0, cnt = 0; stack.push(s); lab[s] = n;
+    while (stack.length) {
+      const p = stack.pop(), x = p % w, y = (p / w) | 0;
+      sx += x; sy += y; sxx += x * x; syy += y * y; sxy += x * y; cnt++;
+      if (x > 0 && mask[p - 1] && !lab[p - 1]) { lab[p - 1] = n; stack.push(p - 1); }
+      if (x < w - 1 && mask[p + 1] && !lab[p + 1]) { lab[p + 1] = n; stack.push(p + 1); }
+      if (y > 0 && mask[p - w] && !lab[p - w]) { lab[p - w] = n; stack.push(p - w); }
+      if (y < h - 1 && mask[p + w] && !lab[p + w]) { lab[p + w] = n; stack.push(p + w); }
+    }
+    const mx = sx / cnt, my = sy / cnt, cxx = sxx / cnt - mx * mx, cyy = syy / cnt - my * my, cxy = sxy / cnt - mx * my;
+    angle.push(0.5 * Math.atan2(2 * cxy, cxx - cyy) + Math.PI / 2);   // ⟂ principal axis = across the stroke
+  }
+  return { lab, angle };
 }
 
 /* Two-pass chamfer distance transform: distance from each foreground pixel to
@@ -505,27 +518,23 @@ function distanceTransform(mask, w, h) {
   return D;
 }
 
-/* Separable box blur of a float field (used to smooth the orientation field). */
-function boxBlur(a, w, h, r) {
-  const t = new Float32Array(w * h), o = new Float32Array(w * h), n = 2 * r + 1;
-  for (let y = 0; y < h; y++) { let s = 0; for (let x = -r; x <= r; x++) s += a[y * w + Math.max(0, Math.min(w - 1, x))]; for (let x = 0; x < w; x++) { t[y * w + x] = s / n; s -= a[y * w + Math.max(0, x - r)]; s += a[y * w + Math.min(w - 1, x + r + 1)]; } }
-  for (let x = 0; x < w; x++) { let s = 0; for (let y = -r; y <= r; y++) s += t[Math.max(0, Math.min(h - 1, y)) * w + x]; for (let y = 0; y < h; y++) { o[y * w + x] = s / n; s -= t[Math.max(0, y - r) * w + x]; s += t[Math.min(h - 1, y + r + 1) * w + x]; } }
-  return o;
-}
-
 /* ── embroidery (woven), raster — NO vectorization ─────────────────────────
-   Real digitizers fill each stroke perpendicular to its medial axis (satin
-   ACROSS the stroke). We approximate that per-pixel: key out the background,
-   then build a smoothed DIRECTION FIELD from the orientation of the distance-
-   transform gradient (which points across each stroke). Shade BRIGHT satin onto
-   the logo's own colors — an orientation-dependent sheen (strokes catch light by
-   angle, like real satin) + fine stitch ribbing ACROSS the threads, biased
-   bright so the interior never goes dark/muddy. A brightened edge band gives the
-   thick woven outline. Robust on any logo (no fragile color vectorization). */
+   Key out the background → foreground mask. Then, per real digitizers:
+   • FILL — each connected shape is satin-filled in ONE uniform direction
+     (perpendicular to its principal axis), so the fill is straight, not a
+     swirly per-pixel field.
+   • BORDER — a band along each contour (where the distance transform is small)
+     runs ALONG the contour tangent, reading as the raised satin border column.
+   • THREAD TEXTURE — thin thread ridges ACROSS the rows + a finer "stranded"
+     modulation ALONG each thread (floss strands), all biased bright so the
+     interior stays lustrous (no dark bands).
+   • SEE-THROUGH — the deep grooves between threads drop alpha so the dark
+     fabric peeks through, like real embroidery.
+   Robust on any logo. Returns a PNG dataURL. */
 function buildEmbroidery(img, doRemoveBg, bgTol) {
   const nw = img?.naturalWidth, nh = img?.naturalHeight;
   if (!nw || !nh) return null;
-  const sc = Math.min(1, 1000 / Math.max(nw, nh));   // cap longest edge for perf/sharpness
+  const sc = Math.min(1, 1100 / Math.max(nw, nh));   // cap longest edge for perf/sharpness
   const w = Math.max(1, Math.round(nw * sc)), h = Math.max(1, Math.round(nh * sc));
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
@@ -538,39 +547,36 @@ function buildEmbroidery(img, doRemoveBg, bgTol) {
   const mask = new Uint8Array(w * h);
   for (let i = 0; i < w * h; i++) mask[i] = d[i * 4 + 3] > 10 ? 1 : 0;
   const D = distanceTransform(mask, w, h);
-  // Orientation field: gradient of D points across the stroke. Encode as a
-  // double-angle vector (cos2φ, sin2φ) weighted by magnitude², blur to smooth,
-  // then recover the thread direction φ — stable even at the medial axis.
-  const C = new Float32Array(w * h), S = new Float32Array(w * h);
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const i = y * w + x; if (!mask[i]) continue;
-    const gx = D[i + (x < w - 1 ? 1 : 0)] - D[i - (x > 0 ? 1 : 0)];
-    const gy = D[i + (y < h - 1 ? w : 0)] - D[i - (y > 0 ? w : 0)];
-    C[i] = gx * gx - gy * gy; S[i] = 2 * gx * gy;
-  }
-  const Cb = boxBlur(C, w, h, Math.max(1, Math.round(w / 90)));
-  const Sb = boxBlur(S, w, h, Math.max(1, Math.round(w / 90)));
-  const ribSp = Math.max(3, w / 130), PI2 = Math.PI * 2, LIGHT = 120 * Math.PI / 180;
+  const { lab, angle } = components(mask, w, h);
+  const PI2 = Math.PI * 2;
+  const ribSp = Math.max(2.2, w / 200);              // THIN thread rows
+  const strandSp = Math.max(1.4, w / 460);           // finer floss-strand frequency
+  const borderW = Math.max(3, Math.round(w / 110));
+  const fallback = -52 * Math.PI / 180;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const i = y * w + x, o = i * 4; if (d[o + 3] === 0) continue;
-    const phi = 0.5 * Math.atan2(Sb[i], Cb[i]);       // thread direction (across stroke)
-    const pA = -x * Math.sin(phi) + y * Math.cos(phi); // along medial axis
-    const rib = Math.cos(pA / ribSp * PI2);            // individual stitches across the column
-    const sheen = 0.5 + 0.5 * Math.cos(2 * (phi - LIGHT));  // orientation-dependent satin luster
-    const gain = 1.04 + 0.42 * sheen + 0.06 * rib;     // bright bias → no dark interior bands
-    const add = 18 * sheen + 10 * Math.max(0, rib);
+    const inBorder = D[i] <= borderW;
+    let phi;
+    if (inBorder) {                                  // border column runs ALONG the contour
+      const gx = D[i + (x < w - 1 ? 1 : 0)] - D[i - (x > 0 ? 1 : 0)];
+      const gy = D[i + (y < h - 1 ? w : 0)] - D[i - (y > 0 ? w : 0)];
+      phi = Math.atan2(gy, gx) + Math.PI / 2;
+    } else { phi = angle[lab[i]] || fallback; }      // fill: straight per-component direction
+    const cphi = Math.cos(phi), sphi = Math.sin(phi);
+    const pA = -x * sphi + y * cphi;                 // along the rows (thread separation axis)
+    const pT = x * cphi + y * sphi;                  // along each thread (strand axis)
+    const ridge = Math.cos(pA / ribSp * PI2);        // -1..1 across the thin rows
+    const strand = Math.cos(pT / strandSp * PI2);    // fine floss strands along the thread
+    const crest = Math.max(0, ridge);
+    const base = inBorder ? 1.14 : 1.05;
+    const gain = base + 0.26 * crest + 0.05 * strand;            // bright crest + strand grain
+    const add = (inBorder ? 24 : 14) * crest + 4 * Math.max(0, strand);
     d[o] = Math.max(0, Math.min(255, d[o] * gain + add));
     d[o + 1] = Math.max(0, Math.min(255, d[o + 1] * gain + add));
     d[o + 2] = Math.max(0, Math.min(255, d[o + 2] * gain + add));
-  }
-  // Brighten the edge band (mask − eroded) for a crisp thick woven outline.
-  const R = Math.max(2, Math.round(w / 180));
-  const er = erodeMask(mask, w, h, R);
-  for (let i = 0; i < w * h; i++) {
-    if (mask[i] && !er[i]) {
-      const o = i * 4, t = 0.34;
-      d[o] += (255 - d[o]) * t; d[o + 1] += (255 - d[o + 1]) * t; d[o + 2] += (255 - d[o + 2]) * t; d[o + 3] = 255;
-    }
+    // SEE-THROUGH: drop alpha in the deepest grooves so the fabric shows.
+    const groove = Math.max(0, -ridge);
+    if (!inBorder && groove > 0.62) d[o + 3] = Math.round(255 * (1 - 0.5 * (groove - 0.62) / 0.38));
   }
   ctx.putImageData(id, 0, 0);
   return c.toDataURL('image/png');
