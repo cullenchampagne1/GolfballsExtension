@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import ImageTracer from 'imagetracerjs';
 import {
-  FloatingPanel, ModalHeader, Btn, Segmented, Slider, Spinner, Callout, SectionLabel,
+  FloatingPanel, ModalHeader, Btn, Segmented, Slider, Spinner, Callout, SectionLabel, Switch,
 } from '../ui/index.js';
 import { useToast } from '../ui/components/ToastHost.jsx';
 import { PREVIEW_GRID } from '../ui/components/ImageColorSwap.jsx';
@@ -64,6 +64,8 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
   const [fx, setFx] = useState('flat');
 
   // Trace tunables (ImageTracer option names in comments).
+  const [removeBg, setRemoveBg] = useState(true); // knock out the background first
+  const [bgTol, setBgTol] = useState(40);         // background match tolerance
   const [numColors, setNumColors] = useState(8); // numberofcolors (color mode)
   const [threshold, setThreshold] = useState(128); // luminance cut (mono mode)
   const [smooth, setSmooth] = useState(1);        // ltres + qtres
@@ -134,6 +136,10 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
         ctx.drawImage(img, 0, 0, w, h);
         const idata = ctx.getImageData(0, 0, w, h);
 
+        // Pre-treatment: knock out the connected background so the trace
+        // (and the palette) focus on the art, not the white field.
+        if (removeBg) removeBackground(idata, bgTol);
+
         let options;
         if (mode === 'mono') {
           // Binarize to opaque black on transparent: any pixel that's
@@ -151,8 +157,15 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
             strokewidth: 0, linefilter: true, rightangleenhance: false, scale: 1 / (scale || 1),
           };
         } else {
+          // Seed the palette with the image's ACTUAL dominant colors via
+          // median-cut (which averages anti-alias tones into their nearest
+          // cluster) instead of ImageTracer's position-sampling — that
+          // sampling wastes most slots on the white background + edge tones
+          // on a logo, collapsing distinct hues (e.g. the green text) into
+          // one muddy color. ImageTracer then refines this seed with k-means.
+          const pal = medianCutPalette(idata, numColors);
           options = {
-            numberofcolors: numColors, colorsampling: 2, colorquantcycles: 3,
+            pal, colorsampling: 0, colorquantcycles: 3, mincolorratio: 0,
             ltres: smooth, qtres: smooth, pathomit: despeckle, blurradius: blur, blurdelta: 20,
             strokewidth: 0, linefilter: true, scale: 1 / (scale || 1),
           };
@@ -169,7 +182,7 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
       }
     }, 16);
     return () => clearTimeout(id);
-  }, [mode, threshold, smooth, despeckle, blur, numColors]);
+  }, [mode, threshold, smooth, despeckle, blur, numColors, removeBg, bgTol]);
 
   // Re-trace (debounced) whenever the image or any tunable changes.
   useEffect(() => {
@@ -342,7 +355,18 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
               </LabeledControl>
             </div>
 
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingBottom: 2, borderBottom: '1px solid var(--gb-border-subtle)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--gb-text-primary)' }}>Remove background</span>
+                <span style={{ fontSize: 9.5, color: 'var(--gb-text-tertiary)' }}>Flood-fill the field connected to the edges to transparent before tracing</span>
+              </div>
+              <Switch on={removeBg} onChange={setRemoveBg} />
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 18px' }}>
+              {removeBg && (
+                <SliderRow label="BG tolerance" value={bgTol} min={0} max={120} step={1} onChange={setBgTol} hint="How close to the corner color counts as background" />
+              )}
               {mode === 'mono' ? (
                 <SliderRow label="Threshold" value={threshold} min={1} max={254} step={1} onChange={setThreshold} hint="Luminance cut for the shape" />
               ) : (
@@ -387,6 +411,101 @@ function SliderRow({ label, value, min, max, step, onChange, hint }) {
       {hint && <span style={{ fontSize: 9.5, color: 'var(--gb-text-tertiary)' }}>{hint}</span>}
     </div>
   );
+}
+
+/* Edge flood-fill background knockout. Samples the background color from
+   the four corners, then floods inward from every border pixel, setting
+   alpha→0 for connected pixels within `tol` (rectilinear RGB) of that color.
+   Flooding from the edges (rather than a global color match) preserves
+   background-colored regions ENCLOSED by the art — e.g. the white counter
+   inside a 'B' or 'O' — so letters don't fall apart. Mutates idata. */
+function removeBackground(idata, tol) {
+  const w = idata.width, h = idata.height, d = idata.data;
+  const corners = [0, w - 1, (h - 1) * w, (h - 1) * w + (w - 1)];
+  let br = 0, bg = 0, bb = 0;
+  for (const p of corners) { const o = p * 4; br += d[o]; bg += d[o + 1]; bb += d[o + 2]; }
+  br = Math.round(br / 4); bg = Math.round(bg / 4); bb = Math.round(bb / 4);
+  const visited = new Uint8Array(w * h);
+  const stack = [];
+  for (let x = 0; x < w; x++) { stack.push(x, (h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { stack.push(y * w, y * w + (w - 1)); }
+  while (stack.length) {
+    const p = stack.pop();
+    if (visited[p]) continue;
+    visited[p] = 1;
+    const o = p * 4;
+    const dist = Math.abs(d[o] - br) + Math.abs(d[o + 1] - bg) + Math.abs(d[o + 2] - bb);
+    if (dist > tol) continue;          // hit the art — stop flooding here
+    d[o + 3] = 0;                       // knock the background pixel out
+    const x = p % w, y = (p / w) | 0;
+    if (x > 0) stack.push(p - 1);
+    if (x < w - 1) stack.push(p + 1);
+    if (y > 0) stack.push(p - w);
+    if (y < h - 1) stack.push(p + w);
+  }
+}
+
+/* Build a seed palette of the image's DOMINANT colors via median-cut.
+   Pixels are bucketed into one box, then the box with the widest color
+   range is repeatedly split at the median of its longest channel until we
+   have `maxColors` boxes; each box's average color is a palette entry. This
+   averages anti-alias tones into their nearest cluster instead of letting
+   each tone claim a slot. Near-duplicate entries are merged so a near-white
+   background can't hog several slots. Transparent pixels are skipped and,
+   if present, represented by a single transparent entry. */
+function medianCutPalette(idata, maxColors) {
+  const d = idata.data;
+  const n = idata.width * idata.height;
+  const step = Math.max(1, Math.floor(n / 24000));   // subsample for speed
+  const px = [];
+  let transparent = false;
+  for (let i = 0; i < n; i += step) {
+    const o = i * 4;
+    if (d[o + 3] < 128) { transparent = true; continue; }
+    px.push([d[o], d[o + 1], d[o + 2]]);
+  }
+  if (!px.length) return [{ r: 0, g: 0, b: 0, a: 0 }];
+  const want = Math.max(1, maxColors - (transparent ? 1 : 0));
+
+  const boxOf = (arr) => {
+    let rmin = 255, gmin = 255, bmin = 255, rmax = 0, gmax = 0, bmax = 0;
+    for (const [r, g, b] of arr) {
+      if (r < rmin) rmin = r; if (r > rmax) rmax = r;
+      if (g < gmin) gmin = g; if (g > gmax) gmax = g;
+      if (b < bmin) bmin = b; if (b > bmax) bmax = b;
+    }
+    const rr = rmax - rmin, gr = gmax - gmin, brange = bmax - bmin;
+    const range = Math.max(rr, gr, brange);
+    const channel = rr >= gr && rr >= brange ? 0 : (gr >= brange ? 1 : 2);
+    return { arr, range, channel };
+  };
+
+  let boxes = [boxOf(px)];
+  while (boxes.length < want) {
+    boxes.sort((a, b) => b.range - a.range);
+    const box = boxes[0];
+    if (!box || box.range === 0 || box.arr.length < 2) break;
+    boxes.shift();
+    const ch = box.channel;
+    box.arr.sort((a, b) => a[ch] - b[ch]);
+    const mid = box.arr.length >> 1;
+    boxes.push(boxOf(box.arr.slice(0, mid)), boxOf(box.arr.slice(mid)));
+  }
+
+  const pal = boxes.map(({ arr }) => {
+    let r = 0, g = 0, b = 0;
+    for (const p of arr) { r += p[0]; g += p[1]; b += p[2]; }
+    const k = arr.length || 1;
+    return { r: Math.round(r / k), g: Math.round(g / k), b: Math.round(b / k), a: 255 };
+  });
+
+  const merged = [];
+  for (const c of pal) {
+    if (merged.some((m) => Math.abs(m.r - c.r) + Math.abs(m.g - c.g) + Math.abs(m.b - c.b) < 24)) continue;
+    merged.push(c);
+  }
+  if (transparent) merged.unshift({ r: 0, g: 0, b: 0, a: 0 });
+  return merged;
 }
 
 const VectorIcon = (p) => (
