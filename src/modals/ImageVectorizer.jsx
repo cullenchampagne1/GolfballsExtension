@@ -85,6 +85,7 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
   const [blur, setBlur] = useState(0);            // blurradius
 
   const [svg, setSvg] = useState(null);
+  const [wovenUrl, setWovenUrl] = useState(null);   // canvas embroidery dataURL (woven mode)
   const [pathCount, setPathCount] = useState(0);
   const [tracing, setTracing] = useState(false);
   const [traceErr, setTraceErr] = useState(false);
@@ -214,6 +215,13 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
     return () => clearTimeout(t);
   }, [loaded, src, runTrace]);
 
+  // Woven embroidery is generated straight from the raster (no vectorization).
+  useEffect(() => {
+    if (fx !== 'woven' || !loaded) { setWovenUrl(null); return; }
+    const t = setTimeout(() => { setWovenUrl(buildEmbroidery(imgRef.current, removeBg, bgTol)); }, 120);
+    return () => clearTimeout(t);
+  }, [fx, loaded, src, removeBg, bgTol]);
+
   /* ── export ────────────────────────────────────────────────── */
   const copySvg = async () => {
     if (!svg) return;
@@ -221,17 +229,22 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
     catch { toast?.error?.('Copy failed'); }
   };
   const downloadSvg = () => {
+    const a = document.createElement('a');
+    if (fx === 'woven') {                 // woven is a raster mockup → PNG
+      if (!wovenUrl) return;
+      a.href = wovenUrl; a.download = 'embroidery.png'; a.click();
+      return;
+    }
     if (!svg) return;
     const blob = new Blob([svg], { type: 'image/svg+xml' });
-    const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = 'traced.svg';
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
 
-  // Woven renders as generated stitch geometry (stitchify) with its own inline
-  // bevel filter; engrave/emboss stay as CSS post-filters; flat is the bare trace.
+  // Woven renders as a raster embroidery mockup (buildEmbroidery); engrave/
+  // emboss stay as CSS post-filters; flat is the bare trace.
   const fxStyle = (fx === 'flat' || fx === 'woven') ? undefined : { filter: `url(#fx-${fx})` };
   const hasImage = !!src;
 
@@ -244,10 +257,9 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
           the preview references them via CSS filter:url(#fx-…). */}
       <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden>
         <defs>
-          {/* Woven — embroidery is rendered as real stitch geometry by
-              stitchify() (parallel satin/tatami thread lines per region). This
-              filter only adds the raised, puffed-thread bevel on top of those
-              stitches; the stitched <svg> references it via filter=url(#emb-raise). */}
+          {/* Woven — buildEmbroidery() draws the satin thread texture onto a
+              raster canvas; this filter adds the raised, puffed-thread bevel on
+              top. The woven <img> references it via filter:url(#emb-raise). */}
           <filter id="emb-raise" x="-8%" y="-8%" width="116%" height="116%">
             <feGaussianBlur in="SourceAlpha" stdDeviation="1.1" result="b" />
             <feSpecularLighting in="b" surfaceScale="1.6" specularConstant="0.5" specularExponent="18" lightingColor="#ffffff" result="s">
@@ -343,12 +355,20 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
               {traceErr && !tracing && (
                 <div style={{ color: 'var(--gb-text-muted)', fontSize: 12 }}>Trace failed — try a smaller image</div>
               )}
-              {svg && !traceErr && (
+              {/* Woven → raster embroidery generated straight from the source
+                  (no vectorization), with the raised-thread bevel filter. */}
+              {fx === 'woven' && wovenUrl && (
+                <img
+                  src={wovenUrl}
+                  alt="embroidery preview"
+                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', filter: 'url(#emb-raise)', opacity: tracing ? 0.4 : 1 }}
+                />
+              )}
+              {fx !== 'woven' && svg && !traceErr && (
                 <div
                   style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: tracing ? 0.4 : 1, ...fxStyle }}
-                  // Woven → generated stitch geometry; otherwise the fitted
-                  // trace (fitSvg adds a viewBox so it scales, not clips).
-                  dangerouslySetInnerHTML={{ __html: fx === 'woven' ? stitchify(svg) : fitSvg(svg) }}
+                  // fitSvg adds a viewBox so the trace scales (not clips) to fit.
+                  dangerouslySetInnerHTML={{ __html: fitSvg(svg) }}
                 />
               )}
             </div>
@@ -364,10 +384,12 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
             <Segmented size="sm" value={view} onChange={setView} options={VIEW_OPTIONS} />
             <div style={{ flex: 1 }} />
             <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>
-              {pathCount} paths{dims ? ` · ${dims.w}×${dims.h}` : ''}
+              {fx === 'woven' ? 'embroidery' : `${pathCount} paths`}{dims ? ` · ${dims.w}×${dims.h}` : ''}
             </span>
-            <Btn size="sm" variant="secondary" onClick={copySvg} disabled={!svg}>Copy SVG</Btn>
-            <Btn size="sm" variant="tinted" status="brand" onClick={downloadSvg} disabled={!svg}>Download</Btn>
+            <Btn size="sm" variant="secondary" onClick={copySvg} disabled={fx === 'woven' || !svg}>Copy SVG</Btn>
+            <Btn size="sm" variant="tinted" status="brand" onClick={downloadSvg} disabled={fx === 'woven' ? !wovenUrl : !svg}>
+              {fx === 'woven' ? 'Download PNG' : 'Download'}
+            </Btn>
           </div>
         )}
 
@@ -456,79 +478,43 @@ function fitSvg(svgString) {
   );
 }
 
-/* ── embroidery (woven) via real stitch geometry ──────────────────────────
-   PEmbroider/Photoshop approach: don't fake thread with a post-filter — GENERATE
-   it. Each traced color region is filled with parallel satin/tatami stitch
-   lines (clipped to the region, dashed into individual stitches, two-tone for
-   sheen) plus a running-stitch outline; a light raised bevel (#emb-raise) gives
-   the puffed-thread look. Returns a self-contained <svg> string. */
-// width ≥ spacing so adjacent thread rows touch — otherwise the dark fabric
-// bleeds through the gaps and visually desaturates ("dilutes") the color. The
-// thread separation still reads from the two-tone rows + the along-thread dash.
-const STITCH = { spacing: 2.6, width: 3.0, dash: '10 1.2', fallbackDeg: -52 };
-function shadeRgb(rgb, f) {
-  const m = rgb.match(/\d+/g).map(Number);
-  return `rgb(${m.map((v) => Math.max(0, Math.min(255, Math.round(v * f)))).join(',')})`;
-}
-function ptsOf(d) { const n = d.match(/-?[\d.]+/g)?.map(Number) || []; const p = []; for (let i = 0; i + 1 < n.length; i += 2) p.push([n[i], n[i + 1]]); return p; }
-function signedArea(p) { let a = 0; for (let i = 0; i < p.length; i++) { const [x1, y1] = p[i], [x2, y2] = p[(i + 1) % p.length]; a += x1 * y2 - x2 * y1; } return a / 2; }
-function centroidOf(p) { let x = 0, y = 0; for (const q of p) { x += q[0]; y += q[1]; } return [x / p.length, y / p.length]; }
-function inPoly(pt, poly) { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i], [xj, yj] = poly[j]; if (((yi > pt[1]) !== (yj > pt[1])) && (pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi)) c = !c; } return c; }
-/* Parallel satin stitch lines filling one connected component. The thread runs
-   ACROSS the component's principal axis (PCA) so letter strokes / petals get a
-   natural satin direction; blobby shapes fall back to a fixed tatami angle. */
-function fillLines(pts, fill) {
-  let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
-  for (const [x, y] of pts) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
-  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, ext = Math.hypot(maxX - minX, maxY - minY) / 2 + 4;
-  let mx = 0, my = 0; for (const [x, y] of pts) { mx += x; my += y; } mx /= pts.length; my /= pts.length;
-  let cxx = 0, cyy = 0, cxy = 0; for (const [x, y] of pts) { const ax = x - mx, ay = y - my; cxx += ax * ax; cyy += ay * ay; cxy += ax * ay; }
-  const trc = cxx + cyy, det = cxx * cyy - cxy * cxy, l1 = trc / 2 + Math.sqrt(Math.max(0, trc * trc / 4 - det)), l2 = trc / 2 - Math.sqrt(Math.max(0, trc * trc / 4 - det));
-  const ang = (l1 > 0 && (l1 - l2) / l1 > 0.3) ? 0.5 * Math.atan2(2 * cxy, cxx - cyy) + Math.PI / 2 : STITCH.fallbackDeg * Math.PI / 180;
-  const dx = Math.cos(ang), dy = Math.sin(ang), nx = -Math.sin(ang), ny = Math.cos(ang);
-  const light = shadeRgb(fill, 1.16), dark = shadeRgb(fill, 0.82);
-  let lines = '', k = 0;
-  for (let s = -ext; s <= ext; s += STITCH.spacing) {
-    const px = cx + nx * s, py = cy + ny * s;
-    lines += `<line x1="${(px - dx * ext).toFixed(1)}" y1="${(py - dy * ext).toFixed(1)}" x2="${(px + dx * ext).toFixed(1)}" y2="${(py + dy * ext).toFixed(1)}" stroke="${k % 2 ? light : dark}"/>`;
+/* ── embroidery (woven), raster — NO vectorization ─────────────────────────
+   "Extract the shape, stitch over it": draw the source, key out the background,
+   then lay parallel satin stitch lines over the foreground with `source-atop`
+   so the threads MODULATE the logo's own pixel colors. True color, no palette,
+   robust on any logo (color vectorization breaks on complex art). The raised
+   bevel (#emb-raise) + fabric backdrop are applied where it's rendered.
+   Returns a PNG dataURL, or null if the source is empty / CORS-tainted. */
+function buildEmbroidery(img, doRemoveBg, bgTol) {
+  const nw = img?.naturalWidth, nh = img?.naturalHeight;
+  if (!nw || !nh) return null;
+  const sc = Math.min(1, 1000 / Math.max(nw, nh));   // cap longest edge for perf/sharpness
+  const w = Math.max(1, Math.round(nw * sc)), h = Math.max(1, Math.round(nh * sc));
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, w, h);
+  let id;
+  try { id = ctx.getImageData(0, 0, w, h); } catch { return null; }   // CORS-tainted
+  if (doRemoveBg) removeBackground(id, bgTol);
+  ctx.putImageData(id, 0, 0);
+  // Satin stitch lines, source-atop so they only paint over (and modulate) the
+  // opaque foreground: light rows lighten, dark rows darken → thread sheen that
+  // keeps the original hue. Dash = individual stitches along each thread.
+  ctx.globalCompositeOperation = 'source-atop';
+  const ang = -52 * Math.PI / 180, dx = Math.cos(ang), dy = Math.sin(ang), nx = -Math.sin(ang), ny = Math.cos(ang);
+  const cx = w / 2, cy = h / 2, ext = Math.hypot(w, h) / 2 + 4;
+  const step = Math.max(2.6, w / 280);
+  ctx.lineWidth = step + 0.8; ctx.lineCap = 'round'; ctx.setLineDash([step * 3, step * 0.45]);
+  let k = 0;
+  for (let s = -ext; s <= ext; s += step) {
+    const mx = cx + nx * s, my = cy + ny * s;
+    ctx.strokeStyle = k % 2 ? 'rgba(255,255,255,0.26)' : 'rgba(0,0,0,0.30)';
+    ctx.beginPath(); ctx.moveTo(mx - dx * ext, my - dy * ext); ctx.lineTo(mx + dx * ext, my + dy * ext); ctx.stroke();
     k++;
   }
-  return lines;
-}
-/* Turn one traced color region into stitch fills. The region's <path> may hold
-   several connected components (letters) each with holes (counters); split into
-   subpaths, pair holes with the outer that contains them (even-odd clip), and
-   satin-fill each component on its own principal-axis direction. */
-function satinFill(d, fill, idx) {
-  const subs = ('M' + d.split('M').slice(1).join('M')).split(/(?=M)/).filter((s) => s.trim())
-    .map((sd) => { const pts = ptsOf(sd); return { d: sd.trim(), pts, area: signedArea(pts) }; })
-    .filter((s) => s.pts.length >= 3);
-  if (!subs.length) return { def: '', body: '' };
-  const totPos = subs.filter((s) => s.area > 0).reduce((a, s) => a + s.area, 0);
-  const totNeg = subs.filter((s) => s.area < 0).reduce((a, s) => a - s.area, 0);
-  const outerSign = totPos >= totNeg ? 1 : -1;   // dominant winding = outer contours
-  const outers = subs.filter((s) => Math.sign(s.area) === outerSign);
-  const holes = subs.filter((s) => Math.sign(s.area) !== outerSign);
-  const dark = shadeRgb(fill, 0.78);
-  let def = '', body = '';
-  outers.forEach((o, j) => {
-    const myHoles = holes.filter((hh) => inPoly(centroidOf(hh.pts), o.pts));
-    const id = `cp${idx}_${j}`;
-    def += `<clipPath id="${id}"><path d="${o.d} ${myHoles.map((hh) => hh.d).join(' ')}" clip-rule="evenodd"/></clipPath>`;
-    body += `<g clip-path="url(#${id})" stroke-width="${STITCH.width}" stroke-linecap="round" stroke-dasharray="${STITCH.dash}">${fillLines(o.pts, fill)}</g>`
-      + `<path d="${o.d}" fill="none" stroke="${dark}" stroke-width="1.3" stroke-linejoin="round" opacity="0.8"/>`;
-  });
-  return { def, body };
-}
-function stitchify(tracedSvg) {
-  const m = tracedSvg.match(/<svg[^>]*\bwidth="([\d.]+)"[^>]*\bheight="([\d.]+)"/);
-  const W = m ? m[1] : 600, H = m ? m[2] : 600;
-  const paths = [...tracedSvg.matchAll(/<path fill="(rgb\([^)]+\))"[^>]*opacity="([\d.]+)"[^>]*d="([^"]+)"/g)]
-    .map((mm) => ({ fill: mm[1], opacity: +mm[2], d: mm[3] }))
-    .filter((p) => p.opacity > 0.05);
-  let defs = '', body = '';
-  paths.forEach((p, i) => { const seg = satinFill(p.d, p.fill, i); defs += seg.def; body += seg.body; });
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="display:block;max-width:100%;max-height:100%;width:auto;height:auto" filter="url(#emb-raise)"><defs>${defs}</defs>${body}</svg>`;
+  ctx.globalCompositeOperation = 'source-over';
+  return c.toDataURL('image/png');
 }
 
 /* Background knockout via color key. Detects the background color as the MOST
@@ -547,36 +533,34 @@ function stitchify(tracedSvg) {
    into the color clusters and paints a full-canvas background layer. */
 function removeBackground(idata, tol) {
   const d = idata.data;
-  const w = idata.width, h = idata.height;
   // Normalize already-transparent pixels (they ARE background).
   for (let i = 0; i < d.length; i += 4) if (d[i + 3] < 128) { d[i] = d[i + 1] = d[i + 2] = 0; d[i + 3] = 0; }
-  // Decide from the BORDER, not the whole image: tally the mode opaque border
-  // color and how transparent the border already is.
+  // Background = the single most common OPAQUE color across the WHOLE image
+  // (5-bit buckets). Whole-image (not border) so a NESTED background works —
+  // e.g. a transparent margin around a white badge: the border is transparent
+  // but white still dominates, so it's correctly detected and keyed.
   const counts = new Map();
-  let borderN = 0, borderTransp = 0;
-  const tally = (p) => {
-    const o = p * 4; borderN++;
-    if (d[o + 3] === 0) { borderTransp++; return; }
-    const k = ((d[o] >> 3) << 10) | ((d[o + 1] >> 3) << 5) | (d[o + 2] >> 3);
-    counts.set(k, (counts.get(k) || 0) + 1);
-  };
-  for (let x = 0; x < w; x++) { tally(x); tally((h - 1) * w + x); }
-  for (let y = 0; y < h; y++) { tally(y * w); tally(y * w + (w - 1)); }
-  // If the border is mostly transparent, the source already carries its own
-  // alpha mask — color-keying would erase matching art. Trust the alpha.
-  if (!counts.size || borderTransp > borderN * 0.5) return false;
-  let bestK = 0, best = -1;
-  for (const [k, c] of counts) if (c > best) { best = c; bestK = k; }
-  const br = ((bestK >> 10) & 31) * 8 + 4, bg = ((bestK >> 5) & 31) * 8 + 4, bb = (bestK & 31) * 8 + 4;
-  // Collect candidates + count opaque, then only apply if it leaves the image.
-  const hits = [];
   let opaque = 0;
   for (let i = 0; i < d.length; i += 4) {
     if (d[i + 3] === 0) continue;
     opaque++;
+    const k = ((d[i] >> 3) << 10) | ((d[i + 1] >> 3) << 5) | (d[i + 2] >> 3);
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  if (!opaque) return false;
+  let bestK = 0, best = -1;
+  for (const [k, c] of counts) if (c > best) { best = c; bestK = k; }
+  // Only treat it as background if it DOMINATES. Otherwise the foreground is
+  // already isolated (transparent source) or there's no flat field (a photo) —
+  // keying then would erase art, so leave the image intact.
+  if (best < opaque * 0.40) return false;
+  const br = ((bestK >> 10) & 31) * 8 + 4, bg = ((bestK >> 5) & 31) * 8 + 4, bb = (bestK & 31) * 8 + 4;
+  const hits = [];
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] === 0) continue;
     if (Math.abs(d[i] - br) + Math.abs(d[i + 1] - bg) + Math.abs(d[i + 2] - bb) <= tol) hits.push(i);
   }
-  if (!opaque || hits.length > opaque * 0.97) return false;   // no real background — leave the image intact
+  if (hits.length > opaque * 0.995) return false;   // would erase everything → skip
   for (const i of hits) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = 0; }
   return true;
 }
