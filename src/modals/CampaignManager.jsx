@@ -14,6 +14,7 @@ import {
 import { loadCallTemplates, CALL_CATEGORY_OPTIONS } from '../lib/callLog.js';
 import { loadTaskTemplates, PRIORITY_OPTIONS, DEFAULT_PRIORITY } from '../lib/quickTask.js';
 import { runCampaign } from '../lib/campaign/engine.js';
+import { buildTestCampaigns } from '../lib/campaign/testCampaigns.js';
 import { readEmailConfig } from '../lib/emailSender.js';
 import { pickFromAddress } from '../lib/sender.js';
 
@@ -630,10 +631,11 @@ function CampaignInspector({ campaign, onChange }) {
 }
 
 /* ── Sidebar ── */
-function CampaignSidebar({ library, currentId, onSelect, onNew, onDelete }) {
+function CampaignSidebar({ library, currentId, onSelect, onNew, onDelete, tests = [], onSelectTest }) {
   const [q, setQ] = useState('');
   const [confirmId, setConfirmId] = useState(null);   // row pending delete-confirm
   const filtered = library.filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()));
+  const testRows = tests.filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()));
   const groups = [
     { key: 'Active', rows: filtered.filter((c) => c.status === 'Active') },
     { key: 'Drafts', rows: filtered.filter((c) => c.status === 'Draft') },
@@ -653,6 +655,27 @@ function CampaignSidebar({ library, currentId, onSelect, onNew, onDelete }) {
         <Input value={q} placeholder="Search campaigns…" leading={<I.search size={13} />} onChange={(v) => setQ(v)} />
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 8px 16px' }}>
+        {/* Built-in logic tests — run against the real audience in forced
+            dry-run to verify each gate. Pinned above the real campaigns. */}
+        {testRows.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px 4px', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1.2, color: 'var(--gb-text-muted)' }}>
+              <I.sparkle size={11} style={{ color: 'var(--gb-brand-label)' }} /><span>Logic tests</span><span style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} /><span style={{ fontFamily: 'var(--gb-font-mono)' }}>{testRows.length}</span>
+            </div>
+            {testRows.map((row) => {
+              const cur = row.id === currentId;
+              return (
+                <div key={row.id} onClick={() => onSelectTest?.(row)} style={{ display: 'grid', gridTemplateColumns: '14px 1fr', gap: 9, alignItems: 'center', padding: '8px 10px', background: cur ? 'var(--gb-brand-tint-soft)' : 'transparent', border: '1px solid ' + (cur ? 'var(--gb-brand-tint-border)' : 'transparent'), borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', marginBottom: 2 }}>
+                  <div style={{ display: 'flex', justifyContent: 'center' }}><I.sparkle size={11} style={{ color: cur ? 'var(--gb-brand-label)' : 'var(--gb-text-muted)' }} /></div>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: cur ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.name.replace(/^🧪 Test · /, '')}</div>
+                    <div style={{ marginTop: 2, fontSize: 10, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{row.steps?.length || 0} gates</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
         {groups.length === 0 && <div style={{ padding: '24px 12px', textAlign: 'center', fontSize: 11.5, color: 'var(--gb-text-muted)' }}>No campaigns yet.</div>}
         {groups.map((g) => (
           <div key={g.key} style={{ marginBottom: 10 }}>
@@ -1201,6 +1224,9 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const [runMode, setRunMode] = useState(false);
   const runner = useCampaignRunner();
   const simTimer = useRef(null);
+  // Built-in logic-test campaigns (ephemeral — never saved). Stable ids
+  // for the session so parentId references inside them hold.
+  const testCampaigns = useMemo(() => buildTestCampaigns(), []);
 
   // Load campaigns + the template stores once.
   useEffect(() => {
@@ -1253,6 +1279,12 @@ export function CampaignManager({ onClose, contacts = [] }) {
     const c = library.find((x) => x.id === id);
     if (c) { setCampaign(c); setSelectedId(null); setDirty(false); setSim({ running: false, activeIdx: 0 }); }
   };
+  // Load one of the built-in logic-test campaigns into the editor. It's not
+  // persisted; dry-run is forced on so the suite can never send.
+  const loadTestCampaign = (c) => {
+    setCampaign(c); setSelectedId(null); setDirty(false);
+    setSim({ running: false, activeIdx: 0 }); setDryRun(true);
+  };
   const createCampaign = () => {
     const c = newCampaign('Untitled campaign');
     setCampaign(c); setSelectedId(null); setDirty(true);
@@ -1304,13 +1336,16 @@ export function CampaignManager({ onClose, contacts = [] }) {
       readEmailConfig(),
       new Promise((res) => { try { chrome.storage.local.get('gbEmployeeId', (d) => res({ employeeId: d?.gbEmployeeId || '' })); } catch { res({ employeeId: '' }); } }),
     ]);
+    // A logic-test campaign always runs dry — its steps must never send,
+    // whatever the toggle says.
+    const effDryRun = dryRun || !!campaign._test;
     const lookupTemplate = (kind, id) => (templateLib[kind] || []).find((t) => t.id === id) || null;
     setRunMode(true);
     runner.start({
       campaign,
       audience,
       lookupTemplate,
-      deps: { rep, emailConfig, signature: emailConfig.signature, fromLocalPart: emailConfig.localPart, dispatch: sendBg, dryRun },
+      deps: { rep, emailConfig, signature: emailConfig.signature, fromLocalPart: emailConfig.localPart, dispatch: sendBg, dryRun: effDryRun },
     });
   };
 
@@ -1339,8 +1374,16 @@ export function CampaignManager({ onClose, contacts = [] }) {
           />
         ) : (
         <>
+        {campaign._test && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '8px 18px', background: 'var(--gb-brand-tint-soft)', borderBottom: '1px solid var(--gb-brand-tint-border)', flexShrink: 0 }}>
+            <I.sparkle size={13} style={{ color: 'var(--gb-brand-label)', flexShrink: 0 }} />
+            <span style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)' }}>
+              <b style={{ color: 'var(--gb-brand-label)' }}>Logic test</b> · {campaign._testNote || 'Runs against the real audience in dry-run; nothing is sent.'} Hit <b>Run campaign</b> and watch the run log for ✓/✗.
+            </span>
+          </div>
+        )}
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-          <CampaignSidebar library={library} currentId={campaign.id} onSelect={selectCampaign} onNew={createCampaign} onDelete={deleteCampaign} />
+          <CampaignSidebar library={library} currentId={campaign.id} onSelect={selectCampaign} onNew={createCampaign} onDelete={deleteCampaign} tests={testCampaigns} onSelectTest={loadTestCampaign} />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid var(--gb-border-default)' }}>
             <Timeline steps={steps} selectedId={selectedId} sim={sim} templateLib={templateLib} onSelect={setSelectedId} onAdd={addStep} onDelete={deleteStep} onDuplicate={duplicateStep} />
           </div>
