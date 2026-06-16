@@ -505,16 +505,23 @@ function distanceTransform(mask, w, h) {
   return D;
 }
 
+/* Separable box blur of a float field (used to smooth the orientation field). */
+function boxBlur(a, w, h, r) {
+  const t = new Float32Array(w * h), o = new Float32Array(w * h), n = 2 * r + 1;
+  for (let y = 0; y < h; y++) { let s = 0; for (let x = -r; x <= r; x++) s += a[y * w + Math.max(0, Math.min(w - 1, x))]; for (let x = 0; x < w; x++) { t[y * w + x] = s / n; s -= a[y * w + Math.max(0, x - r)]; s += a[y * w + Math.min(w - 1, x + r + 1)]; } }
+  for (let x = 0; x < w; x++) { let s = 0; for (let y = -r; y <= r; y++) s += t[Math.max(0, Math.min(h - 1, y)) * w + x]; for (let y = 0; y < h; y++) { o[y * w + x] = s / n; s -= t[Math.max(0, y - r) * w + x]; s += t[Math.min(h - 1, y + r + 1) * w + x]; } }
+  return o;
+}
+
 /* ── embroidery (woven), raster — NO vectorization ─────────────────────────
-   "Extract the shape, stitch over it": key out the background to get the
-   foreground, then shade CONTOUR-FOLLOWING satin threads onto the logo's own
-   colors. Threads are iso-distance ridges of a distance transform, so each
-   shape's threads wrap its OWN contour (per-shape, automatically) and the
-   outermost ridge forms the thick woven outline. Each thread is a rounded
-   filament (diffuse crest/valley) with a glossy specular highlight + along-
-   thread corrugation, so it reads as raised 3D thread, not a flat line. A
-   brightened edge band sharpens the border. Robust on any logo (no fragile
-   color vectorization). Returns a PNG dataURL. */
+   Real digitizers fill each stroke perpendicular to its medial axis (satin
+   ACROSS the stroke). We approximate that per-pixel: key out the background,
+   then build a smoothed DIRECTION FIELD from the orientation of the distance-
+   transform gradient (which points across each stroke). Shade BRIGHT satin onto
+   the logo's own colors — an orientation-dependent sheen (strokes catch light by
+   angle, like real satin) + fine stitch ribbing ACROSS the threads, biased
+   bright so the interior never goes dark/muddy. A brightened edge band gives the
+   thick woven outline. Robust on any logo (no fragile color vectorization). */
 function buildEmbroidery(img, doRemoveBg, bgTol) {
   const nw = img?.naturalWidth, nh = img?.naturalHeight;
   if (!nw || !nh) return null;
@@ -531,24 +538,37 @@ function buildEmbroidery(img, doRemoveBg, bgTol) {
   const mask = new Uint8Array(w * h);
   for (let i = 0; i < w * h; i++) mask[i] = d[i * 4 + 3] > 10 ? 1 : 0;
   const D = distanceTransform(mask, w, h);
-  const spacing = Math.max(2.6, w / 170), PI2 = Math.PI * 2;
+  // Orientation field: gradient of D points across the stroke. Encode as a
+  // double-angle vector (cos2φ, sin2φ) weighted by magnitude², blur to smooth,
+  // then recover the thread direction φ — stable even at the medial axis.
+  const C = new Float32Array(w * h), S = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x; if (!mask[i]) continue;
+    const gx = D[i + (x < w - 1 ? 1 : 0)] - D[i - (x > 0 ? 1 : 0)];
+    const gy = D[i + (y < h - 1 ? w : 0)] - D[i - (y > 0 ? w : 0)];
+    C[i] = gx * gx - gy * gy; S[i] = 2 * gx * gy;
+  }
+  const Cb = boxBlur(C, w, h, Math.max(1, Math.round(w / 90)));
+  const Sb = boxBlur(S, w, h, Math.max(1, Math.round(w / 90)));
+  const ribSp = Math.max(3, w / 130), PI2 = Math.PI * 2, LIGHT = 120 * Math.PI / 180;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const i = y * w + x, o = i * 4; if (d[o + 3] === 0) continue;
-    const ridge = Math.cos(D[i] / spacing * PI2);                 // across nested threads
-    const corrug = Math.cos((x + y) / (spacing * 2.2) * PI2);     // along-thread stitch bumps
-    const diffuse = 0.76 + 0.36 * ridge + 0.13 * corrug;          // crest bright, valley dark
-    const crest = Math.max(0, ridge);
-    const spec = crest * crest * crest * 130 * (0.7 + 0.3 * corrug);  // glossy sheen on crests
-    d[o] = Math.max(0, Math.min(255, d[o] * diffuse + spec));
-    d[o + 1] = Math.max(0, Math.min(255, d[o + 1] * diffuse + spec));
-    d[o + 2] = Math.max(0, Math.min(255, d[o + 2] * diffuse + spec));
+    const phi = 0.5 * Math.atan2(Sb[i], Cb[i]);       // thread direction (across stroke)
+    const pA = -x * Math.sin(phi) + y * Math.cos(phi); // along medial axis
+    const rib = Math.cos(pA / ribSp * PI2);            // individual stitches across the column
+    const sheen = 0.5 + 0.5 * Math.cos(2 * (phi - LIGHT));  // orientation-dependent satin luster
+    const gain = 1.04 + 0.42 * sheen + 0.06 * rib;     // bright bias → no dark interior bands
+    const add = 18 * sheen + 10 * Math.max(0, rib);
+    d[o] = Math.max(0, Math.min(255, d[o] * gain + add));
+    d[o + 1] = Math.max(0, Math.min(255, d[o + 1] * gain + add));
+    d[o + 2] = Math.max(0, Math.min(255, d[o + 2] * gain + add));
   }
   // Brighten the edge band (mask − eroded) for a crisp thick woven outline.
   const R = Math.max(2, Math.round(w / 180));
   const er = erodeMask(mask, w, h, R);
   for (let i = 0; i < w * h; i++) {
     if (mask[i] && !er[i]) {
-      const o = i * 4, t = 0.4;
+      const o = i * 4, t = 0.34;
       d[o] += (255 - d[o]) * t; d[o + 1] += (255 - d[o + 1]) * t; d[o + 2] += (255 - d[o + 2]) * t; d[o + 3] = 255;
     }
   }
