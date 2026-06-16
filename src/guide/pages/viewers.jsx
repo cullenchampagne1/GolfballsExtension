@@ -495,23 +495,23 @@ function PreviewSurface({ mode = '2d', height = 230 }) {
       )}
 
       {/* top-left: size chip + eyedropper */}
-      <div style={{ position: 'absolute', top: 8, left: 10, display: 'flex', alignItems: 'center', gap: 4 }}>
+      <div data-demo="iv-size" style={{ position: 'absolute', top: 8, left: 10, display: 'flex', alignItems: 'center', gap: 4 }}>
         <GlassChip>1024×1024</GlassChip>
         <GlassBtn icon={<DropperGlyph size={14} />} active={mode === 'swap'} label="Eyedropper" />
       </div>
 
       {/* top-right: Align · 3D · Mockup */}
-      <div style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }}>
+      <div data-demo="iv-tools" style={{ position: 'absolute', top: 8, right: 8, display: 'flex', gap: 4 }}>
         <GlassBtn icon={<AlignGlyph size={14} />} active={aligning} label="Align" />
         <GlassBtn icon={<CubeGlyph size={14} />} label="3D view" />
         <GlassBtn icon={<CameraGlyph size={14} />} label="Mockup" />
       </div>
 
       {/* bottom-left: zoom % */}
-      <div style={{ position: 'absolute', bottom: 8, left: 10 }}><GlassChip>140%</GlassChip></div>
+      <div data-demo="iv-zoom" style={{ position: 'absolute', bottom: 8, left: 10 }}><GlassChip>140%</GlassChip></div>
 
       {/* bottom-right: − 1:1 + */}
-      <div style={{ position: 'absolute', bottom: 8, right: 8, display: 'flex', gap: 4 }}>
+      <div data-demo="iv-zoomctl" style={{ position: 'absolute', bottom: 8, right: 8, display: 'flex', gap: 4 }}>
         <ZoomChip>−</ZoomChip><ZoomChip>1:1</ZoomChip><ZoomChip>+</ZoomChip>
       </div>
 
@@ -539,6 +539,36 @@ function PreviewSurface({ mode = '2d', height = 230 }) {
     </div>
   );
 }
+
+/* Raw logo-extractor body (no MiniFrame) for the LiveStage walkthrough, with
+   data-demo targets on the floating-control groups. */
+function ImageWalkSnippet() {
+  return (
+    <div style={{ width: 380, maxWidth: '100%', background: 'var(--gb-surface-modal)', borderRadius: 'inherit', overflow: 'hidden' }}>
+      <ViewerHeader icon={<ImageGlyph size={14} />} title="Logo Extractor" sub="Extracted logo · order #4471823" onClose={false} />
+      <div style={{ padding: 12 }}>
+        <PreviewSurface mode="2d" height={216} />
+        <div data-demo="iv-actions" style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <Btn size="sm" variant="secondary" status="success" icon={<I.copy />} style={{ flex: 1 }}>Copy URL</Btn>
+          <Btn size="sm" variant="primary" icon={<I.download />} style={{ flex: 1 }}>Download</Btn>
+        </div>
+        <Btn size="sm" variant="tinted" status="brand" icon={<I.send />} full style={{ marginTop: 8 }}>Submit Proof</Btn>
+      </div>
+    </div>
+  );
+}
+const IV_CALLOUTS = [
+  { n: 1, target: 'iv-size', title: 'Size + eyedropper', text: 'Top-left: the image’s natural pixel size, and the eyedropper — click a color on the image to swap it for another.' },
+  { n: 2, target: 'iv-tools', title: 'Align · 3D · Mockup', text: 'Top-right: extract a clean decal with the alignment ring, project it on the 3D ball, or render a grass-scene mockup.' },
+  { n: 3, target: 'iv-zoomctl', title: 'Zoom', text: 'Bottom-right: out / 1:1 / in. The wheel zooms toward the cursor and a double-click toggles 1× ↔ 2×; the % shows bottom-left.' },
+  { n: 4, target: 'iv-actions', title: 'Copy · Download · Submit Proof', text: 'Below the image: copy the source URL, download the file, or carry whatever’s on screen into Submit Proof.' },
+];
+const IV_STEPS = [
+  { target: 'iv-size', caption: 'Top-left shows the true pixel size; the eyedropper picks a color to swap.', hold: 2200 },
+  { target: 'iv-tools', caption: 'Top-right toggles Align (extract a decal), 3D (project on the ball), and Mockup (grass scene).', hold: 2600 },
+  { target: 'iv-zoomctl', caption: 'Zoom with the cluster, the wheel, or a double-click — the % reads bottom-left.', hold: 2200 },
+  { target: 'iv-actions', caption: 'Then Copy the URL, Download the file, or push it into Submit Proof.', hold: 2400 },
+];
 
 function ImageSnippet() {
   return (
@@ -630,8 +660,20 @@ export function ImageViewerPage() {
         straight onto the surface.
       </p>
 
+      <LiveStage
+        width={380}
+        frameKind="modal"
+        frameLabel="order · logo extractor"
+        render={() => <ImageWalkSnippet />}
+        callouts={IV_CALLOUTS}
+        steps={IV_STEPS}
+        note="The viewer floats its controls in the four corners so the image stays unobstructed — hover the pins (Tour), press Play, or Try it."
+      />
+
+      <h2 className="sec">The genuine viewer, live</h2>
+      <p>Below is the real Image Viewer on a template logo — exactly as it appears in production. Drag to pan, scroll to zoom, and try the Align / 3D / Mockup toggles.</p>
       <LiveModal w={500} h={600} frameLabel="order · image viewer"
-        note="The real Image Viewer on a template logo — exactly as it appears in production. Drag to pan, scroll to zoom, and try the Align / 3D / Mockup toggles. It’s live."
+        note="The real ImagePreview modal, running live on a template logo."
         render={(box, onClosed) => <ImagePreview url={TEMPLATE_LOGO} onClosed={onClosed} />} />
 
       <h2 className="sec">Walk the surface, control by control</h2>
@@ -703,7 +745,7 @@ function Viewer3DSurface({ height = 230, tint = '#f6f6f6', throwMode = false }) 
     <div style={{
       position: 'relative', height, width: '100%', overflow: 'hidden',
       border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)',
-      background: 'radial-gradient(120% 120% at 50% 30%, #2a2d31 0%, #161719 60%, #0c0d0e 100%)',
+      background: 'var(--gb-surface-2)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
       {/* shadow */}
@@ -752,12 +794,37 @@ function Viewer3DSnippet() {
   );
 }
 
+/* Throw / physics mode — conveys the fling: a dashed trajectory arc from a
+   faded "start" ball to the live ball, with motion streaks. */
+function ThrowSnippet() {
+  return (
+    <MiniFrame width={440} label="3d viewer · throw mode" pad>
+      <div style={{ position: 'relative', height: 200, borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'var(--gb-surface-2)' }}>
+        <svg width="100%" height="100%" viewBox="0 0 440 200" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0 }}>
+          <path d="M 70 150 Q 230 10 350 95" fill="none" stroke="var(--gb-brand-label)" strokeWidth="2.5" strokeDasharray="6 7" opacity="0.75" />
+          <path d="M 342 86 L 352 96 L 339 100 Z" fill="var(--gb-brand-label)" opacity="0.9" />
+        </svg>
+        {/* start (ghost) ball */}
+        <div style={{ position: 'absolute', left: 52, top: 132, width: 38, height: 38, borderRadius: '50%', background: 'radial-gradient(circle at 36% 30%, #fff, #cfcfcf)', opacity: 0.28 }} />
+        {/* motion streaks */}
+        <div style={{ position: 'absolute', left: 250, top: 96, width: 70, height: 24, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,.18))', borderRadius: 12, filter: 'blur(2px)' }} />
+        {/* live ball with decal */}
+        <div style={{ position: 'absolute', left: 312, top: 70, width: 70, height: 70, borderRadius: '50%', background: 'radial-gradient(circle at 36% 28%, #fff 0%, #ededed 58%, #cfcfcf 100%)', boxShadow: 'inset -10px -11px 20px rgba(0,0,0,.2), 0 10px 22px -4px rgba(0,0,0,.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ width: 30, height: 30, borderRadius: '50%', border: '3px solid #0b4f2c', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Georgia, serif', fontWeight: 800, fontSize: 15, color: '#0b4f2c' }}>P</span>
+        </div>
+        <div style={{ position: 'absolute', top: 8, left: 10 }}><GlassBtn icon={<I.bolt size={13} />} active label="Throw / physics" /></div>
+        <div style={{ position: 'absolute', bottom: 8, right: 10 }}><GlassChip mono={false}>drag &amp; fling · bounces off the walls</GlassChip></div>
+      </div>
+    </MiniFrame>
+  );
+}
+
 function GiftSetSnippet() {
   return (
     <MiniFrame width={420} label="3d viewer · gift box" pad>
       <div style={{
         position: 'relative', height: 200, borderRadius: 'var(--gb-r-md)', overflow: 'hidden',
-        background: 'radial-gradient(120% 120% at 50% 30%, #2a2d31 0%, #161719 60%, #0c0d0e 100%)',
+        background: 'var(--gb-surface-2)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         {/* foam box with 6 ball slots + a tool */}
@@ -798,7 +865,7 @@ function Real3DViewer() {
   const [shape, setShape] = useState('ball');
   return (
     <div style={{ margin: '22px 0 6px' }}>
-      <div style={{ position: 'relative', height: 360, width: '100%', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md) var(--gb-r-md) 0 0', overflow: 'hidden', background: 'radial-gradient(120% 120% at 50% 30%, #2a2d31 0%, #161719 60%, #0c0d0e 100%)' }}>
+      <div style={{ position: 'relative', height: 360, width: '100%', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md) var(--gb-r-md) 0 0', overflow: 'hidden', background: 'var(--gb-surface-2)' }}>
         {err
           ? <Viewer3DSurface height={360} tint={shape === 'chip' ? '#b23b3b' : '#f6f6f6'} />
           : <GolfballViewer key={shape} decalDataUrl={TEMPLATE_LOGO} shape={shape} autoRotate minimal onError={() => setErr(true)} />}
@@ -857,7 +924,7 @@ export function Viewer3DPage() {
         <p>The <strong>Copy</strong> and <strong>Download</strong> buttons in the strip export a snapshot. Crucially, each model exports from a <strong>fixed pose</strong> — every PNG frames identically, with a transparent background — so a row of products in a proposal email lines up perfectly instead of looking screenshotted at random angles. (Admins can tune the poses under Developer Settings → Snapshot.)</p>
       </TourBox>
 
-      <TourBox n={4} eyebrow="For fun" title="Physics throw mode" live={<Viewer3DSurface throwMode />} wide>
+      <TourBox n={4} eyebrow="For fun" title="Physics throw mode" live={<ThrowSnippet />} wide>
         <p>The ball has a <strong>throw mode</strong>: flip it on (top-left) and gravity kicks in — drag and fling the ball and it bounces around the scene. There's even a <strong>bomb tool</strong> in the fun menu. It's ball-only and disabled in HDRI scenes (nothing to bounce off a skybox). Yes, really — it's a small reward for getting the proof right.</p>
       </TourBox>
 

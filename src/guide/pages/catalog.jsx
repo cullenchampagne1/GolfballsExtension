@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { I, Btn, Tag, Dot, Input, Dropdown, Segmented, Switch } from '../../ui/index.js';
 import { GIcon } from '../lib/app.jsx';
 import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
+import { LiveStage } from '../lib/stage.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    catalog.jsx — DEEP pages: Gift Catalog + Proposals & Quotes.
@@ -251,33 +252,45 @@ function DetailSnippet() {
   );
 }
 
-/* ----- imprint tabs (customize block) ----- */
+/* ----- imprint customizer (faithful to giftCustomize: 8 underline tabs,
+   a live 3D preview pane, type-specific controls, and the dual-pole row).
+   Returned raw (no MiniFrame) so a LiveStage frames it for the walkthrough. */
 const IMPRINTS = [
-  { id: 'logo', label: 'Custom Logo', icon: () => <I.upload size={13} /> },
-  { id: 'text', label: 'Text', icon: () => <I.edit size={13} /> },
-  { id: 'mono', label: 'Monogram', icon: () => <I.sparkle size={13} /> },
-  { id: 'photo', label: 'Photo', icon: () => <I.eye size={13} /> },
+  { id: 'logo', label: 'Custom Logo' },
+  { id: 'text', label: 'Personalized' },
+  { id: 'mono', label: 'Monogram' },
+  { id: 'photo', label: 'Photo' },
+  { id: 'alignxl', label: 'AlignXL' },
+  { id: 'idalign', label: 'IDAlign' },
+  { id: 'icons', label: 'Icons' },
+  { id: 'number', label: 'Player #' },
 ];
+function CzGridPick({ items }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 5 }}>
+      {items.map((s, i) => (
+        <div key={s} title={s} style={{ aspectRatio: '1', borderRadius: 'var(--gb-r-sm)', border: '1px solid ' + (i === 0 ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'), background: i === 0 ? 'var(--gb-brand-tint-soft)' : SURFACE, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8.5, fontWeight: 700, color: 'var(--gb-text-muted)', textAlign: 'center', lineHeight: 1 }}>{s.slice(0, 6)}</div>
+      ))}
+    </div>
+  );
+}
 function CustomizeSnippet() {
   const [tab, setTab] = useState('logo');
   const [dual, setDual] = useState(false);
   return (
-    <MiniFrame width={350} label="catalog · customize" pad>
-      <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 10 }}>
+    <div style={{ width: 460, maxWidth: '100%', background: 'var(--gb-surface-modal)', borderRadius: 'inherit', overflow: 'hidden' }}>
+      <div data-demo="cz-tabs" style={{ display: 'flex', gap: 1, borderBottom: '1px solid var(--gb-border-default)', padding: '0 8px', overflowX: 'auto' }}>
         {IMPRINTS.map((im) => {
           const on = tab === im.id;
-          return (
-            <button key={im.id} onClick={() => setTab(im.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 9px', borderRadius: 'var(--gb-r-sm)', border: '1px solid ' + (on ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'), background: on ? 'var(--gb-brand-tint-soft)' : SURFACE, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', fontFamily: 'inherit', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{im.icon()} {im.label}</button>
-          );
+          return <button key={im.id} onClick={() => setTab(im.id)} style={{ padding: '9px 9px', background: 'transparent', border: 'none', borderBottom: '2px solid ' + (on ? 'var(--gb-brand-label)' : 'transparent'), marginBottom: -1, cursor: 'pointer', fontFamily: 'inherit', fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap', color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)' }}>{im.label}</button>;
         })}
       </div>
-
-      <div style={{ display: 'flex', gap: 12 }}>
-        <div style={{ width: 110, flexShrink: 0 }}>
-          <Photo h={110} ball />
+      <div style={{ display: 'flex', gap: 12, padding: 12 }}>
+        <div data-demo="cz-preview" style={{ width: 122, flexShrink: 0 }}>
+          <Photo h={122} ball />
           <div style={{ fontSize: 9, color: 'var(--gb-text-muted)', textAlign: 'center', marginTop: 4 }}>live 3D preview</div>
         </div>
-        <div style={{ flex: 1 }}>
+        <div data-demo="cz-controls" style={{ flex: 1, minWidth: 0 }}>
           {tab === 'logo' && (
             <div style={{ border: '1px dashed var(--gb-border-default)', borderRadius: RMD, padding: '18px 10px', textAlign: 'center', background: 'var(--gb-fill-subtle)' }}>
               <I.upload size={18} style={{ color: 'var(--gb-text-muted)' }} />
@@ -287,18 +300,15 @@ function CustomizeSnippet() {
           )}
           {tab === 'text' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <Input size="sm" value="The Smith Open" onChange={() => {}} placeholder="Line 1" />
-              <Dropdown size="sm" value="kabel" onChange={() => {}} options={[{ id: 'kabel', label: 'Kabel Dm BT' }, { id: 'calibri', label: 'Calibri' }, { id: 'lucida', label: 'Lucida Handwriting' }]} />
+              <Input size="sm" value="The Smith Open" onChange={() => {}} placeholder="Line 1 (17 chars)" />
+              <Input size="sm" value="" onChange={() => {}} placeholder="Optional Line 2" />
+              <Dropdown size="sm" value="kabel" onChange={() => {}} options={[{ id: 'kabel', label: 'Kabel Dm BT' }, { id: 'calibri', label: 'Calibri' }, { id: 'lucida', label: 'Lucida Handwriting' }, { id: 'bradley', label: 'Bradley Hand' }]} />
               <Segmented value="std" onChange={() => {}} size="sm" options={[{ id: 'std', label: 'Standard' }, { id: 'lg', label: 'Large' }, { id: 'max', label: 'Max' }]} />
             </div>
           )}
           {tab === 'mono' && (
             <div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 5, marginBottom: 7 }}>
-                {['Circle', 'Hexagram', 'Gardenia', 'Vertical', 'Horizontal', 'Diagonal', 'Simple'].map((s, i) => (
-                  <div key={s} title={s} style={{ aspectRatio: '1', borderRadius: 'var(--gb-r-sm)', border: '1px solid ' + (i === 0 ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'), background: i === 0 ? 'var(--gb-brand-tint-soft)' : SURFACE, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: 'var(--gb-text-secondary)' }}>JS</div>
-                ))}
-              </div>
+              <div style={{ marginBottom: 7 }}><CzGridPick items={['Circle', 'Hexagram', 'Gardenia', 'Vertical', 'Horizontal', 'Diagonal', 'Simple']} /></div>
               <Input size="sm" value="JMS" onChange={() => {}} placeholder="Initials" mono />
             </div>
           )}
@@ -308,17 +318,52 @@ function CustomizeSnippet() {
               <div style={{ fontSize: 10.5, color: 'var(--gb-text-secondary)', marginTop: 6 }}>Auto-cropped to a circle</div>
             </div>
           )}
+          {tab === 'alignxl' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              <CzGridPick items={['Star', 'Thin', 'Medium', 'Thick', 'Dot', 'Skull', 'Martini', 'Wine']} />
+              <Input size="sm" value="EST. 1932" onChange={() => {}} placeholder="Optional accent text" />
+            </div>
+          )}
+          {tab === 'idalign' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              <CzGridPick items={['Arrows', 'Dots', 'Stars', 'Chevron', 'Line', 'Martini', 'Wine', 'Bar']} />
+              <Input size="sm" value="JMS" onChange={() => {}} placeholder="1–3 initials" mono />
+            </div>
+          )}
+          {tab === 'icons' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              <Dropdown size="sm" value="dad" onChange={() => {}} options={[{ id: 'dad', label: "Dad / Father's Day" }, { id: 'drinks', label: 'Drinks' }, { id: 'usa', label: 'USA / Patriotic' }, { id: 'masters', label: 'Masters' }, { id: 'misc', label: 'Misc' }]} />
+              <CzGridPick items={['🏌', '⛳', '🍺', '🏆', '🇺🇸', '★', '◆', '☘']} />
+            </div>
+          )}
+          {tab === 'number' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <Input size="sm" value="7" onChange={() => {}} placeholder="0–99" mono />
+              <div style={{ fontSize: 10, color: 'var(--gb-text-muted)' }}>A jersey-style number. Adds “Additional Personalization · $5.00/dz”.</div>
+            </div>
+          )}
         </div>
       </div>
-
-      <div style={{ marginTop: 12, padding: 9, borderRadius: RMD, border: BORDER, background: 'var(--gb-surface-1)', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div data-demo="cz-dual" style={{ margin: '0 12px 12px', padding: 9, borderRadius: RMD, border: BORDER, background: 'var(--gb-surface-1)', display: 'flex', alignItems: 'center', gap: 8 }}>
         <Switch on={dual} size="sm" onChange={setDual} />
         <div style={{ flex: 1, fontSize: 11.5, color: 'var(--gb-text-secondary)' }}>Add Second Imprint (opposite pole)</div>
         <Tag size="xs" tone="success">+$6 / dz logo</Tag>
       </div>
-    </MiniFrame>
+    </div>
   );
 }
+const CZ_CALLOUTS = [
+  { n: 1, target: 'cz-tabs', title: 'Imprint type', text: 'A tab per type the product supports: Custom Logo, Personalized text, Monogram, Photo, AlignXL, IDAlign, Icons, and Player #.' },
+  { n: 2, target: 'cz-controls', title: 'Type-specific controls', text: 'The controls change with the tab — upload art, type up to 3 lines, pick a monogram style, choose an icon theme, enter a number, etc.' },
+  { n: 3, target: 'cz-preview', title: 'Live 3D preview', text: 'Re-renders as you change anything. The 3D scene is local, but the imprint artwork is the real production render — what you see is what prints.' },
+  { n: 4, target: 'cz-dual', title: 'Second imprint (opposite pole)', text: 'Add a second decoration on the other pole — logo one side, text or monogram the other — both shown in the preview, for an upcharge (+$6/dz logo, +$4/dz text).' },
+];
+const CZ_STEPS = [
+  { target: 'cz-tabs', caption: 'Pick how to decorate it — eight imprint types, only the ones this product supports appear.', hold: 2400 },
+  { target: 'cz-controls', caption: 'The controls below adapt to the tab — here, drop a logo; on Personalized, type up to three lines.', hold: 2600 },
+  { target: 'cz-preview', caption: 'The 3D ball re-renders live with the real production decal — no guessing how it’ll print.', hold: 2400 },
+  { target: 'cz-dual', caption: 'Flip on a second imprint for the opposite pole — logo one side, personalization the other.', hold: 2400 },
+];
 
 /* The eight imprint types, verified */
 const IMPRINT_ROWS = [
@@ -382,14 +427,29 @@ export function CatalogPage() {
         <p>Watch for the extras: a <strong>green promo banner</strong> when one applies, a <strong>Cost</strong> line (<em>“Cost $X.XX/unit · used for margin”</em>) once a cost has synced for the SKU, and <strong>Check inventory</strong> — press it to pull the live stock table (Avail / OnHand / Alloc / OnOrdr) on demand. The footer's <strong>View product</strong> opens the live site page; <strong>Add to proposal</strong> (which becomes <strong>Add another</strong> once it's in) commits the line.</p>
       </TourBox>
 
-      <TourBox n={5} eyebrow="Make it theirs" title="Customizing an item — imprints" live={<CustomizeSnippet />} wide>
-        <p>On a customizable product the detail panel grows a <strong>customize block</strong>: a tab per imprint type the product actually supports, type-specific controls below, and a <strong>live 3D preview</strong> that re-renders as you change anything. The 3D scene renders locally, but the imprint <em>artwork</em> (logo art, monogram, text) is generated by the same production services the website uses — so the decal you see is the real one.</p>
-        <p>Where the product supports it, an <strong>“Add Second Imprint (opposite pole)”</strong> checkbox reveals a second, identical set of controls for the opposite <strong>pole</strong> — logo on one side, text or a monogram on the other, both shown in the 3D preview. The second pole carries an upcharge (per dozen: <strong>+$6 logo, +$4 text</strong>). Deleting the front imprint promotes the back one to front. The full set of imprint types and their controls:</p>
-        <table className="spectable">
-          <thead><tr><th style={{ width: 150 }}>Imprint type</th><th>Controls</th></tr></thead>
-          <tbody>{IMPRINT_ROWS.map((r) => <tr key={r[0]}><td><b>{r[0]}</b></td><td>{r[1]}</td></tr>)}</tbody>
-        </table>
-      </TourBox>
+      <h2 className="sec">Customizing an item — imprints</h2>
+      <p>On a customizable product the detail panel grows a <strong>customize block</strong>: a tab per imprint type the product supports, type-specific controls, and a <strong>live 3D preview</strong>. Walk through it below — hover the numbered pins (Tour), press Play, or switch to Try it.</p>
+
+      <LiveStage
+        width={460}
+        frameKind="modal"
+        legend="left"
+        frameLabel="catalog · customize"
+        render={() => <CustomizeSnippet />}
+        callouts={CZ_CALLOUTS}
+        steps={CZ_STEPS}
+        note="The imprint customizer — switch tabs to see each type’s controls; the explanation reads down the left."
+      />
+
+      <p>
+        The 3D scene renders locally, but the imprint <em>artwork</em> (logo art, monogram, text) is generated by the same
+        production services the website uses — so the decal you see is the real one. <strong>Deleting the front imprint promotes
+        the back one to front.</strong> The full set of imprint types and their controls:
+      </p>
+      <table className="spectable">
+        <thead><tr><th style={{ width: 150 }}>Imprint type</th><th>Controls</th></tr></thead>
+        <tbody>{IMPRINT_ROWS.map((r) => <tr key={r[0]}><td><b>{r[0]}</b></td><td>{r[1]}</td></tr>)}</tbody>
+      </table>
 
       <h2 className="sec">Gift sets — from per-dozen to per-set</h2>
       <p>

@@ -302,7 +302,9 @@ export function CategorizeRail({
       if (!root) return;
       if (root.contains(document.activeElement)) return; // user already in the rail
       const first = root.querySelector('.gb-ev-focusable');
-      try { first?.focus(); } catch { /* ignore */ }
+      // preventScroll: focusing the rail must NOT yank the page/scroll position
+      // to it (it would jump a long doc page — e.g. the guide — to mid-content).
+      try { first?.focus({ preventScroll: true }); } catch { /* ignore */ }
     }, 120);
     return () => clearTimeout(t);
   }, []);
