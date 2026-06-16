@@ -561,7 +561,11 @@ export function ImagePreview({
   const onPointerDown = (e) => {
     if (e.button !== 0 || status !== 'ready') return;
     if (inViewerMode) return;
-    if (e.target?.closest?.('button, input, textarea, select, a, [data-viewer-ui="true"]')) return;
+    // Popovers (color-swap, etc.) portal to <body> but their JSX lives under
+    // this wrapper, so React synthetic events still bubble here. Ignore any
+    // pointerdown that originates inside a DraggablePopup so dragging in/around
+    // the popover never pans the image.
+    if (e.target?.closest?.('button, input, textarea, select, a, [data-viewer-ui="true"], .gb-draggable-popup')) return;
     // Eyedropper mode — clicking the image samples a pixel and opens
     // the color-picker popover instead of starting a drag.
     if (eyedropping) {
@@ -599,8 +603,9 @@ export function ImagePreview({
     if (inViewerMode) return;
     // Ignore double-clicks that originated on overlay controls — two
     // rapid clicks on the zoom button were bubbling up and treating
-    // the wrapper as the dblclick target, snapping zoom back to 1x.
-    if (e.target?.closest?.('button, input, textarea, select, a, [data-viewer-ui="true"]')) return;
+    // the wrapper as the dblclick target, snapping zoom back to 1x. The
+    // same applies to popovers, whose portaled JSX still bubbles here.
+    if (e.target?.closest?.('button, input, textarea, select, a, [data-viewer-ui="true"], .gb-draggable-popup')) return;
     // Toggle 1x ↔ 2x for a quick zoom-in shortcut.
     if (scaleRef.current !== 1 || txRef.current !== 0 || tyRef.current !== 0) {
       resetZoom();
