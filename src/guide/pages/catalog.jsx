@@ -385,6 +385,108 @@ const GLOSSARY = [
   ['Split / Split tier', 'Multiple qty × price rows on one line, to quote several volume scenarios at once.'],
 ];
 
+/* ----- gift-set packaging selector (faithful to the giftSets bundle:
+   a radio list of packaging options each with size + per-set upcharge,
+   then the per-SET pricing flip). ----- */
+const GIFTSETS = [
+  { id: 'none', name: 'No packaging', sub: 'ships loose by the dozen', up: null },
+  { id: 'sleeve', name: '3-Ball Sleeve', sub: 'sleeve · 3 balls', up: '+$4.00 / set' },
+  { id: 'box-lever', name: '6-Ball Black Box', sub: 'Lever-Divot kit · 6 balls', up: '+$22.00 / set' },
+  { id: 'box-chip', name: '6-Ball Black Box', sub: 'Poker-Chip kit · 6 balls', up: '+$19.00 / set' },
+  { id: 'wood', name: 'Premium Wood 6-Ball', sub: 'wooden box · 6 balls', up: '+$38.00 / set' },
+];
+function GiftSetSnippet() {
+  const [pick, setPick] = useState('box-lever');
+  return (
+    <MiniFrame width={360} label="customize · gift-set selector" pad>
+      <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--gb-text-muted)', marginBottom: 9 }}>Gift-set packaging</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {GIFTSETS.map((g) => {
+          const on = pick === g.id;
+          return (
+            <button key={g.id} type="button" onClick={() => setPick(g.id)} style={{ display: 'flex', alignItems: 'center', gap: 9, textAlign: 'left', padding: '8px 10px', borderRadius: RMD, cursor: 'pointer', border: '1px solid ' + (on ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'), background: on ? 'var(--gb-brand-tint-soft)' : SURFACE }}>
+              <span style={{ width: 14, height: 14, flexShrink: 0, borderRadius: '50%', border: '2px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-strong, var(--gb-border-default))'), display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{on && <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gb-brand-label)' }} />}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{g.name}</span>
+                <span style={{ display: 'block', fontSize: 10, color: 'var(--gb-text-muted)' }}>{g.sub}</span>
+              </span>
+              {g.up
+                ? <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, fontFamily: MONO, color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>{g.up}</span>
+                : <span style={{ flexShrink: 0, fontSize: 10, color: 'var(--gb-text-ghost)' }}>default</span>}
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ marginTop: 10, padding: '8px 10px', borderRadius: RMD, border: BORDER, background: 'var(--gb-surface-1)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <GIcon.gift size={14} style={{ color: 'var(--gb-brand-label)', flexShrink: 0 }} />
+        <span style={{ fontSize: 10.5, color: 'var(--gb-text-tertiary)', lineHeight: 1.5 }}>Pricing flips to <b style={{ color: 'var(--gb-text-secondary)' }}>per&nbsp;set</b> — quantity now means number of sets, not dozens.</span>
+      </div>
+    </MiniFrame>
+  );
+}
+
+/* ----- custom / service item editor (faithful to the Custom Items
+   editor: identity + cost fields, a thumbnail drop, style-option rows,
+   and a price ladder). ----- */
+function CiField({ label, value, hint, flex }) {
+  return (
+    <label style={{ flex: flex || 1, minWidth: 0, display: 'block' }}>
+      <span style={{ display: 'block', fontSize: 9.5, fontWeight: 700, color: 'var(--gb-text-muted)', marginBottom: 4 }}>{label}</span>
+      <span style={{ display: 'block', padding: '6px 9px', borderRadius: 'var(--gb-r-sm)', border: BORDER, background: SURFACE, fontSize: 11.5, color: value ? 'var(--gb-text-primary)' : 'var(--gb-text-ghost)', fontFamily: hint ? MONO : undefined, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value || hint}</span>
+    </label>
+  );
+}
+function CustomItemSnippet() {
+  const [drop, setDrop] = useState(true);
+  const LADDER = [['1+', '$14.50'], ['25+', '$12.75'], ['100+', '$11.25']];
+  return (
+    <MiniFrame width={400} label="custom items · editor" pad>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <CiField label="Brand" value="SnugZ" flex={1} />
+        <CiField label="Product" value="Tritan Water Bottle" flex={1.4} />
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <CiField label="Item ID" value="SZ-2200" hint />
+        <CiField label="Cost / unit" value="$6.20" hint />
+        <CiField label="Setup" value="$45.00" hint />
+        <CiField label="Weight" value="0.6 lb" hint />
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'stretch' }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--gb-text-muted)', marginBottom: 4 }}>Thumbnail</div>
+          <div style={{ height: 56, borderRadius: 'var(--gb-r-sm)', border: '1px dashed var(--gb-border-strong, var(--gb-border-default))', background: 'var(--gb-fill-subtle)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, color: 'var(--gb-text-muted)' }}>
+            <I.upload size={14} /><span style={{ fontSize: 9 }}>re-hosted on upload</span>
+          </div>
+        </div>
+        <div style={{ flex: 1.4 }}>
+          <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--gb-text-muted)', marginBottom: 4 }}>Style options</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 9px', borderRadius: 'var(--gb-r-sm)', border: BORDER, background: SURFACE }}>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Color</span>
+            <Dot /><span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>Red · Blue · Black</span>
+            <I.chevr size={11} style={{ marginLeft: 'auto', color: 'var(--gb-text-ghost)' }} />
+          </div>
+          <div style={{ fontSize: 9, color: 'var(--gb-text-ghost)', marginTop: 4 }}>each row becomes a picker on the line</div>
+        </div>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--gb-text-muted)', marginBottom: 5 }}>Price ladder</div>
+        <div style={{ border: BORDER, borderRadius: RMD, overflow: 'hidden' }}>
+          {LADDER.map((r, i) => (
+            <div key={r[0]} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', fontSize: 11.5, padding: '5px 10px', borderTop: i ? '1px solid var(--gb-border-subtle)' : 'none', fontFamily: MONO }}>
+              <span style={{ color: 'var(--gb-text-secondary)' }}>{r[0]}</span>
+              <span style={{ color: 'var(--gb-text-primary)', fontWeight: 700, textAlign: 'right' }}>{r[1]}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+        <Switch on={drop} size="sm" onChange={setDrop} /><span style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)' }}>Dropship</span>
+        <Btn size="sm" variant="primary" icon={<I.save />} style={{ marginLeft: 'auto' }}>Save item</Btn>
+      </div>
+    </MiniFrame>
+  );
+}
+
 export function CatalogPage() {
   return (
     <div className="prose">
@@ -451,28 +553,34 @@ export function CatalogPage() {
         <tbody>{IMPRINT_ROWS.map((r) => <tr key={r[0]}><td><b>{r[0]}</b></td><td>{r[1]}</td></tr>)}</tbody>
       </table>
 
-      <h2 className="sec">Gift sets — from per-dozen to per-set</h2>
-      <p>
-        While customizing a ball, the <strong>gift-set selector</strong> offers packaging: <em>No packaging</em> (default),
-        a 3-Ball Sleeve, 6-Ball Black Box variants with a lever-divot or poker-chip kit, and Premium Wood 6-Ball boxes —
-        each listing its size and the upcharge per set. Pick one and three things change: the <strong>3D preview swaps to the
-        assembled open box</strong> (balls and kit seated in foam, imprints visible), pricing <strong>flips to per-SET</strong>
-        (the ball's custom-logo ladder scaled to the set's ball count, plus the kit's own ladder, rounded to .95 — the same
-        math the website uses, verified against production carts), and in the proposal the line shows a <strong>gift-set
-        banner</strong> with quantity now meaning <em>number of sets</em>, not dozens.
-      </p>
+      <TourBox eyebrow="From per-dozen to per-set" title="Gift sets — packaging selector" live={<GiftSetSnippet />} flip>
+        <p>
+          While customizing a ball, the <strong>gift-set selector</strong> offers packaging: <em>No packaging</em> (default),
+          a 3-Ball Sleeve, 6-Ball Black Box variants with a lever-divot or poker-chip kit, and Premium Wood 6-Ball boxes —
+          each listing its size and the upcharge per set.
+        </p>
+        <p>Pick one and three things change:</p>
+        <ul>
+          <li>The <strong>3D preview swaps to the assembled open box</strong> — balls and kit seated in foam, imprints visible.</li>
+          <li>Pricing <strong>flips to per-SET</strong> — the ball's custom-logo ladder scaled to the set's ball count, plus the kit's own ladder, rounded to .95. It's the same math the website uses, verified against production carts.</li>
+          <li>In the proposal the line shows a <strong>gift-set banner</strong>, with quantity now meaning <em>number of sets</em>, not dozens.</li>
+        </ul>
+      </TourBox>
 
-      <h2 className="sec">Build your own — custom &amp; service items</h2>
-      <p>
-        Sidebar → <strong>Custom Items</strong> opens your library as a masonry gallery (scoped to the linked account where one is
-        set). <strong>+ Add</strong> opens the item editor — <strong>Brand / Product</strong>, <strong>Item ID</strong>,
-        <strong> Extra Details</strong>, <strong>Cost / unit</strong>, <strong>Setup</strong>, <strong>Weight</strong>, a
-        <strong> Thumbnail Image</strong> (auto re-hosted on the company image server so it renders in proposal emails),
-        row-based <strong>Style options</strong> (each row becomes a picker on the line), a <strong>Price ladder</strong>
-        (quantity breaks), a <strong>Description</strong>, and a <strong>Dropship</strong> checkbox. The cost + price ladders are
-        what power real margins in the breakdown. Custom items behave exactly like catalog products in the proposal —
-        quantities, splits, even style variants.
-      </p>
+      <TourBox eyebrow="Custom & service items" title="Build your own" live={<CustomItemSnippet />}>
+        <p>
+          Sidebar → <strong>Custom Items</strong> opens your library as a masonry gallery (scoped to the linked account where one is
+          set). <strong>+ Add</strong> opens the item editor — <strong>Brand / Product</strong>, <strong>Item ID</strong>,
+          <strong> Extra Details</strong>, <strong>Cost / unit</strong>, <strong>Setup</strong>, <strong>Weight</strong>, a
+          <strong> Thumbnail Image</strong> (auto re-hosted on the company image server so it renders in proposal emails),
+          row-based <strong>Style options</strong> (each row becomes a picker on the line), a <strong>Price ladder</strong>
+          (quantity breaks), a <strong>Description</strong>, and a <strong>Dropship</strong> checkbox.
+        </p>
+        <p>
+          The cost + price ladders are what power real margins in the breakdown. Custom items behave exactly like catalog products
+          in the proposal — quantities, splits, even style variants.
+        </p>
+      </TourBox>
       <p>
         <strong>Supplier import</strong> goes further: the <strong>download</strong> button in the Custom Items toolbar opens
         <strong> “Import from a repo”</strong> — pick a supplier from the <strong>repo dropdown</strong> (e.g. HPG Brands, SnugZ USA)
