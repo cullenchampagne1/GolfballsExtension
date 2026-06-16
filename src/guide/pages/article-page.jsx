@@ -2,6 +2,8 @@ import React from 'react';
 import { I } from '../../ui/index.js';
 import { getArticle } from '../../lib/helpContent.js';
 import { NAV } from '../lib/app.jsx';
+import { SkeletonStage } from '../lib/skeleton.jsx';
+import { PAGE_SPECS } from '../lib/skeleton-specs.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    article-page.jsx — a generic page that renders one or more
@@ -137,6 +139,7 @@ export function ArticlePage({ id }) {
       <div className="eyebrow">{nav?.group}</div>
       <h1 className="title">{nav?.title}</h1>
       {lede && <p className="lede">{lede}</p>}
+      {PAGE_SPECS[id] && <SkeletonStage spec={PAGE_SPECS[id]} />}
       {slugs.length === 0 && (
         <p>Documentation for this section is being finalized.</p>
       )}
