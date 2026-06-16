@@ -254,7 +254,7 @@ export function ImageVectorizer({ onClosed, bindClose, visible = true }) {
               <feDistantLight azimuth="235" elevation="60" />
             </feSpecularLighting>
             <feComposite in="s" in2="SourceAlpha" operator="in" result="sc" />
-            <feComposite in="SourceGraphic" in2="sc" operator="arithmetic" k1="0" k2="1" k3="0.55" k4="0" />
+            <feComposite in="SourceGraphic" in2="sc" operator="arithmetic" k1="0" k2="1" k3="0.4" k4="0" />
           </filter>
           {/* Engrave — convolution carves shadowed grooves (light top-left,
               dark bottom-right is inverted vs emboss). */}
@@ -462,7 +462,10 @@ function fitSvg(svgString) {
    lines (clipped to the region, dashed into individual stitches, two-tone for
    sheen) plus a running-stitch outline; a light raised bevel (#emb-raise) gives
    the puffed-thread look. Returns a self-contained <svg> string. */
-const STITCH = { spacing: 2.6, width: 2.0, dash: '6 1.4', fallbackDeg: -52 };
+// width ≥ spacing so adjacent thread rows touch — otherwise the dark fabric
+// bleeds through the gaps and visually desaturates ("dilutes") the color. The
+// thread separation still reads from the two-tone rows + the along-thread dash.
+const STITCH = { spacing: 2.6, width: 3.0, dash: '10 1.2', fallbackDeg: -52 };
 function shadeRgb(rgb, f) {
   const m = rgb.match(/\d+/g).map(Number);
   return `rgb(${m.map((v) => Math.max(0, Math.min(255, Math.round(v * f)))).join(',')})`;
@@ -483,7 +486,7 @@ function fillLines(pts, fill) {
   const trc = cxx + cyy, det = cxx * cyy - cxy * cxy, l1 = trc / 2 + Math.sqrt(Math.max(0, trc * trc / 4 - det)), l2 = trc / 2 - Math.sqrt(Math.max(0, trc * trc / 4 - det));
   const ang = (l1 > 0 && (l1 - l2) / l1 > 0.3) ? 0.5 * Math.atan2(2 * cxy, cxx - cyy) + Math.PI / 2 : STITCH.fallbackDeg * Math.PI / 180;
   const dx = Math.cos(ang), dy = Math.sin(ang), nx = -Math.sin(ang), ny = Math.cos(ang);
-  const light = shadeRgb(fill, 1.30), dark = shadeRgb(fill, 0.70);
+  const light = shadeRgb(fill, 1.16), dark = shadeRgb(fill, 0.82);
   let lines = '', k = 0;
   for (let s = -ext; s <= ext; s += STITCH.spacing) {
     const px = cx + nx * s, py = cy + ny * s;
@@ -506,7 +509,7 @@ function satinFill(d, fill, idx) {
   const outerSign = totPos >= totNeg ? 1 : -1;   // dominant winding = outer contours
   const outers = subs.filter((s) => Math.sign(s.area) === outerSign);
   const holes = subs.filter((s) => Math.sign(s.area) !== outerSign);
-  const dark = shadeRgb(fill, 0.70);
+  const dark = shadeRgb(fill, 0.78);
   let def = '', body = '';
   outers.forEach((o, j) => {
     const myHoles = holes.filter((hh) => inPoly(centroidOf(hh.pts), o.pts));
@@ -528,41 +531,54 @@ function stitchify(tracedSvg) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="display:block;max-width:100%;max-height:100%;width:auto;height:auto" filter="url(#emb-raise)"><defs>${defs}</defs>${body}</svg>`;
 }
 
-/* Background knockout via color key. Samples the background color from the
-   four corners, then removes EVERY pixel within `tol` (rectilinear RGB) of
-   it — globally, not just the edge-connected field. Going global is what
-   drops background-colored regions ENCLOSED by the art (the white counter
-   inside a 'B'/'O', the gaps between lotus petals); an edge flood-fill left
-   those behind, so they showed as a white fill in color mode and filled in
-   solid black in silhouette mode.
+/* Background knockout via color key. Detects the background color as the MOST
+   COMMON opaque border color (mode, not average — averaging a border where art
+   touches the edge yields a muddy blend that can match and erase most of the
+   image), then removes EVERY pixel within `tol` of it — globally, so it also
+   drops background enclosed by the art (the white counter inside a 'B'/'O').
 
-   RGB is zeroed along with alpha (not alpha alone): ImageTracer's k-means
-   assigns every pixel — transparent included — by rectilinear RGBA distance,
-   and the transparent palette seed is (0,0,0,0). Leaving RGB at the bg color
-   (e.g. white) would put the huge transparent field closer to the COLOR
-   seeds than the transparent one, flooding into them — collapsing distinct
-   hues and painting a full-canvas background layer (the "traces blank" bug).
-   Mutates idata. */
+   Guard: if keying would erase nearly the whole image (no real background — a
+   photo, or a near-monochrome logo whose subject ≈ the border), it's skipped
+   so the trace never comes back blank. Returns true if a background was keyed.
+
+   RGB is zeroed with alpha (not alpha alone): ImageTracer's k-means assigns
+   every pixel — transparent included — by rectilinear RGBA distance to the
+   (0,0,0,0) transparent seed; leaving RGB at the bg color floods the field
+   into the color clusters and paints a full-canvas background layer. */
 function removeBackground(idata, tol) {
   const d = idata.data;
   const w = idata.width, h = idata.height;
-  // Sample the background color from the OPAQUE border pixels (not just the 4
-  // corners): a transparent or rounded-badge source has transparent corners,
-  // so corner-only sampling picks the wrong color and leaves an opaque white
-  // field behind. Average the opaque edge pixels instead.
-  let sr = 0, sg = 0, sb = 0, sn = 0;
-  const sample = (p) => { const o = p * 4; if (d[o + 3] > 128) { sr += d[o]; sg += d[o + 1]; sb += d[o + 2]; sn++; } };
-  for (let x = 0; x < w; x++) { sample(x); sample((h - 1) * w + x); }
-  for (let y = 0; y < h; y++) { sample(y * w); sample(y * w + (w - 1)); }
+  // Normalize already-transparent pixels (they ARE background).
+  for (let i = 0; i < d.length; i += 4) if (d[i + 3] < 128) { d[i] = d[i + 1] = d[i + 2] = 0; d[i + 3] = 0; }
+  // Decide from the BORDER, not the whole image: tally the mode opaque border
+  // color and how transparent the border already is.
+  const counts = new Map();
+  let borderN = 0, borderTransp = 0;
+  const tally = (p) => {
+    const o = p * 4; borderN++;
+    if (d[o + 3] === 0) { borderTransp++; return; }
+    const k = ((d[o] >> 3) << 10) | ((d[o + 1] >> 3) << 5) | (d[o + 2] >> 3);
+    counts.set(k, (counts.get(k) || 0) + 1);
+  };
+  for (let x = 0; x < w; x++) { tally(x); tally((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { tally(y * w); tally(y * w + (w - 1)); }
+  // If the border is mostly transparent, the source already carries its own
+  // alpha mask — color-keying would erase matching art. Trust the alpha.
+  if (!counts.size || borderTransp > borderN * 0.5) return false;
+  let bestK = 0, best = -1;
+  for (const [k, c] of counts) if (c > best) { best = c; bestK = k; }
+  const br = ((bestK >> 10) & 31) * 8 + 4, bg = ((bestK >> 5) & 31) * 8 + 4, bb = (bestK & 31) * 8 + 4;
+  // Collect candidates + count opaque, then only apply if it leaves the image.
+  const hits = [];
+  let opaque = 0;
   for (let i = 0; i < d.length; i += 4) {
-    // Already-transparent pixels ARE background — normalize their RGB to 0 so
-    // they cluster to the transparent palette seed.
-    if (d[i + 3] < 128) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = 0; continue; }
-    // Otherwise key out anything within tolerance of the sampled bg color.
-    if (sn && Math.abs(d[i] - sr / sn) + Math.abs(d[i + 1] - sg / sn) + Math.abs(d[i + 2] - sb / sn) <= tol) {
-      d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = 0;
-    }
+    if (d[i + 3] === 0) continue;
+    opaque++;
+    if (Math.abs(d[i] - br) + Math.abs(d[i + 1] - bg) + Math.abs(d[i + 2] - bb) <= tol) hits.push(i);
   }
+  if (!opaque || hits.length > opaque * 0.97) return false;   // no real background — leave the image intact
+  for (const i of hits) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = 0; }
+  return true;
 }
 
 /* Build a seed palette of the image's DOMINANT colors via median-cut.
