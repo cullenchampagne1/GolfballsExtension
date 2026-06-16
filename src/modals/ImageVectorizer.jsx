@@ -462,39 +462,60 @@ function fitSvg(svgString) {
    lines (clipped to the region, dashed into individual stitches, two-tone for
    sheen) plus a running-stitch outline; a light raised bevel (#emb-raise) gives
    the puffed-thread look. Returns a self-contained <svg> string. */
-const STITCH = { angleDeg: -52, spacing: 3.0, width: 2.0, dash: '7 1.6' };
+const STITCH = { spacing: 2.6, width: 2.0, dash: '6 1.4', fallbackDeg: -52 };
 function shadeRgb(rgb, f) {
   const m = rgb.match(/\d+/g).map(Number);
   return `rgb(${m.map((v) => Math.max(0, Math.min(255, Math.round(v * f)))).join(',')})`;
 }
-function pathBBox(d) {
-  const nums = d.match(/-?[\d.]+/g)?.map(Number) || [];
+function ptsOf(d) { const n = d.match(/-?[\d.]+/g)?.map(Number) || []; const p = []; for (let i = 0; i + 1 < n.length; i += 2) p.push([n[i], n[i + 1]]); return p; }
+function signedArea(p) { let a = 0; for (let i = 0; i < p.length; i++) { const [x1, y1] = p[i], [x2, y2] = p[(i + 1) % p.length]; a += x1 * y2 - x2 * y1; } return a / 2; }
+function centroidOf(p) { let x = 0, y = 0; for (const q of p) { x += q[0]; y += q[1]; } return [x / p.length, y / p.length]; }
+function inPoly(pt, poly) { let c = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const [xi, yi] = poly[i], [xj, yj] = poly[j]; if (((yi > pt[1]) !== (yj > pt[1])) && (pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi)) c = !c; } return c; }
+/* Parallel satin stitch lines filling one connected component. The thread runs
+   ACROSS the component's principal axis (PCA) so letter strokes / petals get a
+   natural satin direction; blobby shapes fall back to a fixed tatami angle. */
+function fillLines(pts, fill) {
   let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
-  for (let i = 0; i + 1 < nums.length; i += 2) {
-    const x = nums[i], y = nums[i + 1];
-    if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y;
-  }
-  return { minX, minY, maxX, maxY };
-}
-function satinFill(d, fill, idx) {
-  const b = pathBBox(d);
-  const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
-  const ext = Math.hypot(b.maxX - b.minX, b.maxY - b.minY) / 2 + 4;
-  const ang = (STITCH.angleDeg + (idx % 2 ? 8 : -6)) * Math.PI / 180;  // slight per-region jitter
-  const dx = Math.cos(ang), dy = Math.sin(ang);     // thread direction
-  const nx = -Math.sin(ang), ny = Math.cos(ang);    // step direction
-  const light = shadeRgb(fill, 1.18), dark = shadeRgb(fill, 0.82);
+  for (const [x, y] of pts) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; }
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, ext = Math.hypot(maxX - minX, maxY - minY) / 2 + 4;
+  let mx = 0, my = 0; for (const [x, y] of pts) { mx += x; my += y; } mx /= pts.length; my /= pts.length;
+  let cxx = 0, cyy = 0, cxy = 0; for (const [x, y] of pts) { const ax = x - mx, ay = y - my; cxx += ax * ax; cyy += ay * ay; cxy += ax * ay; }
+  const trc = cxx + cyy, det = cxx * cyy - cxy * cxy, l1 = trc / 2 + Math.sqrt(Math.max(0, trc * trc / 4 - det)), l2 = trc / 2 - Math.sqrt(Math.max(0, trc * trc / 4 - det));
+  const ang = (l1 > 0 && (l1 - l2) / l1 > 0.3) ? 0.5 * Math.atan2(2 * cxy, cxx - cyy) + Math.PI / 2 : STITCH.fallbackDeg * Math.PI / 180;
+  const dx = Math.cos(ang), dy = Math.sin(ang), nx = -Math.sin(ang), ny = Math.cos(ang);
+  const light = shadeRgb(fill, 1.30), dark = shadeRgb(fill, 0.70);
   let lines = '', k = 0;
   for (let s = -ext; s <= ext; s += STITCH.spacing) {
-    const mx = cx + nx * s, my = cy + ny * s;
-    lines += `<line x1="${(mx - dx * ext).toFixed(1)}" y1="${(my - dy * ext).toFixed(1)}" x2="${(mx + dx * ext).toFixed(1)}" y2="${(my + dy * ext).toFixed(1)}" stroke="${k % 2 ? light : dark}"/>`;
+    const px = cx + nx * s, py = cy + ny * s;
+    lines += `<line x1="${(px - dx * ext).toFixed(1)}" y1="${(py - dy * ext).toFixed(1)}" x2="${(px + dx * ext).toFixed(1)}" y2="${(py + dy * ext).toFixed(1)}" stroke="${k % 2 ? light : dark}"/>`;
     k++;
   }
-  return {
-    def: `<clipPath id="cp${idx}"><path d="${d}"/></clipPath>`,
-    body: `<g clip-path="url(#cp${idx})" stroke-width="${STITCH.width}" stroke-linecap="round" stroke-dasharray="${STITCH.dash}">${lines}</g>`
-      + `<path d="${d}" fill="none" stroke="${dark}" stroke-width="1.4" stroke-linejoin="round" opacity="0.85"/>`,
-  };
+  return lines;
+}
+/* Turn one traced color region into stitch fills. The region's <path> may hold
+   several connected components (letters) each with holes (counters); split into
+   subpaths, pair holes with the outer that contains them (even-odd clip), and
+   satin-fill each component on its own principal-axis direction. */
+function satinFill(d, fill, idx) {
+  const subs = ('M' + d.split('M').slice(1).join('M')).split(/(?=M)/).filter((s) => s.trim())
+    .map((sd) => { const pts = ptsOf(sd); return { d: sd.trim(), pts, area: signedArea(pts) }; })
+    .filter((s) => s.pts.length >= 3);
+  if (!subs.length) return { def: '', body: '' };
+  const totPos = subs.filter((s) => s.area > 0).reduce((a, s) => a + s.area, 0);
+  const totNeg = subs.filter((s) => s.area < 0).reduce((a, s) => a - s.area, 0);
+  const outerSign = totPos >= totNeg ? 1 : -1;   // dominant winding = outer contours
+  const outers = subs.filter((s) => Math.sign(s.area) === outerSign);
+  const holes = subs.filter((s) => Math.sign(s.area) !== outerSign);
+  const dark = shadeRgb(fill, 0.70);
+  let def = '', body = '';
+  outers.forEach((o, j) => {
+    const myHoles = holes.filter((hh) => inPoly(centroidOf(hh.pts), o.pts));
+    const id = `cp${idx}_${j}`;
+    def += `<clipPath id="${id}"><path d="${o.d} ${myHoles.map((hh) => hh.d).join(' ')}" clip-rule="evenodd"/></clipPath>`;
+    body += `<g clip-path="url(#${id})" stroke-width="${STITCH.width}" stroke-linecap="round" stroke-dasharray="${STITCH.dash}">${fillLines(o.pts, fill)}</g>`
+      + `<path d="${o.d}" fill="none" stroke="${dark}" stroke-width="1.3" stroke-linejoin="round" opacity="0.8"/>`;
+  });
+  return { def, body };
 }
 function stitchify(tracedSvg) {
   const m = tracedSvg.match(/<svg[^>]*\bwidth="([\d.]+)"[^>]*\bheight="([\d.]+)"/);
