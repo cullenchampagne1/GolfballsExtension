@@ -60,6 +60,8 @@ function ensureCampaignKeyframes() {
     @keyframes cm-running    { 0%, 100% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong); } 50% { box-shadow: 0 0 0 4px var(--gb-brand-tint-soft), 0 0 18px var(--gb-brand-tint-strong); } }
     @keyframes cm-twinkle    { 0%, 100% { opacity: .4; } 50% { opacity: 1; } }
     @keyframes cm-inspector-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .gb-cmp-row .gb-cmp-del { opacity: 0; transition: opacity .12s ease; }
+    .gb-cmp-row:hover .gb-cmp-del { opacity: 1; }
   `;
   (document.head || document.documentElement).appendChild(s);
 }
@@ -628,8 +630,9 @@ function CampaignInspector({ campaign, onChange }) {
 }
 
 /* ── Sidebar ── */
-function CampaignSidebar({ library, currentId, onSelect, onNew }) {
+function CampaignSidebar({ library, currentId, onSelect, onNew, onDelete }) {
   const [q, setQ] = useState('');
+  const [confirmId, setConfirmId] = useState(null);   // row pending delete-confirm
   const filtered = library.filter((c) => !q || c.name.toLowerCase().includes(q.toLowerCase()));
   const groups = [
     { key: 'Active', rows: filtered.filter((c) => c.status === 'Active') },
@@ -658,13 +661,25 @@ function CampaignSidebar({ library, currentId, onSelect, onNew }) {
             </div>
             {g.rows.map((row) => {
               const cur = row.id === currentId;
+              const confirming = confirmId === row.id;
               return (
-                <div key={row.id} onClick={() => onSelect(row.id)} style={{ display: 'grid', gridTemplateColumns: '14px 1fr', gap: 9, alignItems: 'center', padding: '8px 10px', background: cur ? 'var(--gb-brand-tint-soft)' : 'transparent', border: '1px solid ' + (cur ? 'var(--gb-brand-tint-border)' : 'transparent'), borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', marginBottom: 2 }}>
+                <div key={row.id} className="gb-cmp-row" onClick={() => onSelect(row.id)} style={{ position: 'relative', display: 'grid', gridTemplateColumns: '14px 1fr auto', gap: 9, alignItems: 'center', padding: '8px 10px', background: cur ? 'var(--gb-brand-tint-soft)' : 'transparent', border: '1px solid ' + (cur ? 'var(--gb-brand-tint-border)' : 'transparent'), borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', marginBottom: 2 }}>
                   <div style={{ display: 'flex', justifyContent: 'center' }}><Dot tone={row.status === 'Active' ? 'brand' : row.status === 'Paused' ? 'warning' : 'muted'} glow={row.status === 'Active'} /></div>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 600, color: cur ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.name}</div>
                     <div style={{ marginTop: 2, fontSize: 10, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{row.steps?.length || 0} steps</div>
                   </div>
+                  {/* Delete: a hover-revealed trash that turns into an inline
+                      confirm (no native dialog, stays in-modal). */}
+                  {confirming ? (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={(e) => e.stopPropagation()}>
+                      <IconBtn size="xs" danger icon={<I.check />} title="Confirm delete" onClick={() => { setConfirmId(null); onDelete?.(row.id); }} />
+                      <IconBtn size="xs" variant="ghost" icon={<I.close />} title="Cancel" onClick={() => setConfirmId(null)} />
+                    </div>
+                  ) : (
+                    <IconBtn className="gb-cmp-del" size="xs" variant="ghost" icon={<I.trash />} title="Delete campaign"
+                      onClick={(e) => { e.stopPropagation(); setConfirmId(row.id); }} />
+                  )}
                 </div>
               );
             })}
@@ -1014,6 +1029,19 @@ export function CampaignManager({ onClose, contacts = [] }) {
     const c = newCampaign('Untitled campaign');
     setCampaign(c); setSelectedId(null); setDirty(true);
   };
+  const deleteCampaign = (id) => {
+    const removed = library.find((c) => c.id === id);
+    removeCampaign(id).then((list) => {
+      setLibrary(list);
+      // If we deleted the open campaign, fall back to the first remaining
+      // one (or a fresh untitled draft if the library is now empty).
+      if (campaign.id === id) {
+        const next = list[0] || newCampaign('Untitled campaign');
+        setCampaign(next); setSelectedId(null); setDirty(!list.length);
+      }
+      toast?.success?.(`Deleted “${removed?.name || 'campaign'}”`);
+    }).catch(() => toast?.error?.('Couldn’t delete campaign'));
+  };
   const save = () => {
     saveCampaign(campaign).then(({ campaign: saved, list }) => {
       setLibrary(list); setCampaign(saved); setDirty(false);
@@ -1083,7 +1111,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
         ) : (
         <>
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-          <CampaignSidebar library={library} currentId={campaign.id} onSelect={selectCampaign} onNew={createCampaign} />
+          <CampaignSidebar library={library} currentId={campaign.id} onSelect={selectCampaign} onNew={createCampaign} onDelete={deleteCampaign} />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid var(--gb-border-default)' }}>
             <Timeline steps={steps} selectedId={selectedId} sim={sim} templateLib={templateLib} onSelect={setSelectedId} onAdd={addStep} onDelete={deleteStep} onDuplicate={duplicateStep} />
           </div>
