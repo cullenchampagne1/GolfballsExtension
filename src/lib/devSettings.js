@@ -103,6 +103,13 @@ export const DEV_SETTINGS = [
     type:    'bool',
     default: false,
   },
+  {
+    key:     'imageViewer.ballChipOnly',
+    label:   'Image Viewer: ball & chip only',
+    desc:    'Hide the full model dropdown in the Image Viewer 3D strip and replace it with a small ball/chip toggle next to the color swatch. For reps who only need a ball or a poker-chip render. Export photos (copy/download) still work for both models.',
+    type:    'bool',
+    default: false,
+  },
 
   /* ── Outbound email account host ──────────────────────────────
      The local part (before @) used when constructing the `from`

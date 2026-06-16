@@ -390,6 +390,14 @@ export function ImagePreview({
   const viewerChipTint = hasChips ? chipTint : undefined;
   // Gravity/physics is ball-only — turn throw mode off if we switch off the ball.
   useEffect(() => { if (viewerShape !== 'ball') setViewerThrowMode(false); }, [viewerShape]);
+  // Ball-&-chip-only mode (dev setting): hide the full model dropdown and offer
+  // just a ball↔chip toggle next to the color swatch. Snap/export still works
+  // for both models. Coerce off any other model (gift sets, metal tools) when
+  // the mode is on so the toggle always has a valid pair to flip between.
+  const ballChipOnly = !!useDevSetting('imageViewer.ballChipOnly');
+  useEffect(() => {
+    if (ballChipOnly && viewerShape !== 'ball' && viewerShape !== 'chip') setViewerShape('ball');
+  }, [ballChipOnly, viewerShape]);
 
   // Image load wiring. The <img>'s onLoad/onError flips status. We
   // pre-resolve URLs that are already cached so the spinner doesn't
@@ -1535,7 +1543,7 @@ export function ImagePreview({
               this shows one color button per body the model exposes: ball → ball
               color, chip → chip color, gift set → both, metal tools → none. */}
           <AnimatePresence>
-            {view === '3d' && status === 'ready' && !viewerThrowMode && tintControls.length > 0 && (
+            {view === '3d' && status === 'ready' && !viewerThrowMode && (tintControls.length > 0 || ballChipOnly) && (
               <motion.div
                 key="tint-controls"
                 initial={{ opacity: 0, y: 8 }}
@@ -1544,6 +1552,16 @@ export function ImagePreview({
                 transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.7 }}
                 style={{ position: 'absolute', bottom: 8, right: 8, display: 'flex', gap: 4, zIndex: 6 }}
               >
+                {/* Ball↔chip toggle — only in ball-&-chip-only mode, sitting just
+                    left of the color swatch. Icon shows the CURRENT model (so it
+                    reads with the swatch beside it); the tooltip names the flip. */}
+                {ballChipOnly && (
+                  <GlassIconBtn
+                    icon={viewerShape === 'chip' ? <ChipIcon size={14} /> : <BallIcon size={14} />}
+                    title={viewerShape === 'chip' ? 'Switch to golf ball' : 'Switch to poker chip'}
+                    onClick={() => setViewerShape((s) => (s === 'chip' ? 'ball' : 'chip'))}
+                  />
+                )}
                 {tintControls.map((c) => (
                   <TintControl key={c.key} label={c.label} value={c.value} defColor={c.def} onChange={c.set} />
                 ))}
@@ -1682,14 +1700,21 @@ export function ImagePreview({
                 {/* Model switcher — every 3D model we support. Replaces the old
                     ball/chip icon toggle. Its menu portals to <body>, so the
                     strip's overflow:hidden doesn't clip it. Grows to fill the
-                    strip between the Image and Copy buttons. */}
-                <Dropdown
-                  size="sm"
-                  value={viewerShape}
-                  options={MODEL_OPTIONS}
-                  onChange={setViewerShape}
-                  style={{ flex: 1, minWidth: 150 }}
-                />
+                    strip between the Image and Copy buttons. In ball-&-chip-only
+                    mode (dev setting) it's hidden — the ball↔chip toggle lives
+                    in the floating color cluster instead — leaving a spacer so
+                    Copy/Download stay right-aligned. */}
+                {ballChipOnly ? (
+                  <div style={{ flex: 1 }} />
+                ) : (
+                  <Dropdown
+                    size="sm"
+                    value={viewerShape}
+                    options={MODEL_OPTIONS}
+                    onChange={setViewerShape}
+                    style={{ flex: 1, minWidth: 150 }}
+                  />
+                )}
                 <Btn
                   size="sm"
                   variant="secondary"
