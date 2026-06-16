@@ -94,8 +94,15 @@ function Connector({ active, height = 30, tone = 'default', hookRight, hookLeft 
 function StepCard({ step, displayIdx, indent, branchChild, selected, simState, templateLib = {}, onSelect, onDelete, onDuplicate }) {
   const meta = STEP_KIND_META[step.kind] || STEP_KIND_META.email;
   const KIcon = step.branch ? I.branch : meta.icon;
+  // simState (from a single-contact simulation): 'running' = being evaluated,
+  // 'ran' = fired, 'skipped' = gated out, 'cut' = never reached (a branch fired
+  // / flow killed before it), 'pending' = not yet replayed.
   const live = simState === 'running';
-  const done = simState === 'done';
+  const ran = simState === 'ran';
+  const skipped = simState === 'skipped';
+  const failed = simState === 'failed';
+  const cut = simState === 'cut';
+  const done = ran; // green check badge on a fired step
   const tplName = (() => {
     if (step.kind === 'custom') return (step.code || '').trim() ? (step.kill ? 'code · kill flow' : 'code') : 'no code';
     if (step.kind === 'task' && (step.taskMode === 'completeAll' || step.taskMode === 'completeLatest')) {
@@ -117,23 +124,26 @@ function StepCard({ step, displayIdx, indent, branchChild, selected, simState, t
     <div onClick={() => onSelect(step.id)} className="cm-step"
       style={{
         position: 'relative', marginLeft: indent || 0, background: tone.bg,
-        border: '1px solid ' + (live ? tone.run : selected ? tone.bdSel : tone.bd),
+        border: '1px solid ' + (live ? tone.run : ran ? 'var(--gb-success-tint-border)' : selected ? tone.bdSel : tone.bd),
         borderRadius: 'var(--gb-r-lg)',
         boxShadow: selected ? `0 0 0 3px ${tone.ring}, 0 6px 18px rgba(0,0,0,.18)` : '0 1px 0 rgba(0,0,0,.12)',
         cursor: 'pointer', overflow: 'hidden',
-        transition: 'border-color var(--gb-anim), box-shadow var(--gb-anim), transform var(--gb-anim)',
+        opacity: cut ? 0.42 : skipped ? 0.62 : 1,
+        transition: 'border-color var(--gb-anim), box-shadow var(--gb-anim), transform var(--gb-anim), opacity var(--gb-anim)',
         transform: selected ? 'translateX(-2px)' : 'none',
         animation: live ? 'cm-running 1.4s ease-in-out infinite' : 'cm-step-in .3s cubic-bezier(.34,1.4,.64,1)',
       }}>
       <div style={{ padding: 12, display: 'grid', gridTemplateColumns: '30px 1fr auto', gap: 12, alignItems: 'flex-start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
           <div style={{
-            width: 26, height: 26, borderRadius: 'var(--gb-r-sm)', background: tone.badgeBg,
-            border: '1px solid ' + (selected ? tone.bdSel : tone.bd), color: tone.badgeFg,
+            width: 26, height: 26, borderRadius: 'var(--gb-r-sm)',
+            background: ran ? 'var(--gb-success-tint-medium)' : tone.badgeBg,
+            border: '1px solid ' + (ran ? 'var(--gb-success-tint-border)' : selected ? tone.bdSel : tone.bd),
+            color: ran ? 'var(--gb-success-fg)' : tone.badgeFg,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: branchChild ? 10 : 11, fontWeight: 800, fontFamily: 'var(--gb-font-mono)', position: 'relative', flexShrink: 0,
           }}>
-            {done ? <I.check size={13} /> : displayIdx}
+            {ran ? <I.check size={13} /> : skipped ? '–' : displayIdx}
             {live && <span style={{ position: 'absolute', inset: -3, borderRadius: 8, border: '1.5px solid ' + tone.run, animation: 'cm-pulse-ring 1.2s ease-in-out infinite' }} />}
           </div>
         </div>
@@ -143,6 +153,11 @@ function StepCard({ step, displayIdx, indent, branchChild, selected, simState, t
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{step.label}</span>
             {step.branch && <Tag tone="warning" size="xs" style={{ flexShrink: 0 }}>BRANCH</Tag>}
             {step.group && <span style={{ fontSize: 10, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)', flexShrink: 0 }}>· {step.group}</span>}
+            <div style={{ flex: 1 }} />
+            {ran && <Tag tone="success" size="xs" style={{ flexShrink: 0 }}>RAN</Tag>}
+            {skipped && <Tag tone="neutral" size="xs" style={{ flexShrink: 0 }}>SKIPPED</Tag>}
+            {failed && <Tag tone="error" size="xs" style={{ flexShrink: 0 }}>FAILED</Tag>}
+            {cut && <Tag tone="neutral" size="xs" style={{ flexShrink: 0 }}>NOT REACHED</Tag>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: 'var(--gb-text-muted)', minWidth: 0, overflow: 'hidden' }}>
             <span style={{ color: 'var(--gb-text-ghost)', flexShrink: 0 }}>{meta.label.toLowerCase()}</span>
@@ -198,7 +213,13 @@ function Timeline({ steps, selectedId, sim, templateLib, onSelect, onAdd, onDele
           <div style={{ marginTop: 2, fontSize: 11.5, color: 'var(--gb-text-muted)' }}>{steps.length} steps · stops after first branch sends</div>
         </div>
         <div style={{ flex: 1 }} />
-        {sim.running && <Tag tone="brand" size="md" icon={<I.play size={9} />}>SIMULATING · {sim.activeIdx + 1}/{steps.length}</Tag>}
+        {(sim.running || sim.done) && (
+          sim.building
+            ? <Tag tone="brand" size="md" icon={<I.play size={9} />}>Evaluating {sim.contactName}…</Tag>
+            : <Tag tone={sim.done ? 'neutral' : 'brand'} size="md" icon={<I.play size={9} />}>
+                {sim.done ? 'Simulated' : 'Simulating'} {sim.contactName}{!sim.done && sim.total ? ` · ${Math.min(sim.playIdx, sim.total)}/${sim.total}` : ''}
+              </Tag>
+        )}
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -219,8 +240,8 @@ function Timeline({ steps, selectedId, sim, templateLib, onSelect, onAdd, onDele
             displayIdx = `${parentMainIdx}${String.fromCharCode(96 + branchChildCount)}`;
           } else { branchChildCount = 0; mainCount += 1; displayIdx = mainCount; }
 
-          const simState = sim.running ? (idx < sim.activeIdx ? 'done' : idx === sim.activeIdx ? 'running' : 'pending') : null;
-          const active = sim.running && idx === sim.activeIdx;
+          const simState = (sim.running || sim.done) ? (sim.byStep?.[step.id] || (sim.done ? 'cut' : 'pending')) : null;
+          const active = simState === 'running';
           let connectorProps = null;
           if (idx > 0) {
             if (enteringBranch) connectorProps = { tone: 'branch', active, hookRight: true, height: 28 };
@@ -749,7 +770,9 @@ function fmtMoney(n) {
   return `$${Math.round(v)}`;
 }
 
-function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, dirty, audienceCount, audienceValue, onRun, onClose, dryRun, onDryRunChange }) {
+function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, audience = [], simContactKey, onSimContactChange, dirty, audienceCount, audienceValue, onRun, onClose, dryRun, onDryRunChange }) {
+  const simBusy = sim.running || sim.building;
+  const contactOptions = audience.map((c, i) => ({ id: c._key, label: c.contactName || c.name || c.contactId || `Contact ${i + 1}` }));
   return (
     <div style={{ padding: '12px 22px', background: 'var(--gb-surface-1)', borderBottom: '1px solid var(--gb-border-default)', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
@@ -779,14 +802,21 @@ function TopBar({ campaign, onChange, sim, onSimStart, onSimStop, onSimReset, di
           </>
         )}
       </div>
+      {/* Simulate = a single-contact dry-run replayed on the timeline. Pick
+          who to run against, then watch where the flow stops and goes. */}
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: 3, background: 'var(--gb-surface-2)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>
-        <IconBtn size="sm" variant="ghost" icon={<I.rewind />} onClick={onSimReset} />
-        <Btn variant={sim.running ? 'tinted' : 'secondary'} status={sim.running ? 'warning' : 'brand'} size="sm" icon={sim.running ? <I.pause /> : <I.play />} onClick={sim.running ? onSimStop : onSimStart}>{sim.running ? 'Pause sim' : 'Simulate'}</Btn>
+        <IconBtn size="sm" variant="ghost" icon={<I.rewind />} title="Reset simulation" onClick={onSimReset} />
+        {contactOptions.length > 0 && (
+          <div style={{ width: 150 }}>
+            <Dropdown size="sm" value={simContactKey} options={contactOptions} searchable placeholder="Pick a contact…" disabled={simBusy} onChange={onSimContactChange} />
+          </div>
+        )}
+        <Btn variant={simBusy ? 'tinted' : 'secondary'} status={simBusy ? 'warning' : 'brand'} size="sm" icon={simBusy ? <I.pause /> : <I.play />} disabled={!contactOptions.length} state={sim.building ? 'loading' : 'idle'} onClick={simBusy ? onSimStop : onSimStart}>{simBusy ? 'Stop sim' : 'Simulate'}</Btn>
       </div>
       <PillTag on={dryRun} onClick={() => onDryRunChange(!dryRun)}>
         <Dot tone={dryRun ? 'warning' : 'muted'} /> Dry run
       </PillTag>
-      <Btn variant="primary" status="brand" size="sm" icon={<I.zap />} onClick={onRun} disabled={sim.running}>{dryRun ? 'Dry run' : 'Run campaign'}</Btn>
+      <Btn variant="primary" status="brand" size="sm" icon={<I.zap />} onClick={onRun} disabled={simBusy}>{dryRun ? 'Dry run' : 'Run campaign'}</Btn>
       <div style={{ width: 1, height: 26, background: 'var(--gb-border-default)' }} />
       <IconBtn size="md" icon={<I.close />} onClick={onClose} />
     </div>
@@ -1082,13 +1112,18 @@ export function CampaignManager({ onClose, contacts = [] }) {
   const [campaign, setCampaign] = useState(() => newCampaign('Untitled campaign'));
   const [selectedId, setSelectedId] = useState(null);
   const [dirty, setDirty] = useState(false);
-  const [sim, setSim] = useState({ running: false, activeIdx: 0 });
+  // Simulation = a single-contact dry-run replayed step-by-step on the
+  // timeline, so the rep can watch where the flow stops and goes for one
+  // real audience member. sim.trace is the engine's per-step outcome.
+  const [sim, setSim] = useState({ running: false });
+  const [simContactKey, setSimContactKey] = useState(null);
   const [templateLib, setTemplateLib] = useState({ email: [], call: [], task: [] });
   const [dryRun, setDryRun] = useState(false);
   const [runMode, setRunMode] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const runner = useCampaignRunner();
   const simTimer = useRef(null);
+  const simRunRef = useRef(0);
 
   // Import result from the paste dialog: refresh the library, open the first
   // imported campaign, and surface anything the importer couldn't resolve.
@@ -1181,43 +1216,95 @@ export function CampaignManager({ onClose, contacts = [] }) {
   };
 
   // Simulation: sweep the activeIdx through the steps (flow preview only).
-  const startSim = () => { if (!steps.length) return; setSim({ running: true, activeIdx: 0 }); setSelectedId(steps[0].id); };
-  const stopSim = () => setSim((s) => ({ ...s, running: false }));
-  const resetSim = () => setSim({ running: false, activeIdx: 0 });
+  // Keep the simulation contact valid as the audience changes.
+  const audienceKeyed = useMemo(() => contacts.map((c, i) => ({ ...c, _key: c.contactId || c.contactUrl || `row${i}` })), [contacts]);
   useEffect(() => {
-    if (!sim.running) { if (simTimer.current) { clearTimeout(simTimer.current); simTimer.current = null; } return; }
-    if (sim.activeIdx >= steps.length - 1) {
-      simTimer.current = setTimeout(() => setSim((s) => ({ ...s, running: false, activeIdx: steps.length })), 1300);
-      return;
-    }
-    simTimer.current = setTimeout(() => {
-      setSim((s) => ({ ...s, activeIdx: s.activeIdx + 1 }));
-      setSelectedId(steps[sim.activeIdx + 1]?.id);
-    }, 1200);
-    return () => { if (simTimer.current) clearTimeout(simTimer.current); };
-  }, [sim.running, sim.activeIdx, steps.length]);
+    if (!audienceKeyed.length) { setSimContactKey(null); return; }
+    setSimContactKey((k) => (audienceKeyed.some((c) => c._key === k) ? k : audienceKeyed[0]._key));
+  }, [audienceKeyed]);
 
-  const startRun = async () => {
-    if (!contacts.length) { toast?.warning?.('No audience — launch from a CRM Search / Task selection.'); return; }
-    if (!steps.length) { toast?.warning?.('Add at least one step before running.'); return; }
-    stopSim();
-    // Stable per-row key + the deps the engine delegates with.
-    const audience = contacts.map((c, i) => ({ ...c, _key: c.contactId || c.contactUrl || `row${i}` }));
+  // Shared deps for a real (paced) run AND the dry-run simulation.
+  const buildRunDeps = async () => {
     const [emailConfig, rep] = await Promise.all([
       readEmailConfig(),
       new Promise((res) => { try { chrome.storage.local.get('gbEmployeeId', (d) => res({ employeeId: d?.gbEmployeeId || '' })); } catch { res({ employeeId: '' }); } }),
     ]);
     const lookupTemplate = (kind, id) => (templateLib[kind] || []).find((t) => t.id === id) || null;
+    return { lookupTemplate, deps: { rep, emailConfig, signature: emailConfig.signature, fromLocalPart: emailConfig.localPart, dispatch: sendBg } };
+  };
+
+  const startSim = async () => {
+    if (!steps.length) { toast?.warning?.('Add a step before simulating.'); return; }
+    const contact = audienceKeyed.find((c) => c._key === simContactKey) || audienceKeyed[0];
+    if (!contact) { toast?.warning?.('No audience to simulate against — launch from a CRM Search / Task selection.'); return; }
+    if (simTimer.current) { clearTimeout(simTimer.current); simTimer.current = null; }
+    const myRun = ++simRunRef.current;   // invalidates any in-flight eval if stop/reset is hit
+    const name = contact.contactName || contact.name || '(contact)';
+    // Phase 1: actually evaluate the contact (real fetch + conditions, dry-run).
+    setSim({ running: true, building: true, done: false, contactName: name, trace: [], playIdx: 0 });
+    const { lookupTemplate, deps } = await buildRunDeps();
+    const trace = [];
+    let summary = null;
+    try {
+      await runCampaign({
+        campaign, audience: [contact], lookupTemplate,
+        deps: { ...deps, dryRun: true },
+        on: {
+          stepResult: ({ step, status, reason }) => trace.push({ stepId: step.id, status, reason }),
+          contactDone: (s) => { summary = s; },
+        },
+      });
+    } catch { /* fall through — replay whatever we collected */ }
+    if (simRunRef.current !== myRun) return;   // stopped/reset while evaluating
+    // Phase 2: replay the collected trace step-by-step (the effect advances it).
+    setSim({ running: true, building: false, done: false, contactName: name, trace, playIdx: 0, summary });
+  };
+  const stopSim = () => { simRunRef.current++; if (simTimer.current) { clearTimeout(simTimer.current); simTimer.current = null; } setSim((s) => ({ ...s, running: false, building: false, done: true })); };
+  const resetSim = () => { simRunRef.current++; if (simTimer.current) { clearTimeout(simTimer.current); simTimer.current = null; } setSim({ running: false }); };
+
+  // Per-step simulation state for the timeline, derived from the trace + how
+  // far the replay has advanced (playIdx). Steps absent from the trace were
+  // never reached ('cut') once the replay finishes.
+  const simByStep = useMemo(() => {
+    const m = {};
+    if (!sim.running && !sim.done) return m;
+    const trace = sim.trace || [];
+    const idxByStep = {};
+    trace.forEach((e, i) => { idxByStep[e.stepId] = i; });
+    for (const s of steps) {
+      const ti = idxByStep[s.id];
+      if (ti === undefined) { m[s.id] = sim.done ? 'cut' : 'pending'; continue; }
+      if (sim.running && !sim.done && ti === sim.playIdx) m[s.id] = 'running';
+      else if (ti < sim.playIdx || sim.done) m[s.id] = trace[ti].status;  // 'ran' | 'skipped' | 'failed'
+      else m[s.id] = 'pending';
+    }
+    return m;
+  }, [sim, steps]);
+  // Replay the trace: advance one step every ~750ms, selecting the step being
+  // evaluated, then settle on a held 'done' state showing the full path.
+  useEffect(() => {
+    if (!sim.running || sim.building) return;
+    const trace = sim.trace || [];
+    if (sim.playIdx >= trace.length) {
+      simTimer.current = setTimeout(() => setSim((s) => ({ ...s, running: false, done: true })), 800);
+      return () => { if (simTimer.current) clearTimeout(simTimer.current); };
+    }
+    setSelectedId(trace[sim.playIdx]?.stepId || null);
+    simTimer.current = setTimeout(() => setSim((s) => ({ ...s, playIdx: s.playIdx + 1 })), 750);
+    return () => { if (simTimer.current) clearTimeout(simTimer.current); };
+  }, [sim.running, sim.building, sim.playIdx, sim.trace]);
+
+  const startRun = async () => {
+    if (!contacts.length) { toast?.warning?.('No audience — launch from a CRM Search / Task selection.'); return; }
+    if (!steps.length) { toast?.warning?.('Add at least one step before running.'); return; }
+    resetSim();
+    const { lookupTemplate, deps } = await buildRunDeps();
     setRunMode(true);
-    runner.start({
-      campaign,
-      audience,
-      lookupTemplate,
-      deps: { rep, emailConfig, signature: emailConfig.signature, fromLocalPart: emailConfig.localPart, dispatch: sendBg, dryRun },
-    });
+    runner.start({ campaign, audience: audienceKeyed, lookupTemplate, deps: { ...deps, dryRun } });
   };
 
   const mainCount = steps.filter((s) => !s.parentId).length;
+  const timelineSim = { running: sim.running, done: sim.done, building: sim.building, byStep: simByStep, contactName: sim.contactName, playIdx: sim.playIdx, total: (sim.trace || []).length };
   const audienceValue = useMemo(() => contacts.reduce((s, c) => s + (Number(c.value) || 0), 0), [contacts]);
 
   return (
@@ -1236,6 +1323,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
       <motion.div initial={false} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }} style={{ display: 'flex' }}>
       <ModalShell width={1280} height={760} style={{ maxWidth: `calc(94vw / ${scale})`, maxHeight: `calc(90vh / ${scale})`, zoom: scale, color: 'var(--gb-text-secondary)' }}>
         <TopBar campaign={campaign} onChange={patchCampaign} sim={sim} onSimStart={startSim} onSimStop={stopSim} onSimReset={resetSim}
+          audience={audienceKeyed} simContactKey={simContactKey} onSimContactChange={setSimContactKey}
           dirty={dirty} audienceCount={contacts.length} audienceValue={audienceValue} onRun={startRun} onClose={requestClose}
           dryRun={dryRun} onDryRunChange={setDryRun} />
         {runMode ? (
@@ -1252,7 +1340,7 @@ export function CampaignManager({ onClose, contacts = [] }) {
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           <CampaignSidebar library={library} currentId={campaign.id} onSelect={selectCampaign} onNew={createCampaign} onDelete={deleteCampaign} onImport={() => setImportOpen(true)} />
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid var(--gb-border-default)' }}>
-            <Timeline steps={steps} selectedId={selectedId} sim={sim} templateLib={templateLib} onSelect={setSelectedId} onAdd={addStep} onDelete={deleteStep} onDuplicate={duplicateStep} />
+            <Timeline steps={steps} selectedId={selectedId} sim={timelineSim} templateLib={templateLib} onSelect={setSelectedId} onAdd={addStep} onDelete={deleteStep} onDuplicate={duplicateStep} />
           </div>
           <div style={{ width: 500, flexShrink: 0, background: 'var(--gb-surface-modal)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
             {selected
