@@ -173,8 +173,8 @@ function ProductCard({ p, onClick, active }) {
       </div>
       <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)', lineHeight: 1.25 }}>{p.title}</div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-        {p.from && <span style={{ fontSize: 9.5, color: 'var(--gb-text-muted)' }}>from</span>}
         <span style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--gb-text-primary)', fontFamily: MONO }}>${p.price.toFixed(2)}</span>
+        <span style={{ fontSize: 9.5, color: 'var(--gb-text-muted)' }}>each</span>
         {p.was && <span style={{ fontSize: 10.5, color: 'var(--gb-text-ghost)', textDecoration: 'line-through', fontFamily: MONO }}>${p.was.toFixed(2)}</span>}
         <span style={{ marginLeft: 'auto', width: 22, height: 22, borderRadius: '50%', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }} title="Add to proposal"><I.plus size={13} /></span>
       </div>
@@ -282,7 +282,7 @@ function CustomizeSnippet() {
             <div style={{ border: '1px dashed var(--gb-border-default)', borderRadius: RMD, padding: '18px 10px', textAlign: 'center', background: 'var(--gb-fill-subtle)' }}>
               <I.upload size={18} style={{ color: 'var(--gb-text-muted)' }} />
               <div style={{ fontSize: 11, color: 'var(--gb-text-secondary)', marginTop: 6 }}>Drop art or click to upload</div>
-              <div style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)', marginTop: 2 }}>PNG / JPG / GIF · ~5 MB</div>
+              <div style={{ fontSize: 9.5, color: 'var(--gb-text-ghost)', marginTop: 2 }}>Any image file · auto-aligned to the print area</div>
             </div>
           )}
           {tab === 'text' && (
@@ -313,7 +313,7 @@ function CustomizeSnippet() {
 
       <div style={{ marginTop: 12, padding: 9, borderRadius: RMD, border: BORDER, background: 'var(--gb-surface-1)', display: 'flex', alignItems: 'center', gap: 8 }}>
         <Switch on={dual} size="sm" onChange={setDual} />
-        <div style={{ flex: 1, fontSize: 11.5, color: 'var(--gb-text-secondary)' }}>Add personalization to the back</div>
+        <div style={{ flex: 1, fontSize: 11.5, color: 'var(--gb-text-secondary)' }}>Add Second Imprint (opposite pole)</div>
         <Tag size="xs" tone="success">+$6 / dz logo</Tag>
       </div>
     </MiniFrame>
@@ -322,14 +322,14 @@ function CustomizeSnippet() {
 
 /* The eight imprint types, verified */
 const IMPRINT_ROWS = [
-  ['Custom Logo', 'Drag-and-drop / click upload (PNG·JPG·GIF, ~5 MB). Art auto-aligns to the print area and projects onto the 3D ball.'],
-  ['Personalized (Text)', 'Up to 3 lines (~20 chars) · font (Kabel Dm BT default, Calibri, Lucida Handwriting, Bradley Hand) · color (6 quick / 75+) · size Standard / Large / Max.'],
+  ['Custom Logo', 'Drag-and-drop / click upload (any image file). Art auto-aligns to the print area and projects onto the 3D ball.'],
+  ['Personalized (Text)', 'Up to 3 lines (17 characters each) · font (Kabel Dm BT default, Calibri, Lucida Handwriting, Bradley Hand) · color (6 quick / 75+) · size Standard / Large / Max.'],
   ['Monogram', '7 styles — Circle, Hexagram, Gardenia (3 initials); Vertical, Horizontal, Diagonal (2); Simple Circle (1) · initials · primary + accent color.'],
-  ['Photo', 'Upload a photo; auto-crops to a circle (or square) with a live crop preview.'],
+  ['Photo', 'Upload a photo; auto-crops to a circle with a live crop preview.'],
   ['AlignXL (accent line)', '8 line styles (Star, Thin, Medium, Thick, Dot, Skull, Martini, Wine) · optional text · separate text + line colors or “same color”.'],
   ['IDAlign (alignment text)', '12 line styles (arrows, dots, stars, chevrons, martini/wine) · 1–3 initials centered on the line · text + line colors.'],
   ['Icons', 'Theme dropdown (Dad / Father’s Day, Drinks, USA / Patriotic, Masters, Misc) → a grid of 5–9 ready-made graphics.'],
-  ['Custom Player Number', 'A 1–3 digit number input.'],
+  ['Custom Player Number', 'A number stepper — e.g. a jersey number (adds “Additional Personalization · $5.00/dz”).'],
 ];
 
 const GLOSSARY = [
@@ -383,8 +383,8 @@ export function CatalogPage() {
       </TourBox>
 
       <TourBox n={5} eyebrow="Make it theirs" title="Customizing an item — imprints" live={<CustomizeSnippet />} wide>
-        <p>On a customizable product the detail panel grows a <strong>customize block</strong>: a tab per imprint type the product actually supports, type-specific controls below, and a <strong>live 3D preview</strong> that re-renders as you change anything. The preview uses the real production rendering services — <em>what you see is what prints</em>.</p>
-        <p>Where the product supports it, a <strong>“Add personalization to the back”</strong> checkbox reveals a second, identical set of controls for the opposite <strong>pole</strong> — logo on one side, text or a monogram on the other, both shown in the 3D preview. The second pole carries an upcharge (per dozen: <strong>+$6 logo, +$4 text</strong>). Deleting the front imprint promotes the back one to front. The full set of imprint types and their controls:</p>
+        <p>On a customizable product the detail panel grows a <strong>customize block</strong>: a tab per imprint type the product actually supports, type-specific controls below, and a <strong>live 3D preview</strong> that re-renders as you change anything. The 3D scene renders locally, but the imprint <em>artwork</em> (logo art, monogram, text) is generated by the same production services the website uses — so the decal you see is the real one.</p>
+        <p>Where the product supports it, an <strong>“Add Second Imprint (opposite pole)”</strong> checkbox reveals a second, identical set of controls for the opposite <strong>pole</strong> — logo on one side, text or a monogram on the other, both shown in the 3D preview. The second pole carries an upcharge (per dozen: <strong>+$6 logo, +$4 text</strong>). Deleting the front imprint promotes the back one to front. The full set of imprint types and their controls:</p>
         <table className="spectable">
           <thead><tr><th style={{ width: 150 }}>Imprint type</th><th>Controls</th></tr></thead>
           <tbody>{IMPRINT_ROWS.map((r) => <tr key={r[0]}><td><b>{r[0]}</b></td><td>{r[1]}</td></tr>)}</tbody>
@@ -405,25 +405,26 @@ export function CatalogPage() {
       <h2 className="sec">Build your own — custom &amp; service items</h2>
       <p>
         Sidebar → <strong>Custom Items</strong> opens your library as a masonry gallery (scoped to the linked account where one is
-        set). <strong>+ Add</strong> opens the item form — Name, Brand / Item ID, Description, a supplier <strong>Link</strong>, a
-        <strong> Thumbnail</strong> (auto re-hosted on the company image server so it renders in proposal emails), <strong>Price</strong>,
-        comma-separated <strong>Style options</strong> (each becomes a picker), and <strong>Cost (per unit) + Cost breaks</strong> —
-        the ladder that powers real margins in the breakdown. Custom items behave exactly like catalog products in the proposal:
+        set). <strong>+ Add</strong> opens the item editor — <strong>Brand / Product</strong>, <strong>Item ID</strong>,
+        <strong> Extra Details</strong>, <strong>Cost / unit</strong>, <strong>Setup</strong>, <strong>Weight</strong>, a
+        <strong> Thumbnail Image</strong> (auto re-hosted on the company image server so it renders in proposal emails),
+        row-based <strong>Style options</strong> (each row becomes a picker on the line), a <strong>Price ladder</strong>
+        (quantity breaks), a <strong>Description</strong>, and a <strong>Dropship</strong> checkbox. The cost + price ladders are
+        what power real margins in the breakdown. Custom items behave exactly like catalog products in the proposal —
         quantities, splits, even style variants.
       </p>
       <p>
-        <strong>Supplier import</strong> goes further: <strong>+ HPG Brands</strong> and <strong>+ SnugZ USA</strong> bulk-import a
-        catalog in two visible phases (<em>Fetching product catalog…</em> → <em>Fetching product details…</em>) and land on a
-        <strong> review sheet</strong> — every found item with thumbnail, SKU, cost ladder, and an include/exclude checkbox before
-        anything saves (deduped by SKU). Sell prices are computed from supplier cost as
-        <code> (cost + setup + shipping) ÷ (1 − target margin)</code>, so imports arrive quote-ready with honest margins.
+        <strong>Supplier import</strong> goes further: the <strong>download</strong> button in the Custom Items toolbar opens
+        <strong> “Import from a repo”</strong> — pick a supplier from the <strong>repo dropdown</strong> (e.g. HPG Brands, SnugZ USA)
+        and the extension pulls that supplier’s customizable catalog and adds the items straight to your library (deduped by SKU).
+        Sell prices are derived from supplier cost so imports arrive quote-ready with honest margins.
       </p>
 
       <div className="docnote info" style={{ marginTop: 8 }}>
         <span className="dn-ico"><I.download size={15} /></span>
         <div className="dn-b">
           <div className="dn-t">Before a SnugZ import</div>
-          <p style={{ margin: 0 }}>SnugZ needs you signed in to <strong>snugzusa.com</strong> in another tab first; HPG is public. Big imports page through the whole supplier catalog — let the progress finish before navigating away.</p>
+          <p style={{ margin: 0 }}>SnugZ needs you signed in to <strong>snugzusa.com</strong> in another tab first; HPG is public. A big import pages through the whole supplier catalog — let it finish before navigating away.</p>
         </div>
       </div>
 
