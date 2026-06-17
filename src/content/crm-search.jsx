@@ -58,13 +58,39 @@ if (!window.__gbCrmSearchModalLoaded) {
       }
     });
   } catch { /* not in extension context */ }
+  /* Returns true if the keystroke is happening inside an editable field.
+     Uses composedPath so it also sees inputs INSIDE a shadow root (our
+     custom-page takeover) — document.activeElement only reports the shadow
+     host there, so the plain tagName check would miss them. */
+  function inEditable(e) {
+    const path = (e.composedPath && e.composedPath()) || [];
+    for (const el of path) {
+      if (!el || !el.tagName) continue;
+      if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable) return true;
+    }
+    const a = document.activeElement;
+    return !!(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable));
+  }
+
   document.addEventListener('keydown', (e) => {
     if (!(e.ctrlKey || e.metaKey)) return;
     if (e.shiftKey || e.altKey) return;
     if (!state.enabled || !state.key) return;
     if (e.key.toLowerCase() !== state.key) return;
-    const tag = document.activeElement?.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable) return;
+    if (inEditable(e)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    window.__gbShowCrmSearchModal();
+  }, { capture: true });
+
+  /* "/" — a modifier-free trigger that never collides with browser/OS
+     chords (Ctrl+Y, Cmd+K, etc. have built-ins). Opens CRM Search when
+     you're not typing in a field. */
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== '/') return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+    if (!state.enabled) return;
+    if (inEditable(e)) return;
     e.preventDefault();
     e.stopPropagation();
     window.__gbShowCrmSearchModal();

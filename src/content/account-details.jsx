@@ -22,7 +22,7 @@
 
 import React, { useState, useMemo, useEffect, useRef, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ensureTheme } from '../lib/theme.js';
+import { ensureTheme, THEME_VARIANTS, loadTheme, saveTheme, applyTheme } from '../lib/theme.js';
 
 /* ════════════════════════════════════════════════════════════
    ICONS
@@ -412,6 +412,43 @@ function crmHref(pageId) {
 }
 function crmGo(pageId) { try { window.location.assign(crmHref(pageId)); } catch (e) {} }
 function goUrl(url) { try { window.location.assign(url); } catch (e) {} }
+
+/* Breadcrumb trail (see contact-details): the destination trusts the
+   stashed origin only when document.referrer matches it. */
+const BACK_KEY = '__gbBackTo';
+function recordBackTo(label) {
+  try { window.sessionStorage.setItem(BACK_KEY, JSON.stringify({ href: window.location.href, label: label || '' })); } catch (e) {}
+}
+function readBackTo() {
+  try {
+    const raw = window.sessionStorage.getItem(BACK_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw);
+    if (v && v.href && v.href === document.referrer) return v;
+  } catch (e) {}
+  return null;
+}
+
+/* Compact theme switcher — writes global gbTheme (applyTheme + saveTheme). */
+function ThemeSelector() {
+  const [variant, setVariant] = useState(() => (typeof document !== 'undefined' && document.documentElement.dataset.theme) || 'dark');
+  useEffect(() => { loadTheme().then((t) => setVariant(t.variant || 'dark')); }, []);
+  const change = (v) => {
+    setVariant(v);
+    loadTheme().then((cur) => { const next = { ...cur, variant: v }; applyTheme(next); saveTheme(next); });
+  };
+  return (
+    <select value={variant} onChange={(e) => change(e.target.value)} title="Theme"
+      style={{
+        height: 28, background: 'var(--gb-fill-subtle)', color: 'var(--gb-text-secondary)',
+        border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)',
+        fontFamily: 'var(--gb-font-sans)', fontSize: 11.5, fontWeight: 600,
+        padding: '0 8px', cursor: 'pointer', outline: 'none',
+      }}>
+      {THEME_VARIANTS.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+    </select>
+  );
+}
 /* Account detail page (Page=271 & accountID=…), per the original HTML. */
 function accountHref(accId) {
   try { return new URL('Default.aspx?Page=271&accountID=' + accId, window.location.href).href; }
@@ -658,6 +695,7 @@ function Sidebar({ collapsed, setCollapsed }) {
 function TopBar() {
   const D = useD();
   const name = txt(D.account.name) || 'Account';
+  const back = readBackTo();   // came from a contact page? offer a way back
   return (
     <div style={{
       height: 48, flexShrink: 0,
@@ -666,6 +704,19 @@ function TopBar() {
       display: 'flex', alignItems: 'center',
       padding: '0 18px', gap: 18, position: 'sticky', top: 0, zIndex: 10,
     }}>
+      {/* Came-from chip: jump back to the contact we opened this account from */}
+      {back && (
+        <a href={back.href} onClick={(e) => { e.preventDefault(); goUrl(back.href); }}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            height: 26, padding: '0 10px 0 8px', borderRadius: 'var(--gb-r-pill)',
+            background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)',
+            color: 'var(--gb-brand-label)', fontSize: 11, fontWeight: 600, textDecoration: 'none', flexShrink: 0,
+          }} title={'Back to ' + back.label}>
+          <I.chevr size={11} style={{ transform: 'scaleX(-1)' }} />
+          {back.label || 'Back'}
+        </a>
+      )}
       {/* Breadcrumb */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--gb-text-muted)', fontWeight: 500 }}>
         <a href={crmHref(261)} onClick={(e) => { e.preventDefault(); crmGo(261); }} style={{ color: 'inherit', textDecoration: 'none' }}>CRM</a><I.chevr size={10} />
@@ -689,23 +740,24 @@ function TopBar() {
           fontFamily: 'var(--gb-font-mono)', fontSize: 9.5, padding: '1px 5px',
           borderRadius: 3, background: 'var(--gb-fill-subtle)', color: 'var(--gb-text-tertiary)',
           border: '1px solid var(--gb-border-subtle)',
-        }}>⌘K</span>
+        }}>/</span>
       </div>
+      <ThemeSelector />
       <div style={{
         display: 'flex', alignItems: 'center', gap: 7,
         padding: '3px 10px 3px 4px',
-        background: 'var(--gb-fill-subtle)',
-        border: '1px solid var(--gb-border-default)',
+        background: 'var(--gb-brand-tint-soft)',
+        border: '1px solid var(--gb-brand-tint-border)',
         borderRadius: 'var(--gb-r-pill)',
       }}>
         <span style={{
           width: 22, height: 22, borderRadius: '50%',
-          background: 'linear-gradient(135deg, #6e901d, #4a6b14)',
+          background: 'linear-gradient(135deg, var(--gb-brand), var(--gb-brand-dark))',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 10, fontWeight: 700, color: 'var(--gb-text-on-brand)',
         }}>CU</span>
-        <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>Cullen</span>
-        <I.chevd size={10} style={{ color: 'var(--gb-text-muted)' }} />
+        <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-brand-label)' }}>Cullen</span>
+        <I.chevd size={10} style={{ color: 'var(--gb-brand-label)' }} />
       </div>
     </div>
   );
