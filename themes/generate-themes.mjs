@@ -79,17 +79,17 @@ for (const v of VARIANTS) {
     description: `Browser chrome matched to the ${v.name} extension theme.`,
     theme: {
       colors: {
-        // Everything in the browser chrome shares the frame/tab-bar color
-        // (surface-deep) so the toolbar + address bar blend into the tabs
-        // instead of sitting on a lighter "secondary" surface.
+        // frame (= inactive tabs) stays the deep surface; the toolbar (=
+        // the ACTIVE tab) uses a lighter "secondary" surface so the active
+        // tab is distinguishable from the rest. omnibox a touch lighter.
         frame: deep,
         frame_inactive: deep,
-        toolbar: deep,
+        toolbar,
         tab_text: textPrimary,
         tab_background_text: textTertiary,
         bookmark_text: textSecondary,
-        button_background: deep,
-        omnibox_background: deep,
+        button_background: toolbar,
+        omnibox_background: omnibox,
         omnibox_text: textPrimary,
         ntp_background: deep,
         ntp_text: textPrimary,
