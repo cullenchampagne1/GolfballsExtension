@@ -23,6 +23,7 @@
 import React, { useState, useMemo, useEffect, useRef, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ensureTheme, THEME_VARIANTS, loadTheme, saveTheme, applyTheme } from '../lib/theme.js';
+import { getAllIndexed, searchIndexed } from '../lib/crmIndex.js';
 
 /* ════════════════════════════════════════════════════════════
    ICONS
@@ -774,6 +775,121 @@ function Sidebar({ collapsed, setCollapsed }) {
 /* ════════════════════════════════════════════════════════════
    TOP BAR
 ════════════════════════════════════════════════════════════ */
+/* Build a custom-page URL for an indexed record (contact_<n> / account_<n>). */
+function recUrl(rec) {
+  const parts = String((rec && rec.id) || '').split('_');
+  const type = parts[0], num = parts[1];
+  try {
+    if (type === 'contact' && num) return new URL('Default.aspx?Page=240&customerID=' + num, window.location.href).href;
+    if (type === 'account' && num) return new URL('Default.aspx?Page=271&accountID=' + num, window.location.href).href;
+  } catch (e) {}
+  return '';
+}
+
+/* Inline header search — typeahead over the local CRM index (getAllIndexed),
+   dropdown results, Enter/click navigates to the record's custom page. Does
+   NOT open the full CRM modal; that's reachable via the full-search button.
+   "/" focuses it (shadow-safe via composedPath). */
+function InlineSearch() {
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState(false);
+  const [results, setResults] = useState([]);
+  const [active, setActive] = useState(0);
+  const records = useRef([]);
+  const inputRef = useRef(null);
+  const boxRef = useRef(null);
+
+  useEffect(() => { try { getAllIndexed().then((r) => { records.current = r || []; }).catch(() => {}); } catch (e) {} }, []);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+      const path = (e.composedPath && e.composedPath()) || [];
+      const inField = path.some((el) => el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable));
+      if (inField) return;
+      e.preventDefault(); e.stopPropagation();
+      try { inputRef.current && inputRef.current.focus(); } catch (er) {}
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => { const p = (e.composedPath && e.composedPath()) || []; if (boxRef.current && p.indexOf(boxRef.current) === -1) setOpen(false); };
+    document.addEventListener('mousedown', onDown, true);
+    return () => document.removeEventListener('mousedown', onDown, true);
+  }, [open]);
+
+  const onType = (val) => {
+    setQ(val);
+    let res = [];
+    try { res = val.trim() ? searchIndexed(records.current, val, { limit: 8 }) : []; } catch (e) {}
+    setResults(res); setActive(0); setOpen(true);
+  };
+  const go = (rec) => { const u = recUrl(rec); setOpen(false); if (u) goUrl(u); };
+  const openModal = () => { try { window.__gbShowCrmSearchModal && window.__gbShowCrmSearchModal(); } catch (e) {} };
+  const onKeyDown = (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, results.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (results[active]) go(results[active]); }
+    else if (e.key === 'Escape') { setOpen(false); try { inputRef.current.blur(); } catch (er) {} }
+  };
+
+  return (
+    <div ref={boxRef} style={{ position: 'relative', width: 280, flexShrink: 0 }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 7,
+        background: 'var(--gb-fill-inverse-medium)',
+        border: '1px solid ' + (open ? 'var(--gb-border-focus)' : 'var(--gb-border-default)'),
+        borderRadius: 'var(--gb-r-md)', padding: '0 6px 0 10px', height: 28, color: 'var(--gb-text-muted)',
+      }}>
+        <I.search size={12} />
+        <input ref={inputRef} value={q} placeholder="Search customers, accounts…"
+          onChange={(e) => onType(e.target.value)} onKeyDown={onKeyDown} onFocus={() => { if (results.length) setOpen(true); }}
+          style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-sans)', fontSize: 11.5 }} />
+        {!q && <span style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 9.5, padding: '1px 5px', borderRadius: 3, background: 'var(--gb-fill-subtle)', color: 'var(--gb-text-tertiary)', border: '1px solid var(--gb-border-subtle)' }}>/</span>}
+        <IconBtn size="xs" ghost icon={<I.ext />} title="Open full search" onClick={openModal} />
+      </div>
+      {open && results.length > 0 && (
+        <div className="gb-scroll" style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 60,
+          maxHeight: 360, overflowY: 'auto', padding: 5,
+          background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)',
+          borderRadius: 'var(--gb-r-lg)', boxShadow: 'var(--gb-shadow-popover)',
+          animation: 'gb-fade-slide var(--gb-anim) both',
+        }}>
+          {results.map((r, i) => {
+            const isAcct = String(r.id || '').startsWith('account');
+            const name = r.contactName_t || r.accountName_t || r.id;
+            const sub = isAcct ? 'Account' : ['Contact', r.accountName_t, (r.emails_tps || [])[0]].filter(Boolean).join(' · ');
+            return (
+              <button key={r.id || i} onClick={() => go(r)} onMouseEnter={() => setActive(i)}
+                style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 9px', borderRadius: 'var(--gb-r-sm)', border: 0, cursor: 'pointer', textAlign: 'left', background: i === active ? 'var(--gb-fill-subtle)' : 'transparent', transition: 'background var(--gb-anim)' }}>
+                <span style={{ width: 24, height: 24, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', color: 'var(--gb-text-tertiary)' }}>{isAcct ? <I.briefcase size={12} /> : <I.user size={12} />}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+                  <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {open && q && results.length === 0 && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 60, padding: 14,
+          background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)',
+          borderRadius: 'var(--gb-r-lg)', boxShadow: 'var(--gb-shadow-popover)',
+          fontSize: 11.5, color: 'var(--gb-text-muted)', textAlign: 'center',
+        }}>
+          No indexed matches. <a href="#" onClick={(e) => { e.preventDefault(); openModal(); }} style={{ color: 'var(--gb-brand-label)', textDecoration: 'none', fontWeight: 600 }}>Full search →</a>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TopBar() {
   const D = useD();
   const name = fullName(D.contact) || 'Contact';
@@ -793,23 +909,7 @@ function TopBar() {
         {D.ids.contact && <span style={{ marginLeft: 6, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-ghost)', fontSize: 10.5 }}>#{D.ids.contact}</span>}
       </div>
       <div style={{ flex: 1 }} />
-      {/* Search */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 7,
-        background: 'var(--gb-fill-inverse-medium)',
-        border: '1px solid var(--gb-border-default)',
-        borderRadius: 'var(--gb-r-md)',
-        padding: '0 10px', height: 28, width: 240,
-        color: 'var(--gb-text-muted)', fontSize: 11.5,
-      }}>
-        <I.search size={12} />
-        <span style={{ flex: 1 }}>Search customers, orders…</span>
-        <span style={{
-          fontFamily: 'var(--gb-font-mono)', fontSize: 9.5, padding: '1px 5px',
-          borderRadius: 3, background: 'var(--gb-fill-subtle)', color: 'var(--gb-text-tertiary)',
-          border: '1px solid var(--gb-border-subtle)',
-        }}>/</span>
-      </div>
+      <InlineSearch />
       <ThemeSelector />
     </div>
   );

@@ -82,17 +82,7 @@ if (!window.__gbCrmSearchModalLoaded) {
     e.stopPropagation();
     window.__gbShowCrmSearchModal();
   }, { capture: true });
-
-  /* "/" — a modifier-free trigger that never collides with browser/OS
-     chords (Ctrl+Y, Cmd+K, etc. have built-ins). Opens CRM Search when
-     you're not typing in a field. */
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== '/') return;
-    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
-    if (!state.enabled) return;
-    if (inEditable(e)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    window.__gbShowCrmSearchModal();
-  }, { capture: true });
+  /* NOTE: "/" no longer opens this modal. On custom pages it focuses the
+     in-page inline search (index-backed dropdown); the full modal is only
+     opened explicitly (Ctrl+<key> or the header's full-search button). */
 }
