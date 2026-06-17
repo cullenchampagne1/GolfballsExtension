@@ -35,6 +35,21 @@
   var MIRROR_KEY = '__gbCustomPages';
   var ROOT_ID = '__gb-custom-page';
 
+  /* The takeover renders inside a Shadow DOM so the host page's CSS
+     (Bootstrap 2 / Metronic ships aggressive element + reset rules that
+     flatten our corners and kill transitions) CANNOT bleed in. Only this
+     stylesheet + our inline styles apply inside the shadow. The --gb-*
+     design tokens still resolve because custom properties inherit across
+     the shadow boundary from <html>; the Geist @font-face is document-
+     global so it's available too. Keyframes are tree-scoped, so the ones
+     our UI references must be (re)declared HERE. */
+  var SHADOW_CSS =
+    ':host { display: block; height: 100%; font-family: var(--gb-font-sans); color: var(--gb-text-secondary); }' +
+    '* , *::before, *::after { box-sizing: border-box; }' +
+    '@keyframes gb-fade-slide { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }' +
+    '@keyframes gb-spin { to { transform: rotate(360deg); } }' +
+    '@keyframes gb-pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }';
+
   function engine() { return window.__gbPageEngine || null; }
 
   /* id → detector. Mirrors detectPageType()'s URL/DOM checks in
@@ -138,8 +153,8 @@
 
     var rootEl = document.createElement('div');
     rootEl.id = ROOT_ID;
-    // Plain viewport container — the page component carries data-gb-scale
-    // (zoom + host-CSS reset) on its own inner root and scrolls itself.
+    // Plain viewport container. The React UI renders inside a Shadow DOM
+    // attached here so host (Metronic/Bootstrap) CSS can't bleed in.
     rootEl.style.cssText = [
       'position:fixed', 'inset:0', 'z-index:2147483601',
       'overflow:hidden', 'background:var(--gb-surface-deep,#0a0b0c)',
@@ -148,6 +163,21 @@
     // sees our own React mutations.
     document.documentElement.appendChild(rootEl);
 
+    // Shadow root = full CSS isolation from the host page. Inject our
+    // minimal stylesheet (reset + keyframes); --gb-* tokens + Geist
+    // still reach in via inheritance / document-global @font-face.
+    var mountTarget = rootEl;
+    try {
+      var shadow = rootEl.attachShadow({ mode: 'open' });
+      var sheet = document.createElement('style');
+      sheet.textContent = SHADOW_CSS;
+      shadow.appendChild(sheet);
+      var mount = document.createElement('div');
+      mount.style.height = '100%';
+      shadow.appendChild(mount);
+      mountTarget = mount;
+    } catch (e) { /* attachShadow unsupported → render directly (no isolation) */ }
+
     // Lock host scroll via an INLINE style we own — independent of the
     // boot cover's stylesheet, which clear() (below) removes.
     var prevOverflow = document.documentElement.style.overflow;
@@ -155,7 +185,7 @@
 
     var cleanup = null;
     try {
-      cleanup = mod.render(rootEl, { pageId: pageId, store: store });
+      cleanup = mod.render(mountTarget, { pageId: pageId, store: store });
     } catch (e) {
       // Render blew up — abort cleanly back to the host page.
       try { rootEl.remove(); } catch (e2) {}

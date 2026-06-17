@@ -364,15 +364,12 @@ function fullName(c) {
    browser zoom; our denser UI reads too small at that 1:1, so we paint
    at 125%. NOT tied to the extension's UI-scale sliders (scales.js) —
    this is a constant for the custom page only. */
-const PAGE_ZOOM = 1.25;
+const PAGE_ZOOM = 1.375;
 
-/* `all: revert-layer` armour — host golfballs.com CSS ships aggressive
-   resets (e.g. `* { border-radius: 0 !important; transition: none !important }`)
-   that flatten our corners and kill animations. Inline styles can't be
-   !important, but reverting the cascade layer first (exactly what the
-   modals' ModalCard does) neutralises the host clobber before our own
-   styles paint. Spread this FIRST in any styled element's style object. */
-const ARMOR = { all: 'revert-layer', boxSizing: 'border-box' };
+/* The takeover renders inside a Shadow DOM (see custom-pages.js), which
+   fully isolates it from the host page's CSS — so we no longer need the
+   `all: revert-layer` host-armour the modals use. Just pin border-box. */
+const ARMOR = { boxSizing: 'border-box' };
 
 /* CRM admin deep-links — absolute (resolved against the current page) so
    navigation is unambiguous regardless of host path. Page ids from the
