@@ -1013,7 +1013,7 @@ function Hero() {
           <Btn variant="tinted" status="info" icon={<I.phone />} full onClick={() => { try { window.__gbShowCallLogModal && window.__gbShowCallLogModal(); } catch (e) {} }}>Log Call</Btn>
           <Btn variant="tinted" status="info" icon={<I.send />} full>Send Email</Btn>
           <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
-            <Btn variant="ghost" size="sm" icon={<I.ban />}>Remove from DNC</Btn>
+            <Btn variant="secondary" size="sm" icon={<I.ban />}>Remove from DNC</Btn>
             <IconBtn size="sm" icon={<I.more />} />
           </div>
         </div>
