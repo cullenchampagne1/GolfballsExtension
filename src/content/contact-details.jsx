@@ -382,7 +382,32 @@ function crmHref(pageId) {
   catch (e) { return 'Default.aspx?Page=' + pageId; }
 }
 function crmGo(pageId) { try { window.location.assign(crmHref(pageId)); } catch (e) {} }
-const CRM_CHILD_PAGE = { 'Dashboard': 261, 'Search': 360 };
+function goUrl(url) { try { window.location.assign(url); } catch (e) {} }
+/* Account detail page (Page=271 & accountID=…), per the original HTML. */
+function accountHref(accId) {
+  try { return new URL('Default.aspx?Page=271&accountID=' + accId, window.location.href).href; }
+  catch (e) { return 'Default.aspx?Page=271&accountID=' + accId; }
+}
+
+/* Real CRM sidebar Page ids, extracted from the live Contact Details HTML.
+   (Custom Rep Activity has no link in the source — left inert.) */
+const CRM_CHILD_PAGE = {
+  'Dashboard': 261,
+  'Search': 360,
+  'My Recent History': 279,
+  'Task List': 349,
+  'Action Review': 286,
+  'Blacklisted Emails': 262,
+  'Recent Calls': 243,
+  'Case Index': 369,
+  'Create Contact': 269,
+  'Open Lead': 245,
+  'Opportunity': 280,
+  'Opportunity Linking': 356,
+  'Adjust Leader Board': 294,
+};
+/* Childless top-level groups that are themselves a destination. */
+const TOP_PAGE = { dashboard: 18 };
 
 /* ════════════════════════════════════════════════════════════
    LEFT SIDEBAR — primary admin nav
@@ -491,7 +516,7 @@ function Sidebar({ collapsed, setCollapsed }) {
           const hasChildren = Array.isArray(g.children) && g.children.length > 0;
           return (
             <div key={g.id} style={{ marginBottom: 1 }}>
-              <button onClick={() => hasChildren && !collapsed ? toggle(g.id) : null}
+              <button onClick={() => { if (hasChildren && !collapsed) toggle(g.id); else if (TOP_PAGE[g.id]) crmGo(TOP_PAGE[g.id]); }}
                 title={collapsed ? g.label : undefined}
                 style={{
                   width: '100%', display: 'flex', alignItems: 'center',
@@ -709,10 +734,13 @@ function Hero() {
           }}>
             <I.briefcase size={13} style={{ color: 'var(--gb-text-muted)' }} />
             <span>Works at</span>
-            <a href="#account" onClick={(e) => e.preventDefault()} style={{
-              color: 'var(--gb-brand-label)', fontWeight: 600, textDecoration: 'none',
-              display: 'inline-flex', alignItems: 'center', gap: 4,
-            }}>
+            <a href={D.ids.account ? accountHref(D.ids.account) : '#'}
+              onClick={(e) => { e.preventDefault(); if (D.ids.account) goUrl(accountHref(D.ids.account)); }}
+              style={{
+                color: 'var(--gb-brand-label)', fontWeight: 600, textDecoration: 'none',
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+                cursor: D.ids.account ? 'pointer' : 'default',
+              }}>
               {txt(a.name) || 'Account'}
               <I.ext size={11} />
             </a>
