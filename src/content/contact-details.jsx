@@ -1049,7 +1049,7 @@ function Td({ children, align = 'left', mono, muted, style }) {
 function OrdersPanel() {
   const D = useD();
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 14 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <Card>
         <SectionTitle
           icon={<I.cart />} title="Orders" count={num(D.stats.orderCount) ?? D.orders.length}
@@ -1614,8 +1614,8 @@ function App({ store }) {
             </div>
           )}
           <div style={{
-            maxWidth: 1480, margin: '0 auto',
-            padding: '20px 22px 60px',
+            maxWidth: 2200, margin: '0 auto',
+            padding: '20px 28px 60px',
             display: 'flex', flexDirection: 'column', gap: 14,
           }}>
             <Hero />

@@ -71,6 +71,10 @@ const I = {
   flag:    (p) => <Icon {...p}><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></Icon>,
   zap:     (p) => <Icon {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></Icon>,
   history: (p) => <Icon {...p}><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 106 5.3L3 8"/><path d="M12 7v5l4 2"/></Icon>,
+  note:    (p) => <Icon {...p}><path d="M14 3v4a1 1 0 001 1h4"/><path d="M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z"/><path d="M9 13h6M9 17h4"/></Icon>,
+  trash:   (p) => <Icon {...p}><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></Icon>,
+  chat:    (p) => <Icon {...p}><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></Icon>,
+  camera:  (p) => <Icon {...p}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></Icon>,
 };
 
 /* ════════════════════════════════════════════════════════════
@@ -1041,7 +1045,7 @@ function Td({ children, align = 'left', mono, muted, style }) {
 function OrdersPanel() {
   const D = useD();
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 14 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <Card>
         <SectionTitle
           icon={<I.cart />} title="Orders" count={num(D.stats.orderCount) ?? D.orders.length}
@@ -1651,8 +1655,8 @@ function App({ store }) {
             </div>
           )}
           <div style={{
-            maxWidth: 1480, margin: '0 auto',
-            padding: '20px 22px 60px',
+            maxWidth: 2200, margin: '0 auto',
+            padding: '20px 28px 60px',
             display: 'flex', flexDirection: 'column', gap: 14,
           }}>
             <Hero />
