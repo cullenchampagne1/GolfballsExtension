@@ -23,6 +23,7 @@
 import React, { useState, useMemo, useEffect, useRef, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
+import { ensureScales } from '../lib/scales.js';
 
 /* ════════════════════════════════════════════════════════════
    ICONS
@@ -424,7 +425,10 @@ function Sidebar({ collapsed, setCollapsed }) {
       borderRight: '1px solid var(--gb-border-subtle)',
       position: 'sticky', top: 0, height: '100vh',
       display: 'flex', flexDirection: 'column',
-      transition: 'width var(--gb-anim)',
+      /* clearly-visible open/close slide; overflow:hidden clips content
+         as the width animates so it slides rather than reflowing abruptly */
+      transition: 'width 0.28s cubic-bezier(.4,0,.2,1)',
+      willChange: 'width',
       overflow: 'hidden',
     }}>
       {/* Brand */}
@@ -560,7 +564,7 @@ function Sidebar({ collapsed, setCollapsed }) {
 /* ════════════════════════════════════════════════════════════
    TOP BAR
 ════════════════════════════════════════════════════════════ */
-function TopBar({ theme, setTheme }) {
+function TopBar() {
   const D = useD();
   const name = fullName(D.contact) || 'Contact';
   return (
@@ -596,7 +600,6 @@ function TopBar({ theme, setTheme }) {
           border: '1px solid var(--gb-border-subtle)',
         }}>⌘K</span>
       </div>
-      <IconBtn size="sm" icon={theme === 'light' ? <I.spark /> : <I.history />} onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title="Toggle theme" />
       <div style={{
         display: 'flex', alignItems: 'center', gap: 7,
         padding: '3px 10px 3px 4px',
@@ -1471,15 +1474,11 @@ function App({ store }) {
   const data = useSyncExternalStore(store.subscribe, store.get);
   const D = useMemo(() => adapt(data), [data]);
 
-  const [theme, setTheme] = useState(
-    (typeof document !== 'undefined' && document.documentElement.dataset.theme) || 'dark'
-  );
+  // Theme is owned globally by the extension (theme.js / applyTheme writes
+  // data-theme + the --gb-* tokens on <html> from the user's settings). We
+  // inherit it — no per-page light/dark toggle.
   const [sideCollapsed, setSideCollapsed] = useState(false);
   const [tab, setTab] = useState('activity');
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
 
   const TabPanel = useMemo(() => ({
     activity: <ActivityPanel />,
@@ -1492,8 +1491,12 @@ function App({ store }) {
 
   return (
     <DataCtx.Provider value={D}>
-      <div style={{
-        minHeight: '100vh',
+      {/* data-gb-scale="modals" → inherits the rep's tuned extension zoom
+          (counteracts their host-page browser zoom) + the host-CSS reset.
+          height:100% + own scroll so the takeover fills the fixed root the
+          engine mounts, and zoomed content reflows instead of overflowing. */}
+      <div data-gb-scale="modals" style={{
+        height: '100%', minHeight: '100%', overflowY: 'auto',
         background: 'var(--gb-surface-deep)',
         color: 'var(--gb-text-secondary)',
         fontFamily: 'var(--gb-font-sans)',
@@ -1501,7 +1504,7 @@ function App({ store }) {
       }}>
         <Sidebar collapsed={sideCollapsed} setCollapsed={setSideCollapsed} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <TopBar theme={theme} setTheme={setTheme} />
+          <TopBar />
           {!D.ready && (
             <div style={{ padding: '14px 22px 0' }}>
               <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)' }}>Loading contact…</div>
@@ -1525,7 +1528,8 @@ function App({ store }) {
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 14, alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
                 <Tabs active={tab} setActive={setTab} />
-                <div>{TabPanel}</div>
+                {/* key by tab → remount on switch so the fade-slide replays */}
+                <div key={tab} style={{ animation: 'gb-fade-slide var(--gb-anim) both' }}>{TabPanel}</div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'sticky', top: 64 }}>
@@ -1548,6 +1552,7 @@ function App({ store }) {
 if (!window.__gbContactDetailsRegistered) {
   window.__gbContactDetailsRegistered = true;
   ensureTheme();
+  ensureScales();   // injects the [data-gb-scale] zoom stylesheet on this page
   window.__gbCustomPages = window.__gbCustomPages || {};
   window.__gbCustomPages.contact_details = {
     render(rootEl, ctx) {

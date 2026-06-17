@@ -138,10 +138,11 @@
 
     var rootEl = document.createElement('div');
     rootEl.id = ROOT_ID;
-    rootEl.setAttribute('data-gb-scale', 'custom-page');
+    // Plain viewport container — the page component carries data-gb-scale
+    // (zoom + host-CSS reset) on its own inner root and scrolls itself.
     rootEl.style.cssText = [
       'position:fixed', 'inset:0', 'z-index:2147483601',
-      'overflow:auto', 'background:var(--gb-surface-deep,#0a0b0c)',
+      'overflow:hidden', 'background:var(--gb-surface-deep,#0a0b0c)',
     ].join(';');
     // Mount on <html>, not <body>, so the store's body-observer never
     // sees our own React mutations.
