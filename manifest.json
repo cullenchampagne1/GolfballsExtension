@@ -52,6 +52,12 @@
   "content_scripts": [
     {
       "matches": ["*://*.golfballs.com/*"],
+      "js": ["src/vanilla/custom-page-boot.js"],
+      "run_at": "document_start",
+      "all_frames": false
+    },
+    {
+      "matches": ["*://*.golfballs.com/*"],
       "js": [
         "theme.js",
         "src/vanilla/smart-detection.js",
@@ -76,6 +82,8 @@
         "react-dist/content/actions-shelf.js",
         "react-dist/content/calendar.js",
         "react-dist/content/proposal-debug.js",
+        "react-dist/content/contact-details.js",
+        "src/vanilla/custom-pages.js",
         "src/vanilla/main.js"
       ],
       "all_frames": false
