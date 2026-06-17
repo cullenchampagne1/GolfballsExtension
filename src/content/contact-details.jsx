@@ -534,6 +534,11 @@ function accountHref(accId) {
   try { return new URL('Default.aspx?Page=271&accountID=' + accId, window.location.href).href; }
   catch (e) { return 'Default.aspx?Page=271&accountID=' + accId; }
 }
+/* Opportunity detail page (Page=280 & opportunityID=…), per the source HTML. */
+function oppHref(id) {
+  try { return new URL('Default.aspx?Page=280&opportunityID=' + id, window.location.href).href; }
+  catch (e) { return 'Default.aspx?Page=280&opportunityID=' + id; }
+}
 
 /* Real CRM sidebar Page ids, extracted from the live Contact Details HTML.
    (Custom Rep Activity has no link in the source — left inert.) */
@@ -1062,6 +1067,51 @@ function EmptyRow({ colSpan, label }) {
   );
 }
 
+/* Open our existing email viewer for the i-th email row. The email-preview
+   scan stamps tr[data-gb-ep="1"] on the host rows and wires each to
+   __gbOpenEmailPreview; our list is in the same DOM order, so clicking the
+   matching host row opens the viewer (it mounts above the takeover). */
+function openEmailRow(i) {
+  try {
+    const rows = document.querySelectorAll('tr[data-gb-ep="1"]');
+    const r = rows[i];
+    if (r && typeof r.click === 'function') r.click();
+  } catch (e) {}
+}
+
+/* Editable key-value row — value, or an input when `editing`. UI only for
+   now (uncontrolled); save wiring comes later. */
+function EKV({ label, value, editing, mono }) {
+  if (!editing) return <KV label={label} mono={mono}>{value}</KV>;
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: '128px 1fr', gap: 12,
+      padding: '5px 0', borderBottom: '1px dashed var(--gb-border-subtle)',
+      alignItems: 'center', minHeight: 28,
+    }}>
+      <span style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontWeight: 500 }}>{label}</span>
+      <input defaultValue={(value === 0 || value) ? String(value) : ''}
+        style={{
+          width: '100%', height: 26, padding: '0 8px', boxSizing: 'border-box',
+          background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)',
+          borderRadius: 'var(--gb-r-sm)', color: 'var(--gb-text-primary)',
+          fontFamily: mono ? 'var(--gb-font-mono)' : 'var(--gb-font-sans)', fontSize: 12, outline: 'none',
+        }} />
+    </div>
+  );
+}
+
+/* Card header edit control: Edit ↔ Save/Cancel (UI only). */
+function EditToggle({ editing, setEditing }) {
+  if (!editing) return <Btn variant="ghost" size="sm" icon={<I.edit />} onClick={() => setEditing(true)}>Edit</Btn>;
+  return (
+    <div style={{ display: 'flex', gap: 6 }}>
+      <Btn variant="ghost" size="sm" onClick={() => setEditing(false)}>Cancel</Btn>
+      <Btn variant="primary" size="sm" icon={<I.check />} onClick={() => setEditing(false)}>Save</Btn>
+    </div>
+  );
+}
+
 /* ════════════════════════════════════════════════════════════
    TAB PANELS
 ════════════════════════════════════════════════════════════ */
@@ -1303,7 +1353,7 @@ function EmailsPanel() {
               <Td><span style={{ color: 'var(--gb-text-primary)', fontWeight: 500 }}>{e.subject}</span></Td>
               <Td align="right" mono muted>{fmtDateTime(e.date)}</Td>
               <Td align="right" mono muted>{fmtBytes(e.sizeBytes)}</Td>
-              <Td align="right"><IconBtn size="xs" ghost icon={<I.download />} title="Download .eml" /></Td>
+              <Td align="right"><IconBtn size="xs" ghost icon={<I.mail />} title="Open email" onClick={() => openEmailRow(i)} /></Td>
             </tr>
           ))}
           {D.emails.length === 0 && <EmptyRow colSpan={7} label="No emails." />}
@@ -1355,7 +1405,6 @@ function TasksPanel() {
           }}>Quick create</div>
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
             {QUICK_TASK.map((q) => (<Btn key={q} variant="secondary" size="xs">{q}</Btn>))}
-            <Btn variant="tinted" status="error" size="xs" icon={<I.check />}>Complete open</Btn>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
             <div style={{
@@ -1373,6 +1422,7 @@ function TasksPanel() {
                   color: 'var(--gb-text-primary)',
                 }} />
             </div>
+            <IconBtn size="sm" icon={<I.task />} title="Complete all open tasks" />
             <Btn variant="primary" size="sm" icon={<I.check />}>Add</Btn>
           </div>
         </div>
@@ -1463,6 +1513,7 @@ function OpportunitiesPanel() {
           <Th align="right">Est. Value</Th>
           <Th align="right">Est. Close</Th>
           <Th align="center">Stage</Th>
+          <Th align="right">Actions</Th>
         </tr></thead>
         <tbody>
           {D.opportunities.map((o, i) => (
@@ -1472,9 +1523,15 @@ function OpportunitiesPanel() {
               <Td align="right"><span style={{ fontFamily: 'var(--gb-font-mono)', fontWeight: 700, color: 'var(--gb-text-primary)' }}>{fmt$(o.estimatedValue)}</span></Td>
               <Td align="right" mono muted>{fmtDate(o.estimatedCloseDate)}</Td>
               <Td align="center">{o.stage ? <Tag tone="info" size="xs">{o.stage}</Tag> : DASH}</Td>
+              <Td align="right">
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                  <Btn variant="ghost" size="xs" iconRight={<I.ext />} onClick={() => { if (o.id) goUrl(oppHref(o.id)); }}>Open</Btn>
+                  <Btn variant="tinted" size="xs" icon={<I.edit />}>Edit</Btn>
+                </div>
+              </Td>
             </tr>
           ))}
-          {D.opportunities.length === 0 && <EmptyRow colSpan={5} label="No opportunities." />}
+          {D.opportunities.length === 0 && <EmptyRow colSpan={6} label="No opportunities." />}
         </tbody>
       </table>
       </ScrollArea>
@@ -1501,29 +1558,34 @@ function CasesPanel() {
 function AccountInfoCard() {
   const D = useD();
   const a = D.account;
+  const [editing, setEditing] = useState(false);
   return (
     <Card>
       <SectionTitle
         icon={<I.briefcase />} title="Account Information"
         sub={`#${D.ids.account || DASH} · ${txt(a.name) || DASH}`}
-        right={<Btn variant="ghost" size="sm" icon={<I.edit />}>Edit</Btn>}
+        right={<EditToggle editing={editing} setEditing={setEditing} />}
       />
       <div style={{ padding: '8px 18px 14px' }}>
-        <KV label="Account Name" link>{txt(a.name)}</KV>
+        <EKV label="Account Name" value={txt(a.name)} editing={editing} />
         <KV label="Account ID" mono copyable>{txt(D.ids.account)}</KV>
-        <KV label="Industry">{txt(a.industry)}</KV>
-        <KV label="Web Address" link>{txt(a.webAddress)}</KV>
-        <KV label="City">{txt(a.city)}</KV>
-        <KV label="State">{txt(a.state)}</KV>
-        <KV label="Territory">
-          {a.territoryName ? <Tag tone="brand" size="sm">{a.territoryName}</Tag> : DASH}
-          {a.salesRep && <span style={{ marginLeft: 6, color: 'var(--gb-text-tertiary)' }}>{a.salesRep}</span>}
-        </KV>
-        <KV label="User Type">{txt(a.userType)}</KV>
-        <KV label="Tax Exempt">{a.taxExempt ? 'Yes' : 'No'}</KV>
-        <KV label="Credit Approved">{fmtDate(a.creditApproved) === DASH ? null : fmtDate(a.creditApproved)}</KV>
-        <KV label="LinkedIn URL" link>{txt(a.linkedInUrl)}</KV>
-        <KV label="Context">{txt(a.contextNotes)}</KV>
+        <EKV label="Industry" value={txt(a.industry)} editing={editing} />
+        <EKV label="Web Address" value={txt(a.webAddress)} editing={editing} />
+        <EKV label="City" value={txt(a.city)} editing={editing} />
+        <EKV label="State" value={txt(a.state)} editing={editing} />
+        {editing
+          ? <EKV label="Territory" value={txt(a.territoryName)} editing />
+          : (
+            <KV label="Territory">
+              {a.territoryName ? <Tag tone="brand" size="sm">{a.territoryName}</Tag> : DASH}
+              {a.salesRep && <span style={{ marginLeft: 6, color: 'var(--gb-text-tertiary)' }}>{a.salesRep}</span>}
+            </KV>
+          )}
+        <EKV label="User Type" value={txt(a.userType)} editing={editing} />
+        <EKV label="Tax Exempt" value={a.taxExempt ? 'Yes' : 'No'} editing={editing} />
+        <EKV label="Credit Approved" value={fmtDate(a.creditApproved) === DASH ? '' : fmtDate(a.creditApproved)} editing={editing} />
+        <EKV label="LinkedIn URL" value={txt(a.linkedInUrl)} editing={editing} />
+        <EKV label="Context" value={txt(a.contextNotes)} editing={editing} />
       </div>
     </Card>
   );
@@ -1532,26 +1594,27 @@ function AccountInfoCard() {
 function ContactInfoCard() {
   const D = useD();
   const c = D.contact, a = D.account;
+  const [editing, setEditing] = useState(false);
   return (
     <Card>
       <SectionTitle
         icon={<I.user />} title="Contact Information"
         sub={`#${D.ids.contact || DASH}`}
-        right={<Btn variant="ghost" size="sm" icon={<I.edit />}>Edit</Btn>}
+        right={<EditToggle editing={editing} setEditing={setEditing} />}
       />
       <div style={{ padding: '8px 18px 14px' }}>
-        <KV label="First Name">{txt(c.firstName)}</KV>
-        <KV label="Last Name">{txt(c.lastName)}</KV>
-        <KV label="Job Title">{txt(c.jobTitle)}</KV>
-        <KV label="Email" copyable>{txt(c.email)}</KV>
-        <KV label="Phone" copyable>{txt(c.phone)}</KV>
-        <KV label="State">{txt(c.state)}</KV>
-        <KV label="Zip" mono>{txt(c.zipCode)}</KV>
-        <KV label="Country">{txt(c.country)}</KV>
+        <EKV label="First Name" value={txt(c.firstName)} editing={editing} />
+        <EKV label="Last Name" value={txt(c.lastName)} editing={editing} />
+        <EKV label="Job Title" value={txt(c.jobTitle)} editing={editing} />
+        <EKV label="Email" value={txt(c.email)} editing={editing} />
+        <EKV label="Phone" value={txt(c.phone)} editing={editing} />
+        <EKV label="State" value={txt(c.state)} editing={editing} />
+        <EKV label="Zip" value={txt(c.zipCode)} editing={editing} mono />
+        <EKV label="Country" value={txt(c.country)} editing={editing} />
         <KV label="Created By">{txt(a.createdBy)}</KV>
         <KV label="Created On" mono>{fmtDate(a.createdDate) === DASH ? null : fmtDate(a.createdDate)}</KV>
         <KV label="Last Modified" mono>{fmtDateTime(a.modifiedDate) === DASH ? null : fmtDateTime(a.modifiedDate)}</KV>
-        <KV label="Archived">{c.archived ? 'Yes' : 'No'}</KV>
+        <EKV label="Archived" value={c.archived ? 'Yes' : 'No'} editing={editing} />
       </div>
     </Card>
   );
