@@ -46,6 +46,14 @@
   var SHADOW_CSS =
     ':host { display: block; height: 100%; font-family: var(--gb-font-sans); color: var(--gb-text-secondary); }' +
     '* , *::before, *::after { box-sizing: border-box; }' +
+    /* No default scrollbars ANYWHERE in the takeover — every scrollable
+       region gets the thin themed bar. */
+    '* { scrollbar-width: thin; scrollbar-color: var(--gb-border-default) transparent; }' +
+    '::-webkit-scrollbar { width: 9px; height: 9px; }' +
+    '::-webkit-scrollbar-track { background: transparent; }' +
+    '::-webkit-scrollbar-thumb { background: var(--gb-border-default); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }' +
+    '::-webkit-scrollbar-thumb:hover { background: var(--gb-border-strong); background-clip: padding-box; }' +
+    '::-webkit-scrollbar-corner { background: transparent; }' +
     '@keyframes gb-fade-slide { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }' +
     '@keyframes gb-spin { to { transform: rotate(360deg); } }' +
     '@keyframes gb-pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }';

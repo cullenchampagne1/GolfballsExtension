@@ -498,7 +498,9 @@ function Sidebar({ collapsed, setCollapsed }) {
       width: collapsed ? 56 : 232, flexShrink: 0,
       background: 'var(--gb-surface-canvas)',
       borderRight: '1px solid var(--gb-border-subtle)',
-      position: 'sticky', top: 0, height: '100vh',
+      // Fill the flex row's height (the viewport) — NOT 100vh, which the
+      // page zoom would inflate past the screen. The nav scrolls inside.
+      height: '100%', alignSelf: 'stretch',
       display: 'flex', flexDirection: 'column',
       /* clearly-visible open/close slide; overflow:hidden clips content
          as the width animates so it slides rather than reflowing abruptly */
@@ -506,35 +508,39 @@ function Sidebar({ collapsed, setCollapsed }) {
       willChange: 'width',
       overflow: 'hidden',
     }}>
-      {/* Brand */}
+      {/* Brand + collapse/expand toggle. When collapsed, the brand row
+          becomes a single centered expand button so the sidebar can always
+          be reopened. */}
       <div style={{
         height: 48, display: 'flex', alignItems: 'center',
         padding: collapsed ? '0' : '0 14px',
         justifyContent: collapsed ? 'center' : 'space-between',
         gap: 8, borderBottom: '1px solid var(--gb-border-subtle)', flexShrink: 0,
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-          <div style={{
-            width: 26, height: 26, borderRadius: 7,
-            background: 'linear-gradient(135deg, var(--gb-brand) 0%, var(--gb-brand-dark) 100%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 11, fontWeight: 800, color: 'var(--gb-text-on-brand)',
-            boxShadow: '0 0 0 1px var(--gb-brand-border)', flexShrink: 0,
-          }}>GB</div>
-          {!collapsed && (
-            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Golfballs</span>
-              <span style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', fontWeight: 600, letterSpacing: .4, textTransform: 'uppercase' }}>Admin · v2.6</span>
+        {collapsed ? (
+          <IconBtn size="sm" icon={<I.chevr />} onClick={() => setCollapsed(false)} title="Expand sidebar" />
+        ) : (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <div style={{
+                width: 26, height: 26, borderRadius: 7,
+                background: 'linear-gradient(135deg, var(--gb-brand) 0%, var(--gb-brand-dark) 100%)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, fontWeight: 800, color: 'var(--gb-text-on-brand)',
+                boxShadow: '0 0 0 1px var(--gb-brand-border)', flexShrink: 0,
+              }}>GB</div>
+              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Golfballs</span>
+                <span style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', fontWeight: 600, letterSpacing: .4, textTransform: 'uppercase' }}>Admin · v2.6</span>
+              </div>
             </div>
-          )}
-        </div>
-        {!collapsed && (
-          <IconBtn size="xs" ghost icon={<I.chevr style={{ transform: 'scaleX(-1)' }} />} onClick={() => setCollapsed(true)} title="Collapse" />
+            <IconBtn size="xs" ghost icon={<I.chevr style={{ transform: 'scaleX(-1)' }} />} onClick={() => setCollapsed(true)} title="Collapse sidebar" />
+          </>
         )}
       </div>
 
-      {/* Nav */}
-      <nav style={{ flex: 1, overflowY: 'auto', padding: '8px 6px' }}>
+      {/* Nav — scrolls inside the fixed-height sidebar */}
+      <nav className="gb-scroll" style={{ flex: 1, overflowY: 'auto', padding: '8px 6px' }}>
         {NAV.map((g) => {
           const isOpen = openIds.includes(g.id);
           const hasChildren = Array.isArray(g.children) && g.children.length > 0;
@@ -628,10 +634,6 @@ function Sidebar({ collapsed, setCollapsed }) {
           </div>
         )}
         {!collapsed && <IconBtn size="xs" ghost icon={<I.cog />} />}
-        {collapsed && (
-          <IconBtn size="xs" ghost icon={<I.chevr />} onClick={() => setCollapsed(false)} title="Expand"
-            style={{ position: 'absolute', bottom: 50, right: 8 }}/>
-        )}
       </div>
     </aside>
   );
@@ -1584,16 +1586,19 @@ function App({ store }) {
           fills the fixed root the engine mounts. */}
       <div data-gb-scale="custom-page" style={{
         ...ARMOR,
-        zoom: PAGE_ZOOM,                 // fixed 125% — not slider-driven
-        height: '100%', minHeight: '100%', overflowY: 'auto',
+        zoom: PAGE_ZOOM,                 // fixed scale — not slider-driven
+        // No PAGE scroll — the sidebar and content column each scroll
+        // themselves. This also kills the page-scrollbar appear/disappear
+        // that was flickering a scrollbar onto the quick-actions menu.
+        height: '100%', overflow: 'hidden',
         background: 'var(--gb-surface-deep)',
         color: 'var(--gb-text-secondary)',
         fontFamily: 'var(--gb-font-sans)',
-        display: 'flex', alignItems: 'flex-start',
+        display: 'flex', alignItems: 'stretch',
       }}>
         <style>{UI_CSS}</style>
         <Sidebar collapsed={sideCollapsed} setCollapsed={setSideCollapsed} />
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="gb-scroll" style={{ flex: 1, minWidth: 0, height: '100%', overflowY: 'auto' }}>
           <TopBar />
           {!D.ready && (
             <div style={{ padding: '14px 22px 0' }}>
