@@ -539,6 +539,10 @@ function oppHref(id) {
   try { return new URL('Default.aspx?Page=280&opportunityID=' + id, window.location.href).href; }
   catch (e) { return 'Default.aspx?Page=280&opportunityID=' + id; }
 }
+/* Items table carries no id/URL — link to a storefront search by name. */
+function itemSearchUrl(name) {
+  return 'https://www.golfballs.com/search?q=' + encodeURIComponent(name || '');
+}
 
 /* Real CRM sidebar Page ids, extracted from the live Contact Details HTML.
    (Custom Rep Activity has no link in the source — left inert.) */
@@ -1378,7 +1382,13 @@ function OrdersPanel() {
             {D.items.map((it, i) => (
               <tr key={i} style={trStyle}>
                 <Td>
-                  <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', fontWeight: 500, lineHeight: 1.4 }}>{it.name}</div>
+                  <a href={itemSearchUrl(it.name)} target="_blank" rel="noreferrer"
+                    style={{ fontSize: 11.5, color: 'var(--gb-brand-label)', fontWeight: 600, lineHeight: 1.4, textDecoration: 'none', display: 'inline-flex', alignItems: 'baseline', gap: 4 }}
+                    onMouseEnter={(e) => { e.currentTarget.style.textDecoration = 'underline'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.textDecoration = 'none'; }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name}</span>
+                    <I.ext size={10} style={{ alignSelf: 'center', flexShrink: 0, opacity: 0.7 }} />
+                  </a>
                   {num(it.orderCount) != null && (
                     <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 2, fontFamily: 'var(--gb-font-mono)' }}>
                       {it.orderCount} order{it.orderCount !== 1 ? 's' : ''}
