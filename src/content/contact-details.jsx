@@ -656,10 +656,7 @@ function Sidebar({ collapsed, setCollapsed }) {
                 fontSize: 11, fontWeight: 800, color: 'var(--gb-text-on-brand)',
                 boxShadow: '0 0 0 1px var(--gb-brand-border)', flexShrink: 0,
               }}>GB</div>
-              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1 }}>Golfballs</span>
-                <span style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', fontWeight: 600, letterSpacing: .4, textTransform: 'uppercase' }}>Admin · v2.6</span>
-              </div>
+              <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -.1, whiteSpace: 'nowrap' }}>Golfballs Admin</span>
             </div>
             <IconBtn size="xs" ghost icon={<I.chevr style={{ transform: 'scaleX(-1)' }} />} onClick={() => setCollapsed(true)} title="Collapse sidebar" />
           </>
@@ -758,7 +755,7 @@ function Sidebar({ collapsed, setCollapsed }) {
       }}>
         <span style={{
           width: 28, height: 28, borderRadius: '50%',
-          background: 'linear-gradient(135deg, #6e901d, #4a6b14)',
+          background: 'linear-gradient(135deg, var(--gb-brand), var(--gb-brand-dark))',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 10.5, fontWeight: 700, color: 'var(--gb-text-on-brand)', flexShrink: 0,
         }}>CU</span>
@@ -814,22 +811,6 @@ function TopBar() {
         }}>/</span>
       </div>
       <ThemeSelector />
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 7,
-        padding: '3px 10px 3px 4px',
-        background: 'var(--gb-brand-tint-soft)',
-        border: '1px solid var(--gb-brand-tint-border)',
-        borderRadius: 'var(--gb-r-pill)',
-      }}>
-        <span style={{
-          width: 22, height: 22, borderRadius: '50%',
-          background: 'linear-gradient(135deg, var(--gb-brand), var(--gb-brand-dark))',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 10, fontWeight: 700, color: 'var(--gb-text-on-brand)',
-        }}>CU</span>
-        <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-brand-label)' }}>Cullen</span>
-        <I.chevd size={10} style={{ color: 'var(--gb-brand-label)' }} />
-      </div>
     </div>
   );
 }
@@ -1795,8 +1776,9 @@ function App({ store }) {
         <div className="gb-scroll" style={{ flex: 1, minWidth: 0, height: '100%', overflowY: 'auto' }}>
           <TopBar />
           {!D.ready && (
-            <div style={{ padding: '14px 22px 0' }}>
-              <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)' }}>Loading contact…</div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '90px 0', color: 'var(--gb-text-muted)' }}>
+              <span style={{ width: 30, height: 30, borderRadius: '50%', border: '3px solid var(--gb-fill-soft)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin 0.7s linear infinite' }} />
+              <span style={{ fontSize: 12, fontWeight: 600 }}>Loading…</span>
             </div>
           )}
           <div style={{

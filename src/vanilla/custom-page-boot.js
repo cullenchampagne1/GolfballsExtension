@@ -91,6 +91,25 @@
       'position:fixed', 'inset:0', 'z-index:99999',
       'background:' + coverBg(),
     ].join(';');
+
+    // Spinner lives in a shadow root so host (Metronic) CSS can't flatten
+    // its rounded shape. Colors are hardcoded (tokens aren't injected yet at
+    // document_start); brand green reads fine on both light + dark covers.
+    try {
+      var sh = cover.attachShadow({ mode: 'open' });
+      var st = document.createElement('style');
+      st.textContent =
+        '@keyframes __gbcp_spin { to { transform: rotate(360deg); } }' +
+        ':host { display: flex; align-items: center; justify-content: center; height: 100%; }' +
+        '.s { width: 30px; height: 30px; border-radius: 50%;' +
+        ' border: 3px solid rgba(128,128,128,0.22); border-top-color: #8fce2e;' +
+        ' animation: __gbcp_spin 0.7s linear infinite; }';
+      sh.appendChild(st);
+      var sp = document.createElement('div');
+      sp.className = 's';
+      sh.appendChild(sp);
+    } catch (e) { /* no shadow support → plain cover, still fine */ }
+
     root.appendChild(cover);
   }
 
