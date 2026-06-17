@@ -112,8 +112,11 @@
      the --gb-* tokens are injected. */
   function writeThemeBg() {
     try {
-      var bg = getComputedStyle(document.documentElement).getPropertyValue('--gb-surface-deep').trim();
+      var cs = getComputedStyle(document.documentElement);
+      var bg = cs.getPropertyValue('--gb-surface-deep').trim();
+      var ac = cs.getPropertyValue('--gb-brand-label').trim();
       if (bg) window.localStorage.setItem('__gbCustomPageBg', bg);
+      if (ac) window.localStorage.setItem('__gbCustomPageAccent', ac);
     } catch (e) {}
   }
 

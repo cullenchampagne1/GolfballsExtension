@@ -1160,6 +1160,14 @@ function openEmailRow(i) {
     if (r && typeof r.click === 'function') r.click();
   } catch (e) {}
 }
+/* Download the i-th email's .eml — clicks the host row's download anchor. */
+function downloadEmailRow(i) {
+  try {
+    const rows = document.querySelectorAll('tr[data-gb-ep="1"]');
+    const a = rows[i] && rows[i].querySelector('a[href]');
+    if (a) a.click();
+  } catch (e) {}
+}
 
 /* Editable key-value row — value, or an input when `editing`. UI only. */
 function EKV({ label, value, editing, mono }) {
@@ -1434,7 +1442,12 @@ function EmailsPanel() {
               <Td><span style={{ color: 'var(--gb-text-primary)', fontWeight: 500 }}>{e.subject}</span></Td>
               <Td align="right" mono muted>{fmtDateTime(e.date)}</Td>
               <Td align="right" mono muted>{fmtBytes(e.sizeBytes)}</Td>
-              <Td align="right"><IconBtn size="xs" ghost icon={<I.mail />} title="Open email" onClick={() => openEmailRow(i)} /></Td>
+              <Td align="right">
+                <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                  <IconBtn size="xs" ghost icon={<I.mail />} title="Open email" onClick={() => openEmailRow(i)} />
+                  <IconBtn size="xs" ghost icon={<I.download />} title="Download .eml" onClick={() => downloadEmailRow(i)} />
+                </div>
+              </Td>
             </tr>
           ))}
           {D.emails.length === 0 && <EmptyRow colSpan={7} label="No emails." />}
@@ -1477,7 +1490,7 @@ function TasksPanel() {
       <Card>
         <SectionTitle
           icon={<I.task />} title="Open Tasks" count={D.openTasks.length}
-          right={<Btn variant="tinted" size="sm" icon={<I.plus />}>New task</Btn>}
+          right={<Btn variant="tinted" size="sm" icon={<I.plus />} onClick={() => { try { window.__gbShowQuickTaskModal && window.__gbShowQuickTaskModal(); } catch (e) {} }}>New task</Btn>}
         />
         <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
           <div style={{
@@ -1927,7 +1940,7 @@ function App({ store }) {
           <TopBar />
           {!D.ready && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '90px 0', color: 'var(--gb-text-muted)' }}>
-              <span style={{ width: 30, height: 30, borderRadius: '50%', border: '3px solid var(--gb-fill-soft)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin 0.7s linear infinite' }} />
+              <span style={{ width: 30, height: 30, borderRadius: '50%', borderStyle: 'solid', borderWidth: 3, borderColor: 'var(--gb-border-strong)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin 0.7s linear infinite' }} />
               <span style={{ fontSize: 12, fontWeight: 600 }}>Loading…</span>
             </div>
           )}

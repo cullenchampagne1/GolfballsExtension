@@ -65,6 +65,14 @@
     } catch (e) {}
     return '#0a0b0c';
   }
+  /* Themed spinner accent (mirrored from --gb-brand-label by the engine). */
+  function coverAccent() {
+    try {
+      var c = window.localStorage.getItem('__gbCustomPageAccent');
+      if (c && /^#|rgb|hsl/i.test(c)) return c;
+    } catch (e) {}
+    return '#8fce2e';
+  }
 
   function showCover() {
     if (document.getElementById(COVER_ID)) return;
@@ -102,7 +110,7 @@
         '@keyframes __gbcp_spin { to { transform: rotate(360deg); } }' +
         ':host { display: flex; align-items: center; justify-content: center; height: 100%; }' +
         '.s { width: 30px; height: 30px; border-radius: 50%;' +
-        ' border: 3px solid rgba(128,128,128,0.22); border-top-color: #8fce2e;' +
+        ' border: 3px solid rgba(128,128,128,0.22); border-top-color: ' + coverAccent() + ';' +
         ' animation: __gbcp_spin 0.7s linear infinite; }';
       sh.appendChild(st);
       var sp = document.createElement('div');
