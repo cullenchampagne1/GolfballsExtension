@@ -380,7 +380,23 @@ const UI_CSS =
   '.gbcp-stat:hover {' +
   '  box-shadow: inset 0 0 0 1px var(--gb-brand-tint-border),' +
   '              inset 0 0 28px -10px var(--gb-brand-label);' +
-  '}';
+  '}' +
+  /* Thin themed scrollbar for the capped-height panel scroll areas. */
+  '.gb-scroll::-webkit-scrollbar { width: 9px; height: 9px; }' +
+  '.gb-scroll::-webkit-scrollbar-track { background: transparent; }' +
+  '.gb-scroll::-webkit-scrollbar-thumb { background: var(--gb-border-default); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }' +
+  '.gb-scroll::-webkit-scrollbar-thumb:hover { background: var(--gb-border-strong); background-clip: padding-box; }' +
+  '.gb-scroll { scrollbar-width: thin; scrollbar-color: var(--gb-border-default) transparent; }';
+
+/* Capped-height scroll region with the thin themed scrollbar. Used to
+   stack every panel on one screen (no tabs) without runaway height. */
+function ScrollArea({ max = 380, children, style }) {
+  return (
+    <div className="gb-scroll" style={{ maxHeight: max, overflowY: 'auto', overflowX: 'hidden', ...style }}>
+      {children}
+    </div>
+  );
+}
 
 /* CRM admin deep-links — absolute (resolved against the current page) so
    navigation is unambiguous regardless of host path. Page ids from the
@@ -946,7 +962,7 @@ function ActivityPanel() {
           </div>
         }
       />
-      <div style={{ position: 'relative', padding: '12px 18px 18px' }}>
+      <ScrollArea max={460} style={{ position: 'relative', padding: '12px 18px 18px' }}>
         {rows.length > 0 && (
           <div style={{
             position: 'absolute', left: 36, top: 18, bottom: 18,
@@ -991,7 +1007,7 @@ function ActivityPanel() {
         {rows.length === 0 && (
           <div style={{ padding: 28, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)' }}>No activity recorded.</div>
         )}
-      </div>
+      </ScrollArea>
     </Card>
   );
 }
@@ -1004,8 +1020,10 @@ function Th({ children, align = 'left', style }) {
     padding: '9px 14px', textAlign: align,
     fontSize: 9.5, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase',
     color: 'var(--gb-text-muted)',
-    borderBottom: '1px solid var(--gb-border-subtle)',
-    background: 'var(--gb-fill-faint)',
+    borderBottom: '1px solid var(--gb-border-default)',
+    // opaque + sticky so the header pins while the panel body scrolls
+    background: 'var(--gb-surface-2)',
+    position: 'sticky', top: 0, zIndex: 3,
     whiteSpace: 'nowrap', ...style,
   }}>{children}</th>;
 }
@@ -1028,6 +1046,7 @@ function OrdersPanel() {
           sub="Most recent purchases"
           right={<Btn variant="ghost" size="sm" iconRight={<I.chevr />}>View all</Btn>}
         />
+        <ScrollArea max={420}>
         <table style={tableStyle}>
           <thead>
             <tr>
@@ -1066,6 +1085,7 @@ function OrdersPanel() {
             {D.orders.length === 0 && <EmptyRow colSpan={5} label="No orders." />}
           </tbody>
         </table>
+        </ScrollArea>
       </Card>
 
       <Card>
@@ -1073,6 +1093,7 @@ function OrdersPanel() {
           icon={<I.star />} title="Top Items" count={D.items.length}
           sub="By dollar amount, all-time"
         />
+        <ScrollArea max={420}>
         <table style={tableStyle}>
           <thead>
             <tr>
@@ -1101,6 +1122,7 @@ function OrdersPanel() {
             {D.items.length === 0 && <EmptyRow colSpan={3} label="No items." />}
           </tbody>
         </table>
+        </ScrollArea>
       </Card>
     </div>
   );
@@ -1128,6 +1150,7 @@ function EmailsPanel() {
           </div>
         }
       />
+      <ScrollArea max={420}>
       <table style={tableStyle}>
         <thead><tr>
           <Th>Dir</Th>
@@ -1153,6 +1176,7 @@ function EmailsPanel() {
           {D.emails.length === 0 && <EmptyRow colSpan={7} label="No emails." />}
         </tbody>
       </table>
+      </ScrollArea>
     </Card>
   );
 }
@@ -1219,6 +1243,7 @@ function TasksPanel() {
             <Btn variant="primary" size="sm" icon={<I.check />}>Add</Btn>
           </div>
         </div>
+        <ScrollArea max={320}>
         <table style={tableStyle}>
           <thead><tr>
             <Th>Subject</Th>
@@ -1247,10 +1272,12 @@ function TasksPanel() {
             {D.openTasks.length === 0 && <EmptyRow colSpan={5} label="No open tasks." />}
           </tbody>
         </table>
+        </ScrollArea>
       </Card>
 
       <Card>
         <SectionTitle icon={<I.check />} title="Completed Tasks" count={D.doneTasks.length} />
+        <ScrollArea max={320}>
         <table style={tableStyle}>
           <thead><tr>
             <Th>Subject</Th>
@@ -1279,6 +1306,7 @@ function TasksPanel() {
             {D.doneTasks.length === 0 && <EmptyRow colSpan={3} label="No completed tasks." />}
           </tbody>
         </table>
+        </ScrollArea>
       </Card>
     </div>
   );
@@ -1294,6 +1322,7 @@ function OpportunitiesPanel() {
         sub="Pipeline for this contact"
         right={<Btn variant="tinted" size="sm" icon={<I.plus />}>New opportunity</Btn>}
       />
+      <ScrollArea max={420}>
       <table style={tableStyle}>
         <thead><tr>
           <Th>ID</Th>
@@ -1315,6 +1344,7 @@ function OpportunitiesPanel() {
           {D.opportunities.length === 0 && <EmptyRow colSpan={5} label="No opportunities." />}
         </tbody>
       </table>
+      </ScrollArea>
     </Card>
   );
 }
@@ -1542,16 +1572,6 @@ function App({ store }) {
   // data-theme + the --gb-* tokens on <html> from the user's settings). We
   // inherit it — no per-page light/dark toggle.
   const [sideCollapsed, setSideCollapsed] = useState(false);
-  const [tab, setTab] = useState('activity');
-
-  const TabPanel = useMemo(() => ({
-    activity: <ActivityPanel />,
-    orders:   <OrdersPanel />,
-    emails:   <EmailsPanel />,
-    tasks:    <TasksPanel />,
-    opps:     <OpportunitiesPanel />,
-    cases:    <CasesPanel />,
-  })[tab], [tab]);
 
   return (
     <DataCtx.Provider value={D}>
@@ -1596,10 +1616,15 @@ function App({ store }) {
             <StatsStrip />
 
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 14, alignItems: 'flex-start' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
-                <Tabs active={tab} setActive={setTab} />
-                {/* key by tab → remount on switch so the fade-slide replays */}
-                <div key={tab} style={{ ...ARMOR, animation: 'gb-fade-slide var(--gb-anim) both' }}>{TabPanel}</div>
+              {/* No tabs — every section stacked on one screen, each
+                  capped to a custom-scroll area (see panels). */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+                <ActivityPanel />
+                <OpportunitiesPanel />
+                <OrdersPanel />
+                <EmailsPanel />
+                <TasksPanel />
+                <CasesPanel />
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'sticky', top: 64 }}>
