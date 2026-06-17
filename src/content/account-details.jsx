@@ -1687,6 +1687,25 @@ function App({ store }) {
 /* ════════════════════════════════════════════════════════════
    REGISTER with the Custom Pages engine (custom-pages.js)
 ════════════════════════════════════════════════════════════ */
+/* A render error must never leave the takeover blank — surface it. */
+class GBBoundary extends React.Component {
+  constructor(p) { super(p); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err, info) { try { console.error('[gb account-details]', err, info); } catch (e) {} }
+  render() {
+    if (this.state.err) {
+      const e = this.state.err;
+      return (
+        <div style={{ padding: 24, height: '100%', overflow: 'auto', background: 'var(--gb-surface-deep, #0a0b0c)',
+          color: 'var(--gb-error-fg, #e25a5a)', fontFamily: 'var(--gb-font-mono, monospace)', fontSize: 12, whiteSpace: 'pre-wrap' }}>
+          {'Account page failed to render:\n\n' + String((e && e.stack) || e)}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 if (!window.__gbAccountDetailsRegistered) {
   window.__gbAccountDetailsRegistered = true;
   ensureTheme();
@@ -1694,7 +1713,7 @@ if (!window.__gbAccountDetailsRegistered) {
   window.__gbCustomPages.account_details = {
     render(rootEl, ctx) {
       const root = createRoot(rootEl);
-      root.render(<App store={ctx.store} />);
+      root.render(<GBBoundary><App store={ctx.store} /></GBBoundary>);
       return () => { try { root.unmount(); } catch (e) {} };
     },
   };

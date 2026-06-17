@@ -741,8 +741,8 @@ const FIELDS = {
     },
   },
 
-  /* ── Email history (separate from activities; rows have the
-      data-gbep="1" marker the mailer-platform stamps onto
+  /* ── Email history (separate from activities; rows carry the
+      data-gb-ep="1" marker the mailer-platform stamps onto
       sent messages). ── */
   emails: {
     type: 'array',
@@ -750,8 +750,8 @@ const FIELDS = {
     /* Row layout: [0:icon] [1:from] [2:to] [3:subject] [4:date]
        [5:size] [6:download-link]. The first cell is just an icon
        slot the marketing platform stamps onto its own rows
-       (data-gbep="1"). */
-    extract: { sel: 'tr[data-gbep="1"]', max: 100 },
+       (data-gb-ep="1" — note the dash). */
+    extract: { sel: 'tr[data-gb-ep="1"]', max: 100 },
     itemFields: {
       from: {
         type: 'string', label: 'From',
