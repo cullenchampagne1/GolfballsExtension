@@ -69,6 +69,11 @@
       if (!e) return false;
       return e.detectPageType(doc) === (e.PAGE_TYPE ? e.PAGE_TYPE.CONTACT : 'contact');
     },
+    account_details: function (doc) {
+      var e = engine();
+      if (!e) return false;
+      return e.detectPageType(doc) === (e.PAGE_TYPE ? e.PAGE_TYPE.ACCOUNT : 'account');
+    },
   };
 
   // ── enabled-set helpers ──────────────────────────────────────

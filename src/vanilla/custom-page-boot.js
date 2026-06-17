@@ -33,6 +33,7 @@
      run at document_start without the engine. Keep in sync. */
   var URL_RULES = [
     { id: 'contact_details', re: /[?&]Page=240\b/i },
+    { id: 'account_details', re: /[?&]Page=271\b/i },
   ];
 
   function enabledSet() {

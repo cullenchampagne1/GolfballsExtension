@@ -32,6 +32,7 @@ export const CUSTOM_PAGE_SECTIONS = [
       { id: 'opportunity_linking', label: 'Opportunity Linking' },
       { id: 'adjust_leaderboard',  label: 'Adjust Leader Board' },
       { id: 'contact_details',     label: 'Contact Details' },
+      { id: 'account_details',     label: 'Account Details' },
     ],
   },
 ];
