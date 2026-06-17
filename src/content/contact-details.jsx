@@ -101,6 +101,7 @@ function Btn({ variant = 'secondary', size = 'md', icon, iconRight, children, fu
     <button onClick={onClick} disabled={disabled}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
+        ...ARMOR,
         background: V.bg, color: V.fg, border: `1px solid ${V.bd}`,
         height: S.h, padding: `0 ${S.px}px`, fontSize: S.fs, gap: S.gap,
         fontFamily: 'var(--gb-font-sans)', fontWeight: 600, letterSpacing: -.05,
@@ -134,6 +135,7 @@ function IconBtn({ icon, size = 'md', danger, ghost, active, style, onClick, tit
     <button title={title} onClick={onClick}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
+        ...ARMOR,
         width: px, height: px, borderRadius: 'var(--gb-r-sm)',
         background: pal.bg, color: pal.fg, border: `1px solid ${pal.bd}`,
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -163,6 +165,7 @@ function Tag({ children, tone = 'neutral', size = 'md', icon, style }) {
   }[size];
   return (
     <span style={{
+      ...ARMOR,
       color: t.fg, background: t.bg, border: `1px solid ${t.bd}`,
       fontWeight: 700, letterSpacing: .3, textTransform: 'uppercase',
       fontFamily: 'var(--gb-font-sans)',
@@ -183,6 +186,7 @@ function Dot({ tone = 'brand', size = 6, glow }) {
   }[tone];
   return (
     <span style={{
+      ...ARMOR,
       width: size, height: size, borderRadius: '50%', background: c, flexShrink: 0,
       display: 'inline-block', boxShadow: glow ? `0 0 ${size}px ${c}` : 'none',
     }} />
@@ -195,6 +199,9 @@ function Card({ children, style, pad = 0, hover, onClick }) {
     <div onClick={onClick}
       onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
       style={{
+        ...ARMOR,
+        // reset boundary: re-establish inherited basics for descendants
+        fontFamily: 'var(--gb-font-sans)', color: 'var(--gb-text-secondary)',
         background: 'var(--gb-surface-1)',
         border: '1px solid var(--gb-border-subtle)',
         borderRadius: 'var(--gb-r-lg)',
@@ -353,10 +360,28 @@ function fullName(c) {
   return [c.firstName, c.lastName].filter(Boolean).join(' ').trim();
 }
 
-/* CRM admin deep-links — relative to the current Default.aspx so
-   they resolve against whatever host/path we're on. Page ids from
-   the design handoff transcript. */
-function crmHref(pageId) { return 'Default.aspx?Page=' + pageId; }
+/* Fixed render scale for the takeover. The host CRM runs at a reduced
+   browser zoom; our denser UI reads too small at that 1:1, so we paint
+   at 125%. NOT tied to the extension's UI-scale sliders (scales.js) —
+   this is a constant for the custom page only. */
+const PAGE_ZOOM = 1.25;
+
+/* `all: revert-layer` armour — host golfballs.com CSS ships aggressive
+   resets (e.g. `* { border-radius: 0 !important; transition: none !important }`)
+   that flatten our corners and kill animations. Inline styles can't be
+   !important, but reverting the cascade layer first (exactly what the
+   modals' ModalCard does) neutralises the host clobber before our own
+   styles paint. Spread this FIRST in any styled element's style object. */
+const ARMOR = { all: 'revert-layer', boxSizing: 'border-box' };
+
+/* CRM admin deep-links — absolute (resolved against the current page) so
+   navigation is unambiguous regardless of host path. Page ids from the
+   design handoff transcript. */
+function crmHref(pageId) {
+  try { return new URL('Default.aspx?Page=' + pageId, window.location.href).href; }
+  catch (e) { return 'Default.aspx?Page=' + pageId; }
+}
+function crmGo(pageId) { try { window.location.assign(crmHref(pageId)); } catch (e) {} }
 const CRM_CHILD_PAGE = { 'Dashboard': 261, 'Search': 360 };
 
 /* ════════════════════════════════════════════════════════════
@@ -419,6 +444,8 @@ function Sidebar({ collapsed, setCollapsed }) {
 
   return (
     <aside style={{
+      ...ARMOR,
+      fontFamily: 'var(--gb-font-sans)', color: 'var(--gb-text-tertiary)',
       width: collapsed ? 56 : 232, flexShrink: 0,
       background: 'var(--gb-surface-canvas)',
       borderRight: '1px solid var(--gb-border-subtle)',
@@ -498,10 +525,11 @@ function Sidebar({ collapsed, setCollapsed }) {
                   {g.children.map((c, i) => {
                     const obj = typeof c === 'string' ? { label: c } : c;
                     const label = obj.current ? currentLabel : obj.label;
-                    const page = CRM_CHILD_PAGE[obj.label];
-                    const href = obj.current ? undefined : (page ? crmHref(page) : '#');
+                    const page = (!obj.current && CRM_CHILD_PAGE[obj.label]) || null;
+                    const href = page ? crmHref(page) : '#';
                     return (
-                      <a key={i} href={href || '#'} onClick={(e) => { if (!href || href === '#') e.preventDefault(); }}
+                      <a key={i} href={href}
+                        onClick={(e) => { e.preventDefault(); if (page) crmGo(page); }}
                         style={{
                           display: 'block', position: 'relative',
                           padding: '5px 10px 5px 14px',
@@ -576,8 +604,8 @@ function TopBar() {
     }}>
       {/* Breadcrumb */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--gb-text-muted)', fontWeight: 500 }}>
-        <a href={crmHref(261)} style={{ color: 'inherit', textDecoration: 'none' }}>CRM</a><I.chevr size={10} />
-        <a href={crmHref(360)} style={{ color: 'inherit', textDecoration: 'none' }}>Customers</a><I.chevr size={10} />
+        <a href={crmHref(261)} onClick={(e) => { e.preventDefault(); crmGo(261); }} style={{ color: 'inherit', textDecoration: 'none' }}>CRM</a><I.chevr size={10} />
+        <a href={crmHref(360)} onClick={(e) => { e.preventDefault(); crmGo(360); }} style={{ color: 'inherit', textDecoration: 'none' }}>Customers</a><I.chevr size={10} />
         <span style={{ color: 'var(--gb-text-secondary)', fontWeight: 600 }}>{name}</span>
         {D.ids.contact && <span style={{ marginLeft: 6, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-ghost)', fontSize: 10.5 }}>#{D.ids.contact}</span>}
       </div>
@@ -1100,6 +1128,7 @@ function DirArrow({ dir }) {
   }[dir];
   return (
     <span style={{
+      ...ARMOR,
       width: 20, height: 20, borderRadius: 5,
       background: cfg.bg, color: cfg.fg, border: `1px solid ${cfg.bd}`,
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -1498,6 +1527,8 @@ function App({ store }) {
           (box-sizing / line-height / font). height:100% + own scroll so it
           fills the fixed root the engine mounts. */}
       <div data-gb-scale="custom-page" style={{
+        ...ARMOR,
+        zoom: PAGE_ZOOM,                 // fixed 125% — not slider-driven
         height: '100%', minHeight: '100%', overflowY: 'auto',
         background: 'var(--gb-surface-deep)',
         color: 'var(--gb-text-secondary)',
@@ -1531,7 +1562,7 @@ function App({ store }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
                 <Tabs active={tab} setActive={setTab} />
                 {/* key by tab → remount on switch so the fade-slide replays */}
-                <div key={tab} style={{ animation: 'gb-fade-slide var(--gb-anim) both' }}>{TabPanel}</div>
+                <div key={tab} style={{ ...ARMOR, animation: 'gb-fade-slide var(--gb-anim) both' }}>{TabPanel}</div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, position: 'sticky', top: 64 }}>
