@@ -23,7 +23,6 @@
 import React, { useState, useMemo, useEffect, useRef, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
-import { ensureScales } from '../lib/scales.js';
 
 /* ════════════════════════════════════════════════════════════
    ICONS
@@ -1491,11 +1490,14 @@ function App({ store }) {
 
   return (
     <DataCtx.Provider value={D}>
-      {/* data-gb-scale="modals" → inherits the rep's tuned extension zoom
-          (counteracts their host-page browser zoom) + the host-CSS reset.
-          height:100% + own scroll so the takeover fills the fixed root the
-          engine mounts, and zoomed content reflows instead of overflowing. */}
-      <div data-gb-scale="modals" style={{
+      {/* data-gb-scale="custom-page" is intentionally NOT one of
+          scales.js's SCALE_CATEGORIES, so applyScales() emits no zoom rule
+          for it — the takeover renders at the host website's own scale,
+          unaffected by the extension's UI-scale sliders. The bare
+          [data-gb-scale] selector still applies the host-CSS reset
+          (box-sizing / line-height / font). height:100% + own scroll so it
+          fills the fixed root the engine mounts. */}
+      <div data-gb-scale="custom-page" style={{
         height: '100%', minHeight: '100%', overflowY: 'auto',
         background: 'var(--gb-surface-deep)',
         color: 'var(--gb-text-secondary)',
@@ -1552,7 +1554,6 @@ function App({ store }) {
 if (!window.__gbContactDetailsRegistered) {
   window.__gbContactDetailsRegistered = true;
   ensureTheme();
-  ensureScales();   // injects the [data-gb-scale] zoom stylesheet on this page
   window.__gbCustomPages = window.__gbCustomPages || {};
   window.__gbCustomPages.contact_details = {
     render(rootEl, ctx) {
