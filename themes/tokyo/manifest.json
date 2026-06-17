@@ -1,0 +1,73 @@
+{
+  "manifest_version": 3,
+  "version": "1.0.0",
+  "name": "Golfballs Admin — Tokyo Night",
+  "description": "Browser chrome matched to the Tokyo Night extension theme.",
+  "theme": {
+    "colors": {
+      "frame": [
+        22,
+        22,
+        30
+      ],
+      "frame_inactive": [
+        22,
+        22,
+        30
+      ],
+      "toolbar": [
+        31,
+        35,
+        53
+      ],
+      "tab_text": [
+        192,
+        202,
+        245
+      ],
+      "tab_background_text": [
+        120,
+        124,
+        153
+      ],
+      "bookmark_text": [
+        169,
+        177,
+        214
+      ],
+      "button_background": [
+        31,
+        35,
+        53
+      ],
+      "omnibox_background": [
+        36,
+        40,
+        59
+      ],
+      "omnibox_text": [
+        192,
+        202,
+        245
+      ],
+      "ntp_background": [
+        22,
+        22,
+        30
+      ],
+      "ntp_text": [
+        192,
+        202,
+        245
+      ],
+      "ntp_link": [
+        122,
+        162,
+        247
+      ]
+    },
+    "properties": {
+      "ntp_logo_alternate": 1
+    }
+  }
+}

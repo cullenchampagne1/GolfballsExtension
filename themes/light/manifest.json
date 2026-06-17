@@ -1,0 +1,73 @@
+{
+  "manifest_version": 3,
+  "version": "1.0.0",
+  "name": "Golfballs Admin — Light",
+  "description": "Browser chrome matched to the Light extension theme.",
+  "theme": {
+    "colors": {
+      "frame": [
+        230,
+        231,
+        234
+      ],
+      "frame_inactive": [
+        230,
+        231,
+        234
+      ],
+      "toolbar": [
+        255,
+        255,
+        255
+      ],
+      "tab_text": [
+        15,
+        17,
+        21
+      ],
+      "tab_background_text": [
+        74,
+        80,
+        96
+      ],
+      "bookmark_text": [
+        42,
+        47,
+        55
+      ],
+      "button_background": [
+        255,
+        255,
+        255
+      ],
+      "omnibox_background": [
+        240,
+        241,
+        243
+      ],
+      "omnibox_text": [
+        15,
+        17,
+        21
+      ],
+      "ntp_background": [
+        230,
+        231,
+        234
+      ],
+      "ntp_text": [
+        15,
+        17,
+        21
+      ],
+      "ntp_link": [
+        77,
+        107,
+        20
+      ]
+    },
+    "properties": {
+      "ntp_logo_alternate": 0
+    }
+  }
+}
