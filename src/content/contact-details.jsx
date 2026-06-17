@@ -193,10 +193,10 @@ function Dot({ tone = 'brand', size = 6, glow }) {
   );
 }
 
-function Card({ children, style, pad = 0, hover, onClick }) {
+function Card({ children, style, pad = 0, hover, onClick, className }) {
   const [h, setH] = useState(false);
   return (
-    <div onClick={onClick}
+    <div onClick={onClick} className={className}
       onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
       style={{
         ...ARMOR,
@@ -370,6 +370,17 @@ const PAGE_ZOOM = 1.375;
    fully isolates it from the host page's CSS — so we no longer need the
    `all: revert-layer` host-armour the modals use. Just pin border-box. */
 const ARMOR = { boxSizing: 'border-box' };
+
+/* Stat-card hover: a soft brand inner glow + faint inner ring, driven by
+   real CSS :hover (not JS onMouseEnter state, which flickered on scroll as
+   cards slid under the cursor). box-shadow isn't set inline on these cards,
+   so the rule applies cleanly and animates via the card's `transition:all`.
+   Rendered as a <style> inside the shadow tree. */
+const UI_CSS =
+  '.gbcp-stat:hover {' +
+  '  box-shadow: inset 0 0 0 1px var(--gb-brand-tint-border),' +
+  '              inset 0 0 28px -10px var(--gb-brand-label);' +
+  '}';
 
 /* CRM admin deep-links — absolute (resolved against the current page) so
    navigation is unambiguous regardless of host path. Page ids from the
@@ -817,7 +828,7 @@ function StatsStrip() {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
       {cells.map((c, i) => (
-        <Card key={i} pad="14px 16px" hover style={{
+        <Card key={i} className="gbcp-stat" pad="14px 16px" style={{
           ...(c.tone === 'brand' ? { background: 'var(--gb-brand-tint-soft)', borderColor: 'var(--gb-brand-tint-border)' } : null),
         }}>
           <div style={{
@@ -1560,6 +1571,7 @@ function App({ store }) {
         fontFamily: 'var(--gb-font-sans)',
         display: 'flex', alignItems: 'flex-start',
       }}>
+        <style>{UI_CSS}</style>
         <Sidebar collapsed={sideCollapsed} setCollapsed={setSideCollapsed} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <TopBar />
