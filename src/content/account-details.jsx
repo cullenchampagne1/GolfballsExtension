@@ -115,7 +115,7 @@ function Btn({ variant = 'secondary', size = 'md', icon, iconRight, children, fu
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? .5 : 1, whiteSpace: 'nowrap',
         width: full ? '100%' : undefined,
-        transition: 'all var(--gb-anim)', flexShrink: 0,
+        transition: 'background-color var(--gb-anim), border-color var(--gb-anim), color var(--gb-anim), box-shadow var(--gb-anim)', flexShrink: 0,
         ...style,
       }}>
       {icon && React.cloneElement(icon, { size: S.ic })}
