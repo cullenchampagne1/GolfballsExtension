@@ -94,6 +94,16 @@
     try { window.localStorage.setItem(MIRROR_KEY, JSON.stringify(enabled || [])); } catch (e) {}
   }
 
+  /* Mirror the active theme's deep-surface colour so the document_start
+     boot cover (custom-page-boot.js) paints the right background before
+     the --gb-* tokens are injected. */
+  function writeThemeBg() {
+    try {
+      var bg = getComputedStyle(document.documentElement).getPropertyValue('--gb-surface-deep').trim();
+      if (bg) window.localStorage.setItem('__gbCustomPageBg', bg);
+    } catch (e) {}
+  }
+
   // ── live data store (schema engine + debounced host observer) ──
   function extract() {
     var e = engine();
@@ -155,8 +165,11 @@
     rootEl.id = ROOT_ID;
     // Plain viewport container. The React UI renders inside a Shadow DOM
     // attached here so host (Metronic/Bootstrap) CSS can't bleed in.
+    // z-index ABOVE the host page (Metronic tops out ~10k) but BELOW the
+    // extension's own modal/shelf/toast layers (>=999990) so Quick Actions,
+    // CRM Search, toasts etc. still surface ON TOP of the takeover.
     rootEl.style.cssText = [
-      'position:fixed', 'inset:0', 'z-index:2147483601',
+      'position:fixed', 'inset:0', 'z-index:100000',
       'overflow:hidden', 'background:var(--gb-surface-deep,#0a0b0c)',
     ].join(';');
     // Mount on <html>, not <body>, so the store's body-observer never
@@ -212,6 +225,7 @@
   function boot() {
     readEnabled().then(function (enabled) {
       writeMirror(enabled);
+      writeThemeBg();
 
       // Find the first enabled page id whose detector matches AND has a
       // registered UI. First match wins.

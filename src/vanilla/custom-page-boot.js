@@ -24,6 +24,7 @@
   if (window.__gbCustomPageBoot) return;
 
   var MIRROR_KEY = '__gbCustomPages';
+  var BG_KEY = '__gbCustomPageBg';
   var COVER_ID = '__gb-cp-cover';
   var STYLE_ID = '__gb-cp-cover-style';
 
@@ -52,39 +53,43 @@
     return null;
   }
 
+  /* Themed background, read synchronously from a localStorage mirror the
+     engine keeps in sync with the active theme's --gb-surface-deep. At
+     document_start the --gb-* tokens aren't injected yet, so the mirror is
+     how we paint the correct (light/dark/etc.) colour with no flash. */
+  function coverBg() {
+    try {
+      var c = window.localStorage.getItem(BG_KEY);
+      if (c && /^#|rgb|hsl/i.test(c)) return c;
+    } catch (e) {}
+    return '#0a0b0c';
+  }
+
   function showCover() {
     if (document.getElementById(COVER_ID)) return;
     var root = document.documentElement;
 
-    // Lock scroll + hide host paint underneath the cover.
+    // Lock scroll under the cover.
     var style = document.createElement('style');
     style.id = STYLE_ID;
     style.textContent =
-      'html.__gb-cp-locked, html.__gb-cp-locked body { overflow: hidden !important; }' +
-      '@keyframes __gb-cp-spin { to { transform: rotate(360deg); } }';
+      'html.__gb-cp-locked, html.__gb-cp-locked body { overflow: hidden !important; }';
     root.appendChild(style);
     root.classList.add('__gb-cp-locked');
 
-    // Opaque full-screen cover. Token preferred, hard fallback for the
-    // pre-theme document_start moment when --gb-* isn't defined yet.
+    // Flat, opaque, THEMED fill. No spinner / rounded children — the cover
+    // lives outside the takeover's Shadow DOM, so host (Metronic) CSS would
+    // bleed into any styled child (e.g. flatten a spinner's radius). The
+    // real themed loading state renders inside the shadow once React mounts;
+    // this is just a brief, correct-coloured fill. Below the extension's
+    // modal/shelf layers (>=999990) so those still surface during load.
     var cover = document.createElement('div');
     cover.id = COVER_ID;
     cover.setAttribute('aria-hidden', 'true');
     cover.style.cssText = [
-      'position:fixed', 'inset:0', 'z-index:2147483600',
-      'background:#0a0b0c', 'background:var(--gb-surface-deep,#0a0b0c)',
-      'display:flex', 'align-items:center', 'justify-content:center',
+      'position:fixed', 'inset:0', 'z-index:99999',
+      'background:' + coverBg(),
     ].join(';');
-
-    var spinner = document.createElement('div');
-    spinner.style.cssText = [
-      'width:26px', 'height:26px', 'border-radius:50%',
-      'border:2.5px solid rgba(255,255,255,0.12)',
-      'border-top-color:#8fce2e',
-      'border-top-color:var(--gb-brand-label,#8fce2e)',
-      'animation:__gb-cp-spin 0.7s linear infinite',
-    ].join(';');
-    cover.appendChild(spinner);
     root.appendChild(cover);
   }
 
