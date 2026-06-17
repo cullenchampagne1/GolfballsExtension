@@ -148,6 +148,12 @@
       if (document.body) observer.observe(document.body, { childList: true, subtree: true });
     } catch (e) {}
 
+    /* Some portlets (notably Email History) AJAX-load and get their rows
+       stamped by the host's own JS AFTER first paint, which a single
+       mutation burst can miss. Re-extract on a few delays as a backstop so
+       late-arriving sections (emails, opportunities) fill in. */
+    [600, 1500, 3500, 6000].forEach(function (ms) { setTimeout(emit, ms); });
+
     return {
       get: function () { return data; },
       subscribe: function (cb) {

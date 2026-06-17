@@ -574,8 +574,15 @@ function Sidebar({ collapsed, setCollapsed }) {
                   }} />
                 )}
               </button>
-              {/* Children */}
-              {!collapsed && hasChildren && isOpen && (
+              {/* Children — animated open/close (max-height + opacity)
+                  instead of an instant pop. */}
+              {!collapsed && hasChildren && (
+                <div style={{
+                  overflow: 'hidden',
+                  maxHeight: isOpen ? 800 : 0,
+                  opacity: isOpen ? 1 : 0,
+                  transition: 'max-height .28s cubic-bezier(.4,0,.2,1), opacity .2s ease',
+                }}>
                 <div style={{ padding: '2px 0 6px 22px', display: 'flex', flexDirection: 'column' }}>
                   {g.children.map((c, i) => {
                     const obj = typeof c === 'string' ? { label: c } : c;
@@ -608,6 +615,7 @@ function Sidebar({ collapsed, setCollapsed }) {
                       </a>
                     );
                   })}
+                </div>
                 </div>
               )}
             </div>
