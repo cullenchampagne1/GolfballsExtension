@@ -448,7 +448,7 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
     if (!v.nextTaskName) v.nextTaskName = '';
     if (!v.nextTaskDue)  v.nextTaskDue  = '';
 
-    const emailRows = doc.querySelectorAll('tr[data-gbep="1"]');
+    const emailRows = doc.querySelectorAll('tr[data-gb-ep="1"]');
     if (emailRows.length > 0) {
       const cells = emailRows[0].querySelectorAll('td');
       v.lastEmailFrom    = cells[1]?.textContent.trim() || '';
