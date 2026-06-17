@@ -428,23 +428,105 @@ function readBackTo() {
 
 /* Compact theme switcher — writes the global gbTheme (applyTheme + saveTheme),
    so it persists and syncs everywhere, no Settings trip needed. */
+/* Per-variant swatch colors (accent + deep surface), pulled from theme.css.
+   Hardcoded because the [data-theme] token rules live in the document, not
+   in our shadow tree, so a nested data-theme element wouldn't pick them up. */
+const THEME_SWATCH = {
+  dark:     { a: '#8fce2e', s: '#0a0b0c' },
+  midnight: { a: '#a3e030', s: '#16181d' },
+  light:    { a: '#4d6b14', s: '#e6e7ea' },
+  cream:    { a: '#5a7a14', s: '#e6dfd0' },
+  nord:     { a: '#88c0d0', s: '#242933' },
+  dracula:  { a: '#bd93f9', s: '#21222c' },
+  rose:     { a: '#ebbcba', s: '#16141f' },
+  tokyo:    { a: '#7aa2f7', s: '#16161e' },
+};
+function ThemeSwatch({ id, size = 16 }) {
+  const s = THEME_SWATCH[id] || THEME_SWATCH.dark;
+  const dot = Math.round(size * 0.44);
+  return (
+    <span style={{
+      width: size, height: size, borderRadius: 5, background: s.s,
+      border: '1px solid var(--gb-border-default)', flexShrink: 0,
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    }}><span style={{ width: dot, height: dot, borderRadius: '50%', background: s.a }} /></span>
+  );
+}
+
+/* Custom theme dropdown — trigger + themed popover with swatches. Writes the
+   global gbTheme (applyTheme + saveTheme) so it persists + syncs, no Settings
+   trip. Outside-click / Escape close; composedPath keeps it shadow-DOM-safe. */
 function ThemeSelector() {
   const [variant, setVariant] = useState(() => (typeof document !== 'undefined' && document.documentElement.dataset.theme) || 'dark');
+  const [open, setOpen] = useState(false);
+  const [hover, setHover] = useState(false);
+  const ref = useRef(null);
   useEffect(() => { loadTheme().then((t) => setVariant(t.variant || 'dark')); }, []);
-  const change = (v) => {
-    setVariant(v);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => {
+      const path = (e.composedPath && e.composedPath()) || [];
+      if (ref.current && path.indexOf(ref.current) === -1) setOpen(false);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown, true);
+    document.addEventListener('keydown', onKey, true);
+    return () => { document.removeEventListener('mousedown', onDown, true); document.removeEventListener('keydown', onKey, true); };
+  }, [open]);
+  const pick = (v) => {
+    setVariant(v); setOpen(false);
     loadTheme().then((cur) => { const next = { ...cur, variant: v }; applyTheme(next); saveTheme(next); });
   };
+  const cur = THEME_VARIANTS.find((t) => t.id === variant) || THEME_VARIANTS[0];
   return (
-    <select value={variant} onChange={(e) => change(e.target.value)} title="Theme"
-      style={{
-        height: 28, background: 'var(--gb-fill-subtle)', color: 'var(--gb-text-secondary)',
-        border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)',
-        fontFamily: 'var(--gb-font-sans)', fontSize: 11.5, fontWeight: 600,
-        padding: '0 8px', cursor: 'pointer', outline: 'none',
-      }}>
-      {THEME_VARIANTS.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-    </select>
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button onClick={() => setOpen((o) => !o)} title="Theme"
+        onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 7, height: 28, padding: '0 9px',
+          background: (open || hover) ? 'var(--gb-fill-soft)' : 'var(--gb-fill-subtle)',
+          border: '1px solid ' + (open ? 'var(--gb-border-focus)' : 'var(--gb-border-default)'),
+          borderRadius: 'var(--gb-r-md)', cursor: 'pointer', color: 'var(--gb-text-secondary)',
+          fontFamily: 'var(--gb-font-sans)', fontSize: 11.5, fontWeight: 600,
+          transition: 'all var(--gb-anim)', outline: 'none',
+        }}>
+        <ThemeSwatch id={cur.id} size={15} />
+        <span>{cur.name}</span>
+        <I.chevd size={11} style={{ color: 'var(--gb-text-muted)', transition: 'transform var(--gb-anim)', transform: open ? 'rotate(180deg)' : 'none' }} />
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 60,
+          minWidth: 184, padding: 5,
+          background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)',
+          borderRadius: 'var(--gb-r-lg)', boxShadow: 'var(--gb-shadow-popover)',
+          display: 'flex', flexDirection: 'column', gap: 1,
+          animation: 'gb-fade-slide var(--gb-anim) both',
+        }}>
+          {THEME_VARIANTS.map((t) => {
+            const active = t.id === variant;
+            return (
+              <button key={t.id} onClick={() => pick(t.id)}
+                onMouseEnter={(e) => { if (!active) e.currentTarget.style.background = 'var(--gb-fill-subtle)'; }}
+                onMouseLeave={(e) => { if (!active) e.currentTarget.style.background = 'transparent'; }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 9, width: '100%',
+                  padding: '7px 9px', borderRadius: 'var(--gb-r-sm)', border: 0, cursor: 'pointer',
+                  textAlign: 'left', fontFamily: 'var(--gb-font-sans)', fontSize: 12,
+                  fontWeight: active ? 700 : 500,
+                  color: active ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+                  background: active ? 'var(--gb-brand-tint-soft)' : 'transparent',
+                  transition: 'background var(--gb-anim)',
+                }}>
+                <ThemeSwatch id={t.id} />
+                <span style={{ flex: 1 }}>{t.name}</span>
+                {active && <I.check size={12} sw={3} style={{ color: 'var(--gb-brand-label)' }} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 /* Account detail page (Page=271 & accountID=…), per the original HTML. */
