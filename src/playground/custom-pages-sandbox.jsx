@@ -150,47 +150,114 @@ function Seg({ options, value, onChange }) {
   );
 }
 
+/* Parse a saved CRM HTML string, run the REAL schema engine over it, and
+   return { page, data, schemaId, error }. Tests extraction end-to-end. */
+function runEngineOnHtml(text) {
+  try {
+    const doc = new DOMParser().parseFromString(text, 'text/html');
+    // Account page is the only one with #PartnerCampaignID; everything else
+    // (incl. account) carries #tbContactId. Use that to pick the render +
+    // stamp a source URL so the engine's URL-aware bits resolve.
+    const isAccount = !!doc.querySelector('#PartnerCampaignID');
+    const page = isAccount ? 'account_details' : 'contact_details';
+    try { doc.body.dataset.gbSourceUrl = 'https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=' + (isAccount ? '271' : '240'); } catch (e) {}
+    const eng = window.__gbPageEngine;
+    if (!eng || typeof eng.runEngine !== 'function') return { error: 'page-engine.js not loaded (window.__gbPageEngine missing)' };
+    const res = eng.runEngine(doc);
+    if (!res || !res.data) return { page, error: 'Engine found no matching schema in this HTML (is it a Contact/Account Details page?)' };
+    return { page, data: res.data, schemaId: res.schemaId };
+  } catch (e) {
+    return { error: (e && e.message) || 'parse failed' };
+  }
+}
+
 function Sandbox() {
   const [page, setPage] = useState('contact_details');
   const [state, setState] = useState('full');
+  const [source, setSource] = useState('mock');   // 'mock' | 'html'
+  const [loaded, setLoaded] = useState(null);      // { name, page, data, schemaId, error }
   const hostRef = useRef(null);
   const stores = useRef({});
 
-  // (Re)mount the selected page bundle's render() into the host.
+  const activePage = source === 'html' && loaded && loaded.page ? loaded.page : page;
+  const activeData =
+    source === 'html'
+      ? (loaded && loaded.data) || null
+      : dataFor(page, state);
+
+  // (Re)mount the active page bundle's render() into the host.
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const reg = window.__gbCustomPages && window.__gbCustomPages[page];
+    const reg = window.__gbCustomPages && window.__gbCustomPages[activePage];
     if (!reg || typeof reg.render !== 'function') {
-      host.innerHTML = '<div style="padding:40px;color:#e25a5a;font-family:monospace">Page bundle not registered: ' + page + '<br>(check the &lt;script&gt; tags in custom-pages-sandbox.html)</div>';
+      host.innerHTML = '<div style="padding:40px;color:#e25a5a;font-family:monospace">Page bundle not registered: ' + activePage + '</div>';
       return;
     }
-    if (!stores.current[page]) stores.current[page] = makeStore(dataFor(page, state));
-    else stores.current[page].set(dataFor(page, state));
+    if (!stores.current[activePage]) stores.current[activePage] = makeStore(activeData);
+    else stores.current[activePage].set(activeData);
     let cleanup = null;
-    try { cleanup = reg.render(host, { pageId: page, store: stores.current[page] }); } catch (e) { host.innerHTML = '<pre style="padding:24px;color:#e25a5a">' + (e && e.stack || e) + '</pre>'; }
+    try { cleanup = reg.render(host, { pageId: activePage, store: stores.current[activePage] }); } catch (e) { host.innerHTML = '<pre style="padding:24px;color:#e25a5a">' + (e && e.stack || e) + '</pre>'; }
     return () => { try { cleanup && cleanup(); } catch (e) {} try { host.innerHTML = ''; } catch (e) {} };
-  }, [page]);
+  }, [activePage]);
 
-  // Swap data state without remounting (store push → useSyncExternalStore).
+  // Push data changes without remounting.
   useEffect(() => {
-    const s = stores.current[page];
-    if (s) s.set(dataFor(page, state));
-  }, [state, page]);
+    const s = stores.current[activePage];
+    if (s) s.set(activeData);
+  }, [activeData, activePage]);
+
+  const onFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const out = runEngineOnHtml(String(reader.result || ''));
+      setLoaded({ name: file.name, ...out });
+      setSource('html');
+    };
+    reader.readAsText(file);
+    e.target.value = '';   // allow re-loading the same file
+  };
 
   return (
     <>
       <div style={{
         position: 'fixed', top: 0, left: 0, right: 0, height: 46, zIndex: 5,
-        display: 'flex', alignItems: 'center', gap: 14, padding: '0 16px',
+        display: 'flex', alignItems: 'center', gap: 12, padding: '0 16px',
         background: 'var(--gb-surface-canvas)', borderBottom: '1px solid var(--gb-border-default)',
         fontFamily: 'var(--gb-font-sans)',
       }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Custom Pages Sandbox</span>
-        <Seg options={PAGES} value={page} onChange={setPage} />
-        <Seg options={STATES} value={state} onChange={setState} />
+
+        {source === 'mock' && <Seg options={PAGES} value={page} onChange={setPage} />}
+        {source === 'mock' && <Seg options={STATES} value={state} onChange={setState} />}
+
+        <label style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6, height: 26, padding: '0 11px', cursor: 'pointer',
+          background: source === 'html' ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)',
+          border: '1px solid ' + (source === 'html' ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'),
+          borderRadius: 8, fontSize: 12, fontWeight: 600,
+          color: source === 'html' ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+        }}>
+          Load CRM HTML…
+          <input type="file" accept=".html,.htm,text/html" onChange={onFile} style={{ display: 'none' }} />
+        </label>
+
+        {source === 'html' && (
+          <button onClick={() => { setSource('mock'); setLoaded(null); }}
+            style={{ height: 26, padding: '0 10px', border: '1px solid var(--gb-border-default)', borderRadius: 8, background: 'transparent', color: 'var(--gb-text-tertiary)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+            ← Mock
+          </button>
+        )}
+
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>mock data · no CRM</span>
+
+        {source === 'html' && loaded
+          ? (loaded.error
+              ? <span style={{ fontSize: 11, color: 'var(--gb-error-fg)', fontFamily: 'var(--gb-font-mono)' }}>⚠ {loaded.error}</span>
+              : <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{loaded.name} → engine · {loaded.schemaId || loaded.page}</span>)
+          : <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>mock data · no CRM</span>}
       </div>
       <div ref={hostRef} style={{ position: 'fixed', top: 46, left: 0, right: 0, bottom: 0 }} />
     </>

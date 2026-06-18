@@ -12,9 +12,11 @@
 </style>
 </head>
 <body>
+  <!-- The schema engine (window.__gbPageEngine.runEngine) — so the sandbox can
+       extract data from a real saved CRM HTML and test the engine too. -->
+  <script src="react-dist/vanilla/page-engine.js"></script>
   <!-- The REAL page bundles. On load they call ensureTheme() (injects theme.css)
-       and register window.__gbCustomPages[id].render(el, { store }). No engine,
-       no CRM page — the sandbox controller below drives render() with mock data. -->
+       and register window.__gbCustomPages[id].render(el, { store }). -->
   <script src="react-dist/content/contact-details.js"></script>
   <script src="react-dist/content/account-details.js"></script>
   <!-- Sandbox controller: fake store + page/state switcher. -->
