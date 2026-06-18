@@ -303,6 +303,12 @@ const useD = () => React.useContext(DataCtx);
 const PatchCtx = React.createContext(() => {});
 const usePatch = () => React.useContext(PatchCtx);
 
+/* Modal host — native in-takeover modals (the CRM's own Bootstrap modals
+   render UNDER the takeover, so we build our own that POST the same endpoints).
+   openModal(<SomeModal/>) renders it over the page; modals call closeModal. */
+const ModalCtx = React.createContext({ openModal: () => {}, closeModal: () => {} });
+const useModal = () => React.useContext(ModalCtx);
+
 function adapt(data) {
   const d = data || {};
   const tasks = d.tasks || {};
@@ -410,7 +416,8 @@ const UI_CSS =
   '  0% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong), inset 0 0 0 1px var(--gb-brand-tint-border); }' +
   '  100% { box-shadow: 0 0 0 0 transparent, inset 0 0 0 1px transparent; }' +
   '}' +
-  '.gb-saved { animation: gb-saved-pulse .7s ease-out; }';
+  '.gb-saved { animation: gb-saved-pulse .7s ease-out; }' +
+  '@keyframes gb-pop-in { 0% { opacity: 0; transform: translateY(8px) scale(.985); } 100% { opacity: 1; transform: none; } }';
 
 /* Capped-height scroll region with the thin themed scrollbar. Used to
    stack every panel on one screen (no tabs) without runaway height. */
@@ -494,6 +501,45 @@ async function crmUpdateContact(customerId, edits) {
   const up = await fetch(`${base}/golfballs/crm/Admin/Contact/Update.ajax?${encodeURIComponent(JSON.stringify(payload))}`, { credentials: 'include' });
   if (!up.ok) throw new Error('update failed');
 }
+async function crmGetTask(taskId) {
+  const r = await fetch(`${crmOrigin()}/golfballs/crm/Admin/Task/Get.ajax?${taskId}`, { credentials: 'include' });
+  return JSON.parse(await r.text());
+}
+/* Full task edit (subject/description/due/priority); keeps the current status
+   (use crmCompleteTask to complete). Mirrors the page's Save shape — subject +
+   description are themselves URL-encoded inside the JSON, like QuickComplete. */
+async function crmUpdateTaskFull(taskId, e) {
+  const base = crmOrigin();
+  const obj = await crmGetTask(taskId);
+  const has = (k) => e[k] != null;
+  const task = {
+    TaskId: taskId,
+    Subject: encodeURIComponent(has('Subject') ? e.Subject : (obj.Subject || '')),
+    Description: encodeURIComponent(has('Description') ? e.Description : (obj.Description || '')),
+    LiveDate: obj.LiveDate,
+    DueDate: has('DueDate') ? e.DueDate : obj.DueDate,
+    taskCategoryID: obj.taskCategoryID,
+    taskStatusID: obj.taskStatusID,
+    contactID: obj.contactID,
+    employeeID: obj.employeeID,
+    Priority: has('Priority') ? Number(e.Priority) : obj.Priority,
+  };
+  const up = await fetch(`${base}/golfballs/crm/Admin/Task/Update.ajax?${encodeURIComponent(JSON.stringify(task))}`, { credentials: 'include' });
+  if (!up.ok) throw new Error('update failed');
+}
+/* CRM date (M/D/YYYY or ISO) ⇄ <input type=date> (YYYY-MM-DD). */
+function toDateInput(s) {
+  if (!s) return '';
+  const str = String(s);
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+  const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return m ? `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}` : '';
+}
+function fromDateInput(v) {
+  const m = (v || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${Number(m[2])}/${Number(m[3])}/${m[1]}` : v;
+}
+function priLabel(p) { return { 1: 'High', 2: 'Med', 3: 'Low' }[Number(p)] || String(p || ''); }
 
 /* Breadcrumb trail: before navigating away, stash where we are so the
    destination can offer a "back to …" crumb. sessionStorage survives the
@@ -1606,8 +1652,9 @@ function ProofCard({ p }) {
           : <div style={{ width: '100%', aspectRatio: '2 / 1', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-surface-2)', borderRadius: 'var(--gb-r-sm)' }}><I.camera size={28} style={{ color: 'var(--gb-text-ghost)' }} /></div>}
         {p.status && <span style={{ position: 'absolute', top: 14, right: 14 }}><Tag tone={tone} size="xs">{p.status}</Tag></span>}
       </div>
-      {/* darken the info strip over the card surface (no new token) */}
-      <div style={{ padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1, background: 'rgba(0,0,0,0.22)' }}>
+      {/* info strip: a distinct surface (not a blend) with an inset top
+          highlight + soft inner shadow for a recessed 3D feel */}
+      <div style={{ padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1, background: 'var(--gb-surface-2)', boxShadow: 'inset 0 1px 0 color-mix(in srgb, var(--gb-text-primary) 9%, transparent), inset 0 -12px 22px -14px rgba(0,0,0,.55)' }}>
         <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{p.name || 'Proof'}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--gb-text-muted)' }}>
           {p.kind && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.kind}</span>}
@@ -1818,6 +1865,88 @@ function priTone(p) {
   if (s.indexOf('med') !== -1) return 'warning';
   return 'neutral';
 }
+/* ── Native modal shell + form primitives ───────────────────────── */
+const inputStyle = {
+  width: '100%', height: 30, padding: '0 9px', boxSizing: 'border-box',
+  background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)',
+  borderRadius: 'var(--gb-r-sm)', color: 'var(--gb-text-primary)',
+  fontFamily: 'var(--gb-font-sans)', fontSize: 12, outline: 'none',
+};
+function FormField({ label, children, style }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 5, ...style }}>
+      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>{label}</span>
+      {children}
+    </label>
+  );
+}
+function ModalShell({ title, icon, children, footer, width = 460 }) {
+  const { closeModal } = useModal();
+  return (
+    <div onMouseDown={(e) => e.stopPropagation()}
+      style={{
+        width, maxWidth: '92%', maxHeight: '86%', display: 'flex', flexDirection: 'column',
+        background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)',
+        borderRadius: 'var(--gb-r-lg)', boxShadow: 'var(--gb-shadow-modal, 0 24px 64px rgba(0,0,0,.5))',
+        overflow: 'hidden', animation: 'gb-pop-in .22s cubic-bezier(.34,1.4,.64,1) both',
+      }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-surface-2)' }}>
+        {icon && <span style={{ width: 28, height: 28, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{React.cloneElement(icon, { size: 14 })}</span>}
+        <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)', flex: 1 }}>{title}</span>
+        <IconBtn size="sm" ghost icon={<I.close />} onClick={closeModal} />
+      </div>
+      <div className="gb-scroll" style={{ padding: 16, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
+      {footer && <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '11px 16px', borderTop: '1px solid var(--gb-border-subtle)', background: 'var(--gb-surface-2)' }}>{footer}</div>}
+    </div>
+  );
+}
+
+/* Edit Task — loads the task, edits subject/description/due/priority, saves. */
+function EditTaskModal({ taskId }) {
+  const { closeModal } = useModal();
+  const patch = usePatch();
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [t, setT] = useState({ Subject: '', Description: '', DueDate: '', Priority: '2' });
+  useEffect(() => {
+    let live = true;
+    crmGetTask(taskId)
+      .then((o) => { if (live) { setT({ Subject: o.Subject || '', Description: o.Description || '', DueDate: o.DueDate || '', Priority: String(o.Priority || 2) }); setLoading(false); } })
+      .catch(() => { if (live) setLoading(false); });
+    return () => { live = false; };
+  }, [taskId]);
+  const save = async () => {
+    setBusy(true);
+    try {
+      await crmUpdateTaskFull(taskId, t);
+      patch((D) => ({ ...D, openTasks: (D.openTasks || []).map((x) => x.id === taskId ? { ...x, subject: t.Subject, dueDate: t.DueDate, priority: priLabel(t.Priority) } : x) }));
+      gbToast('Task updated', 'success');
+      closeModal();
+    } catch (e) { gbToast('Could not update task', 'error'); setBusy(false); }
+  };
+  return (
+    <ModalShell title="Edit Task" icon={<I.task />} footer={<>
+      <Btn variant="ghost" size="sm" onClick={closeModal} disabled={busy}>Cancel</Btn>
+      <Btn variant="primary" size="sm" icon={<I.check />} onClick={save} disabled={busy || loading}>{busy ? 'Saving…' : 'Save'}</Btn>
+    </>}>
+      {loading
+        ? <div style={{ padding: 20, textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12 }}>Loading…</div>
+        : <>
+          <FormField label="Subject"><input value={t.Subject} onChange={(e) => setT({ ...t, Subject: e.target.value })} style={inputStyle} /></FormField>
+          <FormField label="Description"><textarea value={t.Description} onChange={(e) => setT({ ...t, Description: e.target.value })} rows={4} style={{ ...inputStyle, height: 'auto', padding: 8, resize: 'vertical', lineHeight: 1.5 }} /></FormField>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <FormField label="Due date" style={{ flex: 1 }}><input type="date" value={toDateInput(t.DueDate)} onChange={(e) => setT({ ...t, DueDate: fromDateInput(e.target.value) })} style={inputStyle} /></FormField>
+            <FormField label="Priority" style={{ width: 130 }}>
+              <select value={t.Priority} onChange={(e) => setT({ ...t, Priority: e.target.value })} style={inputStyle}>
+                <option value="1">High</option><option value="2">Med</option><option value="3">Low</option>
+              </select>
+            </FormField>
+          </div>
+        </>}
+    </ModalShell>
+  );
+}
+
 /* Do-Not-Call: calls the CRM RemoveFromDoNotCallList endpoint directly. */
 function DncButton() {
   const D = useD();
@@ -1841,6 +1970,7 @@ function DncButton() {
 /* One open-task row with a working Complete action (optimistic strike-through). */
 function OpenTaskRow({ t }) {
   const patch = usePatch();
+  const { openModal } = useModal();
   const [state, setState] = useState('idle'); // idle | busy | done
   const complete = async () => {
     if (!t.id || state !== 'idle') return;
@@ -1875,9 +2005,7 @@ function OpenTaskRow({ t }) {
       <Td align="center"><Tag tone={priTone(t.priority)} size="xs">{t.priority || DASH}</Tag></Td>
       <Td align="right" mono><span style={{ color: 'var(--gb-warning-fg)', fontWeight: 600 }}>{fmtDate(t.dueDate)}</span></Td>
       <Td align="right">
-        <Btn variant="ghost" size="xs" icon={<I.check />} disabled={state !== 'idle'} onClick={complete}>
-          {done ? 'Done' : state === 'busy' ? '…' : 'Complete'}
-        </Btn>
+        <Btn variant="ghost" size="xs" icon={<I.edit />} disabled={state !== 'idle'} onClick={() => openModal(<EditTaskModal taskId={t.id} />)}>Edit</Btn>
       </Td>
     </tr>
   );
@@ -2279,10 +2407,13 @@ function App({ store }) {
   // data-theme + the --gb-* tokens on <html> from the user's settings). We
   // inherit it — no per-page light/dark toggle.
   const [sideCollapsed, setSideCollapsed] = useState(false);
+  const [modal, setModal] = useState(null);
+  const modalApi = useMemo(() => ({ openModal: (node) => setModal(node), closeModal: () => setModal(null) }), []);
 
   return (
     <DataCtx.Provider value={D}>
     <PatchCtx.Provider value={patch}>
+    <ModalCtx.Provider value={modalApi}>
       {/* data-gb-scale="custom-page" is intentionally NOT one of
           scales.js's SCALE_CATEGORIES, so applyScales() emits no zoom rule
           for it — the takeover renders at the host website's own scale,
@@ -2350,6 +2481,18 @@ function App({ store }) {
           </div>
         </div>
       </div>
+      {modal && (
+        <div onMouseDown={(e) => { if (e.target === e.currentTarget) modalApi.closeModal(); }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 400,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,.55)', padding: 20,
+            animation: 'gb-fade-slide var(--gb-anim) both',
+          }}>
+          {modal}
+        </div>
+      )}
+    </ModalCtx.Provider>
     </PatchCtx.Provider>
     </DataCtx.Provider>
   );

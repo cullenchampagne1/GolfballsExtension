@@ -1504,8 +1504,9 @@ function ProofCard({ p }) {
           : <div style={{ width: '100%', aspectRatio: '2 / 1', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-surface-2)', borderRadius: 'var(--gb-r-sm)' }}><I.camera size={28} style={{ color: 'var(--gb-text-ghost)' }} /></div>}
         {p.status && <span style={{ position: 'absolute', top: 14, right: 14 }}><Tag tone={tone} size="xs">{p.status}</Tag></span>}
       </div>
-      {/* darken the info strip over the card surface (no new token) */}
-      <div style={{ padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1, background: 'rgba(0,0,0,0.22)' }}>
+      {/* info strip: a distinct surface (not a blend) with an inset top
+          highlight + soft inner shadow for a recessed 3D feel */}
+      <div style={{ padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1, background: 'var(--gb-surface-2)', boxShadow: 'inset 0 1px 0 color-mix(in srgb, var(--gb-text-primary) 9%, transparent), inset 0 -12px 22px -14px rgba(0,0,0,.55)' }}>
         <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{p.name || 'Proof'}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--gb-text-muted)' }}>
           {p.kind && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.kind}</span>}
