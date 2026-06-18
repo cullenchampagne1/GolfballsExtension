@@ -1462,32 +1462,37 @@ function proofTone(status) {
 }
 function ProofCard({ p }) {
   const [imgOk, setImgOk] = useState(true);
+  const [hover, setHover] = useState(false);
   const thumb = p.logo_ball || p.logo;
   const tone = proofTone(p.status);
-  const swatch = tone === 'neutral'
-    ? null
-    : { fg: `var(--gb-${tone}-fg)`, bg: `var(--gb-${tone}-tint-medium)`, bd: `var(--gb-${tone}-tint-border)` };
   return (
-    <div style={{ border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'var(--gb-surface-1)', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ height: 116, background: 'var(--gb-surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{
+        width: 188, flexShrink: 0, display: 'flex', flexDirection: 'column',
+        borderRadius: 'var(--gb-r-md)', overflow: 'hidden',
+        border: '1px solid ' + (hover ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-subtle)'),
+        background: 'var(--gb-surface-1)',
+        transform: hover ? 'translateY(-2px)' : 'none',
+        boxShadow: hover ? '0 6px 16px rgba(0,0,0,.28)' : '0 0 0 transparent',
+        transition: 'transform .22s cubic-bezier(.34,1.4,.64,1), box-shadow .22s, border-color .22s',
+      }}>
+      <div style={{ position: 'relative', aspectRatio: '1', background: 'var(--gb-surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid var(--gb-border-subtle)' }}>
         {thumb && imgOk
-          ? <img src={thumb} alt={p.name || 'proof'} loading="lazy" onError={() => setImgOk(false)} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-          : <I.camera size={26} style={{ color: 'var(--gb-text-ghost)' }} />}
+          ? <img src={thumb} alt={p.name || 'proof'} loading="lazy" onError={() => setImgOk(false)} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          : <I.camera size={30} style={{ color: 'var(--gb-text-ghost)' }} />}
+        {p.status && <span style={{ position: 'absolute', top: 8, left: 8 }}><Tag tone={tone} size="xs">{p.status}</Tag></span>}
       </div>
-      <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 7 }}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name || 'Proof'}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-          {p.status && (swatch
-            ? <Tag tone={tone} size="xs">{p.status}</Tag>
-            : <Tag tone="neutral" size="xs">{p.status}</Tag>)}
-          {p.kind && <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>{p.kind}</span>}
-          <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', marginLeft: 'auto' }}>{fmtDate(p.date)}</span>
+      <div style={{ padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{p.name || 'Proof'}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--gb-text-muted)' }}>
+          {p.kind && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.kind}</span>}
+          <span style={{ fontFamily: 'var(--gb-font-mono)', marginLeft: 'auto', flexShrink: 0 }}>{fmtDate(p.date)}</span>
         </div>
         {(p.pdf || p.instant_mockup || p.apparel_mockup) && (
-          <div style={{ display: 'flex', gap: 6, marginTop: 1, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 5, marginTop: 'auto', alignItems: 'center' }}>
             {p.pdf && <Btn variant="secondary" size="xs" icon={<I.download />} onClick={() => { try { window.open(p.pdf, '_blank'); } catch (e) {} }}>PDF</Btn>}
-            {p.instant_mockup && <Btn variant="ghost" size="xs" iconRight={<I.ext />} onClick={() => { try { window.open(p.instant_mockup, '_blank'); } catch (e) {} }}>Ball</Btn>}
-            {p.apparel_mockup && <Btn variant="ghost" size="xs" iconRight={<I.ext />} onClick={() => { try { window.open(p.apparel_mockup, '_blank'); } catch (e) {} }}>Apparel</Btn>}
+            {p.instant_mockup && <IconBtn size="xs" ghost icon={<I.target />} title="Ball mockup" onClick={() => { try { window.open(p.instant_mockup, '_blank'); } catch (e) {} }} />}
+            {p.apparel_mockup && <IconBtn size="xs" ghost icon={<I.briefcase />} title="Apparel mockup" onClick={() => { try { window.open(p.apparel_mockup, '_blank'); } catch (e) {} }} />}
           </div>
         )}
       </div>
@@ -1503,11 +1508,10 @@ function ProofsPanel() {
       {rows.length === 0
         ? <div style={{ padding: 28, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)' }}>No proofs.</div>
         : (
-          <ScrollArea max={440} style={{ padding: 14 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(196px, 1fr))', gap: 12 }}>
-              {rows.map((p, i) => <ProofCard key={i} p={p} />)}
-            </div>
-          </ScrollArea>
+          // horizontal strip of proof cards (SubmitProof-style), custom scrollbar
+          <div className="gb-scroll" style={{ display: 'flex', gap: 12, padding: 14, overflowX: 'auto', overflowY: 'hidden' }}>
+            {rows.map((p, i) => <ProofCard key={i} p={p} />)}
+          </div>
         )}
     </Card>
   );
@@ -2124,10 +2128,10 @@ function App({ store }) {
                   capped to a custom-scroll area (see panels). */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
                 <ActivityPanel />
+                <EmailsPanel />
                 <OpportunitiesPanel />
                 <OrdersPanel />
                 <ProofsPanel />
-                <EmailsPanel />
                 <TasksPanel />
                 <CasesPanel />
               </div>

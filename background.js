@@ -633,6 +633,19 @@ function gbIsAllowedFetchHost(url) {
       || host === 'snugzusa.com';
 }
 
+/* FIREFOX dynamic browser theme — content scripts can't call the theme API,
+   so they send the computed colors here (the background owns the API). No-ops
+   in Chrome, where `browser.theme` doesn't exist. */
+try {
+  if (typeof browser !== 'undefined' && browser.theme && browser.theme.update) {
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (msg && msg.type === 'gbBrowserTheme' && msg.colors) {
+        try { browser.theme.update({ colors: msg.colors }); } catch (e) {}
+      }
+    });
+  }
+} catch (e) { /* no theme API */ }
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   /* Only service messages from this extension's own contexts (content

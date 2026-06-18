@@ -80,6 +80,46 @@ export function applyTheme(theme) {
     if (value) root.style.setProperty(key, value);
     else root.style.removeProperty(key);
   });
+  pushBrowserTheme();   // FIREFOX-only: recolor the browser chrome to match
+}
+
+/* ── FIREFOX dynamic browser theme ───────────────────────────────────
+   Firefox exposes browser.theme.update() to recolor the actual browser
+   chrome (frame/tabs/toolbar/omnibox) at runtime — Chrome has no such
+   API, so this whole path no-ops there (`browser` is undefined). The
+   theme API isn't available in content scripts and the background has no
+   DOM to read tokens, so we compute the colors HERE (from the live
+   --gb-* tokens, so it tracks the active variant + custom overrides) and:
+     • call browser.theme.update() directly when it's available (extension
+       pages), or
+     • hand the colors to the background, which owns the API, via message. */
+function firefoxThemeColors() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = (k, f) => (cs.getPropertyValue(k).trim() || f);
+  const deep = v('--gb-surface-deep', '#0a0b0c');
+  const s1 = v('--gb-surface-1', deep);
+  const s2 = v('--gb-surface-2', s1);
+  const tp = v('--gb-text-primary', '#f5f6f7');
+  const ts = v('--gb-text-secondary', tp);
+  const tt = v('--gb-text-tertiary', '#9ca0a6');
+  return {
+    frame: deep, frame_inactive: deep,
+    tab_background_text: tt, tab_text: tp, tab_selected: s1, tab_line: v('--gb-brand-label', '#8fce2e'),
+    toolbar: s1, toolbar_text: ts, bookmark_text: ts, icons: ts,
+    toolbar_field: s2, toolbar_field_text: tp, toolbar_field_border: 'transparent',
+    toolbar_field_focus: s2, toolbar_field_text_focus: tp,
+    popup: s1, popup_text: tp, popup_border: v('--gb-border-default', s2),
+    ntp_background: deep, ntp_text: tp,
+    button_background_active: s2,
+  };
+}
+function pushBrowserTheme() {
+  if (typeof document === 'undefined' || typeof browser === 'undefined') return;   // Chrome → no-op
+  try {
+    const colors = firefoxThemeColors();
+    if (browser.theme && browser.theme.update) browser.theme.update({ colors });
+    else if (browser.runtime && browser.runtime.sendMessage) browser.runtime.sendMessage({ type: 'gbBrowserTheme', colors });
+  } catch (e) { /* ignore */ }
 }
 
 /** Resolved value of a token on this document — for showing the current color. */
