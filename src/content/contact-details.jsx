@@ -540,6 +540,45 @@ function fromDateInput(v) {
   return m ? `${Number(m[2])}/${Number(m[3])}/${m[1]}` : v;
 }
 function priLabel(p) { return { 1: 'High', 2: 'Med', 3: 'Low' }[Number(p)] || String(p || ''); }
+/* The logged-in rep's employee id — the host page bakes it into its inline
+   QuickAddTask (`employeeID = '2370'`). Read it from the page so Create.ajax
+   attributes the task correctly. */
+function currentEmployeeId() {
+  try {
+    for (const s of Array.from(document.scripts || [])) {
+      const m = (s.textContent || '').match(/employeeID\s*=\s*'(\d+)'/);
+      if (m) return m[1];
+    }
+  } catch (e) {}
+  return '0';
+}
+function todayMDY() {
+  try { const d = new Date(); return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`; } catch (e) { return ''; }
+}
+let __gbTaskTmp = 0;
+/* Create a task (mirrors the page's QuickAddTask shape). Returns the sent task
+   + the parsed response so the caller can patch the row in optimistically. */
+async function crmCreateTask(contactId, e = {}) {
+  const base = crmOrigin();
+  const today = todayMDY();
+  const task = {
+    TaskID: '',
+    Subject: e.Subject || '',
+    Description: e.Description || '',
+    LiveDate: e.LiveDate || today,
+    DueDate: e.DueDate || today,
+    taskStatusID: 1,
+    contactID: String(contactId),
+    employeeID: currentEmployeeId(),
+    Priority: Number(e.Priority || 2),
+  };
+  const r = await fetch(`${base}/golfballs/crm/Admin/Task/Create.ajax?${encodeURIComponent(JSON.stringify(task))}`, { credentials: 'include' });
+  if (!r.ok) throw new Error('create failed');
+  let resp = {};
+  try { resp = JSON.parse(await r.text()); } catch (x) {}
+  const id = resp.TaskId || resp.taskId || resp.TaskID || `new-${++__gbTaskTmp}`;
+  return { task, id };
+}
 
 /* Breadcrumb trail: before navigating away, stash where we are so the
    destination can offer a "back to …" crumb. sessionStorage survives the
@@ -1920,7 +1959,6 @@ function EditTaskModal({ taskId }) {
     try {
       await crmUpdateTaskFull(taskId, t);
       patch((D) => ({ ...D, openTasks: (D.openTasks || []).map((x) => x.id === taskId ? { ...x, subject: t.Subject, dueDate: t.DueDate, priority: priLabel(t.Priority) } : x) }));
-      gbToast('Task updated', 'success');
       closeModal();
     } catch (e) { gbToast('Could not update task', 'error'); setBusy(false); }
   };
@@ -1947,6 +1985,41 @@ function EditTaskModal({ taskId }) {
   );
 }
 
+/* New Task — native create, optimistically prepended to the open list. */
+function AddTaskModal() {
+  const { closeModal } = useModal();
+  const patch = usePatch();
+  const D = useD();
+  const [busy, setBusy] = useState(false);
+  const [t, setT] = useState({ Subject: '', Description: '', DueDate: '', Priority: '2' });
+  const save = async () => {
+    if (!t.Subject.trim() || busy) return;
+    setBusy(true);
+    try {
+      const { task, id } = await crmCreateTask(D.ids.contact, t);
+      patch((Dd) => ({ ...Dd, openTasks: [{ id, subject: task.Subject, category: '', priority: priLabel(task.Priority), dueDate: task.DueDate, status: 'Open' }, ...(Dd.openTasks || [])] }));
+      closeModal();
+    } catch (e) { gbToast('Could not create task', 'error'); setBusy(false); }
+  };
+  return (
+    <ModalShell title="New Task" icon={<I.task />} footer={<>
+      <Btn variant="ghost" size="sm" onClick={closeModal} disabled={busy}>Cancel</Btn>
+      <Btn variant="primary" size="sm" icon={<I.check />} onClick={save} disabled={busy || !t.Subject.trim()}>{busy ? 'Creating…' : 'Create'}</Btn>
+    </>}>
+      <FormField label="Subject"><input autoFocus value={t.Subject} onChange={(e) => setT({ ...t, Subject: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') save(); }} style={inputStyle} /></FormField>
+      <FormField label="Description"><textarea value={t.Description} onChange={(e) => setT({ ...t, Description: e.target.value })} rows={3} style={{ ...inputStyle, height: 'auto', padding: 8, resize: 'vertical', lineHeight: 1.5 }} /></FormField>
+      <div style={{ display: 'flex', gap: 12 }}>
+        <FormField label="Due date" style={{ flex: 1 }}><input type="date" value={toDateInput(t.DueDate)} onChange={(e) => setT({ ...t, DueDate: fromDateInput(e.target.value) })} style={inputStyle} /></FormField>
+        <FormField label="Priority" style={{ width: 130 }}>
+          <select value={t.Priority} onChange={(e) => setT({ ...t, Priority: e.target.value })} style={inputStyle}>
+            <option value="1">High</option><option value="2">Med</option><option value="3">Low</option>
+          </select>
+        </FormField>
+      </div>
+    </ModalShell>
+  );
+}
+
 /* Do-Not-Call: calls the CRM RemoveFromDoNotCallList endpoint directly. */
 function DncButton() {
   const D = useD();
@@ -1956,7 +2029,7 @@ function DncButton() {
     const id = D.ids.contact;
     if (!id || busy || removed) return;
     setBusy(true);
-    try { await crmSetDnc(id, false); setRemoved(true); gbToast('Removed from Do-Not-Call', 'success'); }
+    try { await crmSetDnc(id, false); setRemoved(true); }   // button shows "Removed" (no toast)
     catch (e) { gbToast('Could not update Do-Not-Call', 'error'); }
     finally { setBusy(false); }
   };
@@ -1977,15 +2050,20 @@ function OpenTaskRow({ t }) {
     setState('busy');
     try {
       await crmCompleteTask(t.id);
-      setState('done');
-      gbToast('Task completed', 'success');
-      // brief checked/strike state, then file it out of the open list for real
-      setTimeout(() => patch((D) => ({ ...D, openTasks: (D.openTasks || []).filter((x) => x.id !== t.id) })), 650);
+      setState('done');                                       // check fills + strike (no toast)
+      setTimeout(() => setState('leaving'), 280);             // then fade/slide out
+      setTimeout(() => patch((D) => ({ ...D, openTasks: (D.openTasks || []).filter((x) => x.id !== t.id) })), 660);
     } catch (e) { setState('idle'); gbToast('Could not complete task', 'error'); }
   };
-  const done = state === 'done';
+  const done = state === 'done' || state === 'leaving';
+  const leaving = state === 'leaving';
   return (
-    <tr style={{ ...trStyle, opacity: done ? 0.5 : 1, transition: 'opacity .3s ease' }}>
+    <tr style={{
+      ...trStyle,
+      opacity: leaving ? 0 : (done ? 0.75 : 1),
+      transform: leaving ? 'translateX(12px)' : 'none',
+      transition: 'opacity .4s ease, transform .4s ease',
+    }}>
       <Td>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <button onClick={complete} disabled={state !== 'idle'} title="Complete task"
@@ -2013,13 +2091,27 @@ function OpenTaskRow({ t }) {
 
 function TasksPanel() {
   const D = useD();
+  const patch = usePatch();
+  const { openModal } = useModal();
   const [quickTask, setQuickTask] = useState('');
+  const [adding, setAdding] = useState(false);
+  const quickCreate = async (subject) => {
+    const subj = (subject || '').trim();
+    if (!subj || adding) return;
+    setAdding(true);
+    try {
+      const { task, id } = await crmCreateTask(D.ids.contact, { Subject: subj });
+      patch((Dd) => ({ ...Dd, openTasks: [{ id, subject: task.Subject, category: '', priority: priLabel(task.Priority), dueDate: task.DueDate, status: 'Open' }, ...(Dd.openTasks || [])] }));
+      setQuickTask('');
+    } catch (e) { gbToast('Could not create task', 'error'); }
+    finally { setAdding(false); }
+  };
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
       <Card>
         <SectionTitle
           icon={<I.task />} title="Open Tasks" count={D.openTasks.length}
-          right={<Btn variant="tinted" size="sm" icon={<I.plus />} onClick={() => { try { window.__gbShowQuickTaskModal && window.__gbShowQuickTaskModal(); } catch (e) {} }}>New task</Btn>}
+          right={<Btn variant="tinted" size="sm" icon={<I.plus />} onClick={() => openModal(<AddTaskModal />)}>New task</Btn>}
         />
         <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
           <div style={{
@@ -2027,7 +2119,7 @@ function TasksPanel() {
             color: 'var(--gb-text-muted)', marginBottom: 8,
           }}>Quick create</div>
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            {QUICK_TASK.map((q) => (<Btn key={q} variant="secondary" size="xs">{q}</Btn>))}
+            {QUICK_TASK.map((q) => (<Btn key={q} variant="secondary" size="xs" disabled={adding} onClick={() => quickCreate(q)}>{q}</Btn>))}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
             <div style={{
@@ -2038,6 +2130,7 @@ function TasksPanel() {
             }}>
               <I.bolt size={11} style={{ color: 'var(--gb-text-muted)' }} />
               <input value={quickTask} onChange={(e) => setQuickTask(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') quickCreate(quickTask); }}
                 placeholder="Quick add a task… (Enter to save)"
                 style={{
                   flex: 1, border: 0, outline: 0, background: 'transparent',
@@ -2045,8 +2138,7 @@ function TasksPanel() {
                   color: 'var(--gb-text-primary)',
                 }} />
             </div>
-            <IconBtn size="sm" icon={<I.task />} title="Complete all open tasks" />
-            <Btn variant="primary" size="sm" icon={<I.check />}>Add</Btn>
+            <Btn variant="primary" size="sm" icon={<I.check />} disabled={adding || !quickTask.trim()} onClick={() => quickCreate(quickTask)}>Add</Btn>
           </div>
         </div>
         <ScrollArea max={320}>
@@ -2224,8 +2316,7 @@ function ContactInfoCard() {
         ...(e.userCountry != null && { country: e.userCountry }),
       } }));
       draft.current = {};
-      setSaved((n) => n + 1);
-      gbToast('Contact saved', 'success');
+      setSaved((n) => n + 1);   // confirmation pulse on the card (no toast)
     } catch (err) { gbToast('Could not save contact', 'error'); throw err; }
   };
   return (
@@ -2394,6 +2485,24 @@ function SystemCard() {
 /* ════════════════════════════════════════════════════════════
    ROOT
 ════════════════════════════════════════════════════════════ */
+/* Error boundary — a render crash must NOT blank the takeover (which would
+   reveal the raw CRM page underneath). Show the error instead so it's visible
+   and the rest of the page chrome stays put. */
+class GBBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err, info) { try { console.error('[gb custom contact] render error', err, info); } catch (e) {} }
+  render() {
+    if (this.state.err) {
+      return (
+        <div style={{ padding: 24, margin: 24, fontFamily: 'var(--gb-font-mono)', fontSize: 12, color: 'var(--gb-error-fg)', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-error-tint-border)', borderRadius: 'var(--gb-r-md)', whiteSpace: 'pre-wrap' }}>
+          Custom contact page hit a render error:{'\n\n'}{String(this.state.err && (this.state.err.stack || this.state.err.message || this.state.err))}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 function App({ store }) {
   const data = useSyncExternalStore(store.subscribe, store.get);
   const [patches, setPatches] = useState([]);
@@ -2508,7 +2617,7 @@ if (!window.__gbContactDetailsRegistered) {
   window.__gbCustomPages.contact_details = {
     render(rootEl, ctx) {
       const root = createRoot(rootEl);
-      root.render(<App store={ctx.store} />);
+      root.render(<GBBoundary><App store={ctx.store} /></GBBoundary>);
       return () => { try { root.unmount(); } catch (e) {} };
     },
   };
