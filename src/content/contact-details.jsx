@@ -1513,10 +1513,6 @@ function ProofCard({ p }) {
           ? <img src={thumb} alt={p.name || 'proof'} loading="lazy" onError={() => setImgOk(false)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : <I.camera size={30} style={{ color: 'var(--gb-text-ghost)' }} />}
         {p.status && <span style={{ position: 'absolute', top: 8, right: 8 }}><Tag tone={tone} size="xs">{p.status}</Tag></span>}
-        {thumb && imgOk && (
-          <IconBtn size="xs" icon={copied ? <I.check /> : <I.copy />} title="Copy image" onClick={copyImage}
-            style={{ position: 'absolute', bottom: 8, right: 8, background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', opacity: (hover || copied) ? 1 : 0, transition: 'opacity var(--gb-anim)' }} />
-        )}
       </div>
       {/* darken the info strip over the card surface (no new token) */}
       <div style={{ padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1, background: 'rgba(0,0,0,0.22)' }}>
@@ -1525,13 +1521,13 @@ function ProofCard({ p }) {
           {p.kind && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.kind}</span>}
           <span style={{ fontFamily: 'var(--gb-font-mono)', marginLeft: 'auto', flexShrink: 0 }}>{fmtDate(p.date)}</span>
         </div>
-        {(p.pdf || p.instant_mockup || p.apparel_mockup) && (
-          <div style={{ display: 'flex', gap: 5, marginTop: 'auto', alignItems: 'center' }}>
-            {p.pdf && <Btn variant="secondary" size="xs" icon={<I.download />} onClick={() => { try { window.open(p.pdf, '_blank'); } catch (e) {} }}>PDF</Btn>}
-            {p.instant_mockup && <IconBtn size="xs" ghost icon={<I.target />} title="Ball mockup" onClick={() => { try { window.open(p.instant_mockup, '_blank'); } catch (e) {} }} />}
-            {p.apparel_mockup && <IconBtn size="xs" ghost icon={<I.briefcase />} title="Apparel mockup" onClick={() => { try { window.open(p.apparel_mockup, '_blank'); } catch (e) {} }} />}
-          </div>
-        )}
+        <div style={{ display: 'flex', gap: 5, marginTop: 'auto', alignItems: 'center' }}>
+          {p.pdf && <Btn variant="secondary" size="xs" icon={<I.download />} onClick={() => { try { window.open(p.pdf, '_blank'); } catch (e) {} }}>PDF</Btn>}
+          {p.instant_mockup && <IconBtn size="xs" ghost icon={<I.target />} title="Ball mockup" onClick={() => { try { window.open(p.instant_mockup, '_blank'); } catch (e) {} }} />}
+          {p.apparel_mockup && <IconBtn size="xs" ghost icon={<I.briefcase />} title="Apparel mockup" onClick={() => { try { window.open(p.apparel_mockup, '_blank'); } catch (e) {} }} />}
+          {/* copy main image — always visible, lower-right of the info section */}
+          {thumb && imgOk && <IconBtn size="xs" icon={copied ? <I.check /> : <I.copy />} title="Copy image" onClick={copyImage} style={{ marginLeft: 'auto', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)' }} />}
+        </div>
       </div>
     </div>
   );
