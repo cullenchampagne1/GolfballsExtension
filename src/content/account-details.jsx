@@ -1446,11 +1446,43 @@ function proofTone(status) {
   if (/pend|submit|review|wait|progress/.test(s)) return 'warning';
   return 'neutral';
 }
+/* Re-encode a (CORS-clean) image blob to PNG via canvas — clipboard.write
+   reliably accepts image/png. */
+function blobToPng(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth || img.width; c.height = img.naturalHeight || img.height;
+        c.getContext('2d').drawImage(img, 0, 0);
+        c.toBlob((b) => { URL.revokeObjectURL(url); b ? resolve(b) : reject(new Error('toBlob')); }, 'image/png');
+      } catch (e) { URL.revokeObjectURL(url); reject(e); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('img')); };
+    img.src = url;
+  });
+}
 function ProofCard({ p }) {
   const [imgOk, setImgOk] = useState(true);
   const [hover, setHover] = useState(false);
+  const [copied, setCopied] = useState(false);
   const thumb = p.logo_ball || p.logo;
   const tone = proofTone(p.status);
+  const copyImage = async (e) => {
+    e.stopPropagation();
+    if (!thumb) return;
+    try {
+      const res = await fetch(thumb, { mode: 'cors' });
+      let blob = await res.blob();
+      if (blob.type !== 'image/png') { try { blob = await blobToPng(blob); } catch (e2) {} }
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type || 'image/png']: blob })]);
+      setCopied(true); setTimeout(() => setCopied(false), 1300);
+    } catch (err) {
+      try { await navigator.clipboard.writeText(thumb); setCopied(true); setTimeout(() => setCopied(false), 1300); } catch (e3) {}
+    }
+  };
   return (
     <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
@@ -1459,16 +1491,21 @@ function ProofCard({ p }) {
         border: '1px solid ' + (hover ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-subtle)'),
         background: 'var(--gb-surface-1)',
         transform: hover ? 'translateY(-2px)' : 'none',
-        boxShadow: hover ? '0 6px 16px rgba(0,0,0,.28)' : '0 0 0 transparent',
+        boxShadow: hover ? '0 3px 8px rgba(0,0,0,.14)' : '0 0 0 transparent',
         transition: 'transform .22s cubic-bezier(.34,1.4,.64,1), box-shadow .22s, border-color .22s',
       }}>
       <div style={{ position: 'relative', aspectRatio: '1', background: 'var(--gb-surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid var(--gb-border-subtle)' }}>
         {thumb && imgOk
-          ? <img src={thumb} alt={p.name || 'proof'} loading="lazy" onError={() => setImgOk(false)} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          ? <img src={thumb} alt={p.name || 'proof'} loading="lazy" onError={() => setImgOk(false)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : <I.camera size={30} style={{ color: 'var(--gb-text-ghost)' }} />}
-        {p.status && <span style={{ position: 'absolute', top: 8, left: 8 }}><Tag tone={tone} size="xs">{p.status}</Tag></span>}
+        {p.status && <span style={{ position: 'absolute', top: 8, right: 8 }}><Tag tone={tone} size="xs">{p.status}</Tag></span>}
+        {thumb && imgOk && (
+          <IconBtn size="xs" icon={copied ? <I.check /> : <I.copy />} title="Copy image" onClick={copyImage}
+            style={{ position: 'absolute', bottom: 8, right: 8, background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)', opacity: (hover || copied) ? 1 : 0, transition: 'opacity var(--gb-anim)' }} />
+        )}
       </div>
-      <div style={{ padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+      {/* darken the info strip over the card surface (no new token) */}
+      <div style={{ padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1, background: 'rgba(0,0,0,0.22)' }}>
         <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{p.name || 'Proof'}</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: 'var(--gb-text-muted)' }}>
           {p.kind && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.kind}</span>}
@@ -1488,16 +1525,13 @@ function ProofCard({ p }) {
 function ProofsPanel() {
   const D = useD();
   const rows = D.proofs;
+  if (rows.length === 0) return null;   // only show when there are proofs
   return (
     <Card>
       <SectionTitle icon={<I.camera />} title="Logo Proofs" count={rows.length} sub="Artwork proofs & mockups" />
-      {rows.length === 0
-        ? <div style={{ padding: 28, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)' }}>No proofs.</div>
-        : (
-          <div className="gb-scroll" style={{ display: 'flex', gap: 12, padding: 14, overflowX: 'auto', overflowY: 'hidden' }}>
-            {rows.map((p, i) => <ProofCard key={i} p={p} />)}
-          </div>
-        )}
+      <div className="gb-scroll" style={{ display: 'flex', gap: 12, padding: 14, overflowX: 'auto', overflowY: 'hidden' }}>
+        {rows.map((p, i) => <ProofCard key={i} p={p} />)}
+      </div>
     </Card>
   );
 }
@@ -1569,7 +1603,7 @@ function OrdersPanel() {
             </tr>
           </thead>
           <tbody>
-            {D.items.map((it, i) => (
+            {[...D.items].sort((a, b) => (num(b.revenue) || 0) - (num(a.revenue) || 0)).map((it, i) => (
               <tr key={i} style={trStyle}>
                 <Td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
