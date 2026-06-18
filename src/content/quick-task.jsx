@@ -36,7 +36,7 @@ if (!window.__gbQuickTaskModalLoaded) {
 
   window.__gbShowQuickTaskModal = async function (opts = {}) {
     if ((window.__gbFeatureFlags || {}).quickTaskEnabled === false) return;
-    const { autoCompose = false, returnData = false, onComposed, ...overrides } = opts;
+    const { autoCompose = false, returnData = false, onComposed, onCreated, ...overrides } = opts;
     const pageCtx = await readTaskContext();
     const ctx = { ...pageCtx, ...overrides };
 
@@ -55,7 +55,13 @@ if (!window.__gbQuickTaskModalLoaded) {
           contactType={ctx.contactType || 'contact'}
           autoCompose={autoCompose}
           onComposed={handleComposed}
-          onSubmit={(template) => submitQuickTask({ template, context: ctx })}
+          onSubmit={async (template) => {
+            const r = await submitQuickTask({ template, context: ctx });
+            // Let an opener (e.g. the custom contact page) optimistically add
+            // the row + animate, without a reload, after a real CRM create.
+            if (r && r.ok && typeof onCreated === 'function') { try { onCreated({ template, context: ctx, result: r }); } catch (e) { /* ignore */ } }
+            return r;
+          }}
           onClosed={onClosed}
           bindClose={bindClose}
         />

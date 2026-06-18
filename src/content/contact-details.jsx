@@ -1919,6 +1919,43 @@ function FormField({ label, children, style }) {
     </label>
   );
 }
+/* Custom dropdown for modals — matches our look, and (unlike the shared
+   Dropdown which portals to document.body) renders INSIDE the takeover so it
+   isn't hidden under it. Popover is absolute within the field. */
+function MiniSelect({ value, options, onChange }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => { const p = (e.composedPath && e.composedPath()) || []; if (ref.current && p.indexOf(ref.current) === -1) setOpen(false); };
+    document.addEventListener('mousedown', onDown, true);
+    return () => document.removeEventListener('mousedown', onDown, true);
+  }, [open]);
+  const cur = options.find((o) => String(o.value) === String(value)) || options[0];
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button type="button" onClick={() => setOpen((o) => !o)}
+        style={{ ...inputStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
+        <span>{cur ? cur.label : ''}</span>
+        <I.chevd size={12} style={{ transition: 'transform var(--gb-anim)', transform: open ? 'rotate(180deg)' : 'none', color: 'var(--gb-text-muted)' }} />
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 5, padding: 4, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', boxShadow: 'var(--gb-shadow-popover)', display: 'flex', flexDirection: 'column', gap: 1, animation: 'gb-fade-slide var(--gb-anim) both' }}>
+          {options.map((o) => {
+            const sel = String(o.value) === String(value);
+            return (
+              <button key={o.value} type="button" onClick={() => { onChange(o.value); setOpen(false); }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 9px', border: 0, borderRadius: 'var(--gb-r-sm)', cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--gb-font-sans)', fontSize: 12, fontWeight: sel ? 700 : 500, background: sel ? 'var(--gb-brand-tint-soft)' : 'transparent', color: sel ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)' }}>
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+const PRIORITY_OPTS = [{ value: '1', label: 'High' }, { value: '2', label: 'Med' }, { value: '3', label: 'Low' }];
 function ModalShell({ title, icon, children, footer, width = 460 }) {
   const { closeModal } = useModal();
   return (
@@ -1975,9 +2012,7 @@ function EditTaskModal({ taskId }) {
           <div style={{ display: 'flex', gap: 12 }}>
             <FormField label="Due date" style={{ flex: 1 }}><input type="date" value={toDateInput(t.DueDate)} onChange={(e) => setT({ ...t, DueDate: fromDateInput(e.target.value) })} style={inputStyle} /></FormField>
             <FormField label="Priority" style={{ width: 130 }}>
-              <select value={t.Priority} onChange={(e) => setT({ ...t, Priority: e.target.value })} style={inputStyle}>
-                <option value="1">High</option><option value="2">Med</option><option value="3">Low</option>
-              </select>
+              <MiniSelect value={t.Priority} options={PRIORITY_OPTS} onChange={(v) => setT({ ...t, Priority: v })} />
             </FormField>
           </div>
         </>}
@@ -2011,9 +2046,7 @@ function AddTaskModal() {
       <div style={{ display: 'flex', gap: 12 }}>
         <FormField label="Due date" style={{ flex: 1 }}><input type="date" value={toDateInput(t.DueDate)} onChange={(e) => setT({ ...t, DueDate: fromDateInput(e.target.value) })} style={inputStyle} /></FormField>
         <FormField label="Priority" style={{ width: 130 }}>
-          <select value={t.Priority} onChange={(e) => setT({ ...t, Priority: e.target.value })} style={inputStyle}>
-            <option value="1">High</option><option value="2">Med</option><option value="3">Low</option>
-          </select>
+          <MiniSelect value={t.Priority} options={PRIORITY_OPTS} onChange={(v) => setT({ ...t, Priority: v })} />
         </FormField>
       </div>
     </ModalShell>
@@ -2052,7 +2085,11 @@ function OpenTaskRow({ t }) {
       await crmCompleteTask(t.id);
       setState('done');                                       // check fills + strike (no toast)
       setTimeout(() => setState('leaving'), 280);             // then fade/slide out
-      setTimeout(() => patch((D) => ({ ...D, openTasks: (D.openTasks || []).filter((x) => x.id !== t.id) })), 660);
+      setTimeout(() => patch((D) => ({
+        ...D,
+        openTasks: (D.openTasks || []).filter((x) => x.id !== t.id),
+        doneTasks: [{ ...t, status: 'Complete' }, ...(D.doneTasks || [])],   // appears in Completed
+      })), 660);
     } catch (e) { setState('idle'); gbToast('Could not complete task', 'error'); }
   };
   const done = state === 'done' || state === 'leaving';
@@ -2092,16 +2129,31 @@ function OpenTaskRow({ t }) {
 function TasksPanel() {
   const D = useD();
   const patch = usePatch();
-  const { openModal } = useModal();
   const [quickTask, setQuickTask] = useState('');
   const [adding, setAdding] = useState(false);
+  // Optimistically prepend a row (after a real create) and animate it in.
+  const addRow = (row) => patch((Dd) => ({ ...Dd, openTasks: [{ id: `new-${++__gbTaskTmp}`, category: '', status: 'Open', ...row }, ...(Dd.openTasks || [])] }));
+  // Reuse the proven QuickTask composer (correct preset templates, employee
+  // resolution, CRM create); animate the row in on its onCreated callback.
+  const openComposer = () => {
+    try {
+      window.__gbShowQuickTaskModal && window.__gbShowQuickTaskModal({
+        onCreated: ({ template }) => addRow({
+          subject: (template && (template.subject || template.name)) || 'New task',
+          priority: priLabel((template && (template.priorityId || template.priority)) || 2),
+          dueDate: (template && (template.crmDate || template.dueDate)) || todayMDY(),
+        }),
+      });
+    } catch (e) {}
+  };
+  // Typed quick-add: subject = exactly what was typed (correct freeform task).
   const quickCreate = async (subject) => {
     const subj = (subject || '').trim();
     if (!subj || adding) return;
     setAdding(true);
     try {
       const { task, id } = await crmCreateTask(D.ids.contact, { Subject: subj });
-      patch((Dd) => ({ ...Dd, openTasks: [{ id, subject: task.Subject, category: '', priority: priLabel(task.Priority), dueDate: task.DueDate, status: 'Open' }, ...(Dd.openTasks || [])] }));
+      addRow({ id, subject: task.Subject, priority: priLabel(task.Priority), dueDate: task.DueDate });
       setQuickTask('');
     } catch (e) { gbToast('Could not create task', 'error'); }
     finally { setAdding(false); }
@@ -2111,15 +2163,15 @@ function TasksPanel() {
       <Card>
         <SectionTitle
           icon={<I.task />} title="Open Tasks" count={D.openTasks.length}
-          right={<Btn variant="tinted" size="sm" icon={<I.plus />} onClick={() => openModal(<AddTaskModal />)}>New task</Btn>}
+          right={<Btn variant="tinted" size="sm" icon={<I.plus />} onClick={openComposer}>New task</Btn>}
         />
         <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
           <div style={{
             fontSize: 10, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase',
             color: 'var(--gb-text-muted)', marginBottom: 8,
-          }}>Quick create</div>
+          }}>Quick create — opens the composer with your templates</div>
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            {QUICK_TASK.map((q) => (<Btn key={q} variant="secondary" size="xs" disabled={adding} onClick={() => quickCreate(q)}>{q}</Btn>))}
+            {QUICK_TASK.map((q) => (<Btn key={q} variant="secondary" size="xs" onClick={openComposer}>{q}</Btn>))}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
             <div style={{
