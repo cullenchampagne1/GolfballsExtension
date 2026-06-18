@@ -230,6 +230,18 @@ export function proofLogoUrl(rowEl, kind) {
   }
 }
 
+/** Activity id from a feed row — the row (or a descendant) carries an
+ *  onclick="CreateActivityDetailModal(<id>)". Used to fetch the detail. */
+export function activityId(rowEl) {
+  if (!rowEl) return '';
+  try {
+    const oc = (rowEl.getAttribute && rowEl.getAttribute('onclick')) || '';
+    let m = /CreateActivityDetailModal\((\d+)\)/.exec(oc);
+    if (!m && rowEl.outerHTML) m = /CreateActivityDetailModal\((\d+)\)/.exec(rowEl.outerHTML);
+    return m ? m[1] : '';
+  } catch (e) { return ''; }
+}
+
 /** Aggregate ordered-items table rows. Same DataTables-id problem as the
  *  orders grid (#DataTables_Table_1 is assigned in the browser, absent in a
  *  fetched page) — but this one has no link to key off. Live page: use the
@@ -690,6 +702,7 @@ export const FN_REGISTRY = {
   contactItemRows,
   contactProofRows,
   proofLogoUrl,
+  activityId,
   keyedField,
   accountContactRows,
   firstAccountContactField,

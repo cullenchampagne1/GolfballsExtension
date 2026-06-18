@@ -631,6 +631,10 @@ async function crmGetSnoozeWeeks(customerID) {
     return Number.isFinite(pts) ? Math.round(pts / 3) : '';
   } catch (e) { return ''; }
 }
+async function crmGetActivity(id) {
+  const r = await fetch(`${crmOrigin()}/golfballs/crm/Admin/Activity/Get.ajax?${id}`, { credentials: 'include' });
+  return JSON.parse(await r.text());
+}
 /* Alt lookup — lookupTypeId 1 = Email, 2 = Phone (from SaveLookup). */
 async function crmCreateLookup(contactId, lookupTypeId, content) {
   const base = crmOrigin();
@@ -1535,13 +1539,18 @@ function ActivityFilter({ value, onChange, counts }) {
 }
 function ActivityRow({ a, last }) {
   const [hover, setHover] = useState(false);
+  const { openModal } = useModal();
   const meta = activityType(a);
+  const clickable = !!a.id;
   return (
     <div
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      onClick={clickable ? () => openModal(<ActivityDetailModal activityId={a.id} />) : undefined}
+      title={clickable ? 'View activity detail' : undefined}
       style={{
         display: 'flex', alignItems: 'flex-start', gap: 12,
         padding: '11px 18px',
+        cursor: clickable ? 'pointer' : 'default',
         borderBottom: last ? 'none' : '1px solid var(--gb-border-subtle)',
         background: hover ? 'var(--gb-fill-faint)' : 'transparent',
         transition: 'background var(--gb-anim)',
@@ -2265,6 +2274,49 @@ function LookupModal() {
     </>}>
       <FormField label="Type"><MiniSelect value={type} options={[{ value: '2', label: 'Phone' }, { value: '1', label: 'Email' }]} onChange={setType} /></FormField>
       <FormField label="Value"><input autoFocus value={value} onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') save(); }} style={inputStyle} /></FormField>
+    </ModalShell>
+  );
+}
+
+/* Activity detail — fetches the full activity (subject/description/direction/
+   employee/date + parsed MetaData: phone, duration, voicemail, name, email). */
+function ActivityDetailModal({ activityId }) {
+  const { closeModal } = useModal();
+  const [a, setA] = useState(null);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    let live = true;
+    crmGetActivity(activityId).then((d) => { if (live) setA(d); }).catch(() => { if (live) setErr(true); });
+    return () => { live = false; };
+  }, [activityId]);
+  let meta = {};
+  try { if (a && a.MetaData) meta = JSON.parse(a.MetaData); } catch (e) {}
+  const row = (label, val) => (val === 0 || val) ? (
+    <div style={{ display: 'flex', gap: 12, padding: '6px 0', borderBottom: '1px dashed var(--gb-border-subtle)' }}>
+      <span style={{ width: 112, fontSize: 11, color: 'var(--gb-text-muted)', fontWeight: 500, flexShrink: 0 }}>{label}</span>
+      <span style={{ fontSize: 12, color: 'var(--gb-text-secondary)' }}>{String(val)}</span>
+    </div>
+  ) : null;
+  return (
+    <ModalShell title="Activity Detail" icon={<I.history />} width={480} footer={<Btn variant="ghost" size="sm" onClick={closeModal}>Close</Btn>}>
+      {err
+        ? <div style={{ padding: 18, textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12 }}>Couldn’t load activity.</div>
+        : !a
+        ? <div style={{ padding: 18, textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12 }}>Loading…</div>
+        : <>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{a.ActivitySubject || 'Activity'}</div>
+          {a.ActivityDescription && <div style={{ fontSize: 12.5, color: 'var(--gb-text-secondary)', lineHeight: 1.5, padding: '9px 11px', background: 'var(--gb-surface-2)', borderRadius: 'var(--gb-r-sm)' }}>{a.ActivityDescription}</div>}
+          <div>
+            {row('Direction', a.Direction)}
+            {row('Employee', a.Employee)}
+            {row('Date', a.CreatedDate)}
+            {row('Name', [meta.FirstName, meta.LastName].filter(Boolean).join(' '))}
+            {row('Phone', meta.PhoneNumber)}
+            {row('Email', meta.Email)}
+            {meta.Duration ? row('Duration', `${meta.Duration}s`) : null}
+            {meta.LeftVoicemail != null ? row('Left voicemail', meta.LeftVoicemail ? 'Yes' : 'No') : null}
+          </div>
+        </>}
     </ModalShell>
   );
 }

@@ -719,6 +719,10 @@ const FIELDS = {
     label: 'Activities',
     extract: { sel: '#ActivityTable tbody tr', max: 100 },
     itemFields: {
+      id: {
+        type: 'string', label: 'Activity ID',
+        extract: { rowFn: 'activityId' },   // from the row's CreateActivityDetailModal(<id>)
+      },
       employee: {
         type: 'string', label: 'Employee',
         extract: { cell: 1, attr: 'innerText' },
