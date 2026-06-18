@@ -20,7 +20,7 @@
    system-tokens.css import.
 ───────────────────────────────────────────────────────────── */
 
-import React, { useState, useMemo, useEffect, useRef, useSyncExternalStore } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback, useSyncExternalStore } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ensureTheme, THEME_VARIANTS, loadTheme, saveTheme, applyTheme } from '../lib/theme.js';
 import { getAllIndexed, searchIndexed } from '../lib/crmIndex.js';
@@ -294,6 +294,15 @@ function KV({ label, children, mono, copyable, link, action }) {
 const DataCtx = React.createContext(null);
 const useD = () => React.useContext(DataCtx);
 
+/* Optimistic patch layer. Write-actions know the FINAL view state already, so
+   instead of waiting for a reload we layer reducer patches on top of the
+   engine's data — `patch(prev => next)`. Patches stay applied for the session
+   (the host DOM never reflects a write without a reload; after a reload the
+   fresh data is already correct, so patches reset cleanly). Components animate
+   the change like any other React state update. */
+const PatchCtx = React.createContext(() => {});
+const usePatch = () => React.useContext(PatchCtx);
+
 function adapt(data) {
   const d = data || {};
   const tasks = d.tasks || {};
@@ -395,7 +404,13 @@ const UI_CSS =
   '.gb-scroll::-webkit-scrollbar-track { background: transparent; }' +
   '.gb-scroll::-webkit-scrollbar-thumb { background: var(--gb-border-default); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }' +
   '.gb-scroll::-webkit-scrollbar-thumb:hover { background: var(--gb-border-strong); background-clip: padding-box; }' +
-  '.gb-scroll { scrollbar-width: thin; scrollbar-color: var(--gb-border-default) transparent; }';
+  '.gb-scroll { scrollbar-width: thin; scrollbar-color: var(--gb-border-default) transparent; }' +
+  /* Confirmation pulse after an optimistic save — a brief brand ring/glow. */
+  '@keyframes gb-saved-pulse {' +
+  '  0% { box-shadow: 0 0 0 0 var(--gb-brand-tint-strong), inset 0 0 0 1px var(--gb-brand-tint-border); }' +
+  '  100% { box-shadow: 0 0 0 0 transparent, inset 0 0 0 1px transparent; }' +
+  '}' +
+  '.gb-saved { animation: gb-saved-pulse .7s ease-out; }';
 
 /* Capped-height scroll region with the thin themed scrollbar. Used to
    stack every panel on one screen (no tabs) without runaway height. */
@@ -1825,12 +1840,18 @@ function DncButton() {
 
 /* One open-task row with a working Complete action (optimistic strike-through). */
 function OpenTaskRow({ t }) {
+  const patch = usePatch();
   const [state, setState] = useState('idle'); // idle | busy | done
   const complete = async () => {
     if (!t.id || state !== 'idle') return;
     setState('busy');
-    try { await crmCompleteTask(t.id); setState('done'); gbToast('Task completed', 'success'); }
-    catch (e) { setState('idle'); gbToast('Could not complete task', 'error'); }
+    try {
+      await crmCompleteTask(t.id);
+      setState('done');
+      gbToast('Task completed', 'success');
+      // brief checked/strike state, then file it out of the open list for real
+      setTimeout(() => patch((D) => ({ ...D, openTasks: (D.openTasks || []).filter((x) => x.id !== t.id) })), 650);
+    } catch (e) { setState('idle'); gbToast('Could not complete task', 'error'); }
   };
   const done = state === 'done';
   return (
@@ -2052,18 +2073,35 @@ function AccountInfoCard() {
 
 function ContactInfoCard() {
   const D = useD();
+  const patch = usePatch();
   const c = D.contact, a = D.account;
   const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState(0);   // bump → confirmation pulse
   const draft = useRef({});
   const onEdit = (f, v) => { draft.current[f] = v; };
   const save = async () => {
     const id = D.ids.contact;
     if (!id) { gbToast('No contact id', 'error'); throw new Error('no id'); }
-    try { await crmUpdateContact(id, draft.current); draft.current = {}; gbToast('Contact saved', 'success'); }
-    catch (e) { gbToast('Could not save contact', 'error'); throw e; }
+    const e = draft.current;
+    try {
+      await crmUpdateContact(id, e);
+      // Optimistically reflect the saved values everywhere (card + Hero name).
+      patch((prev) => ({ ...prev, contact: { ...prev.contact,
+        ...(e.firstName != null && { firstName: e.firstName }),
+        ...(e.lastName != null && { lastName: e.lastName }),
+        ...(e.jobTitle != null && { jobTitle: e.jobTitle }),
+        ...(e.email != null && { email: e.email }),
+        ...(e.phoneNumber != null && { phone: e.phoneNumber }),
+        ...(e.zipCode != null && { zipCode: e.zipCode }),
+        ...(e.userCountry != null && { country: e.userCountry }),
+      } }));
+      draft.current = {};
+      setSaved((n) => n + 1);
+      gbToast('Contact saved', 'success');
+    } catch (err) { gbToast('Could not save contact', 'error'); throw err; }
   };
   return (
-    <Card>
+    <Card key={`cic${saved}`} className={saved ? 'gb-saved' : undefined}>
       <SectionTitle
         icon={<I.user />} title="Contact Information"
         sub={`#${D.ids.contact || DASH}`}
@@ -2230,7 +2268,12 @@ function SystemCard() {
 ════════════════════════════════════════════════════════════ */
 function App({ store }) {
   const data = useSyncExternalStore(store.subscribe, store.get);
-  const D = useMemo(() => adapt(data), [data]);
+  const [patches, setPatches] = useState([]);
+  const patch = useCallback((fn) => setPatches((p) => [...p, fn]), []);
+  const D = useMemo(
+    () => patches.reduce((acc, fn) => { try { return fn(acc) || acc; } catch (e) { return acc; } }, adapt(data)),
+    [data, patches],
+  );
 
   // Theme is owned globally by the extension (theme.js / applyTheme writes
   // data-theme + the --gb-* tokens on <html> from the user's settings). We
@@ -2239,6 +2282,7 @@ function App({ store }) {
 
   return (
     <DataCtx.Provider value={D}>
+    <PatchCtx.Provider value={patch}>
       {/* data-gb-scale="custom-page" is intentionally NOT one of
           scales.js's SCALE_CATEGORIES, so applyScales() emits no zoom rule
           for it — the takeover renders at the host website's own scale,
@@ -2306,6 +2350,7 @@ function App({ store }) {
           </div>
         </div>
       </div>
+    </PatchCtx.Provider>
     </DataCtx.Provider>
   );
 }
