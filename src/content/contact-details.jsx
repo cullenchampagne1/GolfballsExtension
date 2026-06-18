@@ -443,7 +443,7 @@ async function crmCompleteTask(taskId) {
     taskCategoryID: obj.taskCategoryID, taskStatusID: 3,
     contactID: obj.contactID, employeeID: obj.employeeID, Priority: obj.Priority,
   };
-  const up = await fetch(`${base}/golfballs/crm/Admin/Task/Update.ajax?${JSON.stringify(task)}`, { credentials: 'include' });
+  const up = await fetch(`${base}/golfballs/crm/Admin/Task/Update.ajax?${encodeURIComponent(JSON.stringify(task))}`, { credentials: 'include' });
   if (!up.ok) throw new Error('update failed');
 }
 async function crmSetDnc(customerID, add) {
@@ -451,6 +451,33 @@ async function crmSetDnc(customerID, add) {
   const action = add ? 'AddToDoNotCallList' : 'RemoveFromDoNotCallList';
   const r = await fetch(`${base}/golfballs/crm/Admin/Contact/${action}.ajax?${customerID}`, { credentials: 'include' });
   if (!r.ok) throw new Error('dnc failed');
+}
+/* Edit contact: read the current record, override ONLY the edited fields
+   (so unedited values are preserved verbatim), then Update. Field names match
+   the Get response 1:1 (verified against the proposal HAR). */
+async function crmUpdateContact(customerId, edits) {
+  const base = crmOrigin();
+  const res = await fetch(`${base}/golfballs/crm/Admin/Contact/Get.ajax?${customerId}`, { credentials: 'include' });
+  const cur = JSON.parse(await res.text());
+  const has = (k) => Object.prototype.hasOwnProperty.call(edits, k);
+  const pick = (k, src) => (has(k) ? edits[k] : (src == null ? '' : src));
+  const cd = cur.CustomData;
+  const payload = {
+    customerId: String(customerId),
+    firstName: pick('firstName', cur.firstName),
+    middleInit: pick('middleInit', cur.middleInit),
+    lastName: pick('lastName', cur.lastName),
+    companyName: pick('companyName', cur.companyName),
+    jobTitle: pick('jobTitle', cur.jobTitle),
+    email: pick('email', cur.email),
+    phoneNumber: pick('phoneNumber', cur.phoneNumber),
+    zipCode: pick('zipCode', cur.zipCode),
+    UserType: String(has('UserType') ? edits.UserType : (cur.userType == null ? 1 : cur.userType)),
+    userCountry: pick('userCountry', cur.userCountry) || 'US',
+    CustomData: cd == null ? '' : (typeof cd === 'string' ? cd : JSON.stringify(cd)),
+  };
+  const up = await fetch(`${base}/golfballs/crm/Admin/Contact/Update.ajax?${encodeURIComponent(JSON.stringify(payload))}`, { credentials: 'include' });
+  if (!up.ok) throw new Error('update failed');
 }
 
 /* Breadcrumb trail: before navigating away, stash where we are so the
@@ -1215,7 +1242,7 @@ function downloadEmailRow(i) {
 
 /* Editable key-value row — value, or an input when `editing`. UI only for
    now (uncontrolled); save wiring comes later. */
-function EKV({ label, value, editing, mono }) {
+function EKV({ label, value, editing, mono, field, onEdit }) {
   if (!editing) return <KV label={label} mono={mono}>{value}</KV>;
   return (
     <div style={{
@@ -1225,23 +1252,33 @@ function EKV({ label, value, editing, mono }) {
     }}>
       <span style={{ fontSize: 11, color: 'var(--gb-text-muted)', fontWeight: 500 }}>{label}</span>
       <input defaultValue={(value === 0 || value) ? String(value) : ''}
+        readOnly={!(field && onEdit)}
+        onChange={field && onEdit ? (e) => onEdit(field, e.target.value) : undefined}
         style={{
           width: '100%', height: 26, padding: '0 8px', boxSizing: 'border-box',
           background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)',
           borderRadius: 'var(--gb-r-sm)', color: 'var(--gb-text-primary)',
+          opacity: (field && onEdit) ? 1 : 0.55,
           fontFamily: mono ? 'var(--gb-font-mono)' : 'var(--gb-font-sans)', fontSize: 12, outline: 'none',
         }} />
     </div>
   );
 }
 
-/* Card header edit control: Edit ↔ Save/Cancel (UI only). */
-function EditToggle({ editing, setEditing }) {
+/* Card header edit control: Edit ↔ Save/Cancel. onSave (async) persists; when
+   absent, Save just exits edit mode (cards still being wired). */
+function EditToggle({ editing, setEditing, onSave }) {
+  const [busy, setBusy] = useState(false);
   if (!editing) return <Btn variant="ghost" size="sm" icon={<I.edit />} onClick={() => setEditing(true)}>Edit</Btn>;
+  const save = async () => {
+    if (!onSave) { setEditing(false); return; }
+    setBusy(true);
+    try { await onSave(); setEditing(false); } catch (e) { /* toast handled in onSave */ } finally { setBusy(false); }
+  };
   return (
     <div style={{ display: 'flex', gap: 6 }}>
-      <Btn variant="ghost" size="sm" onClick={() => setEditing(false)}>Cancel</Btn>
-      <Btn variant="primary" size="sm" icon={<I.check />} onClick={() => setEditing(false)}>Save</Btn>
+      <Btn variant="ghost" size="sm" disabled={busy} onClick={() => setEditing(false)}>Cancel</Btn>
+      <Btn variant="primary" size="sm" icon={<I.check />} disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save'}</Btn>
     </div>
   );
 }
@@ -2017,22 +2054,31 @@ function ContactInfoCard() {
   const D = useD();
   const c = D.contact, a = D.account;
   const [editing, setEditing] = useState(false);
+  const draft = useRef({});
+  const onEdit = (f, v) => { draft.current[f] = v; };
+  const save = async () => {
+    const id = D.ids.contact;
+    if (!id) { gbToast('No contact id', 'error'); throw new Error('no id'); }
+    try { await crmUpdateContact(id, draft.current); draft.current = {}; gbToast('Contact saved', 'success'); }
+    catch (e) { gbToast('Could not save contact', 'error'); throw e; }
+  };
   return (
     <Card>
       <SectionTitle
         icon={<I.user />} title="Contact Information"
         sub={`#${D.ids.contact || DASH}`}
-        right={<EditToggle editing={editing} setEditing={setEditing} />}
+        right={<EditToggle editing={editing} setEditing={setEditing} onSave={save} />}
       />
       <div style={{ padding: '8px 18px 14px' }}>
-        <EKV label="First Name" value={txt(c.firstName)} editing={editing} />
-        <EKV label="Last Name" value={txt(c.lastName)} editing={editing} />
-        <EKV label="Job Title" value={txt(c.jobTitle)} editing={editing} />
-        <EKV label="Email" value={txt(c.email)} editing={editing} />
-        <EKV label="Phone" value={txt(c.phone)} editing={editing} />
+        <EKV label="First Name" value={txt(c.firstName)} editing={editing} field="firstName" onEdit={onEdit} />
+        <EKV label="Last Name" value={txt(c.lastName)} editing={editing} field="lastName" onEdit={onEdit} />
+        <EKV label="Job Title" value={txt(c.jobTitle)} editing={editing} field="jobTitle" onEdit={onEdit} />
+        <EKV label="Email" value={txt(c.email)} editing={editing} field="email" onEdit={onEdit} />
+        <EKV label="Phone" value={txt(c.phone)} editing={editing} field="phoneNumber" onEdit={onEdit} />
+        {/* State lives on the account, not the contact Update payload — read-only here */}
         <EKV label="State" value={txt(c.state)} editing={editing} />
-        <EKV label="Zip" value={txt(c.zipCode)} editing={editing} mono />
-        <EKV label="Country" value={txt(c.country)} editing={editing} />
+        <EKV label="Zip" value={txt(c.zipCode)} editing={editing} mono field="zipCode" onEdit={onEdit} />
+        <EKV label="Country" value={txt(c.country)} editing={editing} field="userCountry" onEdit={onEdit} />
         <KV label="Created By">{txt(a.createdBy)}</KV>
         <KV label="Created On" mono>{fmtDate(a.createdDate) === DASH ? null : fmtDate(a.createdDate)}</KV>
         <KV label="Last Modified" mono>{fmtDateTime(a.modifiedDate) === DASH ? null : fmtDateTime(a.modifiedDate)}</KV>

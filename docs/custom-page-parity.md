@@ -31,6 +31,27 @@ endpoint in the HTML. Endpoints seen so far:
 - Task complete: `Task/Get.ajax?<id>` → `Task/Update.ajax?<json taskStatusID=3>`
 - Task create: `Task/Create.ajax?<json>` · Opportunity/Lookup/Mailer: same `/crm/Admin/...` family
 
+### Exact endpoints + payloads (from generate_proposal.har, contact 8967450)
+All are `GET /golfballs/crm/Admin/...ajax?<urlencoded-json>`, session cookies. To
+EDIT, first `…/Get.ajax?<id>` for the current record, merge changes, then Update.
+- **Edit contact** — `Contact/Get.ajax?<id>` → `Contact/Update.ajax?` with
+  `{customerId, firstName, middleInit, lastName, companyName, jobTitle, email,
+   phoneNumber, zipCode, UserType, userCountry, CustomData:"{LastConversationDate,
+   LinkedInURL,Archived,Context}"}`
+- **Opportunity create** — `Opportunity/Create.ajax?` `{opportunityId:"", Subject,
+   Description, EstimatedClosedDate:"MM-DD-YYYY", EstimatedValue, OpportunityStageId,
+   empAssignedId:"0", contactId, LeadID:null}`
+- **Opportunity edit** — `Opportunity/Get.ajax?<id>` → `Opportunity/Update.ajax?`
+   (same shape + `opportunityId:"<id>"`)
+- **Lookup create** — `Lookup/Create.ajax?` `{lookupTypeId, content, contactId}`
+  (delete seen earlier: `Lookup/Delete` family)
+- **Account edit (from contact)** — `Account/UpdateFromContactPage.ajax?`
+   `{AccountID, Name, AccountWebAddress, MainAddress, MainCity, MainPostal,
+    MainState, MainCountry, ApprovedDate, CreditRequirements, LinkedInURL, Context,
+    CreatedByAsName, CreatedDate, TerritoryID, ModifiedDate, PartnerCampaignID,
+    SalesTaxExempt1, Industry, SubIndustry, EmployeeRange, EstimatedRevenue}`
+- **DNC** ✅ and **Task complete** ✅ already wired.
+
 ## Contacts (start here)
 
 ### Contact record
