@@ -997,6 +997,13 @@ export function SettingsPanel() {
             <Btn variant="ghost" size="xs" onClick={resetDevSettings}>Reset</Btn>
           }
         >
+          {/* Open the offline Custom Pages sandbox (contact/account takeover
+              dev harness) as an extension page — no server needed. */}
+          <Btn variant="secondary" size="sm" full icon={<I.bolt />}
+            onClick={() => { try { window.open(chrome.runtime.getURL('custom-pages-sandbox.html'), '_blank'); } catch (e) {} }}
+            style={{ marginBottom: 10 }}>
+            Open Custom Pages Sandbox
+          </Btn>
           {/* Search — animates filtered rows in/out via AnimatePresence
               and motion's `layout` so the table reflows smoothly as the
               query narrows. Rows are sorted alphabetically by label. */}
