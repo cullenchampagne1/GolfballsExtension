@@ -227,12 +227,19 @@ export function splitThreadHtml(html) {
   if (!html) return null;
   const bounds = findQuoteBoundaries(html);
   if (bounds.length === 0) return null;
+  /* Outlook keeps its font/color/spacing rules (p.MsoNormal, span.EmailStyle…)
+     in <style> blocks at the TOP of the body — so a byte-offset split leaves
+     only segment 0 (the reply) with them; every quoted segment renders
+     unstyled (that's why only the newest message looked formatted). Carry the
+     style blocks into each quoted segment so all messages share the same CSS
+     context (and our color-remap pass has the same rules to work on). */
+  const styleBlocks = (html.match(/<style[\s\S]*?<\/style>/gi) || []).join('');
   const cuts = [0, ...bounds, html.length];
   const messages = [];
   for (let i = 0; i < cuts.length - 1; i++) {
     const seg = html.slice(cuts[i], cuts[i + 1]);
     if (i === 0) messages.push({ quoted: false, bodyHtml: seg });
-    else messages.push({ quoted: true, bodyHtml: stripHeaderBlock(seg), ...quotedHeader(seg) });
+    else messages.push({ quoted: true, bodyHtml: styleBlocks + stripHeaderBlock(seg), ...quotedHeader(seg) });
   }
   return messages.length > 1 ? messages : null;
 }

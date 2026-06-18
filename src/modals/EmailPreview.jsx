@@ -339,15 +339,11 @@ function ReplyComposer({ replyTo, subject }) {
   const hasText = body.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim().length > 0;
   const discard = () => { setBody(''); setExpanded(false); setNonce((n) => n + 1); };
 
-  /* Reply seed: the saved signature with two blank lines of room above it,
-     and the caret dropped at the very top so the rep types straight away. */
-  const [sig, setSig] = useState(null); // signature HTML; null while loading
+  /* Reply seed: blank — the signature is appended on the BACKEND at send
+     time, so we no longer prefill it here (it was doubling up). Just open
+     with an empty composer and the caret at the top. */
   const editorWrapRef = useRef(null);
-  useEffect(() => {
-    try { chrome.storage.local.get('emailSignature', ({ emailSignature }) => setSig(emailSignature || '')); }
-    catch { setSig(''); }
-  }, []);
-  const replyInitialHtml = sig != null ? `<div><br></div><div><br></div>${sig}` : '';
+  const replyInitialHtml = '';
   /* On open, focus the editor and collapse the caret to the start — a
      contentEditable seeded with HTML otherwise lands the caret at the end. */
   useEffect(() => {

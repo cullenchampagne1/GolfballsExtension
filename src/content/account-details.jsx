@@ -1488,7 +1488,7 @@ function ProofCard({ p }) {
       onClick={() => { if (p.history) goUrl(p.history); }}
       title={p.history ? 'View proof history' : undefined}
       style={{
-        width: 188, flexShrink: 0, display: 'flex', flexDirection: 'column',
+        width: 240, flexShrink: 0, display: 'flex', flexDirection: 'column',
         borderRadius: 'var(--gb-r-md)', overflow: 'hidden',
         border: '1px solid ' + (hover ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-subtle)'),
         background: 'var(--gb-surface-1)',
@@ -1497,11 +1497,12 @@ function ProofCard({ p }) {
         boxShadow: hover ? '0 3px 8px rgba(0,0,0,.14)' : '0 0 0 transparent',
         transition: 'transform .22s cubic-bezier(.34,1.4,.64,1), box-shadow .22s, border-color .22s',
       }}>
-      <div style={{ position: 'relative', aspectRatio: '1', background: 'var(--gb-surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+      {/* image controls its own height (show all of it), rounded corners, inset */}
+      <div style={{ position: 'relative', padding: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {thumb && imgOk
-          ? <img src={thumb} alt={p.name || 'proof'} loading="lazy" onError={() => setImgOk(false)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          : <I.camera size={30} style={{ color: 'var(--gb-text-ghost)' }} />}
-        {p.status && <span style={{ position: 'absolute', top: 8, right: 8 }}><Tag tone={tone} size="xs">{p.status}</Tag></span>}
+          ? <img src={thumb} alt={p.name || 'proof'} loading="lazy" onError={() => setImgOk(false)} style={{ width: '100%', height: 'auto', display: 'block', borderRadius: 'var(--gb-r-sm)', objectFit: 'contain' }} />
+          : <div style={{ width: '100%', aspectRatio: '2 / 1', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-surface-2)', borderRadius: 'var(--gb-r-sm)' }}><I.camera size={28} style={{ color: 'var(--gb-text-ghost)' }} /></div>}
+        {p.status && <span style={{ position: 'absolute', top: 14, right: 14 }}><Tag tone={tone} size="xs">{p.status}</Tag></span>}
       </div>
       {/* darken the info strip over the card surface (no new token) */}
       <div style={{ padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 6, flex: 1, background: 'rgba(0,0,0,0.22)' }}>
@@ -1528,7 +1529,7 @@ function ProofsPanel() {
   return (
     <Card>
       <SectionTitle icon={<I.camera />} title="Logo Proofs" count={rows.length} sub="Artwork proofs & mockups" />
-      <div className="gb-scroll" style={{ display: 'flex', gap: 12, padding: 14, overflowX: 'auto', overflowY: 'hidden' }}>
+      <div className="gb-scroll" style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: 14, overflowX: 'auto', overflowY: 'hidden' }}>
         {rows.map((p, i) => <ProofCard key={i} p={p} />)}
       </div>
     </Card>
