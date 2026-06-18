@@ -310,6 +310,7 @@ function adapt(data) {
     opportunities: Array.isArray(d.opportunities) ? d.opportunities : [],
     activities: Array.isArray(d.activities) ? d.activities : [],
     emails: Array.isArray(d.emails) ? d.emails : [],
+    proofs: Array.isArray(d.proofs) ? d.proofs : [],
     contacts: Array.isArray(d.contacts) ? d.contacts : [],   // account → related contacts
   };
 }
@@ -1437,6 +1438,62 @@ function BrandBadge({ name, size = 22 }) {
   );
 }
 
+/* — Logo Proofs — artwork proofs + mockups (data.proofs). */
+function proofTone(status) {
+  const s = (status || '').toLowerCase();
+  if (/approv|complete|done|ready/.test(s)) return 'success';
+  if (/reject|declin|fail|cancel/.test(s)) return 'error';
+  if (/pend|submit|review|wait|progress/.test(s)) return 'warning';
+  return 'neutral';
+}
+function ProofCard({ p }) {
+  const [imgOk, setImgOk] = useState(true);
+  const thumb = p.logo_ball || p.logo;
+  const tone = proofTone(p.status);
+  return (
+    <div style={{ border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', overflow: 'hidden', background: 'var(--gb-surface-1)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ height: 116, background: 'var(--gb-surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+        {thumb && imgOk
+          ? <img src={thumb} alt={p.name || 'proof'} loading="lazy" onError={() => setImgOk(false)} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+          : <I.camera size={26} style={{ color: 'var(--gb-text-ghost)' }} />}
+      </div>
+      <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name || 'Proof'}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+          {p.status && <Tag tone={tone} size="xs">{p.status}</Tag>}
+          {p.kind && <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)' }}>{p.kind}</span>}
+          <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', marginLeft: 'auto' }}>{fmtDate(p.date)}</span>
+        </div>
+        {(p.pdf || p.instant_mockup || p.apparel_mockup) && (
+          <div style={{ display: 'flex', gap: 6, marginTop: 1, flexWrap: 'wrap' }}>
+            {p.pdf && <Btn variant="secondary" size="xs" icon={<I.download />} onClick={() => { try { window.open(p.pdf, '_blank'); } catch (e) {} }}>PDF</Btn>}
+            {p.instant_mockup && <Btn variant="ghost" size="xs" iconRight={<I.ext />} onClick={() => { try { window.open(p.instant_mockup, '_blank'); } catch (e) {} }}>Ball</Btn>}
+            {p.apparel_mockup && <Btn variant="ghost" size="xs" iconRight={<I.ext />} onClick={() => { try { window.open(p.apparel_mockup, '_blank'); } catch (e) {} }}>Apparel</Btn>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+function ProofsPanel() {
+  const D = useD();
+  const rows = D.proofs;
+  return (
+    <Card>
+      <SectionTitle icon={<I.camera />} title="Logo Proofs" count={rows.length} sub="Artwork proofs & mockups" />
+      {rows.length === 0
+        ? <div style={{ padding: 28, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)' }}>No proofs.</div>
+        : (
+          <ScrollArea max={440} style={{ padding: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(196px, 1fr))', gap: 12 }}>
+              {rows.map((p, i) => <ProofCard key={i} p={p} />)}
+            </div>
+          </ScrollArea>
+        )}
+    </Card>
+  );
+}
+
 function OrdersPanel() {
   const D = useD();
   return (
@@ -2097,6 +2154,7 @@ function App({ store }) {
                 <ActivityPanel />
                 <OpportunitiesPanel />
                 <OrdersPanel />
+                <ProofsPanel />
                 <TasksPanel />
                 <EmailsPanel />
               </div>
