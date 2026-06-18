@@ -1206,11 +1206,15 @@ function EditToggle({ editing, setEditing }) {
 ════════════════════════════════════════════════════════════ */
 
 /* — Activity timeline — */
-function activityTone(category) {
-  const c = (category || '').toLowerCase();
-  if (c.indexOf('email') !== -1) return { icon: <I.mail />, tone: 'warning' };
-  if (c.indexOf('call') !== -1 || c.indexOf('phone') !== -1) return { icon: <I.phone />, tone: 'success' };
-  if (c.indexOf('note') !== -1) return { icon: <I.edit />, tone: 'brand' };
+/* Clean activity "type" derived from category + subject (engine gives a loose
+   category, not a tidy enum). Machine/workflow events fall through to cog. */
+function activityType(a) {
+  const s = ((a.category || '') + ' ' + (a.subject || '')).toLowerCase();
+  if (/\b(image|proof|logo|art file|mockup)\b/.test(s)) return { icon: <I.camera />, tone: 'error' };
+  if (/\b(email|e-mail)\b|email sent|followup email/.test(s)) return { icon: <I.mail />, tone: 'warning' };
+  if (/\b(call|phone|voicemail|vm)\b|left a message/.test(s)) return { icon: <I.phone />, tone: 'success' };
+  if (/\b(chat|case|support)\b/.test(s)) return { icon: <I.chat />, tone: 'success' };
+  if (/\bnote\b|logged a note|comment/.test(s)) return { icon: <I.note />, tone: 'brand' };
   return { icon: <I.cog />, tone: 'info' };
 }
 function ActivityPanel() {
@@ -1242,7 +1246,7 @@ function ActivityPanel() {
           }} />
         )}
         {rows.map((a, idx) => {
-          const meta = activityTone(a.category);
+          const meta = activityType(a);
           return (
             <div key={idx} style={{
               display: 'grid', gridTemplateColumns: '38px 1fr auto', gap: 12,

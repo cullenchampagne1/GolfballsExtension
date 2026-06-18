@@ -72,6 +72,9 @@ const I = {
   flag:    (p) => <Icon {...p}><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></Icon>,
   zap:     (p) => <Icon {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></Icon>,
   history: (p) => <Icon {...p}><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 106 5.3L3 8"/><path d="M12 7v5l4 2"/></Icon>,
+  note:    (p) => <Icon {...p}><path d="M14 3v4a1 1 0 001 1h4"/><path d="M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z"/><path d="M9 13h6M9 17h4"/></Icon>,
+  chat:    (p) => <Icon {...p}><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></Icon>,
+  camera:  (p) => <Icon {...p}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></Icon>,
 };
 
 /* ════════════════════════════════════════════════════════════
@@ -1207,11 +1210,18 @@ function EditToggle({ editing, setEditing }) {
 ════════════════════════════════════════════════════════════ */
 
 /* — Activity timeline — */
-function activityTone(category) {
-  const c = (category || '').toLowerCase();
-  if (c.indexOf('email') !== -1) return { icon: <I.mail />, tone: 'warning' };
-  if (c.indexOf('call') !== -1 || c.indexOf('phone') !== -1) return { icon: <I.phone />, tone: 'success' };
-  if (c.indexOf('note') !== -1) return { icon: <I.edit />, tone: 'brand' };
+/* The clean "type" the design colors by — derived from the loose category
+   text PLUS the subject, since the engine gives a category (Detail / Exit /
+   Starting / Email…) that's loose labeling, not a tidy enum. Machine /
+   workflow events (exits, recycles, automated sends, stage changes) have no
+   clearer signal, so they fall through to the blue cog. */
+function activityType(a) {
+  const s = ((a.category || '') + ' ' + (a.subject || '')).toLowerCase();
+  if (/\b(image|proof|logo|art file|mockup)\b/.test(s)) return { icon: <I.camera />, tone: 'error' };
+  if (/\b(email|e-mail)\b|email sent|followup email/.test(s)) return { icon: <I.mail />, tone: 'warning' };
+  if (/\b(call|phone|voicemail|vm)\b|left a message/.test(s)) return { icon: <I.phone />, tone: 'success' };
+  if (/\b(chat|case|support)\b/.test(s)) return { icon: <I.chat />, tone: 'success' };
+  if (/\bnote\b|logged a note|comment/.test(s)) return { icon: <I.note />, tone: 'brand' };
   return { icon: <I.cog />, tone: 'info' };
 }
 function ActivityPanel() {
@@ -1243,7 +1253,7 @@ function ActivityPanel() {
           }} />
         )}
         {rows.map((a, idx) => {
-          const meta = activityTone(a.category);
+          const meta = activityType(a);
           return (
             <div key={idx} style={{
               display: 'grid', gridTemplateColumns: '38px 1fr auto', gap: 12,
