@@ -1344,7 +1344,9 @@ function ActivityPanel() {
   }, [rows]);
   const filtered = filter === 'all' ? rows : rows.filter((a) => activityType(a).key === filter);
   return (
-    <Card>
+    // overflow:visible + raised z so the filter dropdown isn't clipped by the
+    // card (or covered by the panels below) when the list is short.
+    <Card style={{ overflow: 'visible', position: 'relative', zIndex: 2 }}>
       <SectionTitle
         icon={<I.history />}
         title="Activity Feed"
@@ -1394,6 +1396,58 @@ function Td({ children, align = 'left', mono, muted, style }) {
     fontSize: 11.5, color: muted ? 'var(--gb-text-muted)' : 'var(--gb-text-secondary)',
     fontWeight: 500, ...style,
   }}>{children}</td>;
+}
+
+/* Brand letter-badges for ordered items — NOT logos, a colored letter mark per
+   brand (T = Titleist, V = Venture, B = Bridgestone…). Matched by name
+   substring, longest match wins. Curated from the golf brands the corporate
+   catalog carries; extend as needed. */
+const BRANDS = [
+  { m: ['titleist'],                  a: 'T',  c: '#d11f3a' },
+  { m: ['taylormade', 'taylor made'], a: 'TM', c: '#8a8f97' },
+  { m: ['callaway'],                  a: 'C',  c: '#2f6fd0' },
+  { m: ['bridgestone'],               a: 'B',  c: '#e0533f' },
+  { m: ['srixon'],                    a: 'S',  c: '#e08a2f' },
+  { m: ['cleveland'],                 a: 'Cl', c: '#3f8fd0' },
+  { m: ['wilson'],                    a: 'W',  c: '#c8102e' },
+  { m: ['volvik'],                    a: 'Vk', c: '#d83fa0' },
+  { m: ['vice'],                      a: 'Vi', c: '#7a6fd0' },
+  { m: ['mizuno'],                    a: 'M',  c: '#2f5fd0' },
+  { m: ['ping'],                      a: 'P',  c: '#5b6068' },
+  { m: ['cobra'],                     a: 'Co', c: '#e0a030' },
+  { m: ['pinnacle'],                  a: 'Pn', c: '#cbb320' },
+  { m: ['maxfli'],                    a: 'Mx', c: '#d14f3a' },
+  { m: ['top flite', 'topflite'],     a: 'TF', c: '#3faf7f' },
+  { m: ['snell'],                     a: 'Sn', c: '#5fa0e0' },
+  { m: ['kirkland'],                  a: 'K',  c: '#7a8f4f' },
+  { m: ['oncore'],                    a: 'O',  c: '#3fa0a0' },
+  { m: ['nike'],                      a: 'N',  c: '#7fb030' },
+  { m: ['venture'],                   a: 'V',  c: '#4ec48c' },
+  { m: ['bettinardi'],                a: 'Bt', c: '#9a6fd0' },
+  { m: ['scotty cameron', 'cameron'], a: 'SC', c: '#c89b3c' },
+  { m: ['odyssey'],                   a: 'Od', c: '#3f6fd0' },
+];
+function brandFor(name) {
+  const s = (name || '').toLowerCase();
+  let best = null, bestLen = 0;
+  for (const b of BRANDS) {
+    for (const m of b.m) {
+      if (m.length > bestLen && s.indexOf(m) !== -1) { best = b; bestLen = m.length; }
+    }
+  }
+  return best;
+}
+function BrandBadge({ name, size = 22 }) {
+  const b = brandFor(name);
+  if (!b) {
+    const init = ((name || '?').trim().charAt(0) || '?').toUpperCase();
+    return (
+      <span style={{ width: size, height: size, borderRadius: 6, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', color: 'var(--gb-text-tertiary)', fontSize: 10, fontWeight: 700 }}>{init}</span>
+    );
+  }
+  return (
+    <span title={b.m[0]} style={{ width: size, height: size, borderRadius: 6, flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: b.c, color: '#fff', fontSize: b.a.length > 1 ? 9 : 11, fontWeight: 800, letterSpacing: -.3, fontFamily: 'var(--gb-font-sans)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.14)' }}>{b.a}</span>
+  );
 }
 
 function OrdersPanel() {
@@ -1466,12 +1520,17 @@ function OrdersPanel() {
             {D.items.map((it, i) => (
               <tr key={i} style={trStyle}>
                 <Td>
-                  <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', fontWeight: 500, lineHeight: 1.4 }}>{it.name}</div>
-                  {num(it.orderCount) != null && (
-                    <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 2, fontFamily: 'var(--gb-font-mono)' }}>
-                      {it.orderCount} order{it.orderCount !== 1 ? 's' : ''}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                    <BrandBadge name={it.name} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)', fontWeight: 500, lineHeight: 1.4 }}>{it.name}</div>
+                      {num(it.orderCount) != null && (
+                        <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginTop: 2, fontFamily: 'var(--gb-font-mono)' }}>
+                          {it.orderCount} order{it.orderCount !== 1 ? 's' : ''}
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </Td>
                 <Td align="right" mono>{num(it.quantity) ?? DASH}</Td>
                 <Td align="right">
