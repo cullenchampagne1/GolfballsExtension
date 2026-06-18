@@ -417,6 +417,42 @@ function crmHref(pageId) {
 function crmGo(pageId) { try { window.location.assign(crmHref(pageId)); } catch (e) {} }
 function goUrl(url) { try { window.location.assign(url); } catch (e) {} }
 
+/* ── CRM AJAX actions ─────────────────────────────────────────────
+   The takeover overlays the LIVE CRM page, so we hit the same endpoints
+   the page's own jQuery does, with the page's session cookies. Endpoints
+   lifted verbatim from the page's inline functions (QuickComplete /
+   Add|RemoveFromDoNotCallList). No new backend, no captured HAR. */
+function crmOrigin() {
+  try { if (/(^|\.)golfballs\.com$/i.test(location.hostname)) return location.origin; } catch (e) {}
+  return 'https://api.golfballs.com';
+}
+function gbToast(msg, tone = 'info') {
+  try { const t = window.__gbToast; (t && (t[tone] || t.info) || function () {})(msg); } catch (e) {}
+}
+/* Replicates the page's QuickComplete(taskID): read the task, then re-save it
+   with taskStatusID=3 (completed). */
+async function crmCompleteTask(taskId) {
+  const base = crmOrigin();
+  const res = await fetch(`${base}/golfballs/crm/Admin/Task/Get.ajax?${taskId}`, { credentials: 'include' });
+  const obj = JSON.parse(await res.text());
+  const task = {
+    TaskId: taskId,
+    Subject: encodeURIComponent(obj.Subject || ''),
+    Description: encodeURIComponent(obj.Description || ''),
+    LiveDate: obj.LiveDate, DueDate: obj.DueDate,
+    taskCategoryID: obj.taskCategoryID, taskStatusID: 3,
+    contactID: obj.contactID, employeeID: obj.employeeID, Priority: obj.Priority,
+  };
+  const up = await fetch(`${base}/golfballs/crm/Admin/Task/Update.ajax?${JSON.stringify(task)}`, { credentials: 'include' });
+  if (!up.ok) throw new Error('update failed');
+}
+async function crmSetDnc(customerID, add) {
+  const base = crmOrigin();
+  const action = add ? 'AddToDoNotCallList' : 'RemoveFromDoNotCallList';
+  const r = await fetch(`${base}/golfballs/crm/Admin/Contact/${action}.ajax?${customerID}`, { credentials: 'include' });
+  if (!r.ok) throw new Error('dnc failed');
+}
+
 /* Breadcrumb trail: before navigating away, stash where we are so the
    destination can offer a "back to …" crumb. sessionStorage survives the
    same-tab navigation; the destination only trusts it when document.referrer
@@ -1021,7 +1057,7 @@ function Hero() {
           <Btn variant="tinted" status="info" icon={<I.phone />} full onClick={() => { try { window.__gbShowCallLogModal && window.__gbShowCallLogModal(); } catch (e) {} }}>Log Call</Btn>
           <Btn variant="tinted" status="info" icon={<I.send />} full>Send Email</Btn>
           <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
-            <Btn variant="secondary" size="sm" icon={<I.ban />}>Remove from DNC</Btn>
+            <DncButton />
             <IconBtn size="sm" icon={<I.more />} />
           </div>
         </div>
@@ -1730,6 +1766,65 @@ function priTone(p) {
   if (s.indexOf('med') !== -1) return 'warning';
   return 'neutral';
 }
+/* Do-Not-Call: calls the CRM RemoveFromDoNotCallList endpoint directly. */
+function DncButton() {
+  const D = useD();
+  const [busy, setBusy] = useState(false);
+  const [removed, setRemoved] = useState(false);
+  const onClick = async () => {
+    const id = D.ids.contact;
+    if (!id || busy || removed) return;
+    setBusy(true);
+    try { await crmSetDnc(id, false); setRemoved(true); gbToast('Removed from Do-Not-Call', 'success'); }
+    catch (e) { gbToast('Could not update Do-Not-Call', 'error'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Btn variant="secondary" size="sm" icon={<I.ban />} disabled={busy || removed} onClick={onClick}>
+      {removed ? 'Removed from DNC' : busy ? 'Removing…' : 'Remove from DNC'}
+    </Btn>
+  );
+}
+
+/* One open-task row with a working Complete action (optimistic strike-through). */
+function OpenTaskRow({ t }) {
+  const [state, setState] = useState('idle'); // idle | busy | done
+  const complete = async () => {
+    if (!t.id || state !== 'idle') return;
+    setState('busy');
+    try { await crmCompleteTask(t.id); setState('done'); gbToast('Task completed', 'success'); }
+    catch (e) { setState('idle'); gbToast('Could not complete task', 'error'); }
+  };
+  const done = state === 'done';
+  return (
+    <tr style={{ ...trStyle, opacity: done ? 0.5 : 1, transition: 'opacity .3s ease' }}>
+      <Td>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={complete} disabled={state !== 'idle'} title="Complete task"
+            style={{
+              width: 15, height: 15, borderRadius: 4, flexShrink: 0, padding: 0,
+              border: '1.5px solid ' + (done ? 'var(--gb-success-fg)' : 'var(--gb-border-strong)'),
+              background: done ? 'var(--gb-success-fg)' : 'transparent',
+              cursor: state === 'idle' ? 'pointer' : 'default',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+            {done && <I.check size={10} style={{ color: 'var(--gb-text-on-brand)' }} />}
+          </button>
+          <span style={{ color: 'var(--gb-text-primary)', fontWeight: 500, textDecoration: done ? 'line-through' : 'none' }}>{t.subject}</span>
+        </div>
+      </Td>
+      <Td muted>{t.category}</Td>
+      <Td align="center"><Tag tone={priTone(t.priority)} size="xs">{t.priority || DASH}</Tag></Td>
+      <Td align="right" mono><span style={{ color: 'var(--gb-warning-fg)', fontWeight: 600 }}>{fmtDate(t.dueDate)}</span></Td>
+      <Td align="right">
+        <Btn variant="ghost" size="xs" icon={<I.check />} disabled={state !== 'idle'} onClick={complete}>
+          {done ? 'Done' : state === 'busy' ? '…' : 'Complete'}
+        </Btn>
+      </Td>
+    </tr>
+  );
+}
+
 function TasksPanel() {
   const D = useD();
   const [quickTask, setQuickTask] = useState('');
@@ -1778,22 +1873,7 @@ function TasksPanel() {
             <Th></Th>
           </tr></thead>
           <tbody>
-            {D.openTasks.map((t, i) => (
-              <tr key={i} style={trStyle}>
-                <Td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 14, height: 14, borderRadius: 4, border: '1.5px solid var(--gb-border-strong)', flexShrink: 0 }} />
-                    <span style={{ color: 'var(--gb-text-primary)', fontWeight: 500 }}>{t.subject}</span>
-                  </div>
-                </Td>
-                <Td muted>{t.category}</Td>
-                <Td align="center"><Tag tone={priTone(t.priority)} size="xs">{t.priority || DASH}</Tag></Td>
-                <Td align="right" mono>
-                  <span style={{ color: 'var(--gb-warning-fg)', fontWeight: 600 }}>{fmtDate(t.dueDate)}</span>
-                </Td>
-                <Td align="right"><Btn variant="ghost" size="xs" icon={<I.check />}>Complete</Btn></Td>
-              </tr>
-            ))}
+            {D.openTasks.map((t, i) => <OpenTaskRow key={t.id || i} t={t} />)}
             {D.openTasks.length === 0 && <EmptyRow colSpan={5} label="No open tasks." />}
           </tbody>
         </table>
