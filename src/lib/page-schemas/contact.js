@@ -577,6 +577,11 @@ const FIELDS = {
         label: 'Proof PDF URL',
         extract: { rowFn: 'proofLogoUrl', args: ['pdf'] },
       },
+      history: {
+        type: 'string',
+        label: 'Proof history page URL',
+        extract: { rowFn: 'proofLogoUrl', args: ['history'] },
+      },
     },
   },
 

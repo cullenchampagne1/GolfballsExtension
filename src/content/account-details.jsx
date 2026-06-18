@@ -1485,11 +1485,14 @@ function ProofCard({ p }) {
   };
   return (
     <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      onClick={() => { if (p.history) goUrl(p.history); }}
+      title={p.history ? 'View proof history' : undefined}
       style={{
         width: 188, flexShrink: 0, display: 'flex', flexDirection: 'column',
         borderRadius: 'var(--gb-r-md)', overflow: 'hidden',
         border: '1px solid ' + (hover ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-subtle)'),
         background: 'var(--gb-surface-1)',
+        cursor: p.history ? 'pointer' : 'default',
         transform: hover ? 'translateY(-2px)' : 'none',
         boxShadow: hover ? '0 3px 8px rgba(0,0,0,.14)' : '0 0 0 transparent',
         transition: 'transform .22s cubic-bezier(.34,1.4,.64,1), box-shadow .22s, border-color .22s',
@@ -1508,11 +1511,11 @@ function ProofCard({ p }) {
           <span style={{ fontFamily: 'var(--gb-font-mono)', marginLeft: 'auto', flexShrink: 0 }}>{fmtDate(p.date)}</span>
         </div>
         <div style={{ display: 'flex', gap: 5, marginTop: 'auto', alignItems: 'center' }}>
-          {p.pdf && <Btn variant="secondary" size="xs" icon={<I.download />} onClick={() => { try { window.open(p.pdf, '_blank'); } catch (e) {} }}>PDF</Btn>}
-          {p.instant_mockup && <IconBtn size="xs" ghost icon={<I.target />} title="Ball mockup" onClick={() => { try { window.open(p.instant_mockup, '_blank'); } catch (e) {} }} />}
-          {p.apparel_mockup && <IconBtn size="xs" ghost icon={<I.briefcase />} title="Apparel mockup" onClick={() => { try { window.open(p.apparel_mockup, '_blank'); } catch (e) {} }} />}
-          {/* copy main image — always visible, lower-right of the info section */}
-          {thumb && imgOk && <IconBtn size="xs" icon={copied ? <I.check /> : <I.copy />} title="Copy image" onClick={copyImage} style={{ marginLeft: 'auto', background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)' }} />}
+          {p.pdf && <Btn variant="secondary" size="xs" icon={<I.download />} onClick={(e) => { e.stopPropagation(); try { window.open(p.pdf, '_blank'); } catch (er) {} }}>PDF</Btn>}
+          {p.instant_mockup && <IconBtn size="xs" ghost icon={<I.target />} title="Ball mockup" onClick={(e) => { e.stopPropagation(); try { window.open(p.instant_mockup, '_blank'); } catch (er) {} }} />}
+          {p.apparel_mockup && <IconBtn size="xs" ghost icon={<I.briefcase />} title="Apparel mockup" onClick={(e) => { e.stopPropagation(); try { window.open(p.apparel_mockup, '_blank'); } catch (er) {} }} />}
+          {/* copy main image — always visible, lower-right of the info section, no background */}
+          {thumb && imgOk && <IconBtn size="xs" ghost icon={copied ? <I.check /> : <I.copy />} title="Copy image" onClick={copyImage} style={{ marginLeft: 'auto' }} />}
         </div>
       </div>
     </div>

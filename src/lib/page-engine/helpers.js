@@ -225,6 +225,7 @@ export function proofLogoUrl(rowEl, kind) {
     case 'apparel_mockup': return render('virtualproof');
     case 'pdf':            return `https://d1tp32r8b76g0z.cloudfront.net/logo/${dir}/${id}_1.pdf`;
     case 'id':             return id;
+    case 'history':        return (a && a.href) || (a && a.getAttribute('href')) || '';   // the "View History" page link
     default:               return '';
   }
 }
