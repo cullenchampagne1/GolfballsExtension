@@ -1224,9 +1224,42 @@ function activityType(a) {
   if (/\bnote\b|logged a note|comment/.test(s)) return { icon: <I.note />, tone: 'brand' };
   return { icon: <I.cog />, tone: 'info' };
 }
+function ActivityRow({ a, last }) {
+  const [hover, setHover] = useState(false);
+  const meta = activityType(a);
+  return (
+    <div
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'flex-start', gap: 12,
+        padding: '11px 18px',
+        borderBottom: last ? 'none' : '1px solid var(--gb-border-subtle)',
+        background: hover ? 'var(--gb-fill-faint)' : 'transparent',
+        transition: 'background var(--gb-anim)',
+      }}>
+      <span style={{
+        width: 28, height: 28, borderRadius: 8, flexShrink: 0, marginTop: 1,
+        background: `var(--gb-${meta.tone}-tint-medium)`,
+        border: `1px solid var(--gb-${meta.tone}-tint-border)`,
+        color: `var(--gb-${meta.tone}-fg)`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>{React.cloneElement(meta.icon, { size: 13 })}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12.5, color: 'var(--gb-text-primary)', fontWeight: 500, lineHeight: 1.45 }}>
+          {a.subject || <span style={{ color: 'var(--gb-text-ghost)' }}>—</span>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 5, flexWrap: 'wrap' }}>
+          {a.category && <Tag tone={meta.tone} size="xs">{a.category}</Tag>}
+          {a.direction && <Tag tone="neutral" size="xs">{a.direction}</Tag>}
+          {a.employee && <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontWeight: 600 }}>{a.employee}</span>}
+        </div>
+      </div>
+      <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', whiteSpace: 'nowrap', flexShrink: 0, marginTop: 3 }}>{fmtDateTime(a.date)}</span>
+    </div>
+  );
+}
 function ActivityPanel() {
   const D = useD();
-  const [showDetails, setShowDetails] = useState(true);
   const rows = D.activities;
   return (
     <Card>
@@ -1234,59 +1267,16 @@ function ActivityPanel() {
         icon={<I.history />}
         title="Activity Feed"
         count={`${rows.length}`}
-        sub="All system, workflow, and human-logged events"
+        sub="System, workflow, and human-logged events"
         right={
           <div style={{ display: 'flex', gap: 6 }}>
             <Btn variant="ghost" size="sm" icon={<I.filter />}>Filter</Btn>
-            <Btn variant="ghost" size="sm" onClick={() => setShowDetails(!showDetails)}>
-              {showDetails ? 'Hide details' : 'Show details'}
-            </Btn>
             <Btn variant="tinted" size="sm" icon={<I.plus />}>Add note</Btn>
           </div>
         }
       />
-      <ScrollArea max={460} style={{ position: 'relative', padding: '12px 18px 18px' }}>
-        {rows.length > 0 && (
-          <div style={{
-            position: 'absolute', left: 36, top: 18, bottom: 18,
-            width: 1, background: 'var(--gb-border-subtle)',
-          }} />
-        )}
-        {rows.map((a, idx) => {
-          const meta = activityType(a);
-          return (
-            <div key={idx} style={{
-              display: 'grid', gridTemplateColumns: '38px 1fr auto', gap: 12,
-              padding: '10px 0', position: 'relative',
-            }}>
-              <div style={{
-                width: 26, height: 26, borderRadius: 8,
-                background: `var(--gb-${meta.tone}-tint-medium)`,
-                border: `1px solid var(--gb-${meta.tone}-tint-border)`,
-                color: `var(--gb-${meta.tone}-fg)`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                zIndex: 2, position: 'relative',
-                boxShadow: '0 0 0 4px var(--gb-surface-1)',
-              }}>{React.cloneElement(meta.icon, { size: 12 })}</div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  {a.employee && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-secondary)' }}>{a.employee}</span>}
-                  {a.category && <Tag tone={meta.tone} size="xs">{a.category}</Tag>}
-                  {a.direction && <Tag tone="neutral" size="xs">{a.direction}</Tag>}
-                </div>
-                <div style={{
-                  fontSize: 12.5, color: 'var(--gb-text-secondary)', marginTop: 3,
-                  fontWeight: 500, lineHeight: 1.4,
-                }}>{a.subject}</div>
-              </div>
-              <div style={{
-                fontSize: 10.5, color: 'var(--gb-text-muted)', fontWeight: 500,
-                fontFamily: 'var(--gb-font-mono)', textAlign: 'right',
-                whiteSpace: 'nowrap',
-              }}>{fmtDateTime(a.date)}</div>
-            </div>
-          );
-        })}
+      <ScrollArea max={460}>
+        {rows.map((a, idx) => <ActivityRow key={idx} a={a} last={idx === rows.length - 1} />)}
         {rows.length === 0 && (
           <div style={{ padding: 28, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)' }}>No activity recorded.</div>
         )}
