@@ -431,15 +431,13 @@ function ReplyComposer({ replyTo, subject }) {
               <span style={{ color: 'var(--gb-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{subject}</span>
             </div>
             <div ref={editorWrapRef} style={{ padding: '4px 6px' }}>
-              {sig != null && (
-                <RichTextEditor
-                  key={nonce}
-                  initialHtml={replyInitialHtml}
-                  onChange={setBody}
-                  placeholder="Write your reply…"
-                  minHeight={120}
-                />
-              )}
+              <RichTextEditor
+                key={nonce}
+                initialHtml={replyInitialHtml}
+                onChange={setBody}
+                placeholder="Write your reply…"
+                minHeight={120}
+              />
             </div>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 6,
