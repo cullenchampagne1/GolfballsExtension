@@ -631,6 +631,13 @@ async function crmGetSnoozeWeeks(customerID) {
     return Number.isFinite(pts) ? Math.round(pts / 3) : '';
   } catch (e) { return ''; }
 }
+/* Alt lookup — lookupTypeId 1 = Email, 2 = Phone (from SaveLookup). */
+async function crmCreateLookup(contactId, lookupTypeId, content) {
+  const base = crmOrigin();
+  const obj = { lookupTypeId: Number(lookupTypeId), content: String(content), contactId: Number(contactId) };
+  const r = await fetch(`${base}/golfballs/crm/Admin/Lookup/Create.ajax?${encodeURIComponent(JSON.stringify(obj))}`, { credentials: 'include' });
+  if (!r.ok) throw new Error('lookup failed');
+}
 
 /* Breadcrumb trail: before navigating away, stash where we are so the
    destination can offer a "back to …" crumb. sessionStorage survives the
@@ -1144,6 +1151,7 @@ function TopBar() {
 const AVATAR_COLOR = '#3a5f7d';
 function Hero() {
   const D = useD();
+  const { openModal } = useModal();
   const c = D.contact, a = D.account;
   // "City, ST 71801" — city/state comma-joined, zip space-appended.
   const cityState = [a.city, c.state].filter(Boolean).join(', ');
@@ -1232,9 +1240,9 @@ function Hero() {
           background: 'var(--gb-fill-faint)',
           minWidth: 200,
         }}>
-          <Btn variant="primary" icon={<I.edit />} full>Edit Contact</Btn>
+          <Btn variant="primary" icon={<I.edit />} full onClick={() => openModal(<ContactEditModal />)}>Edit Contact</Btn>
           <Btn variant="tinted" status="info" icon={<I.phone />} full onClick={() => { try { window.__gbShowCallLogModal && window.__gbShowCallLogModal(); } catch (e) {} }}>Log Call</Btn>
-          <Btn variant="tinted" status="info" icon={<I.send />} full>Send Email</Btn>
+          <Btn variant="tinted" status="info" icon={<I.send />} full onClick={() => { try { window.__gbOpenTemplate && window.__gbOpenTemplate(); } catch (e) {} }}>Send Email</Btn>
           <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
             <DncButton />
             <IconBtn size="sm" icon={<I.more />} />
@@ -1581,7 +1589,7 @@ function ActivityPanel() {
         right={
           <div style={{ display: 'flex', gap: 6 }}>
             <ActivityFilter value={filter} onChange={setFilter} counts={counts} />
-            <Btn variant="tinted" size="sm" icon={<I.plus />}>Add note</Btn>
+            <Btn variant="tinted" size="sm" icon={<I.plus />} onClick={() => { try { window.__gbOpenNote && window.__gbOpenNote({}); } catch (e) {} }}>Add note</Btn>
           </div>
         }
       />
@@ -1962,6 +1970,7 @@ const inputStyle = {
   background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)',
   borderRadius: 'var(--gb-r-sm)', color: 'var(--gb-text-primary)',
   fontFamily: 'var(--gb-font-sans)', fontSize: 12, outline: 'none',
+  colorScheme: 'dark',   // theme the native date/number pickers to the dark UI
 };
 function FormField({ label, children, style }) {
   return (
@@ -2186,6 +2195,76 @@ function SnoozeModal() {
       <Btn variant="primary" size="sm" icon={<I.check />} onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Snooze'}</Btn>
     </>}>
       <FormField label="Weeks to snooze"><input type="number" min="0" autoFocus value={weeks} onChange={(e) => setWeeks(e.target.value)} placeholder="Enter number of weeks…" style={inputStyle} /></FormField>
+    </ModalShell>
+  );
+}
+
+/* Edit Contact (modal form) — reuses crmUpdateContact (Get → merge → Update,
+   so unedited fields are preserved); optimistically patches contact + Hero. */
+function ContactEditModal() {
+  const { closeModal } = useModal();
+  const patch = usePatch();
+  const D = useD();
+  const c = D.contact;
+  const [busy, setBusy] = useState(false);
+  const [f, setF] = useState({
+    firstName: c.firstName || '', lastName: c.lastName || '', jobTitle: c.jobTitle || '',
+    email: c.email || '', phoneNumber: c.phone || '', zipCode: c.zipCode || '', userCountry: c.country || '',
+  });
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+  const save = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await crmUpdateContact(D.ids.contact, f);
+      patch((Dd) => ({ ...Dd, contact: { ...Dd.contact, firstName: f.firstName, lastName: f.lastName, jobTitle: f.jobTitle, email: f.email, phone: f.phoneNumber, zipCode: f.zipCode, country: f.userCountry } }));
+      closeModal();
+    } catch (e) { gbToast('Could not save contact', 'error'); setBusy(false); }
+  };
+  return (
+    <ModalShell title="Edit Contact" icon={<I.user />} width={520} footer={<>
+      <Btn variant="ghost" size="sm" onClick={closeModal} disabled={busy}>Cancel</Btn>
+      <Btn variant="primary" size="sm" icon={<I.check />} onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Btn>
+    </>}>
+      <div style={{ display: 'flex', gap: 12 }}>
+        <FormField label="First name" style={{ flex: 1 }}><input autoFocus value={f.firstName} onChange={set('firstName')} style={inputStyle} /></FormField>
+        <FormField label="Last name" style={{ flex: 1 }}><input value={f.lastName} onChange={set('lastName')} style={inputStyle} /></FormField>
+      </div>
+      <FormField label="Job title"><input value={f.jobTitle} onChange={set('jobTitle')} style={inputStyle} /></FormField>
+      <FormField label="Email"><input value={f.email} onChange={set('email')} style={inputStyle} /></FormField>
+      <div style={{ display: 'flex', gap: 12 }}>
+        <FormField label="Phone" style={{ flex: 1 }}><input value={f.phoneNumber} onChange={set('phoneNumber')} style={inputStyle} /></FormField>
+        <FormField label="Zip" style={{ width: 110 }}><input value={f.zipCode} onChange={set('zipCode')} style={inputStyle} /></FormField>
+        <FormField label="Country" style={{ width: 90 }}><input value={f.userCountry} onChange={set('userCountry')} style={inputStyle} /></FormField>
+      </div>
+    </ModalShell>
+  );
+}
+
+/* Add Lookup — Phone (type 2) / Email (type 1) → Lookup/Create. */
+function LookupModal() {
+  const { closeModal } = useModal();
+  const patch = usePatch();
+  const D = useD();
+  const [type, setType] = useState('2');
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    if (!value.trim() || busy) return;
+    setBusy(true);
+    try {
+      await crmCreateLookup(D.ids.contact, type, value.trim());
+      patch((Dd) => ({ ...Dd, lookups: [{ type: type === '1' ? 'Email' : 'Phone', value: value.trim() }, ...(Dd.lookups || [])] }));
+      closeModal();
+    } catch (e) { gbToast('Could not add lookup', 'error'); setBusy(false); }
+  };
+  return (
+    <ModalShell title="Add Lookup" icon={<I.plus />} width={400} footer={<>
+      <Btn variant="ghost" size="sm" onClick={closeModal} disabled={busy}>Cancel</Btn>
+      <Btn variant="primary" size="sm" icon={<I.check />} onClick={save} disabled={busy || !value.trim()}>{busy ? 'Adding…' : 'Add'}</Btn>
+    </>}>
+      <FormField label="Type"><MiniSelect value={type} options={[{ value: '2', label: 'Phone' }, { value: '1', label: 'Email' }]} onChange={setType} /></FormField>
+      <FormField label="Value"><input autoFocus value={value} onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') save(); }} style={inputStyle} /></FormField>
     </ModalShell>
   );
 }
@@ -2584,14 +2663,16 @@ function QuickLogCard() {
 
 function AltLookupsCard() {
   const D = useD();
+  const { openModal } = useModal();
   const lookups = [];
   if (D.contact.phone) lookups.push({ type: 'Phone', value: D.contact.phone, primary: true });
   if (D.contact.email) lookups.push({ type: 'Email', value: D.contact.email, primary: true });
+  (D.lookups || []).forEach((l) => lookups.push({ type: l.type || 'Lookup', value: l.value || l.content }));
   return (
     <Card>
       <SectionTitle
         icon={<I.search />} title="Alternate Lookups" count={lookups.length}
-        right={<IconBtn size="xs" ghost icon={<I.plus />} />}
+        right={<IconBtn size="xs" ghost icon={<I.plus />} title="Add lookup" onClick={() => openModal(<LookupModal />)} />}
       />
       <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {lookups.map((l, i) => (
