@@ -21,6 +21,16 @@ Two viable strategies per action:
 - **(C)** Call the CRM fn but raise its modal above the takeover (fragile; host
   CSS bleed — avoid unless trivial).
 
+**KEY: most actions need NO HAR.** Many CRM actions are plain `$.ajax` GETs to
+documented endpoints in the page's own inline JS (already in the saved HTML).
+We just call the same endpoint from the takeover with the page session
+(`fetch(..., {credentials:'include'})`). Only modal-driven multi-field saves
+might need a HAR to confirm payload shape — and even those expose their
+endpoint in the HTML. Endpoints seen so far:
+- DNC: `/golfballs/crm/Admin/Contact/{Add,Remove}FromDoNotCallList.ajax?<custID>`
+- Task complete: `Task/Get.ajax?<id>` → `Task/Update.ajax?<json taskStatusID=3>`
+- Task create: `Task/Create.ajax?<json>` · Opportunity/Lookup/Mailer: same `/crm/Admin/...` family
+
 ## Contacts (start here)
 
 ### Contact record
