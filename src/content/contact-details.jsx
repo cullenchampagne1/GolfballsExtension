@@ -89,7 +89,7 @@ function Btn({ variant = 'secondary', size = 'md', icon, iconRight, children, fu
     info:    { fg: 'var(--gb-info-fg)',     bg: 'var(--gb-info-tint-medium)',  bd: 'var(--gb-info-tint-border)',  hov: 'var(--gb-info-tint-strong)' },
   }[status || 'brand'];
   const V = {
-    primary:   { bg: hover ? 'var(--gb-brand)' : 'linear-gradient(180deg, var(--gb-brand) 0%, var(--gb-brand-dark) 100%)', fg: 'var(--gb-text-on-brand)', bd: 'var(--gb-brand-border)' },
+    primary:   { bg: hover ? 'linear-gradient(180deg, var(--gb-brand-label) 0%, var(--gb-brand) 100%)' : 'linear-gradient(180deg, var(--gb-brand) 0%, var(--gb-brand-dark) 100%)', fg: 'var(--gb-text-on-brand)', bd: 'var(--gb-brand-border)' },
     secondary: { bg: hover ? 'var(--gb-fill-soft)' : 'var(--gb-fill-subtle)',  fg: 'var(--gb-text-secondary)', bd: 'var(--gb-border-default)' },
     tinted:    { bg: hover ? tint.hov : tint.bg, fg: tint.fg, bd: tint.bd },
     ghost:     { bg: hover ? 'var(--gb-fill-subtle)' : 'transparent', fg: 'var(--gb-text-tertiary)', bd: 'transparent' },
@@ -101,6 +101,10 @@ function Btn({ variant = 'secondary', size = 'md', icon, iconRight, children, fu
     md: { h: 30, px: 11, fs: 12,   gap: 6, ic: 12 },
     lg: { h: 36, px: 14, fs: 13,   gap: 7, ic: 13 },
   }[size];
+  // primary's background is a gradient (a background-image) that can't be
+  // interpolated — transitioning it flashes transparent on hover, so skip
+  // background in its transition (gradient↔gradient swaps cleanly anyway).
+  const animBg = variant !== 'primary';
   return (
     <button onClick={onClick} disabled={disabled}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
@@ -114,7 +118,7 @@ function Btn({ variant = 'secondary', size = 'md', icon, iconRight, children, fu
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? .5 : 1, whiteSpace: 'nowrap',
         width: full ? '100%' : undefined,
-        transition: 'background-color var(--gb-anim), border-color var(--gb-anim), color var(--gb-anim), box-shadow var(--gb-anim)', flexShrink: 0,
+        transition: (animBg ? 'background-color var(--gb-anim), ' : '') + 'border-color var(--gb-anim), color var(--gb-anim), box-shadow var(--gb-anim)', flexShrink: 0,
         ...style,
       }}>
       {icon && React.cloneElement(icon, { size: S.ic })}
@@ -1217,12 +1221,83 @@ function EditToggle({ editing, setEditing }) {
    clearer signal, so they fall through to the blue cog. */
 function activityType(a) {
   const s = ((a.category || '') + ' ' + (a.subject || '')).toLowerCase();
-  if (/\b(image|proof|logo|art file|mockup)\b/.test(s)) return { icon: <I.camera />, tone: 'error' };
-  if (/\b(email|e-mail)\b|email sent|followup email/.test(s)) return { icon: <I.mail />, tone: 'warning' };
-  if (/\b(call|phone|voicemail|vm)\b|left a message/.test(s)) return { icon: <I.phone />, tone: 'success' };
-  if (/\b(chat|case|support)\b/.test(s)) return { icon: <I.chat />, tone: 'success' };
-  if (/\bnote\b|logged a note|comment/.test(s)) return { icon: <I.note />, tone: 'brand' };
-  return { icon: <I.cog />, tone: 'info' };
+  if (/\b(image|proof|logo|art file|mockup)\b/.test(s)) return { key: 'image', icon: <I.camera />, tone: 'error' };
+  if (/\b(email|e-mail)\b|email sent|followup email/.test(s)) return { key: 'email', icon: <I.mail />, tone: 'warning' };
+  if (/\b(call|phone|voicemail|vm)\b|left a message/.test(s)) return { key: 'call', icon: <I.phone />, tone: 'success' };
+  if (/\b(chat|case|support)\b/.test(s)) return { key: 'chat', icon: <I.chat />, tone: 'success' };
+  if (/\bnote\b|logged a note|comment/.test(s)) return { key: 'note', icon: <I.note />, tone: 'brand' };
+  return { key: 'workflow', icon: <I.cog />, tone: 'info' };
+}
+
+const ACTIVITY_TYPES = [
+  { key: 'all',      label: 'All types', icon: <I.history />, tone: 'neutral' },
+  { key: 'email',    label: 'Email',     icon: <I.mail />,    tone: 'warning' },
+  { key: 'call',     label: 'Call',      icon: <I.phone />,   tone: 'success' },
+  { key: 'chat',     label: 'Chat',      icon: <I.chat />,    tone: 'success' },
+  { key: 'note',     label: 'Note',      icon: <I.note />,    tone: 'brand' },
+  { key: 'image',    label: 'Image',     icon: <I.camera />,  tone: 'error' },
+  { key: 'workflow', label: 'Workflow',  icon: <I.cog />,     tone: 'info' },
+];
+function typeSwatch(tone) {
+  return tone === 'neutral'
+    ? { bg: 'var(--gb-fill-subtle)', bd: 'var(--gb-border-default)', fg: 'var(--gb-text-tertiary)' }
+    : { bg: `var(--gb-${tone}-tint-medium)`, bd: `var(--gb-${tone}-tint-border)`, fg: `var(--gb-${tone}-fg)` };
+}
+/* Animated type-filter dropdown for the activity feed. */
+function ActivityFilter({ value, onChange, counts }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => { const p = (e.composedPath && e.composedPath()) || []; if (ref.current && p.indexOf(ref.current) === -1) setOpen(false); };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown, true);
+    document.addEventListener('keydown', onKey, true);
+    return () => { document.removeEventListener('mousedown', onDown, true); document.removeEventListener('keydown', onKey, true); };
+  }, [open]);
+  const active = value !== 'all';
+  const cur = ACTIVITY_TYPES.find((t) => t.key === value) || ACTIVITY_TYPES[0];
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <Btn variant={active ? 'tinted' : 'ghost'} size="sm" icon={<I.filter />}
+        iconRight={<I.chevd style={{ transition: 'transform var(--gb-anim)', transform: open ? 'rotate(180deg)' : 'none' }} />}
+        onClick={() => setOpen((o) => !o)}>
+        {active ? cur.label : 'Filter'}
+      </Btn>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 60,
+          minWidth: 176, padding: 5,
+          background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)',
+          borderRadius: 'var(--gb-r-lg)', boxShadow: 'var(--gb-shadow-popover)',
+          display: 'flex', flexDirection: 'column', gap: 1,
+          animation: 'gb-fade-slide var(--gb-anim) both',
+        }}>
+          {ACTIVITY_TYPES.map((t) => {
+            const sel = t.key === value;
+            const sw = typeSwatch(t.tone);
+            return (
+              <button key={t.key} onClick={() => { onChange(t.key); setOpen(false); }}
+                onMouseEnter={(e) => { if (!sel) e.currentTarget.style.background = 'var(--gb-fill-subtle)'; }}
+                onMouseLeave={(e) => { if (!sel) e.currentTarget.style.background = 'transparent'; }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '6px 9px',
+                  borderRadius: 'var(--gb-r-sm)', border: 0, cursor: 'pointer', textAlign: 'left',
+                  fontFamily: 'var(--gb-font-sans)', fontSize: 12, fontWeight: sel ? 700 : 500,
+                  color: sel ? 'var(--gb-brand-label)' : 'var(--gb-text-secondary)',
+                  background: sel ? 'var(--gb-brand-tint-soft)' : 'transparent',
+                  transition: 'background var(--gb-anim)',
+                }}>
+                <span style={{ width: 20, height: 20, borderRadius: 5, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: sw.bg, border: '1px solid ' + sw.bd, color: sw.fg }}>{React.cloneElement(t.icon, { size: 11 })}</span>
+                <span style={{ flex: 1 }}>{t.label}</span>
+                <span style={{ fontSize: 10, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)' }}>{counts[t.key] || 0}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 function ActivityRow({ a, last }) {
   const [hover, setHover] = useState(false);
@@ -1261,25 +1336,37 @@ function ActivityRow({ a, last }) {
 function ActivityPanel() {
   const D = useD();
   const rows = D.activities;
+  const [filter, setFilter] = useState('all');
+  const counts = useMemo(() => {
+    const c = { all: rows.length };
+    rows.forEach((a) => { const k = activityType(a).key; c[k] = (c[k] || 0) + 1; });
+    return c;
+  }, [rows]);
+  const filtered = filter === 'all' ? rows : rows.filter((a) => activityType(a).key === filter);
   return (
     <Card>
       <SectionTitle
         icon={<I.history />}
         title="Activity Feed"
-        count={`${rows.length}`}
+        count={filter === 'all' ? `${rows.length}` : `${filtered.length} of ${rows.length}`}
         sub="System, workflow, and human-logged events"
         right={
           <div style={{ display: 'flex', gap: 6 }}>
-            <Btn variant="ghost" size="sm" icon={<I.filter />}>Filter</Btn>
+            <ActivityFilter value={filter} onChange={setFilter} counts={counts} />
             <Btn variant="tinted" size="sm" icon={<I.plus />}>Add note</Btn>
           </div>
         }
       />
       <ScrollArea max={460}>
-        {rows.map((a, idx) => <ActivityRow key={idx} a={a} last={idx === rows.length - 1} />)}
-        {rows.length === 0 && (
-          <div style={{ padding: 28, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)' }}>No activity recorded.</div>
-        )}
+        {/* key by filter → the list fades/slides in on each filter change */}
+        <div key={filter} style={{ animation: 'gb-fade-slide var(--gb-anim) both' }}>
+          {filtered.map((a, idx) => <ActivityRow key={idx} a={a} last={idx === filtered.length - 1} />)}
+          {filtered.length === 0 && (
+            <div style={{ padding: 28, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)' }}>
+              {rows.length ? 'No matching activity.' : 'No activity recorded.'}
+            </div>
+          )}
+        </div>
       </ScrollArea>
     </Card>
   );

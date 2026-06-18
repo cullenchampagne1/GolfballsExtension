@@ -150,22 +150,19 @@ function Seg({ options, value, onChange }) {
   );
 }
 
-/* Parse a saved CRM HTML string, run the REAL schema engine over it, and
-   return { page, data, schemaId, error }. Tests extraction end-to-end. */
-function runEngineOnHtml(text) {
+/* Parse a saved CRM HTML string and run the REAL schema engine over it.
+   The render page comes from the picker (`page`), NOT auto-detection — stamp
+   the matching source URL so the engine's URL-aware bits resolve to it. */
+function runEngineOnHtml(text, page) {
   try {
     const doc = new DOMParser().parseFromString(text, 'text/html');
-    // Account page is the only one with #PartnerCampaignID; everything else
-    // (incl. account) carries #tbContactId. Use that to pick the render +
-    // stamp a source URL so the engine's URL-aware bits resolve.
-    const isAccount = !!doc.querySelector('#PartnerCampaignID');
-    const page = isAccount ? 'account_details' : 'contact_details';
+    const isAccount = page === 'account_details';
     try { doc.body.dataset.gbSourceUrl = 'https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=' + (isAccount ? '271' : '240'); } catch (e) {}
     const eng = window.__gbPageEngine;
     if (!eng || typeof eng.runEngine !== 'function') return { error: 'page-engine.js not loaded (window.__gbPageEngine missing)' };
     const res = eng.runEngine(doc);
-    if (!res || !res.data) return { page, error: 'Engine found no matching schema in this HTML (is it a Contact/Account Details page?)' };
-    return { page, data: res.data, schemaId: res.schemaId };
+    if (!res || !res.data) return { error: 'Engine found no matching schema in this HTML (is it a Contact/Account Details page?)' };
+    return { data: res.data, schemaId: res.schemaId };
   } catch (e) {
     return { error: (e && e.message) || 'parse failed' };
   }
@@ -179,7 +176,9 @@ function Sandbox() {
   const hostRef = useRef(null);
   const stores = useRef({});
 
-  const activePage = source === 'html' && loaded && loaded.page ? loaded.page : page;
+  // The picker (`page`) always drives which page renders — both for mock and
+  // for a loaded HTML — so loading a file respects the Contact/Account choice.
+  const activePage = page;
   const activeData =
     source === 'html'
       ? (loaded && loaded.data) || null
@@ -212,7 +211,7 @@ function Sandbox() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const out = runEngineOnHtml(String(reader.result || ''));
+      const out = runEngineOnHtml(String(reader.result || ''), page);
       setLoaded({ name: file.name, ...out });
       setSource('html');
     };
@@ -230,7 +229,9 @@ function Sandbox() {
       }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Custom Pages Sandbox</span>
 
-        {source === 'mock' && <Seg options={PAGES} value={page} onChange={setPage} />}
+        {/* Page picker drives the render in BOTH modes — pick Contact/Account
+            BEFORE loading a file and that's what it renders as. */}
+        <Seg options={PAGES} value={page} onChange={setPage} />
         {source === 'mock' && <Seg options={STATES} value={state} onChange={setState} />}
 
         <label style={{
@@ -256,7 +257,7 @@ function Sandbox() {
         {source === 'html' && loaded
           ? (loaded.error
               ? <span style={{ fontSize: 11, color: 'var(--gb-error-fg)', fontFamily: 'var(--gb-font-mono)' }}>⚠ {loaded.error}</span>
-              : <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{loaded.name} → engine · {loaded.schemaId || loaded.page}</span>)
+              : <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>{loaded.name} → engine · {loaded.schemaId || page}</span>)
           : <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>mock data · no CRM</span>}
       </div>
       <div ref={hostRef} style={{ position: 'fixed', top: 46, left: 0, right: 0, bottom: 0 }} />
