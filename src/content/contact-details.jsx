@@ -579,6 +579,58 @@ async function crmCreateTask(contactId, e = {}) {
   const id = resp.TaskId || resp.taskId || resp.TaskID || `new-${++__gbTaskTmp}`;
   return { task, id };
 }
+/* Opportunity stages (ddlopportunityStageId from the page). */
+const OPP_STAGES = [
+  { value: '1', label: 'Open' }, { value: '2', label: 'Proposed' }, { value: '3', label: 'Ordered' },
+  { value: '4', label: 'Closed - Won' }, { value: '5', label: 'Closed - Lost' }, { value: '6', label: 'Automation' },
+  { value: '7', label: 'Prospect' }, { value: '8', label: 'Qualified' },
+];
+/* <input type=date> (YYYY-MM-DD) ⇄ opportunity's MM-DD-YYYY. */
+function toDateInputAny(s) {
+  if (!s) return '';
+  const str = String(s);
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+  const m = str.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+  return m ? `${m[3]}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}` : '';
+}
+function toOppDate(v) { const m = (v || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[2]}-${m[3]}-${m[1]}` : v; }
+async function crmGetOpportunity(id) {
+  const r = await fetch(`${crmOrigin()}/golfballs/crm/Admin/Opportunity/Get.ajax?${id}`, { credentials: 'include' });
+  return JSON.parse(await r.text());
+}
+async function crmSaveOpportunity(contactId, o) {
+  const base = crmOrigin();
+  const payload = {
+    opportunityId: o.opportunityId || '',
+    Subject: o.Subject || '',
+    Description: o.Description || '',
+    EstimatedClosedDate: o.EstimatedClosedDate || '',
+    EstimatedValue: o.EstimatedValue || '0',
+    OpportunityStageId: String(o.OpportunityStageId || '1'),
+    empAssignedId: String(o.empAssignedId || '0'),
+    contactId: Number(contactId),
+    LeadID: null,
+  };
+  const action = payload.opportunityId ? 'Update' : 'Create';
+  const r = await fetch(`${base}/golfballs/crm/Admin/Opportunity/${action}.ajax?${encodeURIComponent(JSON.stringify(payload))}`, { credentials: 'include' });
+  if (!r.ok) throw new Error('opp save failed');
+  let resp = {}; try { resp = JSON.parse(await r.text()); } catch (x) {}
+  return { payload, resp };
+}
+/* Snooze mailer — weeks number (page sends it as snoozePoints verbatim). */
+async function crmSnooze(customerID, weeks) {
+  const base = crmOrigin();
+  const obj = { customerID: Number(customerID), snoozePoints: Number(weeks) || 0 };
+  const r = await fetch(`${base}/golfballs/crm/Admin/Mailer/UpdateSnoozeTime.ajax?${encodeURIComponent(JSON.stringify(obj))}`, { credentials: 'include' });
+  if (!r.ok) throw new Error('snooze failed');
+}
+async function crmGetSnoozeWeeks(customerID) {
+  try {
+    const r = await fetch(`${crmOrigin()}/golfballs/crm/Admin/Mailer/GetSnoozePoints.ajax?${customerID}`, { credentials: 'include' });
+    const pts = Number(await r.text());
+    return Number.isFinite(pts) ? Math.round(pts / 3) : '';
+  } catch (e) { return ''; }
+}
 
 /* Breadcrumb trail: before navigating away, stash where we are so the
    destination can offer a "back to …" crumb. sessionStorage survives the
@@ -2053,6 +2105,91 @@ function AddTaskModal() {
   );
 }
 
+/* New / Edit Opportunity — Create or Update; optimistically patches the list. */
+function OpportunityModal({ opportunityId }) {
+  const { closeModal } = useModal();
+  const patch = usePatch();
+  const D = useD();
+  const editing = !!opportunityId;
+  const [loading, setLoading] = useState(editing);
+  const [busy, setBusy] = useState(false);
+  const [o, setO] = useState({ opportunityId: opportunityId || '', Subject: '', Description: '', EstimatedValue: '', EstimatedClosedDate: '', OpportunityStageId: '1', empAssignedId: '0' });
+  useEffect(() => {
+    if (!editing) return;
+    let live = true;
+    crmGetOpportunity(opportunityId).then((g) => {
+      if (!live) return;
+      setO({
+        opportunityId: String(opportunityId),
+        Subject: g.Subject || '', Description: g.Description || '',
+        EstimatedValue: g.EstimatedValue != null ? String(g.EstimatedValue) : '',
+        EstimatedClosedDate: g.EstimatedClosedDate || g.EstimatedCloseDate || '',
+        OpportunityStageId: String(g.OpportunityStageId || g.opportunityStageId || '1'),
+        empAssignedId: String(g.empAssignedId || '0'),
+      });
+      setLoading(false);
+    }).catch(() => setLoading(false));
+    return () => { live = false; };
+  }, [opportunityId]);
+  const save = async () => {
+    if (!o.Subject.trim() || busy) return;
+    setBusy(true);
+    try {
+      const { payload, resp } = await crmSaveOpportunity(D.ids.contact, o);
+      const id = payload.opportunityId || resp.opportunityId || `new-${++__gbTaskTmp}`;
+      const stageLabel = (OPP_STAGES.find((s) => s.value === payload.OpportunityStageId) || {}).label || '';
+      patch((Dd) => {
+        const row = { id: String(id), subject: payload.Subject, stage: stageLabel, estimatedValue: Number(payload.EstimatedValue) || 0, estimatedCloseDate: payload.EstimatedClosedDate };
+        const list = Dd.opportunities || [];
+        const exists = list.some((x) => String(x.id) === String(id));
+        return { ...Dd, opportunities: exists ? list.map((x) => String(x.id) === String(id) ? { ...x, ...row } : x) : [row, ...list] };
+      });
+      closeModal();
+    } catch (e) { gbToast('Could not save opportunity', 'error'); setBusy(false); }
+  };
+  return (
+    <ModalShell title={editing ? 'Edit Opportunity' : 'New Opportunity'} icon={<I.target />} width={520} footer={<>
+      <Btn variant="ghost" size="sm" onClick={closeModal} disabled={busy}>Cancel</Btn>
+      <Btn variant="primary" size="sm" icon={<I.check />} onClick={save} disabled={busy || loading || !o.Subject.trim()}>{busy ? 'Saving…' : 'Save'}</Btn>
+    </>}>
+      {loading
+        ? <div style={{ padding: 20, textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12 }}>Loading…</div>
+        : <>
+          <FormField label="Subject"><input autoFocus value={o.Subject} onChange={(e) => setO({ ...o, Subject: e.target.value })} style={inputStyle} /></FormField>
+          <FormField label="Description"><textarea value={o.Description} onChange={(e) => setO({ ...o, Description: e.target.value })} rows={3} style={{ ...inputStyle, height: 'auto', padding: 8, resize: 'vertical', lineHeight: 1.5 }} /></FormField>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <FormField label="Est. value" style={{ flex: 1 }}><input value={o.EstimatedValue} onChange={(e) => setO({ ...o, EstimatedValue: e.target.value })} placeholder="0" style={inputStyle} /></FormField>
+            <FormField label="Est. close" style={{ flex: 1 }}><input type="date" value={toDateInputAny(o.EstimatedClosedDate)} onChange={(e) => setO({ ...o, EstimatedClosedDate: toOppDate(e.target.value) })} style={inputStyle} /></FormField>
+          </div>
+          <FormField label="Stage"><MiniSelect value={o.OpportunityStageId} options={OPP_STAGES} onChange={(v) => setO({ ...o, OpportunityStageId: v })} /></FormField>
+        </>}
+    </ModalShell>
+  );
+}
+
+/* Snooze Mailer — number of weeks (the page sends it as snoozePoints). */
+function SnoozeModal() {
+  const { closeModal } = useModal();
+  const D = useD();
+  const [weeks, setWeeks] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { let live = true; crmGetSnoozeWeeks(D.ids.contact).then((w) => { if (live && w !== '') setWeeks(String(w)); }); return () => { live = false; }; }, []);
+  const save = async () => {
+    if (busy) return;
+    setBusy(true);
+    try { await crmSnooze(D.ids.contact, weeks); closeModal(); }
+    catch (e) { gbToast('Could not snooze mailer', 'error'); setBusy(false); }
+  };
+  return (
+    <ModalShell title="Snooze Mailer" icon={<I.send />} width={380} footer={<>
+      <Btn variant="ghost" size="sm" onClick={closeModal} disabled={busy}>Cancel</Btn>
+      <Btn variant="primary" size="sm" icon={<I.check />} onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Snooze'}</Btn>
+    </>}>
+      <FormField label="Weeks to snooze"><input type="number" min="0" autoFocus value={weeks} onChange={(e) => setWeeks(e.target.value)} placeholder="Enter number of weeks…" style={inputStyle} /></FormField>
+    </ModalShell>
+  );
+}
+
 /* Do-Not-Call: calls the CRM RemoveFromDoNotCallList endpoint directly. */
 function DncButton() {
   const D = useD();
@@ -2250,12 +2387,13 @@ function TasksPanel() {
 /* — Opportunities (added; the design mock omitted this) — */
 function OpportunitiesPanel() {
   const D = useD();
+  const { openModal } = useModal();
   return (
     <Card>
       <SectionTitle
         icon={<I.target />} title="Opportunities" count={D.opportunities.length}
         sub="Pipeline for this contact"
-        right={<Btn variant="tinted" size="sm" icon={<I.plus />}>New opportunity</Btn>}
+        right={<Btn variant="tinted" size="sm" icon={<I.plus />} onClick={() => openModal(<OpportunityModal />)}>New opportunity</Btn>}
       />
       <ScrollArea max={420}>
       <table style={tableStyle}>
@@ -2278,7 +2416,7 @@ function OpportunitiesPanel() {
               <Td align="right">
                 <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
                   <Btn variant="ghost" size="xs" iconRight={<I.ext />} onClick={() => { if (o.id) goUrl(oppHref(o.id)); }}>Open</Btn>
-                  <Btn variant="tinted" size="xs" icon={<I.edit />}>Edit</Btn>
+                  <Btn variant="tinted" size="xs" icon={<I.edit />} onClick={() => openModal(<OpportunityModal opportunityId={o.id} />)}>Edit</Btn>
                 </div>
               </Td>
             </tr>
@@ -2482,6 +2620,7 @@ function AltLookupsCard() {
 
 function MailerCard() {
   const D = useD();
+  const { openModal } = useModal();
   const s = D.stats;
   const removed = num(s.mailerRemoved) ? true : false;
   return (
@@ -2509,7 +2648,7 @@ function MailerCard() {
         <KV label="Last Touch" mono>{fmtDate(s.mailerTouchDate) === DASH ? null : fmtDate(s.mailerTouchDate)}</KV>
         <KV label="Last Bounce" mono>{txt(s.lastBounceCode)}</KV>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 12 }}>
-          <Btn variant="tinted" status="warning" size="sm" full>Snooze</Btn>
+          <Btn variant="tinted" status="warning" size="sm" full onClick={() => openModal(<SnoozeModal />)}>Snooze</Btn>
           <Btn variant="tinted" status="error" size="sm" full>Remove</Btn>
         </div>
       </div>
