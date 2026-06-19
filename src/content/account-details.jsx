@@ -1530,7 +1530,7 @@ function ProofsPanel() {
   return (
     <Card>
       <SectionTitle icon={<I.camera />} title="Logo Proofs" count={rows.length} sub="Artwork proofs & mockups" />
-      <div className="gb-scroll" style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: 14, overflowX: 'auto', overflowY: 'hidden' }}>
+      <div className="gb-scroll" style={{ display: 'flex', alignItems: 'stretch', gap: 12, padding: 14, overflowX: 'auto', overflowY: 'hidden' }}>
         {rows.map((p, i) => <ProofCard key={i} p={p} />)}
       </div>
     </Card>

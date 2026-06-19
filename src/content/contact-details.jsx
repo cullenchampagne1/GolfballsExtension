@@ -422,7 +422,12 @@ const UI_CSS =
   '  100% { box-shadow: 0 0 0 0 transparent, inset 0 0 0 1px transparent; }' +
   '}' +
   '.gb-saved { animation: gb-saved-pulse .7s ease-out; }' +
-  '@keyframes gb-pop-in { 0% { opacity: 0; transform: translateY(8px) scale(.985); } 100% { opacity: 1; transform: none; } }';
+  '@keyframes gb-pop-in { 0% { opacity: 0; transform: translateY(8px) scale(.985); } 100% { opacity: 1; transform: none; } }' +
+  '@keyframes gb-pop-out { 0% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(6px) scale(.975); } }' +
+  '@keyframes gb-backdrop-out { 0% { opacity: 1; } 100% { opacity: 0; } }' +
+  /* strip the native number-spinner arrows (snooze "weeks", etc.) */
+  'input[type=number]::-webkit-outer-spin-button, input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }' +
+  'input[type=number] { -moz-appearance: textfield; }';
 
 /* Capped-height scroll region with the thin themed scrollbar. Used to
    stack every panel on one screen (no tabs) without runaway height. */
@@ -1792,7 +1797,7 @@ function ProofsPanel() {
     <Card>
       <SectionTitle icon={<I.camera />} title="Logo Proofs" count={rows.length} sub="Artwork proofs & mockups" />
       {/* horizontal strip of proof cards (SubmitProof-style), custom scrollbar */}
-      <div className="gb-scroll" style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: 14, overflowX: 'auto', overflowY: 'hidden' }}>
+      <div className="gb-scroll" style={{ display: 'flex', alignItems: 'stretch', gap: 12, padding: 14, overflowX: 'auto', overflowY: 'hidden' }}>
         {rows.map((p, i) => <ProofCard key={i} p={p} />)}
       </div>
     </Card>
@@ -2020,8 +2025,15 @@ function MiniSelect({ value, options, onChange }) {
         <span>{cur ? cur.label : ''}</span>
         <I.chevd size={12} style={{ transition: 'transform var(--gb-anim)', transform: open ? 'rotate(180deg)' : 'none', color: 'var(--gb-text-muted)' }} />
       </button>
-      {open && (
-        <div style={{ marginTop: 4, padding: 4, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', boxShadow: 'var(--gb-shadow-popover)', display: 'flex', flexDirection: 'column', gap: 1, animation: 'gb-fade-slide var(--gb-anim) both' }}>
+      {/* always rendered + animated max-height so opening smoothly GROWS the
+          modal (and closing shrinks it) instead of jumping. */}
+      <div style={{
+        overflow: 'hidden',
+        maxHeight: open ? 320 : 0, opacity: open ? 1 : 0,
+        marginTop: open ? 4 : 0,
+        transition: 'max-height .24s cubic-bezier(.4,0,.2,1), opacity .18s ease, margin-top .24s cubic-bezier(.4,0,.2,1)',
+      }}>
+        <div style={{ padding: 4, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', boxShadow: 'var(--gb-shadow-popover)', display: 'flex', flexDirection: 'column', gap: 1 }}>
           {options.map((o) => {
             const sel = String(o.value) === String(value);
             return (
@@ -2032,13 +2044,13 @@ function MiniSelect({ value, options, onChange }) {
             );
           })}
         </div>
-      )}
+      </div>
     </div>
   );
 }
 const PRIORITY_OPTS = [{ value: '1', label: 'High' }, { value: '2', label: 'Med' }, { value: '3', label: 'Low' }];
 function ModalShell({ title, icon, subtitle, children, footer, width = 460 }) {
-  const { closeModal } = useModal();
+  const { closeModal, closing } = useModal();
   return (
     <div onMouseDown={(e) => e.stopPropagation()}
       style={{
@@ -2048,7 +2060,7 @@ function ModalShell({ title, icon, subtitle, children, footer, width = 460 }) {
         // scale the modal to match the page (the takeover renders at PAGE_ZOOM;
         // the overlay is a 1x sibling, so without this the modal looks tiny).
         zoom: PAGE_ZOOM, overflow: 'hidden',
-        animation: 'gb-pop-in .22s cubic-bezier(.34,1.4,.64,1) both',
+        animation: closing ? 'gb-pop-out .19s ease both' : 'gb-pop-in .22s cubic-bezier(.34,1.4,.64,1) both',
       }}>
       {/* shared ModalHeader/Footer — same icon tile, close button + chrome as
           every other extension modal. MiniSelect opens in-flow (grows the
@@ -2854,7 +2866,10 @@ function App({ store }) {
   // inherit it — no per-page light/dark toggle.
   const [sideCollapsed, setSideCollapsed] = useState(false);
   const [modal, setModal] = useState(null);
-  const modalApi = useMemo(() => ({ openModal: (node) => setModal(node), closeModal: () => setModal(null) }), []);
+  const [modalClosing, setModalClosing] = useState(false);
+  const openModal = useCallback((node) => { setModalClosing(false); setModal(node); }, []);
+  const closeModal = useCallback(() => { setModalClosing(true); setTimeout(() => { setModal(null); setModalClosing(false); }, 190); }, []);
+  const modalApi = { openModal, closeModal, closing: modalClosing };   // closing drives the exit animation
 
   return (
     <DataCtx.Provider value={D}>
@@ -2933,7 +2948,7 @@ function App({ store }) {
             position: 'fixed', inset: 0, zIndex: 400,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: 'rgba(0,0,0,.55)', padding: 20,
-            animation: 'gb-fade-slide var(--gb-anim) both',
+            animation: modalClosing ? 'gb-backdrop-out .19s ease both' : 'gb-fade-slide var(--gb-anim) both',
           }}>
           {modal}
         </div>
