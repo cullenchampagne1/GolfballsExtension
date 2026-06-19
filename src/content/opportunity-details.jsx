@@ -614,15 +614,15 @@ async function crmGetOpportunity(id) {
   const r = await fetch(`${crmOrigin()}/golfballs/crm/Admin/Opportunity/Get.ajax?${id}`, { credentials: 'include' });
   return JSON.parse(await r.text());
 }
-/* Proposals live in the host DOM as checkboxes whose onclick is
-   ProposalCheckToggle(this, '<cartId>', '<name>', '<expiration>', <newSite>). */
+/* Proposals live in the host DOM as checkboxes whose ONCHANGE is
+   ProposalCheckToggle(this, '<cartId>', '<name>', '<expiration>', '<newSite>'). */
 function extractProposals(doc) {
   const out = [];
   try {
-    (doc || document).querySelectorAll('[onclick*="ProposalCheckToggle"]').forEach((el) => {
-      const oc = el.getAttribute('onclick') || '';
+    (doc || document).querySelectorAll('[onchange*="ProposalCheckToggle"], [onclick*="ProposalCheckToggle"]').forEach((el) => {
+      const oc = el.getAttribute('onchange') || el.getAttribute('onclick') || '';
       const m = /ProposalCheckToggle\(\s*this\s*,\s*'((?:\\.|[^'])*)'\s*,\s*'((?:\\.|[^'])*)'\s*,\s*'((?:\\.|[^'])*)'\s*,\s*([^)]*)\)/.exec(oc);
-      if (m) out.push({ cartId: m[1], name: m[2].replace(/\\'/g, "'"), expiration: m[3], newSite: /true/i.test(m[4]) });
+      if (m) out.push({ cartId: m[1], name: (m[2] || '').replace(/\\'/g, "'").trim(), expiration: m[3], newSite: /true/i.test(m[4]) });
     });
   } catch (e) {}
   return out;
@@ -3147,7 +3147,13 @@ function OppInfoCard() {
 function ProposalsSection() {
   const { opp } = useOpp();
   const D = useD();
-  const [proposals] = useState(() => extractProposals(document));
+  const [proposals, setProposals] = useState(() => extractProposals(document));
+  useEffect(() => {
+    if (proposals.length) return undefined;   // retry briefly if rows render late
+    let n = 0;
+    const t = setInterval(() => { const p = extractProposals(document); if (p.length) { setProposals(p); clearInterval(t); } else if (++n > 8) clearInterval(t); }, 500);
+    return () => clearInterval(t);
+  }, []);
   const [selected, setSelected] = useState([]);
   const [title, setTitle] = useState('');
   const [genHtml, setGenHtml] = useState('');
