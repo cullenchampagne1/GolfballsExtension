@@ -3155,27 +3155,8 @@ function ProposalsSection() {
     return () => clearInterval(t);
   }, []);
   const [selected, setSelected] = useState([]);
-  const [title, setTitle] = useState('');
-  const [genHtml, setGenHtml] = useState('');
-  const [busy, setBusy] = useState(false);
   const toggle = (id) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
   const chosen = proposals.filter((p) => selected.includes(p.cartId));
-  const ready = chosen.length > 0 && title.trim().length > 0;
-  const generate = async () => {
-    if (!ready || busy) return;
-    setBusy(true); setGenHtml('');
-    try {
-      const html = await crmCreateProposalEmail({
-        groupName: title.trim(),
-        contactEmail: D.contact.email,
-        contactName: [D.contact.firstName, D.contact.lastName].filter(Boolean).join(' '),
-        selected: chosen, contactId: D.ids.contact, opportunityId: opp.id, opportunityStatus: opp.stageId,
-      });
-      setGenHtml(html || '<p style="padding:16px;color:#888">No content returned.</p>');
-    } catch (e) { gbToast('Could not generate proposal email', 'error'); }
-    finally { setBusy(false); }
-  };
-  const copyEmail = async () => { try { await navigator.clipboard.writeText(genHtml); } catch (e) {} };
   return (
     <>
       <Card>
@@ -3206,22 +3187,16 @@ function ProposalsSection() {
           )}
       </Card>
       <Card>
-        <SectionTitle icon={<I.mail />} title="Generate Proposal Email" sub="Build a customer-facing email from the selected proposals"
-          right={<Btn variant="primary" size="sm" icon={<I.bolt />} disabled={!ready || busy} onClick={generate}>{busy ? 'Generating…' : 'Generate email'}</Btn>} />
+        <SectionTitle icon={<I.mail />} title="Breakdown & Email Generator" sub="The corporate-catalog breakdown + template generator, inlined" />
         <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <FormField label="Proposal group title"><TInput value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Moriarity Classic — 2024 Gift Program" /></FormField>
           {chosen.length === 0
             ? <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)', background: 'var(--gb-fill-faint)', border: '1px dashed var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>Select one or more proposals above.</div>
             : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{chosen.map((p) => <Tag key={p.cartId} tone="brand" size="sm">{p.name}</Tag>)}</div>}
-          {genHtml && (
-            <div style={{ animation: 'gb-fade-slide var(--gb-anim) both', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flex: 1 }}>Generated email</span>
-                <Btn variant="secondary" size="xs" icon={<I.copy />} onClick={copyEmail}>Copy HTML</Btn>
-              </div>
-              <EmailHtmlView html={genHtml} style={{ maxHeight: 520 }} />
-            </div>
-          )}
+          <div style={{ padding: 14, fontSize: 12, color: 'var(--gb-text-muted)', lineHeight: 1.5, background: 'var(--gb-fill-faint)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)' }}>
+            Wiring your <strong style={{ color: 'var(--gb-text-secondary)' }}>ProposalEmailComposer</strong> (the multi-template
+            corporate generator) here next — it builds the email client-side from each proposal's real line items
+            (loaded via getCart per cart), so no group title and no server round-trip.
+          </div>
         </div>
       </Card>
     </>
