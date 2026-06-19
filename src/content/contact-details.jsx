@@ -2031,18 +2031,23 @@ function ModalShell({ title, icon, children, footer, width = 460 }) {
   return (
     <div onMouseDown={(e) => e.stopPropagation()}
       style={{
-        width, maxWidth: '92%', maxHeight: '86%', display: 'flex', flexDirection: 'column',
+        width, maxWidth: '92%', display: 'flex', flexDirection: 'column',
         background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-default)',
         borderRadius: 'var(--gb-r-lg)', boxShadow: 'var(--gb-shadow-modal, 0 24px 64px rgba(0,0,0,.5))',
-        overflow: 'hidden', animation: 'gb-pop-in .22s cubic-bezier(.34,1.4,.64,1) both',
+        // scale the modal to match the page (the takeover renders at PAGE_ZOOM;
+        // the overlay is a 1x sibling, so without this the modal looks tiny).
+        zoom: PAGE_ZOOM,
+        // overflow visible so an open dropdown expands the modal's footprint
+        // instead of being clipped; header/footer carry their own corner radii.
+        animation: 'gb-pop-in .22s cubic-bezier(.34,1.4,.64,1) both',
       }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-surface-2)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-surface-2)', borderRadius: 'var(--gb-r-lg) var(--gb-r-lg) 0 0' }}>
         {icon && <span style={{ width: 28, height: 28, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{React.cloneElement(icon, { size: 14 })}</span>}
         <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)', flex: 1 }}>{title}</span>
         <IconBtn size="sm" ghost icon={<I.close />} onClick={closeModal} />
       </div>
-      <div className="gb-scroll" style={{ padding: 16, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
-      {footer && <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '11px 16px', borderTop: '1px solid var(--gb-border-subtle)', background: 'var(--gb-surface-2)' }}>{footer}</div>}
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
+      {footer && <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '11px 16px', borderTop: '1px solid var(--gb-border-subtle)', background: 'var(--gb-surface-2)', borderRadius: '0 0 var(--gb-r-lg) var(--gb-r-lg)' }}>{footer}</div>}
     </div>
   );
 }

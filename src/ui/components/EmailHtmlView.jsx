@@ -208,20 +208,21 @@ export function EmailHtmlView({ html, style }) {
     const host = hostRef.current;
     if (!host) return;
     const shadow = host.shadowRoot || host.attachShadow({ mode: 'open' });
-    const isDark = surfaceIsDark(host);
     /* base href keeps relative links/images resolving against the
        mail host; color-scheme + surface/text follow the active theme
        (the --gb tokens already re-theme) so the email reads correctly
-       in both dark and light. */
+       in both dark and light. color-scheme starts at the page theme; the
+       per-card normalise below (re-run on layout) decides the rest. */
+    const pageDark = surfaceIsDark(host);
     shadow.innerHTML = `
       <base href="https://api.golfballs.com">
       <style>
         :host {
           display: block;
-          color-scheme: ${isDark ? 'dark' : 'light'};
+          color-scheme: ${pageDark ? 'dark' : 'light'};
           padding: 16px 0;
-          background: var(--gb-surface-1, ${isDark ? '#1e2024' : '#ffffff'});
-          color: var(--gb-text-primary, ${isDark ? '#e8eaed' : '#1a1a1a'});
+          background: var(--gb-surface-1, ${pageDark ? '#1e2024' : '#ffffff'});
+          color: var(--gb-text-primary, ${pageDark ? '#e8eaed' : '#1a1a1a'});
           font-family: Calibri, 'Segoe UI', Arial, sans-serif;
           font-size: 13px;
           line-height: 1.6;
@@ -238,16 +239,29 @@ export function EmailHtmlView({ html, style }) {
       <div id="gb-email-content">${html || ''}</div>
     `;
     const content = shadow.querySelector('#gb-email-content');
-    if (content) {
+    if (!content) return undefined;
+    /* Normalise pass — colors + side gutter. Quoted thread cards mount
+       COLLAPSED (the thread default-expands a tick later), so at first paint
+       getComputedStyle reports a degenerate surface and surfaceIsDark can
+       misjudge dark↔light — which left every card but the visible one
+       formatted for the wrong theme. So we (a) run it now, and (b) re-run via
+       a ResizeObserver once the card actually has layout. normaliseEmailDom is
+       idempotent and recovers a wrongly-themed pass, so re-running is safe. */
+    const apply = () => {
+      const isDark = surfaceIsDark(host);
       normaliseEmailDom(content, isDark);
-      /* Add our own side gutter only when the email's HTML doesn't
-         already inset its content — keeps padded marketing templates
-         from getting a double gutter while plain replies still breathe. */
       if (!emailProvidesSidePadding(content)) {
         content.style.paddingLeft = '26px';
         content.style.paddingRight = '26px';
       }
-    }
+    };
+    apply();
+    let ro;
+    try {
+      ro = new ResizeObserver(() => { if (host.offsetHeight > 0) apply(); });
+      ro.observe(host);
+    } catch (e) { /* no ResizeObserver → the initial apply stands */ }
+    return () => { try { ro && ro.disconnect(); } catch (e) {} };
   }, [html]);
 
   return (
