@@ -32,6 +32,7 @@ import { ModalFooter } from '../ui/components/ModalFooter.jsx';
 import { DatePicker } from '../ui/components/DatePicker.jsx';
 import { ProposalEmailComposer } from '../modals/ProposalEmail.jsx';
 import { buildEmailSourceFromCartIds } from '../lib/proposalEmailSource.js';
+import { MarginBreakdown } from '../ui/components/MarginBreakdown.jsx';
 import { submitCallLog } from '../lib/submitCallLog.js';
 import { submitQuickTask } from '../lib/submitQuickTask.js';
 import { loadTaskTemplates } from '../lib/quickTask.js';
@@ -3143,6 +3144,9 @@ function ProposalsSection() {
   const [building, setBuilding] = useState(false);
   const toggle = (id) => { setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id])); setSource(null); };
   const chosen = proposals.filter((p) => selected.includes(p.cartId));
+  // Resolved lines for the margin report: single source carries rawLines; a
+  // multi-proposal source carries them per section.
+  const marginEntries = source ? ((source.rawLines && source.rawLines.length) ? source.rawLines : (source.sections || []).flatMap((s) => s.rawLines || [])) : [];
   const buildEmail = async () => {
     if (!chosen.length || building) return;
     setBuilding(true);
@@ -3203,8 +3207,11 @@ function ProposalsSection() {
             ? <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)', background: 'var(--gb-fill-faint)', border: '1px dashed var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>Select one or more proposals above, then Build email.</div>
             : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{chosen.map((p) => <Tag key={p.cartId} tone="brand" size="sm">{p.name}</Tag>)}</div>
           ) : (((source.lines && source.lines.length) || (source.sections && source.sections.length)) ? (
-            <div style={{ animation: 'gb-fade-slide var(--gb-anim) both', height: 'min(720px, 78vh)', display: 'flex', flexDirection: 'column' }}>
-              <ProposalEmailComposer source={source} />
+            <div style={{ animation: 'gb-fade-slide var(--gb-anim) both', display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {marginEntries.length > 0 && <MarginBreakdown entries={marginEntries} />}
+              <div style={{ height: 'min(720px, 78vh)', display: 'flex', flexDirection: 'column' }}>
+                <ProposalEmailComposer source={source} />
+              </div>
             </div>
           ) : (
             <div style={{ padding: 14, fontSize: 12, color: 'var(--gb-text-secondary)', lineHeight: 1.55, background: 'var(--gb-warning-tint-soft)', border: '1px solid var(--gb-warning-tint-border)', borderRadius: 'var(--gb-r-md)' }}>
