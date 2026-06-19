@@ -29,6 +29,7 @@ import { Input as UIInput } from '../ui/components/Input.jsx';
 import { Textarea as UITextarea } from '../ui/components/Textarea.jsx';
 import { ModalHeader } from '../ui/components/ModalHeader.jsx';
 import { ModalFooter } from '../ui/components/ModalFooter.jsx';
+import { DatePicker } from '../ui/components/DatePicker.jsx';
 import { submitCallLog } from '../lib/submitCallLog.js';
 import { submitQuickTask } from '../lib/submitQuickTask.js';
 import { loadTaskTemplates } from '../lib/quickTask.js';
@@ -2109,7 +2110,7 @@ function EditTaskModal({ taskId }) {
           <FormField label="Subject"><TInput value={t.Subject} onChange={(e) => setT({ ...t, Subject: e.target.value })} /></FormField>
           <FormField label="Description"><TArea value={t.Description} onChange={(e) => setT({ ...t, Description: e.target.value })} rows={4} /></FormField>
           <div style={{ display: 'flex', gap: 12 }}>
-            <FormField label="Due date" style={{ flex: 1 }}><TInput type="date" value={toDateInput(t.DueDate)} onChange={(e) => setT({ ...t, DueDate: fromDateInput(e.target.value) })} /></FormField>
+            <FormField label="Due date" style={{ flex: 1 }}><DatePicker includeTime={false} value={toDateInput(t.DueDate)} onChange={(v) => setT({ ...t, DueDate: v ? fromDateInput(String(v).slice(0,10)) : "" })} /></FormField>
             <FormField label="Priority" style={{ width: 130 }}>
               <MiniSelect value={t.Priority} options={PRIORITY_OPTS} onChange={(v) => setT({ ...t, Priority: v })} />
             </FormField>
@@ -2143,7 +2144,7 @@ function AddTaskModal() {
       <FormField label="Subject"><TInput autoFocus value={t.Subject} onChange={(e) => setT({ ...t, Subject: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') save(); }} /></FormField>
       <FormField label="Description"><TArea value={t.Description} onChange={(e) => setT({ ...t, Description: e.target.value })} rows={3} /></FormField>
       <div style={{ display: 'flex', gap: 12 }}>
-        <FormField label="Due date" style={{ flex: 1 }}><TInput type="date" value={toDateInput(t.DueDate)} onChange={(e) => setT({ ...t, DueDate: fromDateInput(e.target.value) })} /></FormField>
+        <FormField label="Due date" style={{ flex: 1 }}><DatePicker includeTime={false} value={toDateInput(t.DueDate)} onChange={(v) => setT({ ...t, DueDate: v ? fromDateInput(String(v).slice(0,10)) : "" })} /></FormField>
         <FormField label="Priority" style={{ width: 130 }}>
           <MiniSelect value={t.Priority} options={PRIORITY_OPTS} onChange={(v) => setT({ ...t, Priority: v })} />
         </FormField>
@@ -2206,7 +2207,7 @@ function OpportunityModal({ opportunityId }) {
           <FormField label="Description"><TArea value={o.Description} onChange={(e) => setO({ ...o, Description: e.target.value })} rows={3} /></FormField>
           <div style={{ display: 'flex', gap: 12 }}>
             <FormField label="Est. value" style={{ flex: 1 }}><TInput value={o.EstimatedValue} onChange={(e) => setO({ ...o, EstimatedValue: e.target.value })} placeholder="0" /></FormField>
-            <FormField label="Est. close" style={{ flex: 1 }}><TInput type="date" value={toDateInputAny(o.EstimatedClosedDate)} onChange={(e) => setO({ ...o, EstimatedClosedDate: toOppDate(e.target.value) })} /></FormField>
+            <FormField label="Est. close" style={{ flex: 1 }}><DatePicker includeTime={false} value={toDateInputAny(o.EstimatedClosedDate)} onChange={(v) => setO({ ...o, EstimatedClosedDate: v ? toOppDate(String(v).slice(0,10)) : "" })} /></FormField>
           </div>
           <FormField label="Stage"><MiniSelect value={o.OpportunityStageId} options={OPP_STAGES} onChange={(v) => setO({ ...o, OpportunityStageId: v })} /></FormField>
         </>}
@@ -2497,6 +2498,8 @@ function TasksPanel() {
   const patch = usePatch();
   const { openModal } = useModal();
   const qt = useTemplates(QT_KEY);
+  const [manage, setManage] = useState(false);
+  const editTask = (t) => openModal(<TemplateModal kind="task" initial={t} onSave={(tpl) => qt.update(t.id, tpl)} onDelete={() => qt.remove(t.id)} />);
   const [quickTask, setQuickTask] = useState('');
   const [adding, setAdding] = useState(false);
   // Optimistically prepend a row (after a real create) and animate it in.
@@ -2545,15 +2548,22 @@ function TasksPanel() {
           right={<Btn variant="tinted" size="sm" icon={<I.plus />} onClick={openComposer}>New task</Btn>}
         />
         <div style={{ padding: '12px 18px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
-          <div style={{
-            fontSize: 10, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase',
-            color: 'var(--gb-text-muted)', marginBottom: 8,
-          }}>Quick create — one click adds a task (no modal)</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flex: 1 }}>
+              {manage ? 'Manage — click to edit · × to remove' : 'Quick create — one click adds a task'}
+            </span>
+            {qt.list.length > 0 && <IconBtn size="xs" ghost active={manage} icon={<I.edit />} title="Manage buttons" onClick={() => setManage((m) => !m)} />}
+          </div>
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
             {qt.list.map((t) => (
-              <Btn key={t.id} variant="secondary" size="xs" title="Click to add · right-click to edit"
-                onClick={() => runTaskTemplate(t)}
-                onContextMenu={(e) => { e.preventDefault(); openModal(<TemplateModal kind="task" initial={t} onSave={(tpl) => qt.update(t.id, tpl)} onDelete={() => qt.remove(t.id)} />); }}>{t.label}</Btn>
+              <span key={t.id} style={{ position: 'relative', display: 'inline-flex' }}>
+                <Btn variant={manage ? 'tinted' : 'secondary'} size="xs"
+                  title={manage ? 'Click to edit' : 'Click to add · right-click to edit'}
+                  onClick={() => (manage ? editTask(t) : runTaskTemplate(t))}
+                  onContextMenu={(e) => { e.preventDefault(); editTask(t); }}>{t.label}</Btn>
+                {manage && <span onClick={(e) => { e.stopPropagation(); qt.remove(t.id); }} title="Remove"
+                  style={{ position: 'absolute', top: -5, right: -5, width: 15, height: 15, borderRadius: '50%', background: 'var(--gb-error-tint-medium)', border: '1px solid var(--gb-error-tint-border)', color: 'var(--gb-error-fg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, lineHeight: 1, cursor: 'pointer' }}>×</span>}
+              </span>
             ))}
             <IconBtn size="xs" ghost icon={<I.plus />} title="New quick task" onClick={() => openModal(<TemplateModal kind="task" onSave={qt.add} />)} />
             {qt.list.length === 0 && <span style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>Add a quick task with +</span>}
@@ -2792,6 +2802,8 @@ function QuickLogCard() {
   const { openModal } = useModal();
   const ql = useTemplates(QL_KEY);
   const [busy, setBusy] = useState(null);
+  const [manage, setManage] = useState(false);
+  const editLog = (t) => openModal(<TemplateModal kind="call" initial={t} onSave={(tpl) => ql.update(t.id, tpl)} onDelete={() => ql.remove(t.id)} />);
   // A quick-log button: fire the referenced saved call template directly.
   const runLog = async (chip) => {
     if (busy) return;
@@ -2815,22 +2827,28 @@ function QuickLogCard() {
   };
   return (
     <Card>
-      <SectionTitle icon={<I.zap />} title="Quick Log" sub="Log a call instantly — one click"
-        right={<IconBtn size="xs" ghost icon={<I.plus />} title="New quick log" onClick={() => openModal(<TemplateModal kind="call" onSave={ql.add} />)} />} />
+      <SectionTitle icon={<I.zap />} title="Quick Log" sub={manage ? 'Click a button to edit · × to remove' : 'Log a call instantly — one click'}
+        right={<div style={{ display: 'flex', gap: 4 }}>
+          {ql.list.length > 0 && <IconBtn size="xs" ghost active={manage} icon={<I.edit />} title="Manage buttons" onClick={() => setManage((m) => !m)} />}
+          <IconBtn size="xs" ghost icon={<I.plus />} title="New quick log" onClick={() => openModal(<TemplateModal kind="call" onSave={ql.add} />)} />
+        </div>} />
       <div style={{ padding: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
         {ql.list.map((t) => (
-          <button key={t.id} disabled={busy === t.id}
-            onClick={() => runLog(t)}
-            onContextMenu={(e) => { e.preventDefault(); openModal(<TemplateModal kind="call" initial={t} onSave={(tpl) => ql.update(t.id, tpl)} onDelete={() => ql.remove(t.id)} />); }}
-            title="Click to log · right-click to edit"
+          <button key={t.id} disabled={busy === t.id && !manage}
+            onClick={() => (manage ? editLog(t) : runLog(t))}
+            onContextMenu={(e) => { e.preventDefault(); editLog(t); }}
+            title={manage ? 'Click to edit' : 'Click to log · right-click to edit'}
             style={{
-              minWidth: 0,   // let the grid cell constrain width so text can wrap
-              background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)',
+              position: 'relative', minWidth: 0,   // let the grid cell constrain width so text can wrap
+              background: 'var(--gb-fill-subtle)',
+              border: '1px ' + (manage ? 'dashed var(--gb-brand-tint-border)' : 'solid var(--gb-border-default)'),
               borderRadius: 'var(--gb-r-md)', padding: '10px 9px',
               display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start',
-              cursor: busy === t.id ? 'default' : 'pointer', textAlign: 'left', opacity: busy === t.id ? 0.6 : 1,
+              cursor: busy === t.id && !manage ? 'default' : 'pointer', textAlign: 'left', opacity: busy === t.id && !manage ? 0.6 : 1,
               transition: 'all var(--gb-anim)', fontFamily: 'var(--gb-font-sans)',
             }}>
+            {manage && <span onClick={(e) => { e.stopPropagation(); ql.remove(t.id); }} title="Remove"
+              style={{ position: 'absolute', top: 5, right: 5, width: 16, height: 16, borderRadius: '50%', background: 'var(--gb-error-tint-medium)', border: '1px solid var(--gb-error-tint-border)', color: 'var(--gb-error-fg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, lineHeight: 1, cursor: 'pointer' }}>×</span>}
             <span style={{ color: 'var(--gb-text-tertiary)', display: 'flex' }}><I.phone size={13} /></span>
             <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.25, overflowWrap: 'anywhere', wordBreak: 'break-word', maxWidth: '100%' }}>{t.label}</span>
             <span style={{ fontSize: 9, letterSpacing: .5, fontWeight: 600, color: 'var(--gb-text-muted)', lineHeight: 1.3, overflowWrap: 'anywhere', wordBreak: 'break-word', maxWidth: '100%' }}>{t.templateName || ''}</span>
