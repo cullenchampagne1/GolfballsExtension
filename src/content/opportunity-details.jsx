@@ -31,6 +31,8 @@ import { ModalHeader } from '../ui/components/ModalHeader.jsx';
 import { ModalFooter } from '../ui/components/ModalFooter.jsx';
 import { DatePicker } from '../ui/components/DatePicker.jsx';
 import { EmailHtmlView } from '../ui/components/EmailHtmlView.jsx';
+import { ProposalEmailComposer } from '../ui/components/ProposalEmailComposer.jsx';
+import { parseGetCart } from '../lib/cartSerializer.js';
 import { submitCallLog } from '../lib/submitCallLog.js';
 import { submitQuickTask } from '../lib/submitQuickTask.js';
 import { loadTaskTemplates } from '../lib/quickTask.js';
@@ -643,6 +645,36 @@ async function crmCreateProposalEmail({ groupName, contactEmail, contactName, se
   if (!r.ok) throw new Error('proposal email failed');
   const res = JSON.parse(await r.text());
   return (res.params && res.params.proposalhtml) || '';
+}
+/* icustomize getCart is cross-origin → go through the background fetchRaw bridge
+   (shares session, bypasses CORS). Returns parsed cartData. */
+function bgFetchRaw(url) {
+  return new Promise((resolve) => { try { chrome.runtime.sendMessage({ action: 'fetchRaw', url }, (r) => resolve(r || null)); } catch (e) { resolve(null); } });
+}
+async function getCartData(cartNumber) {
+  const r = await bgFetchRaw(`https://master.api.icustomize.com/user/getCart/${encodeURIComponent(cartNumber)}`);
+  if (!r || !r.text) throw new Error('getCart failed');
+  return parseGetCart(JSON.parse(r.text));
+}
+/* Best-effort cart → ProposalEmailComposer line mapping. The icustomize cart
+   format is deep; this covers the common item shape and is refined against a
+   real getCart response. */
+function linesFromCartData(cd) {
+  const items = (cd && (cd.items || cd.Items || cd.cartItems || cd.CartItems || cd.lineItems || cd.Lines)) || [];
+  if (!Array.isArray(items)) return [];
+  return items.map((it) => {
+    const qty = Number(it.Quantity != null ? it.Quantity : (it.quantity != null ? it.quantity : it.qty)) || 1;
+    const unit = Number(it.Price != null ? it.Price : (it.price != null ? it.price : (it.unitPrice != null ? it.unitPrice : it.basePrice))) || 0;
+    const img = ((it.images || it.Images || [])[0] || {});
+    return {
+      brand: it.Brand || it.brand || it.brandName || it.Manufacturer || '',
+      title: it.productTitle || it.ProductTitle || it.Name || it.name || it.title || 'Item',
+      subtitle: it.color || it.Color || it.colorName || it.optionName || '',
+      qty, unitPrice: unit, lineTotal: +(qty * unit).toFixed(2),
+      img: img.URL ? ('https://static.golfballs.com/C/300x300/' + img.URL) : (it.image || it.Image || ''),
+      imprint: null,
+    };
+  });
 }
 async function crmSaveOpportunity(contactId, o) {
   const base = crmOrigin();
@@ -3155,8 +3187,29 @@ function ProposalsSection() {
     return () => clearInterval(t);
   }, []);
   const [selected, setSelected] = useState([]);
-  const toggle = (id) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  const [source, setSource] = useState(null);
+  const [building, setBuilding] = useState(false);
+  const toggle = (id) => { setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id])); setSource(null); };
   const chosen = proposals.filter((p) => selected.includes(p.cartId));
+  const buildEmail = async () => {
+    if (!chosen.length || building) return;
+    setBuilding(true);
+    try {
+      const lines = [];
+      for (const p of chosen) {
+        try { lines.push(...linesFromCartData(await getCartData(p.cartId))); } catch (e) {}
+      }
+      const total = +lines.reduce((s, l) => s + (l.lineTotal || 0), 0).toFixed(2);
+      setSource({
+        groupName: opp.subject || 'Your Custom Order',
+        optionName: chosen.length === 1 ? chosen[0].name : `${chosen.length} proposals`,
+        contactName: [D.contact.firstName, D.contact.lastName].filter(Boolean).join(' '),
+        contactEmail: D.contact.email || '',
+        lines, total,
+      });
+    } catch (e) { gbToast('Could not load proposal carts', 'error'); }
+    finally { setBuilding(false); }
+  };
   return (
     <>
       <Card>
@@ -3187,16 +3240,17 @@ function ProposalsSection() {
           )}
       </Card>
       <Card>
-        <SectionTitle icon={<I.mail />} title="Breakdown & Email Generator" sub="The corporate-catalog breakdown + template generator, inlined" />
-        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {chosen.length === 0
-            ? <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)', background: 'var(--gb-fill-faint)', border: '1px dashed var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>Select one or more proposals above.</div>
-            : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{chosen.map((p) => <Tag key={p.cartId} tone="brand" size="sm">{p.name}</Tag>)}</div>}
-          <div style={{ padding: 14, fontSize: 12, color: 'var(--gb-text-muted)', lineHeight: 1.5, background: 'var(--gb-fill-faint)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)' }}>
-            Wiring your <strong style={{ color: 'var(--gb-text-secondary)' }}>ProposalEmailComposer</strong> (the multi-template
-            corporate generator) here next — it builds the email client-side from each proposal's real line items
-            (loaded via getCart per cart), so no group title and no server round-trip.
-          </div>
+        <SectionTitle icon={<I.mail />} title="Breakdown & Email Generator" sub="Builds the corporate email from each proposal's real line items"
+          right={<Btn variant="primary" size="sm" icon={<I.bolt />} disabled={!chosen.length || building} onClick={buildEmail}>{building ? 'Loading carts…' : source ? 'Rebuild' : 'Build email'}</Btn>} />
+        <div style={{ padding: source ? 0 : 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {!source && (chosen.length === 0
+            ? <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)', background: 'var(--gb-fill-faint)', border: '1px dashed var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>Select one or more proposals above, then Build email.</div>
+            : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{chosen.map((p) => <Tag key={p.cartId} tone="brand" size="sm">{p.name}</Tag>)}</div>)}
+          {source && (
+            <div style={{ animation: 'gb-fade-slide var(--gb-anim) both' }}>
+              <ProposalEmailComposer source={source} />
+            </div>
+          )}
         </div>
       </Card>
     </>
