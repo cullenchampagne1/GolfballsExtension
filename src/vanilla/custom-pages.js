@@ -74,6 +74,11 @@
       if (!e) return false;
       return e.detectPageType(doc) === (e.PAGE_TYPE ? e.PAGE_TYPE.ACCOUNT : 'account');
     },
+    opportunity_details: function (doc) {
+      var e = engine();
+      if (!e) return false;
+      return e.detectPageType(doc) === (e.PAGE_TYPE ? e.PAGE_TYPE.OPPORTUNITY : 'opportunity');
+    },
   };
 
   // ── enabled-set helpers ──────────────────────────────────────

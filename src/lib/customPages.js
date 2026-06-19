@@ -33,6 +33,7 @@ export const CUSTOM_PAGE_SECTIONS = [
       { id: 'adjust_leaderboard',  label: 'Adjust Leader Board' },
       { id: 'contact_details',     label: 'Contact Details' },
       { id: 'account_details',     label: 'Account Details' },
+      { id: 'opportunity_details', label: 'Opportunity Details' },
     ],
   },
 ];
