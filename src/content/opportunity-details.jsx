@@ -3172,7 +3172,12 @@ function ProposalsSection() {
                       <tr key={p.cartId} style={{ ...trStyle, background: on ? 'var(--gb-brand-tint-soft)' : 'transparent', cursor: 'pointer', transition: 'background var(--gb-anim)' }} onClick={() => toggle(p.cartId)}>
                         <Td><span style={{ width: 16, height: 16, borderRadius: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: on ? 'var(--gb-brand-label)' : 'transparent', border: '1.5px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'), color: 'var(--gb-surface-deep)' }}>{on && <I.check size={10} />}</span></Td>
                         <Td><span style={{ color: 'var(--gb-text-primary)', fontWeight: 600 }}>{p.name}</span></Td>
-                        <Td mono muted>{String(p.cartId).slice(0, 8)}…</Td>
+                        <Td>
+                          {(() => { const url = `https://www.golfballs.com/cart?proposalMode=true&opportunityID=${opp.id}&cartID=${p.cartId}`; return (
+                            <a href={url} title={url} onClick={(e) => { e.stopPropagation(); e.preventDefault(); goUrl(url); }}
+                              style={{ fontFamily: 'var(--gb-font-mono)', fontSize: 10.5, color: 'var(--gb-brand-label)', textDecoration: 'none', wordBreak: 'break-all', lineHeight: 1.4 }}>{url}</a>
+                          ); })()}
+                        </Td>
                         <Td align="right" mono><span style={{ color: 'var(--gb-warning-fg)', fontWeight: 600 }}>{p.expiration}</span></Td>
                         <Td align="center">{p.newSite ? <Tag tone="info" size="xs">New</Tag> : <Tag tone="neutral" size="xs">Legacy</Tag>}</Td>
                       </tr>
@@ -3185,20 +3190,26 @@ function ProposalsSection() {
       </Card>
       <Card>
         <SectionTitle icon={<I.mail />} title="Breakdown & Email Generator" sub="Builds the corporate email from each proposal's real line items"
-          right={<Btn variant="primary" size="sm" icon={<I.bolt />} disabled={!chosen.length || building} onClick={buildEmail}>{building ? 'Loading carts…' : source ? 'Rebuild' : 'Build email'}</Btn>} />
-        <div style={{ padding: source ? 0 : 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {!source && (chosen.length === 0
+          right={<Btn variant="primary" size="sm" disabled={!chosen.length || building} onClick={buildEmail}
+            icon={building ? <span style={{ width: 13, height: 13, borderRadius: '50%', borderStyle: 'solid', borderWidth: 2, borderColor: 'currentColor', borderTopColor: 'transparent', display: 'inline-block', animation: 'gb-spin 0.7s linear infinite' }} /> : <I.bolt />}>
+            {building ? 'Loading…' : source ? 'Rebuild' : 'Build email'}</Btn>} />
+        <div style={{ padding: source && !building ? 0 : 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {building ? (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '44px 0', color: 'var(--gb-text-muted)' }}>
+              <span style={{ width: 28, height: 28, borderRadius: '50%', borderStyle: 'solid', borderWidth: 3, borderColor: 'var(--gb-border-strong)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin 0.7s linear infinite' }} />
+              <span style={{ fontSize: 12, fontWeight: 600 }}>Loading proposal cart{chosen.length > 1 ? 's' : ''} & building breakdown…</span>
+            </div>
+          ) : !source ? (chosen.length === 0
             ? <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)', background: 'var(--gb-fill-faint)', border: '1px dashed var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>Select one or more proposals above, then Build email.</div>
-            : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{chosen.map((p) => <Tag key={p.cartId} tone="brand" size="sm">{p.name}</Tag>)}</div>)}
-          {source && (((source.lines && source.lines.length) || (source.sections && source.sections.length)) ? (
+            : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{chosen.map((p) => <Tag key={p.cartId} tone="brand" size="sm">{p.name}</Tag>)}</div>
+          ) : (((source.lines && source.lines.length) || (source.sections && source.sections.length)) ? (
             <div style={{ animation: 'gb-fade-slide var(--gb-anim) both', height: 'min(720px, 78vh)', display: 'flex', flexDirection: 'column' }}>
               <ProposalEmailComposer source={source} />
             </div>
           ) : (
             <div style={{ padding: 14, fontSize: 12, color: 'var(--gb-text-secondary)', lineHeight: 1.55, background: 'var(--gb-warning-tint-soft)', border: '1px solid var(--gb-warning-tint-border)', borderRadius: 'var(--gb-r-md)' }}>
-              Loaded the cart(s) but couldn't read any line items — the getCart format isn't mapped yet for{' '}
-              <span style={{ fontFamily: 'var(--gb-font-mono)' }}>{chosen.map((p) => p.cartId).join(', ')}</span>.
-              Open DevTools → Console, copy the <strong>[gb] getCart</strong> log, and send it to me so I can map the fields.
+              Loaded the cart(s) but no line items came back for{' '}
+              <span style={{ fontFamily: 'var(--gb-font-mono)' }}>{chosen.map((p) => p.cartId).join(', ')}</span>. The carts may be empty or failed to load.
             </div>
           ))}
         </div>
