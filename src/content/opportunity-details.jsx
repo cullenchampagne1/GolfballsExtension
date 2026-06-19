@@ -653,6 +653,7 @@ function bgFetchRaw(url) {
 }
 async function getCartData(cartNumber) {
   const r = await bgFetchRaw(`https://master.api.icustomize.com/user/getCart/${encodeURIComponent(cartNumber)}`);
+  try { console.log('[gb] getCart', cartNumber, '→', r && r.text ? r.text : r); } catch (e) {}
   if (!r || !r.text) throw new Error('getCart failed');
   return parseGetCart(JSON.parse(r.text));
 }
@@ -3246,11 +3247,17 @@ function ProposalsSection() {
           {!source && (chosen.length === 0
             ? <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)', background: 'var(--gb-fill-faint)', border: '1px dashed var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>Select one or more proposals above, then Build email.</div>
             : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{chosen.map((p) => <Tag key={p.cartId} tone="brand" size="sm">{p.name}</Tag>)}</div>)}
-          {source && (
-            <div style={{ animation: 'gb-fade-slide var(--gb-anim) both' }}>
+          {source && (source.lines.length > 0 ? (
+            <div style={{ animation: 'gb-fade-slide var(--gb-anim) both', height: 'min(720px, 78vh)', display: 'flex', flexDirection: 'column' }}>
               <ProposalEmailComposer source={source} />
             </div>
-          )}
+          ) : (
+            <div style={{ padding: 14, fontSize: 12, color: 'var(--gb-text-secondary)', lineHeight: 1.55, background: 'var(--gb-warning-tint-soft)', border: '1px solid var(--gb-warning-tint-border)', borderRadius: 'var(--gb-r-md)' }}>
+              Loaded the cart(s) but couldn't read any line items — the getCart format isn't mapped yet for{' '}
+              <span style={{ fontFamily: 'var(--gb-font-mono)' }}>{chosen.map((p) => p.cartId).join(', ')}</span>.
+              Open DevTools → Console, copy the <strong>[gb] getCart</strong> log, and send it to me so I can map the fields.
+            </div>
+          ))}
         </div>
       </Card>
     </>
