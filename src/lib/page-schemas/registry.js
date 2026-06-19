@@ -14,7 +14,7 @@
    pattern; more-specific schemas should come first.
 ─────────────────────────────────────────────────────────────── */
 
-import { contactSchema, accountSchema } from './contact.js';
+import { contactSchema, accountSchema, opportunitySchema } from './contact.js';
 import { orderSchema } from './order.js';
 
 /** All registered schemas, in detection priority order. Contact is
@@ -29,6 +29,7 @@ const SCHEMAS = [
   orderSchema,
   contactSchema,
   accountSchema,
+  opportunitySchema,
 ];
 
 /** Match a doc's URL against a schema's detect.url. We accept three

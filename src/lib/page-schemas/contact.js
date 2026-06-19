@@ -857,6 +857,22 @@ export const contactSchema = {
   fields: FIELDS,
 };
 
+export const opportunitySchema = {
+  id: 'opportunity',
+  label: 'Opportunity Details Page',
+  detect: {
+    /* Page=280&opportunityID=… is canonical; #opportunityId is the
+       opportunity form's hidden id, present only on this page. Reuses the
+       shared FIELDS so tasks/emails/activities extract the same way — the
+       opportunity scalars + proposals are fetched by the page itself via the
+       Opportunity/* .ajax endpoints (more reliable than DOM scraping). */
+    url: /[?&]Page=280\b/i,
+    dom: '#opportunityId',
+    mode: 'any',
+  },
+  fields: FIELDS,
+};
+
 export const accountSchema = {
   id: 'account',
   label: 'Account Details Page',

@@ -31,7 +31,7 @@ import {
   detectSchema,
 } from '../lib/page-engine/index.js';
 
-import { contactSchema, accountSchema } from '../lib/page-schemas/contact.js';
+import { contactSchema, accountSchema, opportunitySchema } from '../lib/page-schemas/contact.js';
 import { orderSchema } from '../lib/page-schemas/order.js';
 import { listSchemas, getSchemaById } from '../lib/page-schemas/registry.js';
 import { evalTree, treeUsesVars, varsReferenced, isGroupedTree, applyOp, arrayQuantifier } from '../lib/matchEngine.js';
@@ -91,6 +91,7 @@ const api = Object.freeze({
   schemas: Object.freeze({
     contact: contactSchema,
     account: accountSchema,
+    opportunity: opportunitySchema,
     order: orderSchema,
   }),
 });
