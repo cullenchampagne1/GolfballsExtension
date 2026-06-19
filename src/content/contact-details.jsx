@@ -30,7 +30,9 @@ import { Textarea as UITextarea } from '../ui/components/Textarea.jsx';
 import { ModalHeader } from '../ui/components/ModalHeader.jsx';
 import { ModalFooter } from '../ui/components/ModalFooter.jsx';
 import { submitCallLog } from '../lib/submitCallLog.js';
-import { CALL_CATEGORY_OPTIONS } from '../lib/callLog.js';
+import { submitQuickTask } from '../lib/submitQuickTask.js';
+import { loadTaskTemplates } from '../lib/quickTask.js';
+import { loadCallTemplates } from '../lib/callLog.js';
 
 /* ════════════════════════════════════════════════════════════
    ICONS
@@ -2021,21 +2023,20 @@ function MiniSelect({ value, options, onChange }) {
   }, [open]);
   const cur = options.find((o) => String(o.value) === String(value)) || options[0];
   return (
-    <div ref={ref}>
+    <div ref={ref} style={{ position: 'relative' }}>
       <button type="button" onClick={() => setOpen((o) => !o)}
         style={{ ...inputStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
         <span>{cur ? cur.label : ''}</span>
         <I.chevd size={12} style={{ transition: 'transform var(--gb-anim)', transform: open ? 'rotate(180deg)' : 'none', color: 'var(--gb-text-muted)' }} />
       </button>
-      {/* always rendered + animated max-height so opening smoothly GROWS the
-          modal (and closing shrinks it) instead of jumping. */}
-      <div style={{
-        overflow: 'hidden',
-        maxHeight: open ? 320 : 0, opacity: open ? 1 : 0,
-        marginTop: open ? 4 : 0,
-        transition: 'max-height .24s cubic-bezier(.4,0,.2,1), opacity .18s ease, margin-top .24s cubic-bezier(.4,0,.2,1)',
-      }}>
-        <div style={{ padding: 4, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', boxShadow: 'var(--gb-shadow-popover)', display: 'flex', flexDirection: 'column', gap: 1 }}>
+      {open && (
+        <div className="gb-scroll" style={{
+          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 50,
+          maxHeight: 220, overflowY: 'auto',
+          padding: 4, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)',
+          borderRadius: 'var(--gb-r-md)', boxShadow: 'var(--gb-shadow-popover)',
+          display: 'flex', flexDirection: 'column', gap: 1, animation: 'gb-fade-slide var(--gb-anim) both',
+        }}>
           {options.map((o) => {
             const sel = String(o.value) === String(value);
             return (
@@ -2046,7 +2047,7 @@ function MiniSelect({ value, options, onChange }) {
             );
           })}
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -2061,15 +2062,16 @@ function ModalShell({ title, icon, subtitle, children, footer, width = 460 }) {
         borderRadius: 'var(--gb-r-lg)', boxShadow: 'var(--gb-shadow-modal, 0 24px 64px rgba(0,0,0,.5))',
         // scale the modal to match the page (the takeover renders at PAGE_ZOOM;
         // the overlay is a 1x sibling, so without this the modal looks tiny).
-        zoom: PAGE_ZOOM, overflow: 'hidden',
+        // overflow visible so a MiniSelect popover floats IN FRONT of the modal
+        // instead of being clipped; header/footer wrappers keep rounded corners.
+        zoom: PAGE_ZOOM, overflow: 'visible',
         animation: closing ? 'gb-pop-out .19s ease both' : 'gb-pop-in .22s cubic-bezier(.34,1.4,.64,1) both',
       }}>
-      {/* shared ModalHeader/Footer — same icon tile, close button + chrome as
-          every other extension modal. MiniSelect opens in-flow (grows the
-          modal) so nothing needs to escape the rounded overflow. */}
-      <ModalHeader icon={icon} title={title} subtitle={subtitle} onClose={closeModal} />
+      <div style={{ borderRadius: 'var(--gb-r-lg) var(--gb-r-lg) 0 0', overflow: 'hidden' }}>
+        <ModalHeader icon={icon} title={title} subtitle={subtitle} onClose={closeModal} />
+      </div>
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
-      {footer && <ModalFooter>{footer}</ModalFooter>}
+      {footer && <div style={{ borderRadius: '0 0 var(--gb-r-lg) var(--gb-r-lg)', overflow: 'hidden' }}><ModalFooter>{footer}</ModalFooter></div>}
     </div>
   );
 }
@@ -2377,30 +2379,42 @@ function useTemplates(key) {
     remove: (id) => persist(list.filter((x) => x.id !== id)),
   };
 }
-/* Editor for a quick-action template. kind 'task' → label + subject;
-   kind 'call' → + direction + CRM category (required to log). */
+/* Pick an EXISTING saved template (your task / call_log templates) and give it
+   a button label. Clicking the chip later fires that template directly. */
+function loadExisting(kind) { return kind === 'call' ? loadCallTemplates() : loadTaskTemplates(); }
 function TemplateModal({ kind, initial, onSave, onDelete }) {
   const { closeModal } = useModal();
   const isCall = kind === 'call';
-  const [f, setF] = useState(initial || { label: '', subject: '', direction: '2', category: '0' });
-  const save = () => { if (!f.label.trim()) return; onSave(f); closeModal(); };
+  const [f, setF] = useState(initial || { label: '', templateId: '' });
+  const [opts, setOpts] = useState(null);
+  useEffect(() => {
+    let live = true;
+    loadExisting(kind).then((l) => { if (live) setOpts((l || []).map((t) => ({ value: String(t.id), label: t.name || t.subject || String(t.id) }))); });
+    return () => { live = false; };
+  }, [kind]);
+  const save = () => {
+    if (!f.label.trim() || !f.templateId) return;
+    const opt = (opts || []).find((o) => o.value === String(f.templateId));
+    onSave({ label: f.label.trim(), templateId: String(f.templateId), templateName: opt ? opt.label : '' });
+    closeModal();
+  };
   return (
     <ModalShell width={440} icon={isCall ? <I.phone /> : <I.task />}
-      title={initial ? 'Edit Template' : isCall ? 'New Quick Log' : 'New Quick Task'}
+      title={initial ? 'Edit Button' : isCall ? 'New Quick Log' : 'New Quick Task'}
       footer={<>
         {initial && onDelete && <Btn variant="danger" size="sm" onClick={() => { onDelete(); closeModal(); }}>Delete</Btn>}
         <div style={{ flex: 1 }} />
         <Btn variant="ghost" size="sm" onClick={closeModal}>Cancel</Btn>
-        <Btn variant="primary" size="sm" icon={<I.check />} onClick={save} disabled={!f.label.trim()}>Save</Btn>
+        <Btn variant="primary" size="sm" icon={<I.check />} onClick={save} disabled={!f.label.trim() || !f.templateId}>Save</Btn>
       </>}>
       <FormField label="Button label"><TInput value={f.label} autoFocus placeholder={isCall ? 'e.g. Promo VM' : 'e.g. F-UP'} onChange={(e) => setF({ ...f, label: e.target.value })} /></FormField>
-      <FormField label={isCall ? 'Call note / subject' : 'Task subject'}><TArea value={f.subject} rows={2} placeholder="What this button creates…" onChange={(e) => setF({ ...f, subject: e.target.value })} /></FormField>
-      {isCall && (
-        <div style={{ display: 'flex', gap: 12 }}>
-          <FormField label="Direction" style={{ width: 130 }}><MiniSelect value={f.direction} options={[{ value: '2', label: 'Outbound' }, { value: '1', label: 'Inbound' }]} onChange={(v) => setF({ ...f, direction: v })} /></FormField>
-          <FormField label="Category" style={{ flex: 1 }}><MiniSelect value={f.category} options={CALL_CATEGORY_OPTIONS.map((c) => ({ value: c.id, label: c.label }))} onChange={(v) => setF({ ...f, category: v })} /></FormField>
-        </div>
-      )}
+      <FormField label={isCall ? 'Call template' : 'Task template'}>
+        {opts === null
+          ? <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', padding: '6px 0' }}>Loading…</div>
+          : opts.length
+          ? <MiniSelect value={f.templateId} options={[{ value: '', label: 'Select a template…' }, ...opts]} onChange={(v) => setF({ ...f, templateId: v })} />
+          : <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', padding: '6px 0' }}>No saved {isCall ? 'call' : 'task'} templates yet — create them in the {isCall ? 'Call Log' : 'Quick Task'} editor first.</div>}
+      </FormField>
     </ModalShell>
   );
 }
@@ -2487,11 +2501,15 @@ function TasksPanel() {
   const [adding, setAdding] = useState(false);
   // Optimistically prepend a row (after a real create) and animate it in.
   const addRow = (row) => patch((Dd) => ({ ...Dd, openTasks: [{ id: `new-${++__gbTaskTmp}`, category: '', status: 'Open', ...row }, ...(Dd.openTasks || [])] }));
-  // A saved quick-task template: create the task directly, no modal.
-  const runTaskTemplate = async (t) => {
+  // A quick-task button: fire the referenced saved template directly, no modal.
+  const runTaskTemplate = async (chip) => {
     try {
-      const { task, id } = await crmCreateTask(D.ids.contact, { Subject: t.subject || t.label });
-      addRow({ id, subject: task.Subject, priority: priLabel(task.Priority), dueDate: task.DueDate });
+      const all = await loadTaskTemplates();
+      const tpl = (all || []).find((t) => String(t.id) === String(chip.templateId));
+      if (!tpl) { gbToast('Template not found', 'error'); return; }
+      const r = await submitQuickTask({ template: tpl, context: { contactId: D.ids.contact, employeeId: currentEmployeeId() } });
+      if (r && r.ok) addRow({ subject: tpl.subject || tpl.name || chip.label, priority: priLabel(tpl.priorityId || tpl.priority || 2), dueDate: todayMDY() });
+      else gbToast((r && r.error) || 'Could not create task', 'error');
     } catch (e) { gbToast('Could not create task', 'error'); }
   };
   // Reuse the proven QuickTask composer (correct preset templates, employee
@@ -2774,22 +2792,23 @@ function QuickLogCard() {
   const { openModal } = useModal();
   const ql = useTemplates(QL_KEY);
   const [busy, setBusy] = useState(null);
-  // A saved quick-log template: log the call directly (submitCallLog), no modal,
-  // and prepend it to the activity feed.
-  const runLog = async (t) => {
+  // A quick-log button: fire the referenced saved call template directly.
+  const runLog = async (chip) => {
     if (busy) return;
-    setBusy(t.id);
+    setBusy(chip.id);
     try {
+      const all = await loadCallTemplates();
+      const tpl = (all || []).find((t) => String(t.id) === String(chip.templateId));
+      if (!tpl) { gbToast('Template not found', 'error'); setBusy(null); return; }
       const ctx = {
         contactId: D.ids.contact,
         phone: String(D.contact.phone || '').replace(/\D/g, ''),
         employeeId: currentEmployeeId(),
         contactName: [D.contact.firstName, D.contact.lastName].filter(Boolean).join(' '),
       };
-      const template = { callCategory: t.category, callDirection: Number(t.direction), subject: t.subject || t.label, body: t.subject || t.label };
-      const r = await submitCallLog({ template, context: ctx });
+      const r = await submitCallLog({ template: tpl, context: ctx });
       if (r && r.ok) {
-        patch((Dd) => ({ ...Dd, activities: [{ id: '', employee: 'You', category: 'Call', direction: t.direction === '1' ? 'In' : 'Out', subject: t.subject || t.label, date: new Date().toLocaleString() }, ...(Dd.activities || [])] }));
+        patch((Dd) => ({ ...Dd, activities: [{ id: '', employee: 'You', category: 'Call', direction: tpl.callDirection === 1 ? 'In' : 'Out', subject: tpl.subject || tpl.name || chip.label, date: new Date().toLocaleString() }, ...(Dd.activities || [])] }));
       } else { gbToast((r && r.error) || 'Could not log call', 'error'); }
     } catch (e) { gbToast('Could not log call', 'error'); }
     finally { setBusy(null); }
@@ -2813,7 +2832,7 @@ function QuickLogCard() {
             }}>
             <span style={{ color: 'var(--gb-text-tertiary)', display: 'flex' }}><I.phone size={13} /></span>
             <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)' }}>{t.label}</span>
-            <span style={{ fontSize: 9, letterSpacing: .8, fontWeight: 700, color: 'var(--gb-text-muted)', textTransform: 'uppercase', fontFamily: 'var(--gb-font-mono)' }}>{t.direction === '1' ? 'IN' : 'OUT'}</span>
+            <span style={{ fontSize: 9, letterSpacing: .5, fontWeight: 600, color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{t.templateName || ''}</span>
           </button>
         ))}
         {ql.list.length === 0 && <div style={{ gridColumn: '1 / -1', padding: 14, textAlign: 'center', fontSize: 11.5, color: 'var(--gb-text-muted)' }}>Add a quick-log button with +</div>}
