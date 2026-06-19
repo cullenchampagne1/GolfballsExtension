@@ -12,6 +12,7 @@ export const PAGE_TYPE = Object.freeze({
   ORDER:       'order',
   CONTACT:     'contact',
   ACCOUNT:     'account',
+  OPPORTUNITY: 'opportunity',
   ORDER_INDEX: 'order-index',
   OTHER:       'other',
 });

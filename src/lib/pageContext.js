@@ -58,6 +58,10 @@ export function detectPageType(doc = (typeof document !== 'undefined' ? document
   if (/[?&]page=ViewOrder/i.test(url) && /[?&]orderID=/i.test(url)) return PAGE_TYPE.ORDER;
   if (/[?&]Page=240\b/i.test(url)) return PAGE_TYPE.CONTACT;
   if (/[?&]Page=271\b/i.test(url)) return PAGE_TYPE.ACCOUNT;
+  // Opportunity (Page=280&opportunityID=…) — MUST come before the #tbContactId
+  // fallback below, because the opportunity page also renders a contact id and
+  // would otherwise be mis-detected as a contact (hijacking the takeover).
+  if (/[?&]Page=280\b/i.test(url)) return PAGE_TYPE.OPPORTUNITY;
   if (doc && typeof doc.getElementById === 'function' && doc.getElementById('tbContactId')) return PAGE_TYPE.CONTACT;
   if (/[?&]accountID=\d+/i.test(url)) return PAGE_TYPE.ACCOUNT;
   if (/[?&]customerID=\d+/i.test(url)) return PAGE_TYPE.CONTACT;
