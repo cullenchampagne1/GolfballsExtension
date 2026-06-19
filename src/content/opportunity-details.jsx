@@ -866,7 +866,7 @@ function Sidebar({ collapsed, setCollapsed }) {
   const D = useD();
   const [openIds, setOpenIds] = useState(['crm']);
   const toggle = (id) => setOpenIds((s) => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
-  const currentLabel = 'Customer · #' + (D.ids.contact || '');
+  const currentLabel = 'Opportunity · #' + oppIdFromUrl();
 
   return (
     <aside style={{
@@ -1141,21 +1141,33 @@ function InlineSearch() {
 
 function TopBar() {
   const D = useD();
-  const name = fullName(D.contact) || 'Contact';
+  const { opp } = useOpp();
+  const contactId = D.ids.contact;
+  const contactName = fullName(D.contact);
+  const contactHref = contactId ? `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=240&customerID=${contactId}` : null;
+  const oid = (opp && opp.id) || oppIdFromUrl();
   return (
     <div style={{
       height: 48, flexShrink: 0,
       background: 'var(--gb-surface-canvas)',
       borderBottom: '1px solid var(--gb-border-subtle)',
       display: 'flex', alignItems: 'center',
-      padding: '0 18px', gap: 18, position: 'sticky', top: 0, zIndex: 10,
+      padding: '0 18px', gap: 14, position: 'sticky', top: 0, zIndex: 10,
     }}>
+      {/* Back-to-contact tag — the opportunity belongs to this contact */}
+      {contactHref && (
+        <a href={contactHref} onClick={(e) => { e.preventDefault(); goUrl(contactHref); }}
+          title="Back to contact"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 26, padding: '0 11px 0 8px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-brand-tint-soft)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', textDecoration: 'none', fontSize: 11.5, fontWeight: 600, flexShrink: 0 }}>
+          <I.chevr size={12} style={{ transform: 'scaleX(-1)' }} />{contactName ? `Back to ${contactName}` : 'Back to contact'}
+        </a>
+      )}
       {/* Breadcrumb */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--gb-text-muted)', fontWeight: 500 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--gb-text-muted)', fontWeight: 500, minWidth: 0 }}>
         <a href={crmHref(261)} onClick={(e) => { e.preventDefault(); crmGo(261); }} style={{ color: 'inherit', textDecoration: 'none' }}>CRM</a><I.chevr size={10} />
-        <a href={crmHref(360)} onClick={(e) => { e.preventDefault(); crmGo(360); }} style={{ color: 'inherit', textDecoration: 'none' }}>Customers</a><I.chevr size={10} />
-        <span style={{ color: 'var(--gb-text-secondary)', fontWeight: 600 }}>{name}</span>
-        {D.ids.contact && <span style={{ marginLeft: 6, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-ghost)', fontSize: 10.5 }}>#{D.ids.contact}</span>}
+        <a href={crmHref(280)} onClick={(e) => { e.preventDefault(); crmGo(280); }} style={{ color: 'inherit', textDecoration: 'none' }}>Opportunity</a><I.chevr size={10} />
+        <span style={{ color: 'var(--gb-text-secondary)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 300 }}>{txt(D.account.name) || (opp && opp.subject) || 'Opportunity'}</span>
+        {oid && <span style={{ marginLeft: 6, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-ghost)', fontSize: 10.5 }}>#{oid}</span>}
       </div>
       <div style={{ flex: 1 }} />
       <InlineSearch />
