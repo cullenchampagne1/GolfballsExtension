@@ -29,6 +29,8 @@ import { Input as UIInput } from '../ui/components/Input.jsx';
 import { Textarea as UITextarea } from '../ui/components/Textarea.jsx';
 import { ModalHeader } from '../ui/components/ModalHeader.jsx';
 import { ModalFooter } from '../ui/components/ModalFooter.jsx';
+import { submitCallLog } from '../lib/submitCallLog.js';
+import { CALL_CATEGORY_OPTIONS } from '../lib/callLog.js';
 
 /* ════════════════════════════════════════════════════════════
    ICONS
@@ -2346,6 +2348,63 @@ function ActivityDetailModal({ activityId }) {
   );
 }
 
+/* ── User-defined quick-action templates (persisted in chrome.storage) ──
+   Quick Create (tasks) + Quick Log (calls): the rep defines labelled buttons
+   that fire the action DIRECTLY — no modal — once configured. Blank initially;
+   the + opens the editor; right-click a chip to edit/delete. */
+const QT_KEY = 'gbCpQuickTasks';
+const QL_KEY = 'gbCpQuickLogs';
+function loadTpls(key) {
+  return new Promise((res) => {
+    try { chrome.storage.local.get(key, (d) => res(Array.isArray(d && d[key]) ? d[key] : [])); }
+    catch (e) { res([]); }
+  });
+}
+function useTemplates(key) {
+  const [list, setList] = useState([]);
+  useEffect(() => {
+    let live = true;
+    loadTpls(key).then((l) => { if (live) setList(l); });
+    const onCh = (ch, area) => { if (area === 'local' && ch[key]) setList(Array.isArray(ch[key].newValue) ? ch[key].newValue : []); };
+    try { chrome.storage.onChanged.addListener(onCh); } catch (e) {}
+    return () => { live = false; try { chrome.storage.onChanged.removeListener(onCh); } catch (e) {} };
+  }, [key]);
+  const persist = (next) => { setList(next); try { chrome.storage.local.set({ [key]: next }); } catch (e) {} };
+  return {
+    list,
+    add: (tpl) => persist([...list, { ...tpl, id: `q${Date.now()}${Math.floor(Math.random() * 1e4)}` }]),
+    update: (id, tpl) => persist(list.map((x) => (x.id === id ? { ...x, ...tpl } : x))),
+    remove: (id) => persist(list.filter((x) => x.id !== id)),
+  };
+}
+/* Editor for a quick-action template. kind 'task' → label + subject;
+   kind 'call' → + direction + CRM category (required to log). */
+function TemplateModal({ kind, initial, onSave, onDelete }) {
+  const { closeModal } = useModal();
+  const isCall = kind === 'call';
+  const [f, setF] = useState(initial || { label: '', subject: '', direction: '2', category: '0' });
+  const save = () => { if (!f.label.trim()) return; onSave(f); closeModal(); };
+  return (
+    <ModalShell width={440} icon={isCall ? <I.phone /> : <I.task />}
+      title={initial ? 'Edit Template' : isCall ? 'New Quick Log' : 'New Quick Task'}
+      footer={<>
+        {initial && onDelete && <Btn variant="danger" size="sm" onClick={() => { onDelete(); closeModal(); }}>Delete</Btn>}
+        <div style={{ flex: 1 }} />
+        <Btn variant="ghost" size="sm" onClick={closeModal}>Cancel</Btn>
+        <Btn variant="primary" size="sm" icon={<I.check />} onClick={save} disabled={!f.label.trim()}>Save</Btn>
+      </>}>
+      <FormField label="Button label"><TInput value={f.label} autoFocus placeholder={isCall ? 'e.g. Promo VM' : 'e.g. F-UP'} onChange={(e) => setF({ ...f, label: e.target.value })} /></FormField>
+      <FormField label={isCall ? 'Call note / subject' : 'Task subject'}><TArea value={f.subject} rows={2} placeholder="What this button creates…" onChange={(e) => setF({ ...f, subject: e.target.value })} /></FormField>
+      {isCall && (
+        <div style={{ display: 'flex', gap: 12 }}>
+          <FormField label="Direction" style={{ width: 130 }}><MiniSelect value={f.direction} options={[{ value: '2', label: 'Outbound' }, { value: '1', label: 'Inbound' }]} onChange={(v) => setF({ ...f, direction: v })} /></FormField>
+          <FormField label="Category" style={{ flex: 1 }}><MiniSelect value={f.category} options={CALL_CATEGORY_OPTIONS.map((c) => ({ value: c.id, label: c.label }))} onChange={(v) => setF({ ...f, category: v })} /></FormField>
+        </div>
+      )}
+    </ModalShell>
+  );
+}
+
 /* Do-Not-Call: calls the CRM RemoveFromDoNotCallList endpoint directly. */
 function DncButton() {
   const D = useD();
@@ -2422,10 +2481,19 @@ function OpenTaskRow({ t }) {
 function TasksPanel() {
   const D = useD();
   const patch = usePatch();
+  const { openModal } = useModal();
+  const qt = useTemplates(QT_KEY);
   const [quickTask, setQuickTask] = useState('');
   const [adding, setAdding] = useState(false);
   // Optimistically prepend a row (after a real create) and animate it in.
   const addRow = (row) => patch((Dd) => ({ ...Dd, openTasks: [{ id: `new-${++__gbTaskTmp}`, category: '', status: 'Open', ...row }, ...(Dd.openTasks || [])] }));
+  // A saved quick-task template: create the task directly, no modal.
+  const runTaskTemplate = async (t) => {
+    try {
+      const { task, id } = await crmCreateTask(D.ids.contact, { Subject: t.subject || t.label });
+      addRow({ id, subject: task.Subject, priority: priLabel(task.Priority), dueDate: task.DueDate });
+    } catch (e) { gbToast('Could not create task', 'error'); }
+  };
   // Reuse the proven QuickTask composer (correct preset templates, employee
   // resolution, CRM create); animate the row in on its onCreated callback.
   const openComposer = () => {
@@ -2462,9 +2530,15 @@ function TasksPanel() {
           <div style={{
             fontSize: 10, fontWeight: 700, letterSpacing: .7, textTransform: 'uppercase',
             color: 'var(--gb-text-muted)', marginBottom: 8,
-          }}>Quick create — opens the composer with your templates</div>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            {QUICK_TASK.map((q) => (<Btn key={q} variant="secondary" size="xs" onClick={openComposer}>{q}</Btn>))}
+          }}>Quick create — one click adds a task (no modal)</div>
+          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+            {qt.list.map((t) => (
+              <Btn key={t.id} variant="secondary" size="xs" title="Click to add · right-click to edit"
+                onClick={() => runTaskTemplate(t)}
+                onContextMenu={(e) => { e.preventDefault(); openModal(<TemplateModal kind="task" initial={t} onSave={(tpl) => qt.update(t.id, tpl)} onDelete={() => qt.remove(t.id)} />); }}>{t.label}</Btn>
+            ))}
+            <IconBtn size="xs" ghost icon={<I.plus />} title="New quick task" onClick={() => openModal(<TemplateModal kind="task" onSave={qt.add} />)} />
+            {qt.list.length === 0 && <span style={{ fontSize: 11, color: 'var(--gb-text-muted)' }}>Add a quick task with +</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
             <div style={{
@@ -2694,45 +2768,55 @@ function ContactInfoCard() {
 /* ════════════════════════════════════════════════════════════
    RIGHT RAIL — Quick Log, Alt Lookups, Mailer, System
 ════════════════════════════════════════════════════════════ */
-const QUICK_LOG = [
-  { label: 'Promotion VM',  meta: 'OUT', icon: 'vm' },
-  { label: 'Proposal VM',   meta: 'OUT', icon: 'vm' },
-  { label: 'Promotion HU',  meta: 'OUT', icon: 'call' },
-  { label: 'Promotion WP',  meta: 'OUT', icon: 'call' },
-];
 function QuickLogCard() {
-  const [active, setActive] = useState(null);
+  const D = useD();
+  const patch = usePatch();
+  const { openModal } = useModal();
+  const ql = useTemplates(QL_KEY);
+  const [busy, setBusy] = useState(null);
+  // A saved quick-log template: log the call directly (submitCallLog), no modal,
+  // and prepend it to the activity feed.
+  const runLog = async (t) => {
+    if (busy) return;
+    setBusy(t.id);
+    try {
+      const ctx = {
+        contactId: D.ids.contact,
+        phone: String(D.contact.phone || '').replace(/\D/g, ''),
+        employeeId: currentEmployeeId(),
+        contactName: [D.contact.firstName, D.contact.lastName].filter(Boolean).join(' '),
+      };
+      const template = { callCategory: t.category, callDirection: Number(t.direction), subject: t.subject || t.label, body: t.subject || t.label };
+      const r = await submitCallLog({ template, context: ctx });
+      if (r && r.ok) {
+        patch((Dd) => ({ ...Dd, activities: [{ id: '', employee: 'You', category: 'Call', direction: t.direction === '1' ? 'In' : 'Out', subject: t.subject || t.label, date: new Date().toLocaleString() }, ...(Dd.activities || [])] }));
+      } else { gbToast((r && r.error) || 'Could not log call', 'error'); }
+    } catch (e) { gbToast('Could not log call', 'error'); }
+    finally { setBusy(null); }
+  };
   return (
     <Card>
-      <SectionTitle icon={<I.zap />} title="Quick Log" sub="Log a touchpoint instantly" />
+      <SectionTitle icon={<I.zap />} title="Quick Log" sub="Log a call instantly — one click"
+        right={<IconBtn size="xs" ghost icon={<I.plus />} title="New quick log" onClick={() => openModal(<TemplateModal kind="call" onSave={ql.add} />)} />} />
       <div style={{ padding: 12, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-        {QUICK_LOG.map((q, i) => (
-          <button key={i}
-            onMouseDown={() => setActive(i)}
-            onMouseUp={() => setTimeout(() => setActive(null), 400)}
-            onMouseLeave={() => setActive(null)}
+        {ql.list.map((t) => (
+          <button key={t.id} disabled={busy === t.id}
+            onClick={() => runLog(t)}
+            onContextMenu={(e) => { e.preventDefault(); openModal(<TemplateModal kind="call" initial={t} onSave={(tpl) => ql.update(t.id, tpl)} onDelete={() => ql.remove(t.id)} />); }}
+            title="Click to log · right-click to edit"
             style={{
-              background: active === i ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)',
-              border: '1px solid ' + (active === i ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'),
-              borderRadius: 'var(--gb-r-md)',
-              padding: '10px 9px',
-              display: 'flex', flexDirection: 'column', gap: 4,
-              alignItems: 'flex-start',
-              cursor: 'pointer', textAlign: 'left',
-              transition: 'all var(--gb-anim)',
-              fontFamily: 'var(--gb-font-sans)',
+              background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)',
+              borderRadius: 'var(--gb-r-md)', padding: '10px 9px',
+              display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start',
+              cursor: busy === t.id ? 'default' : 'pointer', textAlign: 'left', opacity: busy === t.id ? 0.6 : 1,
+              transition: 'all var(--gb-anim)', fontFamily: 'var(--gb-font-sans)',
             }}>
-            <span style={{ color: active === i ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)', display: 'flex' }}>
-              {q.icon === 'vm' ? <I.inbox size={13} /> : <I.phone size={13} />}
-            </span>
-            <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)' }}>{q.label}</span>
-            <span style={{
-              fontSize: 9, letterSpacing: .8, fontWeight: 700,
-              color: 'var(--gb-text-muted)', textTransform: 'uppercase',
-              fontFamily: 'var(--gb-font-mono)',
-            }}>{q.meta}</span>
+            <span style={{ color: 'var(--gb-text-tertiary)', display: 'flex' }}><I.phone size={13} /></span>
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)' }}>{t.label}</span>
+            <span style={{ fontSize: 9, letterSpacing: .8, fontWeight: 700, color: 'var(--gb-text-muted)', textTransform: 'uppercase', fontFamily: 'var(--gb-font-mono)' }}>{t.direction === '1' ? 'IN' : 'OUT'}</span>
           </button>
         ))}
+        {ql.list.length === 0 && <div style={{ gridColumn: '1 / -1', padding: 14, textAlign: 'center', fontSize: 11.5, color: 'var(--gb-text-muted)' }}>Add a quick-log button with +</div>}
       </div>
     </Card>
   );
