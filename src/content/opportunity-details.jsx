@@ -3147,6 +3147,7 @@ function ProposalsSection() {
   // Resolved lines for the margin report: single source carries rawLines; a
   // multi-proposal source carries them per section.
   const marginEntries = source ? ((source.rawLines && source.rawLines.length) ? source.rawLines : (source.sections || []).flatMap((s) => s.rawLines || [])) : [];
+  const hasContent = !!(source && ((source.lines && source.lines.length) || (source.sections && source.sections.length)));
   const buildEmail = async () => {
     if (!chosen.length || building) return;
     setBuilding(true);
@@ -3193,34 +3194,49 @@ function ProposalsSection() {
           )}
       </Card>
       <Card>
-        <SectionTitle icon={<I.mail />} title="Breakdown & Email Generator" sub="Builds the corporate email from each proposal's real line items"
+        <SectionTitle icon={<I.bolt />} title="Build Proposal Breakdown" sub="Loads each selected proposal's cart → margin + customer email"
           right={<Btn variant="primary" size="sm" disabled={!chosen.length || building} onClick={buildEmail}
             icon={building ? <span style={{ width: 13, height: 13, borderRadius: '50%', borderStyle: 'solid', borderWidth: 2, borderColor: 'currentColor', borderTopColor: 'transparent', display: 'inline-block', animation: 'gb-spin 0.7s linear infinite' }} /> : <I.bolt />}>
-            {building ? 'Loading…' : source ? 'Rebuild' : 'Build email'}</Btn>} />
-        <div style={{ padding: source && !building ? 0 : 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {building ? 'Loading…' : hasContent ? 'Rebuild' : 'Build'}</Btn>} />
+        <div style={{ padding: 16 }}>
           {building ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '44px 0', color: 'var(--gb-text-muted)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '34px 0', color: 'var(--gb-text-muted)' }}>
               <span style={{ width: 28, height: 28, borderRadius: '50%', borderStyle: 'solid', borderWidth: 3, borderColor: 'var(--gb-border-strong)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin 0.7s linear infinite' }} />
               <span style={{ fontSize: 12, fontWeight: 600 }}>Loading proposal cart{chosen.length > 1 ? 's' : ''} & building breakdown…</span>
             </div>
           ) : !source ? (chosen.length === 0
-            ? <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)', background: 'var(--gb-fill-faint)', border: '1px dashed var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>Select one or more proposals above, then Build email.</div>
+            ? <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)', background: 'var(--gb-fill-faint)', border: '1px dashed var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>Select one or more proposals above, then Build.</div>
             : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{chosen.map((p) => <Tag key={p.cartId} tone="brand" size="sm">{p.name}</Tag>)}</div>
-          ) : (((source.lines && source.lines.length) || (source.sections && source.sections.length)) ? (
-            <div style={{ animation: 'gb-fade-slide var(--gb-anim) both', display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {marginEntries.length > 0 && <MarginBreakdown entries={marginEntries} />}
-              <div style={{ height: 'min(720px, 78vh)', display: 'flex', flexDirection: 'column' }}>
-                <ProposalEmailComposer source={source} />
-              </div>
+          ) : hasContent ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: 'var(--gb-success-fg)' }}>
+              <I.check size={14} /> Built — margin breakdown and email below.
             </div>
           ) : (
-            <div style={{ padding: 14, fontSize: 12, color: 'var(--gb-text-secondary)', lineHeight: 1.55, background: 'var(--gb-warning-tint-soft)', border: '1px solid var(--gb-warning-tint-border)', borderRadius: 'var(--gb-r-md)' }}>
+            <div style={{ fontSize: 12, color: 'var(--gb-text-secondary)', lineHeight: 1.55 }}>
               Loaded the cart(s) but no line items came back for{' '}
               <span style={{ fontFamily: 'var(--gb-font-mono)' }}>{chosen.map((p) => p.cartId).join(', ')}</span>. The carts may be empty or failed to load.
             </div>
-          ))}
+          )}
         </div>
       </Card>
+
+      {hasContent && marginEntries.length > 0 && (
+        <Card style={{ animation: 'gb-fade-slide var(--gb-anim) both' }}>
+          <SectionTitle icon={<I.spark />} title="Margin Breakdown" sub="Blended margin across the selected proposal(s)" />
+          <div style={{ padding: 16 }}>
+            <MarginBreakdown entries={marginEntries} />
+          </div>
+        </Card>
+      )}
+
+      {hasContent && (
+        <Card style={{ animation: 'gb-fade-slide var(--gb-anim) both' }}>
+          <SectionTitle icon={<I.mail />} title="Proposal Email" sub="Generated from the proposals' line items — pick a template & preview" />
+          <div style={{ height: 'min(720px, 78vh)', display: 'flex', flexDirection: 'column' }}>
+            <ProposalEmailComposer source={source} />
+          </div>
+        </Card>
+      )}
     </>
   );
 }
