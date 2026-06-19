@@ -1421,8 +1421,8 @@ function downloadEmailRow(i) {
 
 /* Editable key-value row — value, or an input when `editing`. UI only for
    now (uncontrolled); save wiring comes later. */
-function EKV({ label, value, editing, mono, field, onEdit }) {
-  if (!editing) return <KV label={label} mono={mono}>{value}</KV>;
+function EKV({ label, value, editing, mono, field, onEdit, copyable }) {
+  if (!editing) return <KV label={label} mono={mono} copyable={copyable}>{value}</KV>;
   return (
     <div style={{
       display: 'grid', gridTemplateColumns: '128px 1fr', gap: 12,
@@ -2778,8 +2778,8 @@ function ContactInfoCard() {
         <EKV label="First Name" value={txt(c.firstName)} editing={editing} field="firstName" onEdit={onEdit} />
         <EKV label="Last Name" value={txt(c.lastName)} editing={editing} field="lastName" onEdit={onEdit} />
         <EKV label="Job Title" value={txt(c.jobTitle)} editing={editing} field="jobTitle" onEdit={onEdit} />
-        <EKV label="Email" value={txt(c.email)} editing={editing} field="email" onEdit={onEdit} />
-        <EKV label="Phone" value={txt(c.phone)} editing={editing} field="phoneNumber" onEdit={onEdit} />
+        <EKV label="Email" value={txt(c.email)} editing={editing} field="email" onEdit={onEdit} copyable />
+        <EKV label="Phone" value={txt(c.phone)} editing={editing} field="phoneNumber" onEdit={onEdit} copyable />
         {/* State lives on the account, not the contact Update payload — read-only here */}
         <EKV label="State" value={txt(c.state)} editing={editing} />
         <EKV label="Zip" value={txt(c.zipCode)} editing={editing} mono field="zipCode" onEdit={onEdit} />
