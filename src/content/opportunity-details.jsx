@@ -30,6 +30,7 @@ import { Textarea as UITextarea } from '../ui/components/Textarea.jsx';
 import { ModalHeader } from '../ui/components/ModalHeader.jsx';
 import { ModalFooter } from '../ui/components/ModalFooter.jsx';
 import { DatePicker } from '../ui/components/DatePicker.jsx';
+import { EmailHtmlView } from '../ui/components/EmailHtmlView.jsx';
 import { submitCallLog } from '../lib/submitCallLog.js';
 import { submitQuickTask } from '../lib/submitQuickTask.js';
 import { loadTaskTemplates } from '../lib/quickTask.js';
@@ -612,6 +613,36 @@ function toOppDate(v) { const m = (v || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); 
 async function crmGetOpportunity(id) {
   const r = await fetch(`${crmOrigin()}/golfballs/crm/Admin/Opportunity/Get.ajax?${id}`, { credentials: 'include' });
   return JSON.parse(await r.text());
+}
+/* Proposals live in the host DOM as checkboxes whose onclick is
+   ProposalCheckToggle(this, '<cartId>', '<name>', '<expiration>', <newSite>). */
+function extractProposals(doc) {
+  const out = [];
+  try {
+    (doc || document).querySelectorAll('[onclick*="ProposalCheckToggle"]').forEach((el) => {
+      const oc = el.getAttribute('onclick') || '';
+      const m = /ProposalCheckToggle\(\s*this\s*,\s*'((?:\\.|[^'])*)'\s*,\s*'((?:\\.|[^'])*)'\s*,\s*'((?:\\.|[^'])*)'\s*,\s*([^)]*)\)/.exec(oc);
+      if (m) out.push({ cartId: m[1], name: m[2].replace(/\\'/g, "'"), expiration: m[3], newSite: /true/i.test(m[4]) });
+    });
+  } catch (e) {}
+  return out;
+}
+/* CreateProposalEmail → returns the generated proposal-email HTML (breakdown).
+   Endpoint variant depends on the proposals' newSite flag. */
+async function crmCreateProposalEmail({ groupName, contactEmail, contactName, selected, contactId, opportunityId, opportunityStatus }) {
+  const base = crmOrigin();
+  const modifier = (selected[0] && selected[0].newSite) ? 'NewSite' : '';
+  const payload = {
+    ProposalGroupName: groupName, ContactEmail: contactEmail || '', ContactName: contactName || '', EmailCC: '', ProposalMessage: '',
+    CartIds: selected.map((c) => c.cartId),
+    ProposalNames: selected.map((c) => c.name),
+    ProposalExpirations: selected.map((c) => c.expiration),
+    ContactId: String(contactId || ''), OpportunityID: String(opportunityId || ''), OpportunityStatus: String(opportunityStatus || ''),
+  };
+  const r = await fetch(`${base}/golfballs/crm/Admin/ProposalEmail${modifier}/CreateProposalEmail.ajax?${encodeURIComponent(JSON.stringify(payload))}`, { credentials: 'include' });
+  if (!r.ok) throw new Error('proposal email failed');
+  const res = JSON.parse(await r.text());
+  return (res.params && res.params.proposalhtml) || '';
 }
 async function crmSaveOpportunity(contactId, o) {
   const base = crmOrigin();
@@ -3111,6 +3142,86 @@ function OppInfoCard() {
   );
 }
 
+/* Proposals + inline email generation (your modal, inlined): select proposals
+   full-width, then the breakdown + generated email full-width below. */
+function ProposalsSection() {
+  const { opp } = useOpp();
+  const D = useD();
+  const [proposals] = useState(() => extractProposals(document));
+  const [selected, setSelected] = useState([]);
+  const [title, setTitle] = useState('');
+  const [genHtml, setGenHtml] = useState('');
+  const [busy, setBusy] = useState(false);
+  const toggle = (id) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  const chosen = proposals.filter((p) => selected.includes(p.cartId));
+  const ready = chosen.length > 0 && title.trim().length > 0;
+  const generate = async () => {
+    if (!ready || busy) return;
+    setBusy(true); setGenHtml('');
+    try {
+      const html = await crmCreateProposalEmail({
+        groupName: title.trim(),
+        contactEmail: D.contact.email,
+        contactName: [D.contact.firstName, D.contact.lastName].filter(Boolean).join(' '),
+        selected: chosen, contactId: D.ids.contact, opportunityId: opp.id, opportunityStatus: opp.stageId,
+      });
+      setGenHtml(html || '<p style="padding:16px;color:#888">No content returned.</p>');
+    } catch (e) { gbToast('Could not generate proposal email', 'error'); }
+    finally { setBusy(false); }
+  };
+  const copyEmail = async () => { try { await navigator.clipboard.writeText(genHtml); } catch (e) {} };
+  return (
+    <>
+      <Card>
+        <SectionTitle icon={<I.cart />} title="Proposals" count={proposals.length} sub="Select proposals to build a customer email"
+          right={<Btn variant="tinted" status="warning" size="sm" icon={<I.cart />} onClick={() => goUrl(`https://www.golfballs.com/cart?proposalMode=true&opportunityID=${opp.id}`)}>Proposal Mode</Btn>} />
+        {proposals.length === 0
+          ? <div style={{ padding: 28, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)' }}>No proposals on this opportunity yet — use Proposal Mode to build one.</div>
+          : (
+            <ScrollArea max={300}>
+              <table style={tableStyle}>
+                <thead><tr><Th style={{ width: 34 }}></Th><Th>Name</Th><Th>Cart</Th><Th align="right">Expires</Th><Th align="center">Site</Th></tr></thead>
+                <tbody>
+                  {proposals.map((p) => {
+                    const on = selected.includes(p.cartId);
+                    return (
+                      <tr key={p.cartId} style={{ ...trStyle, background: on ? 'var(--gb-brand-tint-soft)' : 'transparent', cursor: 'pointer', transition: 'background var(--gb-anim)' }} onClick={() => toggle(p.cartId)}>
+                        <Td><span style={{ width: 16, height: 16, borderRadius: 4, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: on ? 'var(--gb-brand-label)' : 'transparent', border: '1.5px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-strong)'), color: 'var(--gb-surface-deep)' }}>{on && <I.check size={10} />}</span></Td>
+                        <Td><span style={{ color: 'var(--gb-text-primary)', fontWeight: 600 }}>{p.name}</span></Td>
+                        <Td mono muted>{String(p.cartId).slice(0, 8)}…</Td>
+                        <Td align="right" mono><span style={{ color: 'var(--gb-warning-fg)', fontWeight: 600 }}>{p.expiration}</span></Td>
+                        <Td align="center">{p.newSite ? <Tag tone="info" size="xs">New</Tag> : <Tag tone="neutral" size="xs">Legacy</Tag>}</Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </ScrollArea>
+          )}
+      </Card>
+      <Card>
+        <SectionTitle icon={<I.mail />} title="Generate Proposal Email" sub="Build a customer-facing email from the selected proposals"
+          right={<Btn variant="primary" size="sm" icon={<I.bolt />} disabled={!ready || busy} onClick={generate}>{busy ? 'Generating…' : 'Generate email'}</Btn>} />
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <FormField label="Proposal group title"><TInput value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Moriarity Classic — 2024 Gift Program" /></FormField>
+          {chosen.length === 0
+            ? <div style={{ padding: 16, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)', background: 'var(--gb-fill-faint)', border: '1px dashed var(--gb-border-default)', borderRadius: 'var(--gb-r-md)' }}>Select one or more proposals above.</div>
+            : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{chosen.map((p) => <Tag key={p.cartId} tone="brand" size="sm">{p.name}</Tag>)}</div>}
+          {genHtml && (
+            <div style={{ animation: 'gb-fade-slide var(--gb-anim) both', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: .4, textTransform: 'uppercase', color: 'var(--gb-text-muted)', flex: 1 }}>Generated email</span>
+                <Btn variant="secondary" size="xs" icon={<I.copy />} onClick={copyEmail}>Copy HTML</Btn>
+              </div>
+              <EmailHtmlView html={genHtml} style={{ maxHeight: 520 }} />
+            </div>
+          )}
+        </div>
+      </Card>
+    </>
+  );
+}
+
 function App({ store }) {
   const data = useSyncExternalStore(store.subscribe, store.get);
   const [patches, setPatches] = useState([]);
@@ -3189,7 +3300,7 @@ function App({ store }) {
                 <OppHeader />
                 <OppStatsStrip />
                 <OppInfoCard />
-                {/* Proposals + inline email generation land in the next push. */}
+                <ProposalsSection />
                 <TasksPanel />
                 <EmailsPanel />
               </>
