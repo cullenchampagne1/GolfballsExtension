@@ -2824,6 +2824,7 @@ function QuickLogCard() {
             onContextMenu={(e) => { e.preventDefault(); openModal(<TemplateModal kind="call" initial={t} onSave={(tpl) => ql.update(t.id, tpl)} onDelete={() => ql.remove(t.id)} />); }}
             title="Click to log · right-click to edit"
             style={{
+              minWidth: 0,   // let the grid cell constrain width so text can wrap
               background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)',
               borderRadius: 'var(--gb-r-md)', padding: '10px 9px',
               display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start',
@@ -2831,8 +2832,8 @@ function QuickLogCard() {
               transition: 'all var(--gb-anim)', fontFamily: 'var(--gb-font-sans)',
             }}>
             <span style={{ color: 'var(--gb-text-tertiary)', display: 'flex' }}><I.phone size={13} /></span>
-            <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)' }}>{t.label}</span>
-            <span style={{ fontSize: 9, letterSpacing: .5, fontWeight: 600, color: 'var(--gb-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{t.templateName || ''}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--gb-text-primary)', lineHeight: 1.25, overflowWrap: 'anywhere', wordBreak: 'break-word', maxWidth: '100%' }}>{t.label}</span>
+            <span style={{ fontSize: 9, letterSpacing: .5, fontWeight: 600, color: 'var(--gb-text-muted)', lineHeight: 1.3, overflowWrap: 'anywhere', wordBreak: 'break-word', maxWidth: '100%' }}>{t.templateName || ''}</span>
           </button>
         ))}
         {ql.list.length === 0 && <div style={{ gridColumn: '1 / -1', padding: 14, textAlign: 'center', fontSize: 11.5, color: 'var(--gb-text-muted)' }}>Add a quick-log button with +</div>}
