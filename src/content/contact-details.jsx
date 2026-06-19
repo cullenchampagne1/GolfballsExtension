@@ -24,6 +24,9 @@ import React, { useState, useMemo, useEffect, useRef, useCallback, useSyncExtern
 import { createRoot } from 'react-dom/client';
 import { ensureTheme, THEME_VARIANTS, loadTheme, saveTheme, applyTheme } from '../lib/theme.js';
 import { getAllIndexed, searchIndexed } from '../lib/crmIndex.js';
+import { Field as UIField } from '../ui/components/Field.jsx';
+import { Input as UIInput } from '../ui/components/Input.jsx';
+import { Textarea as UITextarea } from '../ui/components/Textarea.jsx';
 
 /* ════════════════════════════════════════════════════════════
    ICONS
@@ -1981,13 +1984,18 @@ const inputStyle = {
   fontFamily: 'var(--gb-font-sans)', fontSize: 12, outline: 'none',
   colorScheme: 'dark',   // theme the native date/number pickers to the dark UI
 };
+/* Use the shared component-library Field/Input/Textarea so the modal forms
+   match the rest of the extension (and the native date/number controls are
+   themed). TInput/TArea adapt the call sites' event-style onChange to the
+   components' value-style onChange so the forms didn't need rewriting. */
 function FormField({ label, children, style }) {
-  return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: 5, ...style }}>
-      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>{label}</span>
-      {children}
-    </label>
-  );
+  return <UIField label={label} style={style}>{children}</UIField>;
+}
+function TInput({ onChange, ...rest }) {
+  return <UIInput {...rest} onChange={(v) => onChange && onChange({ target: { value: v } })} />;
+}
+function TArea({ onChange, ...rest }) {
+  return <UITextarea resize="vertical" {...rest} onChange={(v) => onChange && onChange({ target: { value: v } })} />;
 }
 /* Custom dropdown for modals — matches our look, and (unlike the shared
    Dropdown which portals to document.body) renders INSIDE the takeover so it
@@ -2082,10 +2090,10 @@ function EditTaskModal({ taskId }) {
       {loading
         ? <div style={{ padding: 20, textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12 }}>Loading…</div>
         : <>
-          <FormField label="Subject"><input value={t.Subject} onChange={(e) => setT({ ...t, Subject: e.target.value })} style={inputStyle} /></FormField>
-          <FormField label="Description"><textarea value={t.Description} onChange={(e) => setT({ ...t, Description: e.target.value })} rows={4} style={{ ...inputStyle, height: 'auto', padding: 8, resize: 'vertical', lineHeight: 1.5 }} /></FormField>
+          <FormField label="Subject"><TInput value={t.Subject} onChange={(e) => setT({ ...t, Subject: e.target.value })} /></FormField>
+          <FormField label="Description"><TArea value={t.Description} onChange={(e) => setT({ ...t, Description: e.target.value })} rows={4} /></FormField>
           <div style={{ display: 'flex', gap: 12 }}>
-            <FormField label="Due date" style={{ flex: 1 }}><input type="date" value={toDateInput(t.DueDate)} onChange={(e) => setT({ ...t, DueDate: fromDateInput(e.target.value) })} style={inputStyle} /></FormField>
+            <FormField label="Due date" style={{ flex: 1 }}><TInput type="date" value={toDateInput(t.DueDate)} onChange={(e) => setT({ ...t, DueDate: fromDateInput(e.target.value) })} /></FormField>
             <FormField label="Priority" style={{ width: 130 }}>
               <MiniSelect value={t.Priority} options={PRIORITY_OPTS} onChange={(v) => setT({ ...t, Priority: v })} />
             </FormField>
@@ -2116,10 +2124,10 @@ function AddTaskModal() {
       <Btn variant="ghost" size="sm" onClick={closeModal} disabled={busy}>Cancel</Btn>
       <Btn variant="primary" size="sm" icon={<I.check />} onClick={save} disabled={busy || !t.Subject.trim()}>{busy ? 'Creating…' : 'Create'}</Btn>
     </>}>
-      <FormField label="Subject"><input autoFocus value={t.Subject} onChange={(e) => setT({ ...t, Subject: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') save(); }} style={inputStyle} /></FormField>
-      <FormField label="Description"><textarea value={t.Description} onChange={(e) => setT({ ...t, Description: e.target.value })} rows={3} style={{ ...inputStyle, height: 'auto', padding: 8, resize: 'vertical', lineHeight: 1.5 }} /></FormField>
+      <FormField label="Subject"><TInput autoFocus value={t.Subject} onChange={(e) => setT({ ...t, Subject: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') save(); }} /></FormField>
+      <FormField label="Description"><TArea value={t.Description} onChange={(e) => setT({ ...t, Description: e.target.value })} rows={3} /></FormField>
       <div style={{ display: 'flex', gap: 12 }}>
-        <FormField label="Due date" style={{ flex: 1 }}><input type="date" value={toDateInput(t.DueDate)} onChange={(e) => setT({ ...t, DueDate: fromDateInput(e.target.value) })} style={inputStyle} /></FormField>
+        <FormField label="Due date" style={{ flex: 1 }}><TInput type="date" value={toDateInput(t.DueDate)} onChange={(e) => setT({ ...t, DueDate: fromDateInput(e.target.value) })} /></FormField>
         <FormField label="Priority" style={{ width: 130 }}>
           <MiniSelect value={t.Priority} options={PRIORITY_OPTS} onChange={(v) => setT({ ...t, Priority: v })} />
         </FormField>
@@ -2178,11 +2186,11 @@ function OpportunityModal({ opportunityId }) {
       {loading
         ? <div style={{ padding: 20, textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12 }}>Loading…</div>
         : <>
-          <FormField label="Subject"><input autoFocus value={o.Subject} onChange={(e) => setO({ ...o, Subject: e.target.value })} style={inputStyle} /></FormField>
-          <FormField label="Description"><textarea value={o.Description} onChange={(e) => setO({ ...o, Description: e.target.value })} rows={3} style={{ ...inputStyle, height: 'auto', padding: 8, resize: 'vertical', lineHeight: 1.5 }} /></FormField>
+          <FormField label="Subject"><TInput autoFocus value={o.Subject} onChange={(e) => setO({ ...o, Subject: e.target.value })} /></FormField>
+          <FormField label="Description"><TArea value={o.Description} onChange={(e) => setO({ ...o, Description: e.target.value })} rows={3} /></FormField>
           <div style={{ display: 'flex', gap: 12 }}>
-            <FormField label="Est. value" style={{ flex: 1 }}><input value={o.EstimatedValue} onChange={(e) => setO({ ...o, EstimatedValue: e.target.value })} placeholder="0" style={inputStyle} /></FormField>
-            <FormField label="Est. close" style={{ flex: 1 }}><input type="date" value={toDateInputAny(o.EstimatedClosedDate)} onChange={(e) => setO({ ...o, EstimatedClosedDate: toOppDate(e.target.value) })} style={inputStyle} /></FormField>
+            <FormField label="Est. value" style={{ flex: 1 }}><TInput value={o.EstimatedValue} onChange={(e) => setO({ ...o, EstimatedValue: e.target.value })} placeholder="0" /></FormField>
+            <FormField label="Est. close" style={{ flex: 1 }}><TInput type="date" value={toDateInputAny(o.EstimatedClosedDate)} onChange={(e) => setO({ ...o, EstimatedClosedDate: toOppDate(e.target.value) })} /></FormField>
           </div>
           <FormField label="Stage"><MiniSelect value={o.OpportunityStageId} options={OPP_STAGES} onChange={(v) => setO({ ...o, OpportunityStageId: v })} /></FormField>
         </>}
@@ -2208,7 +2216,7 @@ function SnoozeModal() {
       <Btn variant="ghost" size="sm" onClick={closeModal} disabled={busy}>Cancel</Btn>
       <Btn variant="primary" size="sm" icon={<I.check />} onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Snooze'}</Btn>
     </>}>
-      <FormField label="Weeks to snooze"><input type="number" min="0" autoFocus value={weeks} onChange={(e) => setWeeks(e.target.value)} placeholder="Enter number of weeks…" style={inputStyle} /></FormField>
+      <FormField label="Weeks to snooze"><TInput type="number" min="0" autoFocus value={weeks} onChange={(e) => setWeeks(e.target.value)} placeholder="Enter number of weeks…" /></FormField>
     </ModalShell>
   );
 }
@@ -2241,15 +2249,15 @@ function ContactEditModal() {
       <Btn variant="primary" size="sm" icon={<I.check />} onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save'}</Btn>
     </>}>
       <div style={{ display: 'flex', gap: 12 }}>
-        <FormField label="First name" style={{ flex: 1 }}><input autoFocus value={f.firstName} onChange={set('firstName')} style={inputStyle} /></FormField>
-        <FormField label="Last name" style={{ flex: 1 }}><input value={f.lastName} onChange={set('lastName')} style={inputStyle} /></FormField>
+        <FormField label="First name" style={{ flex: 1 }}><TInput autoFocus value={f.firstName} onChange={set('firstName')} /></FormField>
+        <FormField label="Last name" style={{ flex: 1 }}><TInput value={f.lastName} onChange={set('lastName')} /></FormField>
       </div>
-      <FormField label="Job title"><input value={f.jobTitle} onChange={set('jobTitle')} style={inputStyle} /></FormField>
-      <FormField label="Email"><input value={f.email} onChange={set('email')} style={inputStyle} /></FormField>
+      <FormField label="Job title"><TInput value={f.jobTitle} onChange={set('jobTitle')} /></FormField>
+      <FormField label="Email"><TInput value={f.email} onChange={set('email')} /></FormField>
       <div style={{ display: 'flex', gap: 12 }}>
-        <FormField label="Phone" style={{ flex: 1 }}><input value={f.phoneNumber} onChange={set('phoneNumber')} style={inputStyle} /></FormField>
-        <FormField label="Zip" style={{ width: 110 }}><input value={f.zipCode} onChange={set('zipCode')} style={inputStyle} /></FormField>
-        <FormField label="Country" style={{ width: 90 }}><input value={f.userCountry} onChange={set('userCountry')} style={inputStyle} /></FormField>
+        <FormField label="Phone" style={{ flex: 1 }}><TInput value={f.phoneNumber} onChange={set('phoneNumber')} /></FormField>
+        <FormField label="Zip" style={{ width: 110 }}><TInput value={f.zipCode} onChange={set('zipCode')} /></FormField>
+        <FormField label="Country" style={{ width: 90 }}><TInput value={f.userCountry} onChange={set('userCountry')} /></FormField>
       </div>
     </ModalShell>
   );
@@ -2278,7 +2286,7 @@ function LookupModal() {
       <Btn variant="primary" size="sm" icon={<I.check />} onClick={save} disabled={busy || !value.trim()}>{busy ? 'Adding…' : 'Add'}</Btn>
     </>}>
       <FormField label="Type"><MiniSelect value={type} options={[{ value: '2', label: 'Phone' }, { value: '1', label: 'Email' }]} onChange={setType} /></FormField>
-      <FormField label="Value"><input autoFocus value={value} onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') save(); }} style={inputStyle} /></FormField>
+      <FormField label="Value"><TInput autoFocus value={value} onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') save(); }} /></FormField>
     </ModalShell>
   );
 }
