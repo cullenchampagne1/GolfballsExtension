@@ -1473,6 +1473,7 @@ function EditToggle({ editing, setEditing, onSave }) {
    workflow events (exits, recycles, automated sends, stage changes) have no
    clearer signal, so they fall through to the blue cog. */
 function activityType(a) {
+  if (a && a.localNote) return { key: 'note', icon: <I.note />, tone: 'warning' };   // local sticky note → yellow
   const s = ((a.category || '') + ' ' + (a.subject || '')).toLowerCase();
   if (/\b(image|proof|logo|art file|mockup)\b/.test(s)) return { key: 'image', icon: <I.camera />, tone: 'error' };
   if (/\b(email|e-mail)\b|email sent|followup email/.test(s)) return { key: 'email', icon: <I.mail />, tone: 'warning' };
@@ -1552,22 +1553,24 @@ function ActivityFilter({ value, onChange, counts }) {
     </div>
   );
 }
-function ActivityRow({ a, last }) {
+function ActivityRow({ a, last, onDelete }) {
   const [hover, setHover] = useState(false);
   const { openModal } = useModal();
   const meta = activityType(a);
-  const clickable = !!a.id;
+  const isNote = !!a.localNote;
+  const clickable = !!a.id && !isNote;
   return (
     <div
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       onClick={clickable ? () => openModal(<ActivityDetailModal activityId={a.id} />) : undefined}
-      title={clickable ? 'View activity detail' : undefined}
+      title={clickable ? 'View activity detail' : (isNote ? 'Personal note (local)' : undefined)}
       style={{
         display: 'flex', alignItems: 'flex-start', gap: 12,
         padding: '11px 18px',
         cursor: clickable ? 'pointer' : 'default',
         borderBottom: last ? 'none' : '1px solid var(--gb-border-subtle)',
-        background: hover ? 'var(--gb-fill-faint)' : 'transparent',
+        borderLeft: isNote ? '3px solid var(--gb-warning-tint-border)' : '3px solid transparent',
+        background: isNote ? 'var(--gb-warning-tint-soft)' : (hover ? 'var(--gb-fill-faint)' : 'transparent'),
         transition: 'background var(--gb-anim)',
       }}>
       <span style={{
@@ -1578,7 +1581,7 @@ function ActivityRow({ a, last }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>{React.cloneElement(meta.icon, { size: 13 })}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12.5, color: 'var(--gb-text-primary)', fontWeight: 500, lineHeight: 1.45 }}>
+        <div style={{ fontSize: 12.5, color: 'var(--gb-text-primary)', fontWeight: 500, lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
           {a.subject || <span style={{ color: 'var(--gb-text-ghost)' }}>—</span>}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 5, flexWrap: 'wrap' }}>
@@ -1587,13 +1590,24 @@ function ActivityRow({ a, last }) {
           {a.employee && <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontWeight: 600 }}>{a.employee}</span>}
         </div>
       </div>
-      <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', whiteSpace: 'nowrap', flexShrink: 0, marginTop: 3 }}>{fmtDateTime(a.date)}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginTop: 3 }}>
+        <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', whiteSpace: 'nowrap' }}>{fmtDateTime(a.date)}</span>
+        {isNote && onDelete && (
+          <button onClick={(e) => { e.stopPropagation(); onDelete(a.noteId); }} title="Delete note"
+            style={{ width: 18, height: 18, borderRadius: '50%', border: '1px solid var(--gb-border-default)', background: 'var(--gb-surface-1)', color: 'var(--gb-text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, lineHeight: 1, opacity: hover ? 1 : 0, transition: 'opacity var(--gb-anim)' }}>×</button>
+        )}
+      </div>
     </div>
   );
 }
 function ActivityPanel() {
   const D = useD();
-  const rows = D.activities;
+  const { openModal } = useModal();
+  const ln = useLocalNotes(D.ids.contact);
+  // Local notes ride at the top of the feed (newest annotations first), then
+  // the real CRM activity.
+  const noteRows = useMemo(() => ln.notes.map((n) => ({ localNote: true, noteId: n.id, subject: n.text, category: 'Note', employee: 'You', date: new Date(n.ts).toLocaleString() })), [ln.notes]);
+  const rows = useMemo(() => [...noteRows, ...D.activities], [noteRows, D.activities]);
   const [filter, setFilter] = useState('all');
   const counts = useMemo(() => {
     const c = { all: rows.length };
@@ -1613,14 +1627,14 @@ function ActivityPanel() {
         right={
           <div style={{ display: 'flex', gap: 6 }}>
             <ActivityFilter value={filter} onChange={setFilter} counts={counts} />
-            <Btn variant="tinted" size="sm" icon={<I.plus />} onClick={() => { try { window.__gbOpenNote && window.__gbOpenNote({}); } catch (e) {} }}>Add note</Btn>
+            <Btn variant="tinted" size="sm" icon={<I.note />} onClick={() => openModal(<NoteModal onSave={ln.add} />)}>Add note</Btn>
           </div>
         }
       />
       <ScrollArea max={460}>
         {/* key by filter → the list fades/slides in on each filter change */}
         <div key={filter} style={{ animation: 'gb-fade-slide var(--gb-anim) both' }}>
-          {filtered.map((a, idx) => <ActivityRow key={idx} a={a} last={idx === filtered.length - 1} />)}
+          {filtered.map((a, idx) => <ActivityRow key={a.noteId || idx} a={a} last={idx === filtered.length - 1} onDelete={ln.remove} />)}
           {filtered.length === 0 && (
             <div style={{ padding: 28, textAlign: 'center', fontSize: 12, color: 'var(--gb-text-muted)' }}>
               {rows.length ? 'No matching activity.' : 'No activity recorded.'}
@@ -2216,6 +2230,29 @@ function OpportunityModal({ opportunityId }) {
 }
 
 /* Snooze Mailer — number of weeks (the page sends it as snoozePoints). */
+/* Add a local note — stored in our storage (not the CRM); shows as a yellow
+   row in the Activity Feed. */
+function NoteModal({ onSave }) {
+  const { closeModal } = useModal();
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    const t = text.trim();
+    if (!t || busy) return;
+    setBusy(true);
+    try { await onSave(t); closeModal(); } catch (e) { setBusy(false); }
+  };
+  return (
+    <ModalShell title="Add note" icon={<I.note />} subtitle="Personal — stored locally, shown in the activity feed" width={460} footer={<>
+      <Btn variant="ghost" onClick={closeModal}>Cancel</Btn>
+      <Btn variant="primary" disabled={!text.trim() || busy} onClick={save}>Add note</Btn>
+    </>}>
+      <FormField label="Note">
+        <TArea value={text} onChange={(e) => setText(e.target.value)} rows={5} placeholder="Type a note about this contact…" />
+      </FormField>
+    </ModalShell>
+  );
+}
 function SnoozeModal() {
   const { closeModal } = useModal();
   const D = useD();
@@ -2357,6 +2394,46 @@ function ActivityDetailModal({ activityId }) {
    the + opens the editor; right-click a chip to edit/delete. */
 const QT_KEY = 'gbCpQuickTasks';
 const QL_KEY = 'gbCpQuickLogs';
+
+/* ── Local notes — a personal annotation layer the CRM doesn't have. Stored in
+   chrome.storage.local under gbLocalNotes, keyed by contact id, and merged into
+   the Activity Feed as yellow-tinted rows. (Not synced to the CRM; the native
+   Activity/SaveLeadNote endpoint exists if real CRM notes are wanted later.) */
+const LOCAL_NOTES_KEY = 'gbLocalNotes';
+function loadLocalNotesMap() {
+  return new Promise((res) => {
+    try { chrome.storage.local.get(LOCAL_NOTES_KEY, (d) => res((d && d[LOCAL_NOTES_KEY]) || {})); }
+    catch (e) { res({}); }
+  });
+}
+function useLocalNotes(key) {
+  const [notes, setNotes] = useState([]);
+  useEffect(() => {
+    if (!key) return undefined;
+    let live = true;
+    const read = () => loadLocalNotesMap().then((m) => { if (live) setNotes(Array.isArray(m[key]) ? m[key] : []); });
+    read();
+    const onChg = (ch, area) => { if (area === 'local' && ch[LOCAL_NOTES_KEY]) read(); };
+    try { chrome.storage.onChanged.addListener(onChg); } catch (e) {}
+    return () => { live = false; try { chrome.storage.onChanged.removeListener(onChg); } catch (e) {} };
+  }, [key]);
+  const add = async (text) => {
+    const t = String(text || '').trim();
+    if (!t || !key) return;
+    const m = await loadLocalNotesMap();
+    const list = Array.isArray(m[key]) ? m[key] : [];
+    m[key] = [{ id: 'ln_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: t, ts: Date.now() }, ...list];
+    try { chrome.storage.local.set({ [LOCAL_NOTES_KEY]: m }); } catch (e) {}
+  };
+  const remove = async (id) => {
+    if (!key) return;
+    const m = await loadLocalNotesMap();
+    m[key] = (m[key] || []).filter((n) => n.id !== id);
+    try { chrome.storage.local.set({ [LOCAL_NOTES_KEY]: m }); } catch (e) {}
+  };
+  return { notes, add, remove };
+}
+
 function loadTpls(key) {
   return new Promise((res) => {
     try { chrome.storage.local.get(key, (d) => res(Array.isArray(d && d[key]) ? d[key] : [])); }
