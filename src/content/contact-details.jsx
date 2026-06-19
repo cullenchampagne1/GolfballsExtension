@@ -27,6 +27,8 @@ import { getAllIndexed, searchIndexed } from '../lib/crmIndex.js';
 import { Field as UIField } from '../ui/components/Field.jsx';
 import { Input as UIInput } from '../ui/components/Input.jsx';
 import { Textarea as UITextarea } from '../ui/components/Textarea.jsx';
+import { ModalHeader } from '../ui/components/ModalHeader.jsx';
+import { ModalFooter } from '../ui/components/ModalFooter.jsx';
 
 /* ════════════════════════════════════════════════════════════
    ICONS
@@ -1997,9 +1999,10 @@ function TInput({ onChange, ...rest }) {
 function TArea({ onChange, ...rest }) {
   return <UITextarea resize="vertical" {...rest} onChange={(v) => onChange && onChange({ target: { value: v } })} />;
 }
-/* Custom dropdown for modals — matches our look, and (unlike the shared
-   Dropdown which portals to document.body) renders INSIDE the takeover so it
-   isn't hidden under it. Popover is absolute within the field. */
+/* Custom dropdown for modals — the shared Dropdown portals to document.body
+   which renders UNDER the in-shadow takeover, so we roll our own. The options
+   open IN-FLOW (not absolute), so they grow the modal's footprint instead of
+   being clipped by its rounded overflow — exactly what was wanted. */
 function MiniSelect({ value, options, onChange }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -2011,14 +2014,14 @@ function MiniSelect({ value, options, onChange }) {
   }, [open]);
   const cur = options.find((o) => String(o.value) === String(value)) || options[0];
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div ref={ref}>
       <button type="button" onClick={() => setOpen((o) => !o)}
         style={{ ...inputStyle, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
         <span>{cur ? cur.label : ''}</span>
         <I.chevd size={12} style={{ transition: 'transform var(--gb-anim)', transform: open ? 'rotate(180deg)' : 'none', color: 'var(--gb-text-muted)' }} />
       </button>
       {open && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 5, padding: 4, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', boxShadow: 'var(--gb-shadow-popover)', display: 'flex', flexDirection: 'column', gap: 1, animation: 'gb-fade-slide var(--gb-anim) both' }}>
+        <div style={{ marginTop: 4, padding: 4, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)', boxShadow: 'var(--gb-shadow-popover)', display: 'flex', flexDirection: 'column', gap: 1, animation: 'gb-fade-slide var(--gb-anim) both' }}>
           {options.map((o) => {
             const sel = String(o.value) === String(value);
             return (
@@ -2034,7 +2037,7 @@ function MiniSelect({ value, options, onChange }) {
   );
 }
 const PRIORITY_OPTS = [{ value: '1', label: 'High' }, { value: '2', label: 'Med' }, { value: '3', label: 'Low' }];
-function ModalShell({ title, icon, children, footer, width = 460 }) {
+function ModalShell({ title, icon, subtitle, children, footer, width = 460 }) {
   const { closeModal } = useModal();
   return (
     <div onMouseDown={(e) => e.stopPropagation()}
@@ -2044,18 +2047,15 @@ function ModalShell({ title, icon, children, footer, width = 460 }) {
         borderRadius: 'var(--gb-r-lg)', boxShadow: 'var(--gb-shadow-modal, 0 24px 64px rgba(0,0,0,.5))',
         // scale the modal to match the page (the takeover renders at PAGE_ZOOM;
         // the overlay is a 1x sibling, so without this the modal looks tiny).
-        zoom: PAGE_ZOOM,
-        // overflow visible so an open dropdown expands the modal's footprint
-        // instead of being clipped; header/footer carry their own corner radii.
+        zoom: PAGE_ZOOM, overflow: 'hidden',
         animation: 'gb-pop-in .22s cubic-bezier(.34,1.4,.64,1) both',
       }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderBottom: '1px solid var(--gb-border-subtle)', background: 'var(--gb-surface-2)', borderRadius: 'var(--gb-r-lg) var(--gb-r-lg) 0 0' }}>
-        {icon && <span style={{ width: 28, height: 28, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{React.cloneElement(icon, { size: 14 })}</span>}
-        <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)', flex: 1 }}>{title}</span>
-        <IconBtn size="sm" ghost icon={<I.close />} onClick={closeModal} />
-      </div>
+      {/* shared ModalHeader/Footer — same icon tile, close button + chrome as
+          every other extension modal. MiniSelect opens in-flow (grows the
+          modal) so nothing needs to escape the rounded overflow. */}
+      <ModalHeader icon={icon} title={title} subtitle={subtitle} onClose={closeModal} />
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
-      {footer && <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '11px 16px', borderTop: '1px solid var(--gb-border-subtle)', background: 'var(--gb-surface-2)', borderRadius: '0 0 var(--gb-r-lg) var(--gb-r-lg)' }}>{footer}</div>}
+      {footer && <ModalFooter>{footer}</ModalFooter>}
     </div>
   );
 }
