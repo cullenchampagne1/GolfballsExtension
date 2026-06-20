@@ -31,9 +31,10 @@ import { ModalHeader } from '../ui/components/ModalHeader.jsx';
 import { ModalFooter } from '../ui/components/ModalFooter.jsx';
 import { DatePicker } from '../ui/components/DatePicker.jsx';
 import { submitCallLog } from '../lib/submitCallLog.js';
-import { submitQuickTask } from '../lib/submitQuickTask.js';
-import { loadTaskTemplates } from '../lib/quickTask.js';
+import { submitQuickTask, readTaskContext } from '../lib/submitQuickTask.js';
+import { loadTaskTemplates, buildCustomTaskTemplate } from '../lib/quickTask.js';
 import { loadCallTemplates } from '../lib/callLog.js';
+import { completeTaskById } from '../lib/crmTasks.js';
 
 /* ════════════════════════════════════════════════════════════
    ICONS
@@ -468,21 +469,6 @@ function gbToast(msg, tone = 'info') {
 }
 /* Replicates the page's QuickComplete(taskID): read the task, then re-save it
    with taskStatusID=3 (completed). */
-async function crmCompleteTask(taskId) {
-  const base = crmOrigin();
-  const res = await fetch(`${base}/golfballs/crm/Admin/Task/Get.ajax?${taskId}`, { credentials: 'include' });
-  const obj = JSON.parse(await res.text());
-  const task = {
-    TaskId: taskId,
-    Subject: encodeURIComponent(obj.Subject || ''),
-    Description: encodeURIComponent(obj.Description || ''),
-    LiveDate: obj.LiveDate, DueDate: obj.DueDate,
-    taskCategoryID: obj.taskCategoryID, taskStatusID: 3,
-    contactID: obj.contactID, employeeID: obj.employeeID, Priority: obj.Priority,
-  };
-  const up = await fetch(`${base}/golfballs/crm/Admin/Task/Update.ajax?${encodeURIComponent(JSON.stringify(task))}`, { credentials: 'include' });
-  if (!up.ok) throw new Error('update failed');
-}
 async function crmSetDnc(customerID, add) {
   const base = crmOrigin();
   const action = add ? 'AddToDoNotCallList' : 'RemoveFromDoNotCallList';
@@ -567,33 +553,29 @@ function currentEmployeeId() {
   } catch (e) {}
   return '0';
 }
+/* Resolve the task/call context the SAME way the campaign engine does:
+   employeeId comes from gbEmployeeId storage (readTaskContext), with the
+   script-scrape as a fallback; contactId from the page, fallback to the engine
+   id. Every task/call action funnels through this so they actually attribute. */
+async function taskContext(fallbackContactId, extra = {}) {
+  let ctx = {};
+  try { ctx = await readTaskContext(); } catch (e) {}
+  if (!ctx.employeeId || ctx.employeeId === '0') { const fb = currentEmployeeId(); if (fb && fb !== '0') ctx.employeeId = fb; }
+  if (!ctx.contactId && fallbackContactId) ctx.contactId = String(fallbackContactId);
+  return { ...ctx, ...extra };
+}
+/* CRM due date (M/D/YYYY) → daysOut (days from today) for buildCustomTaskTemplate. */
+function daysOutFrom(mdy) {
+  if (!mdy) return null;
+  const d = new Date(mdy);
+  if (Number.isNaN(d.getTime())) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0); d.setHours(0, 0, 0, 0);
+  return Math.max(0, Math.round((d.getTime() - today.getTime()) / 86400000));
+}
 function todayMDY() {
   try { const d = new Date(); return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`; } catch (e) { return ''; }
 }
 let __gbTaskTmp = 0;
-/* Create a task (mirrors the page's QuickAddTask shape). Returns the sent task
-   + the parsed response so the caller can patch the row in optimistically. */
-async function crmCreateTask(contactId, e = {}) {
-  const base = crmOrigin();
-  const today = todayMDY();
-  const task = {
-    TaskID: '',
-    Subject: e.Subject || '',
-    Description: e.Description || '',
-    LiveDate: e.LiveDate || today,
-    DueDate: e.DueDate || today,
-    taskStatusID: 1,
-    contactID: String(contactId),
-    employeeID: currentEmployeeId(),
-    Priority: Number(e.Priority || 2),
-  };
-  const r = await fetch(`${base}/golfballs/crm/Admin/Task/Create.ajax?${encodeURIComponent(JSON.stringify(task))}`, { credentials: 'include' });
-  if (!r.ok) throw new Error('create failed');
-  let resp = {};
-  try { resp = JSON.parse(await r.text()); } catch (x) {}
-  const id = resp.TaskId || resp.taskId || resp.TaskID || `new-${++__gbTaskTmp}`;
-  return { task, id };
-}
 /* Opportunity stages (ddlopportunityStageId from the page). */
 const OPP_STAGES = [
   { value: '1', label: 'Open' }, { value: '2', label: 'Proposed' }, { value: '3', label: 'Ordered' },
@@ -2145,8 +2127,11 @@ function AddTaskModal() {
     if (!t.Subject.trim() || busy) return;
     setBusy(true);
     try {
-      const { task, id } = await crmCreateTask(D.ids.contact, t);
-      patch((Dd) => ({ ...Dd, openTasks: [{ id, subject: task.Subject, category: '', priority: priLabel(task.Priority), dueDate: task.DueDate, status: 'Open' }, ...(Dd.openTasks || [])] }));
+      const ctx = await taskContext(D.ids.contact);
+      const tpl = buildCustomTaskTemplate({ subject: t.Subject, body: t.Description, daysOut: daysOutFrom(t.DueDate), priority: t.Priority, categoryId: 0 });
+      const res = await submitQuickTask({ template: tpl, context: ctx });
+      if (!res || !res.ok) { gbToast((res && res.error) || 'Could not create task', 'error'); setBusy(false); return; }
+      patch((Dd) => ({ ...Dd, openTasks: [{ id: res.taskId || `new-${Date.now()}`, subject: t.Subject.trim(), category: '', priority: priLabel(t.Priority), dueDate: t.DueDate, status: 'Open' }, ...(Dd.openTasks || [])] }));
       closeModal();
     } catch (e) { gbToast('Could not create task', 'error'); setBusy(false); }
   };
@@ -2526,7 +2511,7 @@ function OpenTaskRow({ t }) {
     if (!t.id || state !== 'idle') return;
     setState('busy');
     try {
-      await crmCompleteTask(t.id);
+      await completeTaskById(t.id);
       setState('done');                                       // check fills + strike (no toast)
       setTimeout(() => setState('leaving'), 280);             // then fade/slide out
       setTimeout(() => patch((D) => ({
@@ -2587,7 +2572,7 @@ function TasksPanel() {
       const all = await loadTaskTemplates();
       const tpl = (all || []).find((t) => String(t.id) === String(chip.templateId));
       if (!tpl) { gbToast('Template not found', 'error'); return; }
-      const r = await submitQuickTask({ template: tpl, context: { contactId: D.ids.contact, employeeId: currentEmployeeId() } });
+      const r = await submitQuickTask({ template: tpl, context: await taskContext(D.ids.contact) });
       if (r && r.ok) addRow({ subject: tpl.subject || tpl.name || chip.label, priority: priLabel(tpl.priorityId || tpl.priority || 2), dueDate: todayMDY() });
       else gbToast((r && r.error) || 'Could not create task', 'error');
     } catch (e) { gbToast('Could not create task', 'error'); }
@@ -2611,8 +2596,10 @@ function TasksPanel() {
     if (!subj || adding) return;
     setAdding(true);
     try {
-      const { task, id } = await crmCreateTask(D.ids.contact, { Subject: subj });
-      addRow({ id, subject: task.Subject, priority: priLabel(task.Priority), dueDate: task.DueDate });
+      const ctx = await taskContext(D.ids.contact);
+      const r = await submitQuickTask({ template: buildCustomTaskTemplate({ subject: subj }), context: ctx });
+      if (!r || !r.ok) { gbToast((r && r.error) || 'Could not create task', 'error'); return; }
+      addRow({ id: r.taskId || `new-${++__gbTaskTmp}`, subject: subj, priority: priLabel(2), dueDate: todayMDY() });
       setQuickTask('');
     } catch (e) { gbToast('Could not create task', 'error'); }
     finally { setAdding(false); }
@@ -2889,12 +2876,10 @@ function QuickLogCard() {
       const all = await loadCallTemplates();
       const tpl = (all || []).find((t) => String(t.id) === String(chip.templateId));
       if (!tpl) { gbToast('Template not found', 'error'); setBusy(null); return; }
-      const ctx = {
-        contactId: D.ids.contact,
+      const ctx = await taskContext(D.ids.contact, {
         phone: String(D.contact.phone || '').replace(/\D/g, ''),
-        employeeId: currentEmployeeId(),
         contactName: [D.contact.firstName, D.contact.lastName].filter(Boolean).join(' '),
-      };
+      });
       const r = await submitCallLog({ template: tpl, context: ctx });
       if (r && r.ok) {
         patch((Dd) => ({ ...Dd, activities: [{ id: '', employee: 'You', category: 'Call', direction: tpl.callDirection === 1 ? 'In' : 'Out', subject: tpl.subject || tpl.name || chip.label, date: new Date().toLocaleString() }, ...(Dd.activities || [])] }));
