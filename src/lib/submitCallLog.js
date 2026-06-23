@@ -190,7 +190,7 @@ export async function submitCallLog({ template, context } = {}) {
   };
   setField('tbCategory', String(callCategory));
   setField('tbSubject',  String(tpl.subject || tpl.name || 'Quick Log Entry'));
-  setField('tbBody',     String(tpl.body || 'Logged via Call Log modal'));
+  setField('tbBody',     String(tpl.body || ''));
   if (tpl.callVoicemail) setField('Voicemail', 'on');
 
   // ASP.NET needs the submit button's name+value to fire the right
