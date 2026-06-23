@@ -800,24 +800,25 @@ export function TaskList({ onClosed, bindClose, useMock: useMockProp }) {
 
   /* Selected-task → contact tuples for the Email Runner side panel.
      Tasks built from a real CRM scrape carry contactUrl
-     (Page=240&customerID=…). Mock tasks ship with an empty
+     (Page=240&customerID=…). We extract the customerID to use as the
+     contactId for the campaign manager. Mock tasks ship with an empty
      contactUrl, so in useMock we synthesise a `mock://…` placeholder
      — EmailRunner's mock dispatchBg returns canned HTML regardless of
-     the URL, so the loop runs and the rep sees the per-row animation.
-     `contactId` here is the task row id (not the underlying contact's
-     customerId) — that's the key TaskRow uses to look itself up in
-     emailStatusByRow when the EmailRunner pumps a row-level update. */
+     the URL, so the loop runs and the rep sees the per-row animation. */
   const selectedContacts = useMemo(() => visibleTasks
-    .filter((t) => selected.has(t.id) && (t.contactUrl || useMock))
-    .map((t) => ({
-      contactId:   t.id,
-      contactName: t.contact || '',
-      contactUrl:  t.contactUrl || (useMock ? `mock://contact/${t.id}` : ''),
-      // Carry a value so the Campaign Manager's audience total + "Highest
-      // value" ordering work from a task selection too. Task rows have no
-      // revenue field, so this is 0 unless one rides along.
-      value:       Number(t.value ?? t.revenue) || 0,
-    })), [visibleTasks, selected, useMock]);
+    .filter((t) => selected.has(t.id) && (t.contactUrl?.includes('customerID=') || useMock))
+    .map((t) => {
+      const contactId = useMock ? t.id : new URL(t.contactUrl).searchParams.get('customerID');
+      return {
+        contactId,
+        contactName: t.contact || '',
+        contactUrl:  t.contactUrl || (useMock ? `mock://contact/${t.id}` : ''),
+        // Carry a value so the Campaign Manager's audience total + "Highest
+        // value" ordering work from a task selection too. Task rows have no
+        // revenue field, so this is 0 unless one rides along.
+        value:       Number(t.value ?? t.revenue) || 0,
+      };
+    }), [visibleTasks, selected, useMock]);
 
   return (
     <>
