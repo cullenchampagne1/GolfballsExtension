@@ -779,7 +779,7 @@ export function EmailRunner({
               </div>
 
               <Field label="Delay between sends" hint={`${fmtSeconds(delay[0])}–${fmtSeconds(delay[1])}, random per contact — keeps the blast looking human.`}>
-                <RangeSlider values={delay} min={5} max={80} step={5} unit="s" onChange={(next) => setDelay(next)} disabled={status === 'running'} />
+                <RangeSlider values={delay} min={0} max={80} step={5} unit="s" onChange={(next) => setDelay(next)} disabled={status === 'running'} />
               </Field>
 
               <Field label="Skip rules" hint="Matching contacts are quietly skipped — not emailed — and counted as skipped.">
