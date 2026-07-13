@@ -33,13 +33,19 @@ const textDecoder = new TextDecoder('utf-8');
 
 const asText = (value) => (value == null ? '' : String(value)).trim();
 
-export function normalizeImportHeader(value) {
-  const key = asText(value)
+export function normalizeImportColumn(value) {
+  return asText(value)
     .replace(/^\uFEFF/, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
-  return HEADER_ALIASES[key] || '';
+}
+
+export function normalizeImportHeader(value) {
+  const key = normalizeImportColumn(value);
+  // Known aliases still collapse to the canonical system fields, while every
+  // other named column survives as a template-variable candidate.
+  return HEADER_ALIASES[key] || key;
 }
 
 function normalizeId(value, kind) {
@@ -125,6 +131,19 @@ export function normalizeContactMatrix(matrix, { fileName = '' } = {}) {
     const contactId = normalizeId(raw.contact_id, 'contact');
     const accountId = normalizeId(raw.account_id, 'account');
     const { fullName, firstName, lastName } = splitName(raw.name, raw.first_name, raw.last_name);
+    const importVariables = Object.fromEntries(
+      Object.entries(raw).map(([key, value]) => [key, asText(value)]),
+    );
+    // Canonical/derived identity values are available under their expected
+    // spreadsheet names even when the source used an accepted alias.
+    Object.assign(importVariables, {
+      name: fullName,
+      first_name: firstName,
+      last_name: lastName,
+      email,
+      contact_id: contactId,
+      account_id: accountId,
+    });
 
     const problems = [];
     if (!email) problems.push('email is blank');
@@ -152,7 +171,7 @@ export function normalizeContactMatrix(matrix, { fileName = '' } = {}) {
       contactName_t: fullName,
       firstName_s: firstName,
       lastName_s: lastName,
-      accountName_t: '',
+      accountName_t: asText(raw.account_name),
       accountID_s: accountId,
       email_tp: email,
       emails_tps: [email],
@@ -163,6 +182,7 @@ export function normalizeContactMatrix(matrix, { fileName = '' } = {}) {
       importContactID_s: contactId,
       importAccountID_s: accountId,
       importRow_i: spreadsheetRow,
+      importVariables_o: importVariables,
     });
   }
 
@@ -336,8 +356,14 @@ export function directContactVariables(contact, definitions = {}) {
   const email = asText(contact?.email);
   const contactId = asText(contact?.crmContactId || contact?.contactId);
   const accountId = asText(contact?.accountId);
+  const imported = contact?.importVariables || contact?.importVariables_o || {};
   const values = {};
   for (const [name, definition] of Object.entries(definitions || {})) {
+    const columnKey = normalizeImportColumn(name);
+    if (columnKey && Object.prototype.hasOwnProperty.call(imported, columnKey)) {
+      values[name] = asText(imported[columnKey]);
+      continue;
+    }
     const hint = `${name} ${definition?.path || ''} ${definition?.field || ''}`.toLowerCase().replace(/[^a-z0-9]+/g, '');
     if (hint.includes('firstname')) values[name] = firstName;
     else if (hint.includes('lastname')) values[name] = lastName;

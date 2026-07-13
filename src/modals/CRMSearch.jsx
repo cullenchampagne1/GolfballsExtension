@@ -111,6 +111,7 @@ const rowToEmailContact = (row, useMock) => {
     firstName: row.firstName_s || '',
     lastName: row.lastName_s || '',
     email: rowEmail(row),
+    importVariables: row.importVariables_o || {},
     contactUrl: rowContactUrl(row, useMock),
     imported: !!row.imported_b,
   };
@@ -125,6 +126,7 @@ const rowToCampaignContact = (row, useMock) => {
     firstName: row.firstName_s || '',
     lastName: row.lastName_s || '',
     email: rowEmail(row),
+    importVariables: row.importVariables_o || {},
     contactUrl: rowContactUrl(row, useMock),
     value: row.yearToDateRevenue_f ?? row.priorYearRevenue_f ?? 0,
     sourceRowId: row.id,

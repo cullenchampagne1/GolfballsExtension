@@ -48,11 +48,14 @@ function zip(entries) {
   return output.buffer;
 }
 
-const csv = parseCsvMatrix('name,contact_id,account_id,email\r\n"Doe, Jane",1001,77,jane@example.com\r\nBad,,,bad');
+const csv = parseCsvMatrix('name,contact_id,account_id,email,account_name,preferred_product\r\n"Doe, Jane",1001,77,jane@example.com,Example Club,Tour Soft\r\nBad,,,bad,,');
 const normalized = normalizeContactMatrix(csv, { fileName: 'contacts.csv' });
 assert.equal(normalized.records.length, 1);
 assert.equal(normalized.errors.length, 1);
 assert.equal(normalized.records[0].contactName_t, 'Doe, Jane');
+assert.equal(normalized.records[0].accountName_t, 'Example Club');
+assert.equal(normalized.records[0].importVariables_o.account_name, 'Example Club');
+assert.equal(normalized.records[0].importVariables_o.preferred_product, 'Tour Soft');
 assert.deepEqual(contactIdsFromRow(normalized.records[0]), { contactId: '1001', accountId: '77' });
 
 const shared = ['name', 'first_name', 'last_name', 'account_id', 'email'];
@@ -70,11 +73,17 @@ assert.deepEqual(contactIdsFromRow(xlsxNormalized.records[0]), { contactId: '', 
 const values = directContactVariables({
   contactName: 'Alex Smith', firstName: 'Alex', lastName: 'Smith',
   email: 'alex@example.com', crmContactId: '42', accountId: '9001',
+  importVariables: { account_name: 'Spreadsheet Account', preferred_product: 'Tour Soft' },
 }, {
   greeting: { path: 'contact.firstName' },
   recipient: { path: 'contact.email' },
   account: { path: 'account.id' },
+  account_name: { path: 'account.name' },
+  preferred_product: { path: 'contact.favoriteProduct' },
 });
-assert.deepEqual(values, { greeting: 'Alex', recipient: 'alex@example.com', account: '9001' });
+assert.deepEqual(values, {
+  greeting: 'Alex', recipient: 'alex@example.com', account: '9001',
+  account_name: 'Spreadsheet Account', preferred_product: 'Tour Soft',
+});
 
 console.log('contact import tests passed');
