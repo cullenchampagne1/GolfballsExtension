@@ -94,12 +94,14 @@ export async function buildContactContext(contact, deps = {}) {
 
   let html = '';
   let error = null;
-  try {
-    const fetched = await dispatch({ action: 'fetchRaw', url: contact.contactUrl });
-    if (!fetched) error = 'Background not reachable';
-    else if (!fetched.ok || typeof fetched.text !== 'string') error = fetched.error || `Fetch failed (HTTP ${fetched.status || '?'})`;
-    else html = fetched.text;
-  } catch (e) { error = e?.message || 'fetch threw'; }
+  if (contact.contactUrl) {
+    try {
+      const fetched = await dispatch({ action: 'fetchRaw', url: contact.contactUrl });
+      if (!fetched) error = 'Background not reachable';
+      else if (!fetched.ok || typeof fetched.text !== 'string') error = fetched.error || `Fetch failed (HTTP ${fetched.status || '?'})`;
+      else html = fetched.text;
+    } catch (e) { error = e?.message || 'fetch threw'; }
+  }
 
   const doc = html ? parseDoc(html) : null;
   const data = doc ? (runEngine(doc)?.data || {}) : {};
@@ -116,14 +118,17 @@ export async function buildContactContext(contact, deps = {}) {
   const bounceCode = (stats.lastBounceCode || resolvePath(doc, 'stats.lastBounceCode') || '').toString().trim();
   const mailerRemoved = !!parseInt(stats.mailerRemoved ?? resolvePath(doc, 'stats.mailerRemoved'), 10);
 
-  const contactId = contact.contactId || contactIdFromUrl(contact.contactUrl)
+  const contactId = contact.crmContactId || contact.contactId || contactIdFromUrl(contact.contactUrl)
     || resolvePath(doc, 'contact.id') || '';
   const phone = (resolvePath(doc, 'contact.phone') || '').toString().replace(/\D/g, '');
-  const first = resolvePath(doc, 'contact.firstName') || '';
-  const last = resolvePath(doc, 'contact.lastName') || '';
-  const email = (resolvePath(doc, 'contact.email') || contact.email || '').toString();
+  const first = (contact.imported ? contact.firstName : resolvePath(doc, 'contact.firstName'))
+    || resolvePath(doc, 'contact.firstName') || contact.firstName || '';
+  const last = (contact.imported ? contact.lastName : resolvePath(doc, 'contact.lastName'))
+    || resolvePath(doc, 'contact.lastName') || contact.lastName || '';
+  const email = ((contact.imported ? contact.email : resolvePath(doc, 'contact.email'))
+    || resolvePath(doc, 'contact.email') || contact.email || '').toString();
   const contactName = `${first} ${last}`.trim() || contact.contactName || contact.name || '';
-  const accountId = resolvePath(doc, 'account.id') || '';
+  const accountId = resolvePath(doc, 'account.id') || contact.accountId || '';
 
   // "Do not contact" flag — set when the phrase appears in the name or email
   // (case-insensitive, flexible whitespace). Reps stash it in those fields.
@@ -146,7 +151,7 @@ export async function buildContactContext(contact, deps = {}) {
 
   return {
     contact, html, doc, data, signals, error,
-    contactId, employeeId: rep.employeeId || '', phone, contactName, accountId,
+    contactId, employeeId: rep.employeeId || '', phone, contactName, firstName: first, lastName: last, email, accountId,
     bounceCode, mailerRemoved, doNotContact,
     emailConfig, signature, fromLocalPart, dispatch, dryRun,
     getValue,

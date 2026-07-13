@@ -14,6 +14,7 @@ import {
   indexRecords, getAllIndexed, deleteIndexed, clearIndex, searchIndexed,
 } from '../lib/crmIndex.js';
 import { actionRegistry } from '../lib/actionRegistry.js';
+import { parseContactFile, contactIdsFromRow } from '../lib/contactImport.js';
 
 /* ───────────────────────────────────────────────────────────────
    CRMSearch — React port of content/crm-search-modal.js.
@@ -82,9 +83,53 @@ const fmtDate = (iso) => {
 };
 const contactUrl = (id) => {
   const [type, num] = String(id || '').split('_');
-  if (type === 'contact') return `${API.CRM_ADMIN}Default.aspx?Page=${CRM_PAGES.CONTACT_DETAIL}&customerID=${num}`;
-  if (type === 'account') return `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=267&AccountID=${num}`;
+  if (type === 'contact') return `${API.CRM_ADMIN}Default.aspx?Page=${CRM_PAGES.CONTACT_DETAIL}&customerID=${encodeURIComponent(num)}`;
+  if (type === 'account') return `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=267&AccountID=${encodeURIComponent(num)}`;
   return '';
+};
+
+const rowContactUrl = (row, useMock = false) => {
+  const { contactId, accountId } = contactIdsFromRow(row);
+  if (contactId) return `${API.CRM_ADMIN}Default.aspx?Page=${CRM_PAGES.CONTACT_DETAIL}&customerID=${encodeURIComponent(contactId)}`;
+  // Spreadsheet account_id values are real CRM account identifiers, so an
+  // imported row gets the same profile link as a Solr account result.
+  if (accountId) return `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=267&AccountID=${encodeURIComponent(accountId)}`;
+  const url = contactUrl(row?.id);
+  return url || (useMock ? `mock://contact/${row?.id}` : '');
+};
+
+const rowEmail = (row) => row?.emails_tps?.[0] || row?.email_tp || '';
+
+const rowToEmailContact = (row, useMock) => {
+  const { contactId, accountId } = contactIdsFromRow(row);
+  return {
+    // EmailRunner uses this as its row-status key, so retain the full list ID.
+    contactId: row.id,
+    crmContactId: contactId,
+    accountId,
+    contactName: row.contactName_t || row.accountName_t || '',
+    firstName: row.firstName_s || '',
+    lastName: row.lastName_s || '',
+    email: rowEmail(row),
+    contactUrl: rowContactUrl(row, useMock),
+    imported: !!row.imported_b,
+  };
+};
+
+const rowToCampaignContact = (row, useMock) => {
+  const { contactId, accountId } = contactIdsFromRow(row);
+  return {
+    contactId,
+    accountId,
+    contactName: row.contactName_t || row.accountName_t || '',
+    firstName: row.firstName_s || '',
+    lastName: row.lastName_s || '',
+    email: rowEmail(row),
+    contactUrl: rowContactUrl(row, useMock),
+    value: row.yearToDateRevenue_f ?? row.priorYearRevenue_f ?? 0,
+    sourceRowId: row.id,
+    imported: !!row.imported_b,
+  };
 };
 
 export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
@@ -128,7 +173,11 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
      to Solr when they explicitly press Enter / Search. */
   const [indexed, setIndexed] = useState([]);
   const [indexLoaded, setIndexLoaded] = useState(false);
-  const [mode, setMode] = useState('indexed');   // 'indexed' | 'server'
+  const [mode, setMode] = useState('indexed');   // 'indexed' | 'server' | 'imported'
+  const [importedRows, setImportedRows] = useState([]);
+  const [importSummary, setImportSummary] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const importInputRef = useRef(null);
   useEffect(() => {
     let alive = true;
     /* In useMock mode (playground), pre-seed the indexed list with
@@ -376,12 +425,19 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
     return searchIndexed(indexed, query, { limit: 200 });
   }, [indexed, query, mode]);
 
+  const importedResults = useMemo(() => {
+    if (mode !== 'imported') return [];
+    return searchIndexed(importedRows, query, { limit: Math.max(200, importedRows.length) });
+  }, [importedRows, query, mode]);
+
   /* What the results table renders. In 'indexed' mode we feed the
      indexed list through the same ResultsTable so styling matches.
      The mode flag drives the "X indexed" vs "X results" subtitle too. */
-  const displayedRows = mode === 'indexed' ? indexedResults : results;
+  const displayedRows = mode === 'indexed' ? indexedResults : mode === 'imported' ? importedResults : results;
   const displayedStatus = mode === 'indexed'
     ? (indexLoaded ? 'ready' : 'loading')
+    : mode === 'imported'
+      ? 'ready'
     : status;
 
   /* Keep activeIdx in range. When new results arrive, drop the
@@ -435,6 +491,44 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
     }
   }, [refreshIndex, toast]);
 
+  const onImportContacts = useCallback(async (event) => {
+    const file = event.target.files?.[0];
+    // Allow choosing the same file again after fixing it in Excel.
+    event.target.value = '';
+    if (!file) return;
+    setImporting(true);
+    try {
+      const parsed = await parseContactFile(file);
+      // Preserve any rich Solr fields already indexed for a contact while
+      // letting the spreadsheet refresh the identity and email fields.
+      const existing = new Map(indexed.map((row) => [row.id, row]));
+      const records = parsed.records.map((row) => ({ ...(existing.get(row.id) || {}), ...row }));
+      setImportedRows(records);
+      setImportSummary({
+        fileName: file.name,
+        accepted: records.length,
+        rejected: parsed.errors.length,
+        duplicates: parsed.warnings.length,
+        taskReady: records.filter((row) => !!contactIdsFromRow(row).contactId).length,
+        errors: parsed.errors.slice(0, 5),
+      });
+      setQuery('');
+      setMode('imported');
+      setActiveIdx(-1);
+      setLastIdx(null);
+      setSelected(new Set(records.map((row) => row.id)));
+      const skipped = parsed.errors.length + parsed.warnings.length;
+      toast?.success?.(
+        `Imported ${records.length} contact${records.length === 1 ? '' : 's'}${skipped ? ` · skipped ${skipped}` : ''}`,
+        { duration: 3200 },
+      );
+    } catch (err) {
+      toast?.error?.(`Import failed: ${err?.message || err}`, { duration: 5000 });
+    } finally {
+      setImporting(false);
+    }
+  }, [indexed, toast]);
+
   // ── Selection ────────────────────────────────────────────────
   const toggleSel = (id, idx, shiftKey) => {
     if (shiftKey && lastIdx != null && idx != null) {
@@ -444,7 +538,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
       setSelected((s) => {
         const next = new Set(s);
         for (let i = a; i <= b; i++) {
-          const r = results[i];
+          const r = displayedRows[i];
           if (r) next.add(r.id);
         }
         return next;
@@ -458,15 +552,15 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
     }
     if (idx != null) setLastIdx(idx);
   };
-  const allVisibleSelected = results.length > 0 && results.every((r) => selected.has(r.id));
+  const allVisibleSelected = displayedRows.length > 0 && displayedRows.every((r) => selected.has(r.id));
   const toggleAll = () => setSelected((s) => {
     if (allVisibleSelected) {
       const next = new Set(s);
-      for (const r of results) next.delete(r.id);
+      for (const r of displayedRows) next.delete(r.id);
       return next;
     }
     const next = new Set(s);
-    for (const r of results) next.add(r.id);
+    for (const r of displayedRows) next.add(r.id);
     return next;
   });
 
@@ -521,7 +615,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
   // Columns match QB_FIELDS so the exported file has the same data
   // surface users can filter on in the Query Builder.
   const exportSelectedCSV = useCallback(() => {
-    const rows = results.filter((r) => selected.has(r.id));
+    const rows = displayedRows.filter((r) => selected.has(r.id));
     if (!rows.length) {
       toast?.warning?.('No rows selected', { duration: 2500 });
       return;
@@ -570,7 +664,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
     // the blob URL — Safari especially is finicky if you revoke too soon.
     setTimeout(() => URL.revokeObjectURL(url), 1500);
     toast?.success?.(`Exported ${rows.length} row${rows.length === 1 ? '' : 's'} to CSV`);
-  }, [results, selected, toast]);
+  }, [displayedRows, selected, toast]);
 
   // ── Render ───────────────────────────────────────────────────
   const selCount = selected.size;
@@ -579,6 +673,10 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
   // looking at; in server mode it reverts to the Solr count.
   const subtitle = useMock
     ? <span>Search contacts &amp; accounts · <span style={{ fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-warning-fg)', fontWeight: 700, fontSize: 10 }}>OFFLINE / MOCK</span></span>
+    : mode === 'imported'
+      ? (query
+          ? `${importedResults.length} imported match${importedResults.length === 1 ? '' : 'es'} for “${query}”`
+          : `${importedRows.length} imported contact${importedRows.length === 1 ? '' : 's'} · ready for email${importSummary?.taskReady ? ` · ${importSummary.taskReady} task-ready` : ''}`)
     : mode === 'indexed'
       ? (indexed.length === 0
           ? 'No locally-indexed contacts yet — run a search and click Index'
@@ -632,7 +730,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
     if (e.key === 'Enter') {
       e.preventDefault();
       if (activeIdx >= 0 && rows[activeIdx]) {
-        const url = contactUrl(rows[activeIdx].id);
+        const url = rowContactUrl(rows[activeIdx], useMock);
         if (url) {
           try { window.open(url, '_blank', 'noopener,noreferrer'); }
           catch { window.location.href = url; }
@@ -678,7 +776,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
       if (e.key === 'Enter') {
         e.preventDefault();
         const row = rows[activeIdx];
-        const url = row ? contactUrl(row.id) : '';
+        const url = row ? rowContactUrl(row, useMock) : '';
         if (url) {
           try { window.open(url, '_blank', 'noopener,noreferrer'); }
           catch { window.location.href = url; }
@@ -693,7 +791,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
     };
     document.addEventListener('keydown', onDocKey, true);
     return () => document.removeEventListener('keydown', onDocKey, true);
-  }, [activeIdx, displayedRows]);
+  }, [activeIdx, displayedRows, useMock]);
 
   /* ── Modal-aware actions wiring ──────────────────────────────
      1. Push CRMSearch onto the action registry's modal stack on
@@ -868,12 +966,23 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
         display: 'flex', gap: 8, alignItems: 'center',
         flexShrink: 0,
       }}>
+        <input
+          ref={importInputRef}
+          type="file"
+          accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+          onChange={onImportContacts}
+          style={{ display: 'none' }}
+        />
         <Input
           nativeRef={searchInputRef}
           value={query}
           onChange={onQueryChange}
           onKeyDown={onSearchKeyDown}
-          placeholder={mode === 'indexed' ? 'Filter indexed contacts — Enter to search server' : 'Search by name, email, account, or phone…'}
+          placeholder={mode === 'imported'
+            ? 'Filter this imported list…'
+            : mode === 'indexed'
+              ? 'Filter indexed contacts — Enter to search server'
+              : 'Search by name, email, account, or phone…'}
           leading={<I.search size={12} />}
           /* Visually deactivate while a row is keyboard-focused so it
              reads as "focus moved into the list" — even though the
@@ -901,12 +1010,59 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
         >Query Builder</Btn>
         <Btn
           size="sm"
+          variant="secondary"
+          icon={importing ? <Spinner /> : <I.upload size={11} />}
+          disabled={importing}
+          onClick={() => importInputRef.current?.click()}
+        >{importing ? 'Importing…' : 'Import list'}</Btn>
+        <Btn
+          size="sm"
           variant="tinted"
           status="brand"
           icon={<I.bolt size={11} />}
           onClick={submitSearch}
         >Search</Btn>
       </div>
+
+      {/* Imported batch stays isolated as a temporary modal view. Every
+          accepted row is selected by default so normal email/campaign
+          actions work immediately; nothing is added to the local index. */}
+      <AnimatePresence initial={false}>
+        {mode === 'imported' && importSummary && (
+          <motion.div
+            key="import-summary"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18 }}
+            style={{ overflow: 'hidden', flexShrink: 0 }}
+          >
+            <div style={{
+              padding: '8px 14px',
+              borderBottom: '1px solid var(--gb-brand-tint-border)',
+              background: 'var(--gb-brand-tint-soft)',
+              display: 'flex', alignItems: 'center', gap: 10,
+              fontSize: 11,
+              color: 'var(--gb-text-secondary)',
+            }}>
+              <I.upload size={12} style={{ color: 'var(--gb-brand-label)' }} />
+              <span style={{ fontWeight: 700, color: 'var(--gb-brand-label)' }}>{importSummary.fileName}</span>
+              <span>{importSummary.accepted} ready</span>
+              <span>· {importSummary.taskReady} with contact IDs</span>
+              {(importSummary.rejected > 0 || importSummary.duplicates > 0) && (
+                <span style={{ color: 'var(--gb-warning-fg)' }}>
+                  · {importSummary.rejected + importSummary.duplicates} skipped
+                  {importSummary.errors[0] ? ` (row ${importSummary.errors[0].row}: ${importSummary.errors[0].message})` : ''}
+                </span>
+              )}
+              <div style={{ flex: 1 }} />
+              <Btn size="xs" variant="ghost" onClick={() => { setMode('indexed'); setQuery(''); setSelected(new Set()); }}>
+                Back to index
+              </Btn>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Filter bar — one tag per active condition produced by the
           Query Builder. Each tag's ✕ drops that single condition from
@@ -1064,7 +1220,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
             }}>
               <div style={{ fontSize: 11.5, color: 'var(--gb-text-secondary)' }}>
                 <span style={{ color: 'var(--gb-brand-label)', fontWeight: 700 }}>{selCount} selected</span>
-                {' '}of {results.length} result{results.length === 1 ? '' : 's'}
+                {' '}of {displayedRows.length} result{displayedRows.length === 1 ? '' : 's'}
               </div>
               <div style={{ flex: 1 }} />
               {/* Run Campaign opens the Campaign Manager submodal. The
@@ -1077,13 +1233,8 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
                 onClick={() => {
                   const audience = displayedRows
                     .filter((r) => selected.has(r.id))
-                    .map((r) => ({
-                      contactId: r.id,
-                      contactName: r.contactName_t || r.accountName_t || '',
-                      contactUrl: contactUrl(r.id) || (useMock ? `mock://contact/${r.id}` : ''),
-                      value: r.yearToDateRevenue_f ?? r.priorYearRevenue_f ?? 0,
-                    }))
-                    .filter((c) => c.contactUrl);
+                    .map((r) => rowToCampaignContact(r, useMock))
+                    .filter((c) => c.contactUrl || c.email);
                   if (!audience.length) { toast?.info?.('Select contacts first', { placement: 'top-center' }); return; }
                   if (typeof window.__gbOpenCampaignManager === 'function') window.__gbOpenCampaignManager(audience);
                   else toast?.info?.('Campaign manager unavailable here', { duration: 2400, placement: 'top-center' });
@@ -1122,7 +1273,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
           loadingMore={loadingMore}
           status={displayedStatus}
           query={query}
-          total={mode === 'indexed' ? indexed.length : total}
+          total={mode === 'indexed' ? indexed.length : mode === 'imported' ? importedRows.length : total}
           selected={selected}
           activeIdx={activeIdx}
           allChecked={allVisibleSelected}
@@ -1173,18 +1324,8 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
       useMock={useMock}
       contacts={displayedRows
         .filter((r) => selected.has(r.id))
-        .map((r) => ({
-          /* contactId here is the full Solr id (e.g. 'contact_12345')
-             — we use it as the key in emailStatusByRow so the row
-             render can look itself up directly without splitting. */
-          contactId:   r.id,
-          contactName: r.contactName_t || r.accountName_t || '',
-          /* In mock mode there's no real CRM page to fetch — give the
-             contactUrl a placeholder so the dispatch loop still runs.
-             The mock sendBg returns canned HTML regardless. */
-          contactUrl:  contactUrl(r.id) || (useMock ? `mock://contact/${r.id}` : ''),
-        }))
-        .filter((c) => c.contactUrl)}
+        .map((r) => rowToEmailContact(r, useMock))
+        .filter((c) => c.contactUrl || c.email)}
       onClose={() => setEmailRunnerOpen(false)}
       onResetRowStates={() => setEmailStatusByRow({})}
       /* Flip every selected contact to 'queued' the moment Run
@@ -1346,6 +1487,8 @@ function ResultsTable({ rows, status, query, total, selected, activeIdx = -1, al
         <EmptyRow>
           {mode === 'indexed' && query
             ? <>No indexed contacts match <strong style={{ color: 'var(--gb-text-secondary)' }}>“{query}”</strong>. <span style={{ cursor: 'pointer', color: 'var(--gb-brand-label)', textDecoration: 'underline' }} onClick={onSubmitServer}>Search server instead</span>.</>
+            : mode === 'imported'
+              ? <>No imported contacts match <strong style={{ color: 'var(--gb-text-secondary)' }}>“{query}”</strong>.</>
             : mode === 'indexed'
               ? <>No locally-indexed contacts yet. Run a search and click <strong style={{ color: 'var(--gb-text-secondary)' }}>Index these N</strong> to add some.</>
               : query
@@ -1536,7 +1679,7 @@ function ResultRow({ row, isSelected, isActive, emailStatus, showStatusCol, onTo
   const acct  = (isContact ? row.accountName_t : '—');
   const email = row.emails_tps?.[0] || row.email_tp || '—';
   const rep   = row.salesRep_s || '—';
-  const url   = contactUrl(row.id);
+  const url   = rowContactUrl(row);
   const mono = {
     color: 'var(--gb-text-tertiary)',
     fontFamily: 'var(--gb-font-mono)', fontSize: 11,
@@ -1629,8 +1772,8 @@ function ResultRow({ row, isSelected, isActive, emailStatus, showStatusCol, onTo
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>{acct}</div>
       <div>
-        <Tag tone={isContact ? 'info' : 'brand'} size="xs">
-          {isContact ? 'Contact' : 'Account'}
+        <Tag tone={row.imported_b ? 'brand' : isContact ? 'info' : 'brand'} size="xs">
+          {row.imported_b ? 'Imported' : isContact ? 'Contact' : 'Account'}
         </Tag>
       </div>
       <div style={mono}>{email}</div>

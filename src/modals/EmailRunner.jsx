@@ -6,6 +6,7 @@ import { pickFromAddress } from '../lib/sender.js';
 import { sendEmail } from '../lib/emailSender.js';
 import { useDevSetting } from '../lib/devSettings.js';
 import { renderTemplate } from '../lib/variableResolution.js';
+import { directContactVariables } from '../lib/contactImport.js';
 
 /* ───────────────────────────────────────────────────────────────
    EmailRunner — draggable bottom-anchored panel that drives a bulk
@@ -528,17 +529,19 @@ export function EmailRunner({
         const rawSubject = v?.subject || selectedTpl.subject || '';
         const rawBody    = v?.body    || selectedTpl.body    || '';
 
-        // 1. Fetch the contact page HTML through the background proxy.
-        const fetched = await dispatchBg({ action: 'fetchRaw', url: c.contactUrl });
-        if (!fetched) {
-          /* sendBg resolved null — most likely chrome.runtime.lastError
-             ("Could not establish connection. Receiving end does not
-             exist."). Surface that explicitly so the row badge tells
-             the user what to debug rather than a generic "Fetch failed". */
-          throw new Error('Background not reachable (extension reloaded?)');
-        }
-        if (!fetched.ok || typeof fetched.text !== 'string') {
-          throw new Error(fetched.error || `Fetch failed (HTTP ${fetched.status || '?'})`);
+        // 1. Fetch the contact page when one exists. Spreadsheet rows that
+        // only carry account_id intentionally have no contact URL; their
+        // explicit email/name columns are the safe source of truth.
+        let fetchedText = '';
+        if (c.contactUrl) {
+          const fetched = await dispatchBg({ action: 'fetchRaw', url: c.contactUrl });
+          if (!fetched) {
+            if (!c.email) throw new Error('Background not reachable (extension reloaded?)');
+          } else if (!fetched.ok || typeof fetched.text !== 'string') {
+            if (!c.email) throw new Error(fetched.error || `Fetch failed (HTTP ${fetched.status || '?'})`);
+          } else {
+            fetchedText = fetched.text;
+          }
         }
 
         /* 2. Resolve template vars against the fetched HTML. Prefer
@@ -550,25 +553,33 @@ export function EmailRunner({
            main.js hasn't finished loading). The global is the path
            the user wants — the message route was the fragile one
            reported as "every send fails to evaluate." */
-        const directResolve = useMock ? null : window.__gbResolveVarsForHtml;
-        const resolved = directResolve
-          ? await directResolve(fetched.text, tplVars, tplToField, c.contactUrl)
-          : await dispatchBg({
-              action:  'resolveVarsForHtml',
-              html:    fetched.text,
-              vars:    tplVars,
-              toField: tplToField,
-              url:     c.contactUrl,
-            });
-        const resolvedVars = resolved?.resolved || {};
-        const toEmail      = resolved?.toEmail  || '';
+        const directVars = directContactVariables(c, tplVars);
+        let resolved = null;
+        if (fetchedText) {
+          const directResolve = useMock ? null : window.__gbResolveVarsForHtml;
+          resolved = directResolve
+            ? await directResolve(fetchedText, tplVars, tplToField, c.contactUrl)
+            : await dispatchBg({
+                action:  'resolveVarsForHtml',
+                html:    fetchedText,
+                vars:    tplVars,
+                toField: tplToField,
+                url:     c.contactUrl,
+              });
+        }
+        const resolvedVars = c.imported
+          ? { ...(resolved?.resolved || {}), ...directVars }
+          : { ...directVars, ...(resolved?.resolved || {}) };
+        const toEmail      = c.imported ? (c.email || resolved?.toEmail || '') : (resolved?.toEmail || c.email || '');
         /* The resolver pulls contact.firstName + lastName off the
            fetched page via the schema engine and ships it as
            displayName. We prefer that over the caller-supplied
            contactName because the page is the source of truth — if
            the row came from an account-page list with no contact
            text, this still produces a real name for the trail. */
-        const pageName = (resolved?.displayName || '').trim();
+        const pageName = (c.imported
+          ? (c.contactName || c.name || resolved?.displayName)
+          : (resolved?.displayName || c.contactName || c.name || '')).trim();
         /* Last time this contact was emailed — the more recent of the contact
            page's Email-history date (the rep's real CRM record, extracted by the
            page engine) and our own local send log. Drives the "recently emailed"
@@ -580,7 +591,7 @@ export function EmailRunner({
         setCurrent((cur) => (cur && cur.contactId === c.contactId)
           ? { ...cur, name: pageName || cur.name, email: toEmail || cur.email }
           : cur);
-        if (resolved?.error) {
+        if (resolved?.error && !toEmail) {
           /* Bubble the resolver's own message up so a parse / engine
              failure shows the cause instead of "No recipient email". */
           outcome = { status: 'error', error: `Resolve failed: ${resolved.error}`, name: pageName };

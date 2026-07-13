@@ -29,6 +29,7 @@ import { buildCustomTemplate } from '../callLog.js';
 import { buildCustomTaskTemplate } from '../quickTask.js';
 import { completeContactTasks } from '../crmTasks.js';
 import { runCode } from '../page-engine/code-runtime.js';
+import { directContactVariables } from '../contactImport.js';
 
 /* Weighted random pick — same algorithm EmailRunner's variation
    picker uses. `weightOf(item)` returns the item's weight; zero/missing
@@ -100,9 +101,22 @@ async function runEmail(step, template, ctx, { dryRun }) {
   }
 
   const resolved = await resolveVarsForHtml(ctx, vars, toField);
-  const resolvedVars = resolved?.resolved || {};
-  const toEmail = resolved?.toEmail || '';
-  if (resolved?.error) return { ok: false, error: `Resolve failed: ${resolved.error}` };
+  const directVars = directContactVariables({
+    ...ctx.contact,
+    contactName: ctx.contactName,
+    firstName: ctx.firstName,
+    lastName: ctx.lastName,
+    email: ctx.email || ctx.contact?.email,
+    crmContactId: ctx.contactId,
+    accountId: ctx.accountId,
+  }, vars);
+  const resolvedVars = ctx.contact?.imported
+    ? { ...(resolved?.resolved || {}), ...directVars }
+    : { ...directVars, ...(resolved?.resolved || {}) };
+  const toEmail = ctx.contact?.imported
+    ? (ctx.contact?.email || ctx.email || resolved?.toEmail || '')
+    : (resolved?.toEmail || ctx.email || ctx.contact?.email || '');
+  if (resolved?.error && !toEmail) return { ok: false, error: `Resolve failed: ${resolved.error}` };
   if (!toEmail) return { ok: false, error: 'No recipient email resolved' };
 
   const subject = renderTemplate(rawSubject, resolvedVars, vars);
