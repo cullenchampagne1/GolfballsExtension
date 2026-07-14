@@ -26,16 +26,12 @@
 
 import { DEFAULT_PRIORITY } from './quickTask.js';
 import { API } from './constants.js';
+import { resolveEmployeeId } from './employeeIdentity.js';
 
 const BASE = API.CRM;
 
 const hasChromeRuntime = () => {
   try { return typeof chrome !== 'undefined' && !!chrome.runtime?.sendMessage; }
-  catch { return false; }
-};
-
-const hasChromeStorage = () => {
-  try { return typeof chrome !== 'undefined' && !!chrome.storage?.local?.get; }
   catch { return false; }
 };
 
@@ -103,14 +99,10 @@ export async function readTaskContext() {
     out.contactName = (document.getElementById('Name')?.value || '').trim();
   }
 
-  // employeeId — same gbEmployeeId in storage that calls use.
-  if (hasChromeStorage()) {
-    try {
-      out.employeeId = await new Promise((resolve) => {
-        chrome.storage.local.get('gbEmployeeId', (d) => resolve(d?.gbEmployeeId || ''));
-      });
-    } catch { /* leave empty */ }
-  }
+  // Prefer the CRM page's own identity markup, then the validated local cache.
+  // This remains reliable when the iCustomize iframe has not emitted an auth
+  // request early enough for its identity broadcast.
+  out.employeeId = await resolveEmployeeId();
 
   return out;
 }
@@ -145,7 +137,7 @@ export async function submitQuickTask({ template, context } = {}) {
        indexed on contactID, and the CRM expects employeeID for
        ownership. Without them we'd create an orphan task. */
   const contactId = numericId(ctx.contactId);
-  const employeeId = numericId(ctx.employeeId);
+  const employeeId = numericId(ctx.employeeId) || numericId(await resolveEmployeeId());
   const missing = [];
   if (!contactId)  missing.push('valid contact ID');
   if (!employeeId) missing.push('valid employee ID');

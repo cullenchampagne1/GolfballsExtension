@@ -152,8 +152,13 @@ export function priLabel(p) { return { 1: 'High', 2: 'Med', 3: 'Low' }[Number(p)
 
 export function currentEmployeeId() {
   try {
+    const memoryId = String(window.__gbEmployeeId || '').trim();
+    if (/^\d{1,12}$/.test(memoryId) && Number(memoryId) > 0) return memoryId;
+    const field = document.querySelector('#employeeID, #EmployeeID, #employeeId, #EmployeeId, [name="employeeID"], [name="EmployeeID"]');
+    const fieldId = String(field?.value || field?.textContent || '').trim();
+    if (/^\d{1,12}$/.test(fieldId) && Number(fieldId) > 0) return fieldId;
     for (const s of Array.from(document.scripts || [])) {
-      const m = (s.textContent || '').match(/employeeID\s*=\s*'(\d+)'/);
+      const m = (s.textContent || '').match(/\b(?:employeeID|employeeId|adminUserID)\b\s*[:=]\s*["']?(\d{1,12})/i);
       if (m) return m[1];
     }
   } catch (e) {}

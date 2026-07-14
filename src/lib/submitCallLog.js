@@ -29,16 +29,12 @@
 ─────────────────────────────────────────────────────────────── */
 
 import { API } from './constants.js';
+import { resolveEmployeeId } from './employeeIdentity.js';
 
 const BASE = API.CRM;
 
 const hasChromeRuntime = () => {
   try { return typeof chrome !== 'undefined' && !!chrome.runtime?.sendMessage; }
-  catch { return false; }
-};
-
-const hasChromeStorage = () => {
-  try { return typeof chrome !== 'undefined' && !!chrome.storage?.local?.get; }
   catch { return false; }
 };
 
@@ -78,14 +74,7 @@ export async function readCallContext() {
   const last  = (document.getElementById('lblContactLastName')?.textContent  || '').trim();
   out.contactName = `${first} ${last}`.trim();
 
-  // employeeId — comes from chrome.storage.local, set by the auth flow.
-  if (hasChromeStorage()) {
-    try {
-      out.employeeId = await new Promise((resolve) => {
-        chrome.storage.local.get('gbEmployeeId', (d) => resolve(d?.gbEmployeeId || ''));
-      });
-    } catch { /* leave empty */ }
-  }
+  out.employeeId = await resolveEmployeeId();
 
   return out;
 }
@@ -124,9 +113,10 @@ export async function submitCallLog({ template, context } = {}) {
        playground with mocked data, OR if smart-detection failed
        to read a real contact page. */
   const missing = [];
+  const employeeId = ctx.employeeId || await resolveEmployeeId();
   if (!ctx.contactId)  missing.push('contact ID');
   if (!ctx.phone)      missing.push('phone number');
-  if (!ctx.employeeId) missing.push('employee ID');
+  if (!employeeId) missing.push('employee ID');
   if (missing.length) {
     return {
       ok: false,
@@ -151,7 +141,7 @@ export async function submitCallLog({ template, context } = {}) {
   const userName = encodeURIComponent(ctx.contactName || '');
   const pageUrl = `${BASE}/golfballs/adminnew/Default.aspx?Page=272`
     + `&phone=${encodeURIComponent(ctx.phone)}`
-    + `&employeeId=${encodeURIComponent(ctx.employeeId)}`
+    + `&employeeId=${encodeURIComponent(employeeId)}`
     + `&userName=${userName}`
     + `&userId=${encodeURIComponent(ctx.contactId)}`
     + `&direction=${urlDir}`
