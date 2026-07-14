@@ -857,7 +857,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     let body = '';
     try { body = JSON.stringify({ name, scopes: msg.scopes }); } catch { /* invalid payload */ }
     if (!name || name.length > 120 || !msg.scopes || typeof msg.scopes !== 'object'
-        || Array.isArray(msg.scopes) || body.length > 512_000) {
+        || Array.isArray(msg.scopes)) {
       sendResponse({ ok: false, error: 'Invalid settings share' });
       return true;
     }

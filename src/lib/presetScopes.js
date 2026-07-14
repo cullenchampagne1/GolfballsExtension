@@ -4,7 +4,7 @@
    A shared template is a bundle of scopes the user explicitly picks
    at creation time. Each scope is a self-contained slice of the
    extension's `chrome.storage.local` so that:
-     • Create = read those keys and send bounded JSON to RevStack.
+     • Create = read those keys and send schema-validated JSON to RevStack.
      • Import = write selected scopes back. Arrays merge by id (existing id
        wins, new id appended) so sharing emails ADDS to the recipient
        instead of overwriting their library. Plain objects just
@@ -90,7 +90,7 @@ export const PRESET_SCOPES = [
  * reachable or this installation's server credential has been revoked. */
 export const SETTINGS_TEMPLATE_FILE_KIND = 'golfballs-settings-template';
 export const SETTINGS_TEMPLATE_FILE_VERSION = 1;
-export const SETTINGS_TEMPLATE_FILE_MAX_BYTES = 512 * 1024;
+const EXTENSION_STATE_FILE_KIND = 'golfballs-extension-state';
 
 const ALL_KEYS = [...new Set(PRESET_SCOPES.flatMap((s) => s.keys))];
 
@@ -123,10 +123,7 @@ function writeKeys(obj) {
  * Build a scoped object from the user's current extension state. Only
  * the scopes listed in `scopeIds` are included.
  */
-export async function gatherScopes(scopeIds) {
-  const wanted = PRESET_SCOPES.filter((s) => scopeIds.includes(s.id));
-  const keysToRead = [...new Set(wanted.flatMap((s) => s.keys))];
-  const data = await readKeys(keysToRead);
+function scopesFromStorageData(data, wanted = PRESET_SCOPES) {
   const scopes = {};
   for (const s of wanted) {
     const bag = {};
@@ -149,6 +146,12 @@ export async function gatherScopes(scopeIds) {
     if (include) scopes[s.id] = bag;
   }
   return scopes;
+}
+
+export async function gatherScopes(scopeIds) {
+  const wanted = PRESET_SCOPES.filter((s) => scopeIds.includes(s.id));
+  const keysToRead = [...new Set(wanted.flatMap((s) => s.keys))];
+  return scopesFromStorageData(await readKeys(keysToRead), wanted);
 }
 
 /**
@@ -286,17 +289,29 @@ export function buildSettingsTemplateFile(name, scopes) {
   };
 }
 
-/** Parse and bound an offline settings file before it reaches applyScopes(). */
+/** Parse an offline settings or migration file before it reaches applyScopes(). */
 export function parseSettingsTemplateFile(text) {
   const source = String(text || '');
-  if (new TextEncoder().encode(source).byteLength > SETTINGS_TEMPLATE_FILE_MAX_BYTES) {
-    throw new Error('Settings template files must be 512 KB or smaller');
-  }
   let raw;
   try { raw = JSON.parse(source); }
   catch (error) { throw new Error(`Not valid JSON — ${error.message}`); }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new Error('The settings template must be a JSON object');
+  }
+  if (raw.kind === EXTENSION_STATE_FILE_KIND && raw.version === 1) {
+    if (!raw.data || typeof raw.data !== 'object' || Array.isArray(raw.data)) {
+      throw new Error('The extension state backup is missing its data');
+    }
+    const scopes = scopesFromStorageData(raw.data);
+    if (!Object.keys(scopes).length) throw new Error('The extension state backup has no supported settings');
+    return {
+      schemaVersion: SETTINGS_TEMPLATE_FILE_VERSION,
+      kind: SETTINGS_TEMPLATE_FILE_KIND,
+      name: 'Extension state backup',
+      createdAt: raw.exportedAt || new Date().toISOString(),
+      scopes,
+      transport: 'json',
+    };
   }
   if (raw.kind !== SETTINGS_TEMPLATE_FILE_KIND || raw.schemaVersion !== SETTINGS_TEMPLATE_FILE_VERSION) {
     throw new Error('This is not a supported Golfballs settings template file');

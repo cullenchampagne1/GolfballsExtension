@@ -1,4 +1,4 @@
-/** Offline sharing regression tests: bounded, versioned files only. */
+/** Offline sharing regression tests: schema-validated, versioned files only. */
 import assert from 'node:assert/strict';
 import {
   buildSettingsTemplateFile,
@@ -27,6 +27,20 @@ assert.throws(
   () => parseSettingsTemplateFile(JSON.stringify({ ...settings, kind: 'unknown' })),
   /not a supported Golfballs settings template/,
 );
+
+const largeBody = 'x'.repeat(700_000);
+const migratedState = parseSettingsTemplateFile(JSON.stringify({
+  kind: 'golfballs-extension-state',
+  version: 1,
+  exportedAt: '2026-07-14T00:00:00.000Z',
+  data: {
+    gbApiInstallation: { apiKey: 'must-not-import' },
+    templates: [{ id: 'large-template', type: 'order', name: 'Large', body: largeBody }],
+    templateFolders: [],
+  },
+}));
+assert.equal(migratedState.scopes['tpl-order'].templates[0].body.length, 700_000);
+assert.equal(JSON.stringify(migratedState).includes('must-not-import'), false);
 
 const email = buildEmailTemplateFile({
   id: 'local-id-must-not-survive',
