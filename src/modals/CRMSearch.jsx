@@ -84,7 +84,7 @@ const fmtDate = (iso) => {
 const contactUrl = (id) => {
   const [type, num] = String(id || '').split('_');
   if (type === 'contact') return `${API.CRM_ADMIN}Default.aspx?Page=${CRM_PAGES.CONTACT_DETAIL}&customerID=${encodeURIComponent(num)}`;
-  if (type === 'account') return `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=267&AccountID=${encodeURIComponent(num)}`;
+  if (type === 'account') return `${API.CRM_ADMIN}Default.aspx?Page=${CRM_PAGES.ACCOUNT_DETAIL}&AccountID=${encodeURIComponent(num)}`;
   return '';
 };
 
@@ -93,7 +93,7 @@ const rowContactUrl = (row, useMock = false) => {
   if (contactId) return `${API.CRM_ADMIN}Default.aspx?Page=${CRM_PAGES.CONTACT_DETAIL}&customerID=${encodeURIComponent(contactId)}`;
   // Spreadsheet account_id values are real CRM account identifiers, so an
   // imported row gets the same profile link as a Solr account result.
-  if (accountId) return `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=267&AccountID=${encodeURIComponent(accountId)}`;
+  if (accountId) return `${API.CRM_ADMIN}Default.aspx?Page=${CRM_PAGES.ACCOUNT_DETAIL}&AccountID=${encodeURIComponent(accountId)}`;
   const url = contactUrl(row?.id);
   return url || (useMock ? `mock://contact/${row?.id}` : '');
 };

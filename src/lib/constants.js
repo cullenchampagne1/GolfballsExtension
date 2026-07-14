@@ -39,5 +39,6 @@ export const API = Object.freeze({
 export const CRM_PAGES = Object.freeze({
   CONTACT_SEARCH: 128,   // customer search / proof submission
   CONTACT_DETAIL: 240,   // single-contact view (…&customerID=)
+  ACCOUNT_DETAIL: 271,   // single-account view (…&AccountID=)
   PRODUCT:        253,   // item/product view (…&itemID=)
 });
