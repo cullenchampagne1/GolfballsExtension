@@ -140,10 +140,11 @@ await assert.rejects(
   client.apiFetch('/extension/ping', { method: 'DELETE' }),
   /Blocked extension API method/,
 );
-await assert.rejects(
-  client.apiFetch('/extension/ping', { method: 'POST', body: 'x'.repeat(1_000_001) }),
-  /bounded serialized string/,
-);
+const largeSettingsResponse = await client.apiFetch('/extension/settings-shares', {
+  method: 'POST', body: 'x'.repeat(2_000_000),
+});
+assert.equal(largeSettingsResponse.status, 200, 'multi-megabyte settings must reach fetch');
+assert.equal(requests.at(-1).options.body.length, 2_000_000);
 
 const revoked = await client.apiFetch('/extension/revoked');
 assert.equal(revoked.status, 401);

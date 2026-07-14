@@ -834,7 +834,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     let body = '';
     try { body = JSON.stringify({ template: msg.template }); } catch { /* invalid */ }
     if (!msg.template || typeof msg.template !== 'object' || Array.isArray(msg.template)
-        || body.length > 256_000) {
+        || body.length > 25 * 1024 * 1024) {
       sendResponse({ ok: false, error: 'Invalid email template' });
       return true;
     }

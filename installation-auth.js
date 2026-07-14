@@ -14,8 +14,13 @@
   const ENROLLMENT_URL = `${API_ORIGIN}/auth/extension-installation`;
   const STORAGE_KEY = 'gbApiInstallation';
   const RESPONSE_LIMIT = 32_000;
-  const CONFIG_RESPONSE_LIMIT = 512_000;
-  const REQUEST_BODY_LIMIT = 1_000_000;
+  // Settings snapshots can legitimately contain large template libraries and
+  // custom-page definitions. Keep the browser guard aligned with the backend's
+  // 100 MiB per-share ceiling (plus JSON-envelope headroom) instead of failing
+  // locally before fetch().
+  const EXTENSION_JSON_LIMIT = 110 * 1024 * 1024;
+  const CONFIG_RESPONSE_LIMIT = EXTENSION_JSON_LIMIT;
+  const REQUEST_BODY_LIMIT = EXTENSION_JSON_LIMIT;
   const API_KEY_RE = /^rsk_[a-f0-9]{12}_[A-Za-z0-9_-]{40,80}$/;
   const INSTALLATION_ID_RE = /^[a-f0-9-]{32,40}$/i;
   let enrollmentPromise = null;

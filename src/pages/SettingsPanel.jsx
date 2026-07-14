@@ -280,6 +280,7 @@ function SettingsLinksManager({ onPresetLoad }) {
   const [importUrl, setImportUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [serverUnavailable, setServerUnavailable] = useState(false);
+  const [serverError, setServerError] = useState('');
   // Default: full state — every scope checked (save dialog).
   const [chosenScopes, setChosenScopes] = useState(() => new Set(PRESET_SCOPES.map((s) => s.id)));
   // Which scopes to APPLY when loading the selected preset (defaults to all it
@@ -298,9 +299,11 @@ function SettingsLinksManager({ onPresetLoad }) {
       const response = await sendBackgroundMessage('settingsShareList');
       setShares(response.shares || []);
       setServerUnavailable(false);
+      setServerError('');
     } catch (error) {
       setShares([]);
       setServerUnavailable(true);
+      setServerError(error.message || 'Unable to list settings links');
     }
   }
 
@@ -352,13 +355,8 @@ function SettingsLinksManager({ onPresetLoad }) {
     setBusy(true);
     try {
       const scopes = await gatherScopes([...chosenScopes]);
-      if (serverUnavailable) {
-        downloadSettingsFallback(presetName, scopes);
-        setPresetName('');
-        setShowSaveDialog(false);
-        window.__gbToast?.success('Settings template downloaded as JSON');
-        return;
-      }
+      // Always retry the link service. A previous list/create failure is a
+      // status signal, not a permanent JSON-only mode for this panel session.
       const response = await sendBackgroundMessage('settingsShareCreate', {
         name: presetName.trim(), scopes,
       });
@@ -366,6 +364,8 @@ function SettingsLinksManager({ onPresetLoad }) {
       setShares((current) => [share, ...current.filter((item) => item.id !== share.id)]);
       setSelectedId(share.id);
       setSelectedShare(share);
+      setServerUnavailable(false);
+      setServerError('');
       setPresetName('');
       setShowSaveDialog(false);
       let copied = false;
@@ -386,6 +386,7 @@ function SettingsLinksManager({ onPresetLoad }) {
         const scopes = await gatherScopes([...chosenScopes]);
         downloadSettingsFallback(presetName, scopes);
         setServerUnavailable(true);
+        setServerError(error.message || 'Unable to create settings link');
         setPresetName('');
         setShowSaveDialog(false);
         window.__gbToast?.success('Server unavailable — downloaded a JSON settings template instead');
@@ -473,6 +474,7 @@ function SettingsLinksManager({ onPresetLoad }) {
       const share = normalizePreset(response.share);
       setImportCandidate(share);
       setServerUnavailable(false);
+      setServerError('');
       window.__gbToast?.success(`Loaded "${share.name}" — choose what to import`);
     } catch (error) {
       setServerUnavailable(true);
@@ -530,7 +532,7 @@ function SettingsLinksManager({ onPresetLoad }) {
       </SectionLabel>
       {serverUnavailable && (
         <Callout tone="warning" style={{ marginBottom: 10 }}>
-          Link sharing is unavailable or this installation was revoked. JSON export and import remain available.
+          Link sharing is currently unavailable{serverError ? ` — ${serverError}` : ''}. The next save will retry; JSON export and import remain available.
         </Callout>
       )}
       <AnimatePresence>
@@ -683,7 +685,7 @@ function SettingsLinksManager({ onPresetLoad }) {
                   disabled={busy || !presetName.trim() || chosenScopes.size === 0}
                   onClick={handleSave}
                 >
-                  {serverUnavailable ? 'Download JSON' : 'Save'}
+                  Save
                 </Btn>
                 <Btn variant="ghost" size="sm" onClick={() => setShowSaveDialog(false)}>Cancel</Btn>
               </div>
