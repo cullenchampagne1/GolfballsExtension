@@ -1141,19 +1141,6 @@ export function SettingsPanel({ remotePolicy }) {
               />
             </Field>
 
-            <Field label="Address autocomplete key">
-              <Input
-                value={credentials.addressAutocompleteKey}
-                onChange={(v) => setCredentialValue('addressAutocompleteKey', v)}
-                mono
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
-                placeholder="Browser key from Smarty"
-                leading={<I.search />}
-              />
-            </Field>
-
             <div style={{ marginTop: 12 }}>
               <Callout tone="warning" title="Set up in Power Automate">
                 <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
@@ -1161,9 +1148,6 @@ export function SettingsPanel({ remotePolicy }) {
                   <li>Add a <b style={{ color: 'var(--gb-text-secondary)' }}>Send an email (V2)</b> action</li>
                   <li>Save and paste the generated URL above</li>
                 </ol>
-              </Callout>
-              <Callout tone="info" title="Credential handling">
-                Integration values stay on this browser profile and are excluded from project presets and feature-flag broadcasts. Rotate a URL or key if it was ever committed or shared.
               </Callout>
             </div>
 

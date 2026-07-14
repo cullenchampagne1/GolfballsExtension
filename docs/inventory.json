@@ -230,7 +230,7 @@
   "storageKeys": [
     { "key": "devSettings", "area": "local", "contains": "all developer setting values" },
     { "key": "featureFlags", "area": "local", "contains": "non-secret feature toggles and public integration identifiers" },
-    { "key": "gbCredentials", "area": "local", "contains": "Power Automate trigger URL and address-autocomplete browser key; excluded from presets and broadcasts" },
+    { "key": "gbCredentials", "area": "local", "contains": "Power Automate trigger URL; excluded from presets and broadcasts" },
     { "key": "gbApiInstallation", "area": "local", "contains": "worker-owned RevStack installation UUID, per-install API key, safe prefix, enrollment time, pinned extension ID, and version; excluded from presets, broadcasts, and runtime messages" },
     { "key": "gbRemoteSettingsPolicy", "area": "local", "contains": "last validated policy revision, visibility maps, apply time, and administrator-bypass state" },
     { "key": "gbRemoteSettingsBackup", "area": "local", "contains": "pre-policy feature/developer values used for reversible administrator bypass" },

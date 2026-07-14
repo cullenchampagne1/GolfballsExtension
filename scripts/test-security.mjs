@@ -61,4 +61,12 @@ assert.equal(manifest.host_permissions.includes('https://master.api.icustomize.c
 assert.equal(manifest.permissions.includes('theme'), false, 'unused theme permission must not return');
 assert.match(manifest.content_security_policy.sandbox, /default-src 'none'/);
 
+const settingsSource = await readFile(new URL('../src/pages/SettingsPanel.jsx', import.meta.url), 'utf8');
+const credentialsSource = await readFile(new URL('../src/lib/credentials.js', import.meta.url), 'utf8');
+const backgroundSource = await readFile(new URL('../background.js', import.meta.url), 'utf8');
+assert.equal(settingsSource.includes('Address autocomplete key'), false);
+assert.equal(settingsSource.includes('Credential handling'), false);
+assert.equal(credentialsSource.includes('addressAutocompleteKey'), true, 'legacy key cleanup must remain');
+assert.equal(backgroundSource.includes('credentials.addressAutocompleteKey'), false);
+
 console.log('security tests passed');

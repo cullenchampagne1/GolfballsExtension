@@ -993,35 +993,26 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   // ── Address autocomplete (Smarty US-Autocomplete-Pro — golfballs' own feed) ──
-  // A DNR rule stamps the authorized golfballs Referer. The browser key is
-  // configured locally and deliberately kept out of source control/presets.
+  // Use the same Referer-locked website key and endpoint as golfballs.com.
+  // The DNR rule above stamps the authorized Golfballs Referer, so employees
+  // do not configure a separate key for this browser-side website service.
   if (msg.action === 'geocodeAddress' && typeof msg.q === 'string') {
     const q = msg.q.trim().slice(0, 160);
     if (q.length < 2) { sendResponse({ ok: true, suggestions: [] }); return true; }
-    (async () => {
-      const credentials = await gbReadCredentials();
-      const key = typeof credentials.addressAutocompleteKey === 'string'
-        ? credentials.addressAutocompleteKey.trim()
-        : '';
-      if (!/^[A-Za-z0-9_-]{8,128}$/.test(key)) {
-        sendResponse({ ok: false, error: 'Address autocomplete key is not configured', suggestions: [] });
-        return;
-      }
-      const params = new URLSearchParams({ key, search: q, max_results: '6' });
-      if (msg.selected) params.set('selected', String(msg.selected).slice(0, 240));
-      const url = `https://us-autocomplete-pro.api.smartystreets.com/lookup?${params}`;
-      try {
-        const response = await fetch(url, { credentials: 'omit', headers: { Accept: 'application/json' } });
-        const data = response.ok ? await gbReadJsonLimited(response, 1_000_000).catch(() => ({})) : {};
-        sendResponse({
-          ok: response.ok,
-          suggestions: Array.isArray(data && data.suggestions) ? data.suggestions.slice(0, 6) : [],
-          error: response.ok ? undefined : `HTTP ${response.status}`,
-        });
-      } catch (error) {
-        sendResponse({ ok: false, error: String(error), suggestions: [] });
-      }
-    })();
+    const params = new URLSearchParams({
+      key: '25666478969040630', search: q, max_results: '6',
+    });
+    if (msg.selected) params.set('selected', String(msg.selected).slice(0, 240));
+    fetch(`https://us-autocomplete-pro.api.smartystreets.com/lookup?${params}`, {
+      credentials: 'omit', headers: { Accept: 'application/json' },
+    }).then(async (response) => {
+      const data = response.ok ? await gbReadJsonLimited(response, 1_000_000).catch(() => ({})) : {};
+      sendResponse({
+        ok: response.ok,
+        suggestions: Array.isArray(data && data.suggestions) ? data.suggestions.slice(0, 6) : [],
+        error: response.ok ? undefined : `HTTP ${response.status}`,
+      });
+    }).catch((error) => sendResponse({ ok: false, error: String(error), suggestions: [] }));
     return true;
   }
 

@@ -10,16 +10,12 @@ export const CREDENTIALS_KEY = 'gbCredentials';
 
 export const EMPTY_CREDENTIALS = Object.freeze({
   powerAutomateUrl: '',
-  addressAutocompleteKey: '',
 });
 
 function normalize(value) {
   const source = value && typeof value === 'object' ? value : {};
   return {
     powerAutomateUrl: typeof source.powerAutomateUrl === 'string' ? source.powerAutomateUrl.trim() : '',
-    addressAutocompleteKey: typeof source.addressAutocompleteKey === 'string'
-      ? source.addressAutocompleteKey.trim()
-      : '',
   };
 }
 
@@ -33,7 +29,9 @@ export function loadCredentials() {
           ? { ...stored.featureFlags }
           : {};
         const legacyUrl = typeof flags.powerAutomateUrl === 'string' ? flags.powerAutomateUrl.trim() : '';
-        let migrated = false;
+        let migrated = Object.prototype.hasOwnProperty.call(
+          stored[CREDENTIALS_KEY] || {}, 'addressAutocompleteKey',
+        );
 
         if (!credentials.powerAutomateUrl && legacyUrl) {
           credentials.powerAutomateUrl = legacyUrl;
