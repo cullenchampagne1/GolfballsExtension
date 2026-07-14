@@ -540,7 +540,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
       setSelected(new Set(records.map((row) => row.id)));
       const skipped = parsed.errors.length + parsed.warnings.length;
       toast?.success?.(
-        `Imported ${records.length} contact${records.length === 1 ? '' : 's'}${skipped ? ` · skipped ${skipped}` : ''}`,
+        `Imported ${records.length} CRM record${records.length === 1 ? '' : 's'}${skipped ? ` · skipped ${skipped}` : ''}`,
         { duration: 3200 },
       );
     } catch (err) {
@@ -697,7 +697,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
     : mode === 'imported'
       ? (query
           ? `${importedResults.length} imported match${importedResults.length === 1 ? '' : 'es'} for “${query}”`
-          : `${importedRows.length} imported contact${importedRows.length === 1 ? '' : 's'} · ready for email${importSummary?.taskReady ? ` · ${importSummary.taskReady} task-ready` : ''}`)
+          : `${importedRows.length} imported record${importedRows.length === 1 ? '' : 's'} · email resolves from file or CRM page${importSummary?.taskReady ? ` · ${importSummary.taskReady} task-ready` : ''}`)
     : mode === 'indexed'
       ? (indexedCount === 0
           ? 'No locally-indexed contacts yet — run a search and click Index'

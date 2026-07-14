@@ -24,6 +24,11 @@ const HEADER_ALIASES = {
   customerid: 'contact_id',
   account_id: 'account_id',
   accountid: 'account_id',
+  account_name: 'account_name',
+  accountname: 'account_name',
+  company: 'account_name',
+  company_name: 'account_name',
+  organization: 'account_name',
   email: 'email',
   email_address: 'email',
   emailaddress: 'email',
@@ -99,20 +104,23 @@ export function normalizeContactMatrix(matrix, { fileName = '' } = {}) {
   const rows = Array.isArray(matrix) ? matrix : [];
   const headerIndex = rows.slice(0, 12).findIndex((row) => {
     const recognized = new Set((Array.isArray(row) ? row : []).map(normalizeImportHeader).filter(Boolean));
-    return recognized.has('email') && (recognized.has('contact_id') || recognized.has('account_id'));
+    const hasId = recognized.has('contact_id') || recognized.has('account_id');
+    const hasIdentity = recognized.has('account_name') || recognized.has('name')
+      || recognized.has('first_name') || recognized.has('last_name');
+    return hasId && hasIdentity;
   });
   if (headerIndex < 0) {
-    throw new Error('No header row found. Include email and either contact_id or account_id.');
+    throw new Error('No header row found. Include an ID plus account_name or a person name.');
   }
 
   const headers = rows[headerIndex].map(normalizeImportHeader);
   const present = new Set(headers.filter(Boolean));
-  if (!present.has('email')) throw new Error('The worksheet needs an email column.');
   if (!present.has('contact_id') && !present.has('account_id')) {
     throw new Error('The worksheet needs contact_id or account_id.');
   }
-  if (!present.has('name') && !present.has('first_name') && !present.has('last_name')) {
-    throw new Error('The worksheet needs name, first_name, or last_name.');
+  if (!present.has('account_name') && !present.has('name')
+      && !present.has('first_name') && !present.has('last_name')) {
+    throw new Error('The worksheet needs account_name, name, or first_name and last_name.');
   }
 
   const records = [];
@@ -131,6 +139,7 @@ export function normalizeContactMatrix(matrix, { fileName = '' } = {}) {
     const contactId = normalizeId(raw.contact_id, 'contact');
     const accountId = normalizeId(raw.account_id, 'account');
     const { fullName, firstName, lastName } = splitName(raw.name, raw.first_name, raw.last_name);
+    const accountName = asText(raw.account_name);
     const importVariables = Object.fromEntries(
       Object.entries(raw).map(([key, value]) => [key, asText(value)]),
     );
@@ -146,16 +155,17 @@ export function normalizeContactMatrix(matrix, { fileName = '' } = {}) {
     });
 
     const problems = [];
-    if (!email) problems.push('email is blank');
-    else if (!validEmail(email)) problems.push('email is invalid');
+    if (email && !validEmail(email)) problems.push('email is invalid');
     if (!contactId && !accountId) problems.push('contact_id and account_id are blank');
-    if (!fullName) problems.push('name is blank');
+    if (!accountName && !fullName) problems.push('account_name and person name are blank');
     if (problems.length) {
       errors.push({ row: spreadsheetRow, message: problems.join('; ') });
       continue;
     }
 
-    const identity = contactId ? `contact:${contactId}` : `account:${accountId}:${email}`;
+    const identity = contactId
+      ? `contact:${contactId}`
+      : `account:${accountId}:${email || fullName || accountName}`;
     if (seen.has(identity)) {
       warnings.push({ row: spreadsheetRow, message: 'duplicate row skipped' });
       continue;
@@ -164,17 +174,17 @@ export function normalizeContactMatrix(matrix, { fileName = '' } = {}) {
 
     const id = contactId
       ? `contact_${contactId}`
-      : `import_account_${safeIdPart(accountId)}_${stableHash(email)}`;
+      : `import_account_${safeIdPart(accountId)}_${stableHash(email || fullName || accountName)}`;
     records.push({
       id,
-      recordType_s: 'Contact',
+      recordType_s: contactId ? 'Contact' : 'Account',
       contactName_t: fullName,
       firstName_s: firstName,
       lastName_s: lastName,
-      accountName_t: asText(raw.account_name),
+      accountName_t: accountName,
       accountID_s: accountId,
       email_tp: email,
-      emails_tps: [email],
+      emails_tps: email ? [email] : [],
       phones_ss: [],
       importSource_s: fileName || 'Spreadsheet',
       imported_b: true,
@@ -188,7 +198,7 @@ export function normalizeContactMatrix(matrix, { fileName = '' } = {}) {
 
   if (!records.length) {
     const detail = errors[0]?.message ? ` First error: row ${errors[0].row}, ${errors[0].message}.` : '';
-    throw new Error(`No valid contacts found.${detail}`);
+    throw new Error(`No valid CRM records found.${detail}`);
   }
   return { records, errors, warnings, headerRow: headerIndex + 1 };
 }
@@ -361,16 +371,21 @@ export function directContactVariables(contact, definitions = {}) {
   for (const [name, definition] of Object.entries(definitions || {})) {
     const columnKey = normalizeImportColumn(name);
     if (columnKey && Object.prototype.hasOwnProperty.call(imported, columnKey)) {
-      values[name] = asText(imported[columnKey]);
-      continue;
+      const explicit = asText(imported[columnKey]);
+      if (explicit) {
+        values[name] = explicit;
+        continue;
+      }
     }
     const hint = `${name} ${definition?.path || ''} ${definition?.field || ''}`.toLowerCase().replace(/[^a-z0-9]+/g, '');
-    if (hint.includes('firstname')) values[name] = firstName;
-    else if (hint.includes('lastname')) values[name] = lastName;
-    else if (hint.includes('email')) values[name] = email;
-    else if (hint.includes('accountid')) values[name] = accountId;
-    else if (hint.includes('contactid') || hint.includes('customerid')) values[name] = contactId;
-    else if (hint.includes('contactname') || hint === 'name' || hint.includes('fullname')) values[name] = contactName;
+    let value = '';
+    if (hint.includes('firstname')) value = firstName;
+    else if (hint.includes('lastname')) value = lastName;
+    else if (hint.includes('email')) value = email;
+    else if (hint.includes('accountid')) value = accountId;
+    else if (hint.includes('contactid') || hint.includes('customerid')) value = contactId;
+    else if (hint.includes('contactname') || hint === 'name' || hint.includes('fullname')) value = contactName;
+    if (value) values[name] = value;
   }
   return values;
 }

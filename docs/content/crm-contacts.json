@@ -21,7 +21,9 @@
           { "type": "heading", "text": "The local index" },
           { "type": "p", "text": "The index is what makes repeat name searches instant. After a server search, an 'Index all N' / 'Index these N' button stores normalized names plus encrypted CRM details. Encryption keys are created automatically on the device, so there is no setup or server call. Only the highest-ranked visible results are decrypted. A Clear index button removes the encrypted cache; Enter always remains available for live server search." },
           { "type": "heading", "text": "Selections and bulk actions" },
-          { "type": "p", "text": "Tick rows and the summary bar appears — 'N selected of M results' — with Run campaign, Email selected, and Export CSV. Keyboard: Tab from the input drops focus onto the first row; Tab/Shift+Tab walk rows (wrapping); Esc returns to the input." }
+          { "type": "p", "text": "Tick rows and the summary bar appears — 'N selected of M results' — with Run campaign, Email selected, and Export CSV. Keyboard: Tab from the input drops focus onto the first row; Tab/Shift+Tab walk rows (wrapping); Esc returns to the input." },
+          { "type": "heading", "text": "Importing Excel or CSV lists" },
+          { "type": "p", "text": "Import list accepts .xlsx or .csv rows with contact_id or account_id plus either account_name, a full name, or first_name/last_name. Email is optional: when it is blank, Email selected and campaign runs open the matching CRM page and let the page engine resolve the recipient and template variables. Non-empty malformed email values are rejected instead of silently used." }
         ],
         "advanced": [
           { "type": "p", "text": "The Query Builder button adds structured filters; active filters render as removable tags above the results. See the Query Builder article for the full field and operator catalog." }

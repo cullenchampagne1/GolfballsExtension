@@ -964,6 +964,14 @@ export const HELP_CONTENT = {
           {
             "type": "p",
             "text": "Tick rows and the summary bar appears — 'N selected of M results' — with Run campaign, Email selected, and Export CSV. Keyboard: Tab from the input drops focus onto the first row; Tab/Shift+Tab walk rows (wrapping); Esc returns to the input."
+          },
+          {
+            "type": "heading",
+            "text": "Importing Excel or CSV lists"
+          },
+          {
+            "type": "p",
+            "text": "Import list accepts .xlsx or .csv rows with contact_id or account_id plus either account_name, a full name, or first_name/last_name. Email is optional: when it is blank, Email selected and campaign runs open the matching CRM page and let the page engine resolve the recipient and template variables. Non-empty malformed email values are rejected instead of silently used."
           }
         ],
         "advanced": [
@@ -6114,8 +6122,18 @@ export const HELP_CONTENT = {
             ],
             "rows": [
               [
-                "Settings",
-                "themeColors, gbTheme, featureFlags, devSettings, keyboardShortcuts, customPages, emailSignature",
+                "Preferences",
+                "featureFlags, devSettings, keyboardShortcuts, customPages",
+                "overwrites"
+              ],
+              [
+                "Appearance",
+                "themeColors, gbTheme, uiScales",
+                "overwrites"
+              ],
+              [
+                "Email Identity",
+                "emailSignature",
                 "overwrites"
               ],
               [

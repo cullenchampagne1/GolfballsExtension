@@ -58,6 +58,29 @@ assert.equal(normalized.records[0].importVariables_o.account_name, 'Example Club
 assert.equal(normalized.records[0].importVariables_o.preferred_product, 'Tour Soft');
 assert.deepEqual(contactIdsFromRow(normalized.records[0]), { contactId: '1001', accountId: '77' });
 
+const withoutEmails = normalizeContactMatrix(parseCsvMatrix(
+  'account_name,account_id\r\nNo Email Account,501\r\n'
+  + 'Person Account,502\r\n',
+), { fileName: 'accounts.csv' });
+assert.equal(withoutEmails.records.length, 2);
+assert.equal(withoutEmails.records[0].recordType_s, 'Account');
+assert.equal(withoutEmails.records[0].accountName_t, 'No Email Account');
+assert.equal(withoutEmails.records[0].email_tp, '');
+assert.deepEqual(withoutEmails.records[0].emails_tps, []);
+assert.deepEqual(contactIdsFromRow(withoutEmails.records[0]), { contactId: '', accountId: '501' });
+
+const peopleWithoutEmails = normalizeContactMatrix(parseCsvMatrix(
+  'first_name,last_name,contact_id\r\nTaylor,Jordan,601\r\n',
+), { fileName: 'contacts-no-email.csv' });
+assert.equal(peopleWithoutEmails.records[0].contactName_t, 'Taylor Jordan');
+assert.equal(peopleWithoutEmails.records[0].email_tp, '');
+assert.deepEqual(contactIdsFromRow(peopleWithoutEmails.records[0]), { contactId: '601', accountId: '' });
+
+assert.throws(
+  () => normalizeContactMatrix(parseCsvMatrix('email,account_id\r\na@example.com,1\r\n')),
+  /account_name or a person name/,
+);
+
 const shared = ['name', 'first_name', 'last_name', 'account_id', 'email'];
 const sharedXml = `<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${shared.map((v) => `<si><t>${v}</t></si>`).join('')}</sst>`;
 const sheetXml = `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>
@@ -85,5 +108,14 @@ assert.deepEqual(values, {
   greeting: 'Alex', recipient: 'alex@example.com', account: '9001',
   account_name: 'Spreadsheet Account', preferred_product: 'Tour Soft',
 });
+
+const deferredEmail = directContactVariables({
+  contactName: 'No Email Account', accountId: '501', email: '',
+  importVariables: { account_name: 'No Email Account', email: '' },
+}, {
+  recipient: { path: 'contact.email' },
+  account_name: { path: 'account.name' },
+});
+assert.deepEqual(deferredEmail, { account_name: 'No Email Account' });
 
 console.log('contact import tests passed');
