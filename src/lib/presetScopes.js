@@ -29,19 +29,24 @@
 
 export const PRESET_SCOPES = [
   {
-    id:    'settings',
-    label: 'Settings',
-    desc:  'Theme · feature flags · dev settings · keyboard shortcuts · custom pages · signature',
-    /* Each storage key in this scope is captured + restored. */
-    keys: [
-      'themeColors',
-      'gbTheme',
-      'featureFlags',
-      'devSettings',
-      'keyboardShortcuts',
-      'customPages',
-      'emailSignature',
-    ],
+    id: 'settings-preferences', category: 'Configuration',
+    label: 'Preferences',
+    desc: 'Feature flags · developer settings · keyboard shortcuts · custom pages',
+    keys: ['featureFlags', 'devSettings', 'keyboardShortcuts', 'customPages'],
+    merge: 'overwrite',
+  },
+  {
+    id: 'settings-appearance', category: 'Configuration',
+    label: 'Appearance',
+    desc: 'Theme · custom colors · per-surface UI scale',
+    keys: ['themeColors', 'gbTheme', 'uiScales'],
+    merge: 'overwrite',
+  },
+  {
+    id: 'settings-email', category: 'Configuration',
+    label: 'Email Identity',
+    desc: 'Email signature only; Power Automate credentials are never exported',
+    keys: ['emailSignature'],
     merge: 'overwrite',
   },
   // Email templates, split by `type` so a shared preset can carry just the
@@ -49,38 +54,38 @@ export const PRESET_SCOPES = [
   // mergeById on load merges them into the recipient's array, leaving other
   // types untouched. Folders ride along (whole) so categories survive.
   {
-    id: 'tpl-order',   label: 'Order Templates',   desc: 'Email templates for order pages',
+    id: 'tpl-order', category: 'Email Templates', label: 'Order Templates', desc: 'Email templates for order pages',
     keys: ['templates', 'templateFolders'], merge: 'mergeById',
     filter: { templates: (t) => (t.type || 'order') === 'order' },
   },
   {
-    id: 'tpl-case',    label: 'Case Templates',    desc: 'Email templates for case pages',
+    id: 'tpl-case', category: 'Email Templates', label: 'Case Templates', desc: 'Email templates for case pages',
     keys: ['templates', 'templateFolders'], merge: 'mergeById',
     filter: { templates: (t) => t.type === 'case' },
   },
   {
-    id: 'tpl-account', label: 'Account Templates', desc: 'Email templates for account pages',
+    id: 'tpl-account', category: 'Email Templates', label: 'Account Templates', desc: 'Email templates for account pages',
     keys: ['templates', 'templateFolders'], merge: 'mergeById',
     filter: { templates: (t) => t.type === 'account' },
   },
   {
-    id: 'tpl-contact', label: 'Contact Templates', desc: 'Email templates for contact pages',
+    id: 'tpl-contact', category: 'Email Templates', label: 'Contact Templates', desc: 'Email templates for contact pages',
     keys: ['templates', 'templateFolders'], merge: 'mergeById',
     filter: { templates: (t) => t.type === 'contact' },
   },
   // Note templates, split by `subType`.
   {
-    id: 'note-quick', label: 'Quick Notes',         desc: 'Quick note templates',
+    id: 'note-quick', category: 'Activity Templates', label: 'Quick Notes', desc: 'Quick note templates',
     keys: ['noteTemplates', 'noteFolders'], merge: 'mergeById',
     filter: { noteTemplates: (n) => (n.subType || 'note') === 'note' },
   },
   {
-    id: 'note-task',  label: 'Task Templates',      desc: 'Task templates',
+    id: 'note-task', category: 'Activity Templates', label: 'Task Templates', desc: 'Task templates',
     keys: ['noteTemplates', 'noteFolders'], merge: 'mergeById',
     filter: { noteTemplates: (n) => n.subType === 'task' },
   },
   {
-    id: 'note-call',  label: 'Call Log Templates',  desc: 'Call-log templates',
+    id: 'note-call', category: 'Activity Templates', label: 'Call Log Templates', desc: 'Call-log templates',
     keys: ['noteTemplates', 'noteFolders'], merge: 'mergeById',
     filter: { noteTemplates: (n) => n.subType === 'call_log' },
   },
@@ -236,6 +241,18 @@ export function normalizePreset(p) {
     if (Array.isArray(p.noteTemplates)) scopes.notes     = { noteTemplates: p.noteTemplates, noteFolders: p.noteFolders || [] };
   }
 
+  // Settings links created before the categorized scope split used one broad
+  // `settings` bag. Partition it on read so old files and URLs remain usable.
+  if (scopes.settings && typeof scopes.settings === 'object') {
+    const legacy = scopes.settings;
+    for (const def of PRESET_SCOPES.filter((scope) => scope.id.startsWith('settings-'))) {
+      const bag = {};
+      for (const key of def.keys) if (legacy[key] !== undefined) bag[key] = legacy[key];
+      if (Object.keys(bag).length) scopes[def.id] = { ...(scopes[def.id] || {}), ...bag };
+    }
+    delete scopes.settings;
+  }
+
   // Migrate the old coarse `templates` / `notes` scopes into the per-type
   // scopes so presets saved before the split still load.
   if (scopes.templates) {
@@ -255,8 +272,11 @@ export function normalizePreset(p) {
     delete scopes.notes;
   }
 
-  if (scopes.settings?.featureFlags) {
-    scopes.settings = { ...scopes.settings, featureFlags: withoutCredentials(scopes.settings.featureFlags) };
+  if (scopes['settings-preferences']?.featureFlags) {
+    scopes['settings-preferences'] = {
+      ...scopes['settings-preferences'],
+      featureFlags: withoutCredentials(scopes['settings-preferences'].featureFlags),
+    };
   }
 
   return { ...p, scopes };

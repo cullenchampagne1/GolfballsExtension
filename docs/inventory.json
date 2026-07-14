@@ -271,7 +271,9 @@
   ],
 
   "importExportScopes": [
-    { "id": "settings", "label": "Settings", "keys": ["themeColors", "gbTheme", "featureFlags", "devSettings", "keyboardShortcuts", "customPages", "emailSignature"], "merge": "overwrite" },
+    { "id": "settings-preferences", "category": "Configuration", "label": "Preferences", "keys": ["featureFlags", "devSettings", "keyboardShortcuts", "customPages"], "merge": "overwrite" },
+    { "id": "settings-appearance", "category": "Configuration", "label": "Appearance", "keys": ["themeColors", "gbTheme", "uiScales"], "merge": "overwrite" },
+    { "id": "settings-email", "category": "Configuration", "label": "Email Identity", "keys": ["emailSignature"], "merge": "overwrite" },
     { "id": "tpl-order", "label": "Order Templates", "keys": ["templates", "templateFolders"], "merge": "mergeById" },
     { "id": "tpl-case", "label": "Case Templates", "keys": ["templates", "templateFolders"], "merge": "mergeById" },
     { "id": "tpl-account", "label": "Account Templates", "keys": ["templates", "templateFolders"], "merge": "mergeById" },

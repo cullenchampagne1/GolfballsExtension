@@ -406,9 +406,15 @@ function SettingsLinksManager({ onPresetLoad }) {
       const { applied } = await applyScopes(chosen);
       if (importCandidate.transport !== 'json') {
         try {
+          const sourceScopeIds = Object.keys(importCandidate.scopes || {});
+          const retainedScopeIds = sourceScopeIds.filter((id) => (
+            id === 'settings'
+              ? applied.some((appliedId) => appliedId.startsWith('settings-'))
+              : applied.includes(id)
+          ));
           const retained = await sendBackgroundMessage('settingsShareRecordImport', {
             shareId: preset.id,
-            scopeIds: applied,
+            scopeIds: retainedScopeIds,
           });
           const retainedShare = normalizePreset(retained.share);
           setShares((current) => [retainedShare, ...current.filter((item) => item.id !== retainedShare.id)]);
@@ -494,6 +500,7 @@ function SettingsLinksManager({ onPresetLoad }) {
     return { id: p.id, label: `${p.name}${created ? ` (${created})` : ''}${tail}${shared}` };
   });
   const candidateScopeIds = importCandidate ? presetScopeIds(importCandidate) : [];
+  const scopeCategories = [...new Set(PRESET_SCOPES.map((scope) => scope.category))];
 
   return (
     <div>
@@ -589,33 +596,42 @@ function SettingsLinksManager({ onPresetLoad }) {
                   <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', marginBottom: 7 }}>
                     Choose what to merge into this extension · {loadScopes.size} of {candidateScopeIds.length} selected
                   </div>
-                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                    {candidateScopeIds.map((id) => {
-                      const def = PRESET_SCOPES.find((scope) => scope.id === id);
-                      if (!def) return null;
-                      const on = loadScopes.has(id);
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                    {scopeCategories.map((category) => {
+                      const defs = PRESET_SCOPES.filter((scope) => scope.category === category && candidateScopeIds.includes(scope.id));
+                      if (!defs.length) return null;
                       return (
-                        <button
-                          key={id}
-                          type="button"
-                          title={def.desc}
-                          onClick={() => setLoadScopes((current) => {
-                            const next = new Set(current);
-                            if (next.has(id)) next.delete(id); else next.add(id);
-                            return next;
-                          })}
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', padding: '3px 9px',
-                            borderRadius: 'var(--gb-r-pill)', cursor: 'pointer', fontSize: 10.5,
-                            fontWeight: 600, fontFamily: 'inherit',
-                            background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)',
-                            border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
-                            color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
-                            textDecoration: on ? 'none' : 'line-through',
-                          }}
-                        >
-                          {def.label}
-                        </button>
+                        <div key={category}>
+                          <div style={{ fontSize: 8.5, fontWeight: 750, color: 'var(--gb-text-muted)', textTransform: 'uppercase', letterSpacing: '.55px', marginBottom: 4 }}>{category}</div>
+                          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                            {defs.map((def) => {
+                              const on = loadScopes.has(def.id);
+                              return (
+                                <button
+                                  key={def.id}
+                                  type="button"
+                                  title={def.desc}
+                                  onClick={() => setLoadScopes((current) => {
+                                    const next = new Set(current);
+                                    if (next.has(def.id)) next.delete(def.id); else next.add(def.id);
+                                    return next;
+                                  })}
+                                  style={{
+                                    display: 'inline-flex', alignItems: 'center', padding: '3px 9px',
+                                    borderRadius: 'var(--gb-r-pill)', cursor: 'pointer', fontSize: 10.5,
+                                    fontWeight: 600, fontFamily: 'inherit',
+                                    background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)',
+                                    border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
+                                    color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
+                                    textDecoration: on ? 'none' : 'line-through',
+                                  }}
+                                >
+                                  {def.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
@@ -695,17 +711,22 @@ function SettingsLinksManager({ onPresetLoad }) {
                   </span>
                 </div>
                 <div style={{ height: 1, background: 'var(--gb-border-subtle)' }} />
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 14, rowGap: 7 }}>
-                  {PRESET_SCOPES.map((s) => (
-                    <Checkbox
-                      key={s.id}
-                      size="sm"
-                      checked={chosenScopes.has(s.id)}
-                      label={s.label}
-                      onChange={() => toggleScope(s.id)}
-                    />
-                  ))}
-                </div>
+                {scopeCategories.map((category) => (
+                  <div key={category}>
+                    <div style={{ fontSize: 8.5, fontWeight: 750, color: 'var(--gb-text-muted)', textTransform: 'uppercase', letterSpacing: '.55px', marginBottom: 5 }}>{category}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 14, rowGap: 7 }}>
+                      {PRESET_SCOPES.filter((scope) => scope.category === category).map((scope) => (
+                        <Checkbox
+                          key={scope.id}
+                          size="sm"
+                          checked={chosenScopes.has(scope.id)}
+                          label={scope.label}
+                          onChange={() => toggleScope(scope.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </motion.div>

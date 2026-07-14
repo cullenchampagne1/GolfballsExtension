@@ -2,7 +2,9 @@
 import assert from 'node:assert/strict';
 import {
   buildSettingsTemplateFile,
+  gatherScopes,
   parseSettingsTemplateFile,
+  PRESET_SCOPES,
 } from '../src/lib/presetScopes.js';
 import {
   buildEmailTemplateFile,
@@ -18,11 +20,11 @@ const settings = buildSettingsTemplateFile('Sales setup', {
   },
   unknownScope: { unsafe: true },
 });
-assert.deepEqual(Object.keys(settings.scopes), ['settings']);
-assert.equal(settings.scopes.settings.featureFlags.powerAutomateUrl, undefined);
+assert.deepEqual(Object.keys(settings.scopes), ['settings-preferences']);
+assert.equal(settings.scopes['settings-preferences'].featureFlags.powerAutomateUrl, undefined);
 const parsedSettings = parseSettingsTemplateFile(JSON.stringify(settings));
 assert.equal(parsedSettings.transport, 'json');
-assert.deepEqual(Object.keys(parsedSettings.scopes), ['settings']);
+assert.deepEqual(Object.keys(parsedSettings.scopes), ['settings-preferences']);
 assert.throws(
   () => parseSettingsTemplateFile(JSON.stringify({ ...settings, kind: 'unknown' })),
   /not a supported Golfballs settings template/,
@@ -41,6 +43,49 @@ const migratedState = parseSettingsTemplateFile(JSON.stringify({
 }));
 assert.equal(migratedState.scopes['tpl-order'].templates[0].body.length, 700_000);
 assert.equal(JSON.stringify(migratedState).includes('must-not-import'), false);
+
+const expectedConfigurationKeys = [
+  'featureFlags', 'devSettings', 'keyboardShortcuts', 'customPages',
+  'themeColors', 'gbTheme', 'uiScales', 'emailSignature',
+];
+const configurationScopes = PRESET_SCOPES.filter((scope) => scope.category === 'Configuration');
+assert.deepEqual(
+  [...new Set(configurationScopes.flatMap((scope) => scope.keys))].sort(),
+  expectedConfigurationKeys.sort(),
+);
+assert.equal(PRESET_SCOPES.every((scope) => typeof scope.category === 'string' && scope.category), true);
+
+const storageState = Object.fromEntries(expectedConfigurationKeys.map((key) => [key, { saved: key }]));
+storageState.featureFlags = { taskListEnabled: true, powerAutomateUrl: 'must-not-export' };
+globalThis.chrome = {
+  storage: {
+    local: {
+      get(keys, callback) {
+        callback(Object.fromEntries(keys.filter((key) => key in storageState).map((key) => [key, storageState[key]])));
+      },
+      set(_value, callback) { callback?.(); },
+    },
+  },
+};
+const completeConfiguration = await gatherScopes(configurationScopes.map((scope) => scope.id));
+const exportedConfigurationKeys = Object.values(completeConfiguration).flatMap((bag) => Object.keys(bag));
+assert.deepEqual([...new Set(exportedConfigurationKeys)].sort(), expectedConfigurationKeys.sort());
+assert.equal(JSON.stringify(completeConfiguration).includes('must-not-export'), false);
+
+const legacySettings = parseSettingsTemplateFile(JSON.stringify({
+  ...settings,
+  scopes: {
+    settings: {
+      featureFlags: { taskListEnabled: true },
+      gbTheme: { variant: 'dark' },
+      uiScales: { modals: 0.9 },
+      emailSignature: '<p>Legacy</p>',
+    },
+  },
+}));
+assert.deepEqual(Object.keys(legacySettings.scopes).sort(), [
+  'settings-appearance', 'settings-email', 'settings-preferences',
+]);
 
 const email = buildEmailTemplateFile({
   id: 'local-id-must-not-survive',
