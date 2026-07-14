@@ -11,7 +11,7 @@ import { QueryBuilder, describeCondition, compileToSolr, compileToLabel, loadSav
 import { SCAN_LAST_RUN_KEY } from '../lib/recentOrdersScan.js';
 import { EmailRunner } from './EmailRunner.jsx';
 import {
-  indexRecords, getAllIndexed, deleteIndexed, clearIndex, searchIndexed,
+  indexRecords, queryIndexed, deleteIndexed, clearIndex, searchIndexed,
 } from '../lib/crmIndex.js';
 import { actionRegistry } from '../lib/actionRegistry.js';
 import { parseContactFile, contactIdsFromRow } from '../lib/contactImport.js';
@@ -45,8 +45,8 @@ const ENDPOINT = 'https://api.golfballs.com/Golfballs/WebServices/Private/SolrIn
 // case the user types an exact record key.
 const QF = 'id^100 accountID_s^100 contactName_t^120 accountName_t^120 email_tp^25 emails_tps^25 phones_ss^25';
 // Phrase fields (pf): edismax adds a boost when ALL query tokens
-// appear as a phrase. Bumps "Cullen Champagne" above someone called
-// "Champagne Cullen-Brown" who only matches the tokens separately.
+// appear as a phrase. Bumps "Alex Morgan" above someone called
+// "Morgan Alex-Smith" who only matches the tokens separately.
 const PF = 'contactName_t^400 accountName_t^400 email_tp^60';
 const ROWS = 100;
 
@@ -174,31 +174,53 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
      indexed clients without hitting the server, and only falls back
      to Solr when they explicitly press Enter / Search. */
   const [indexed, setIndexed] = useState([]);
+  const [indexedCount, setIndexedCount] = useState(0);
+  const [indexedMatched, setIndexedMatched] = useState(0);
   const [indexLoaded, setIndexLoaded] = useState(false);
   const [mode, setMode] = useState('indexed');   // 'indexed' | 'server' | 'imported'
   const [importedRows, setImportedRows] = useState([]);
   const [importSummary, setImportSummary] = useState(null);
   const [importing, setImporting] = useState(false);
   const importInputRef = useRef(null);
+  const indexedSearchGen = useRef(0);
   useEffect(() => {
-    let alive = true;
-    /* In useMock mode (playground), pre-seed the indexed list with
-       the same MOCK_RESULTS the server-mode mock returns so the
-       modal opens with rows already visible — no Search button click
-       required to populate something the rep can select + email. */
     if (useMock) {
-      setIndexed(MOCK_RESULTS);
+      setIndexed(searchIndexed(MOCK_RESULTS, query, { limit: 200 }));
+      setIndexedCount(MOCK_RESULTS.length);
+      setIndexedMatched(MOCK_RESULTS.length);
       setIndexLoaded(true);
-      return () => { alive = false; };
+      return undefined;
     }
-    getAllIndexed()
-      .then((rows) => { if (alive) { setIndexed(rows); setIndexLoaded(true); } })
-      .catch(() => { if (alive) { setIndexed([]); setIndexLoaded(true); } });
-    return () => { alive = false; };
-  }, [useMock]);
+    if (mode !== 'indexed') return undefined;
+    const generation = ++indexedSearchGen.current;
+    const timer = setTimeout(() => {
+      queryIndexed(query, { limit: 200 })
+        .then((result) => {
+          if (indexedSearchGen.current !== generation) return;
+          setIndexed(result.rows);
+          setIndexedCount(result.total);
+          setIndexedMatched(result.matched);
+          setIndexLoaded(true);
+        })
+        .catch(() => {
+          if (indexedSearchGen.current !== generation) return;
+          setIndexed([]);
+          setIndexedCount(0);
+          setIndexedMatched(0);
+          setIndexLoaded(true);
+        });
+    }, query ? 100 : 0);
+    return () => clearTimeout(timer);
+  }, [useMock, mode, query]);
   const refreshIndex = useCallback(async () => {
-    try { setIndexed(await getAllIndexed()); } catch { /* ignore */ }
-  }, []);
+    try {
+      const result = await queryIndexed(query, { limit: 200 });
+      setIndexed(result.rows);
+      setIndexedCount(result.total);
+      setIndexedMatched(result.matched);
+      setIndexLoaded(true);
+    } catch { /* ignore */ }
+  }, [query]);
 
   const bindCloseRef = useRef(null);
   const handleBindClose = useCallback((fn) => {
@@ -422,10 +444,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
      without hitting the network — anything below a few thousand rows
      ranks in <10ms. Empty query returns the full set sorted by most-
      recently-indexed. */
-  const indexedResults = useMemo(() => {
-    if (mode !== 'indexed') return [];
-    return searchIndexed(indexed, query, { limit: 200 });
-  }, [indexed, query, mode]);
+  const indexedResults = mode === 'indexed' ? indexed : [];
 
   const importedResults = useMemo(() => {
     if (mode !== 'imported') return [];
@@ -680,11 +699,11 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
           ? `${importedResults.length} imported match${importedResults.length === 1 ? '' : 'es'} for “${query}”`
           : `${importedRows.length} imported contact${importedRows.length === 1 ? '' : 's'} · ready for email${importSummary?.taskReady ? ` · ${importSummary.taskReady} task-ready` : ''}`)
     : mode === 'indexed'
-      ? (indexed.length === 0
+      ? (indexedCount === 0
           ? 'No locally-indexed contacts yet — run a search and click Index'
           : query
-            ? `${indexedResults.length} indexed match${indexedResults.length === 1 ? '' : 'es'} for “${query}” · press Enter to search server`
-            : `${indexed.length} indexed contact${indexed.length === 1 ? '' : 's'} · type to filter or press Enter to search server`)
+            ? `${indexedMatched} indexed match${indexedMatched === 1 ? '' : 'es'} for “${query}” · press Enter to search server`
+            : `${indexedCount} indexed contact${indexedCount === 1 ? '' : 's'} · type to filter or press Enter to search server`)
       : status === 'loading'
         ? 'Searching…'
         : status === 'ready' && results.length
@@ -869,8 +888,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
      last time this was run" (first run = the last 7 days), so the result
      set is exactly the clients who've ordered since the previous scan.
      The clock advances on every run so tomorrow's scan starts where this
-     one ended. Requires a saved filter literally named "My Clients".
-     The clock can be reset from the Settings page console: __gbScan.reset(). */
+     one ended. Requires a saved filter literally named "My Clients". */
   useEffect(() => {
     const unsub = actionRegistry.register({
       id: 'gb-crm-scan-recent-orders',
@@ -1275,7 +1293,7 @@ export function CRMSearch({ onClosed, bindClose, useMock: useMockProp }) {
           loadingMore={loadingMore}
           status={displayedStatus}
           query={query}
-          total={mode === 'indexed' ? indexed.length : mode === 'imported' ? importedRows.length : total}
+          total={mode === 'indexed' ? indexedMatched : mode === 'imported' ? importedRows.length : total}
           selected={selected}
           activeIdx={activeIdx}
           allChecked={allVisibleSelected}

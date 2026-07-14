@@ -124,7 +124,7 @@ export function SettingsPage() {
 
       <TourBox n={5} eyebrow="Power-user" title="Developer settings" live={<DevSnippet />} flip>
         <p>The long tail: <strong>119 registry-driven knobs</strong> — animation timing, draggable vs. centered per modal, the minimum-margin threshold, the catalog re-index interval, 3D viewer tuning. Most reps never open this section; the ones shown here are real rows from the registry.</p>
-        <p>One matters on day one: <strong>Email account host</strong> is the local part of your From address. It ships with a default that isn't you — set it before sending anything.</p>
+        <p>One matters on day one: <strong>Email account host</strong> is the local part of your From address. It starts blank and must be configured before Power Automate can send.</p>
       </TourBox>
 
       <h2 className="sec">Every feature toggle</h2>
@@ -133,8 +133,8 @@ export function SettingsPage() {
 
       <h2 className="sec">Also in Settings</h2>
       <ul>
-        <li><strong>User Presets</strong> — bundle settings and templates into a named preset, export it as JSON, import a teammate's. Scopes are separate checkboxes: <em>settings scopes overwrite on import; template scopes merge by id</em> (same id replaces, new id appends — your own templates are never deleted).</li>
-        <li><strong>Custom Pages</strong> — pick which CRM pages (dashboard, search, task list, …) the extension replaces with its own UI. Unchecked pages fall through to the original.</li>
+        <li><strong>Shared Settings Templates</strong> — choose scopes, name the template, and receive a revocable URL. A teammate pastes the URL, previews its contents, and chooses scopes to import. <em>Settings overwrite on import; template scopes merge by id</em> (same id replaces, new id appends — local-only templates are never deleted).</li>
+        <li><strong>Custom Pages</strong> — enable the extension's custom interface per page scope. The CRM scope covers every supported CRM takeover; disabled scopes use the original site.</li>
         <li><strong>Email signature</strong> — edited from the Manager sidebar; auto-appended to Power Automate sends (not to Outlook-fallback emails).</li>
       </ul>
 

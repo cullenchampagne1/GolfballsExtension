@@ -1,64 +1,74 @@
 {
   "manifest_version": 3,
   "name": "Golfballs.com Sales Toolkit",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApsGgTwjRq6hQeSoGlDpyMasggI2oqOt4ud6fFS4t2/msWZlic5axhibtC4Cos2lF7EO46ulwI3Zv3NXVdlIz3CJrP4p0OneHpU/BqBuZyiecFktTOyGPwjtYmRjpw/PoS+gNXLdQG56qXvEQVz24qudXuSZWia7TF5BiI2RszMx91IbqugrxNgKEiY7Xcf72gsasjhBPdXhmUndK5suIBc7hynVThvjvO+4JP5OLmtH0dBC2rfh9z6PrZbhYiP4fewQgRZIAdNvnqhQGTqaDHOZqA62qC+9o+/v77xqNEr9420wsBc+aIWF8t/z8k2a4nJ86lkXUwSbextrgO+FAuQIDAQAB",
+  "update_url": "https://api.cullenchampagne.com/extension/updates.xml",
   "version": "3.3",
   "description": "Email, proposal, CRM-workflow, and order tools for the golfballs.com admin CRM.",
   "permissions": [
-    "activeTab",
     "scripting",
     "storage",
-    "theme",
     "unlimitedStorage",
     "tabs",
     "clipboardWrite",
-    "webNavigation",
-    "identity",
-    "downloads",
-    "declarativeNetRequest"
+    "declarativeNetRequest",
+    "alarms"
   ],
   "host_permissions": [
-    "*://*.golfballs.com/*",
-    "*://*.icustomize.com/*",
-    "*://*.gbcadmin.com/*",
-    "*://snugzusa.com/*",
-    "*://*.snugzusa.com/*",
-    "*://hpgbrands.com/*",
-    "*://*.hpgbrands.com/*",
-    "*://*.customizationapplications.com/*",
-    "http://s.customizationapps.com/*",
+    "https://www.golfballs.com/*",
+    "https://api.golfballs.com/*",
+    "https://static.golfballs.com/*",
+    "https://www.icustomize.com/*",
+    "https://admin.icustomize.com/*",
+    "https://master.api.icustomize.com/*",
+    "https://production-private-api.icustomize.com/*",
+    "https://office.gbcadmin.com/*",
+    "https://operations.gbcadmin.com/*",
+    "https://snugzusa.com/*",
+    "https://*.snugzusa.com/*",
+    "https://hpgbrands.com/*",
+    "https://*.hpgbrands.com/*",
+    "https://www.customizationapplications.com/*",
     "https://s.customizationapps.com/*",
     "https://d1tp32r8b76g0z.cloudfront.net/*",
     "https://brmth7.a.searchspring.io/*",
-    "https://*.execute-api.us-east-2.amazonaws.com/*",
+    "https://7uyieah5s5.execute-api.us-east-2.amazonaws.com/dev/convert",
+    "https://51grploz6a.execute-api.us-east-2.amazonaws.com/production/admin/recordNote",
     "https://s3.amazonaws.com/*",
     "https://s3.us-east-2.amazonaws.com/*",
     "https://*.s3.amazonaws.com/*",
     "https://*.s3.us-east-2.amazonaws.com/*",
-    "https://graph.microsoft.com/*",
-    "https://login.microsoftonline.com/*",
-    "https://us-autocomplete-pro.api.smartystreets.com/*"
+    "https://us-autocomplete-pro.api.smartystreets.com/*",
+    "https://*.logic.azure.com/*",
+    "https://*.environment.api.powerplatform.com/*",
+    "https://api.cullenchampagne.com/*"
   ],
   "web_accessible_resources": [
     {
       "resources": ["editor.html", "playground.html", "custom-pages-sandbox.html", "sandbox.html", "react-dist/sandbox/sandbox-eval.js", "assets/photo_ball.jpg", "assets/golfball_model/Golf_ball.obj", "assets/poker_chip_model/PokerChip.obj", "assets/divot_tool_model/DivotTool.obj", "assets/bartender_tool_model/BartenderTool.obj", "assets/marker_model/BallMarker.obj", "assets/giftbox_model/GiftBox.obj", "assets/giftbox_model/GiftBox_Lever.obj", "assets/giftbox_model/GiftBox_Bartender.obj", "assets/giftbox_model/GiftBox_WoodPoker.obj", "assets/giftbox_model/GiftBox_WoodLever.obj", "assets/giftbox_model/wood_diff.jpg", "assets/metal_texture/worn_metal_rough.jpg", "assets/metal_texture/worn_metal_normal.png", "assets/tee_model/Tee.obj", "assets/golden_gate_hills_4k.exr", "assets/lilienstein_4k.exr", "assets/moonlit_golf_4k.exr", "assets/sunset_fairway_4k.exr", "assets/mockup_base.png"],
-      "matches": ["*://*.golfballs.com/*", "*://*.icustomize.com/*"]
+      "matches": [
+        "https://www.golfballs.com/*",
+        "https://api.golfballs.com/*",
+        "https://admin.icustomize.com/*",
+        "https://www.icustomize.com/*"
+      ]
     }
   ],
   "sandbox": {
     "pages": ["sandbox.html"]
   },
   "content_security_policy": {
-    "sandbox": "sandbox allow-scripts; script-src 'self' 'unsafe-eval'; child-src 'self';"
+    "sandbox": "sandbox allow-scripts; default-src 'none'; script-src 'self' 'unsafe-eval'; connect-src 'none'; img-src 'none'; style-src 'none'; font-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; form-action 'none'; base-uri 'none';"
   },
   "content_scripts": [
     {
-      "matches": ["*://*.golfballs.com/*"],
+      "matches": ["https://www.golfballs.com/*", "https://api.golfballs.com/*"],
       "js": ["src/vanilla/custom-page-boot.js"],
       "run_at": "document_start",
       "all_frames": false
     },
     {
-      "matches": ["*://*.golfballs.com/*"],
+      "matches": ["https://www.golfballs.com/*", "https://api.golfballs.com/*"],
       "js": [
         "theme.js",
         "src/vanilla/smart-detection.js",
@@ -92,9 +102,17 @@
       "all_frames": false
     },
     {
-      "matches": ["*://admin.icustomize.com/*"],
+      "matches": ["https://admin.icustomize.com/*"],
+      "js": ["iframe/auth-session-broker.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": ["https://admin.icustomize.com/*"],
       "js": [
         "theme.js",
+        "iframe/message-bridge.js",
         "iframe/note-sender.js",
         "iframe/date-utils.js",
         "iframe/calendar-bridge.js",
@@ -104,14 +122,19 @@
       "all_frames": true
     },
     {
-      "matches": ["*://*.golfballs.com/*", "*://*.gbcadmin.com/*"],
+      "matches": [
+        "https://www.golfballs.com/*",
+        "https://api.golfballs.com/*",
+        "https://office.gbcadmin.com/*",
+        "https://operations.gbcadmin.com/*"
+      ],
       "js": ["src/vanilla/proposal-net-hook.js"],
       "run_at": "document_start",
       "world": "MAIN",
       "all_frames": true
     },
     {
-      "matches": ["*://*.gbcadmin.com/*"],
+      "matches": ["https://office.gbcadmin.com/*", "https://operations.gbcadmin.com/*"],
       "js": ["theme.js", "react-dist/content/proposal-debug.js"],
       "all_frames": false
     }

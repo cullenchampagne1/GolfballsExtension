@@ -274,7 +274,7 @@ function EmailCaseSnippet() {
             </div>
             <MailCard initials="RK" hue={20} name="Rob King" addr="rdking3@bellsouth.net" time="Thu, Jun 11 · 7:09 PM" expanded
               body="Two of the dozen boxes from #4471829 showed up crushed — courier damage. Can you reship the damaged dozen before our event on the 22nd?" />
-            <MailCard initials="CC" hue={130} name="Cullen (Golfballs)" addr="cullen@loyaltylogo.com" time="Wed, Jun 10 · 4:02 PM" sent
+            <MailCard initials="AR" hue={130} name="Alex (Golfballs)" addr="alex@loyaltylogo.com" time="Wed, Jun 10 · 4:02 PM" sent
               body="Hi Rob — your order shipped today via UPS Ground…" />
           </div>
           <div data-demo="ev-reply"><ReplyBar /></div>
@@ -311,7 +311,7 @@ function ChatSnippet() {
             <div style={{ flex: 1, height: 1, background: 'var(--gb-border-subtle)' }} />
           </div>
           <ChatBubble side="left" initials="RK" hue={200} name="Rob King" time="2:14 PM" body="Hi — my promo code EVERY12GETS6 won't apply at checkout." />
-          <ChatBubble side="right" initials="CC" hue={130} name="Cullen · Golfballs" time="2:15 PM" body="That code needs 12+ dozen of qualifying logo balls. How many are you ordering?" />
+          <ChatBubble side="right" initials="AR" hue={130} name="Alex · Golfballs" time="2:15 PM" body="That code needs 12+ dozen of qualifying logo balls. How many are you ordering?" />
           <ChatBubble side="left" initials="RK" hue={200} name="Rob King" time="2:16 PM" body="Just 6 dozen Pro V1." />
           <div style={{ margin: '10px 0', padding: '8px 11px', background: 'var(--gb-warning-tint-soft)', border: '1px solid var(--gb-warning-tint-border)', borderRadius: 'var(--gb-r-md)', fontSize: 11.5, lineHeight: 1.5, color: 'var(--gb-text-secondary)' }}>
             <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: 0.5, textTransform: 'uppercase', color: 'var(--gb-warning-fg)', marginRight: 8 }}>Note</span>

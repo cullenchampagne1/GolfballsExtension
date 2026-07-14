@@ -185,6 +185,42 @@ export function parseTemplateBlob(text) {
   return list.map((t, i) => normalizeTemplate(t, i));
 }
 
+export const EMAIL_TEMPLATE_FILE_KIND = 'golfballs-email-template';
+export const EMAIL_TEMPLATE_FILE_VERSION = 1;
+export const EMAIL_TEMPLATE_FILE_MAX_BYTES = 256 * 1024;
+
+/** Create a portable email-template file. The server link is a convenience;
+ * this versioned JSON envelope is the durable, server-independent format. */
+export function buildEmailTemplateFile(template) {
+  const normalized = normalizeTemplate(template, 0);
+  return {
+    schemaVersion: EMAIL_TEMPLATE_FILE_VERSION,
+    kind: EMAIL_TEMPLATE_FILE_KIND,
+    createdAt: new Date().toISOString(),
+    template: normalized,
+  };
+}
+
+/** Parse only the current versioned file envelope. Raw template objects are
+ * intentionally rejected so imports never depend on an undocumented legacy
+ * shape or silently reinterpret an unrelated JSON file. */
+export function parseEmailTemplateFile(text) {
+  const source = String(text || '');
+  if (new TextEncoder().encode(source).byteLength > EMAIL_TEMPLATE_FILE_MAX_BYTES) {
+    throw new Error('Email template files must be 256 KB or smaller');
+  }
+  let raw;
+  try { raw = JSON.parse(source); }
+  catch (error) { throw new Error(`Not valid JSON — ${error.message}`); }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw) || raw.kind !== EMAIL_TEMPLATE_FILE_KIND) {
+    throw new Error('This is not a versioned Golfballs email template file');
+  }
+  if (raw.schemaVersion !== EMAIL_TEMPLATE_FILE_VERSION || !raw.template) {
+    throw new Error('This email template file version is not supported');
+  }
+  return normalizeTemplate(raw.template, 0);
+}
+
 /* Merge normalized templates into storage. Always appends (fresh ids). */
 export function importTemplates(templates) {
   return new Promise((resolve, reject) => {

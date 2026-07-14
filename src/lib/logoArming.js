@@ -47,16 +47,10 @@ function filenameFromPath(p) {
 function urlsFor(host, pathOrUrl) {
   if (!host || !pathOrUrl) return [];
   if (/^https?:\/\//i.test(pathOrUrl)) {
-    return [
-      pathOrUrl.replace(/^http:\/\//i, 'https://'),
-      pathOrUrl.replace(/^https:\/\//i, 'http://'),
-    ];
+    return [pathOrUrl.replace(/^http:\/\//i, 'https://')];
   }
   const path = pathOrUrl.replace(/^\/+/, '');
-  return [
-    `https://${host}/${path}`,
-    `http://${host}/${path}`,
-  ];
+  return [`https://${host}/${path}`];
 }
 
 function looksLikeIconToken(s) {
@@ -103,15 +97,11 @@ function findOverlayTokenOrPath(rawUrl) {
 
 function buildAbsoluteCandidates(tokenOrPath) {
   if (/^https?:\/\//i.test(tokenOrPath)) {
-    const base = [
-      tokenOrPath.replace(/^http:\/\//i,  'https://'),
-      tokenOrPath.replace(/^https:\/\//i, 'http://'),
-    ];
+    const base = [tokenOrPath.replace(/^http:\/\//i, 'https://')];
     const noSize = withoutSizeSuffix(tokenOrPath);
     return noSize !== tokenOrPath ? [
       ...base,
-      noSize.replace(/^http:\/\//i,  'https://'),
-      noSize.replace(/^https:\/\//i, 'http://'),
+      noSize.replace(/^http:\/\//i, 'https://'),
     ] : base;
   }
 
@@ -218,9 +208,8 @@ function findItemLinkForImage(img) {
 
 // ── Background fetch (CORS / mixed-content immune) ─────────────
 
-// Content-script <img> tags get blocked as mixed content when the asset
-// is http://s.customizationapps.com/... on an https CRM page, so every
-// fetch routes through the background service worker. The dataUrl it
+// Legacy HTTP asset tokens are upgraded to HTTPS before every request, and
+// fetches route through the background service worker. The dataUrl it
 // returns is same-origin, keeping the modal's canvas eyedropper CORS-clean.
 function loadImageViaBackground(url, onSuccess, onFail) {
   chrome.runtime.sendMessage(
@@ -305,13 +294,6 @@ function extractOriginalFilePath(text, cropGuid) {
   return m2 ? m2[1] : null;
 }
 
-// Resolution tracing — content scripts log to the page's own console, so these
-// lines show up in DevTools. Silence with:  window.__gbLogoQuiet = true
-function LOG(...a) {
-  if (typeof window !== 'undefined' && window.__gbLogoQuiet) return;
-  try { console.log('%c[gb-logo]', 'color:#6e901d;font-weight:700', ...a); } catch { /* ignore */ }
-}
-
 // Resolve the express / custom-logo order's RAW upload from its design state.
 // Calls done(dataUrl, url) on success, or done(null) when there's no order
 // context or the lookup/fetch fails — so the caller can fall through to the
@@ -322,34 +304,30 @@ function resolveExpressOriginal(rawSrc, done) {
   const cropGuid = om ? om[0].split('/').pop() : null;
   const messageId = findOrderMessageId();
   if (!messageId || typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) {
-    LOG('express: no order context (no messageID on page) -> skip');
     return done(null);
   }
-  LOG('express: editOrder lookup, messageID=' + messageId + (cropGuid ? ', cropGuid=' + cropGuid : ' (no cropGuid)'));
   let settled = false;
   const finish = (du, url) => { if (settled) return; settled = true; clearTimeout(timer); done(du || null, url || null); };
-  const timer = setTimeout(() => { LOG('express: editOrder timed out (6s)'); finish(null); }, 6000);
+  const timer = setTimeout(() => finish(null), 6000);
   try {
     chrome.runtime.sendMessage(
       { action: 'chargeApiProxy', url: `${API.MASTER}/admin/editOrder`, method: 'PUT', body: { messageID: messageId } },
       (resp) => {
         if (chrome.runtime.lastError || !resp || !resp.ok || !resp.text) {
-          LOG('express: editOrder request failed (' + (chrome.runtime.lastError?.message || ('status ' + (resp && resp.status))) + ')');
           return finish(null);
         }
         const filePath = extractOriginalFilePath(resp.text, cropGuid);
-        if (!filePath) { LOG('express: no Source/CustomerUploads path in order state'); return finish(null); }
+        if (!filePath) return finish(null);
         const rawUrl = 'https://static.golfballs.com/' + filePath.replace(/^\/+/, '');
-        LOG('express: raw upload -> ' + rawUrl);
         try {
           chrome.runtime.sendMessage({ action: 'proxyFetchImage', url: rawUrl }, (r) => {
             if (r && r.ok && r.dataUrl) finish(r.dataUrl, rawUrl);
-            else { LOG('express: raw upload fetch failed'); finish(null); }
+            else finish(null);
           });
-        } catch (e) { LOG('express: raw upload fetch threw', e); finish(null); }
+        } catch (e) { finish(null); }
       },
     );
-  } catch (e) { LOG('express: sendMessage threw', e); finish(null); }
+  } catch (e) { finish(null); }
 }
 
 // ── Click → resolve logo → open the React Image Preview ───────
@@ -362,12 +340,8 @@ function resolveExpressOriginal(rawSrc, done) {
 // error state — it never spins on "Resolving image…" forever.
 function extractAndShow(rawSrc, directUrl, itemLink) {
   if (typeof window.__gbOpenImagePreview !== 'function') {
-    console.error('[gb-logo] __gbOpenImagePreview missing — image-preview.js not loaded?');
     return;
   }
-  LOG('---- resolve start ----');
-  LOG('  src    =', rawSrc);
-  LOG('  linked =', directUrl || '(none)');
 
   window.__gbOpenImagePreview({ pending: true, itemLink });
 
@@ -378,7 +352,6 @@ function extractAndShow(rawSrc, directUrl, itemLink) {
     // would re-trigger the crossOrigin error in the modal's <img>.
     if (delivered || !isImageDataUrl(dataUrl)) return false;
     delivered = true;
-    LOG('delivered ->', url || '(dataURL)');
     if (typeof window.__gbImagePreviewReplace === 'function') {
       window.__gbImagePreviewReplace({ url: url || '', dataUrl });
     }
@@ -389,11 +362,11 @@ function extractAndShow(rawSrc, directUrl, itemLink) {
   const FETCH_CAP_MS = 3000;
   const bgFetch = (url, cb) => {
     let settled = false;
-    const settle = (du, why) => { if (settled) return; settled = true; if (why) LOG('  -', why + ':', url); cb(du); };
-    const timer = setTimeout(() => settle(null, 'miss (3s cap)'), FETCH_CAP_MS);
+    const settle = (du) => { if (settled) return; settled = true; cb(du); };
+    const timer = setTimeout(() => settle(null), FETCH_CAP_MS);
     loadImageViaBackground(url,
       (du) => { clearTimeout(timer); settle(du); },
-      (err) => { clearTimeout(timer); settle(null, 'miss (' + (err || 'fetch error') + ')'); },
+      () => { clearTimeout(timer); settle(null); },
     );
   };
 
@@ -409,8 +382,7 @@ function extractAndShow(rawSrc, directUrl, itemLink) {
   // render" behaviour that the ordered-resolver rewrite dropped.)
   if (directUrl) {
     steps.push((next) => {
-      LOG('primary: linked original file', directUrl);
-      bgFetch(directUrl, (du) => { if (!deliver(du, directUrl)) { LOG('primary: miss'); next(); } });
+      bgFetch(directUrl, (du) => { if (!deliver(du, directUrl)) next(); });
     });
   }
 
@@ -419,10 +391,8 @@ function extractAndShow(rawSrc, directUrl, itemLink) {
   // iframe loaded so chargeApiProxy can scavenge the JWT (see
   // resolveExpressOriginal) — without it this misses and we fall through.
   steps.push((next) => {
-    LOG('method B (express raw upload): start');
     resolveExpressOriginal(rawSrc, (du, url) => {
       if (deliver(du, url)) return;
-      LOG('method B: miss');
       next();
     });
   });
@@ -436,7 +406,6 @@ function extractAndShow(rawSrc, directUrl, itemLink) {
   if (tokenOrPath) {
     const candidates = buildAbsoluteCandidates(tokenOrPath).slice(0, 32);
     steps.push((next) => {
-      LOG('method A (overlay token):', candidates.length, 'candidate host(s), parallel');
       if (!candidates.length) return next();
       let settled = false;
       let remaining = candidates.length;
@@ -444,17 +413,14 @@ function extractAndShow(rawSrc, directUrl, itemLink) {
         bgFetch(url, (du) => {
           if (settled) return;
           if (isImageDataUrl(du)) { settled = true; deliver(du, url); }
-          else if (--remaining === 0) { settled = true; LOG('method A: all candidates missed'); next(); }
+          else if (--remaining === 0) { settled = true; next(); }
         });
       });
     });
-  } else {
-    LOG('method A (overlay token): no token in src -> skipped');
   }
 
   // Last resort — the page's own composite render (what the page already shows).
   steps.push((next) => {
-    LOG('last resort: page composite', rawSrc);
     bgFetch(rawSrc, (du) => { if (!deliver(du, rawSrc)) next(); });
   });
 
@@ -464,7 +430,6 @@ function extractAndShow(rawSrc, directUrl, itemLink) {
   const run = () => {
     if (delivered) return;
     if (s >= steps.length) {
-      LOG('FAILED: all methods + fallbacks missed -> showing error state');
       if (typeof window.__gbImagePreviewReplace === 'function') window.__gbImagePreviewReplace({ failed: true });
       return;
     }

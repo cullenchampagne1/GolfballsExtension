@@ -324,9 +324,8 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
       handler: async () => {
         // The shelf's ToastHost is mounted with installGlobal=true,
         // so window.__gbToast is set as soon as the shelf renders.
-        // findPhone itself handles the (now-rare) case where it's
-        // still undefined — just bails with a console.warn — so we
-        // don't pre-gate the call here.
+        // findPhone itself handles the rare missing-host case, so we do not
+        // pre-gate the call here.
         const links = _readOrderLinks();
         await findPhone({
           contactName:     _readContactName(),

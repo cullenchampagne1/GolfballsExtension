@@ -363,7 +363,7 @@
       ['h.sum(arr, key?) · h.pick(arr, key)', 'Total / pluck a field across a list'],
       ['h.parseNumber / parseDate / normalizePhone', 'Coerce messy values'],
       ['await h.fetchJson(url) · h.fetchText(url)', 'GET a URL through the background (CORS-safe)'],
-      ['await h.send(action, payload)', 'Call a privileged background action'],
+      ['await h.fetchText(url)', 'Read text from an allowlisted HTTPS resource'],
       ['h.dom(sel) · h.domAll(sel) · h.domText(sel)', 'Read straight from the live page DOM'],
     ];
     return (

@@ -1,4 +1,4 @@
-// note-sender.js — AdminSession token capture + direct API note submission
+// note-sender.js — typed client for authenticated note submission
 // Runs inside admin.icustomize.com iframes
 
 // Guard: set the ready flag on first load (content scripts inject once per frame)
@@ -7,49 +7,38 @@ window.__gbIframeReady = true;
 
 
   // ═══════════════════════════════════════════════════════
-  // QUICK NOTES INJECTOR (API BYPASS METHOD)
+  // QUICK NOTES INJECTOR
   // ═══════════════════════════════════════════════════════
 
-  // --- THE TOKEN THIEF (FETCH INTERCEPTOR) --- //
-  /* We wrap fetch to harvest the AdminSession bearer the admin app already
-     sends on its own API calls, so we can replay it on the Notes API.
-     Scope is deliberately narrow: only requests bound for icustomize hosts
-     are inspected — unrelated requests this frame makes (analytics, CDNs,
-     anything else) are passed straight through untouched, never snooped.
-     The whole inspection is wrapped in try/catch so a malformed headers
-     object can never break the page's real fetch. */
-  let __gbStolenToken = null;
-  const __originalFetch = window.fetch;
-
-  const __gbIsIcustomizeReq = (resource) => {
-    try {
-      const url = typeof resource === 'string' ? resource
-                : (resource && resource.url) ? resource.url : '';
-      return /(^|\.)icustomize\.com$/i.test(new URL(url, location.href).hostname);
-    } catch { return false; }
-  };
-
-  window.fetch = function(...args) {
-    try {
-      const [resource, config] = args;
-      if (__gbIsIcustomizeReq(resource)) {
-        const headers = config && config.headers;
-        if (headers instanceof Headers) {
-          if (headers.has('adminsession')) __gbStolenToken = headers.get('adminsession');
-        } else if (headers) {
-          for (const key in headers) {
-            if (key.toLowerCase() === 'adminsession') __gbStolenToken = headers[key];
-          }
-        }
-        // A Request object may carry the header directly.
-        if (!__gbStolenToken && typeof Request !== 'undefined' && resource instanceof Request
-            && resource.headers && resource.headers.has('adminsession')) {
-          __gbStolenToken = resource.headers.get('adminsession');
-        }
+  /**
+   * Sends a typed operation to the MAIN-world authentication broker. The
+   * broker returns only bounded operation results; authentication headers are
+   * never copied into this isolated content-script world or extension storage.
+   * @param {object} request Approved broker operation.
+   * @returns {Promise<object>} Bounded operation result.
+   */
+  function __gbAuthBrokerRequest(request) {
+    const requestId = `${Date.now().toString(36)}_${crypto.getRandomValues(new Uint32Array(2)).join('_')}`;
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        document.removeEventListener('GB_AUTH_BROKER_RESPONSE', onResponse);
+        resolve({ ok: false, status: 0, error: 'Authenticated iCustomize bridge did not respond' });
+      }, 15_000);
+      function onResponse(event) {
+        if (!event.detail || event.detail.requestId !== requestId) return;
+        clearTimeout(timeout);
+        document.removeEventListener('GB_AUTH_BROKER_RESPONSE', onResponse);
+        resolve(event.detail.result || { ok: false, status: 0, error: 'Empty authenticated response' });
       }
-    } catch { /* never let inspection break the real fetch */ }
-    return __originalFetch.apply(this, args);
-  };
+      document.addEventListener('GB_AUTH_BROKER_RESPONSE', onResponse);
+      document.dispatchEvent(new CustomEvent('GB_AUTH_BROKER_REQUEST', { detail: { requestId, request } }));
+    });
+  }
+
+  async function __gbGetAuthenticatedIdentity() {
+    const result = await __gbAuthBrokerRequest({ action: 'identity' });
+    return result && result.ok ? result.identity : null;
+  }
 
   /**
    * Locates the "New" button in the notes panel that triggers the note-entry
@@ -66,39 +55,6 @@ window.__gbIframeReady = true;
   }
 
   /**
-   * Scans a Web Storage object (localStorage or sessionStorage) for a value
-   * that contains a JWT (identified by the "eyJ" base64 header prefix).
-   * @param {Storage} storage - The storage object to scan.
-   * @returns {string|null} The extracted JWT string, or null if not found.
-   */
-  function __gbFindJWTInStorage(storage) {
-      for (let i = 0; i < storage.length; i++) {
-          try {
-              const val = storage.getItem(storage.key(i));
-              if (typeof val === 'string' && val.includes('eyJ')) {
-                  const match = val.match(/(eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)/);
-                  if (match) return match[1];
-              }
-          } catch(e) {}
-      }
-      return null;
-  }
-
-  /**
-   * Retrieves the active admin session token using a prioritised strategy:
-   * intercepted fetch token → localStorage → sessionStorage → cookie.
-   * @returns {string|null} The JWT token string, or null if unavailable.
-   */
-  function __gbGetAuthToken() {
-    if (__gbStolenToken) return __gbStolenToken;
-    let token = __gbFindJWTInStorage(localStorage) || __gbFindJWTInStorage(sessionStorage);
-    if (token) return token;
-    const match = document.cookie.match(new RegExp('(^| )adminsession=([^;]+)', 'i'));
-    if (match) return match[2];
-    return null; 
-  }
-
-  /**
    * Submits a quick note directly to the icustomize Notes API, bypassing the
    * page UI. Animates the triggering button through saving/saved/error states
    * and reloads the page on success.
@@ -107,86 +63,54 @@ window.__gbIframeReady = true;
    * @returns {Promise<void>}
    */
   async function __gbSubmitNoteDirectly(note, buttonElement) {
-    const token = __gbGetAuthToken();
-    if (!token) {
-        alert("[GB] Could not locate AdminSession token. Please try manually reloading the iframe.");
-        return;
-    }
-    
     const urlParams = new URLSearchParams(window.location.search);
     const entityID = urlParams.get('entityID');
     const entityName = urlParams.get('entityName') || 'order';
-    
+
     if (!entityID) {
         alert("[GB] Could not find Order ID in the URL. Are you on an order page?");
         return;
     }
-    
-    let empId = "0";
-    let empName = "Unknown";
-    try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        empId = payload.adminUserID || "0";
-        empName = payload.UserName || "Unknown";
-    } catch (e) {}
 
     const now = new Date();
     const dateStr = now.toLocaleDateString();
     const timeStr = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
     const replace = s => (s || '').replace(/\{\{date\}\}/gi, dateStr).replace(/\{\{time\}\}/gi, timeStr);
-    
-    const payload = {
-        entityName: entityName,
-        entityID: entityID,
-        data: {
-            audience: note.audienceVal ? [note.audienceVal] : [],
-            scope: "",
-            subject: replace(note.subject),
-            body: replace(note.body),
-            employee_id: String(empId),
-            employee_name: empName,
-            hidden: false,
-            media: []
-        }
-    };
 
     // --- Modern Animation Trigger: Saving ---
     const stateText = buttonElement.querySelector('.gb-text-state');
     if (stateText) stateText.textContent = "Saving...";
     buttonElement.classList.add('show-state', 'is-saving');
-    
+
     try {
-        const response = await fetch("https://51grploz6a.execute-api.us-east-2.amazonaws.com/production/admin/recordNote", {
-            method: "PUT",
-            headers: {
-                "accept": "application/json, text/plain, */*",
-                "adminsession": token,
-                "content-type": "application/json;charset=UTF-8",
-                "sitekey": "golfballs"
-            },
-            body: JSON.stringify(payload)
+        const response = await __gbAuthBrokerRequest({
+            action: 'recordNote',
+            entityName,
+            entityID,
+            note: {
+                subject: replace(note.subject),
+                body: replace(note.body),
+                audienceVal: note.audienceVal || ''
+            }
         });
-        
+
         if (response.ok) {
-            console.log(`[GB] API Note submitted successfully for Order ${entityID}!`);
-            
             // --- Modern Animation Trigger: Success ---
             if (stateText) stateText.textContent = "Saved ✓";
             buttonElement.classList.remove('is-saving');
             buttonElement.classList.add('is-saved');
-            
+
             setTimeout(() => window.location.reload(), 600);
         } else {
-            console.error("[GB] Failed to submit note:", response.status, await response.text());
-            alert("Failed to save note via API. Check console for details.");
-            
+            const detail = response.error ? `: ${response.error}` : '';
+            alert(`Failed to save note via API (HTTP ${response.status || 0})${detail}.`);
+
             // --- Revert Animation on Fail ---
             buttonElement.classList.remove('show-state', 'is-saving');
         }
     } catch (error) {
-        console.error("[GB] API Error:", error);
         alert("Network error while saving note.");
-        
+
         // --- Revert Animation on Fail ---
         buttonElement.classList.remove('show-state', 'is-saving');
     }

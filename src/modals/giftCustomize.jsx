@@ -392,6 +392,8 @@ function Checkbox({ checked, onClick, label, note }) {
 
 /* renders an SVG-string thumbnail (currentColor) at tile size */
 function SvgArt({ inner, viewBox = '0 0 84 48', w = 56, h = 32 }) {
+  /* SECURITY-AUDITED: `inner` comes only from the frozen, source-authored
+     alignment-art registry; no API, storage, or user input reaches it. */
   return <svg viewBox={viewBox} width={w} height={h} preserveAspectRatio="xMidYMid meet" dangerouslySetInnerHTML={{ __html: inner }} />;
 }
 /* selectable grid of SVG-art style tiles (alignment graphics) */

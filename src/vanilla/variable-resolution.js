@@ -308,11 +308,6 @@
         display = raw;
       }
       rawValues[name] = raw;
-      /* ── TEMP DEBUG (catalog-match diagnosis) — remove when fixed ── */
-      try {
-        const preview = (raw && typeof raw === 'object') ? raw : String(raw).slice(0, 200);
-        console.log(`[GB var-debug] ${name} (${def.type}) =`, preview);
-      } catch {}
       /* Smart options run BEFORE any per-variable validation that
          consumers downstream might apply. Order is load-bearing:
          a path field marked `validate.required` would otherwise
@@ -328,16 +323,6 @@
         try { onProgress({ kind: 'var', name, value: resolved[name] }); } catch {}
       }
     }
-
-    /* ── TEMP DEBUG — persist the whole resolved set so __gbDownloadDebug()
-       can export it as a JSON file (resolution runs on the CRM page, not the
-       popup, so a file is easier to collect than cross-page console). ── */
-    try {
-      if (typeof window !== 'undefined') window.__gbVarDebug = rawValues;
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.set({ gbVarsDebug: { ts: Date.now(), url: (typeof location !== 'undefined' ? location.href : ''), vars: rawValues } });
-      }
-    } catch {}
 
     return { resolved, toEmail };
   }
@@ -483,9 +468,9 @@
     if (!rules || rules.length === 0) return false;
     return rules.every(({ selector, operator, value }) => {
       let elText = '';
-      try { 
-        const el = doc.querySelector(selector); 
-        elText = el ? ((doc === document && typeof getTextOf === 'function') ? getTextOf(el).toLowerCase() : (el.innerText || el.textContent || '').toLowerCase()) : ''; 
+      try {
+        const el = doc.querySelector(selector);
+        elText = el ? ((doc === document && typeof getTextOf === 'function') ? getTextOf(el).toLowerCase() : (el.innerText || el.textContent || '').toLowerCase()) : '';
       } catch {}
       const val = (value || '').toLowerCase().trim();
       switch (operator) {

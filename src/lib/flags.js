@@ -23,7 +23,6 @@ export const FEATURE_DEFAULTS = {
   phoneFinderEnabled:       true,
   emailTemplatesEnabled:    true,
   powerAutomateEnabled:     false,
-  powerAutomateUrl:         '',
   // ── Features that previously had no flag (now toggleable) ──
   actionsShelfEnabled:      true,   // the bottom-right quick-actions shelf itself
   giftCatalogEnabled:       true,   // Gifting Catalog (+ Customize + Monogram)
@@ -91,14 +90,11 @@ export function loadFlags() {
     try {
       chrome.storage.local.get('featureFlags', (d) => {
         const saved = d.featureFlags || {};
-        // Migrate the legacy directSendUrl key written by older builds.
-        // replyWithTemplate/directSendEnabled were phased out in favor
-        // of a per-email setting and intentionally are not migrated.
-        if (saved.directSendUrl && !saved.powerAutomateUrl) {
-          saved.powerAutomateUrl = saved.directSendUrl;
-        }
-        // Strip phased-out keys so they don't bloat storage with stale
-        // values that no code consults.
+        // Bearer-style URLs migrate through credentials.js. Do not broadcast
+        // or return them as feature flags.
+        delete saved.powerAutomateUrl;
+        delete saved.directSendUrl;
+        // Strip phased-out keys so they do not bloat storage.
         delete saved.replyWithTemplateEnabled;
         delete saved.directSendEnabled;
         delete saved.developerMode;
@@ -114,10 +110,13 @@ export function loadFlags() {
 /** Persist flags and broadcast them to open golfballs.com tabs. */
 export function saveFlags(flags) {
   try {
-    chrome.storage.local.set({ featureFlags: flags });
-    chrome.tabs.query({ url: ['*://*.golfballs.com/*'] }, (tabs) => {
+    const safeFlags = { ...flags };
+    delete safeFlags.powerAutomateUrl;
+    delete safeFlags.directSendUrl;
+    chrome.storage.local.set({ featureFlags: safeFlags });
+    chrome.tabs.query({ url: ['https://www.golfballs.com/*', 'https://api.golfballs.com/*'] }, (tabs) => {
       (tabs || []).forEach((t) => {
-        try { chrome.tabs.sendMessage(t.id, { action: 'GB_FEATURE_FLAGS', flags }); } catch {}
+        try { chrome.tabs.sendMessage(t.id, { action: 'GB_FEATURE_FLAGS', flags: safeFlags }); } catch {}
       });
     });
   } catch { /* not in an extension page — nothing to persist */ }

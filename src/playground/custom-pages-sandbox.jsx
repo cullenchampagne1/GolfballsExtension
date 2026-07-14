@@ -34,7 +34,7 @@ const CONTACT_DATA = {
     name: 'Cooley Insurance', webAddress: 'https://cooleyins.com',
     mainAddress: '123 Central Ave', city: 'Hot Springs', postal: '71901',
     state: 'AR', country: 'US', creditApproved: '2022-06-01T00:00:00',
-    creditRequirements: 'Net 30', territoryName: 'P5', salesRep: 'Cullen',
+    creditRequirements: 'Net 30', territoryName: 'P5', salesRep: 'Demo Rep',
     userType: 'Corporate', createdBy: 'GabrielM', createdDate: '2022-05-23T00:00:00',
     contextNotes: 'Insurance agency, logo balls + gifts.', modifiedDate: '2026-05-20T14:15:00',
     taxExempt: false, partnerCampaign: 'Spring Promo', industry: 'Financial', linkedInUrl: '',
@@ -190,13 +190,23 @@ function Sandbox() {
     if (!host) return;
     const reg = window.__gbCustomPages && window.__gbCustomPages[activePage];
     if (!reg || typeof reg.render !== 'function') {
-      host.innerHTML = '<div style="padding:40px;color:#e25a5a;font-family:monospace">Page bundle not registered: ' + activePage + '</div>';
+      host.replaceChildren();
+      const error = document.createElement('div');
+      error.style.cssText = 'padding:40px;color:#e25a5a;font-family:monospace';
+      error.textContent = `Page bundle not registered: ${activePage}`;
+      host.appendChild(error);
       return;
     }
     if (!stores.current[activePage]) stores.current[activePage] = makeStore(activeData);
     else stores.current[activePage].set(activeData);
     let cleanup = null;
-    try { cleanup = reg.render(host, { pageId: activePage, store: stores.current[activePage] }); } catch (e) { host.innerHTML = '<pre style="padding:24px;color:#e25a5a">' + (e && e.stack || e) + '</pre>'; }
+    try { cleanup = reg.render(host, { pageId: activePage, store: stores.current[activePage] }); } catch (e) {
+      host.replaceChildren();
+      const error = document.createElement('pre');
+      error.style.cssText = 'padding:24px;color:#e25a5a';
+      error.textContent = String((e && e.stack) || e);
+      host.appendChild(error);
+    }
     return () => { try { cleanup && cleanup(); } catch (e) {} try { host.innerHTML = ''; } catch (e) {} };
   }, [activePage]);
 

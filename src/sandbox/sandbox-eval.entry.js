@@ -11,7 +11,7 @@
      • pure ones (fmt, regex, coalesce, parsers, pick, sum,
        catalog.priceAt) run locally — imported / mirrored from
        page-engine/code-runtime.js (keep in sync).
-     • privileged ones that need chrome or the page DOM (send,
+     • approved read-only ones that need chrome or the page DOM (
        fetchText, fetchJson, catalog.search/find, domText) are PROXIED
        back to the bridge over postMessage and awaited.
      • h.dom / h.domAll return live Elements, which can't cross the
@@ -33,17 +33,24 @@ import {
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const MAX_BODY_LENGTH = 8192;
 const EXEC_TIMEOUT_MS = 10000;
+const CHANNEL = decodeURIComponent(location.hash.slice(1));
+
+if (!/^[a-f0-9]{48}$/.test(CHANNEL)) throw new Error('invalid sandbox channel');
 
 /* Mirror of code-runtime.js BLOCKED_PATTERNS — keep in sync. */
 const BLOCKED_PATTERNS = [
   { re: /\bwhile\s*\(\s*true\s*\)/i, reason: 'infinite while loop' },
   { re: /\bfor\s*\(\s*;\s*;\s*\)/,   reason: 'infinite for loop' },
   { re: /\bfetch\s*\(/,              reason: 'use h.fetchJson / h.fetchText instead of fetch()' },
-  { re: /\bchrome\b/,                reason: 'chrome APIs not allowed — use h.send()' },
+  { re: /\bchrome\b/,                reason: 'chrome APIs not allowed' },
   { re: /\bimport\s*\(/,             reason: 'dynamic import not allowed' },
   { re: /\beval\s*\(/,               reason: 'eval not allowed' },
+  { re: /\bFunction\s*\(/,           reason: 'Function constructor not allowed' },
   { re: /\bsetTimeout\s*\(/,         reason: 'setTimeout not allowed' },
   { re: /\bsetInterval\s*\(/,        reason: 'setInterval not allowed' },
+  { re: /\bnew\s+Worker\b/,           reason: 'Worker not allowed' },
+  { re: /\bXMLHttpRequest\b/,         reason: 'XHR not allowed' },
+  { re: /\b(?:window|globalThis|parent|top|opener|postMessage)\b/, reason: 'ambient window access not allowed' },
 ];
 function precheck(body) {
   if (typeof body !== 'string') throw new Error('code body must be a string');
@@ -81,7 +88,12 @@ function catalogPriceAt(product, qty = 1) {
 /* ── privileged-helper proxy plumbing ── */
 let callSeq = 0;
 const pending = new Map(); // callId → { resolve, reject }
-function post(msg) { try { (window.parent || window).postMessage(msg, '*'); } catch { /* no parent */ } }
+function post(msg) {
+  try {
+    /* SECURITY-AUDITED: the sandbox document has an opaque origin. */
+    window.parent.postMessage({ ...msg, channel: CHANNEL }, '*');
+  } catch { /* no parent */ }
+}
 
 function makeProxy(jobId, path) {
   return (...args) => new Promise((resolve, reject) => {
@@ -101,7 +113,6 @@ function buildHelpers(jobId) {
   return Object.freeze({
     fmt, coalesce, regex, parseNumber, parseDate, normalizePhone, pick, sum,
     /* privileged → proxied to the bridge (which has chrome + DOM) */
-    send:      makeProxy(jobId, 'send'),
     fetchText: makeProxy(jobId, 'fetchText'),
     fetchJson: makeProxy(jobId, 'fetchJson'),
     parse:     makeProxy(jobId, 'parse'),
@@ -145,7 +156,7 @@ async function runJob(id, body, ctx, vars) {
 
 window.addEventListener('message', (ev) => {
   const m = ev.data;
-  if (!m || m.__gbSandbox == null) return;
+  if (ev.source !== window.parent || !m || m.__gbSandbox == null || m.channel !== CHANNEL) return;
   if (m.__gbSandbox === 'run') { runJob(m.id, m.body, m.ctx, m.vars); return; }
   if (m.__gbSandbox === 'hresult') {
     const p = pending.get(m.callId);

@@ -341,7 +341,7 @@ function HelperTable() {
     ['h.titleCase(s)', 'Re-case text to Title Case'],
     ['h.parseNumber(s) · h.parseDate(s) · h.normalizePhone(s)', 'Coerce messy values — phone becomes (###) ###-####'],
     ['await h.fetchText(url) · h.fetchJson(url)', 'GET a URL through the background worker (CORS-safe, allow-listed hosts)'],
-    ['await h.send(action, payload)', 'Call a privileged background action'],
+    ['await h.fetchText(url)', 'Read text from an allowlisted HTTPS resource'],
     ['await h.catalogSearch(q, {limit}) · h.catalogFind(q)', 'Search the gift catalog by name similarity'],
   ];
   return (

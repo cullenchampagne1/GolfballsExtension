@@ -67,7 +67,7 @@
       "icon": "alert",
       "tiers": ["beginner", "advanced"],
       "keywords": ["missing button", "not showing", "shortcut not working", "shelf missing", "modal gone"],
-      "summary": "Usually a feature toggle, the wrong page type, or (for admins) a hidden setting.",
+      "summary": "Usually a feature toggle, the wrong page type, or an administrator-managed policy setting.",
       "covers": [],
       "body": {
         "beginner": [
@@ -79,7 +79,7 @@
           ] }
         ],
         "advanced": [
-          { "type": "callout", "kind": "info", "text": "If the toggle itself is missing from Settings, an admin hid it via secret settings. Run __gbSecret.list() in the Settings page console to see what's hidden, and __gbSecret.show('key') to restore it." }
+          { "type": "callout", "kind": "info", "text": "If the toggle itself is missing, the authenticated server policy marked it hidden. A RevStack administrator can change golfballs-extension-configuration.yaml; the extension applies the next valid sync automatically." }
         ]
       },
       "related": ["feature-toggles", "hidden-settings", "actions-shelf"]
@@ -150,21 +150,21 @@
       "icon": "alert",
       "tiers": ["intermediate", "advanced"],
       "keywords": ["settings gone", "toggle missing", "reset", "disappeared", "lost settings"],
-      "summary": "Three suspects: an imported preset overwrote them, an admin hid them, or the dev section was collapsed via console command.",
+      "summary": "Two suspects: an imported preset overwrote them or the remote administrator policy manages them.",
       "covers": [],
       "body": {
         "intermediate": [
           { "type": "list", "items": [
             "Imported a preset recently? Settings scopes overwrite on import. Re-apply your own preset if you saved one — exporting a personal backup preset first is the habit that prevents this.",
-            "A specific toggle is gone (not just off)? It was hidden via secret settings — ask your admin, or see below.",
-            "The whole Developer Settings section is gone? Someone ran __gbSecret.hideDev(), which also resets dev values to defaults."
+            "A specific toggle is gone (not just off)? The server policy hides it — ask a RevStack administrator.",
+            "The whole Developer Settings section is gone? The server policy hides that section for non-administrator installations."
           ] }
         ],
         "advanced": [
-          { "type": "callout", "kind": "info", "text": "From the Settings page console: __gbSecret.list() shows hidden keys, __gbSecret.show('key') restores one, __gbSecret.clear() restores everything, __gbSecret.showDev() brings the dev section back." }
+          { "type": "callout", "kind": "info", "text": "Policy changes belong in golfballs-extension-configuration.yaml. The previous console hide/show commands were removed so local users cannot override an administrator disable." }
         ]
       },
-      "related": ["presets", "hidden-settings", "console-commands"]
+      "related": ["presets", "hidden-settings"]
     }
   ]
 }

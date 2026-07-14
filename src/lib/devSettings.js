@@ -115,16 +115,16 @@ export const DEV_SETTINGS = [
      The local part (before @) used when constructing the `from`
      address for the PA flow. The configured sender accounts in
      src/lib/sender.js carry just the domain; we glue the host on
-     here. Empty falls back to the registry default. Different
+     here. Empty is invalid for Power Automate delivery. Different
      reps run the same extension under their own mailbox, so this
      stays per-machine (devSettings) rather than per-template. */
   {
     key:     'email.localPart',
     label:   'Email account host',
-    desc:    'Local part of the sender address (the bit before @). Combined with the chosen sender account at send time — e.g. "cullen" + "golfballs.com" → cullen@golfballs.com.',
+    desc:    'Required for Power Automate delivery. Enter the local part of your sender address (the portion before @), for example "alex".',
     type:    'string',
-    default: 'cullen',
-    placeholder: 'cullen',
+    default: '',
+    placeholder: 'your.name',
   },
 
   /* ── 3D viewer ball defaults ──────────────────────────────────

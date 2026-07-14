@@ -9,7 +9,7 @@
      vars   the variables resolved BEFORE this one (by varOrder), so
             a code var can build on earlier results — { name: value }
      h      a frozen helpers namespace — fmt.*, coalesce, regex, the
-            async server helpers (send / fetchText / fetchJson), and
+            approved read-only helpers (fetchText / fetchJson), and
             DOM access bound to the resolving page (dom / domAll /
             domText / doc)
 
@@ -24,11 +24,11 @@
    The resolver picks the async path when the variable def is marked
    `async` (the editor sets that when the body uses await / h.server).
 
-   Security stance — soft sandbox.
-   ──────────────────────────────────
-   Templates are authored by the rep themselves and never imported
-   from outside sources today. The threat model is "I might write a
-   bad expression and break the renderer." Goals here:
+   Security stance — isolated sandbox.
+   ───────────────────────────────────
+   Live extension execution happens in the manifest sandbox through
+   sandbox-bridge.js. The threat model includes shared or malformed
+   template code, so helper calls are capability-gated and read-only.
      • short execution (timeout for the async path)
      • no surprise side effects on the page or extension
      • clear errors when the body throws so the rep can fix it
@@ -43,10 +43,8 @@
      • Async result awaited with a timeout so a hung server call
        can't freeze the resolution loop.
 
-   What we DON'T defend against (the soft-sandbox compromise):
-     • Globals are still reachable in this realm (`window`). To
-       harden, run inside a sandboxed <iframe sandbox="allow-scripts">
-       with postMessage. Defer until cross-rep template sharing.
+   Direct compilation exports remain for Node-based tests only. Browser
+   callers must use page-engine.evaluateCode(), which uses the iframe.
 
    Add new helpers in buildHelpers() below; describeHelpers() mirrors
    the shape so the editor can surface `h.*` autocomplete.
@@ -78,7 +76,7 @@ const BLOCKED_PATTERNS = [
   { re: /\bwhile\s*\(\s*true\s*\)/i,           reason: 'infinite while loop' },
   { re: /\bfor\s*\(\s*;\s*;\s*\)/,             reason: 'infinite for loop' },
   { re: /\bfetch\s*\(/,                        reason: 'use h.fetchJson / h.fetchText instead of fetch()' },
-  { re: /\bchrome\b/,                          reason: 'chrome APIs not allowed — use h.send()' },
+  { re: /\bchrome\b/,                          reason: 'chrome APIs not allowed' },
   { re: /\bimport\s*\(/,                       reason: 'dynamic import not allowed' },
   { re: /\beval\s*\(/,                         reason: 'eval not allowed' },
   { re: /\bFunction\s*\(/,                     reason: 'Function constructor not allowed' },
@@ -86,6 +84,7 @@ const BLOCKED_PATTERNS = [
   { re: /\bsetInterval\s*\(/,                  reason: 'setInterval not allowed' },
   { re: /\bnew\s+Worker\b/,                    reason: 'Worker not allowed' },
   { re: /\bXMLHttpRequest\b/,                  reason: 'XHR not allowed' },
+  { re: /\b(?:window|globalThis|parent|top|opener|postMessage)\b/, reason: 'ambient window access not allowed' },
 ];
 
 /* Fetch coalescing + short-lived cache, shared across every resolution.
@@ -111,10 +110,10 @@ function isAllowedCodeVarHost(url) {
   let host;
   try { host = new URL(String(url), 'https://www.golfballs.com').hostname.toLowerCase(); }
   catch { return false; }
-  return /(^|\.)golfballs\.com$/.test(host)
-      || /(^|\.)icustomize\.com$/.test(host)
-      || /(^|\.)gbcadmin\.com$/.test(host)
-      || /(^|\.)customizationapplications\.com$/.test(host)
+  return /^(?:www|api|static)\.golfballs\.com$/.test(host)
+      || /^(?:www|admin|master\.api|production-private-api)\.icustomize\.com$/.test(host)
+      || /^(?:office|operations)\.gbcadmin\.com$/.test(host)
+      || host === 'www.customizationapplications.com'
       || host === 's.customizationapps.com'
       || host === 'd1tp32r8b76g0z.cloudfront.net'
       || /(^|\.)hpgbrands\.com$/.test(host)
@@ -334,25 +333,6 @@ function buildHelpers() {
         if (sameTail.length === 1) hit = sameTail[0];
       }
     }
-    /* ── TEMP DEBUG (catalog-match diagnosis) — persist to storage so
-       __gbDownloadDebug() can export it. Remove when fixed. ── */
-    try {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        const tail = key.split('/').pop();
-        const entry = {
-          ts: Date.now(), input: url, key, catalogCount: all.length, hit: hit ? hit.title : null,
-          nearByTail: all.filter((p) => p.url && normUrl(p.url).split('/').pop() === tail)
-            .slice(0, 8).map((p) => ({ title: p.title, url: normUrl(p.url), id: p.id })),
-          ballUrlSample: all.filter((p) => /golf ball/i.test(p.title || ''))
-            .slice(0, 100).map((p) => normUrl(p.url)),
-        };
-        chrome.storage.local.get('gbByUrlDebug', (d) => {
-          const arr = Array.isArray(d && d.gbByUrlDebug) ? d.gbByUrlDebug : [];
-          arr.push(entry); while (arr.length > 10) arr.shift();
-          chrome.storage.local.set({ gbByUrlDebug: arr });
-        });
-      }
-    } catch {}
     return hit ? slimProduct(hit) : null;
   };
   /* Generic primitive: take an HTML string, run it through the SAME page
@@ -426,8 +406,7 @@ function buildHelpers() {
       }
       return s;
     },
-    /* ── Server calls (async, background-routed) ── */
-    send,
+    /* ── Read-only server calls (async, background-routed) ── */
     fetchText,
     fetchJson,
     /* ── Run the page engine on an arbitrary HTML string (async) ── */
@@ -513,6 +492,7 @@ function wrapBody(body) {
  *  Throws on syntax errors (caller catches + surfaces). */
 export function compile(body) {
   precheck(body);
+  if (typeof window !== 'undefined') throw new Error('direct code compilation is disabled in browser contexts');
   return new Function('ctx', 'vars', 'h', wrapBody(body));
 }
 
@@ -520,6 +500,7 @@ export function compile(body) {
  *  so the body can `await h.fetchJson(...)`. */
 export function compileAsync(body) {
   precheck(body);
+  if (typeof window !== 'undefined') throw new Error('direct code compilation is disabled in browser contexts');
   return new AsyncFunction('ctx', 'vars', 'h', wrapBody(body));
 }
 
@@ -589,7 +570,6 @@ export function describeHelpers() {
     'h.normalizePhone': { kind: 'fn', signature: '(v) → "+1XXXXXXXXXX"' },
     'h.pick':           { kind: 'fn', signature: '(arr, key) → arr of arr[i][key]' },
     'h.sum':            { kind: 'fn', signature: '(arr, key?) → number' },
-    'h.send':           { kind: 'fn', signature: 'async (action, payload?) → background response  // calls a background worker action' },
     'h.fetchText':      { kind: 'fn', signature: 'async (url) → string  // GET via background (CORS/mixed-content immune)' },
     'h.fetchJson':      { kind: 'fn', signature: 'async (url) → parsed JSON' },
     'h.catalog.search':  { kind: 'fn', signature: 'async (query, { limit = 10 }) → [{ id, title, brand, name, label, short, price, logo, orig, breaks, minQty, url }]  // label="Titleist Pro V1 High Number Golf Balls", short="Pro V1 High Number"' },

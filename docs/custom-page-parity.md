@@ -103,7 +103,7 @@ EDIT, first `…/Get.ajax?<id>` for the current record, merge changes, then Upda
   `editFormOpportunityInformationSaved`, `ClearOpportunityEventData`.
 
 ## Mailer
-- 🟡 **Mailer status** shown in stats. 
+- 🟡 **Mailer status** shown in stats.
 - ❌ **Contact mailer subscription** — CRM `CreateContactMailerkModal`
   (ContactMailerModal). → (B).
 - ❌ **Snooze mailer** — CRM `CreateSnoozeMailerModal` / `UpdateSnoozeTime`

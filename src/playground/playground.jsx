@@ -161,9 +161,9 @@ const EMAIL_FIXTURES = {
 const SAMPLE_CHAT_RAW = [
   '(09:14:00) <b>Visitor</b> [Visitor joined the chat]',
   "(09:14:00) <b>Visitor</b> Hi, I placed an order for custom polos on the 18th — order #4521098 — but they haven't shipped yet.",
-  "(09:15:00) <b>Cullen</b> Hi! I'm Cullen, happy to help. Let me pull up that order for you.",
-  '(09:15:00) <b>Cullen</b> One second…',
-  '(09:16:00) <b>Cullen</b> [Transferred to Ren]',
+  "(09:15:00) <b>Alex</b> Hi! I'm Alex, happy to help. Let me pull up that order for you.",
+  '(09:15:00) <b>Alex</b> One second…',
+  '(09:16:00) <b>Alex</b> [Transferred to Ren]',
   '(09:17:00) <b>Ren</b> Hi, this is Ren from the embroidery team. Looks like proof approval is still pending on our end.',
   '(09:17:00) <b>Visitor</b> I thought I approved on Monday?',
   '(09:19:00) <b>Ren</b> Your approval from May 19 went to the wrong proof revision (v2). We sent a v3 with updated kerning that needs a new sign-off.',

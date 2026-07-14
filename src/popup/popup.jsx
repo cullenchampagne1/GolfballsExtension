@@ -4,6 +4,8 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import { useDevSettings } from '../lib/devSettings.js';
+import { loadCredentials } from '../lib/credentials.js';
+import { isPowerAutomateUrl } from '../lib/security.js';
 import { dropConditional, renderTemplate } from '../lib/variableResolution.js';
 import {
   Btn, Dropdown, TemplatePicker, Dot, Tag, KeyVal, SectionLabel, Field, Textarea,
@@ -137,6 +139,7 @@ function PopupApp() {
   const [allTemplates, setAllTemplates] = useState([]);  // all enabled, non-case templates (full list, pre page-filter)
   const [pageInfo, setPageInfo] = useState({});
   const [flags, setFlags] = useState({});
+  const [paConfigured, setPaConfigured] = useState(false);
   const [watchList, setWatchList] = useState([]);
 
   // ── dev settings — live-subscribed so every toggle reflects instantly ──
@@ -189,6 +192,7 @@ function PopupApp() {
       });
 
       const data = await storageGet(['templates', 'watchList', 'featureFlags']);
+      const credentials = await loadCredentials();
       const tpls = (data.templates || []).filter((t) => t.enabled !== false && t.type !== 'case');
       const mergedFlags = {
         chargeEnabled: true, orderEditEnabled: true, submitProofEnabled: true,
@@ -208,6 +212,7 @@ function PopupApp() {
       setAllTemplates(tpls);
       setWatchList(data.watchList || []);
       setFlags(mergedFlags);
+      setPaConfigured(isPowerAutomateUrl(credentials.powerAutomateUrl));
 
       if (tpls.length === 0) { setStage('empty'); return; }
 
@@ -476,6 +481,7 @@ function PopupApp() {
           resolvedTo={resolvedTo}
           pageInfo={pageInfo}
           flags={flags}
+          paConfigured={paConfigured}
           watchList={watchList}
           tab={tab}
           ignoreCharge={ignoreCharge}
@@ -694,7 +700,7 @@ function MainView({
   pendingVars = [], toPending = false,
   selectedVariationId, onSelectVariation,
   tpl,
-  resolving, resolvedVars, resolvedTo, pageInfo, flags, watchList, tab,
+  resolving, resolvedVars, resolvedTo, pageInfo, flags, paConfigured, watchList, tab,
   ignoreCharge, ignoreOrderEdit, ignoreWatch, ignoreProof, ignorePageContext,
   onOpenWatchAdd, onOpenProof,
 }) {
@@ -888,8 +894,7 @@ function MainView({
     // string-trim checks defend against non-canonical legacy values
     // that earlier flag migrations may have left in storage.
     const paOn   = !!flags.powerAutomateEnabled;
-    const paUrl  = !!(flags.powerAutomateUrl && String(flags.powerAutomateUrl).trim());
-    const paReady = paOn && paUrl;
+    const paReady = paOn && paConfigured;
 
     // When PA is configured we send through it; otherwise fall back to
     // a mailto window. The legacy file-based reply path is removed —
@@ -901,7 +906,6 @@ function MainView({
         templateHtml: rawBody,
         templateSubject: subject,
         contactEmail: resolvedTo,
-        paUrl: flags.powerAutomateUrl,
         /* Sender config rides along so the content-script handler
            can resolve the `from` address per the template's pick.
            senderRandomize=true → fresh random sender per send. */
@@ -946,8 +950,7 @@ function MainView({
        predicate reads identically here and in onSend regardless
        of where the value came from. */
     const paOn  = flags.powerAutomateEnabled === true;
-    const paUrl = typeof flags.powerAutomateUrl === 'string' && flags.powerAutomateUrl.trim().length > 0;
-    const paReady = paOn && paUrl;
+    const paReady = paOn && paConfigured;
     if (paReady && isReply)  return { icon: <I.send />,  label: 'Reply' };
     if (paReady)             return { icon: <I.send />,  label: 'Send' };
     if (isReply)             return { icon: <Ic.reply />, label: 'Reply in Outlook' };
@@ -1133,8 +1136,7 @@ function MainView({
                 /* Direct-send (PA on + URL) shows just Send. In Outlook
                    mode we pair "Open in Outlook" with a Copy button that
                    puts the formatted email on the clipboard. */
-                const paReady = !!flags.powerAutomateEnabled
-                  && !!(flags.powerAutomateUrl && String(flags.powerAutomateUrl).trim());
+                const paReady = !!flags.powerAutomateEnabled && paConfigured;
                 const sendBtn = (
                   <Btn
                     full={paReady}

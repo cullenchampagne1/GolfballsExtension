@@ -4,7 +4,7 @@
  * Entry point for the Golfballs.com content script bundle. Wrapped in a
  * single-execution guard so Chrome's content-script re-injection on
  * navigations does not register duplicate listeners. Registers:
- * - postMessage bridge for iframe → page communication (calendar, notifications)
+ * - authenticated runtime bridge for iframe → page communication
  * - chrome.runtime.onMessage listener for popup/background → page actions
  * - Initial page scans and a MutationObserver for dynamic content
  */
@@ -13,25 +13,7 @@
 if (!window.__gbContentReady) {
 window.__gbContentReady = true;
 
-  /* Trust gate for window.postMessage. Legitimate GB_* messages arrive
-     either same-origin (our own React content scripts) or from the
-     admin.icustomize.com iframe embedded in the CRM page. Anything else
-     — a malicious ad/iframe on the page — must not be able to inject an
-     employeeId, fake calendar progress, etc. Sandbox-bridge messages use
-     a separate __gbSandbox marker and their own listener, so dropping
-     unknown-origin `action` messages here is safe. */
-  const GB_TRUSTED_ORIGIN_RE = /^https?:\/\/([a-z0-9-]+\.)*golfballs\.com$/i;
-  function __gbTrustedMessage(event) {
-    const o = event.origin;
-    return o === window.location.origin
-      || o === 'https://admin.icustomize.com'
-      || GB_TRUSTED_ORIGIN_RE.test(o);
-  }
-
-// ── Message bridge from iframe (calendar, dates, notifications) ─────────────
-  // MESSAGE LISTENER (From Iframe)
-  // ═══════════════════════════════════════════════════════
-  
+// ── Authenticated runtime bridge from iframe ────────────────────────────────
   /* showGbNotification (the old vanilla toast) is gone — relay to the
      page-wide React toast (window.__gbToast, installed by the actions-
      shelf). Maps the old (message, type, duration) shape; 'loading'
@@ -43,15 +25,18 @@ window.__gbContentReady = true;
     try { fn?.(msg, dur > 0 ? { duration: dur } : {}); } catch { /* no host */ }
   }
 
-  window.addEventListener('message', (event) => {
-    if (!__gbTrustedMessage(event)) return;
-    const { action, message, type, duration, data } = event.data || {};
+  let __gbAutoPushUpdate = null;
+  function __gbHandleIframeMessage(payload) {
+    const { action, message, type, duration, data } = payload || {};
+    let handled = false;
 
     if (action === 'GB_NOTIFY') {
+      handled = true;
       gbNotify(message, type, duration);
     }
 
     if (action === 'GB_OPEN_CALENDAR') {
+      handled = true;
       if (window.__gbFeatureFlags?.calendarEnabled !== false) {
         // React Order Date Manager only — no legacy fallback. If the
         // content entry didn't load, tell the rep instead of silently
@@ -65,27 +50,36 @@ window.__gbContentReady = true;
     }
 
     if (action === 'GB_PUSH_DATES_AND_NOTE') {
-      if (window.__gbFeatureFlags?.autoPushEnabled !== false) openAutoPushNotification(event.data);
+      handled = true;
+      if (window.__gbFeatureFlags?.autoPushEnabled !== false) openAutoPushNotification(payload);
     }
 
     // Store employee ID broadcast from the iframe toolbar for use by case actions
-    if (action === 'GB_EMPLOYEE_ID' && event.data.employeeId) {
-      window.__gbEmployeeId = event.data.employeeId;
+    if (action === 'GB_EMPLOYEE_ID') {
+      handled = true;
+      const employeeId = String(payload.employeeId || '');
+      if (!/^\d{1,12}$/.test(employeeId)) return true;
+      window.__gbEmployeeId = employeeId;
       // Persist across page navigations — case pages don't load the iframe toolbar
-      chrome.storage.local.set({ gbEmployeeId: String(event.data.employeeId) });
+      chrome.storage.local.set({ gbEmployeeId: window.__gbEmployeeId });
     }
 
     // ── Calendar step updates from iframe ────────────────────────────────────
     if (action === 'GB_CALENDAR_STEP' && window.__gbActiveCalendar) {
-      window.__gbActiveCalendar.onStep(event.data.step, event.data.label);
+      handled = true;
+      window.__gbActiveCalendar.onStep(payload.step, payload.label);
     }
     if (action === 'GB_CALENDAR_DONE' && window.__gbActiveCalendar) {
+      handled = true;
       window.__gbActiveCalendar.onDone();
     }
     if (action === 'GB_CALENDAR_ERROR' && window.__gbActiveCalendar) {
-      window.__gbActiveCalendar.onError(event.data.error);
+      handled = true;
+      window.__gbActiveCalendar.onError(payload.error);
     }
-  });
+    if (typeof __gbAutoPushUpdate === 'function') handled = __gbAutoPushUpdate(payload) || handled;
+    return handled;
+  }
 
   /* Auto Date Push progress — moved here from the (removed) vanilla
      calendar.js, now a centered React step toast. Driven by the iframe's
@@ -102,27 +96,28 @@ window.__gbContentReady = true;
       title: `Auto Date Push — ${daysOut} day${daysOut !== 1 ? 's' : ''} out`,
       placement: 'top-center',
     });
-    const handler = (event) => {
-      if (!__gbTrustedMessage(event)) return;
-      const d = event.data;
-      if (!d) return;
+    __gbAutoPushUpdate = (d) => {
+      if (!d) return false;
       if (d.action === 'GB_AUTO_PUSH_STEP') {
         if (d.step != null && id != null) t?.update?.(id, { currentStep: Math.max(0, (parseInt(d.step, 10) || 1) - 1) });
+        return true;
       }
       if (d.action === 'GB_DATES_PUSHED') {
-        window.removeEventListener('message', handler);
+        __gbAutoPushUpdate = null;
         if (id != null) {
           t?.update?.(id, { currentStep: steps.length });
           setTimeout(() => { t?.dismiss?.(id); t?.success?.('Dates saved', { placement: 'top-center', duration: 2500 }); }, 700);
         }
+        return true;
       }
       if (d.action === 'GB_AUTO_PUSH_ERROR') {
-        window.removeEventListener('message', handler);
+        __gbAutoPushUpdate = null;
         if (id != null) t?.dismiss?.(id);
         t?.error?.('Auto push failed: ' + String(d.error || 'Failed').slice(0, 55), { placement: 'top-center', duration: 6000 });
+        return true;
       }
+      return false;
     };
-    window.addEventListener('message', handler);
   }
 
   /* Streaming variable resolution. The popup opens this port and gets a
@@ -148,6 +143,11 @@ window.__gbContentReady = true;
   // ═══════════════════════════════════════════════════════
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+
+    if (__gbHandleIframeMessage(msg)) {
+      sendResponse({ ok: true });
+      return true;
+    }
 
     if (msg.action === 'enterPickMode') {
       enterPickMode();
@@ -329,7 +329,6 @@ window.__gbContentReady = true;
       if (typeof __gbShowWatchListModal === 'function') {
         __gbShowWatchListModal();
       } else {
-        console.warn('[GB] watchlist-modal.js not loaded — __gbShowWatchListModal missing');
       }
       return true;
     }
@@ -348,15 +347,20 @@ window.__gbContentReady = true;
            content script (no ESM imports). Keep in sync with
            src/lib/sender.js when adding accounts. Only the DOMAIN
            lives here; the local part comes from the rep's
-           devSetting ('email.localPart', defaults to 'cullen'), so
-           the rendered From: is e.g. cullen@golfballs.com. */
+           `email.localPart` dev setting. Missing configuration fails
+           closed instead of falling back to another employee. */
         const SENDER_DOMAINS = {
           golfballs:   'golfballs.com',
           loyaltylogo: 'loyaltylogo.com',
         };
         const SENDER_IDS = Object.keys(SENDER_DOMAINS);
-        const rawLocal = (devSettings && devSettings['email.localPart']) || 'cullen';
-        const localPart = String(rawLocal).trim() || 'cullen';
+        const rawLocal = (devSettings && devSettings['email.localPart']) || '';
+        const localPart = String(rawLocal).trim();
+        if (!/^[a-z0-9](?:[a-z0-9._+-]{0,62}[a-z0-9])?$/i.test(localPart)) {
+          window.__gbToast?.error?.('Configure Email account host in Settings before sending', { duration: 6000 });
+          sendResponse({ sent: false, error: 'Sender address is not configured' });
+          return;
+        }
         const domainFor = (id) => SENDER_DOMAINS[id] || SENDER_DOMAINS[SENDER_IDS[0]];
         const fromAddr = (() => {
           const id = msg.senderRandomize
@@ -373,7 +377,7 @@ window.__gbContentReady = true;
             replyMode: msg.replyMode,
           }],
         };
-        chrome.runtime.sendMessage({ action: 'paAutomate', paUrl: msg.paUrl, payload }, (result) => {
+        chrome.runtime.sendMessage({ action: 'paAutomate', payload }, (result) => {
           /* Always go through window.__gbToast — actions-shelf mounts
              a ToastHost on every golfballs.com page (matched in the
              manifest), so the global is reliably installed by the
@@ -388,8 +392,8 @@ window.__gbContentReady = true;
             toast?.error?.(`Email failed: ${err}`, { duration: 6000 });
           }
         });
+        sendResponse({ sent: true });
       });
-      sendResponse({ sent: true });
       return true;
     }
 
@@ -488,79 +492,12 @@ window.__gbContentReady = true;
           }
         }
       } catch {}
-      /* ── TEMP DEBUG (bulk send) — capture what the FETCHED html actually
-         contains so we can tell whether the orders/items tables are even
-         present (DataTables grids may be JS-populated and absent from the
-         static HTML), whether the base-url fix absolutized the order link,
-         and what the chain resolved to. Appended to gbBulkDebug. ── */
-      const firstA = doc.querySelector('#DataTables_Table_0 tbody tr a[href]');
-      const H = html || '';
-      const countOf = (s) => { let n=0,i=0; while ((i=H.indexOf(s,i))>=0) { n++; i+=s.length; } return n; };
-      const around  = (s) => { const i=H.indexOf(s); return i<0?null:H.slice(Math.max(0,i-220), i+140).replace(/\s+/g,' '); };
-      const dbg = {
-        ts: Date.now(),
-        baseUrl: baseUrl || null,
-        htmlLen: H.length,
-        ordersRows: doc.querySelectorAll('#DataTables_Table_0 tbody tr').length,
-        itemsRows: doc.querySelectorAll('#DataTables_Table_1 tbody tr').length,
-        firstOrderHref: firstA ? firstA.href : null,
-        firstOrderHrefRaw: firstA ? firstA.getAttribute('href') : null,
-        hasOrdersTable: !!doc.querySelector('#DataTables_Table_0'),
-        // ── how does the orders grid get its data? ──
-        viewOrderCount:  countOf('ViewOrder'),          // >0 ⇒ order links ARE server-rendered
-        orderIdCount:    countOf('orderID'),
-        hasAjaxConfig:   /sAjaxSource|"ajax"|ajax\s*:/.test(H),
-        aroundViewOrder: around('ViewOrder'),           // shows the real table/cell markup if rendered
-        aroundAjax:      around('sAjaxSource') || around('"ajax"'),
-        tableIds: (H.match(/<table[^>]*\bid="[^"]+"/gi) || []).slice(0, 20),
-        allTables: doc.querySelectorAll('table').length,
-        rowsInAnyTable: doc.querySelectorAll('table tbody tr').length,
-        // per-table fingerprint so the items grid can be identified if the
-        // content heuristic misfires (headers + first row + has-order-link)
-        tablesInfo: Array.from(doc.querySelectorAll('table')).slice(0, 25).map((t) => ({
-          id: t.id || null,
-          cls: (t.className || '').slice(0, 40),
-          headers: Array.from(t.querySelectorAll('thead th, thead td')).map((c) => (c.textContent || '').trim()).filter(Boolean).slice(0, 8),
-          firstRow: Array.from((t.querySelector('tbody tr') || {}).children || []).map((c) => (c.textContent || '').trim().slice(0, 24)).slice(0, 8),
-          rows: t.querySelectorAll('tbody tr').length,
-          viewOrder: !!t.querySelector('a[href*="ViewOrder" i]'),
-        })),
-      };
-      const logBulk = (extra) => {
-        try {
-          Object.assign(dbg, extra || {});
-          chrome.storage.local.get('gbBulkDebug', (d) => {
-            const arr = Array.isArray(d && d.gbBulkDebug) ? d.gbBulkDebug : [];
-            arr.push(dbg); while (arr.length > 15) arr.shift();
-            chrome.storage.local.set({ gbBulkDebug: arr });
-          });
-        } catch {}
-      };
       return resolveAllVarsAsync(vars, toField, doc)
-        .then((res) => { logBulk({ resolved: res.resolved || {}, toEmail: res.toEmail || '' }); return { ...res, displayName, lastEmailMs }; })
-        .catch((err) => { logBulk({ error: err?.message || 'resolve failed' }); return { resolved: {}, toEmail: '', displayName, lastEmailMs, error: err?.message || 'resolve failed' }; });
+        .then((res) => ({ ...res, displayName, lastEmailMs }))
+        .catch((err) => ({ resolved: {}, toEmail: '', displayName, lastEmailMs, error: err?.message || 'resolve failed' }));
     } catch (e) {
       return Promise.resolve({ resolved: {}, toEmail: '', displayName: '', error: e?.message || 'parse failed' });
     }
-  };
-
-  /* ── TEMP DEBUG — export the last resolution + catalog-match trace as a
-     JSON file. Run `__gbDownloadDebug()` in the CRM page console after a
-     resolution. Remove with the other gb*-debug blocks once matching is
-     fixed. ── */
-  window.__gbDownloadDebug = () => {
-    try {
-      chrome.storage.local.get(['gbVarsDebug', 'gbByUrlDebug', 'gbBulkDebug'], (d) => {
-        const payload = { exportedAt: new Date().toISOString(), vars: d.gbVarsDebug || null, byUrl: d.gbByUrlDebug || [], bulk: d.gbBulkDebug || [] };
-        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `gb-var-debug-${Date.now()}.json`;
-        document.body.appendChild(a); a.click();
-        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
-      });
-      return 'downloading gb-var-debug…';
-    } catch (e) { return 'debug export failed: ' + (e && e.message); }
   };
 
 // ── Initial scans + DOM mutation observer ───────────────────────────────────

@@ -561,7 +561,6 @@ export function ImagePreview({
         cache.w = natW; cache.h = natH;
       } catch (e) {
         // CORS-tainted canvas — same caveat as captureAlignment.
-        console.warn('[ImagePreview] eyedropper read failed:', e);
         return null;
       }
     }
@@ -873,7 +872,6 @@ export function ImagePreview({
       // CORS-tainted canvases throw on getImageData. Fall back to the
       // unmodified crop; the 3D decal will look opaque-white but the
       // shape will still be correct.
-      console.warn('[ImagePreview] white-knockout skipped:', e);
     }
 
     return canvas.toDataURL('image/png');
@@ -975,7 +973,6 @@ export function ImagePreview({
     // Defensive: every production call site passes onLaunchSubmitProof
     // (playground, content-script wrappers). If a future caller forgets,
     // surface a console warning instead of a misleading "coming soon".
-    console.warn('[gb] ImagePreview: Submit Proof clicked without onLaunchSubmitProof prop');
   };
 
 

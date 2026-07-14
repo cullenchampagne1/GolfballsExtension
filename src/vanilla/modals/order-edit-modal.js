@@ -18,324 +18,324 @@
       const style = document.createElement('style');
       style.id = '__gb-oe-css';
       style.textContent = `
-        @keyframes __gbOeFadeIn { 
-          from { opacity: 0; } 
-          to { opacity: 1; } 
+        @keyframes __gbOeFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
 
-        @keyframes __gbOeSlideUp { 
-          from { opacity: 0; transform: scale(.97) translateY(16px); } 
-          to { opacity: 1; transform: scale(1) translateY(0); } 
+        @keyframes __gbOeSlideUp {
+          from { opacity: 0; transform: scale(.97) translateY(16px); }
+          to { opacity: 1; transform: scale(1) translateY(0); }
         }
 
-        @keyframes __gbOeSpin { 
-          to { transform: rotate(360deg); } 
+        @keyframes __gbOeSpin {
+          to { transform: rotate(360deg); }
         }
 
-        #__gb-oe-overlay { 
-          position: fixed !important; 
-          inset: 0 !important; 
-          z-index: 999990 !important; 
-          display: flex !important; 
-          align-items: center !important; 
-          justify-content: center !important; 
-          background: rgba(0, 0, 0, .6) !important; 
+        #__gb-oe-overlay {
+          position: fixed !important;
+          inset: 0 !important;
+          z-index: 999990 !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          background: rgba(0, 0, 0, .6) !important;
           backdrop-filter: blur(8px) !important; -webkit-backdrop-filter: blur(8px) !important;
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important; 
-          animation: __gbOeFadeIn .18s ease !important; 
-          padding: 36px !important; 
-          transition: all .15s !important; 
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+          animation: __gbOeFadeIn .18s ease !important;
+          padding: 36px !important;
+          transition: all .15s !important;
         }
 
-        #__gb-oe-shell { 
-          display: flex !important; 
-          gap: 16px !important; 
-          width: 90% !important; 
-          height: 90% !important; 
-          max-width: 90vw !important; 
-          max-height: 90vh !important; 
-          margin: auto !important; 
-          animation: __gbOeSlideUp .25s cubic-bezier(.34, 1.4, .64, 1) !important; 
-          transition: all .15s !important; 
+        #__gb-oe-shell {
+          display: flex !important;
+          gap: 16px !important;
+          width: 90% !important;
+          height: 90% !important;
+          max-width: 90vw !important;
+          max-height: 90vh !important;
+          margin: auto !important;
+          animation: __gbOeSlideUp .25s cubic-bezier(.34, 1.4, .64, 1) !important;
+          transition: all .15s !important;
         }
 
         /* Glassmorphic Panels */
         .gb-oe-panel {
-          background: rgba(17, 17, 17, .85) !important; 
+          background: rgba(17, 17, 17, .85) !important;
           backdrop-filter: blur(16px) !important; -webkit-backdrop-filter: blur(16px) !important;
-          border: 1px solid rgba(255, 255, 255, .08) !important; 
-          border-radius: 18px !important; 
-          overflow: hidden !important; 
-          display: flex !important; 
-          flex-direction: column !important; 
-          box-shadow: 0 24px 70px rgba(0, 0, 0, .9), inset 0 0 0 1px rgba(255, 255, 255, .03) !important; 
+          border: 1px solid rgba(255, 255, 255, .08) !important;
+          border-radius: 18px !important;
+          overflow: hidden !important;
+          display: flex !important;
+          flex-direction: column !important;
+          box-shadow: 0 24px 70px rgba(0, 0, 0, .9), inset 0 0 0 1px rgba(255, 255, 255, .03) !important;
         }
 
-        #__gb-oe-iframe-panel { 
-          flex: 1 1 auto !important; 
-          min-width: 0 !important; 
+        #__gb-oe-iframe-panel {
+          flex: 1 1 auto !important;
+          min-width: 0 !important;
         }
 
-        #__gb-oe-stats-panel { 
-          width: 280px !important; 
-          flex-shrink: 0 !important; 
+        #__gb-oe-stats-panel {
+          width: 280px !important;
+          flex-shrink: 0 !important;
         }
 
         /* Headers */
-        .gb-oe-hdr { 
-          background: rgba(0, 0, 0, .4) !important; 
-          padding: 14px 20px !important; 
-          display: flex !important; 
-          align-items: center !important; 
-          gap: 12px !important; 
-          border-bottom: 1px solid rgba(255, 255, 255, .06) !important; 
-          flex-shrink: 0 !important; 
+        .gb-oe-hdr {
+          background: rgba(0, 0, 0, .4) !important;
+          padding: 14px 20px !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 12px !important;
+          border-bottom: 1px solid rgba(255, 255, 255, .06) !important;
+          flex-shrink: 0 !important;
         }
 
-        #__gb-oe-iframe-hdr-icon { 
-          width: 32px !important; 
-          height: 32px !important; 
-          background: rgba(var(--gb-brand-label-rgb, 125,184,42), .15) !important; 
-          border-radius: 8px !important; 
-          display: flex !important; 
-          align-items: center !important; 
-          justify-content: center !important; 
+        #__gb-oe-iframe-hdr-icon {
+          width: 32px !important;
+          height: 32px !important;
+          background: rgba(var(--gb-brand-label-rgb, 125,184,42), .15) !important;
+          border-radius: 8px !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
           color: var(--gb-brand-label, #7db82a) !important;
           border: 1px solid rgba(var(--gb-brand-label-rgb, 125,184,42), .3) !important;
           flex-shrink: 0 !important;
         }
 
-        #__gb-oe-iframe-title { 
-          font-size: 14px !important; 
-          font-weight: 700 !important; 
-          color: var(--gb-text-primary, #fff) !important; 
+        #__gb-oe-iframe-title {
+          font-size: 14px !important;
+          font-weight: 700 !important;
+          color: var(--gb-text-primary, #fff) !important;
         }
 
-        #__gb-oe-iframe-sub { 
-          font-size: 11px !important; 
+        #__gb-oe-iframe-sub {
+          font-size: 11px !important;
           font-weight: 500 !important;
-          color: rgba(255, 255, 255, .5) !important; 
-          margin-top: 2px !important; 
+          color: rgba(255, 255, 255, .5) !important;
+          margin-top: 2px !important;
         }
 
-        #__gb-oe-close-btn { 
-          margin-left: auto !important; 
-          background: rgba(255, 255, 255, .05) !important; 
-          color: rgba(255, 255, 255, .8) !important; 
-          border: 1px solid rgba(255, 255, 255, .1) !important; 
-          border-radius: 7px !important; 
-          padding: 6px 12px !important; 
-          font-size: 11px !important; 
-          font-weight: 600 !important; 
-          cursor: pointer !important; 
-          display: flex !important; 
-          align-items: center !important; 
-          gap: 6px !important; 
-          transition: all .15s !important; 
+        #__gb-oe-close-btn {
+          margin-left: auto !important;
+          background: rgba(255, 255, 255, .05) !important;
+          color: rgba(255, 255, 255, .8) !important;
+          border: 1px solid rgba(255, 255, 255, .1) !important;
+          border-radius: 7px !important;
+          padding: 6px 12px !important;
+          font-size: 11px !important;
+          font-weight: 600 !important;
+          cursor: pointer !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          transition: all .15s !important;
           font-family: inherit !important;
         }
 
-        #__gb-oe-close-btn:hover { 
-          background: rgba(255, 255, 255, .12) !important; 
+        #__gb-oe-close-btn:hover {
+          background: rgba(255, 255, 255, .12) !important;
           color: #fff !important;
         }
 
         /* Iframe Area */
-        #__gb-oe-iframe-wrap { 
-          flex: 1 !important; 
-          overflow: hidden !important; 
-          position: relative !important; 
-          background: #fff !important; 
+        #__gb-oe-iframe-wrap {
+          flex: 1 !important;
+          overflow: hidden !important;
+          position: relative !important;
+          background: #fff !important;
         }
 
-        #__gb-oe-iframe { 
-          width: 100% !important; 
-          height: 100% !important; 
-          border: none !important; 
-          display: block !important; 
+        #__gb-oe-iframe {
+          width: 100% !important;
+          height: 100% !important;
+          border: none !important;
+          display: block !important;
         }
 
-        #__gb-oe-iframe-loading { 
-          position: absolute !important; 
-          inset: 0 !important; 
-          display: flex !important; 
-          flex-direction: column !important; 
-          align-items: center !important; 
-          justify-content: center !important; 
-          background: rgba(17,17,17,.95) !important; 
-          gap: 14px !important; 
-          z-index: 10 !important; 
-          transition: opacity .3s !important; 
+        #__gb-oe-iframe-loading {
+          position: absolute !important;
+          inset: 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: center !important;
+          justify-content: center !important;
+          background: rgba(17,17,17,.95) !important;
+          gap: 14px !important;
+          z-index: 10 !important;
+          transition: opacity .3s !important;
         }
 
-        #__gb-oe-iframe-loading.done { 
-          opacity: 0 !important; 
-          pointer-events: none !important; 
+        #__gb-oe-iframe-loading.done {
+          opacity: 0 !important;
+          pointer-events: none !important;
         }
 
-        #__gb-oe-load-spin, #__gb-oe-stats-spin { 
-          width: 28px !important; 
-          height: 28px !important; 
-          border: 3px solid rgba(var(--gb-brand-label-rgb, 125,184,42), .2) !important; 
-          border-top-color: var(--gb-brand-label, #7db82a) !important; 
-          border-radius: 50% !important; 
-          animation: __gbOeSpin .8s linear infinite !important; 
+        #__gb-oe-load-spin, #__gb-oe-stats-spin {
+          width: 28px !important;
+          height: 28px !important;
+          border: 3px solid rgba(var(--gb-brand-label-rgb, 125,184,42), .2) !important;
+          border-top-color: var(--gb-brand-label, #7db82a) !important;
+          border-radius: 50% !important;
+          animation: __gbOeSpin .8s linear infinite !important;
         }
 
-        #__gb-oe-load-text, #__gb-oe-stats-spin-label { 
-          font-size: 13px !important; 
+        #__gb-oe-load-text, #__gb-oe-stats-spin-label {
+          font-size: 13px !important;
           font-weight: 500 !important;
-          color: rgba(255,255,255,.6) !important; 
+          color: rgba(255,255,255,.6) !important;
         }
 
         /* Stats Sidebar */
-        #__gb-oe-stats-title { 
-          font-size: 10px !important; 
-          font-weight: 800 !important; 
-          text-transform: uppercase !important; 
-          letter-spacing: .8px !important; 
-          color: rgba(255, 255, 255, .5) !important; 
+        #__gb-oe-stats-title {
+          font-size: 10px !important;
+          font-weight: 800 !important;
+          text-transform: uppercase !important;
+          letter-spacing: .8px !important;
+          color: rgba(255, 255, 255, .5) !important;
         }
 
-        #__gb-oe-stats-body { 
-          flex: 1 !important; 
-          overflow-y: auto !important; 
-          padding: 16px !important; 
-          scrollbar-width: thin !important; 
-          scrollbar-color: rgba(255,255,255,.1) transparent !important; 
+        #__gb-oe-stats-body {
+          flex: 1 !important;
+          overflow-y: auto !important;
+          padding: 16px !important;
+          scrollbar-width: thin !important;
+          scrollbar-color: rgba(255,255,255,.1) transparent !important;
         }
 
-        #__gb-oe-stats-spin-wrap { 
-          display: flex !important; 
-          flex-direction: column !important; 
-          align-items: center !important; 
-          justify-content: center !important; 
-          height: 100% !important; 
-          gap: 14px !important; 
+        #__gb-oe-stats-spin-wrap {
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: center !important;
+          justify-content: center !important;
+          height: 100% !important;
+          gap: 14px !important;
         }
 
-        .gb-oe-section { 
-          background: rgba(0, 0, 0, .25) !important; 
-          border: 1px solid rgba(255, 255, 255, .05) !important; 
-          border-radius: 12px !important; 
-          padding: 14px !important; 
-          margin-bottom: 12px !important; 
+        .gb-oe-section {
+          background: rgba(0, 0, 0, .25) !important;
+          border: 1px solid rgba(255, 255, 255, .05) !important;
+          border-radius: 12px !important;
+          padding: 14px !important;
+          margin-bottom: 12px !important;
         }
 
         .gb-oe-section:last-child { margin-bottom: 0 !important; }
 
-        .gb-oe-section-title { 
-          font-size: 9.5px !important; 
-          font-weight: 800 !important; 
-          text-transform: uppercase !important; 
-          letter-spacing: .6px !important; 
-          color: rgba(255,255,255,.4) !important; 
-          margin-bottom: 12px !important; 
+        .gb-oe-section-title {
+          font-size: 9.5px !important;
+          font-weight: 800 !important;
+          text-transform: uppercase !important;
+          letter-spacing: .6px !important;
+          color: rgba(255,255,255,.4) !important;
+          margin-bottom: 12px !important;
         }
 
         .gb-oe-section-divider { display: none !important; }
 
-        .gb-oe-row { 
-          display: flex !important; 
-          justify-content: space-between !important; 
-          align-items: flex-start !important; 
-          gap: 12px !important; 
-          margin-bottom: 8px !important; 
+        .gb-oe-row {
+          display: flex !important;
+          justify-content: space-between !important;
+          align-items: flex-start !important;
+          gap: 12px !important;
+          margin-bottom: 8px !important;
         }
 
         .gb-oe-row:last-child { margin-bottom: 0 !important; }
 
-        .gb-oe-key { 
-          font-size: 10px !important; 
-          color: rgba(255,255,255,.5) !important; 
-          font-weight: 600 !important; 
-          text-transform: uppercase !important; 
-          letter-spacing: .4px !important; 
-          flex-shrink: 0 !important; 
-          padding-top: 2px !important; 
+        .gb-oe-key {
+          font-size: 10px !important;
+          color: rgba(255,255,255,.5) !important;
+          font-weight: 600 !important;
+          text-transform: uppercase !important;
+          letter-spacing: .4px !important;
+          flex-shrink: 0 !important;
+          padding-top: 2px !important;
         }
 
-        .gb-oe-val { 
-          font-size: 12.5px !important; 
+        .gb-oe-val {
+          font-size: 12.5px !important;
           font-weight: 500 !important;
-          color: var(--gb-text-secondary, #ccc) !important; 
-          text-align: right !important; 
-          word-break: break-word !important; 
-          flex: 1 !important; 
+          color: var(--gb-text-secondary, #ccc) !important;
+          text-align: right !important;
+          word-break: break-word !important;
+          flex: 1 !important;
         }
 
         .gb-oe-val.highlight { color: var(--gb-brand-label, #7db82a) !important; font-weight: 700 !important; }
         .gb-oe-val.muted { color: rgba(255,255,255,.3) !important; font-style: italic !important; }
         .gb-oe-val.warn { color: var(--gb-error, #c86060) !important; font-weight: 600 !important; }
 
-        .gb-oe-total-row { 
-          display: flex !important; 
-          justify-content: space-between !important; 
-          align-items: center !important; 
-          background: rgba(var(--gb-brand-label-rgb, 125,184,42), .1) !important; 
-          border: 1px solid rgba(var(--gb-brand-label-rgb, 125,184,42), .2) !important; 
-          border-radius: 8px !important; 
-          padding: 12px 14px !important; 
-          margin-top: 6px !important; 
+        .gb-oe-total-row {
+          display: flex !important;
+          justify-content: space-between !important;
+          align-items: center !important;
+          background: rgba(var(--gb-brand-label-rgb, 125,184,42), .1) !important;
+          border: 1px solid rgba(var(--gb-brand-label-rgb, 125,184,42), .2) !important;
+          border-radius: 8px !important;
+          padding: 12px 14px !important;
+          margin-top: 6px !important;
         }
 
-        .gb-oe-total-key { 
-          font-size: 11px !important; 
-          font-weight: 800 !important; 
-          text-transform: uppercase !important; 
-          letter-spacing: .5px !important; 
-          color: var(--gb-brand-label, #7db82a) !important; 
+        .gb-oe-total-key {
+          font-size: 11px !important;
+          font-weight: 800 !important;
+          text-transform: uppercase !important;
+          letter-spacing: .5px !important;
+          color: var(--gb-brand-label, #7db82a) !important;
         }
 
-        .gb-oe-total-val { 
-          font-size: 16px !important; 
-          font-weight: 800 !important; 
-          color: var(--gb-text-primary, #fff) !important; 
+        .gb-oe-total-val {
+          font-size: 16px !important;
+          font-weight: 800 !important;
+          color: var(--gb-text-primary, #fff) !important;
         }
 
-        .gb-oe-ship-pill { 
-          display: inline-flex !important; 
-          align-items: center !important; 
-          gap: 6px !important; 
-          background: rgba(var(--gb-brand-label-rgb, 125,184,42), .15) !important; 
-          border: 1px solid rgba(var(--gb-brand-label-rgb, 125,184,42), .3) !important; 
-          border-radius: 6px !important; 
-          padding: 4px 10px !important; 
-          font-size: 11.5px !important; 
-          color: var(--gb-brand-label, #7db82a) !important; 
-          font-weight: 700 !important; 
-          margin-bottom: 8px !important; 
+        .gb-oe-ship-pill {
+          display: inline-flex !important;
+          align-items: center !important;
+          gap: 6px !important;
+          background: rgba(var(--gb-brand-label-rgb, 125,184,42), .15) !important;
+          border: 1px solid rgba(var(--gb-brand-label-rgb, 125,184,42), .3) !important;
+          border-radius: 6px !important;
+          padding: 4px 10px !important;
+          font-size: 11.5px !important;
+          color: var(--gb-brand-label, #7db82a) !important;
+          font-weight: 700 !important;
+          margin-bottom: 8px !important;
         }
 
-        .gb-oe-ship-rates { 
-          display: flex !important; 
-          flex-direction: column !important; 
-          gap: 4px !important; 
-          margin-top: 10px !important; 
+        .gb-oe-ship-rates {
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 4px !important;
+          margin-top: 10px !important;
         }
 
-        .gb-oe-ship-rate-row { 
-          display: flex !important; 
-          justify-content: space-between !important; 
-          font-size: 11.5px !important; 
-          color: rgba(255,255,255,.4) !important; 
-          padding: 5px 0 !important; 
-          border-bottom: 1px solid rgba(255,255,255,.05) !important; 
+        .gb-oe-ship-rate-row {
+          display: flex !important;
+          justify-content: space-between !important;
+          font-size: 11.5px !important;
+          color: rgba(255,255,255,.4) !important;
+          padding: 5px 0 !important;
+          border-bottom: 1px solid rgba(255,255,255,.05) !important;
         }
 
         .gb-oe-ship-rate-row:last-child { border-bottom: none !important; }
         .gb-oe-ship-rate-row.active { color: var(--gb-brand-label, #7db82a) !important; font-weight: 600 !important; }
 
-        #__gb-oe-stats-error { 
-          padding: 14px !important; 
-          margin: 12px 0 !important; 
-          background: rgba(var(--gb-error-rgb, 200,96,96), .1) !important; 
-          border: 1px solid rgba(var(--gb-error-rgb, 200,96,96), .3) !important; 
-          border-radius: 8px !important; 
-          font-size: 12px !important; 
-          color: var(--gb-error, #c86060) !important; 
-          line-height: 1.5 !important; 
-          display: none; 
+        #__gb-oe-stats-error {
+          padding: 14px !important;
+          margin: 12px 0 !important;
+          background: rgba(var(--gb-error-rgb, 200,96,96), .1) !important;
+          border: 1px solid rgba(var(--gb-error-rgb, 200,96,96), .3) !important;
+          border-radius: 8px !important;
+          font-size: 12px !important;
+          color: var(--gb-error, #c86060) !important;
+          line-height: 1.5 !important;
+          display: none;
         }
       `;
       document.head.appendChild(style);
@@ -373,7 +373,7 @@
             <iframe id="__gb-oe-iframe" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-top-navigation-by-user-activation"></iframe>
           </div>
         </div>
-        
+
         <div id="__gb-oe-stats-panel" class="gb-oe-panel">
           <div class="gb-oe-hdr" id="__gb-oe-stats-hdr">
             <div id="__gb-oe-stats-title">Order Summary</div>
@@ -392,7 +392,7 @@
 
     // --- Hover fade logic ---
     const shell = document.getElementById('__gb-oe-shell');
-    
+
     // When the mouse leaves the modal: drop opacity to 20% and clear the dark background
     shell.addEventListener('mouseleave', () => {
       shell.style.setProperty('opacity', '0.15', 'important');
@@ -400,7 +400,7 @@
       overlay.style.setProperty('backdrop-filter', 'blur(0px)', 'important');
       overlay.style.setProperty('-webkit-backdrop-filter', 'blur(0px)', 'important');
     });
-    
+
     // When the mouse re-enters the modal: restore 100% opacity and the dark background
     shell.addEventListener('mouseenter', () => {
       shell.style.setProperty('opacity', '1', 'important');
@@ -491,6 +491,11 @@
    * @returns {string} Dollar-formatted string (e.g. "$12.50").
    */
   function fmt(n) { return '$' + parseFloat(n || 0).toFixed(2); }
+  function esc(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, (char) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    })[char]);
+  }
           /**
    * Generates an HTML string for a summary table row with a key, value, and
    * optional CSS class applied to the value cell.
@@ -500,14 +505,18 @@
    * @returns {string} HTML string for a `<tr>` element.
    */
   function row(k, v, cls) {
-          return `<div class="gb-oe-row"><span class="gb-oe-key">${k}</span><span class="gb-oe-val ${cls||''}">${v || '<span style="color:rgba(255,255,255,.2)">\u2014</span>'}</span></div>`;
+          const value = v == null || v === '' ? '<span style="color:rgba(255,255,255,.2)">\u2014</span>' : esc(v);
+          return `<div class="gb-oe-row"><span class="gb-oe-key">${esc(k)}</span><span class="gb-oe-val ${esc(cls || '')}">${value}</span></div>`;
+        }
+        function rowHtml(k, trustedHtml, cls) {
+          return `<div class="gb-oe-row"><span class="gb-oe-key">${esc(k)}</span><span class="gb-oe-val ${esc(cls || '')}">${trustedHtml}</span></div>`;
         }
 
         const ratesHtml = rates.length ? `<div class="gb-oe-ship-rates">${rates.map(r => {
           const act  = r.method === selMethod ? 'active' : '';
           const pr   = parseFloat(r.price?.Amount || 0);
           const free = promo.freeShipping && r.method === selMethod;
-          return `<div class="gb-oe-ship-rate-row ${act}"><span>${r.method}</span><span>${free ? 'FREE' : fmt(pr)}${r.estimatedDelivery ? ' \u00b7 ' + r.estimatedDelivery : ''}</span></div>`;
+          return `<div class="gb-oe-ship-rate-row ${act}"><span>${esc(r.method)}</span><span>${free ? 'FREE' : fmt(pr)}${r.estimatedDelivery ? ' \u00b7 ' + esc(r.estimatedDelivery) : ''}</span></div>`;
         }).join('')}</div>` : '';
 
         const cardsHtml = (info.billingOptions || []).map(c => {
@@ -533,7 +542,7 @@
               .filter(Boolean).join('  ');
             return `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.05);border-radius:8px !important;margin-bottom:6px;">
               <svg width="14" height="14" fill="none" stroke="rgba(255,255,255,.4)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" style="flex-shrink:0;"><rect x="2" y="5" width="20" height="14" rx="3"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-              <span style="font-size:11.5px;font-weight:500;color:rgba(255,255,255,.6);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${method.replace(/</g,'&lt;') || r.note.replace(/</g,'&lt;')}</span>
+              <span style="font-size:11.5px;font-weight:500;color:rgba(255,255,255,.6);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(method || r.note)}</span>
               <span style="font-size:12px;font-weight:700;color:var(--gb-brand-label, #7db82a);flex-shrink:0;">${fmt(r.amount)}</span>
             </div>`;
           }).join('');
@@ -559,7 +568,9 @@
           <div class="gb-oe-section">
             <div class="gb-oe-section-title">Financials</div>
             ${row('Subtotal', fmt(productSubtotal), 'highlight')}
-            ${row('Shipping', promo.freeShipping ? '<span style="color:var(--gb-brand-label, #7db82a);font-weight:700;">FREE</span> <span style="color:rgba(255,255,255,.3);font-size:10px;font-weight:500;">(' + fmt(promo.shippingDiscount||0) + ' off)</span>' : fmt(shipCost))}
+            ${promo.freeShipping
+              ? rowHtml('Shipping', '<span style="color:var(--gb-brand-label, #7db82a);font-weight:700;">FREE</span> <span style="color:rgba(255,255,255,.3);font-size:10px;font-weight:500;">(' + fmt(promo.shippingDiscount||0) + ' off)</span>')
+              : row('Shipping', fmt(shipCost))}
             ${row('Tax', fmt(salesTax))}
             ${(promo.totalDiscount||0) > 0 ? row('Promo Disc', '-' + fmt(promo.totalDiscount), 'warn') : ''}
             ${giftCert > 0 ? row('Gift Cert', '-' + fmt(giftCert), 'warn') : ''}
@@ -583,7 +594,7 @@
             <div class="gb-oe-section-title">Shipping</div>
             <div class="gb-oe-ship-pill">
               <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 17H3a2 2 0 01-2-2V5a2 2 0 012-2h11a2 2 0 012 2v3M16 3h4l2 4v5h-6V3zM5.5 21a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM18.5 21a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/></svg>
-              ${selMethod || 'Standard'}
+              ${esc(selMethod || 'Standard')}
             </div>
             ${row('Name', (shipping.firstName||'') + ' ' + (shipping.lastName||''))}
             ${row('Address', (shipping.address1||'') + (shipping.address2 ? ' ' + shipping.address2 : ''))}
@@ -613,16 +624,19 @@
             <div class="gb-oe-section-title">Order Info</div>
             ${row('Payment', order.paymentType||'')}
             ${row('Delivery', order.deliveryMethod||'')}
-            ${row('MessageID', '<span style="font-size:9.5px;word-break:break-all;color:rgba(255,255,255,.4)">' + messageId + '</span>')}
+            ${rowHtml('MessageID', '<span style="font-size:9.5px;word-break:break-all;color:rgba(255,255,255,.4)">' + esc(messageId) + '</span>')}
           </div>
         `;
 
       } catch(err) {
-        console.error('[GB OrderEdit]', err);
         if (loadText) loadText.textContent = 'API error \u2014 loading cart anyway\u2026';
         loadCart();
         const statsBody = document.getElementById('__gb-oe-stats-body');
-        if (statsBody) statsBody.innerHTML = `<div id="__gb-oe-stats-error" style="display:block">Failed to load order summary:<br>${err.message}</div>`;
+        if (statsBody) {
+          statsBody.innerHTML = '<div id="__gb-oe-stats-error" style="display:block">Failed to load order summary:<br><span></span></div>';
+          const errorText = statsBody.querySelector('#__gb-oe-stats-error span');
+          if (errorText) errorText.textContent = err?.message || 'Unknown error';
+        }
       }
     }
 

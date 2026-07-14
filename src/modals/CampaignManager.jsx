@@ -365,10 +365,10 @@ function CustomConfig({ step, upd }) {
         typeId="account"
         varNames={[]}
         hideActions
-        placeholder="ctx = contact/account data · h = fetch/send/dom · window.open(url) opens a tab"
+        placeholder="ctx = contact/account data · h = read-only fetch/catalog/domText helpers"
       />
       <div style={{ marginTop: 6, fontSize: 10, color: 'var(--gb-text-muted)', lineHeight: 1.5 }}>
-        Runs once per contact for side effects. Use <b>h.fetchJson / h.fetchText</b> for requests, <b>h.send(action, payload)</b> for background actions, <b>h.dom / document</b> for the page, and <b>window.open(url)</b> to open a tab.
+        Runs once per contact in an isolated sandbox. Use <b>h.fetchJson / h.fetchText</b> for allowlisted reads, <b>h.catalog</b> for product data, and <b>h.domText</b> for approved page text.
       </div>
       <div style={{ height: 14 }} />
       <SectionLabel>Flow control</SectionLabel>

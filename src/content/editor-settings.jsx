@@ -2,7 +2,8 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { ensureTheme } from '../lib/theme.js';
 import { SettingsPanel } from '../pages/SettingsPanel.jsx';
-import { Btn, I } from '../ui/index.js';
+import { useRemoteSettingsPolicy } from '../lib/remoteSettingsPolicy.js';
+import { Btn, I, Tag } from '../ui/index.js';
 
 /* ───────────────────────────────────────────────────────────────
    editor-settings.jsx — entry for the Manage window's Settings page.
@@ -16,6 +17,7 @@ import { Btn, I } from '../ui/index.js';
 ─────────────────────────────────────────────────────────────── */
 
 function EditorSettings() {
+  const remotePolicy = useRemoteSettingsPolicy();
   return (
     /* Full-bleed design-system surface. The panel must carry its own
        --gb-surface-canvas background so background AND text retone together
@@ -40,15 +42,18 @@ function EditorSettings() {
             Back
           </Btn>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -0.2 }}>
-              Settings
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--gb-text-primary)', letterSpacing: -0.2 }}>
+                Settings
+              </div>
+              {remotePolicy.adminBypass && <Tag tone="brand" size="xs">Admin</Tag>}
             </div>
             <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1 }}>
               Theme &amp; features — applied live here and across open order tabs.
             </div>
           </div>
         </div>
-        <SettingsPanel />
+        <SettingsPanel remotePolicy={remotePolicy} />
       </div>
     </div>
   );

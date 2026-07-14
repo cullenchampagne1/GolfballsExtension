@@ -28,7 +28,7 @@ import { pickFromAddress } from '../sender.js';
 import { buildCustomTemplate } from '../callLog.js';
 import { buildCustomTaskTemplate } from '../quickTask.js';
 import { completeContactTasks } from '../crmTasks.js';
-import { runCode } from '../page-engine/code-runtime.js';
+import { runInSandbox } from '../page-engine/sandbox-bridge.js';
 import { directContactVariables } from '../contactImport.js';
 
 /* Weighted random pick — same algorithm EmailRunner's variation
@@ -175,9 +175,8 @@ async function runTask(step, template, ctx, { dryRun }) {
   return res.ok ? { ok: true, detail: res.taskId ? `Task #${res.taskId}` : 'Task created' } : { ok: false, error: res.error };
 }
 
-/* Custom step — runs an arbitrary code block in the page realm with the
-   full helper surface (ctx = contact/account data, h = fetch/send/dom,
-   plus window/document + window.open for tabs). The `kill` toggle (or a
+/* Custom step — runs an arbitrary code block in the isolated sandbox with
+   the approved read-only helper surface. The `kill` toggle (or a
    code that returns 'kill' / { kill:true }) stops the contact's whole
    flow afterwards. Dry-run never executes the code — side effects are
    real — it just reports what it would do. */
@@ -188,7 +187,7 @@ async function runCustom(step, ctx, { dryRun }) {
   }
   if (!step.code || !step.code.trim()) return { ok: false, error: 'Empty custom code' };
   try {
-    const result = await runCode(step.code, ctx.data || {}, {}, { doc: ctx.doc });
+    const result = await runInSandbox(step.code, ctx.data || {}, {}, ctx.doc);
     const kill = willKill || result === 'kill' || (result && result.kill === true);
     return { ok: true, detail: 'Custom ran' + (kill ? ' · killed flow' : ''), kill };
   } catch (e) {

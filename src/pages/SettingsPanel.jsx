@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import {
   SectionLabel, Card, Callout, Btn, IconBtn, Input, Dropdown, Field,
   FeatureSpotlight, ExpandableFeature, ColorSpotlight, Switch, Dot, I,
-  CollapsibleChecklist, Slider,
+  Slider,
 } from '../ui/index.js';
 import {
   SCALE_CATEGORIES, DEFAULT_SCALES, loadScales, saveScales, applyScales,
@@ -21,19 +21,34 @@ import {
 } from '../lib/customPages.js';
 import {
   PRESET_SCOPES, gatherScopes, applyScopes, normalizePreset, presetScopeIds,
+  buildSettingsTemplateFile, parseSettingsTemplateFile,
 } from '../lib/presetScopes.js';
 import { Checkbox } from '../ui/components/Checkbox.jsx';
-import { Tag } from '../ui/components/Tag.jsx';
 import { CollapsibleSection } from '../ui/components/CollapsibleSection.jsx';
 import { DEV_SETTINGS, defaultDevSettings, loadDevSettings, saveDevSettings } from '../lib/devSettings.js';
-import { useSecretSettings, isSecret, installSecretConsole, DEV_SECTION_KEY } from '../lib/secretSettings.js';
-import { installScanConsole } from '../lib/recentOrdersScan.js';
+import { EMPTY_CREDENTIALS, loadCredentials, saveCredentials } from '../lib/credentials.js';
+import { isPowerAutomateUrl } from '../lib/security.js';
+import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
 
 /* ───────────────────────────────────────────────────────────────
    SettingsPanel — the fully-featured Manage → Settings page.
 ─────────────────────────────────────────────────────────────── */
 
 const T = { base: { duration: 0.18, ease: [0.4, 0, 0.2, 1] } };
+
+function downloadJson(value, filename) {
+  const blob = new Blob([JSON.stringify(value, null, 2)], { type: 'application/json' });
+  const href = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = href;
+  anchor.download = filename;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(href), 0);
+}
+
+function safeJsonFilename(name, fallback) {
+  return `${String(name || fallback).trim().replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || fallback}.json`;
+}
 
 /* ── Icon helper ─────────────────────────────────────────────── */
 const ICON_MAP = {
@@ -249,38 +264,65 @@ function KeyboardShortcutRow({ label, desc, value, onChange, featureOff }) {
   );
 }
 
-/* ── User Presets Manager ──────────────────────────────────────
-   Save snapshot bundles of the extension's storage. Each save lets
-   the user pick which scopes to include (Settings, Email Templates,
-   Note Templates, or all). Load merges scopes back: arrays merge by
-   id (same id = replace, new id = append) so sharing a preset with
-   a friend ADDS templates to their library instead of wiping it. */
-function UserPresetsManager({ onPresetLoad }) {
-  const [presets, setPresets] = useState([]);
+/* ── Shared settings templates ─────────────────────────────────
+   Named, scoped snapshots use authenticated links when available and bounded
+   JSON files when the server or installation credential is unavailable.
+   Both transports preview and apply through the same scoped merge path. */
+function SettingsLinksManager({ onPresetLoad }) {
+  const fileInputRef = useRef(null);
+  const [shares, setShares] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+  const [selectedShare, setSelectedShare] = useState(null);
+  const [importCandidate, setImportCandidate] = useState(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showImportPanel, setShowImportPanel] = useState(false);
   const [presetName, setPresetName] = useState('');
+  const [importUrl, setImportUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [serverUnavailable, setServerUnavailable] = useState(false);
   // Default: full state — every scope checked (save dialog).
   const [chosenScopes, setChosenScopes] = useState(() => new Set(PRESET_SCOPES.map((s) => s.id)));
   // Which scopes to APPLY when loading the selected preset (defaults to all it
   // carries; the recipient can untick any before loading).
   const [loadScopes, setLoadScopes] = useState(new Set());
-  const fileInputRef = useRef(null);
+  useEffect(() => { loadShares(); }, []);
 
-  useEffect(() => { loadUserPresets(); }, []);
-
-  // When the selected preset changes, default to applying ALL the scopes it
-  // carries (the user can then untick the ones they don't want).
+  // Loading a link prepares an import candidate. Owned/listed links never
+  // enter this state, so creators are not invited to import their own link.
   useEffect(() => {
-    const p = presets.find((x) => x.id === selectedId);
-    setLoadScopes(new Set(p ? presetScopeIds(p) : []));
-  }, [selectedId, presets]);
+    setLoadScopes(new Set(importCandidate ? presetScopeIds(importCandidate) : []));
+  }, [importCandidate]);
 
-  async function loadUserPresets() {
+  async function loadShares() {
     try {
-      const data = await chrome.storage.local.get('userPresets');
-      setPresets(data.userPresets || []);
-    } catch { setPresets([]); }
+      const response = await sendBackgroundMessage('settingsShareList');
+      setShares(response.shares || []);
+      setServerUnavailable(false);
+    } catch (error) {
+      setShares([]);
+      setServerUnavailable(true);
+    }
+  }
+
+  async function openSettingsFile(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    try {
+      const preset = parseSettingsTemplateFile(await file.text());
+      setImportCandidate({ ...preset, id: `json-${Date.now()}` });
+      setImportUrl('');
+      setShowSaveDialog(false);
+      setShowImportPanel(true);
+      window.__gbToast?.success(`Loaded "${preset.name}" from JSON — choose what to import`);
+    } catch (error) {
+      window.__gbToast?.error(error.message || 'Unable to read settings template file');
+    }
+  }
+
+  function downloadSettingsFallback(name, scopes) {
+    const file = buildSettingsTemplateFile(name, scopes);
+    downloadJson(file, safeJsonFilename(name, 'golfballs-settings'));
   }
 
   function toggleScope(id) {
@@ -301,94 +343,300 @@ function UserPresetsManager({ onPresetLoad }) {
     // intent is "back up everything I have right now".
     setChosenScopes(new Set(PRESET_SCOPES.map((s) => s.id)));
     setPresetName('');
+    setShowImportPanel(false);
     setShowSaveDialog(true);
   }
 
   async function handleSave() {
     if (!presetName.trim() || chosenScopes.size === 0) return;
-    const scopes = await gatherScopes([...chosenScopes]);
-    const id = 'up_' + Date.now();
-    const newPreset = {
-      id, name: presetName.trim(), createdAt: Date.now(),
-      scopes,
-    };
-    const updated = [...presets, newPreset];
-    setPresets(updated);
-    await chrome.storage.local.set({ userPresets: updated });
-    setPresetName(''); setShowSaveDialog(false); setSelectedId(id);
-    window.__gbToast?.success(`Saved "${newPreset.name}"`);
+    setBusy(true);
+    try {
+      const scopes = await gatherScopes([...chosenScopes]);
+      if (serverUnavailable) {
+        downloadSettingsFallback(presetName, scopes);
+        setPresetName('');
+        setShowSaveDialog(false);
+        window.__gbToast?.success('Settings template downloaded as JSON');
+        return;
+      }
+      const response = await sendBackgroundMessage('settingsShareCreate', {
+        name: presetName.trim(), scopes,
+      });
+      const share = normalizePreset(response.share);
+      setShares((current) => [share, ...current.filter((item) => item.id !== share.id)]);
+      setSelectedId(share.id);
+      setSelectedShare(share);
+      setPresetName('');
+      setShowSaveDialog(false);
+      let copied = false;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(share.url);
+          copied = true;
+        }
+      } catch {
+        // Link creation succeeded; clipboard availability must not turn it
+        // into a false failure. The Copy button remains available below.
+      }
+      window.__gbToast?.success(
+        copied ? `Created "${share.name}" and copied its URL` : `Created "${share.name}"`,
+      );
+    } catch (error) {
+      try {
+        const scopes = await gatherScopes([...chosenScopes]);
+        downloadSettingsFallback(presetName, scopes);
+        setServerUnavailable(true);
+        setPresetName('');
+        setShowSaveDialog(false);
+        window.__gbToast?.success('Server unavailable — downloaded a JSON settings template instead');
+      } catch (fallbackError) {
+        window.__gbToast?.error(fallbackError.message || error.message || 'Unable to share settings');
+      }
+    } finally { setBusy(false); }
   }
 
   async function handleLoad() {
-    if (!selectedId) return;
-    const raw = presets.find((p) => p.id === selectedId);
-    if (!raw) return;
-    const preset = normalizePreset(raw);
-    // Apply only the scopes the user left ticked.
-    const chosen = {};
-    for (const id of loadScopes) if (preset.scopes && preset.scopes[id]) chosen[id] = preset.scopes[id];
-    const { applied } = await applyScopes(chosen);
-    onPresetLoad?.();
-    const labels = applied
-      .map((id) => PRESET_SCOPES.find((s) => s.id === id)?.label)
-      .filter(Boolean);
-    window.__gbToast?.success(
-      labels.length ? `Loaded ${labels.join(' · ')}` : 'Preset had nothing to load',
-    );
+    if (!importCandidate) return;
+    setBusy(true);
+    try {
+      const preset = normalizePreset(importCandidate);
+      // Apply only the scopes the user left ticked.
+      const chosen = {};
+      for (const id of loadScopes) if (preset.scopes && preset.scopes[id]) chosen[id] = preset.scopes[id];
+      const { applied } = await applyScopes(chosen);
+      if (importCandidate.transport !== 'json') {
+        try {
+          const retained = await sendBackgroundMessage('settingsShareRecordImport', {
+            shareId: preset.id,
+            scopeIds: applied,
+          });
+          const retainedShare = normalizePreset(retained.share);
+          setShares((current) => [retainedShare, ...current.filter((item) => item.id !== retainedShare.id)]);
+          setSelectedId(retainedShare.id);
+          setSelectedShare(retainedShare);
+        } catch {
+          // Applying the local data succeeded. Server-side history is optional
+          // and must never turn that success into an import failure.
+          setServerUnavailable(true);
+        }
+      }
+      setImportCandidate(null);
+      setImportUrl('');
+      setShowImportPanel(false);
+      onPresetLoad?.();
+      const labels = applied.map((id) => PRESET_SCOPES.find((s) => s.id === id)?.label).filter(Boolean);
+      window.__gbToast?.success(labels.length ? `Imported ${labels.join(' · ')}` : 'Template had nothing to import');
+    } catch (error) {
+      window.__gbToast?.error(error.message || 'Unable to import settings template');
+    } finally { setBusy(false); }
   }
 
   async function handleDelete() {
     if (!selectedId) return;
-    const updated = presets.filter((p) => p.id !== selectedId);
-    setPresets(updated);
-    await chrome.storage.local.set({ userPresets: updated });
-    setSelectedId(null);
-  }
-
-  function handleExport() {
-    if (!selectedId) return;
-    const preset = presets.find((p) => p.id === selectedId);
-    if (!preset) return;
-    const blob = new Blob([JSON.stringify(preset, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url;
-    a.download = preset.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '_preset.json';
-    a.click(); URL.revokeObjectURL(url);
-  }
-
-  async function handleImport(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    setBusy(true);
     try {
-      const obj = JSON.parse(await file.text());
-      if (!obj.name) throw new Error('Invalid');
-      // Stamp a fresh id so two imports of the same file don't collide.
-      const normalized = normalizePreset({ ...obj, id: 'up_' + Date.now(), createdAt: Date.now() });
-      const updated = [...presets, normalized];
-      setPresets(updated);
-      await chrome.storage.local.set({ userPresets: updated });
-      setSelectedId(normalized.id);
-      window.__gbToast?.success(`Imported "${normalized.name}"`);
-    } catch (err) {
-      console.error('Import failed:', err);
-      window.__gbToast?.error('Import failed — not a valid preset file');
-    }
-    e.target.value = '';
+      await sendBackgroundMessage('settingsShareRevoke', { shareId: selectedId });
+      setShares((current) => current.filter((share) => share.id !== selectedId));
+      setSelectedId(null);
+      setSelectedShare(null);
+      window.__gbToast?.success('Settings link revoked');
+    } catch (error) {
+      window.__gbToast?.error(error.message || 'Unable to revoke settings link');
+    } finally { setBusy(false); }
   }
 
-  const hasPresets = presets.length > 0;
-  const dropdownOptions = presets.map((p) => {
-    const ids = presetScopeIds(p);
+  async function selectOwnedShare(id) {
+    setSelectedId(id);
+    setSelectedShare(null);
+    if (!id) return;
+    setBusy(true);
+    try {
+      const response = await sendBackgroundMessage('settingsShareGet', { shareId: id });
+      setSelectedShare(normalizePreset(response.share));
+    } catch (error) {
+      setServerUnavailable(true);
+      window.__gbToast?.error(error.message || 'Unable to open settings link');
+    } finally { setBusy(false); }
+  }
+
+  async function openImportUrl() {
+    if (!importUrl.trim()) return;
+    setBusy(true);
+    try {
+      const response = await sendBackgroundMessage('settingsShareGet', { url: importUrl.trim() });
+      const share = normalizePreset(response.share);
+      setImportCandidate(share);
+      setServerUnavailable(false);
+      window.__gbToast?.success(`Loaded "${share.name}" — choose what to import`);
+    } catch (error) {
+      setServerUnavailable(true);
+      window.__gbToast?.error(error.message || 'Unable to open settings link');
+    } finally { setBusy(false); }
+  }
+
+  async function copySelectedUrl() {
+    if (!selectedShare?.url) return;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard access is unavailable');
+      await navigator.clipboard.writeText(selectedShare.url);
+      window.__gbToast?.success('Settings URL copied');
+    } catch (error) {
+      window.__gbToast?.error(error.message || 'Unable to copy settings URL');
+    }
+  }
+
+  const hasShares = shares.length > 0;
+  const dropdownOptions = shares.map((p) => {
+    const ids = p.scope_ids || presetScopeIds(p);
     const tail = ids.length ? ` · ${ids.length} scope${ids.length === 1 ? '' : 's'}` : '';
-    return { id: p.id, label: `${p.name} (${new Date(p.createdAt).toLocaleDateString()})${tail}` };
+    const created = p.created_at ? new Date(p.created_at).toLocaleDateString() : '';
+    const shared = p.relationship === 'imported' ? ' · Shared with you' : '';
+    return { id: p.id, label: `${p.name}${created ? ` (${created})` : ''}${tail}${shared}` };
   });
-  const selectedScopeIds = selectedId
-    ? presetScopeIds(presets.find((p) => p.id === selectedId))
-    : [];
+  const candidateScopeIds = importCandidate ? presetScopeIds(importCandidate) : [];
 
   return (
     <div>
-      <SectionLabel>User Presets</SectionLabel>
+      <input ref={fileInputRef} type="file" accept="application/json,.json" hidden onChange={openSettingsFile} />
+      <SectionLabel action={(
+        <div style={{ display: 'flex', gap: 5 }}>
+          <Btn
+            variant={showImportPanel ? 'tinted' : 'ghost'}
+            size="xs"
+            icon={<I.link />}
+            onClick={() => {
+              setShowSaveDialog(false);
+              setShowImportPanel((open) => !open);
+            }}
+          >
+            Import link
+          </Btn>
+          <Btn variant="ghost" size="xs" icon={<I.download />} onClick={() => fileInputRef.current?.click()}>
+            Import JSON
+          </Btn>
+          <Btn variant="primary" size="xs" icon={<I.plus />} onClick={openSaveDialog}>
+            Create
+          </Btn>
+        </div>
+      )}>
+        Shared Settings Templates
+      </SectionLabel>
+      {serverUnavailable && (
+        <Callout tone="warning" style={{ marginBottom: 10 }}>
+          Link sharing is unavailable or this installation was revoked. JSON export and import remain available.
+        </Callout>
+      )}
+      <AnimatePresence>
+        {showImportPanel && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={T.base}
+            style={{ overflow: 'hidden', marginBottom: 10 }}
+          >
+            <div style={{
+              padding: 11,
+              background: 'var(--gb-surface-1)',
+              border: '1px solid var(--gb-border-default)',
+              borderRadius: 'var(--gb-r-md)',
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-text-primary)', marginBottom: 3 }}>
+                Load a shared template
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--gb-text-muted)', marginBottom: 8 }}>
+                Paste the URL you received. Nothing is imported until you choose its scopes below.
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <Input
+                  value={importUrl}
+                  onChange={setImportUrl}
+                  onKeyDown={(e) => e.key === 'Enter' && openImportUrl()}
+                  placeholder="https://api.cullenchampagne.com/extension/settings-shares/…"
+                  leading={<I.link />}
+                  mono
+                  autoFocus
+                  style={{ flex: 1, minWidth: 0 }}
+                />
+                <Btn variant="tinted" size="md" icon={<I.download />} onClick={openImportUrl} disabled={busy || !importUrl.trim()}>
+                  Load link
+                </Btn>
+                <Btn
+                  variant="ghost"
+                  size="md"
+                  onClick={() => {
+                    setShowImportPanel(false);
+                    setImportCandidate(null);
+                    setImportUrl('');
+                  }}
+                >
+                  Cancel
+                </Btn>
+              </div>
+              <AnimatePresence>
+              {candidateScopeIds.length > 0 && (
+                <motion.div
+                  key={importCandidate.id}
+                  initial={{ opacity: 0, height: 0, y: -6 }}
+                  animate={{ opacity: 1, height: 'auto', y: 0 }}
+                  exit={{ opacity: 0, height: 0, y: -6 }}
+                  transition={T.base}
+                  style={{ overflow: 'hidden', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--gb-border-subtle)' }}
+                >
+                  <div style={{ fontSize: 11, fontWeight: 750, color: 'var(--gb-text-primary)', marginBottom: 2 }}>
+                    {importCandidate.name}
+                  </div>
+                  <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', marginBottom: 7 }}>
+                    Choose what to merge into this extension · {loadScopes.size} of {candidateScopeIds.length} selected
+                  </div>
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                    {candidateScopeIds.map((id) => {
+                      const def = PRESET_SCOPES.find((scope) => scope.id === id);
+                      if (!def) return null;
+                      const on = loadScopes.has(id);
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          title={def.desc}
+                          onClick={() => setLoadScopes((current) => {
+                            const next = new Set(current);
+                            if (next.has(id)) next.delete(id); else next.add(id);
+                            return next;
+                          })}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', padding: '3px 9px',
+                            borderRadius: 'var(--gb-r-pill)', cursor: 'pointer', fontSize: 10.5,
+                            fontWeight: 600, fontFamily: 'inherit',
+                            background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)',
+                            border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
+                            color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
+                            textDecoration: on ? 'none' : 'line-through',
+                          }}
+                        >
+                          {def.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 9 }}>
+                    <Btn
+                      variant="primary"
+                      size="md"
+                      icon={<I.download />}
+                      onClick={handleLoad}
+                      disabled={busy || loadScopes.size === 0}
+                    >
+                      Import selected
+                    </Btn>
+                  </div>
+                </motion.div>
+              )}
+              </AnimatePresence>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <AnimatePresence>
         {showSaveDialog && (
           <motion.div
@@ -408,18 +656,18 @@ function UserPresetsManager({ onPresetLoad }) {
               <div style={{ display: 'flex', gap: 8 }}>
                 <Input
                   value={presetName}
-                  onChange={(e) => setPresetName(e.target.value)}
+                  onChange={setPresetName}
                   onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-                  placeholder="Name this preset…"
+                  placeholder="Name this settings template…"
                   autoFocus size="sm"
                   style={{ flex: 1 }}
                 />
                 <Btn
                   variant="primary" size="sm" icon={<I.check />}
-                  disabled={!presetName.trim() || chosenScopes.size === 0}
+                  disabled={busy || !presetName.trim() || chosenScopes.size === 0}
                   onClick={handleSave}
                 >
-                  Save
+                  {serverUnavailable ? 'Download JSON' : 'Save'}
                 </Btn>
                 <Btn variant="ghost" size="sm" onClick={() => setShowSaveDialog(false)}>Cancel</Btn>
               </div>
@@ -463,53 +711,53 @@ function UserPresetsManager({ onPresetLoad }) {
           </motion.div>
         )}
       </AnimatePresence>
-      {/* Single toolbar row: preset picker + primary Load, then square
-          icon buttons (Save · Export · Import · Delete) that stay
-          proportional at any zoom. The dropdown gets a minWidth:0 so it
-          yields space to the buttons instead of pushing them to wrap. */}
+      {/* The server list contains links created by this installation and links
+          it has successfully imported. */}
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        <Dropdown size="md" value={selectedId} placeholder={hasPresets ? 'Select a preset…' : 'No saved presets'} options={dropdownOptions} onChange={setSelectedId} disabled={!hasPresets} style={{ flex: 1, minWidth: 0 }} />
-        <Btn variant="primary" size="md" icon={<I.check />} onClick={handleLoad} disabled={!selectedId || loadScopes.size === 0}>Load</Btn>
-        <IconBtn size="md" icon={<I.save />}     onClick={openSaveDialog}                      title="Save current state as a preset" />
-        <IconBtn size="md" icon={<I.download />} onClick={handleExport} disabled={!selectedId} title="Export selected preset to a file" />
-        <IconBtn size="md" icon={<I.upload />}   onClick={() => fileInputRef.current?.click()} title="Import a preset from a file" />
-        <IconBtn size="md" icon={<I.trash />} danger onClick={handleDelete} disabled={!selectedId} title="Delete selected preset" />
-        <input ref={fileInputRef} type="file" accept=".json" onChange={handleImport} style={{ display: 'none' }} />
+        <Dropdown size="md" value={selectedId} placeholder={hasShares ? 'Saved settings links…' : 'No settings links yet'} options={dropdownOptions} onChange={selectOwnedShare} disabled={!hasShares || busy} style={{ flex: 1, minWidth: 0 }} />
+        <IconBtn size="md" icon={<I.trash />} danger onClick={handleDelete} disabled={busy || selectedShare?.relationship !== 'owned'} title="Revoke selected settings URL" />
       </div>
-      {/* Scope chips — what's in the selected preset AND which to load. Tap a
-          chip to include/exclude it; only ticked scopes are applied on Load. */}
-      {selectedScopeIds.length > 0 && (
-        <div style={{ marginTop: 8 }}>
-          <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', marginBottom: 5 }}>
-            Tap to choose what to load · {loadScopes.size} of {selectedScopeIds.length}
+      {/* Compact link result: creation/list selection never offers scope import.
+          Scope choices exist only inside the explicit Import-link flow. */}
+      <AnimatePresence>
+      {selectedShare?.url && (
+        <motion.div
+          key={selectedShare.id}
+          initial={{ opacity: 0, height: 0, y: -5 }}
+          animate={{ opacity: 1, height: 'auto', y: 0 }}
+          exit={{ opacity: 0, height: 0, y: -5 }}
+          transition={T.base}
+          style={{
+          marginTop: 9,
+          padding: '8px 9px',
+          border: '1px solid var(--gb-brand-tint-border)',
+          borderRadius: 'var(--gb-r-md)',
+          background: 'var(--gb-brand-tint-soft)',
+          display: 'flex', alignItems: 'center', gap: 8,
+          overflow: 'hidden',
+        }}>
+          <I.link size={13} style={{ color: 'var(--gb-brand-label)', flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 750, color: 'var(--gb-text-primary)', marginBottom: 2 }}>
+              {selectedShare.name}
+            </div>
+            <div title={selectedShare.url} style={{
+              fontSize: 9.5, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {selectedShare.url}
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-            {selectedScopeIds.map((id) => {
-              const def = PRESET_SCOPES.find((s) => s.id === id);
-              if (!def) return null;
-              const on = loadScopes.has(id);
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  title={def.desc}
-                  onClick={() => setLoadScopes((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; })}
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', padding: '3px 9px',
-                    borderRadius: 'var(--gb-r-pill)', cursor: 'pointer', fontSize: 10.5, fontWeight: 600, fontFamily: 'inherit',
-                    background: on ? 'var(--gb-brand-tint-medium)' : 'var(--gb-fill-subtle)',
-                    border: '1px solid ' + (on ? 'var(--gb-brand-label)' : 'var(--gb-border-default)'),
-                    color: on ? 'var(--gb-brand-label)' : 'var(--gb-text-tertiary)',
-                    textDecoration: on ? 'none' : 'line-through',
-                  }}
-                >
-                  {def.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+          <IconBtn size="sm" icon={<I.copy />} onClick={copySelectedUrl} title="Copy settings URL" />
+          <IconBtn
+            size="sm"
+            icon={<I.close />}
+            onClick={() => { setSelectedId(null); setSelectedShare(null); }}
+            title="Dismiss link"
+          />
+        </motion.div>
       )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -682,9 +930,10 @@ function DevSettingRow({ def, value, onChange }) {
 }
 
 /* ── Main Settings Panel ─────────────────────────────────────── */
-export function SettingsPanel() {
+export function SettingsPanel({ remotePolicy }) {
   const [theme, setTheme] = useState(DEFAULT_THEME);
   const [flags, setFlags] = useState(FEATURE_DEFAULTS);
+  const [credentials, setCredentials] = useState(EMPTY_CREDENTIALS);
   const [shortcuts, setShortcuts] = useState(KEYBOARD_SHORTCUTS_DEFAULTS);
   const [customPages, setCustomPages] = useState(emptyCustomPages);
   const [devSettings, setDevSettings] = useState(defaultDevSettings);
@@ -692,16 +941,11 @@ export function SettingsPanel() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [paStatus, setPaStatus] = useState(null);
   const [scales, setScales] = useState(DEFAULT_SCALES);
-  // Per-setting "hidden from UI" flags (own storage object, importable on its
-  // own). A secret key is NEVER rendered here — there is intentionally no UI to
-  // set/unset it; that's done only via the `__gbSecret` console command (see
-  // src/lib/secretSettings.js). Hiding keeps the value, so an admin can lock a
-  // feature on/off and remove its switch so reps can't see or change it.
-  const [secret] = useSecretSettings();
-  const visible = (key) => !isSecret(secret, key);
-  // `__gbSecret.hideDev()` sets this — hides the whole Developer Settings
-  // section for non-dev builds.
-  const devSectionHidden = isSecret(secret, DEV_SECTION_KEY);
+  // Visibility is server-owned after a complete, validated policy sync.
+  // Dashboard administrators bypass the policy and retain their local setup.
+  const visible = (key) => remotePolicy.adminBypass
+    || (!remotePolicy.hiddenFeatures[key] && !remotePolicy.hiddenDeveloperSettings[key]);
+  const devSectionHidden = !remotePolicy.adminBypass && remotePolicy.developerSectionHidden;
 
   /* Sort registry alphabetically once; filter on the user's query
      case-insensitively against label / desc / key so they can find a
@@ -718,20 +962,16 @@ export function SettingsPanel() {
     );
   })();
 
-  // Expose the admin-only console command in this (extension settings) page so
-  // an admin can hide/show settings from the console. No UI surface by design.
-  useEffect(() => { installSecretConsole(window); }, []);
-  // `__gbScan.reset()` / `.status()` for the recent-orders scan clock.
-  useEffect(() => { installScanConsole(window); }, []);
 
   useEffect(() => {
     loadTheme().then((t) => { setTheme(t); applyTheme(t); });
     loadFlags().then(setFlags);
+    loadCredentials().then(setCredentials);
     loadKeyboardShortcuts().then(setShortcuts);
     loadCustomPages().then(setCustomPages);
     loadDevSettings().then(setDevSettings);
     loadScales().then(setScales);
-  }, [refreshKey]);
+  }, [refreshKey, remotePolicy.revision, remotePolicy.adminBypass]);
 
   /* UI-scale commit — local state + persist + apply to this document
      immediately so the rep sees the change without waiting for the
@@ -762,11 +1002,14 @@ export function SettingsPanel() {
     window.__gbToast?.success('Developer settings reset to defaults');
   }
 
-  /* Update one section's selection + persist. The customPages shape is
-     { [sectionId]: [pageId, …] }, so we replace the section's array
-     wholesale on every change — same pattern as setFlagValue. */
-  function setSectionSelection(sectionId, ids) {
-    const next = { ...customPages, [sectionId]: ids };
+  /* The UI manages one switch per scope. Storage remains an array of page ids
+     so the classic page engine keeps its stable, backward-compatible shape. */
+  function toggleCustomPageScope(section) {
+    const enabled = (customPages[section.id] || []).length > 0;
+    const next = {
+      ...customPages,
+      [section.id]: enabled ? [] : section.items.map((item) => item.id),
+    };
     setCustomPages(next);
     saveCustomPages(next);
   }
@@ -790,6 +1033,11 @@ export function SettingsPanel() {
   };
   const toggleFlag = (key) => { const next = { ...flags, [key]: !flags[key] }; setFlags(next); saveFlags(next); };
   const setFlagValue = (key, value) => { const next = { ...flags, [key]: value }; setFlags(next); saveFlags(next); };
+  const setCredentialValue = (key, value) => {
+    const next = { ...credentials, [key]: value };
+    setCredentials(next);
+    saveCredentials(next);
+  };
   const setShortcut = (key, value) => { const next = { ...shortcuts, [key]: value.toLowerCase() }; setShortcuts(next); saveKeyboardShortcuts(next); };
 
   const regularFeatures = FEATURE_FLAGS.filter(f => !f.experimental && !f.dev && visible(f.key));
@@ -798,8 +1046,7 @@ export function SettingsPanel() {
   // Accepts both Logic Apps (logic.azure.com) and Power Platform direct
   // automation (*.environment.api.powerplatform.com) URL formats.
   const testConnection = () => {
-    const url = (flags.powerAutomateUrl || '').trim();
-    const ok = /^https:\/\/[^/\s]+\.(logic\.azure\.com|environment\.api\.powerplatform\.com)(:\d+)?\/\S+/i.test(url);
+    const ok = isPowerAutomateUrl(credentials.powerAutomateUrl);
     setPaStatus(ok ? 'ok' : 'fail');
     return ok ? Promise.resolve() : Promise.reject(new Error('invalid flow url'));
   };
@@ -807,8 +1054,8 @@ export function SettingsPanel() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, fontFamily: 'var(--gb-font-sans)' }}>
 
-      {/* User Presets */}
-      <UserPresetsManager onPresetLoad={() => setRefreshKey(k => k + 1)} />
+      {/* Installation-authenticated shared settings templates */}
+      <SettingsLinksManager onPresetLoad={() => setRefreshKey(k => k + 1)} />
 
       {/* Variant */}
       <section>
@@ -867,11 +1114,9 @@ export function SettingsPanel() {
         </div>
       </section>
 
-      {/* Experimental — Power Automate flow URL. The legacy global
-          "Reply with Template" toggle was phased out in favor of a
-          per-template setting; the URL itself is still a shared secret
-          so it lives here. The ExpandableFeature's "on" state proxies
-          off whether a URL is saved — toggling off clears it. */}
+      {/* Bearer-style integration settings are stored outside featureFlags so
+          presets and feature broadcasts cannot copy them. */}
+      {visible('powerAutomateEnabled') && (
       <section>
         <SectionLabel>Experimental</SectionLabel>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -885,11 +1130,27 @@ export function SettingsPanel() {
           >
             <Field label="Flow URL" required>
               <Input
-                value={flags.powerAutomateUrl || ''}
-                onChange={(v) => setFlagValue('powerAutomateUrl', v)}
+                value={credentials.powerAutomateUrl}
+                onChange={(v) => setCredentialValue('powerAutomateUrl', v)}
                 mono
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
                 placeholder="https://…environment.api.powerplatform.com/powerautomate/…"
                 leading={<I.bolt />}
+              />
+            </Field>
+
+            <Field label="Address autocomplete key">
+              <Input
+                value={credentials.addressAutocompleteKey}
+                onChange={(v) => setCredentialValue('addressAutocompleteKey', v)}
+                mono
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="Browser key from Smarty"
+                leading={<I.search />}
               />
             </Field>
 
@@ -900,6 +1161,9 @@ export function SettingsPanel() {
                   <li>Add a <b style={{ color: 'var(--gb-text-secondary)' }}>Send an email (V2)</b> action</li>
                   <li>Save and paste the generated URL above</li>
                 </ol>
+              </Callout>
+              <Callout tone="info" title="Credential handling">
+                Integration values stay on this browser profile and are excluded from project presets and feature-flag broadcasts. Rotate a URL or key if it was ever committed or shared.
               </Callout>
             </div>
 
@@ -915,58 +1179,34 @@ export function SettingsPanel() {
           </ExpandableFeature>
         </div>
       </section>
+      )}
 
-      {/* Custom Pages — pick which internal site pages the extension
-          should replace with custom overrides. Each section is a
-          CollapsibleChecklist with its own tri-state select-all; the
-          section-level header here also drives a master select-all
-          that flips every page across every section. */}
+      {/* Custom Pages — one switch per registered scope. The page engine still
+          consumes page-id arrays internally, preserving its stable contract. */}
+      {(!remotePolicy.hiddenCustomPages || remotePolicy.adminBypass) && CUSTOM_PAGE_SECTIONS.some((section) => (
+        remotePolicy.adminBypass || !remotePolicy.hiddenCustomPageScopes[section.id]
+      )) && (
       <section>
-        {(() => {
-          const allItems = CUSTOM_PAGE_SECTIONS.flatMap((s) =>
-            s.items.map((it) => ({ sec: s.id, id: it.id })));
-          const totalPicked = allItems.reduce(
-            (n, { sec, id }) => n + ((customPages[sec] || []).includes(id) ? 1 : 0), 0,
-          );
-          const allOn = totalPicked === allItems.length && allItems.length > 0;
-          const masterToggle = () => {
-            const next = {};
-            for (const s of CUSTOM_PAGE_SECTIONS) {
-              next[s.id] = allOn ? [] : s.items.map((it) => it.id);
-            }
-            setCustomPages(next);
-            saveCustomPages(next);
-          };
-          return (
-            <SectionLabel
-              action={
-                <Btn variant="ghost" size="xs" onClick={masterToggle}>
-                  {allOn ? 'Deselect all' : 'Select all'}
-                </Btn>
-              }
-            >
-              Custom Pages
-            </SectionLabel>
-          );
-        })()}
+        <SectionLabel>Custom Pages</SectionLabel>
         <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: -4, marginBottom: 10, lineHeight: 1.5 }}>
-          Pick which internal site pages the extension replaces with a custom UI. Anything left unchecked falls through to the original page.
+          Enable the extension's custom interface by page scope. Disabled scopes use the original site.
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {CUSTOM_PAGE_SECTIONS.map((section) => (
-            <CollapsibleChecklist
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {CUSTOM_PAGE_SECTIONS
+            .filter((section) => remotePolicy.adminBypass || !remotePolicy.hiddenCustomPageScopes[section.id])
+            .map((section) => (
+            <FeatureSpotlight
               key={section.id}
               icon={<I.cog />}
-              title={section.label}
-              items={section.items}
-              selected={customPages[section.id] || []}
-              onChange={(ids) => setSectionSelection(section.id, ids)}
-              columns={2}
-              defaultOpen={false}
+              name={section.label}
+              desc={`Use the custom extension UI for supported ${section.label} pages.`}
+              on={(customPages[section.id] || []).length > 0}
+              onChange={() => toggleCustomPageScope(section)}
             />
           ))}
         </div>
       </section>
+      )}
 
       {/* Theme Colors */}
       <section>

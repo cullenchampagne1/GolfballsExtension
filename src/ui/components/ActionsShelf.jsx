@@ -510,7 +510,7 @@ export function ActionsShelf({
           e.preventDefault();
           e.stopPropagation();
           try { row.action.handler && row.action.handler(); }
-          catch (err) { console.warn('ActionsShelf: shortcut handler threw', err); }
+          catch (err) { /* Keep shortcuts responsive if an optional action fails. */ }
           if (!row.action.keepOpen) setOpen(false);
         }
       }
@@ -666,7 +666,7 @@ export function ActionsShelf({
                   index={r.index}
                   smart={r.smart}
                   onPick={(a) => {
-                    try { a.handler && a.handler(); } catch (err) { console.warn('ActionsShelf: action handler threw', err); }
+                    try { a.handler && a.handler(); } catch (err) { /* Keep the shelf responsive. */ }
                     if (!a.keepOpen) setOpen(false);
                   }}
                 />

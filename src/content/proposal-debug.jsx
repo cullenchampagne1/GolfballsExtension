@@ -151,7 +151,7 @@ function ProposalDebugRoot() {
   enabledRef.current = enabled;
   useEffect(() => {
     const onMsg = (e) => {
-      if (e.source !== window || !e.data || !e.data.__gbProposalNet || !e.data.entry) return;
+      if (e.source !== window || e.origin !== window.location.origin || !e.data || !e.data.__gbProposalNet || !e.data.entry) return;
       if (!enabledRef.current) return;
       try { chrome.runtime.sendMessage({ action: 'gbProposalNet', entry: e.data.entry }); } catch { /* */ }
     };

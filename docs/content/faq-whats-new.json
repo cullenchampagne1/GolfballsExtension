@@ -13,13 +13,13 @@
       "faq": [
         { "q": "Why don't I see a confirmation when something succeeds?", "a": "Deliberate design: the extension only notifies on errors. No toast means it worked. The exceptions are flows that show explicit progress, like date saves and bulk sends." },
         { "q": "Why did Send open an Outlook window?", "a": "Power Automate is off (the default) or has no flow URL, so sending falls back to a pre-filled Outlook window. See 'How Email Sending Works'." },
-        { "q": "Does anyone else see my Watch List, templates, or settings?", "a": "No — everything is stored locally in your browser profile. Sharing happens only when you export a preset and someone imports it." },
+        { "q": "Does anyone else see my Watch List, templates, or settings?", "a": "Local data stays in your browser profile unless you explicitly create a settings link. RevStack stores only the scopes you select; Watch List data and credentials are never included." },
         { "q": "Are 3D previews accurate enough to send to customers?", "a": "Yes — decorations render through the same production services the website uses, and exports use a fixed pose so every shot frames identically." },
         { "q": "What's the difference between the Watch List and Quick Tasks?", "a": "Watch List is your private local to-do list; nothing reaches the CRM. Quick Task creates a real CRM task attached to the contact, visible to the team." },
         { "q": "Why does the Gift Catalog take a few seconds sometimes?", "a": "It's re-indexing the full site catalog — happens when the local cache (24h) expires. Subsequent opens are instant." },
         { "q": "Will a campaign email people twice if I run it again?", "a": "A campaign processes the audience you select per run. Re-running on the same selection sends again — use saved queries to define audiences precisely, and dry-run first." },
-        { "q": "Did 'reply with template' send my email?", "a": "If you used the Microsoft (Graph) path, it created a draft in your mailbox — review and send it from Outlook. Only Power Automate sends directly." },
-        { "q": "A toggle disappeared from my Settings — am I losing my mind?", "a": "No — an admin hid it via secret settings. The feature keeps working in its locked state. See 'Hidden Settings'." },
+        { "q": "Did 'reply with template' send my email?", "a": "Power Automate sends directly and reports success or failure. When Power Automate is off, the extension opens a pre-filled Outlook window and you finish the send there." },
+        { "q": "A toggle disappeared from my Settings — am I losing my mind?", "a": "No — the authenticated administrator policy can hide managed controls. Ask a RevStack administrator to review the Golfballs configuration." },
         { "q": "Where do saved proposals live?", "a": "Both locally (your saved proposals list) and server-side as a real cart tied to the CRM opportunity — which is why you can reload one later or send the customer a live cart link." }
       ],
       "related": ["how-email-sending-works", "hidden-settings", "watch-list", "build-email-proposal"]

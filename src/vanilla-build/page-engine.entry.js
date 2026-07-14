@@ -17,16 +17,12 @@ import {
   clearCache,
   resolvePath,
   evaluateCode,
-  evaluateCodeSync,
   extract,
   resolve,
   listPaths,
   toDisplayString,
   existsAt,
   tokenizePath,
-  runCode,
-  runCodeSync,
-  compile,
   describeHelpers,
   detectSchema,
 } from '../lib/page-engine/index.js';
@@ -49,7 +45,6 @@ const api = Object.freeze({
   clearCache,
   resolvePath,
   evaluateCode,
-  evaluateCodeSync,
 
   /* "Which page am I on + what's on it" — the single page-type
      detector (superset of the old shelf/smart-detection copies) plus
@@ -67,9 +62,6 @@ const api = Object.freeze({
   toDisplayString,
   existsAt,
   tokenizePath,
-  runCode,
-  runCodeSync,
-  compile,
   describeHelpers,
   detectSchema,
   listSchemas,

@@ -76,7 +76,7 @@ export async function evaluateCode(doc, body, vars = {}) {
   const ctx = runEngine(doc);
   /* MV3 blocks `new Function` in the content-script world, so the body is
      compiled + run in a sandboxed iframe (sandbox-bridge.js). Privileged
-     helpers it calls (h.send / h.fetch* / h.catalog.* / h.domText) are
+     approved helpers it calls (h.fetch* / h.catalog.* / h.domText) are
      serviced back here against this doc. runCode (direct new Function) is
      kept only for non-MV3 / test contexts. */
   return runInSandbox(body, ctx?.data || {}, vars, doc);

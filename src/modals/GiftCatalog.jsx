@@ -2566,7 +2566,6 @@ function CustomItemForm({ initial, onCancel, onSave, onDelete }) {
           // external link rather than refusing the save. The catalog renders
           // it fine; only proposal emails need the hosted copy, and editing
           // the item later retries the ingest.
-          console.warn('[GB] custom-item image ingest failed, keeping external URL:', (e && e.message) || e);
         }
       }
       await onSave(rec);

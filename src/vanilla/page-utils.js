@@ -311,7 +311,7 @@ let pickActive = false;
         if (!glow) {
           glow = document.createElement('div');
           glow.id = '__gb-signifyd-glow';
-          
+
           // Fixed keeps it locked to the screen vertically.
           // top: -3px covers your top margin gap!
           glow.style.cssText = `
@@ -325,7 +325,7 @@ let pickActive = false;
             transition: opacity 0.5s ease-in-out;
           `;
           document.body.appendChild(glow);
-          
+
           // Ensure it recalculates if the user resizes the window
           window.addEventListener('resize', __gbApplySignifydGlow);
         }
@@ -341,7 +341,7 @@ let pickActive = false;
           glow.style.left = '0px';
           glow.style.width = '100%';
         }
-        
+
       } else if (!hasFailedTag && glow) {
         // Clean up when the tag is removed
         glow.remove();

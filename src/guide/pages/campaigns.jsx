@@ -557,7 +557,7 @@ const STEP_TYPES = [
   ['Email', 'A template picker; when the chosen template has variations, weight sliders set the split (always sum to 100%) — each contact rolls one.'],
   ['Call', 'Log a call (saved template, or custom: category, direction, subject, notes, voicemail flag) — or complete the contact\'s open tasks (latest / all).'],
   ['Task', 'Create a task (template, or custom: subject, notes, due-in days, priority) — or complete open tasks.'],
-  ['Custom', 'A code editor (ctx = contact/account data, h = fetch/send/dom, window.open opens a tab) with a “Kill the flow after this step” switch; the code can also return \'kill\'.'],
+  ['Custom', 'A sandboxed code editor (ctx = contact/account data, h = read-only fetch/catalog/domText helpers) with a “Kill the flow after this step” switch; the code can also return \'kill\'.'],
 ];
 const COND_SOURCES = [
   ['Signal', 'Pre-computed CRM stats: Order count · Days since last order · Lifetime spend ($) · Has ordered brand · Order item contains.'],

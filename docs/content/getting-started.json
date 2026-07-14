@@ -62,12 +62,12 @@
           { "type": "p", "text": "Open the Settings page (extension popup → settings gear, or the Settings tab in the Template Editor). Five things are worth doing on day one:" },
           { "type": "list", "items": [
             "Pick a theme — Dark, Slate, Light, or Cream. Changes apply live everywhere.",
-            "Set your email account host — the 'Email account host' field under Developer Settings controls the From identity on sends. It ships with a default that is probably not you; change it first.",
+            "Set your email account host — the 'Email account host' field under Developer Settings controls the From identity on sends. It starts blank and must be configured before Power Automate delivery.",
             "Write your email signature — Settings → signature editor. It's auto-appended to emails sent through Power Automate.",
             "Review feature toggles — everything except Power Automate is on by default. Turn off what you won't use.",
-            "Import a team preset — if a teammate exported a preset JSON, Settings → User Presets → Import gives you their templates and settings in one step."
+            "Open a team settings link — paste the URL under Shared Settings Templates, preview it, and choose which scopes to import."
           ] },
-          { "type": "callout", "kind": "warning", "title": "Check the From identity", "text": "Until you change 'Email account host', emails may go out under someone else's identity. This is the single most important first-run setting." },
+          { "type": "callout", "kind": "warning", "title": "Configure the From identity", "text": "Power Automate sends fail closed while 'Email account host' is blank, preventing accidental delivery under another employee's identity." },
           { "type": "callout", "kind": "tip", "text": "Power Automate is off by default. Without it, Send opens a pre-filled Outlook window instead of sending silently. See \"How Email Sending Works\" before enabling it." }
         ]
       },

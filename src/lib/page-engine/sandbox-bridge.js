@@ -6,8 +6,8 @@
    module:
      • lazily frames the sandbox page (once per page) and waits for ready,
      • posts code-var jobs to it and resolves with the body's value,
-     • services the privileged-helper calls it proxies back
-       (h.send / h.fetch* / h.catalog.* / h.domText) using the REAL
+     • services a small, explicit set of read-only helper calls
+       (h.fetch* / h.catalog.* / h.domText) using the REAL
        helpers, which have chrome + the live DOM.
 
    See sandbox/sandbox-eval.entry.js for the other side + the protocol.
@@ -25,6 +25,23 @@ const jobs = new Map();         // jobId → { resolve, reject }
 const jobDocs = new Map();      // jobId → doc (for the domText proxy)
 let seq = 0;
 let listening = false;
+const ALLOWED_HELPERS = Object.freeze(new Set([
+  'fetchText', 'fetchJson', 'parse', 'product', 'domText',
+  'catalog.search', 'catalog.find', 'catalog.byId', 'catalog.byUrl',
+]));
+
+function randomChannel() {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/* The sandbox has an opaque origin by design, so targetOrigin cannot be a
+   concrete URL. A cryptographically random per-frame capability, strict
+   event.source checks, and a closed shadow root form the trust boundary. */
+const sandboxChannel = typeof crypto !== 'undefined' && crypto.getRandomValues
+  ? randomChannel()
+  : null;
 
 function getByPath(obj, path) {
   return String(path).split('.').reduce((o, k) => (o == null ? o : o[k]), obj);
@@ -37,8 +54,8 @@ function installListener() {
   listening = true;
   window.addEventListener('message', async (ev) => {
     const m = ev.data;
-    if (!m || m.__gbSandbox == null) return;
-    /* Trust gate: privileged 'hcall' (h.send / h.fetch* / DOM) and job
+    if (!m || m.__gbSandbox == null || m.channel !== sandboxChannel) return;
+    /* Trust gate: privileged 'hcall' (h.fetch* / catalog / DOM) and job
        'result' messages are honored ONLY from our own sandbox iframe.
        Without this, any other frame on the page could post an 'hcall' and
        drive the real helpers (which carry chrome + the live DOM). The frame
@@ -57,8 +74,16 @@ function installListener() {
     if (m.__gbSandbox === 'hcall') {
       const frame = await framePromise.catch(() => null);
       const win = frame && frame.contentWindow;
-      const reply = (ok, value, error) => { try { win && win.postMessage({ __gbSandbox: 'hresult', callId: m.callId, ok, value, error }, '*'); } catch {} };
+      const reply = (ok, value, error) => {
+        try {
+          /* SECURITY-AUDITED: sandbox documents have an opaque origin. */
+          win && win.postMessage({ __gbSandbox: 'hresult', channel: sandboxChannel, callId: m.callId, ok, value, error }, '*');
+        } catch {}
+      };
       try {
+        if (!jobs.has(m.jobId)) throw new Error('helper call is not attached to an active job');
+        if (!ALLOWED_HELPERS.has(String(m.path || ''))) throw new Error(`helper not allowed: h.${m.path || ''}`);
+        if (!Array.isArray(m.args) || m.args.length > 8) throw new Error('invalid helper arguments');
         const doc = jobDocs.get(m.jobId) || (typeof document !== 'undefined' ? document : null);
         const h = helpersFor(doc);
         const fn = getByPath(h, m.path);
@@ -76,25 +101,29 @@ function ensureFrame() {
   if (framePromise) return framePromise;
   installListener();
   framePromise = new Promise((resolve, reject) => {
-    if (!SANDBOX_URL || typeof document === 'undefined') {
+    if (!SANDBOX_URL || !sandboxChannel || typeof document === 'undefined') {
       reject(new Error('code sandbox is unavailable in this context'));
       return;
     }
     const iframe = document.createElement('iframe');
-    iframe.src = SANDBOX_URL;
+    iframe.src = `${SANDBOX_URL}#${sandboxChannel}`;
     iframe.setAttribute('aria-hidden', 'true');
     iframe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:0;height:0;border:0;visibility:hidden;';
     let done = false;
     const settle = (fn, arg) => { if (done) return; done = true; window.removeEventListener('message', onReady); fn(arg); };
     const onReady = (ev) => {
       if (!iframe.contentWindow || ev.source !== iframe.contentWindow) return;
-      if (!ev.data || ev.data.__gbSandbox !== 'ready') return;
+      if (!ev.data || ev.data.__gbSandbox !== 'ready' || ev.data.channel !== sandboxChannel) return;
       sandboxWindow = iframe.contentWindow;   // trust anchor for the main listener
       settle(resolve, iframe);
     };
     window.addEventListener('message', onReady);
     iframe.addEventListener('error', () => settle(reject, new Error('sandbox iframe failed to load')));
-    (document.documentElement || document.body).appendChild(iframe);
+    const host = document.createElement('span');
+    host.hidden = true;
+    host.setAttribute('aria-hidden', 'true');
+    (document.documentElement || document.body).appendChild(host);
+    host.attachShadow({ mode: 'closed' }).appendChild(iframe);
     setTimeout(() => settle(reject, new Error('sandbox iframe load timed out')), 8000);
   });
   return framePromise;
@@ -115,7 +144,8 @@ export async function runInSandbox(body, ctx, vars = {}, doc = undefined) {
   return new Promise((resolve, reject) => {
     jobs.set(id, { resolve, reject });
     try {
-      frame.contentWindow.postMessage({ __gbSandbox: 'run', id, body, ctx, vars }, '*');
+      /* SECURITY-AUDITED: sandbox documents have an opaque origin. */
+      frame.contentWindow.postMessage({ __gbSandbox: 'run', channel: sandboxChannel, id, body, ctx, vars }, '*');
     } catch (e) {
       jobs.delete(id); jobDocs.delete(id); reject(e); return;
     }

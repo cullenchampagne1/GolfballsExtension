@@ -143,7 +143,7 @@ export const NAV = [
   { group: 'Reference', items: [
     { id: 'troubleshooting', title: 'Troubleshooting', icon: 'alert', slugs: ['ts-outlook-opened', 'ts-variable-unresolved', 'ts-catalog-stale', 'ts-modal-not-appearing', 'ts-no-cost', 'ts-date-update-failed', 'ts-3d-blank', 'ts-settings-vanished'] },
     { id: 'faq', title: 'FAQ', icon: 'more', slugs: ['faq'] },
-    { id: 'power', title: 'Power User', icon: 'zap', slugs: ['code-variables', 'console-commands', 'hidden-settings', 'modal-playground', 'debug-storage'] },
+    { id: 'power', title: 'Power User', icon: 'zap', slugs: ['code-variables', 'hidden-settings', 'modal-playground', 'debug-storage'] },
     { id: 'whatsnew', title: "What's New", icon: 'sparkle', slugs: ['whats-new'] },
   ]},
 ];

@@ -1,10 +1,11 @@
 {
   "$schema": "inventory of the Golfballs.com Chrome extension — source of truth for all documentation generation",
-  "generatedAt": "2026-06-09",
+  "generatedAt": "2026-07-13",
   "extension": {
     "name": "Golfballs.com",
     "version": "3.3",
     "manifestVersion": 3,
+    "extensionId": "annoeoeiijgdgmlpefllibcilcamnjek (pinned by manifest public key)",
     "description": "Helper utilities for the golfballs.com website — a CRM/sales productivity toolkit injected into golfballs.com admin pages and admin.icustomize.com iframes."
   },
 
@@ -56,7 +57,7 @@
   "modals": [
     { "id": "quick-task", "component": "QuickTask", "file": "src/modals/QuickTask.jsx", "displayName": "Quick Task", "purpose": "Keyboard-first CRM task creator with templates, category, priority and relative due dates.", "openedBy": ["actions shelf 'Add Task'", "popup Tools", "window.__gbShowQuickTaskModal()"], "pageContext": ["contact", "account", "order"], "flag": "quickTaskEnabled", "submits": "CRM Task/Create.ajax" },
     { "id": "task-list", "component": "TaskList", "file": "src/modals/TaskList.jsx", "displayName": "My Tasks", "purpose": "Searchable, filterable view of the rep's CRM task list with bulk select, open-tabs, and campaign launch.", "openedBy": ["Ctrl+X (configurable)", "actions shelf", "popup Tools"], "pageContext": ["contact", "account", "any"], "flag": "taskListEnabled", "subModals": ["EmailRunner"], "dataSource": "scrapes CRM Page=349 task table" },
-    { "id": "crm-search", "component": "CRMSearch", "file": "src/modals/CRMSearch.jsx", "displayName": "CRM Search", "purpose": "Instant search of contacts/accounts/orders via CRM Solr; filter chips, saved queries, bulk selection for campaigns.", "openedBy": ["Ctrl+K (configurable)", "actions shelf", "popup Tools"], "pageContext": ["any"], "flag": "crmSearchEnabled", "subModals": ["QueryBuilder"], "dataSource": "POST SolrIndexCrm.asmx/Query + IndexedDB gb-crm-index" },
+    { "id": "crm-search", "component": "CRMSearch", "file": "src/modals/CRMSearch.jsx", "displayName": "CRM Search", "purpose": "Instant search of contacts/accounts/orders via CRM Solr; filter chips, saved queries, bulk selection for campaigns.", "openedBy": ["Ctrl+K (configurable)", "actions shelf", "popup Tools"], "pageContext": ["any"], "flag": "crmSearchEnabled", "subModals": ["QueryBuilder"], "dataSource": "POST SolrIndexCrm.asmx/Query + worker-owned encrypted IndexedDB gb-crm-index-secure" },
     { "id": "query-builder", "component": "QueryBuilder", "file": "src/modals/QueryBuilder.jsx", "displayName": "Query Builder", "purpose": "Advanced grouped AND/OR condition builder that compiles to Solr syntax; save/load named queries.", "openedBy": ["filter button inside CRM Search"], "pageContext": ["inside CRMSearch"], "flag": "crmSearchEnabled", "audience": "advanced" },
     { "id": "call-log", "component": "CallLog", "file": "src/modals/CallLog.jsx", "displayName": "Call Log", "purpose": "Keyboard-first call logger: template filter bar, '/' composer (category, direction, voicemail, subject, note), live preview, submit to CRM activity log.", "openedBy": ["actions shelf 'Log Call'", "popup Tools", "window.__gbShowCallLogModal()"], "pageContext": ["contact", "account"], "flag": "callLogEnabled", "submits": "CRM activity-log endpoint (Page=272 form)" },
     { "id": "watch-list", "component": "WatchList", "file": "src/modals/WatchList.jsx", "displayName": "My Watch List", "purpose": "Personal cross-session to-do/watch list with priorities, due dates, completion, and links back to the order/contact each item came from.", "openedBy": ["popup Tracking section", "actions shelf 'Watch'"], "pageContext": ["any"], "flag": "watchListEnabled", "storage": "watchList (chrome.storage.local)", "notes": "Completed items auto-delete after watchList.autoDeleteCompletedDays (default 5)." },
@@ -69,7 +70,7 @@
     { "id": "gift-catalog", "component": "GiftCatalog", "file": "src/modals/GiftCatalog.jsx", "displayName": "Gift Catalog", "purpose": "Browse/search the entire golfballs.com catalog (Solr full index), filter by category/brand/price, customize items (logo/text/monogram, gift sets), and build a quote/proposal.", "openedBy": ["actions shelf 'Gift Catalog'", "window.__gbOpenGiftCatalog()"], "pageContext": ["contact", "account", "order"], "flag": "giftCatalogEnabled", "subModals": ["giftCustomize", "ProposalEmail", "GolfballViewer"], "relatedSettings": ["giftCatalog.*"] },
     { "id": "gift-customize", "component": "giftCustomize", "file": "src/modals/giftCustomize.jsx", "displayName": "Customize Item", "purpose": "Per-product option selection: imprint type (logo/text/monogram), colors, dual-pole second imprint, gift-set packaging upsell with live 3D preview, quantity/price ladder.", "openedBy": ["'Customize' on a Gift Catalog card"], "pageContext": ["inside GiftCatalog"], "flag": "giftCatalogEnabled", "libs": ["giftImprints", "giftSets", "giftSetLayout"] },
     { "id": "proposal-email", "component": "ProposalEmail", "file": "src/modals/ProposalEmail.jsx", "displayName": "Proposal Email", "purpose": "Compose and send an HTML proposal email with line items, pricing, discounts/free promo lines, 3D render snapshots, and cart link; tracks the proposal server-side (CreateProposalEmail + TrackProposal + Opportunity update).", "openedBy": ["'Email Proposal' inside Gift Catalog"], "pageContext": ["inside GiftCatalog"], "flag": "giftCatalogEnabled", "libs": ["saveProposal", "proposalSnapshots", "cartSerializer", "emailSender"] },
-    { "id": "email-runner", "component": "EmailRunner", "file": "src/modals/EmailRunner.jsx", "displayName": "Campaign Runner", "purpose": "Bulk-email selected rows from Task List or CRM Search: pick a template, preview, then watch per-recipient progress with retry.", "openedBy": ["'Run Campaign' with rows selected in TaskList/CRMSearch"], "pageContext": ["inside TaskList/CRMSearch"], "flag": "campaignManagerEnabled", "backend": "background runEmailBlast orchestration" },
+    { "id": "email-runner", "component": "EmailRunner", "file": "src/modals/EmailRunner.jsx", "displayName": "Campaign Runner", "purpose": "Bulk-email selected rows from Task List or CRM Search: pick a template, preview, then watch per-recipient progress with retry.", "openedBy": ["'Run Campaign' with rows selected in TaskList/CRMSearch"], "pageContext": ["inside TaskList/CRMSearch"], "flag": "campaignManagerEnabled", "backend": "local EmailRunner orchestration using validated fetchRaw and paAutomate worker calls" },
     { "id": "campaign-manager", "component": "CampaignManager", "file": "src/modals/CampaignManager.jsx", "displayName": "Campaign Manager", "purpose": "Define multi-step outreach campaigns (email / task / call-log / code actions) with grouped AND/OR conditions, audience ordering, pacing + jitter, dry-run simulation, and pause/resume.", "openedBy": ["popup Tools", "actions shelf"], "pageContext": ["any"], "flag": "campaignManagerEnabled", "libs": ["campaign/*", "matchEngine"], "storage": "campaigns" },
     { "id": "calendar", "component": "CalendarModal", "file": "src/modals/CalendarModal.jsx", "displayName": "Order Date Manager", "purpose": "Pick approval + commitment dates on two mini calendars; saving runs a multi-step ASP.NET postback chain through the admin.icustomize.com iframe with step-by-step progress toasts.", "openedBy": ["calendar button in iframe toolbar", "window.__gbOpenOrderCalendar()"], "pageContext": ["order (via iframe)"], "flag": "calendarEnabled", "relatedFlags": ["autoPushEnabled"] },
     { "id": "crm-create-contact", "component": "CRMCreateContact", "file": "src/modals/CRMCreateContact.jsx", "displayName": "New Contact", "purpose": "Quick-create a CRM contact: account search/attach, name, email, phone, company.", "openedBy": ["Ctrl+Q (configurable)", "actions shelf"], "pageContext": ["contact", "account", "any"], "flag": "crmNewContactEnabled", "relatedSettings": ["crmCreateContact.requireAccount"] },
@@ -161,11 +162,11 @@
 
   "settings": {
     "storageKey": "devSettings (chrome.storage.local; flat object merged over registry defaults)",
-    "panelSections": ["Theme", "UI Scales", "Features", "Keyboard Shortcuts", "Custom Pages (CRM)", "Developer Settings (hideable)", "User Presets"],
+    "panelSections": ["Theme", "UI Scales", "Features", "Keyboard Shortcuts", "Custom Pages (policy-managed globally and per scope)", "Developer Settings (hideable)", "Shared Settings Templates"],
     "theme": { "variants": ["dark", "midnight", "light", "cream"], "colorPickers": ["brand", "action button", "button deep", "button border", "error", "warning", "success", "info"], "storage": ["gbTheme", "themeColors"] },
     "uiScales": { "surfaces": ["modals", "popovers", "toasts", "shelf", "popup", "editor", "playground"], "range": "50–150%", "storage": "uiScales" },
     "keyboardShortcuts": { "configurable": ["taskList (X)", "marginCalc (M)", "crmSearch (K)", "crmNewContact (Q)"], "storage": "keyboardShortcuts" },
-    "customPages": { "what": "Per-CRM-page overrides that swap in extension UI", "pages": ["dashboard", "search", "custom_rep_activity", "my_recent_history", "task_list", "action_review", "blacklisted_emails", "recent_calls", "case_index", "create_contact", "open_lead", "opportunity", "opportunity_linking", "adjust_leaderboard", "contact_details"], "storage": "customPages" },
+    "customPages": { "what": "Per-scope switches that enable supported extension page takeovers", "scopes": ["crm"], "implementedPages": ["contact_details", "account_details", "opportunity_details"], "storage": "customPages page-id arrays retained as the engine contract" },
     "developerSettings": [
       { "key": "numberDisplay.enabled", "type": "boolean", "default": true, "label": "Animated number displays" },
       { "key": "numberDisplay.durationMs", "type": "number", "default": 400, "range": "0–5000 ms", "label": "Number display duration" },
@@ -175,9 +176,8 @@
       { "key": "popup.ignoreContext.watch", "type": "boolean", "default": false, "label": "Popup: ignore context — Watch Order" },
       { "key": "popup.ignoreContext.submitProof", "type": "boolean", "default": false, "label": "Popup: ignore context — Submit Proof" },
       { "key": "popup.forceMatchedCount", "type": "number", "default": 0, "range": "0–50", "label": "Popup: force matched count" },
-      { "key": "email.localPart", "type": "string", "default": "cullen", "label": "Email account host (From local-part)" },
+      { "key": "email.localPart", "type": "string", "default": "", "label": "Email account host (From local-part; required for Power Automate sends)" },
       { "key": "marginCalc.minAllowedMargin", "type": "number", "default": 30, "range": "0–100", "label": "Minimum allowed margin %" },
-      { "key": "marginCalc.draggable", "type": "boolean", "default": true, "label": "Margin Calculator draggable" },
       { "key": "watchList.autoDeleteCompletedDays", "type": "number", "default": 5, "range": "0–365", "label": "Auto-delete completed watch items after N days" },
       { "key": "watchList.draggable", "type": "boolean", "default": false, "label": "Watch List draggable" },
       { "key": "imageViewer.draggable", "type": "boolean", "default": false, "label": "Image Viewer draggable" },
@@ -218,20 +218,22 @@
     ]
   },
 
-  "secretSettings": {
-    "storageKey": "secret_settings",
-    "what": "Map of setting keys hidden from the Settings UI (value preserved, switch removed). Set ONLY via console command — no UI by design.",
-    "specialKeys": [{ "key": "__devSection", "effect": "Hides the entire Developer Settings section and resets dev values to defaults" }],
+  "remoteSettingsPolicy": {
+    "endpoint": "GET https://api.cullenchampagne.com/extension/configuration",
+    "policyFile": "api-access-configs/golfballs-extension-configuration.yaml",
+    "what": "Complete, authenticated feature/developer value and visibility policy with dashboard-administrator bypass.",
     "consoleCommands": {
-      "__gbSecret": ["hide(...keys)", "show(...keys)", "list()", "clear()", "hideDev()", "showDev()", "help()"],
       "__gbScan": ["reset() — clear recent-orders scan clock (next scan covers 7 days)", "status()", "help()"]
     }
   },
 
   "storageKeys": [
     { "key": "devSettings", "area": "local", "contains": "all developer setting values" },
-    { "key": "featureFlags", "area": "local", "contains": "boolean feature toggles + powerAutomateUrl + graphClientId" },
-    { "key": "secret_settings", "area": "local", "contains": "hidden-setting map" },
+    { "key": "featureFlags", "area": "local", "contains": "non-secret feature toggles and public integration identifiers" },
+    { "key": "gbCredentials", "area": "local", "contains": "Power Automate trigger URL and address-autocomplete browser key; excluded from presets and broadcasts" },
+    { "key": "gbApiInstallation", "area": "local", "contains": "worker-owned RevStack installation UUID, per-install API key, safe prefix, enrollment time, pinned extension ID, and version; excluded from presets, broadcasts, and runtime messages" },
+    { "key": "gbRemoteSettingsPolicy", "area": "local", "contains": "last validated policy revision, visibility maps, apply time, and administrator-bypass state" },
+    { "key": "gbRemoteSettingsBackup", "area": "local", "contains": "pre-policy feature/developer values used for reversible administrator bypass" },
     { "key": "gbTheme", "area": "local", "contains": "{ variant, colors } theme record" },
     { "key": "themeColors", "area": "local", "contains": "legacy CSS color variable map" },
     { "key": "keyboardShortcuts", "area": "local", "contains": "configurable shortcut letters" },
@@ -242,7 +244,7 @@
     { "key": "noteTemplates", "area": "local", "contains": "note/task/call_log templates" },
     { "key": "noteFolders", "area": "local", "contains": "note template folders" },
     { "key": "watchList", "area": "local (+localStorage fallback)", "contains": "watch list items with context links" },
-    { "key": "userPresets", "area": "local", "contains": "named setting/template preset bundles" },
+    { "key": "userPresets", "area": "local (legacy)", "contains": "retired file-based preset data; no longer read or written by the settings UI" },
     { "key": "uiScales", "area": "local", "contains": "per-surface zoom factors" },
     { "key": "campaigns", "area": "local", "contains": "campaign definitions + run state" },
     { "key": "gbSavedProposals", "area": "local", "contains": "saved proposal snapshots" },
@@ -256,17 +258,20 @@
     { "key": "gbCostMap", "area": "local", "contains": "SKU → cost map (persistent)" },
     { "key": "crmSavedQueries / crmQuickPresets / gbCrmLastQuery", "area": "local", "contains": "Query Builder saved queries, quick presets, last search" },
     { "key": "gbScanRecentOrders_lastRun", "area": "local", "contains": "recent-orders scan watermark" },
-    { "key": "gbGraphToken", "area": "local", "contains": "Microsoft Graph OAuth token record" },
+    { "key": "gbLocalNotes", "area": "local", "contains": "bounded personal contact notes (100 per contact, 4,000 characters each)" },
+    { "key": "gbEmailSendLog", "area": "local", "contains": "recipient-to-last-sent timestamps used by Campaign Runner skip-recent controls" },
+    { "key": "gbCpQuickTasks / gbCpQuickLogs", "area": "local", "contains": "contact-detail quick task and call-log template preferences" },
     { "key": "gbEmployeeId", "area": "local", "contains": "logged-in employee id from page context" },
-    { "key": "chargeContext / orderTabId / editorTabId / pendingNav / pickMode / pickHover / pickResult", "area": "local", "contains": "cross-window coordination state" },
-    { "key": "gbBulkDebug / gbByUrlDebug / gbVarsDebug", "area": "local", "contains": "debug snapshots" },
+    { "key": "chargeContext / orderTabId / editorTabId / pickMode / pickHover / pickResult", "area": "local", "contains": "cross-window coordination state" },
+    { "key": "gbProposalDebugLog", "area": "local", "contains": "bounded, opt-in proposal diagnostics; cleared when debug mode is disabled" },
     { "key": "__gb_callouts_dismissed", "area": "localStorage", "contains": "dismissed callout ids" },
-    { "key": "gb-crm-index", "area": "IndexedDB", "contains": "contact/account index for fast substring search" }
+    { "key": "gb-crm-index-secure / keys", "area": "extension IndexedDB", "contains": "locally generated non-extractable AES-GCM and HMAC CryptoKey objects" },
+    { "key": "gb-crm-index-secure / records", "area": "extension IndexedDB", "contains": "plaintext contact/account names and AES-GCM encrypted CRM rows" },
+    { "key": "gb-crm-index", "area": "legacy page IndexedDB", "contains": "retired plaintext CRM index; deleted automatically on first secure-index operation" }
   ],
 
   "importExportScopes": [
     { "id": "settings", "label": "Settings", "keys": ["themeColors", "gbTheme", "featureFlags", "devSettings", "keyboardShortcuts", "customPages", "emailSignature"], "merge": "overwrite" },
-    { "id": "secret", "label": "Hidden-setting config", "keys": ["secret_settings"], "merge": "overwrite" },
     { "id": "tpl-order", "label": "Order Templates", "keys": ["templates", "templateFolders"], "merge": "mergeById" },
     { "id": "tpl-case", "label": "Case Templates", "keys": ["templates", "templateFolders"], "merge": "mergeById" },
     { "id": "tpl-account", "label": "Account Templates", "keys": ["templates", "templateFolders"], "merge": "mergeById" },
@@ -277,15 +282,13 @@
   ],
 
   "permissions": [
-    { "permission": "activeTab", "why": "focus/message the active tab (pick mode, editor focus)" },
-    { "permission": "scripting", "why": "inject scripts for inventory fetch, imports, pick mode, email blast var resolution" },
+    { "permission": "scripting", "why": "inject scripts for inventory fetch, supplier imports, and variable pick mode" },
     { "permission": "storage", "why": "all persisted settings/templates/caches" },
     { "permission": "unlimitedStorage", "why": "IndexedDB CRM index + large catalog caches" },
-    { "permission": "tabs", "why": "open/close tabs for email blasts, charge window, editor popup, calendar" },
+    { "permission": "tabs", "why": "open and focus the charge window, editor, guide, calendar, and variable-pick targets" },
     { "permission": "clipboardWrite", "why": "Copy Order IDs, copy proposal links" },
-    { "permission": "webNavigation", "why": "wait for tab load completion during email blasts" },
-    { "permission": "identity", "why": "Microsoft Graph OAuth (PKCE) for draft replies" },
-    { "permission": "downloads", "why": "save EML files / logo downloads" }
+    { "permission": "declarativeNetRequest", "why": "apply the approved autocomplete request header rule" },
+    { "permission": "alarms", "why": "refresh the authenticated extension settings policy while the service worker is suspended between events" }
   ],
 
   "externalServices": [
@@ -293,31 +296,32 @@
     { "service": "golfballs.com storefront", "endpoints": ["category/product pages (__NEXT_DATA__)"], "usedFor": "product config, brand products, replacements", "auth": "session cookies" },
     { "service": "api.golfballs.com admin", "endpoints": ["/golfballs/adminnew/* (CRM ajax)"], "usedFor": "proposal email creation, tracking, opportunity updates, tasks, call logs, contacts, proofs", "auth": "session cookies" },
     { "service": "Dynamics (office.gbcadmin.com)", "endpoints": ["/office/Dynamics/Inventory.aspx?sku="], "usedFor": "inventory + per-unit cost for margin calc", "auth": "session via same-origin iframe" },
-    { "service": "Microsoft Graph", "endpoints": ["/v1.0/me/messages (drafts)"], "usedFor": "draft replies/fresh emails in user's mailbox", "auth": "OAuth2 PKCE, Mail.ReadWrite" },
-    { "service": "Power Automate", "endpoints": ["user-configured HTTP trigger URL"], "usedFor": "primary programmatic email transport (CID inline images)", "auth": "URL token" },
+    { "service": "Power Automate", "endpoints": ["user-configured HTTPS trigger on *.logic.azure.com or *.environment.api.powerplatform.com"], "usedFor": "primary programmatic email transport (CID inline images)", "auth": "bearer-style URL stored outside feature flags" },
     { "service": "HPG Brands / SnugZ USA", "endpoints": ["Searchspring API + product detail pages"], "usedFor": "supplier product import into custom items", "auth": "public / session iframe" },
-    { "service": "admin.icustomize.com", "endpoints": ["charge portlet API", "order notes", "delivery calendar"], "usedFor": "charges, notes, order dates", "auth": "JWT from frame context / session" }
+    { "service": "admin.icustomize.com", "endpoints": ["charge portlet API", "order notes", "delivery calendar"], "usedFor": "charges, notes, order dates", "auth": "JWT from frame context / session" },
+    { "service": "OpenStreetMap Nominatim", "endpoints": ["/search"], "usedFor": "address geocoding", "auth": "public HTTPS endpoint with bounded queries and responses" },
+    { "service": "RevStack API (api.cullenchampagne.com)", "endpoints": ["POST /auth/extension-installation", "GET /extension/configuration", "GET/POST /extension/settings-shares*"], "usedFor": "anonymous installation enrollment, fixed-name administrator settings policy, and revocable scoped settings-template URLs", "auth": "unique server-issued rsk_ bearer per extension installation; dashboard admin cookie enables policy bypass without exposing the cookie; 30 requests/minute; server-revocable" }
   ],
 
   "messageHandlers": {
-    "note": "All cross-context communication is message-driven; no alarms, no context menus, no chrome.commands.",
-    "background": ["broadcastToFrames", "proxyFetchImage", "fetchRaw", "fetchInventory", "fetchCosts", "crmAjax", "hpgDetail", "snugzInit", "snugzFetch", "fetchBrandProducts", "fetchGiftCatalog", "giftSaveCart", "giftSaveProposal", "applyPromotion", "fetchPackageUpsell", "giftLoadCart", "fetchProductConfig", "fetchProductRaw", "uploadCustomLogo", "fetchCalendarState", "postCalendarForm", "submitCalendarUpdate", "generateProofLink", "chargeApiProxy", "openChargeWindow", "openCaseTplEditor", "openEditor", "startPick", "pickHover", "elementPicked", "cancelPick", "ping", "paAutomate", "openMailto", "runEmailBlast", "downloadEml", "graphGetToken", "graphSignOut", "graphSendFresh", "graphSendReply", "graphCheckAuth"],
+    "note": "Cross-context communication is message-driven; chrome.alarms schedules authenticated policy refreshes. There are no context menus or chrome.commands.",
+    "background": ["settingsShareList", "settingsShareCreate", "settingsShareGet", "settingsShareRecordImport", "settingsShareRevoke", "emailTemplateShareCreate", "emailTemplateShareGet", "broadcastToFrames", "proxyFetchImage", "fetchRaw", "geocodeAddress", "fetchInventory", "fetchCosts", "crmAjax", "hpgDetail", "snugzInit", "snugzFetch", "fetchBrandProducts", "fetchGiftCatalog", "giftSaveCart", "giftSaveProposal", "applyPromotion", "fetchPackageUpsell", "giftLoadCart", "fetchProductConfig", "fetchProductRaw", "uploadCustomLogo", "fetchCalendarState", "postCalendarForm", "submitCalendarUpdate", "generateProofLink", "chargeApiProxy", "openGuide", "openEditor", "startPick", "pickHover", "elementPicked", "cancelPick", "ping", "paAutomate", "gbProposalNet", "openMailto"],
     "content": ["resolveVars", "getPageInfo", "showChargeModal", "showOrderEditModal", "showToast", "GB_FEATURE_FLAGS", "GB_APPLY_THEME", "enterPickMode", "emailBlastProgress", "emailBlastDone", "executePresetTask", "showImagePreview"],
-    "iframePostMessage": ["GB_NOTIFY", "GB_OPEN_CALENDAR", "GB_REQUEST_OPEN_CALENDAR", "GB_CALENDAR_SAVE", "GB_CALENDAR_STEP/DONE/ERROR", "GB_PUSH_DATES_AND_NOTE", "GB_DATES_PUSHED", "GB_EMPLOYEE_ID", "GB_SALES_REP_FOUND"]
+    "iframeRuntimeBridge": ["GB_NOTIFY", "GB_OPEN_CALENDAR", "GB_REQUEST_OPEN_CALENDAR", "GB_CALENDAR_SAVE", "GB_CALENDAR_STEP/DONE/ERROR", "GB_PUSH_DATES_AND_NOTE", "GB_DATES_PUSHED", "GB_EMPLOYEE_ID", "GB_SALES_REP_FOUND"]
   },
 
   "automations": [
-    { "name": "Email blast orchestration", "trigger": "runEmailBlast message", "what": "Opens each contact in a background tab, waits for load, resolves variables, sends via Power Automate, closes tab, randomized pacing; progress broadcast to all tabs." },
+    { "name": "Campaign Runner orchestration", "trigger": "Run Campaign from a selected CRM Search or Task List result", "what": "EmailRunner resolves each recipient, validates a configured sender, sends sequentially through the bounded worker transport, records last-sent timestamps, and exposes per-recipient retry/progress." },
     { "name": "Order date auto-push", "trigger": "Calendar save / note save (autoPushEnabled)", "what": "Multi-step ASP.NET postback chain via iframe with step toasts; pushes dates + note to the order." },
     { "name": "Catalog re-index", "trigger": "Gift Catalog open + stale cache", "what": "Re-pulls full Solr index when older than giftCatalog.cacheHours." },
     { "name": "Watch list auto-cleanup", "trigger": "Watch List open", "what": "Deletes completed items older than watchList.autoDeleteCompletedDays." },
     { "name": "Signifyd glow", "trigger": "MutationObserver on order index", "what": "Re-applies fraud-score row glow as rows render." },
     { "name": "Theme live-update", "trigger": "storage change / GB_APPLY_THEME broadcast", "what": "Rebuilds CSS custom properties in every frame instantly." },
-    { "name": "CRM index capture", "trigger": "visiting contact/account pages", "what": "Indexes records into IndexedDB for instant search." }
+    { "name": "CRM index capture", "trigger": "index action after CRM search", "what": "Encrypts complete CRM rows in worker-owned IndexedDB while retaining names for ranked local search." }
   ],
 
   "emailPipeline": {
-    "transports": ["Power Automate HTTP trigger (primary, when powerAutomateEnabled + URL set)", "mailto → Outlook (fallback: formatting stripped, no signature; bulk = one window per send)", "Microsoft Graph (draft-only reply/fresh modes)"],
+    "transports": ["Power Automate HTTPS trigger (primary, when enabled and configured)", "mailto → Outlook (fallback: formatting stripped, no signature; bulk = one window per send)"],
     "imageHandling": "Inline <img> converted to CID attachments (base64, max 3MB each) in background extractEmailImages(); requires matching Power Automate flow.",
     "signature": "emailSignature HTML auto-appended on PA sends only."
   },
@@ -331,7 +335,7 @@
     { "variable": "{{orders[any].total}}", "resolvesTo": "array quantifiers over order history (any/none/[0]/[-1])" },
     { "variable": "{{repName}}", "resolvesTo": "logged-in sales rep" },
     { "variable": "{{a|b|c}}", "resolvesTo": "OR-block: first non-empty candidate" },
-    { "variable": "code variables", "resolvesTo": "sandboxed JS expressions (h.dom, h.fetchText helpers) — power user" }
+    { "variable": "code variables", "resolvesTo": "sandboxed JS expressions with read-only h.domText, h.fetchText, h.fetchJson, h.catalog, h.product, and h.parse helpers" }
   ],
 
   "features": [
@@ -364,13 +368,12 @@
     { "id": "copy-ids", "name": "Copy Order IDs", "surface": "order index action", "flag": "copyIdsEnabled", "summary": "Copy all listed order IDs to the clipboard." },
     { "id": "signifyd-glow", "name": "Signifyd Glow", "surface": "order index rows", "flag": "signifydGlowEnabled", "summary": "Color-codes order rows by fraud score." },
     { "id": "actions-shelf", "name": "Actions Shelf", "surface": "floating shelf", "flag": "actionsShelfEnabled", "summary": "Context-aware quick-action launcher on every CRM page (Shift×2)." },
-    { "id": "settings", "name": "Settings, Theme, Scales & Presets", "surface": "editor Settings panel", "flag": null, "summary": "Theme variants + custom colors, per-surface UI scaling, feature toggles, shortcuts, custom pages, preset import/export." },
-    { "id": "code-variables", "name": "Code Variables & Recipes", "surface": "template/campaign editors", "flag": null, "audience": "advanced", "summary": "Sandboxed JS expressions with prebuilt recipes (OOS scanner, replacement recommender)." },
-    { "id": "graph-replies", "name": "Outlook Draft Replies (Microsoft Graph)", "surface": "email preview reply", "flag": "powerAutomateEnabled-adjacent", "audience": "advanced", "summary": "OAuth-connected draft creation in the rep's mailbox (draft-only, never auto-sends)." }
+    { "id": "settings", "name": "Settings, Theme, Scales & Sharing", "surface": "editor Settings panel", "flag": null, "summary": "Theme variants, scaling, toggles, shortcuts, policy-managed custom pages, and scoped server settings links." },
+    { "id": "code-variables", "name": "Code Variables & Recipes", "surface": "template/campaign editors", "flag": null, "audience": "advanced", "summary": "Sandboxed JS expressions with prebuilt recipes (OOS scanner, replacement recommender)." }
   ],
 
   "workflows": [
-    { "id": "first-run", "name": "First-time setup", "persona": "new rep", "steps": ["Install extension", "Open any golfballs.com CRM page (UI injects automatically)", "Open Settings (editor) → pick theme variant", "Review feature toggles (all on by default except Power Automate)", "Set email signature", "Optionally import a team preset (Settings → User Presets → Import)", "Optionally enable Power Automate + paste flow URL"] },
+    { "id": "first-run", "name": "First-time setup", "persona": "new rep", "steps": ["Install extension", "Open any golfballs.com CRM page (UI injects automatically)", "Open Settings (editor) → pick theme variant", "Review feature toggles (all on by default except Power Automate)", "Set email signature", "Optionally preview a team settings URL and choose scopes to import", "Optionally enable Power Automate + paste flow URL"] },
     { "id": "send-templated-email", "name": "Send a templated email", "persona": "rep", "steps": ["Open a contact/order/case page", "Click extension icon (popup)", "Pick a matched template", "Watch variables resolve", "Send (PA) or open in Outlook (fallback)"] },
     { "id": "build-proposal", "name": "Build & send a proposal", "persona": "rep", "steps": ["Open Gift Catalog from shelf", "Search/filter products", "Customize (logo/text/monogram, gift set)", "Set quantities/prices, apply promo", "Save proposal", "Email Proposal → review render → send"] },
     { "id": "log-call-task", "name": "Log a call + follow-up task", "persona": "rep", "steps": ["On contact page open Call Log", "'/' composer → category/direction/note", "Submit", "Open Quick Task → set due (+1w) → submit"] },
@@ -379,7 +382,7 @@
     { "id": "verify-logo", "name": "Extract & verify a logo / submit proof", "persona": "art team", "steps": ["Hover order image → expand", "Image Viewer resolves original upload", "Download or recolor/mockup", "Submit Proof with artist + notes"] },
     { "id": "set-order-dates", "name": "Set order dates", "persona": "rep", "steps": ["Order page → calendar button (iframe toolbar)", "Pick approval + commitment dates", "Update Dates → watch step toasts → done"] },
     { "id": "import-supplier", "name": "Import supplier products", "persona": "rep/admin", "steps": ["Custom items → Import HPG/SnugZ", "Filter customizable items", "Fetch costs/options", "Preview markup ladder", "Save as custom items"] },
-    { "id": "share-config", "name": "Share team configuration", "persona": "admin", "steps": ["Settings → User Presets → Save (choose scopes)", "Export JSON", "Teammate: Import JSON → scopes merge by id"] }
+    { "id": "share-config", "name": "Share team configuration", "persona": "admin", "steps": ["Create a named Shared Settings Template with selected scopes", "Copy its revocable opaque URL", "Teammate previews URL and chooses scopes to import"] }
   ],
 
   "uiLibrary": {

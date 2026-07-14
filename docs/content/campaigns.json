@@ -46,7 +46,7 @@
             ["Email", "Template picker; variation weight sliders appear when the template has variations"],
             ["Call", "Create a call log (saved template or custom: category, direction, subject, notes, voicemail flag) — or complete the contact's open tasks (latest / all)"],
             ["Task", "Create a task (template or custom: subject, notes, due-in days, priority) — or complete open tasks"],
-            ["Custom", "A code editor (ctx = contact/account data, h = fetch/send/dom helpers, window.open opens a tab) with an optional 'Kill the flow after this step' switch — the code can also return 'kill'"]
+            ["Custom", "A sandboxed code editor (ctx = contact/account data, h = read-only fetch/catalog/domText helpers) with an optional 'Kill the flow after this step' switch — the code can also return 'kill'"]
           ] },
           { "type": "heading", "text": "Branches and groups" },
           { "type": "list", "items": [

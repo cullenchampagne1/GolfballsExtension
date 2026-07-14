@@ -161,7 +161,6 @@
       "icon": "bolt",
       "items": [
         { "article": "code-variables" },
-        { "article": "console-commands" },
         { "article": "modal-playground" },
         { "article": "hidden-settings" },
         { "article": "debug-storage" }

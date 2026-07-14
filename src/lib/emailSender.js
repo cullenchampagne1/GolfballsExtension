@@ -1,4 +1,6 @@
 import { pickFromAddress, DEFAULT_LOCAL_PART } from './sender.js';
+import { loadCredentials } from './credentials.js';
+import { sanitizeHtml } from './sanitizeHtml.js';
 
 /* ───────────────────────────────────────────────────────────────
    emailSender.js — one place that builds, classifies, and dispatches
@@ -29,24 +31,25 @@ export function readEmailConfig() {
   return new Promise((resolve) => {
     try {
       chrome.storage.local.get(['emailSignature', 'devSettings', 'featureFlags', 'templates'], (cfg) => {
-        resolve(freezeConfig(cfg || {}));
+        loadCredentials()
+          .then((credentials) => resolve(freezeConfig(cfg || {}, credentials)))
+          .catch(() => resolve(freezeConfig(cfg || {}, {})));
       });
-    } catch { resolve(freezeConfig({})); }
+    } catch { resolve(freezeConfig({}, {})); }
   });
 }
 
-function freezeConfig(cfg) {
+function freezeConfig(cfg, credentials) {
   const flags = cfg.featureFlags || {};
   const paOn  = flags.powerAutomateEnabled === true;
-  const paUrl = (typeof flags.powerAutomateUrl === 'string' && flags.powerAutomateUrl.trim().length > 0)
-    ? flags.powerAutomateUrl
+  const paUrl = (typeof credentials.powerAutomateUrl === 'string' && credentials.powerAutomateUrl.trim().length > 0)
+    ? credentials.powerAutomateUrl
     : '';
   return Object.freeze({
     signature: cfg.emailSignature || '',
-    localPart: (cfg.devSettings && cfg.devSettings['email.localPart']) || DEFAULT_LOCAL_PART,
+    localPart: String((cfg.devSettings && cfg.devSettings['email.localPart']) || DEFAULT_LOCAL_PART).trim(),
     templates: Array.isArray(cfg.templates) ? cfg.templates : [],
     powerAutomateEnabled: paOn,
-    powerAutomateUrl: paUrl,
     paReady: paOn && !!paUrl,
   });
 }
@@ -82,7 +85,7 @@ export function buildPaPayload({ from, to, subject, htmlBody, signature, replyMo
       from,
       to,
       subject,
-      htmlBody: signature != null ? withSignature(htmlBody, signature) : htmlBody,
+      htmlBody: sanitizeHtml(signature != null ? withSignature(htmlBody, signature) : htmlBody),
       replyMode,
     }],
   };
@@ -122,7 +125,7 @@ function classifyPaResult(r) {
  * @param {string} [msg.signature] appended on the PA path, dropped on mailto
  * @param {object} [msg.config]    a readEmailConfig() result; pass it to skip
  *                                 a storage read and/or to force the transport
- *                                 (EmailRunner passes { paReady, powerAutomateUrl }
+ *                                 (EmailRunner passes { paReady }
  *                                 so mock mode stays on the PA path).
  * @param {object} [opts]
  * @param {Function} [opts.dispatch]  custom dispatcher (mock / cancel-aware)
@@ -134,8 +137,11 @@ export async function sendEmail({ from, to, subject, htmlBody, replyMode = 'stan
   const cfg = config || await readEmailConfig();
 
   if (cfg.paReady) {
+    if (!from) {
+      return { state: 'failed', transport: 'pa', error: 'Configure Email account host in Settings before sending' };
+    }
     const payload = buildPaPayload({ from, to, subject, htmlBody, signature, replyMode });
-    const r = await dispatch({ action: 'paAutomate', paUrl: cfg.powerAutomateUrl, payload });
+    const r = await dispatch({ action: 'paAutomate', payload });
     return classifyPaResult(r);
   }
 

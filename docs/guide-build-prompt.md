@@ -59,7 +59,7 @@ Keep the design's grouping (it reads well); correct and extend it with our conte
 | Catalog & Art | Gift Catalog & Proposals (`catalog`, WIP) | — | `gift-catalog`, `customizing-item`, `gift-sets`, `proposal-panel`, `proposal-breakdown`, `custom-service-items`, `supplier-import`, `promo-codes`, `build-email-proposal`, `gifting-glossary` — big section, likely 2–3 pages |
 | **Campaigns (ADD — missing from design)** | Quick Send + Campaign Manager | follow design's page style | `bulk-email-selection`, `campaign-manager`, `campaign-conditions` |
 | **Reference (ADD)** | Troubleshooting + FAQ | `WipPage`-style simple prose pages | all 8 `ts-*` articles, `faq` |
-| **Power User (ADD)** | Code Variables, Console Commands, Hidden Settings | simple prose pages | `code-variables`, `console-commands`, `hidden-settings`, `modal-playground`, `debug-storage` |
+| **Power User (ADD)** | Code Variables, Hidden Settings | simple prose pages | `code-variables`, `hidden-settings`, `modal-playground`, `debug-storage` |
 | For Developers | Wiring Audit (`audit`) | — | drop it, or point at `docs/inventory.json` |
 
 Search: replace the design's hand-written `SEARCH_KEYWORDS` with `HELP_SEARCH_INDEX` from `helpContent.js` (165 records with keywords already authored), mapped to guide routes.

@@ -116,7 +116,7 @@ function MethodsSnippet() {
   const order = ['v'];
   const toggle = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const rows = [
-    { id: 'v', name: 'Visa ···· 4242 · Cullen Champagne' },
+    { id: 'v', name: 'Visa ···· 4242 · Demo Customer' },
     { id: 'm', name: 'Mastercard ···· 8810 · Acme Industries' },
   ];
   return (
@@ -142,7 +142,7 @@ function MethodsResultSnippet() {
   return (
     <MiniFrame width={480} label="charge customer · result" pad>
       <MiniLabel>Payment Methods</MiniLabel>
-      <MethodRow name="Visa ···· 4242 · Cullen Champagne" state="success" detail="ID: 8f3a2c1b" />
+      <MethodRow name="Visa ···· 4242 · Demo Customer" state="success" detail="ID: 8f3a2c1b" />
       <MethodRow name="Mastercard ···· 8810 · Acme Industries" state="fail" detail="D2026:05 Do not honor" />
     </MiniFrame>
   );

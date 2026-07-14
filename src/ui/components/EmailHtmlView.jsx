@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { sanitizeHtml } from '../../lib/sanitizeHtml.js';
 
 /* ───────────────────────────────────────────────────────────────
    EmailHtmlView — renders an opened email's HTML body inside a
@@ -236,7 +237,7 @@ export function EmailHtmlView({ html, style }) {
         #gb-email-content img, #gb-email-content video { max-width: 100% !important; height: auto !important; }
         #gb-email-content table { max-width: 100% !important; table-layout: auto; }
       </style>
-      <div id="gb-email-content">${html || ''}</div>
+      <div id="gb-email-content">${sanitizeHtml(html)}</div>
     `;
     const content = shadow.querySelector('#gb-email-content');
     if (!content) return undefined;

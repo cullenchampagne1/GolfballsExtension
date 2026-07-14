@@ -4,11 +4,14 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import { ensureTheme } from '../lib/theme.js';
 import {
-  Btn, IconBtn, Tag, Input, Segmented, SectionLabel, I, Icon, T,
+  Btn, IconBtn, Tag, Input, Segmented, SectionLabel, Callout, I, Icon, T,
   TYPE_ICONS, TYPE_COLORS,
   useSettingNotification,
 } from '../ui/index.js';
-import { parseTemplateBlob, importTemplates } from '../lib/templateImport.js';
+import {
+  buildEmailTemplateFile, importTemplates, normalizeTemplate, parseEmailTemplateFile,
+} from '../lib/templateImport.js';
+import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
 
 /* ────────────────────────────────────────────────────────────────
    editor-sidebar.jsx
@@ -306,6 +309,14 @@ function TemplateRow({ tpl, isNote, type, active, onClick, onMove, folders, onDr
                 </MenuItem>
               ))}
               <div style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '4px 6px 2px' }} />
+              {!isNote && (
+                <MenuItem onClick={() => {
+                  setMenuOpen(false);
+                  window.dispatchEvent(new CustomEvent('gb:share-email-template', { detail: tpl }));
+                }}>
+                  <I.link size={11} /> Share template
+                </MenuItem>
+              )}
               <MenuItem
                 danger
                 onClick={() => {
@@ -515,81 +526,166 @@ function FolderGroup({ folder, tpls, isNote, currentId, onOpen, onMove, onRename
 }
 
 /* ── Root ───────────────────────────────────────────────────────── */
-/* ── Import-templates modal — paste an LLM-generated JSON blob ────
-   The blob contract lives in docs/llm-template-toolset.md (the toolset
-   file handed to a model so it can author full multi-variation,
-   variable-driven templates). Validates live as you paste; Import
-   appends with fresh ids (never overwrites). */
+/* Import one temporary email-template link, preview it, then normalize it
+   through the existing importer so it receives a fresh local id. */
 function ImportTemplatesModal({ onClose, onDone }) {
-  const [text, setText] = useState('');
+  const fileInputRef = useRef(null);
+  const [visible, setVisible] = useState(false);
+  const closingRef = useRef(false);
+  const [url, setUrl] = useState('');
+  const [share, setShare] = useState(null);
   const [busy, setBusy] = useState(false);
-  const parsed = useMemo(() => {
-    const t = text.trim();
-    if (!t) return null;
-    try { return { ok: true, templates: parseTemplateBlob(t) }; }
-    catch (e) { return { ok: false, error: e.message }; }
-  }, [text]);
+  const [error, setError] = useState('');
+  useEffect(() => { requestAnimationFrame(() => setVisible(true)); }, []);
+  const finishClose = (callback = onClose) => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setVisible(false);
+    setTimeout(callback, 190);
+  };
+  const load = async () => {
+    if (!url.trim()) return;
+    setBusy(true); setError(''); setShare(null);
+    try {
+      const response = await sendBackgroundMessage('emailTemplateShareGet', { url: url.trim() });
+      setShare({ ...response.share, template: normalizeTemplate(response.share?.template, 0) });
+    } catch (e) {
+      setError(`${e.message}. You can import a JSON template file instead.`);
+    }
+    finally { setBusy(false); }
+  };
+  const loadFile = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setBusy(true); setError(''); setShare(null);
+    try {
+      const template = parseEmailTemplateFile(await file.text());
+      setShare({ template, transport: 'json' });
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  };
   const doImport = async () => {
-    if (!parsed || !parsed.ok || busy) return;
+    if (!share?.template || busy) return;
     setBusy(true);
-    try { await importTemplates(parsed.templates); onDone(parsed.templates.length); }
-    catch (e) { onDone(0, e.message); }
+    try { await importTemplates([share.template]); finishClose(() => onDone(1)); }
+    catch (e) { finishClose(() => onDone(0, e.message)); }
   };
   return createPortal(
-    <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: visible ? 1 : 0 }} transition={SNAP}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) finishClose(); }}
       style={{ position: 'fixed', inset: 0, zIndex: 2147483000, background: 'rgba(10,12,8,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ width: 560, maxWidth: '92vw', maxHeight: '86vh', display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden', fontFamily: 'var(--gb-font-sans)' }}>
+      <input ref={fileInputRef} type="file" accept="application/json,.json" hidden onChange={loadFile} />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 10 }}
+        animate={{ opacity: visible ? 1 : 0, scale: visible ? 1 : 0.96, y: visible ? 0 : 10 }}
+        transition={SOFT}
+        style={{ width: 560, maxWidth: '92vw', maxHeight: '86vh', display: 'flex', flexDirection: 'column', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden', fontFamily: 'var(--gb-font-sans)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderBottom: '1px solid var(--gb-border-subtle)' }}>
           <span style={{ width: 28, height: 28, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ImportIcon size={14} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Import templates</div>
-            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>Paste a generated template JSON blob — single template, array, or {'{ templates: […] }'}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Import shared email template</div>
+            <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>Load a 24-hour link or JSON file to review it before importing.</div>
           </div>
-          <IconBtn size="sm" icon={<I.close />} onClick={onClose} />
+          <IconBtn size="sm" icon={<I.close />} onClick={() => finishClose()} />
         </div>
         <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
-          <textarea
+          <div style={{ display: 'flex', gap: 7 }}>
+          <Input
             autoFocus
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder='Paste the JSON here…'
-            spellCheck={false}
-            style={{ width: '100%', boxSizing: 'border-box', height: 220, resize: 'vertical', padding: 10,
-              background: 'var(--gb-fill-inverse-medium)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-md)',
-              outline: 'none', color: 'var(--gb-text-primary)', fontFamily: 'var(--gb-font-mono)', fontSize: 11, lineHeight: 1.5 }}
+            value={url}
+            onChange={setUrl}
+            onKeyDown={(e) => e.key === 'Enter' && load()}
+            placeholder="Paste temporary template link…"
+            leading={<I.link />}
+            mono
+            style={{ flex: 1 }}
           />
-          {parsed && (
-            parsed.ok ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '9px 11px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint-soft)', border: '1px solid var(--gb-success-tint-border)' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--gb-success-fg)' }}>
-                  {parsed.templates.length} template{parsed.templates.length === 1 ? '' : 's'} ready to import
+          <Btn variant="tinted" size="md" onClick={load} disabled={!url.trim() || busy}>Load link</Btn>
+          <Btn variant="ghost" size="md" icon={<I.download />} onClick={() => fileInputRef.current?.click()} disabled={busy}>Open JSON</Btn>
+          </div>
+          {share && (
+              <div style={{ padding: '11px 12px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-success-tint-soft)', border: '1px solid var(--gb-success-tint-border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 7 }}>
+                  <Tag tone="brand" size="xs">{share.template.type}</Tag>
+                  <strong style={{ color: 'var(--gb-text-primary)', fontSize: 12 }}>{share.template.name}</strong>
+                  {share.transport === 'json' && <Tag tone="neutral" size="xs">JSON file</Tag>}
                 </div>
-                {parsed.templates.map((t, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 11, color: 'var(--gb-text-secondary)', minWidth: 0 }}>
-                    <Tag tone="neutral" size="xs">{t.type}</Tag>
-                    <span style={{ fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
-                    <span style={{ color: 'var(--gb-text-muted)', flexShrink: 0 }}>
-                      {Object.keys(t.vars || {}).length || (t.caseVars || []).length} vars{t.variations ? ` · ${t.variations.length} variations` : ''}
-                    </span>
-                  </div>
-                ))}
+                <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginBottom: 5 }}>Subject</div>
+                <div style={{ fontSize: 11, color: 'var(--gb-text-secondary)', marginBottom: 9 }}>{share.template.subject || 'No subject'}</div>
+                <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginBottom: 5 }}>Body preview</div>
+                <div style={{ maxHeight: 180, overflow: 'auto', padding: 9, borderRadius: 'var(--gb-r-sm)', background: 'var(--gb-surface-1)', color: 'var(--gb-text-secondary)', fontSize: 11, whiteSpace: 'pre-wrap' }}>
+                  {String(share.template.body || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() || 'Empty body'}
+                </div>
               </div>
-            ) : (
+          )}
+          {error && (
               <div style={{ padding: '9px 11px', borderRadius: 'var(--gb-r-md)', background: 'var(--gb-error-tint-soft, var(--gb-warning-tint-soft))', border: '1px solid var(--gb-error-tint-border, var(--gb-warning-tint-border))', fontSize: 11, color: 'var(--gb-error-fg, var(--gb-warning-fg))', lineHeight: 1.5 }}>
-                {parsed.error}
+                {error}
               </div>
-            )
           )}
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, padding: '11px 14px', borderTop: '1px solid var(--gb-border-subtle)' }}>
-          <Btn variant="ghost" size="sm" onClick={onClose}>Cancel</Btn>
-          <Btn variant="primary" size="sm" icon={<ImportIcon />} disabled={!parsed || !parsed.ok || busy} state={busy ? 'loading' : 'idle'} onClick={doImport}>
-            Import{parsed && parsed.ok ? ` ${parsed.templates.length}` : ''}
+          <Btn variant="ghost" size="sm" onClick={() => finishClose()}>Cancel</Btn>
+          <Btn variant="primary" size="sm" icon={<ImportIcon />} disabled={!share || busy} state={busy ? 'loading' : 'idle'} onClick={doImport}>
+            Import template
           </Btn>
         </div>
-      </div>
-    </div>,
+      </motion.div>
+    </motion.div>,
     document.body,
+  );
+}
+
+function ShareEmailTemplateModal({ template, onClose }) {
+  const [visible, setVisible] = useState(false);
+  const closingRef = useRef(false);
+  const [share, setShare] = useState(null);
+  const [error, setError] = useState('');
+  useEffect(() => { requestAnimationFrame(() => setVisible(true)); }, []);
+  const finishClose = () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setVisible(false);
+    setTimeout(onClose, 190);
+  };
+  useEffect(() => {
+    let alive = true;
+    sendBackgroundMessage('emailTemplateShareCreate', { template })
+      .then((response) => { if (alive) setShare(response.share); })
+      .catch((e) => { if (alive) setError(e.message); });
+    return () => { alive = false; };
+  }, [template]);
+  const copy = async () => {
+    await navigator.clipboard.writeText(share.url);
+    window.__gbToast?.success('Temporary template link copied');
+  };
+  const download = () => {
+    const blob = new Blob([JSON.stringify(buildEmailTemplateFile(template), null, 2)], { type: 'application/json' });
+    const href = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = href; a.download = `${String(template.name || 'email-template').replace(/[^a-z0-9_-]+/gi, '-')}.json`;
+    a.click(); setTimeout(() => URL.revokeObjectURL(href), 0);
+    if (error) window.__gbToast?.success('Email template downloaded as JSON');
+  };
+  return createPortal(
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: visible ? 1 : 0 }} transition={SNAP} onMouseDown={(e) => { if (e.target === e.currentTarget) finishClose(); }} style={{ position: 'fixed', inset: 0, zIndex: 2147483000, background: 'rgba(10,12,8,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <motion.div initial={{ opacity: 0, scale: 0.96, y: 8 }} animate={{ opacity: visible ? 1 : 0, scale: visible ? 1 : 0.96, y: visible ? 0 : 8 }} transition={SOFT} style={{ width: 520, maxWidth: '92vw', padding: 16, background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', fontFamily: 'var(--gb-font-sans)' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <span style={{ width: 32, height: 32, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-brand-tint-medium)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.link size={15} /></span>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 750, color: 'var(--gb-text-primary)' }}>Share “{template.name}”</div><div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 3 }}>Anyone with the Golfballs extension can preview and import this template for 24 hours. The link expires automatically.</div></div>
+          <IconBtn size="sm" icon={<I.close />} onClick={finishClose} title="Close" />
+        </div>
+        <div style={{ marginTop: 14 }}>
+          {share ? <><div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--gb-text-muted)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: .7 }}>Temporary link · expires {new Date(share.expires_at).toLocaleString()}</div><Input value={share.url} readOnly mono leading={<I.link />} /></> : error ? <Callout tone="warning">The sharing server is unavailable or this installation was revoked. Download the JSON file to share this template without the server.</Callout> : <div style={{ padding: 16, textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 11 }}>Generating secure link…</div>}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 7, marginTop: 14 }}>
+          <Btn variant={error ? 'primary' : 'ghost'} size="sm" icon={<I.download />} onClick={download}>Download JSON</Btn>
+          <Btn variant="primary" size="sm" icon={<I.copy />} onClick={copy} disabled={!share}>Copy link</Btn>
+        </div>
+      </motion.div>
+    </motion.div>, document.body,
   );
 }
 
@@ -599,6 +695,7 @@ function TemplateSidebar() {
   // so confirm/prompt overlays the whole window, not the sidebar.
   const notify = useSettingNotification();
   const [importOpen,  setImportOpen]  = useState(false);
+  const [shareTemplate, setShareTemplate] = useState(null);
   const [tab,         setTab]         = useState('templates');
   const [templates,   setTemplates]   = useState([]);
   const [notes,       setNotes]       = useState([]);
@@ -626,6 +723,12 @@ function TemplateSidebar() {
     };
     chrome.storage.onChanged.addListener(onChange);
     return () => { alive = false; chrome.storage.onChanged.removeListener(onChange); };
+  }, []);
+
+  useEffect(() => {
+    const listener = (event) => setShareTemplate(event.detail || null);
+    window.addEventListener('gb:share-email-template', listener);
+    return () => window.removeEventListener('gb:share-email-template', listener);
   }, []);
 
   const isNote = tab === 'notes';
@@ -809,6 +912,9 @@ function TemplateSidebar() {
           }}
         />
       )}
+      <AnimatePresence>
+        {shareTemplate && <ShareEmailTemplateModal key={shareTemplate.id} template={shareTemplate} onClose={() => setShareTemplate(null)} />}
+      </AnimatePresence>
 
       {/* Controls: tabs + search + new template + new folder */}
       <div style={{ padding: '10px 10px 8px', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
@@ -938,7 +1044,7 @@ function TemplateSidebar() {
         </LayoutGroup>
       </div>
 
-      {/* Pinned footer — signature + import-templates (paste JSON) */}
+      {/* Pinned footer — signature + temporary-link import */}
       <div style={{
         padding: 10, borderTop: '1px solid var(--gb-border-subtle)', flexShrink: 0,
         background: 'var(--gb-surface-canvas)', display: 'flex', gap: 6,
@@ -947,7 +1053,7 @@ function TemplateSidebar() {
           Email signature
         </Btn>
         <Btn variant="ghost" size="sm" icon={<ImportIcon />} onClick={() => setImportOpen(true)}
-          title="Import templates (paste JSON)" style={{ flexShrink: 0, padding: '0 9px' }} />
+          title="Import a temporary template link" style={{ flexShrink: 0, padding: '0 9px' }} />
       </div>
     </div>
   );

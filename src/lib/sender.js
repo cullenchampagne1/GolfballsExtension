@@ -11,13 +11,13 @@
    The DOMAIN (`golfballs.com` / `loyaltylogo.com`) is per-template
    — picked in the editor's Segmented sender pills.
 
-   The LOCAL PART (`cullen` / `marcus` / …) is per-REP. Different
+   The LOCAL PART (for example, `alex` or `sales.rep`) is per-REP. Different
    reps run the same extension under their own mailbox, so the local
    part lives in `chrome.storage.local.devSettings['email.localPart']`
    and is glued on at send time.
 
      localPart + '@' + domain
-     'cullen'  + '@' + 'golfballs.com'  →  cullen@golfballs.com
+     'alex'  + '@' + 'golfballs.com'  →  alex@golfballs.com
 
    One source of truth
    ────────────────────
@@ -33,10 +33,9 @@
    re-render, the runtime resolution picks it up next send.
 ─────────────────────────────────────────────────────────────── */
 
-/** Fallback local part when nothing is configured AND the registry
- *  default hasn't loaded yet. Matches the devSettings default at
- *  src/lib/devSettings.js → 'email.localPart'. */
-export const DEFAULT_LOCAL_PART = 'cullen';
+/** Missing sender identity stays empty so a new install cannot silently send
+ *  under a specific employee's mailbox. */
+export const DEFAULT_LOCAL_PART = '';
 
 /** Per-sender domain. `id` is the slug we persist on the template;
  *  `label` shows in the editor's Segmented picker; `domain` is the
@@ -61,8 +60,9 @@ export const DEFAULT_DOMAIN = SENDER_ACCOUNTS[0]?.domain || '';
  *  part. Unknown slugs fall through to the default domain. */
 export function senderEmail(senderId, localPart) {
   const lp = (localPart && String(localPart).trim()) || DEFAULT_LOCAL_PART;
+  if (!/^[a-z0-9](?:[a-z0-9._+-]{0,62}[a-z0-9])?$/i.test(lp)) return '';
   const domain = SENDER_DOMAIN_BY_ID[senderId] || DEFAULT_DOMAIN;
-  return `${lp}@${domain}`;
+  return domain ? `${lp}@${domain}` : '';
 }
 
 /**
@@ -77,8 +77,8 @@ export function senderEmail(senderId, localPart) {
  *   neither / unknown slug          → DEFAULT_DOMAIN
  *
  * `localPart` is the rep's mailbox name (devSetting 'email.localPart').
- * Pass the live value at the call site — passing nothing falls back
- * to the registry default. */
+ * Pass the live value at the call site. Missing or invalid configuration
+ * returns an empty string so the transport can fail with a clear prompt. */
 export function pickFromAddress(template, localPart) {
   if (!template) return senderEmail(SENDER_ACCOUNTS[0]?.id, localPart);
   if (template.senderRandomize) {

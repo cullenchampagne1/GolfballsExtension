@@ -112,8 +112,8 @@
 
         <h2 className="sec">Also in Settings</h2>
         <ul>
-          <li><strong>User Presets</strong> — save a snapshot of your settings + templates, export it to a file, and re-import or share it. Importing <em>merges</em>, so a teammate's preset adds templates rather than wiping yours.</li>
-          <li><strong>Custom Pages</strong> — pick which internal site pages the extension replaces with a custom UI. Unchecked pages fall through to the original.</li>
+          <li><strong>Shared Settings Templates</strong> — name a scoped snapshot, copy its revocable URL, and let a teammate preview and choose what to import. Template imports <em>merge by id</em>, preserving local-only templates.</li>
+          <li><strong>Custom Pages</strong> — enable the custom interface per registered page scope. Disabled scopes use the original site.</li>
           <li><strong>Theme Colors &amp; UI Scale</strong> — override the brand/accent colors and zoom each extension surface independently of the host site.</li>
         </ul>
       </div>

@@ -52,8 +52,13 @@ function dueDateStr(daysOut) {
   const n = parseInt(daysOut, 10);
   if (!n || n <= 0) return todayStr();
   const d = new Date();
-  d.setDate(d.getDate() + n);
+  d.setDate(d.getDate() + Math.min(n, 3_650));
   return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+}
+
+function numericId(value) {
+  const id = String(value == null ? '' : value).trim();
+  return /^\d{1,12}$/.test(id) && Number(id) > 0 ? id : '';
 }
 
 /** Read whatever task-context the current DOM exposes. Returns
@@ -127,18 +132,23 @@ export async function submitQuickTask({ template, context } = {}) {
   const ctx = context  || {};
 
   /* ── 1. Template validation ─────────────────────────────── */
-  const subject = (tpl.subject || tpl.name || '').trim();
+  const subject = String(tpl.subject || tpl.name || '').trim();
   if (!subject) {
     return { ok: false, error: 'Task needs a subject. Add one to the template or in the custom form.' };
   }
+  if (subject.length > 500) return { ok: false, error: 'Task subject exceeds 500 characters.' };
+  const description = String(tpl.body || '').trim();
+  if (description.length > 4_000) return { ok: false, error: 'Task description exceeds 4,000 characters.' };
 
   /* ── 2. Context validation — the "safe in sandbox" gate ───
        contactId + employeeId are mandatory: the task table is
        indexed on contactID, and the CRM expects employeeID for
        ownership. Without them we'd create an orphan task. */
+  const contactId = numericId(ctx.contactId);
+  const employeeId = numericId(ctx.employeeId);
   const missing = [];
-  if (!ctx.contactId)  missing.push('contact ID');
-  if (!ctx.employeeId) missing.push('employee ID');
+  if (!contactId)  missing.push('valid contact ID');
+  if (!employeeId) missing.push('valid employee ID');
   if (missing.length) {
     return {
       ok: false,
@@ -159,19 +169,22 @@ export async function submitQuickTask({ template, context } = {}) {
   const params = {
     TaskID:        '',
     Subject:       subject,
-    Description:   (tpl.body || '').trim(),
+    Description:   description,
     LiveDate:      todayStr(),
     DueDate:       dueDateStr(tpl.daysOut),
-    taskCategoryID: String(tpl.categoryId || 0),
+    taskCategoryID: /^\d{1,6}$/.test(String(tpl.categoryId == null ? 0 : tpl.categoryId))
+      ? String(tpl.categoryId == null ? 0 : tpl.categoryId)
+      : '0',
     taskStatusID:  '1',
-    Priority:      String(tpl.priority || DEFAULT_PRIORITY),
-    contactID:     String(ctx.contactId),
+    Priority:      ['1', '2', '3'].includes(String(tpl.priority)) ? String(tpl.priority) : String(DEFAULT_PRIORITY),
+    contactID:     contactId,
     leadID:        '0',
-    employeeID:    String(ctx.employeeId),
+    employeeID:    employeeId,
     caseID:        0,
   };
   const qs = encodeURIComponent(JSON.stringify(params));
   const url = `${BASE}/golfballs/crm/Admin/Task/Create.ajax?${qs}`;
+  if (url.length > 20_000) return { ok: false, error: 'Task request exceeds the CRM URL limit.' };
 
   /* ── 5. POST it via the background fetchRaw bridge. */
   let resp;

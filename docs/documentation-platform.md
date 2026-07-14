@@ -25,7 +25,7 @@ Help & Training (editor.html → "Help" sidebar tab)
 │   │   ├── Email Templates & the Popup     (template matching, live variable resolution, Send)
 │   │   ├── Email Thread Preview            (hover previews, case categorization chips, recommended replies)
 │   │   ├── Text & Note Preview
-│   │   └── How Email Sending Works         (Power Automate vs Outlook fallback vs Graph drafts; signatures; inline images)
+│   │   └── How Email Sending Works         (Power Automate vs Outlook fallback; signatures; inline images)
 │   ├── Orders & Pricing
 │   │   ├── Margin Calculator               (incl. live Dynamics costs, minimum-margin guardrail)
 │   │   ├── Charge / Refund
@@ -66,7 +66,7 @@ Help & Training (editor.html → "Help" sidebar tab)
 │   ├── Feature Toggles                     (all 23 flags, what each turns on/off)
 │   ├── Keyboard Shortcuts
 │   ├── Custom CRM Pages
-│   ├── Email & Integrations                (signature, Power Automate, Microsoft sign-in)
+│   ├── Email & Integrations                (sender identity, signature, Power Automate)
 │   ├── Developer Settings                  (every dev setting, default, range, impact)
 │   └── Presets: Import / Export / Share    (scopes, merge behavior)
 │
@@ -94,15 +94,14 @@ Help & Training (editor.html → "Help" sidebar tab)
 │   ├── "Margin calculator shows no cost"                         (Dynamics session, cost cache)
 │   ├── "Date update failed mid-way"                              (postback chain steps, retry)
 │   ├── "3D preview is black/blank"                               (known GPU/Windows-ARM issue)
-│   └── "My settings vanished"                                    (presets overwrite, secret settings, __gbSecret)
+│   └── "My settings vanished"                                    (presets overwrite, remote policy)
 │
 ├── FAQ
 │
 ├── Power User Corner                       (hidden & advanced functionality — discoverable on purpose)
 │   ├── Code Variables & Recipes
-│   ├── Console Commands (__gbSecret, __gbScan)
 │   ├── The Modal Playground
-│   ├── Hidden Settings (secret_settings)
+│   ├── Managed Settings (authenticated remote policy)
 │   └── Debug Storage Keys
 │
 └── What's New                              (release notes per version; seeded from git history)
@@ -160,15 +159,14 @@ Every article, its audience tiers, and search keywords. **Bold** articles ship w
 | 42 | Custom CRM Pages | Settings Reference | A | custom page, override, dashboard |
 | 43 | Email & Integrations | Settings Reference | I/A | signature, power automate url, microsoft, sign in |
 | 44 | Developer Settings | Settings Reference | A | dev settings, draggable, cache hours, debug |
-| 45 | Presets: Import / Export / Share | Settings Reference | I/A | preset, export, import, team, share config |
+| 45 | Shared Settings Templates | Settings Reference | I/A | settings link, URL, import, team, share config |
 | 46–53 | Troubleshooting articles (8) | Troubleshooting | B/I/A | per-symptom keywords above |
 | 54 | FAQ | FAQ | B/I/A | — |
 | 55 | Code Variables & Recipes | Power User Corner | A | code variable, javascript, recipe, oos |
-| 56 | Console Commands | Power User Corner | A | __gbSecret, __gbScan, hide setting |
-| 57 | The Modal Playground | Power User Corner | A | playground, mock, test |
-| 58 | Hidden Settings | Power User Corner | A | secret, hidden, locked |
-| 59 | Debug Storage Keys | Power User Corner | A | storage, debug, gbVarsDebug |
-| 60 | What's New | What's New | B | release, changelog, version |
+| 56 | The Modal Playground | Power User Corner | A | playground, mock, test |
+| 57 | Hidden Settings | Power User Corner | A | secret, hidden, locked |
+| 58 | Debug Storage Keys | Power User Corner | A | storage, debug, proposal trace |
+| 59 | What's New | What's New | B | release, changelog, version |
 
 Tiers: **B**eginner (plain language), **I**ntermediate (workflows), **A**dvanced (power user). Articles with multiple tiers render as stacked, progressively-disclosed sections (`CollapsibleSection`).
 
@@ -315,7 +313,7 @@ All components live in `src/pages/help/` and compose existing `src/ui` primitive
 | `WhatsNewList` | Release notes | `releases` | — | `Card`, `Tag` |
 | `OnboardingFlow` | First-run / what's-new wizard (§7) | `flow`, `onDone` | step index | `ModalShell`, `Segmented`, `TutorialStep` |
 
-**Content pipeline.** A build script (`scripts/build-help-content.mjs`, same pattern as `build-giftset.mjs`) compiles `docs/inventory.json` + authored article/tutorial files (`docs/content/*.json`) into `src/lib/helpContent.js` — a static module with `{ tree, articles, tutorials, searchIndex }`. No runtime fetching; the docs ship inside the bundle and the Settings Reference can never drift from the registry because it's generated from the same `devSettings.js`/`flags.js` registries at build time.
+**Content pipeline.** `scripts/build-help-content.mjs` compiles `docs/inventory.json` + authored article/tutorial files (`docs/content/*.json`) into `src/lib/helpContent.js` — a static module with `{ tree, articles, tutorials, searchIndex }`. No runtime fetching; the docs ship inside the bundle and the Settings Reference can never drift from the registry because it's generated from the same `devSettings.js`/`flags.js` registries at build time.
 
 ---
 
@@ -356,14 +354,14 @@ Found while auditing — these are gaps in the *product's* self-explanation that
 
 1. **Power Automate is the most consequential setting and the least explained.** It defaults **off**, silently changing Send behavior everywhere (Outlook windows, no signature). → Dedicated article (#9) + a one-time `Callout` in the popup the first time a mailto fallback fires.
 2. **The Actions Shelf has no discoverable trigger.** Shift×2 is unguessable. → Onboarding step + tooltip on first shelf appearance.
-3. **Hidden settings (`secret_settings`) can confuse admins' teammates** ("my toggle is gone"). → Troubleshooting article "My settings vanished" + `__gbSecret.list()` documented in Power User Corner.
+3. **Remote policy can hide settings from teammates** ("my toggle is gone"). → Troubleshooting explains the administrator-owned configuration and automatic synchronization.
 4. **Signifyd glow colors have no legend.** → Article #17 with a color legend; recommend an in-UI legend tooltip.
 5. **Watch List auto-delete (5 days) is silent.** → Documented in #15 with the setting reference; recommend a one-line footer note in the modal.
 6. **Composer keyboard grammar (`/`, 1–9, Enter)** is powerful and invisible. → Tutorial 3.4 + recommend a `Kbd` hint row in the composer footer.
 7. **Date-save step chain** can fail mid-way with no recovery guidance. → Troubleshooting #6.
 8. **Catalog re-index delay** on first open reads as a hang. → Tip in tutorial 3.2; recommend a progress toast.
-9. **Graph "send" is draft-only** — users may believe a reply was sent. → Explicit warning callout in article #9.
-10. **`email.localPart` defaults to a personal value** (`cullen`) — every new user sends from the wrong account until changed. → Initial Configuration step 3 makes it mandatory; recommend first-run prompt.
+9. **The sender identity must be configured explicitly.** The extension now fails closed when `email.localPart` is blank instead of borrowing an employee identity. → Initial Configuration step 3 makes the field mandatory and explains the validation error.
+10. **Retired transports can create misleading setup guidance.** The obsolete Graph/OAuth experiment was deleted from the runtime and manifest. → Keep user documentation limited to the supported Power Automate and Outlook fallback paths.
 11. **No-toast-on-success policy** (errors only) reads as "nothing happened" to new users. → FAQ entry; mention in onboarding.
 12. **QuickTask return-to-popup mode** exists but popup side isn't wired — exclude from docs until wired (tracked as a known gap, not documented as a feature).
 
@@ -394,9 +392,9 @@ Build integration: no new manifest entries needed — Help lives inside the exis
 | Keyboard shortcuts | 8 | 8 | 100% |
 | Workflows | 10 | 10 (3 beginner / 4 intermediate / 3 advanced) | 100% |
 | Storage keys | ~35 | user-relevant ones in Presets/Troubleshooting; debug keys in Power User Corner | 100% of user-facing |
-| External integrations | 9 | PA, Graph, icustomize, Dynamics covered where user-visible | 100% of user-facing |
+| External integrations | 7 | Power Automate, icustomize, Dynamics, supplier, geocoding, storefront, and CRM services covered where user-visible | 100% of user-facing |
 | Hidden/advanced | 10 items | Power User Corner (5 articles) | 100% |
 
 **Known exclusions (deliberate):** internal message-handler API (developer docs, not user docs — lives in inventory.json), QuickTask return-to-popup (unwired), activity-log campaign signals marked `ready:false` in code.
 
-**Top recommended product improvements** (from §8): first-run prompt for `email.localPart`, Power Automate fallback callout, shelf-discovery tooltip, Signifyd legend, composer keyboard hint row.
+**Top recommended product improvements** (from §8): first-run sender-identity prompt, Power Automate fallback callout, shelf-discovery tooltip, Signifyd legend, composer keyboard hint row.

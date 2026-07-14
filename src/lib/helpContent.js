@@ -5,7 +5,7 @@
 
 export const HELP_CONTENT = {
   "version": "3.3",
-  "generatedAt": "2026-06-15",
+  "generatedAt": "2026-07-14",
   "tree": [
     {
       "title": "Getting Started",
@@ -313,9 +313,6 @@ export const HELP_CONTENT = {
       "items": [
         {
           "article": "code-variables"
-        },
-        {
-          "article": "console-commands"
         },
         {
           "article": "modal-playground"
@@ -777,7 +774,7 @@ export const HELP_CONTENT = {
               ],
               [
                 "Custom",
-                "A code editor (ctx = contact/account data, h = fetch/send/dom helpers, window.open opens a tab) with an optional 'Kill the flow after this step' switch — the code can also return 'kill'"
+                "A sandboxed code editor (ctx = contact/account data, h = read-only fetch/catalog/domText helpers) with an optional 'Kill the flow after this step' switch — the code can also return 'kill'"
               ]
             ]
           },
@@ -958,7 +955,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "The index is what makes repeat searches instant. After a server search, an 'Index all N' / 'Index these N' button stores the results locally; a footer notes 'Locally indexed — instant typeahead. Falls through to server on Enter', with a Clear index button beside it. Records you visit also index themselves automatically."
+            "text": "The index is what makes repeat name searches instant. After a server search, an 'Index all N' / 'Index these N' button stores normalized names plus encrypted CRM details. Encryption keys are created automatically on the device, so there is no setup or server call. Only the highest-ranked visible results are decrypted. A Clear index button removes the encrypted cache; Enter always remains available for live server search."
           },
           {
             "type": "heading",
@@ -2100,17 +2097,13 @@ export const HELP_CONTENT = {
         "mailto",
         "signature",
         "images",
-        "graph",
-        "draft",
         "transport",
         "send",
         "copy"
       ],
-      "summary": "Three transports — Power Automate (silent send), Outlook fallback (pre-filled window + Copy), and Microsoft Graph (draft-only) — and exactly when each is used.",
+      "summary": "The two email transports — Power Automate silent delivery and the pre-filled Outlook fallback — and exactly when each is used.",
       "feature": "email-templates",
-      "covers": [
-        "graph-replies"
-      ],
+      "covers": [],
       "coversFlags": [
         "powerAutomateEnabled"
       ],
@@ -2133,11 +2126,6 @@ export const HELP_CONTENT = {
                 "Outlook (mailto)",
                 "Power Automate is OFF — the default",
                 "A pre-filled Outlook window opens: formatting stripped to plain text, no signature. The popup adds a Copy button that puts the formatted HTML on your clipboard so a paste into Outlook keeps the styling."
-              ],
-              [
-                "Microsoft Graph",
-                "Reply-with-template after signing in with Microsoft",
-                "Creates a DRAFT in your mailbox. It never sends automatically — review and send from Outlook."
               ]
             ]
           },
@@ -2168,7 +2156,7 @@ export const HELP_CONTENT = {
           {
             "type": "callout",
             "kind": "warning",
-            "text": "Graph mode is draft-only by design. Creating a draft does NOT send the email — check your Outlook Drafts folder."
+            "text": "Email account host starts blank. Power Automate delivery is blocked until you configure your own sender local-part in Settings."
           }
         ]
       },
@@ -2212,7 +2200,7 @@ export const HELP_CONTENT = {
         },
         {
           "q": "Does anyone else see my Watch List, templates, or settings?",
-          "a": "No — everything is stored locally in your browser profile. Sharing happens only when you export a preset and someone imports it."
+          "a": "Local data stays in your browser profile unless you explicitly create a settings link. RevStack stores only the scopes you select; Watch List data and credentials are never included."
         },
         {
           "q": "Are 3D previews accurate enough to send to customers?",
@@ -2232,11 +2220,11 @@ export const HELP_CONTENT = {
         },
         {
           "q": "Did 'reply with template' send my email?",
-          "a": "If you used the Microsoft (Graph) path, it created a draft in your mailbox — review and send it from Outlook. Only Power Automate sends directly."
+          "a": "Power Automate sends directly and reports success or failure. When Power Automate is off, the extension opens a pre-filled Outlook window and you finish the send there."
         },
         {
           "q": "A toggle disappeared from my Settings — am I losing my mind?",
-          "a": "No — an admin hid it via secret settings. The feature keeps working in its locked state. See 'Hidden Settings'."
+          "a": "No — the authenticated administrator policy can hide managed controls. Ask a RevStack administrator to review the Golfballs configuration."
         },
         {
           "q": "Where do saved proposals live?",
@@ -2468,17 +2456,17 @@ export const HELP_CONTENT = {
             "type": "list",
             "items": [
               "Pick a theme — Dark, Slate, Light, or Cream. Changes apply live everywhere.",
-              "Set your email account host — the 'Email account host' field under Developer Settings controls the From identity on sends. It ships with a default that is probably not you; change it first.",
+              "Set your email account host — the 'Email account host' field under Developer Settings controls the From identity on sends. It starts blank and must be configured before Power Automate delivery.",
               "Write your email signature — Settings → signature editor. It's auto-appended to emails sent through Power Automate.",
               "Review feature toggles — everything except Power Automate is on by default. Turn off what you won't use.",
-              "Import a team preset — if a teammate exported a preset JSON, Settings → User Presets → Import gives you their templates and settings in one step."
+              "Open a team settings link — paste the URL under Shared Settings Templates, preview it, and choose which scopes to import."
             ]
           },
           {
             "type": "callout",
             "kind": "warning",
-            "title": "Check the From identity",
-            "text": "Until you change 'Email account host', emails may go out under someone else's identity. This is the single most important first-run setting."
+            "title": "Configure the From identity",
+            "text": "Power Automate sends fail closed while 'Email account host' is blank, preventing accidental delivery under another employee's identity."
           },
           {
             "type": "callout",
@@ -3956,8 +3944,8 @@ export const HELP_CONTENT = {
                 "Fetch a page or JSON through the background worker (CORS-safe, allow-listed hosts)"
               ],
               [
-                "h.send(action, payload)",
-                "Call any background action directly"
+                "h.fetchText(url)",
+                "Read text from an allowlisted HTTPS resource"
               ],
               [
                 "h.catalogSearch(q, {limit}) / h.catalogFind(q)",
@@ -4024,107 +4012,6 @@ export const HELP_CONTENT = {
       "sectionLabel": "Power User Corner"
     },
     {
-      "slug": "console-commands",
-      "title": "Console Commands",
-      "icon": "code",
-      "tiers": [
-        "advanced"
-      ],
-      "keywords": [
-        "__gbSecret",
-        "__gbScan",
-        "hide setting",
-        "console",
-        "admin commands"
-      ],
-      "summary": "Two admin command objects available in the Settings page console: __gbSecret (hidden settings) and __gbScan (recent-orders scan clock).",
-      "covers": [],
-      "body": {
-        "advanced": [
-          {
-            "type": "p",
-            "text": "Open DevTools on the Settings/editor page. Two helper objects are installed:"
-          },
-          {
-            "type": "heading",
-            "text": "__gbSecret — hidden-setting manager"
-          },
-          {
-            "type": "table",
-            "headers": [
-              "Command",
-              "Effect"
-            ],
-            "rows": [
-              [
-                "__gbSecret.hide('key', …)",
-                "Hide setting(s) from the Settings UI — values keep working, the switch disappears"
-              ],
-              [
-                "__gbSecret.show('key', …)",
-                "Un-hide setting(s)"
-              ],
-              [
-                "__gbSecret.list()",
-                "List currently hidden keys"
-              ],
-              [
-                "__gbSecret.clear()",
-                "Show everything again"
-              ],
-              [
-                "__gbSecret.hideDev()",
-                "Hide the entire Developer Settings section AND reset dev values to defaults"
-              ],
-              [
-                "__gbSecret.showDev()",
-                "Bring the Developer Settings section back"
-              ],
-              [
-                "__gbSecret.help()",
-                "Print this reference"
-              ]
-            ]
-          },
-          {
-            "type": "heading",
-            "text": "__gbScan — recent-orders scan"
-          },
-          {
-            "type": "table",
-            "headers": [
-              "Command",
-              "Effect"
-            ],
-            "rows": [
-              [
-                "__gbScan.status()",
-                "Show when the recent-orders scan last ran"
-              ],
-              [
-                "__gbScan.reset()",
-                "Clear the scan clock — the next scan covers the last 7 days"
-              ],
-              [
-                "__gbScan.help()",
-                "Print this reference"
-              ]
-            ]
-          },
-          {
-            "type": "callout",
-            "kind": "warning",
-            "text": "There is deliberately no UI for these. Hidden settings are how an admin locks a feature on or off for a teammate's profile — document what you hide, or future-you will file the bug."
-          }
-        ]
-      },
-      "related": [
-        "hidden-settings",
-        "ts-settings-vanished"
-      ],
-      "sectionLabel": "Power User Corner"
-    },
-    {
       "slug": "modal-playground",
       "title": "The Modal Playground",
       "icon": "bolt",
@@ -4169,32 +4056,31 @@ export const HELP_CONTENT = {
         "advanced"
       ],
       "keywords": [
-        "secret",
+        "remote policy",
         "hidden",
         "locked",
-        "secret settings",
-        "admin lock"
+        "admin disabled",
+        "configuration"
       ],
-      "summary": "How admins lock a feature on/off and remove its switch from the Settings UI — and how to see what's hidden.",
+      "summary": "How the authenticated server policy manages feature values and visibility.",
       "covers": [],
       "body": {
         "advanced": [
           {
             "type": "p",
-            "text": "A hidden setting keeps its value but loses its switch: the feature stays in whatever state the admin set, and the toggle no longer appears in Settings. It's a soft lock for keeping team configurations consistent."
+            "text": "The extension periodically loads the authenticated Golfballs configuration. Managed values are applied locally and hidden controls are removed from Settings; an unavailable or invalid response leaves the last valid policy in place."
           },
           {
             "type": "list",
             "items": [
-              "Hide/show is console-only by design: __gbSecret.hide('taskListEnabled') etc. — see Console Commands.",
-              "Hidden state travels in presets via the 'Hidden-setting config' scope, so an admin can distribute locks with the team preset.",
-              "Audit any profile with __gbSecret.list()."
+              "Edit golfballs-extension-configuration.yaml through the RevStack administrator config editor.",
+              "value is authoritative when managed is true; hidden controls whether the setting appears.",
+              "A signed-in RevStack dashboard administrator bypasses the remote policy and keeps local settings."
             ]
           }
         ]
       },
       "related": [
-        "console-commands",
         "presets",
         "feature-toggles"
       ],
@@ -4210,17 +4096,17 @@ export const HELP_CONTENT = {
       "keywords": [
         "storage",
         "debug",
-        "gbVarsDebug",
+        "proposal",
         "inspect",
         "logs"
       ],
-      "summary": "Where the extension keeps its state, and which keys hold debug snapshots when you're chasing a problem.",
+      "summary": "Where the extension keeps state and how to use the bounded, opt-in proposal diagnostic log.",
       "covers": [],
       "body": {
         "advanced": [
           {
             "type": "p",
-            "text": "All state lives in chrome.storage.local (inspect via the service-worker console: chrome.storage.local.get(null)). Useful keys when debugging:"
+            "text": "Persistent extension state lives primarily in chrome.storage.local. The CRM search index lives in worker-owned extension IndexedDB; only names/ranking metadata are plaintext and complete rows require the managed device key. Useful keys when debugging:"
           },
           {
             "type": "table",
@@ -4230,20 +4116,12 @@ export const HELP_CONTENT = {
             ],
             "rows": [
               [
-                "gbVarsDebug",
-                "The latest variable-resolution snapshot — what each {{variable}} resolved to and from where"
+                "gbProposalDebugLog",
+                "A bounded proposal request/response trace, present only while proposalDebug.enabled is on"
               ],
               [
-                "gbBulkDebug",
-                "Per-recipient logs from the last bulk email run"
-              ],
-              [
-                "gbByUrlDebug",
-                "URL-based debug logs"
-              ],
-              [
-                "devSettings / featureFlags / secret_settings",
-                "The three configuration maps"
+                "devSettings / featureFlags / gbRemoteSettingsPolicy",
+                "Local values plus the last validated administrator policy metadata"
               ],
               [
                 "gbGiftCatalogCache_v5 / gbProductConfigCache / gbInventoryCache / gbCostMap",
@@ -4253,17 +4131,16 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "Contact search speed comes from an IndexedDB database (gb-crm-index) — visible under DevTools → Application → IndexedDB."
+            "text": "Contact search speed comes from the encrypted gb-crm-index-secure IndexedDB database owned by the extension service worker. Missing/rotated policy clears stale records and requires a rebuild."
           },
           {
             "type": "callout",
             "kind": "warning",
-            "text": "Deleting cache keys is safe (they rebuild). Deleting templates, featureFlags, or devSettings is not — export a preset first if you're going to experiment."
+            "text": "Proposal diagnostics can contain customer data. Enable them only while reproducing a problem, disable them immediately afterward, and never paste credentials into an export. Cache keys are safe to delete; templates and settings are not."
           }
         ]
       },
       "related": [
-        "console-commands",
         "presets"
       ],
       "sectionLabel": "Power User Corner"
@@ -4664,7 +4541,7 @@ export const HELP_CONTENT = {
         "advanced": [
           {
             "type": "p",
-            "text": "Settings → Custom Pages lists CRM pages the extension can take over — dashboard, search, task list, case index, contact details, and more. Toggle a page on and navigating to it loads the extension's interface instead of the stock CRM page."
+            "text": "Settings → Custom Pages exposes one switch per registered page scope. Enabling CRM activates the extension interface on supported CRM takeovers; disabling it uses the stock CRM pages. Scope values and visibility can be centrally managed by the authenticated policy."
           },
           {
             "type": "callout",
@@ -4769,7 +4646,7 @@ export const HELP_CONTENT = {
           {
             "type": "callout",
             "kind": "info",
-            "text": "Admins can hide this entire section (and reset it to defaults) with the __gbSecret.hideDev() console command — see the Power User Corner."
+            "text": "The authenticated remote policy can manage these values or hide this section. RevStack dashboard administrators bypass that policy."
           },
           {
             "type": "heading",
@@ -5005,6 +4882,42 @@ export const HELP_CONTENT = {
           },
           {
             "type": "heading",
+            "text": "Image Viewer"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Setting",
+              "Type",
+              "Default",
+              "Range",
+              "What it does"
+            ],
+            "rows": [
+              [
+                "Image Viewer: ball & chip only",
+                "bool",
+                "Off",
+                "",
+                "Hide the full model dropdown in the Image Viewer 3D strip and replace it with a small ball/chip toggle next to the color swatch. For reps who only need a ball or a poker-chip render. Export photos (copy/download) still work for both models."
+              ],
+              [
+                "Image Viewer: draggable mode",
+                "bool",
+                "Off",
+                "",
+                "When on, the Image Viewer is a draggable tool window. When off, it sits centered and closes on outside-click."
+              ]
+            ],
+            "meta": {
+              "settingKeys": [
+                "imageViewer.ballChipOnly",
+                "imageViewer.draggable"
+              ]
+            }
+          },
+          {
+            "type": "heading",
             "text": "Email"
           },
           {
@@ -5020,9 +4933,9 @@ export const HELP_CONTENT = {
               [
                 "Email account host",
                 "string",
-                "cullen",
+                "(empty)",
                 "",
-                "Local part of the sender address (the bit before @). Combined with the chosen sender account at send time — e.g. \"cullen\" + \"golfballs.com\" → cullen@golfballs.com."
+                "Required for Power Automate delivery. Enter the local part of your sender address (the portion before @), for example \"alex\"."
               ]
             ],
             "meta": {
@@ -5064,34 +4977,6 @@ export const HELP_CONTENT = {
               "settingKeys": [
                 "marginCalc.draggable",
                 "marginCalc.minAllowedMargin"
-              ]
-            }
-          },
-          {
-            "type": "heading",
-            "text": "Image Viewer"
-          },
-          {
-            "type": "table",
-            "headers": [
-              "Setting",
-              "Type",
-              "Default",
-              "Range",
-              "What it does"
-            ],
-            "rows": [
-              [
-                "Image Viewer: draggable mode",
-                "bool",
-                "Off",
-                "",
-                "When on, the Image Viewer is a draggable tool window. When off, it sits centered and closes on outside-click."
-              ]
-            ],
-            "meta": {
-              "settingKeys": [
-                "imageViewer.draggable"
               ]
             }
           },
@@ -5517,6 +5402,34 @@ export const HELP_CONTENT = {
           },
           {
             "type": "heading",
+            "text": "campaignManager"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Setting",
+              "Type",
+              "Default",
+              "Range",
+              "What it does"
+            ],
+            "rows": [
+              [
+                "Campaign Manager: zoom scale",
+                "number",
+                "1.2×",
+                "1–2×",
+                "Magnification of the Campaign Manager modal (1 = 100%). Default 1.2; lower it if the modal overflows on a smaller screen."
+              ]
+            ],
+            "meta": {
+              "settingKeys": [
+                "campaignManager.scale"
+              ]
+            }
+          },
+          {
+            "type": "heading",
             "text": "Playground"
           },
           {
@@ -5548,6 +5461,34 @@ export const HELP_CONTENT = {
               "settingKeys": [
                 "playground.forceMock",
                 "playground.open"
+              ]
+            }
+          },
+          {
+            "type": "heading",
+            "text": "customPages"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Setting",
+              "Type",
+              "Default",
+              "Range",
+              "What it does"
+            ],
+            "rows": [
+              [
+                "Custom Pages sandbox",
+                "action",
+                "—",
+                "",
+                "Offline dev harness for the Contact / Account Details takeovers — mock data, or load a saved CRM HTML to run it through the real schema engine."
+              ]
+            ],
+            "meta": {
+              "settingKeys": [
+                "customPages.sandbox"
               ]
             }
           },
@@ -6135,34 +6076,34 @@ export const HELP_CONTENT = {
       },
       "related": [
         "hidden-settings",
-        "console-commands",
         "modal-playground"
       ],
       "sectionLabel": "Settings Reference"
     },
     {
       "slug": "presets",
-      "title": "Presets: Import / Export / Share",
+      "title": "Shared Settings Templates",
       "icon": "save",
       "tiers": [
         "intermediate",
         "advanced"
       ],
       "keywords": [
-        "preset",
-        "export",
+        "settings link",
+        "template",
+        "URL",
         "import",
         "team",
         "share config",
         "backup"
       ],
-      "summary": "Bundle settings and templates into named presets, export them as JSON, and import a teammate's — with scope-by-scope control over what's included.",
+      "summary": "Bundle selected settings and templates under a name, receive a revocable URL, and let another enrolled installation preview and choose what to import.",
       "covers": [],
       "body": {
         "intermediate": [
           {
             "type": "p",
-            "text": "Settings → User Presets saves the current state under a name. When saving (or importing) you choose scopes — which slices of configuration the preset carries:"
+            "text": "Settings → Shared Settings Templates stores selected scopes on RevStack under a name and returns an opaque URL. A recipient pastes that URL into their extension, previews the name and included scopes, and chooses what to import:"
           },
           {
             "type": "table",
@@ -6175,11 +6116,6 @@ export const HELP_CONTENT = {
               [
                 "Settings",
                 "themeColors, gbTheme, featureFlags, devSettings, keyboardShortcuts, customPages, emailSignature",
-                "overwrites"
-              ],
-              [
-                "Hidden-setting config",
-                "secret_settings",
                 "overwrites"
               ],
               [
@@ -6221,7 +6157,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "Export writes the preset to a JSON file; a teammate imports it from the same panel. This is how teams distribute a standard template library and house style."
+            "text": "No file is downloaded or uploaded. Both creator and recipient authenticate through their own extension installation. The creator can list and revoke links created by that installation."
           }
         ],
         "advanced": [
@@ -6236,7 +6172,7 @@ export const HELP_CONTENT = {
           {
             "type": "callout",
             "kind": "warning",
-            "text": "The 'Hidden-setting config' scope carries which toggles are locked and hidden. Importing it applies those locks to you — only include it deliberately."
+            "text": "Treat the opaque URL as a capability and share it only with intended recipients. Credentials, installation auth, Watch List data, and administrator policy are never included; managed policy is reapplied independently after import."
           }
         ]
       },
@@ -6377,7 +6313,7 @@ export const HELP_CONTENT = {
         "shelf missing",
         "modal gone"
       ],
-      "summary": "Usually a feature toggle, the wrong page type, or (for admins) a hidden setting.",
+      "summary": "Usually a feature toggle, the wrong page type, or an administrator-managed policy setting.",
       "covers": [],
       "body": {
         "beginner": [
@@ -6395,7 +6331,7 @@ export const HELP_CONTENT = {
           {
             "type": "callout",
             "kind": "info",
-            "text": "If the toggle itself is missing from Settings, an admin hid it via secret settings. Run __gbSecret.list() in the Settings page console to see what's hidden, and __gbSecret.show('key') to restore it."
+            "text": "If the toggle itself is missing, the authenticated server policy marked it hidden. A RevStack administrator can change golfballs-extension-configuration.yaml; the extension applies the next valid sync automatically."
           }
         ]
       },
@@ -6527,7 +6463,7 @@ export const HELP_CONTENT = {
         "disappeared",
         "lost settings"
       ],
-      "summary": "Three suspects: an imported preset overwrote them, an admin hid them, or the dev section was collapsed via console command.",
+      "summary": "Two suspects: an imported preset overwrote them or the remote administrator policy manages them.",
       "covers": [],
       "body": {
         "intermediate": [
@@ -6535,8 +6471,8 @@ export const HELP_CONTENT = {
             "type": "list",
             "items": [
               "Imported a preset recently? Settings scopes overwrite on import. Re-apply your own preset if you saved one — exporting a personal backup preset first is the habit that prevents this.",
-              "A specific toggle is gone (not just off)? It was hidden via secret settings — ask your admin, or see below.",
-              "The whole Developer Settings section is gone? Someone ran __gbSecret.hideDev(), which also resets dev values to defaults."
+              "A specific toggle is gone (not just off)? The server policy hides it — ask a RevStack administrator.",
+              "The whole Developer Settings section is gone? The server policy hides that section for non-administrator installations."
             ]
           }
         ],
@@ -6544,14 +6480,13 @@ export const HELP_CONTENT = {
           {
             "type": "callout",
             "kind": "info",
-            "text": "From the Settings page console: __gbSecret.list() shows hidden keys, __gbSecret.show('key') restores one, __gbSecret.clear() restores everything, __gbSecret.showDev() brings the dev section back."
+            "text": "Policy changes belong in golfballs-extension-configuration.yaml. The previous console hide/show commands were removed so local users cannot override an administrator disable."
           }
         ]
       },
       "related": [
         "presets",
-        "hidden-settings",
-        "console-commands"
+        "hidden-settings"
       ],
       "sectionLabel": "Troubleshooting"
     }
@@ -6578,9 +6513,9 @@ export const HELP_CONTENT = {
         },
         {
           "action": "Set 'Email account host' to your own account name.",
-          "expected": "Your From identity is now yours.",
+          "expected": "Your From identity is configured.",
           "visualCue": "Developer Settings section.",
-          "warning": "Skip this and your emails may go out under someone else's identity — it ships with a default that isn't you."
+          "warning": "Power Automate sends remain blocked while this required value is blank."
         },
         {
           "action": "Write your email signature in the signature editor.",
@@ -6594,9 +6529,9 @@ export const HELP_CONTENT = {
           "tip": "Everything except Power Automate is on by default. Leaving it all on is fine."
         },
         {
-          "action": "(If your team shares config) Settings → User Presets → Import, and pick the team preset JSON.",
-          "expected": "Team templates and settings merge in; a summary lists what was imported.",
-          "visualCue": "User Presets section.",
+          "action": "(If your team shares config) paste its URL under Settings → Shared Settings Templates and select Preview.",
+          "expected": "The template name and included scopes appear; tick only the scopes you want and import them.",
+          "visualCue": "Shared Settings Templates section.",
           "commonMistake": "Importing the Settings scope overwrites your theme and toggles — untick scopes you want to keep your own."
         }
       ],
@@ -6965,21 +6900,21 @@ export const HELP_CONTENT = {
       ],
       "steps": [
         {
-          "action": "Settings → User Presets → Save; name the preset and choose scopes.",
-          "expected": "Scope checkboxes control what's bundled: settings, hidden-setting config, and each template type separately.",
-          "visualCue": "Scope checklist in the save dialog.",
-          "tip": "For a team template pack, tick only the template scopes and leave Settings out — people keep their own theme and toggles."
+          "action": "Settings → Shared Settings Templates → Create URL; name the template and choose scopes.",
+          "expected": "The extension stores only the chosen scopes on RevStack and creates a revocable opaque URL.",
+          "visualCue": "Scope checklist in the create dialog.",
+          "tip": "For a team template pack, tick only template scopes and leave Settings out so people keep their own theme and toggles."
         },
         {
-          "action": "Export the preset to a JSON file and share it.",
-          "expected": "A .json file downloads.",
-          "visualCue": "Export button on the preset row."
+          "action": "Copy the generated URL and send it to the intended teammate.",
+          "expected": "No JSON file is created; the URL identifies the server-side template.",
+          "visualCue": "Copy URL button."
         },
         {
-          "action": "Teammate: Settings → User Presets → Import, pick the file, confirm scopes.",
+          "action": "Teammate: paste the URL, select Preview, choose scopes, then Import.",
           "expected": "Templates merge by id (same id replaces, new id appends); settings scopes overwrite.",
-          "visualCue": "Import summary.",
-          "commonMistake": "Importing the Settings scope replaces the teammate's theme/toggles. Importing 'Hidden-setting config' applies the admin's locks — include it only on purpose."
+          "visualCue": "Template preview and scope checklist.",
+          "commonMistake": "Importing Settings replaces the teammate's theme/toggles. Server-managed policy remains independent and is reapplied on sync."
         }
       ],
       "related": [
@@ -7457,13 +7392,11 @@ export const HELP_CONTENT = {
         "mailto",
         "signature",
         "images",
-        "graph",
-        "draft",
         "transport",
         "send",
         "copy"
       ],
-      "description": "Three transports — Power Automate (silent send), Outlook fallback (pre-filled window + Copy), and Microsoft Graph (draft-only) — and exactly when each is used.",
+      "description": "The two email transports — Power Automate silent delivery and the pre-filled Outlook fallback — and exactly when each is used.",
       "article": "how-email-sending-works",
       "shortcut": null,
       "flag": null
@@ -7503,7 +7436,7 @@ export const HELP_CONTENT = {
       "category": "FAQ",
       "title": "Does anyone else see my Watch List, templates, or settings?",
       "keywords": [],
-      "description": "No — everything is stored locally in your browser profile. Sharing happens only when you export a preset and someone imports it.",
+      "description": "Local data stays in your browser profile unless you explicitly create a settings link. RevStack stores only the scopes you select; Watch List data and credentials are never included.",
       "article": "faq"
     },
     {
@@ -7543,7 +7476,7 @@ export const HELP_CONTENT = {
       "category": "FAQ",
       "title": "Did 'reply with template' send my email?",
       "keywords": [],
-      "description": "If you used the Microsoft (Graph) path, it created a draft in your mailbox — review and send it from Outlook. Only Power Automate sends directly.",
+      "description": "Power Automate sends directly and reports success or failure. When Power Automate is off, the extension opens a pre-filled Outlook window and you finish the send there.",
       "article": "faq"
     },
     {
@@ -7551,7 +7484,7 @@ export const HELP_CONTENT = {
       "category": "FAQ",
       "title": "A toggle disappeared from my Settings — am I losing my mind?",
       "keywords": [],
-      "description": "No — an admin hid it via secret settings. The feature keeps working in its locked state. See 'Hidden Settings'.",
+      "description": "No — the authenticated administrator policy can hide managed controls. Ask a RevStack administrator to review the Golfballs configuration.",
       "article": "faq"
     },
     {
@@ -7995,22 +7928,6 @@ export const HELP_CONTENT = {
       "flag": null
     },
     {
-      "id": "article:console-commands",
-      "category": "Articles",
-      "title": "Console Commands",
-      "keywords": [
-        "__gbSecret",
-        "__gbScan",
-        "hide setting",
-        "console",
-        "admin commands"
-      ],
-      "description": "Two admin command objects available in the Settings page console: __gbSecret (hidden settings) and __gbScan (recent-orders scan clock).",
-      "article": "console-commands",
-      "shortcut": null,
-      "flag": null
-    },
-    {
       "id": "article:modal-playground",
       "category": "Articles",
       "title": "The Modal Playground",
@@ -8031,13 +7948,13 @@ export const HELP_CONTENT = {
       "category": "Articles",
       "title": "Hidden Settings",
       "keywords": [
-        "secret",
+        "remote policy",
         "hidden",
         "locked",
-        "secret settings",
-        "admin lock"
+        "admin disabled",
+        "configuration"
       ],
-      "description": "How admins lock a feature on/off and remove its switch from the Settings UI — and how to see what's hidden.",
+      "description": "How the authenticated server policy manages feature values and visibility.",
       "article": "hidden-settings",
       "shortcut": null,
       "flag": null
@@ -8049,11 +7966,11 @@ export const HELP_CONTENT = {
       "keywords": [
         "storage",
         "debug",
-        "gbVarsDebug",
+        "proposal",
         "inspect",
         "logs"
       ],
-      "description": "Where the extension keeps its state, and which keys hold debug snapshots when you're chasing a problem.",
+      "description": "Where the extension keeps state and how to use the bounded, opt-in proposal diagnostic log.",
       "article": "debug-storage",
       "shortcut": null,
       "flag": null
@@ -8163,16 +8080,17 @@ export const HELP_CONTENT = {
     {
       "id": "article:presets",
       "category": "Articles",
-      "title": "Presets: Import / Export / Share",
+      "title": "Shared Settings Templates",
       "keywords": [
-        "preset",
-        "export",
+        "settings link",
+        "template",
+        "URL",
         "import",
         "team",
         "share config",
         "backup"
       ],
-      "description": "Bundle settings and templates into named presets, export them as JSON, and import a teammate's — with scope-by-scope control over what's included.",
+      "description": "Bundle selected settings and templates under a name, receive a revocable URL, and let another enrolled installation preview and choose what to import.",
       "article": "presets",
       "shortcut": null,
       "flag": null
@@ -8236,7 +8154,7 @@ export const HELP_CONTENT = {
         "shelf missing",
         "modal gone"
       ],
-      "description": "Usually a feature toggle, the wrong page type, or (for admins) a hidden setting.",
+      "description": "Usually a feature toggle, the wrong page type, or an administrator-managed policy setting.",
       "article": "ts-modal-not-appearing",
       "shortcut": null,
       "flag": null
@@ -8299,7 +8217,7 @@ export const HELP_CONTENT = {
         "disappeared",
         "lost settings"
       ],
-      "description": "Three suspects: an imported preset overwrote them, an admin hid them, or the dev section was collapsed via console command.",
+      "description": "Two suspects: an imported preset overwrote them or the remote administrator policy manages them.",
       "article": "ts-settings-vanished",
       "shortcut": null,
       "flag": null
@@ -8761,13 +8679,23 @@ export const HELP_CONTENT = {
       "article": "developer-settings"
     },
     {
+      "id": "devSetting:imageViewer.ballChipOnly",
+      "category": "Settings",
+      "title": "Image Viewer: ball & chip only",
+      "keywords": [
+        "imageViewer.ballChipOnly"
+      ],
+      "description": "Hide the full model dropdown in the Image Viewer 3D strip and replace it with a small ball/chip toggle next to the color swatch. For reps who only need a ball or a poker-chip render. Export photos (copy/download) still work for both models.",
+      "article": "developer-settings"
+    },
+    {
       "id": "devSetting:email.localPart",
       "category": "Settings",
       "title": "Email account host",
       "keywords": [
         "email.localPart"
       ],
-      "description": "Local part of the sender address (the bit before @). Combined with the chosen sender account at send time — e.g. \"cullen\" + \"golfballs.com\" → cullen@golfballs.com.",
+      "description": "Required for Power Automate delivery. Enter the local part of your sender address (the portion before @), for example \"alex\".",
       "article": "developer-settings"
     },
     {
@@ -9021,6 +8949,16 @@ export const HELP_CONTENT = {
       "article": "developer-settings"
     },
     {
+      "id": "devSetting:campaignManager.scale",
+      "category": "Settings",
+      "title": "Campaign Manager: zoom scale",
+      "keywords": [
+        "campaignManager.scale"
+      ],
+      "description": "Magnification of the Campaign Manager modal (1 = 100%). Default 1.2; lower it if the modal overflows on a smaller screen.",
+      "article": "developer-settings"
+    },
+    {
       "id": "devSetting:giftCatalog.previewScale",
       "category": "Settings",
       "title": "Gifting Catalog: live preview ball scale",
@@ -9158,6 +9096,16 @@ export const HELP_CONTENT = {
         "playground.open"
       ],
       "description": "Blank in-extension surface for previewing modals.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:customPages.sandbox",
+      "category": "Settings",
+      "title": "Custom Pages sandbox",
+      "keywords": [
+        "customPages.sandbox"
+      ],
+      "description": "Offline dev harness for the Contact / Account Details takeovers — mock data, or load a saved CRM HTML to run it through the real schema engine.",
       "article": "developer-settings"
     },
     {

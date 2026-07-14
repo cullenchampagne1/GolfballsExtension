@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /* ───────────────────────────────────────────────────────────────
    editor-bridge — the non-React glue that the React editor
    bundles depend on. Replaces the legacy `editor.js` file.
@@ -11,7 +10,6 @@
      • deleteTemplate / deleteNoteTemplate (themed gbConfirm + persist)
      • Variable resolution proxy to the order tab
      • Settings open/close stubs
-     • One-shot migrations (window.gbMigrateVariations / Unmigrate)
 
    IMPORTANT: this script is loaded BEFORE the React content bundles
    in editor.html, so the React mounts can read window.__gbCurrent*
@@ -73,13 +71,13 @@ function gbConfirm(message, options = {}) {
 
 /**
  * Surfaces a bottom-right toast via the React PillToast manager when
- * available; falls back to console.log if not.
+ * available. If the host has not mounted yet, the notification is dropped.
  */
 function toast(msg, isError = false) {
   if (window.__gbToast) {
     return isError ? window.__gbToast.error(msg) : window.__gbToast.success(msg);
   }
-  console.log('[gb-toast]', msg);
+  return undefined;
 }
 
 // ── Storage ────────────────────────────────────────────────────
@@ -96,7 +94,7 @@ async function saveNoteTemplates() {
 // ── Templates: open / new / delete ─────────────────────────────
 async function newTemplate() {
   if (!window.__gbOpenTemplate) {
-    console.warn('[gb-editor] React template bridge missing; reload editor.');
+    toast('Template editor failed to load — reload the editor.', true);
     return;
   }
   const id = 't_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -130,7 +128,7 @@ function openTemplate(id) {
     window.__gbOpenTemplate(tpl);
     return;
   }
-  console.warn('[gb-editor] React template bridge missing; reload editor.');
+    toast('Template editor failed to load — reload the editor.', true);
 }
 
 async function deleteTemplate() {
@@ -165,7 +163,7 @@ async function deleteTemplateById(id) {
 // ── Note templates: open / new / delete ────────────────────────
 async function newNoteTemplate() {
   if (!window.__gbOpenNote) {
-    console.warn('[gb-editor] React note-template bridge missing; reload editor.');
+    toast('Note-template editor failed to load — reload the editor.', true);
     return;
   }
   const id = 'n_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -199,7 +197,7 @@ function openNoteTemplate(id) {
     window.__gbOpenNote(tpl);
     return;
   }
-  console.warn('[gb-editor] React note-template bridge missing; reload editor.');
+    toast('Note-template editor failed to load — reload the editor.', true);
 }
 
 async function deleteNoteTemplate() {
@@ -294,106 +292,6 @@ function closeSettings() {
   $(_settingsPreviousView)?.classList.add('view-animate');
 }
 
-/**
- * The standalone Case Templates panel was retired when case templates
- * were unified into the main editor's type-switcher. Anything that
- * still messages us to open it gets a toast instead.
- */
-function openCaseTplEditor() {
-  if (window.__gbToast?.info) {
-    window.__gbToast.info('Case templates now live in the main editor — switch the template type to "Case".');
-  } else {
-    console.info('[gb] Case template editor is unified with the main editor.');
-  }
-}
-
-// ── One-shot migrations (console helpers) ──────────────────────
-/**
- * Convert legacy "X Variation N" sibling templates into the new
- * explicit `tpl.variations: [{id,label,subject,body}]` shape.
- * Run from devtools: `await window.gbMigrateVariations()`
- */
-async function gbMigrateVariations({ dryRun = false } = {}) {
-  const data = await loadStorage();
-  const all = data.templates || [];
-  const byBase = new Map();
-  const VARIATION_RE = /^(.*?)\s*Variation\s*[#]?(\d+)\s*$/i;
-  for (const t of all) {
-    const m = (t.name || '').match(VARIATION_RE);
-    if (!m) continue;
-    const base = m[1].trim();
-    const n = parseInt(m[2], 10);
-    if (!byBase.has(base)) byBase.set(base, []);
-    byBase.get(base).push({ tpl: t, n });
-  }
-  let migrated = 0;
-  /* Accumulate removals across ALL groups before filtering once at the
-     end. The previous code reassigned `templates = all.filter(…)` per
-     iteration, which silently wiped out earlier groups' deletions —
-     only the last group's siblings actually got removed. */
-  const removeIds = new Set();
-  for (const [base, group] of byBase.entries()) {
-    if (group.length < 2) continue;
-    const parent = all.find((t) => t.name === base);
-    if (!parent) continue;
-    group.sort((a, b) => a.n - b.n);
-    // Dedupe by id against any variations already on the parent. Lets
-    // the migration be re-run safely to clean up leftover standalones
-    // from earlier buggy runs without doubling entries on the parent.
-    const existingIds = new Set((parent.variations || []).map((v) => v.id));
-    const variations = group
-      .filter((g) => !existingIds.has(g.tpl.id))
-      .map((g) => ({
-        id: g.tpl.id, label: `Variation ${g.n}`,
-        subject: g.tpl.subject || '', body: g.tpl.body || '',
-      }));
-    parent.variations = [...(parent.variations || []), ...variations];
-    migrated += variations.length;
-    // Every group sibling — even ones already in parent.variations —
-    // belongs in the removal set so the standalone templates from the
-    // first-run leftover state get pruned now.
-    for (const g of group) removeIds.add(g.tpl.id);
-  }
-  if (!dryRun && migrated > 0) {
-    templates = all.filter((t) => !removeIds.has(t.id));
-    await saveTemplates();
-    console.log('[gbMigrateVariations] migrated', migrated, 'siblings into parents (', removeIds.size, 'standalone templates removed)');
-  } else {
-    console.log('[gbMigrateVariations]', dryRun ? 'dry-run:' : 'no-op:', 'would migrate', migrated, 'siblings');
-  }
-  return { migrated, removed: removeIds.size };
-}
-
-/**
- * Reverse the migration: expand `tpl.variations` back into sibling
- * "X Variation N" templates so the legacy editor's sibling layout
- * still has data to render.
- */
-async function gbUnmigrateVariations({ dryRun = false } = {}) {
-  const data = await loadStorage();
-  const all = data.templates || [];
-  const additions = [];
-  for (const parent of all) {
-    if (!Array.isArray(parent.variations) || parent.variations.length === 0) continue;
-    parent.variations.forEach((v, i) => {
-      additions.push({
-        ...parent,
-        id: v.id || `${parent.id}_var_${i + 1}`,
-        name: `${parent.name} Variation ${i + 1}`,
-        subject: v.subject || parent.subject || '',
-        body: v.body || parent.body || '',
-        variations: undefined,
-      });
-    });
-  }
-  console.log('[gbUnmigrateVariations]', dryRun ? 'dry-run:' : 'unmigrating:', 'would add', additions.length, 'sibling templates');
-  if (!dryRun && additions.length > 0) {
-    templates = [...all.map((t) => ({ ...t, variations: undefined })), ...additions];
-    await saveTemplates();
-  }
-  return { added: additions.length };
-}
-
 // ── Install bridges + start ────────────────────────────────────
 // Expose to the React content bundles + legacy callers.
 window.openTemplate     = openTemplate;
@@ -406,16 +304,11 @@ window.deleteTemplateById     = deleteTemplateById;
 window.deleteNoteTemplateById = deleteNoteTemplateById;
 window.openSettings     = openSettings;
 window.closeSettings    = closeSettings;
-window.openCaseTplEditor = openCaseTplEditor;
-
 window.__gbSaveTemplate = applyTemplatePatch;
 window.__gbSaveNote     = applyNotePatch;
 window.__gbResolveVars  = resolveVarsLive;
 window.__gbCurrentTemplate = () => templates.find((t) => t.id === currentId) || null;
 window.__gbCurrentNote     = () => noteTemplates.find((t) => t.id === currentNoteId) || null;
-
-window.gbMigrateVariations   = gbMigrateVariations;
-window.gbUnmigrateVariations = gbUnmigrateVariations;
 
 // Storage onChanged — keep local arrays in sync if another tab/popup edits.
 chrome.storage.onChanged.addListener((changes) => {
@@ -430,32 +323,6 @@ function wireGearButton() {
   $('btn-settings')?.addEventListener('click', openSettings);
 }
 
-// Cross-tab signal to deep-link into case templates. Now a toast.
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg?.action === 'GB_OPEN_CASE_TPL_EDITOR') openCaseTplEditor();
-});
-
-// Pull pending-nav written by background.js when the editor is opened
-// specifically for case templates.
-(async () => {
-  const getNav = async () => {
-    try {
-      const s = await new Promise((res) => chrome.storage.session?.get('pendingNav', res).catch(() => res({})));
-      if (s?.pendingNav) return s.pendingNav;
-    } catch (_) { /* noop */ }
-    try {
-      const s = await new Promise((res) => chrome.storage.local.get('pendingNav', res));
-      if (s?.pendingNav) return s.pendingNav;
-    } catch (_) { /* noop */ }
-    return null;
-  };
-  const nav = await getNav();
-  if (nav === 'case-tpl') {
-    chrome.storage.session?.remove('pendingNav').catch(() => chrome.storage.local.remove('pendingNav'));
-    openCaseTplEditor();
-  }
-})();
-
 async function init() {
   const data = await loadStorage();
   templates     = data.templates     || [];
@@ -464,12 +331,11 @@ async function init() {
   /* One-version backwards-compat pass: lift legacy contact/account/order
      variables onto the page engine, and scratch legacy order auto-match
      rules so they're re-authored against the order schema. Persists +
-     stamps each template (varsMigratedVersion) so it runs ONCE. The
-     console still logs everything it changed for the record. */
+     stamps each template (varsMigratedVersion) so it runs ONCE. */
   try {
     const mig = migrateTemplates(templates, { dryRun: false });
     if (mig.changed) { templates = mig.migrated; await saveTemplates(); }
-  } catch (e) { console.warn('[gb] templateMigration failed', e); }
+  } catch (e) { toast('A stored template could not be upgraded automatically.', true); }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', wireGearButton);
   } else {

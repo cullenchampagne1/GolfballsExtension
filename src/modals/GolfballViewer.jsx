@@ -776,7 +776,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
           };
           texDiag.push(entry);
           // eslint-disable-next-line no-console
-          if (renderDebugRef.current) console.log('[GBTEX]', name, entry);
+          if (renderDebugRef.current) console.log('[GBTEX]', name, entry); // SECURITY-AUDITED-DEV-SETTING-CONSOLE
         };
 
         // ── Lighting ───────────────────────────────────────────
@@ -1221,32 +1221,6 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
             loadThreeAndModel(giftSet.boxModel || 'giftbox'), loadThreeAndModel('ball'),
           ]);
           if (disposed) return;
-          try {
-            // Pocket diagnostic: does the LOADED box geometry actually have a recess
-            // where we place the tool? below>0 + pmin deep = box has the pocket (so a
-            // missing-recess look is the placed tool covering it, not a stale OBJ).
-            let pocket = null;
-            const ti = (giftSet.kitItems || []).find((k) => k.shape === 'divot' || k.shape === 'bartender');
-            if (ti) {
-              const bp = boxRes.model.geometry.attributes.position;
-              let below = 0, pmin = 9;
-              for (let i = 0; i < bp.count; i++) {
-                const x = bp.getX(i), y = bp.getY(i), z = bp.getZ(i);
-                if (Math.hypot(x - ti.x, y - ti.y) < 1.0) { if (z < -0.1) below++; if (z < pmin) pmin = z; }
-              }
-              pocket = { at: `${ti.x},${ti.y}`, below, pmin: +pmin.toFixed(2) };
-            }
-            console.log('[GIFTSET]', {
-              modelVersion: MODEL_VERSION,
-              boxModel: giftSet.boxModel,
-              boxVerts: boxRes.model.geometry.attributes.position.count,
-              boxHasColors: !!boxRes.model.geometry.attributes.color,
-              balls: giftSet.ballSlots.length,
-              kit: (giftSet.kitItems || []).map((k) => k.shape).join(','),
-              toolPocket: pocket,
-            });
-          } catch (e) { /* noop */ }
-
           // Center a cloned geometry on its own origin; report radius + half-extents.
           const centeredGeo = (srcGeo) => {
             const g = srcGeo.clone();
@@ -1510,7 +1484,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 const target = sceneKeyRef.current;
                 loadEnvironment(target)
                   .then(() => { if (!disposed && sceneKeyRef.current === target) applySceneMode(target); })
-                  .catch((e) => { console.warn('GolfballViewer: failed to load HDRI', target, e); });
+                  .catch(() => {});
               } else {
                 applySceneMode(null);
               }
@@ -3208,7 +3182,7 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
                 .then(() => {
                   if (!disposed && sceneKeyRef.current === target) applySceneMode(target);
                 })
-                .catch((e) => { console.warn('GolfballViewer: failed to load HDRI', target, e); });
+                .catch(() => {});
             } else {
               applySceneMode(null);
             }
@@ -4060,7 +4034,6 @@ export const GolfballViewer = React.forwardRef(function GolfballViewer({ decalDa
         if (!disposed) { try { onReadyRef.current?.(); } catch (e) { /* */ } }
         setTimeout(() => { if (!disposed) setStatus('ready'); }, remaining);
       } catch (e) {
-        console.error('[GolfballViewer] load failed', e);
         if (!disposed) {
           setStatus('error');
           onError?.(e);

@@ -17,6 +17,7 @@
    ─────────────────────────────────────────────────────────────────────────── */
 
 import { addCustomItems } from './customItems.js';
+import { sendBackgroundMessage } from './backgroundMessage.js';
 
 const ORIGIN = 'https://snugzusa.com';
 const NET_RATIO = 0.60;       // our cost as a fraction of the listed price
@@ -27,19 +28,6 @@ const ZIPIT_AMOUNT = 40;      // ZIP-IT freight (pass-through, post-margin) when
 const round2 = (n) => Math.round(n * 100) / 100;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const stopped = (signal) => !!(signal && signal.aborted);
-
-function sendBg(action, payload = {}) {
-  return new Promise((resolve, reject) => {
-    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) { reject(new Error('Not in an extension context')); return; }
-    try {
-      chrome.runtime.sendMessage({ action, ...payload }, (resp) => {
-        if (chrome.runtime.lastError) { reject(new Error(chrome.runtime.lastError.message)); return; }
-        if (!resp || !resp.ok) { reject(new Error((resp && resp.error) || (action + ' failed'))); return; }
-        resolve(resp);
-      });
-    } catch (e) { reject(e); }
-  });
-}
 
 /* Build price + cost ladders from parsed tiers ([[qty, listedPrice], …]). */
 function laddersFrom(tiers, setup, zipit) {
@@ -57,7 +45,7 @@ function laddersFrom(tiers, setup, zipit) {
 
 /* Full import. `onProgress({phase,...})` fires through both phases. */
 export async function importSnugzCatalog({ onProgress, signal } = {}) {
-  const init = await sendBg('snugzInit');
+  const init = await sendBackgroundMessage('snugzInit');
   if (stopped(signal)) throw new Error('cancelled');
   const cats = (init && init.categories) || [];
   if (!cats.length) throw new Error('No SnugZ categories found (sign in to snugzusa.com first)');
@@ -67,7 +55,7 @@ export async function importSnugzCatalog({ onProgress, signal } = {}) {
   for (let i = 0; i < cats.length; i++) {
     if (stopped(signal)) break;
     try {
-      const r = await sendBg('snugzFetch', { urls: [ORIGIN + cats[i]], kind: 'list' });
+      const r = await sendBackgroundMessage('snugzFetch', { urls: [ORIGIN + cats[i]], kind: 'list' });
       (r.results || []).forEach((x) => (x.slugs || []).forEach((s) => slugs.add(s)));
     } catch { /* skip a bad category */ }
     if (onProgress) onProgress({ phase: 'list', cat: i + 1, cats: cats.length, found: slugs.size });
@@ -84,7 +72,7 @@ export async function importSnugzCatalog({ onProgress, signal } = {}) {
     if (stopped(signal)) break;
     const urls = list.slice(i, i + BATCH).map((s) => `${ORIGIN}/product/${s}`);
     let results = [];
-    try { const r = await sendBg('snugzFetch', { urls, kind: 'detail' }); results = r.results || []; }
+    try { const r = await sendBackgroundMessage('snugzFetch', { urls, kind: 'detail' }); results = r.results || []; }
     catch { /* skip a bad batch */ }
     for (const x of results) {
       const d = x.detail;

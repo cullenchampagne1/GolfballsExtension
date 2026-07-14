@@ -19,7 +19,7 @@
         ],
         "intermediate": [
           { "type": "heading", "text": "The local index" },
-          { "type": "p", "text": "The index is what makes repeat searches instant. After a server search, an 'Index all N' / 'Index these N' button stores the results locally; a footer notes 'Locally indexed — instant typeahead. Falls through to server on Enter', with a Clear index button beside it. Records you visit also index themselves automatically." },
+          { "type": "p", "text": "The index is what makes repeat name searches instant. After a server search, an 'Index all N' / 'Index these N' button stores normalized names plus encrypted CRM details. Encryption keys are created automatically on the device, so there is no setup or server call. Only the highest-ranked visible results are decrypted. A Clear index button removes the encrypted cache; Enter always remains available for live server search." },
           { "type": "heading", "text": "Selections and bulk actions" },
           { "type": "p", "text": "Tick rows and the summary bar appears — 'N selected of M results' — with Run campaign, Email selected, and Export CSV. Keyboard: Tab from the input drops focus onto the first row; Tab/Shift+Tab walk rows (wrapping); Esc returns to the input." }
         ],

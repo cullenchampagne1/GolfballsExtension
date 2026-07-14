@@ -18,6 +18,7 @@ import { assembleLine, buildSaveCartBody, buildSaveProposalBody, buildCustomItem
 import { runEngine } from './page-engine/index.js';
 import { needsIngest, ingestImageUrl, saveCustomItem } from './customItems.js';
 import { API } from './constants.js';
+import { sendBackgroundMessage } from './backgroundMessage.js';
 
 // golfballs.com second-pole upcharge per dozen (Logo / Text), added on top of
 // the custom-logo ladder for a dual-pole imprint. Mirrors the modal's pricing.
@@ -46,29 +47,13 @@ export function copyToClipboard(text) {
   });
 }
 
-function sendBg(action, payload = {}) {
-  return new Promise((resolve, reject) => {
-    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) {
-      reject(new Error('Not in an extension context'));
-      return;
-    }
-    try {
-      chrome.runtime.sendMessage({ action, ...payload }, (resp) => {
-        if (chrome.runtime.lastError) { reject(new Error(chrome.runtime.lastError.message)); return; }
-        if (!resp || !resp.ok) { reject(new Error((resp && resp.error) || (action + ' failed'))); return; }
-        resolve(resp);
-      });
-    } catch (e) { reject(e); }
-  });
-}
-
 /* Fetch the raw product object for every unique product URL, in parallel
    (deduped). Returns Map(url → product|null). A null means the page fetch
    failed for that product — its lines are skipped + reported. */
 async function fetchRawProducts(urls) {
   const uniq = [...new Set(urls.filter(Boolean))];
   const entries = await Promise.all(uniq.map(async (url) => {
-    try { const r = await sendBg('fetchProductRaw', { url }); return [url, r.product]; }
+    try { const r = await sendBackgroundMessage('fetchProductRaw', { url }); return [url, r.product]; }
     catch { return [url, null]; }
   }));
   return new Map(entries);
@@ -78,7 +63,7 @@ async function fetchRawProducts(urls) {
    DISPLAY from the same fee ladders the cart uses. Returns the product or null. */
 export async function fetchRawProduct(url) {
   if (!url) return null;
-  try { const r = await sendBg('fetchProductRaw', { url }); return r.product || null; }
+  try { const r = await sendBackgroundMessage('fetchProductRaw', { url }); return r.product || null; }
   catch { return null; }
 }
 
@@ -87,7 +72,7 @@ export async function fetchRawProduct(url) {
    filePath/cropFilePath/userImage into the decoration so the cart references a
    real, server-rendered logo. Returns the (possibly enriched) decoration. */
 async function uploadOneLogo(dataUrl, fileName) {
-  const up = await sendBg('uploadCustomLogo', { dataUrl, fileName: fileName || 'logo.png' });
+  const up = await sendBackgroundMessage('uploadCustomLogo', { dataUrl, fileName: fileName || 'logo.png' });
   return { filePath: up.filePath, fileName: up.fileName, cropFilePath: up.cropFilePath, userImage: up.userImage };
 }
 
@@ -192,10 +177,8 @@ function buildLocalStorageCart(items, { proposalID = null, promotion = null } = 
 function buildCartConsoleCommand(cartJson) {
   return `(function(){try{`
     + `localStorage.setItem('shoppingCart', ${JSON.stringify(cartJson)});`
-    + `var n=(JSON.parse(localStorage.getItem('shoppingCart')).itemsInCart||[]).length;`
-    + `console.log('%c[GB] Proposal loaded — '+n+' item(s). Reloading cart…','color:#2e9e5b;font-weight:bold');`
     + `location.reload();`
-    + `}catch(e){console.error('[GB] proposal load failed:',e);}})();`;
+    + `}catch(e){return false;}})();`;
 }
 
 /* Build a Save-draft payload: serialize the proposal into the golfballs.com
@@ -224,7 +207,7 @@ export async function validatePromo(proposal, promoCode, { country = null } = {}
   const { items } = await buildProposalLines(proposal);
   if (!items.length) throw new Error('Could not load product data — try again');
   const body = { cartItems: items, country, promoCode: code, shippingMethods: [], isVip: false, vipSignup: false };
-  const resp = await sendBg('applyPromotion', { body });
+  const resp = await sendBackgroundMessage('applyPromotion', { body });
   const promotion = resp && resp.promotion;
   if (!promotion || (!promotion.promo && !(promotion.unmetRequirements || []).length)) {
     throw new Error('“' + code + '” isn’t a valid promo code for this cart');
@@ -242,7 +225,7 @@ export async function saveProposalToServer(proposal, { proposalID = null, custom
   const { items, skipped } = await buildProposalLines(proposal);
   if (!items.length) throw new Error('Could not load product data for any line — try again');
   const body = buildSaveCartBody(items, { proposalID, customerID, salesRepID });
-  const resp = await sendBg('giftSaveCart', { body });
+  const resp = await sendBackgroundMessage('giftSaveCart', { body });
   return { cartNumber: resp.cartNumber, cartID: resp.cartID, message: resp.message, savedLines: items.length, skipped };
 }
 
@@ -278,7 +261,7 @@ export async function fetchOpportunitiesForAccount(accountId) {
   if (accountId == null || accountId === '') return [];
   const url = accountPageUrl(accountId);
   let html = '';
-  try { const r = await sendBg('fetchRaw', { url }); html = r.text || ''; }
+  try { const r = await sendBackgroundMessage('fetchRaw', { url }); html = r.text || ''; }
   catch { return []; }
   if (!html) return [];
   let doc;
@@ -345,7 +328,7 @@ export function parseProposalsHtml(html) {
 export async function fetchProposalsForOpportunity(opportunityID) {
   if (opportunityID == null || opportunityID === '') return [];
   let html = '';
-  try { const r = await sendBg('fetchRaw', { url: OPP_PAGE(opportunityID) }); html = r.text || ''; }
+  try { const r = await sendBackgroundMessage('fetchRaw', { url: OPP_PAGE(opportunityID) }); html = r.text || ''; }
   catch { return []; }
   const adminId = (html.match(/AdminID\s*=\s*['"]?(\d+)/) || [])[1] || '';
   const contactId = (html.match(/[Cc]ontact[Ii][dD]\s*[:=]\s*['"](\d+)['"]/) || [])[1] || '';
@@ -377,7 +360,7 @@ export async function fetchActiveProposals({ accountId, opportunities } = {}) {
 
 /* Load a saved cart's contents by cartID (GET /user/getCart/<id>). */
 export async function loadProposalCart(cartID) {
-  const resp = await sendBg('giftLoadCart', { cartNumber: cartID });
+  const resp = await sendBackgroundMessage('giftLoadCart', { cartNumber: cartID });
   return resp && resp.cartData;
 }
 
@@ -485,7 +468,7 @@ export function cartToEntry(cartData, meta = {}) {
    subject/description/lead/stage). All credentialed via the CRM relay. Throws if
    the track step fails; the opp-value update is best-effort. */
 const _crmBase = API.CRM_CRM;
-function _crmAjax(url, opts = {}) { return sendBg('crmAjax', { url, method: opts.method || 'GET', body: opts.body, contentType: opts.contentType }); }
+function _crmAjax(url, opts = {}) { return sendBackgroundMessage('crmAjax', { url, method: opts.method || 'GET', body: opts.body, contentType: opts.contentType }); }
 function _toISODate(s) {
   const m = /(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(s || ''));
   if (!m) return '';
@@ -604,7 +587,7 @@ export async function saveProposalToOpportunity(proposal, {
     proposalID,
     promotion,
   });
-  const resp = await sendBg('giftSaveProposal', { body });
+  const resp = await sendBackgroundMessage('giftSaveProposal', { body });
   return { cartID: resp.cartID, raw: resp.raw, savedLines: items.length, skipped };
 }
 

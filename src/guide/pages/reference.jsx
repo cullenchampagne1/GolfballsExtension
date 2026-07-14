@@ -11,7 +11,7 @@ import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
    reference tables, cardgrids, docnotes, and a themed changelog
    timeline. Content is transcribed from the verified articles in
    src/lib/helpContent.js (ts-* / faq / code-variables /
-   console-commands / hidden-settings / modal-playground /
+   hidden-settings / modal-playground /
    debug-storage / whats-new).
 ─────────────────────────────────────────────────────────────── */
 
@@ -139,7 +139,7 @@ const TS_TABLE = [
   ['Margin Calculator shows no cost', 'Cost/inventory lookups need an active office-portal (gbcadmin) session; cached costs can also be stale.', <>Sign into the portal in another tab and retry; run a <b>cost sync</b> for asterisked SKUs; a fresh sync clears the ~6 h cache.</>],
   ['Date update failed mid-way', 'The save walks a multi-step admin form; an expired session or slow response stops the chain.', <>Re-open Order Dates and retry (safe to repeat); if it fails at step one, reload the order page so the iframe re-authenticates.</>],
   ['3D preview is black or blank', 'Almost always a graphics-driver quirk (known on Windows-on-ARM / Snapdragon), not missing artwork.', <>Update the extension; confirm hardware WebGL at <code>chrome://gpu</code>; close + reopen the modal to rebuild the 3D context.</>],
-  ['My settings vanished', 'An imported preset overwrote them, an admin hid a toggle, or the dev section was collapsed via console.', <>Re-apply your own preset; ask your admin; or restore from the Settings console (see Power User).</>],
+  ['My settings changed', 'An imported settings-link scope overwrote local values, or administrator policy applied a managed value.', <>Review the imported scopes and ask a RevStack administrator to review managed settings. Policy is reapplied independently after imports.</>],
 ];
 
 export function TroubleshootingPage() {
@@ -228,7 +228,7 @@ export function TroubleshootingPage() {
         <span className="dn-ico"><I.alert size={15} /></span>
         <div className="dn-b">
           <div className="dn-t">A toggle is gone, not just off?</div>
-          <p style={{ margin: 0 }}>If a switch you expect is <em>absent</em> from Settings, an admin hid it via secret settings — the feature keeps working in its locked state. From the Settings page console, <code>__gbSecret.list()</code> shows hidden keys and <code>__gbSecret.show('key')</code> restores one. Full detail on the <a href="#power-user">Power User</a> page.</p>
+          <p style={{ margin: 0 }}>If a switch you expect is <em>absent</em>, the authenticated server policy marked it hidden. A RevStack administrator can update the Golfballs configuration; the next valid sync applies it automatically.</p>
         </div>
       </div>
 
@@ -253,14 +253,14 @@ const FAQ_GROUPS = [
     items: [
       { q: 'Why don’t I see a confirmation when something succeeds?', a: 'Deliberate design: the extension only notifies on errors. No toast means it worked. The exceptions are flows that show explicit progress, like date saves and bulk sends.', link: ['#troubleshooting', 'Troubleshooting'] },
       { q: 'Why did Send open an Outlook window?', a: 'Power Automate is off (the default) or has no flow URL, so sending falls back to a pre-filled Outlook window.', link: ['#settings', 'How email sending works'] },
-      { q: 'Did “reply with template” send my email?', a: 'If you used the Microsoft (Graph) path, it created a draft in your mailbox — review and send it from Outlook. Only Power Automate sends directly.' },
+      { q: 'Did “reply with template” send my email?', a: 'Power Automate sends directly and reports the result. With Power Automate off, the extension opens a pre-filled Outlook window and you finish the send there.' },
     ],
   },
   {
     label: 'Your data & privacy',
     items: [
-      { q: 'Does anyone else see my Watch List, templates, or settings?', a: 'No — everything is stored locally in your browser profile. Sharing happens only when you export a preset and someone imports it.' },
-      { q: 'A toggle disappeared from my Settings — am I losing my mind?', a: 'No — an admin hid it via secret settings. The feature keeps working in its locked state.', link: ['#power-user', 'Hidden settings'] },
+      { q: 'Does anyone else see my Watch List, templates, or settings?', a: 'Local data stays in your browser profile unless you explicitly create a settings link. The link stores only the scopes you select; Watch List and credentials are never included.' },
+      { q: 'A toggle disappeared from my Settings — am I losing my mind?', a: 'No — the authenticated administrator policy can hide managed controls. Ask a RevStack administrator to review the Golfballs configuration.', link: ['#power-user', 'Managed settings'] },
       { q: 'Where do saved proposals live?', a: 'Both locally (your saved proposals list) and server-side as a real cart tied to the CRM opportunity — which is why you can reload one later or send the customer a live cart link.' },
     ],
   },
@@ -308,7 +308,7 @@ export function FaqPage() {
         <span className="dn-ico"><I.check size={15} /></span>
         <div className="dn-b">
           <div className="dn-t">The two answers worth internalizing</div>
-          <p style={{ margin: 0 }}><strong>Silence means success</strong> — the extension only toasts on errors. And <strong>everything is local to your profile</strong> — nothing you do here is visible to teammates unless you export a preset. Most surprises trace back to one of these two.</p>
+          <p style={{ margin: 0 }}><strong>Silence means success</strong> — the extension only toasts on errors. Most state is local; only scopes you deliberately place in a <strong>Shared Settings Template</strong> are stored by RevStack and available through its opaque URL.</p>
         </div>
       </div>
 
@@ -340,7 +340,6 @@ export function FaqPage() {
 const HELPER_RAIL = [
   { sig: 'h.dom / h.domAll / h.domText', d: 'Read the live page' },
   { sig: 'h.fetchText / h.fetchJson', d: 'GET via the background worker' },
-  { sig: 'h.send(action, payload)', d: 'Call a background action' },
   { sig: 'h.catalogSearch / h.catalogFind', d: 'Search the gift catalog' },
   { sig: 'h.fmt.currency / number / date', d: 'Format for the email' },
   { sig: 'h.coalesce / h.titleCase', d: 'First non-empty · Title Case' },
@@ -376,57 +375,15 @@ function CodeEditorSnippet() {
   );
 }
 
-/* Snippet: a terminal running __gbSecret commands. */
-const TERM_LINES = [
-  { p: '__gbSecret.list()', out: "['marginCalcEnabled']", tone: 'out' },
-  { p: "__gbSecret.show('marginCalcEnabled')", out: 'restored 1 setting', tone: 'ok' },
-  { p: '__gbSecret.hideDev()', out: 'Developer Settings hidden + reset', tone: 'warn' },
-];
-
-function ConsoleSnippet() {
-  return (
-    <MiniFrame width={460} label="settings page · DevTools console" pad={false}>
-      <div style={{ background: 'var(--gb-surface-deep)', borderRadius: '0 0 var(--gb-r-md) var(--gb-r-md)', padding: '12px 14px', fontFamily: 'var(--gb-font-mono)', fontSize: 11.5, lineHeight: 1.85 }}>
-        {TERM_LINES.map((l, i) => (
-          <div key={i} style={{ marginBottom: 8 }}>
-            <div style={{ display: 'flex', gap: 7 }}>
-              <span style={{ color: 'var(--gb-brand-label)', flexShrink: 0 }}>&gt;</span>
-              <span style={{ color: 'var(--gb-text-primary)' }}>{l.p}</span>
-            </div>
-            <div style={{ paddingLeft: 14, color: l.tone === 'ok' ? 'var(--gb-success-fg)' : l.tone === 'warn' ? 'var(--gb-warning-fg)' : 'var(--gb-text-muted)' }}>
-              {'← '}{l.out}
-            </div>
-          </div>
-        ))}
-        <div style={{ display: 'flex', gap: 7 }}>
-          <span style={{ color: 'var(--gb-brand-label)' }}>&gt;</span>
-          <span style={{ width: 7, height: 14, background: 'var(--gb-brand-label)', display: 'inline-block', opacity: 0.7 }} />
-        </div>
-      </div>
-    </MiniFrame>
-  );
-}
-
 const PU_FLAG_ROWS = [
   ['Feature flags', 'featureFlags', 'On/off for every tool — the Features list in Settings. Off = the tool vanishes everywhere.'],
   ['Developer Settings', 'devSettings', '119 low-level knobs: animation timing, per-modal draggable mode, margin threshold, catalog re-index interval, 3D viewer tuning.'],
-  ['Hidden (secret) settings', 'secret_settings', 'Soft locks: a hidden setting keeps its value but loses its switch. Console-managed only, travels in presets.'],
-];
-
-const PU_CONSOLE_ROWS = [
-  ['__gbSecret.hide(\'key\', …)', 'Hide setting(s) — value keeps working, the switch disappears'],
-  ['__gbSecret.show(\'key\', …)', 'Un-hide setting(s)'],
-  ['__gbSecret.list()', 'List currently hidden keys'],
-  ['__gbSecret.clear()', 'Show everything again'],
-  ['__gbSecret.hideDev() / showDev()', 'Hide (and reset to defaults) / restore the whole Developer Settings section'],
-  ['__gbScan.status() / reset()', 'Show / clear the recent-orders scan clock (reset = next scan covers 7 days)'],
+  ['Remote policy', 'gbRemoteSettingsPolicy', 'Last validated revision, visibility maps, and administrator-bypass state. Policy does not travel in presets.'],
 ];
 
 const PU_STORAGE_ROWS = [
-  ['gbVarsDebug', 'Latest variable-resolution snapshot — what each {{variable}} resolved to, and from where'],
-  ['gbBulkDebug', 'Per-recipient logs from the last bulk email run'],
-  ['gbByUrlDebug', 'URL-based debug logs'],
-  ['devSettings / featureFlags / secret_settings', 'The three configuration maps'],
+  ['gbProposalDebugLog', 'Bounded, opt-in proposal trace; cleared when proposal debugging is disabled'],
+  ['devSettings / featureFlags / gbRemoteSettingsPolicy', 'Local values plus the last validated administrator policy metadata'],
   ['gbGiftCatalogCache_v5 / gbInventoryCache / gbCostMap', 'Data caches (catalog, inventory, costs) — safe to delete, they rebuild'],
 ];
 
@@ -437,7 +394,7 @@ export function PowerUserPage() {
       <h1 className="title">Power User Corner</h1>
       <p className="lede">
         The deepest reference in the guide. Sandboxed JavaScript variables and the <code>h.*</code> helper API,
-        the hidden <code>__gbSecret</code> console commands that lock settings, the full feature-flag / dev-setting
+        the authenticated administrator policy that manages settings, the full feature-flag / dev-setting
         map, the modal playground, and where the extension keeps its state. <strong>Advanced</strong>, but every
         piece is documented exactly as shipped.
       </p>
@@ -461,7 +418,7 @@ export function PowerUserPage() {
         <tbody>
           <tr><td><code>h.dom(sel) / h.domAll(sel) / h.domText(sel)</code></td><td>Query the live page: first element, all elements, or the first match’s text</td></tr>
           <tr><td><code>h.fetchText(url) / h.fetchJson(url)</code></td><td>Fetch a page or JSON through the background worker (CORS-safe, allow-listed hosts)</td></tr>
-          <tr><td><code>h.send(action, payload)</code></td><td>Call any background action directly</td></tr>
+          <tr><td><code>h.fetchText(url)</code></td><td>Read an allowlisted HTTPS resource</td></tr>
           <tr><td><code>h.catalogSearch(q, {'{limit}'}) / h.catalogFind(q)</code></td><td>Search the gift catalog by name similarity — top matches, or the single best one</td></tr>
           <tr><td><code>h.fmt.currency / h.fmt.number / h.fmt.date</code></td><td>Format values for the email ($1,234.00 · 1,234 · MM/DD/YYYY)</td></tr>
           <tr><td><code>h.parseNumber / h.parseDate / h.normalizePhone</code></td><td>Extract a number, parse a date, format a phone as (###) ###-####</td></tr>
@@ -486,25 +443,8 @@ export function PowerUserPage() {
         </tbody>
       </table>
 
-      <h2 className="sec">Console commands</h2>
-      <p>
-        Open DevTools on the <strong>Settings / editor page</strong> and two helper objects are installed:
-        <code>__gbSecret</code> (the hidden-setting manager) and <code>__gbScan</code> (the recent-orders scan clock).
-        There’s deliberately no UI for these — hidden settings are how an admin locks a feature for a teammate’s profile.
-      </p>
-
-      <TourBox n={2} eyebrow="__gbSecret" title="The hidden-setting manager" live={<ConsoleSnippet />} wide>
-        <p>A <strong>hidden setting</strong> keeps its value but loses its switch: the feature stays in whatever state the admin set, and the toggle no longer appears in Settings. It’s a soft lock for keeping team configs consistent.</p>
-        <p>Run the commands from the Settings page console. <code>__gbSecret.hideDev()</code> is the heavy one — it hides the <em>entire</em> Developer Settings section <strong>and resets its values to defaults</strong>. Hidden state travels in presets via the “Hidden-setting config” scope, so a lock can ship with the team preset.</p>
-      </TourBox>
-
-      <table className="spectable">
-        <thead><tr><th>Command</th><th>Effect</th></tr></thead>
-        <tbody>{PU_CONSOLE_ROWS.map((r) => <tr key={r[0]}><td><code>{r[0]}</code></td><td>{r[1]}</td></tr>)}</tbody>
-      </table>
-
-      <h2 className="sec">Hidden settings &amp; feature flags</h2>
-      <p>Three configuration maps drive every switch in the extension. They live in <code>chrome.storage.local</code> and travel in presets.</p>
+      <h2 className="sec">Managed settings &amp; feature flags</h2>
+      <p>The installation-authenticated policy drives managed values and visibility. Local feature and developer values remain in <code>chrome.storage.local</code>; policy metadata never travels in presets.</p>
       <table className="spectable">
         <thead><tr><th style={{ width: 200 }}>Map</th><th style={{ width: 150 }}>Storage key</th><th>What it holds</th></tr></thead>
         <tbody>{PU_FLAG_ROWS.map((r) => <tr key={r[1]}><td><b>{r[0]}</b></td><td><code>{r[1]}</code></td><td>{r[2]}</td></tr>)}</tbody>
@@ -536,13 +476,13 @@ export function PowerUserPage() {
         <thead><tr><th style={{ width: 280 }}>Key</th><th>Holds</th></tr></thead>
         <tbody>{PU_STORAGE_ROWS.map((r) => <tr key={r[0]}><td><code>{r[0]}</code></td><td>{r[1]}</td></tr>)}</tbody>
       </table>
-      <p>Contact-search speed comes from an IndexedDB database (<code>gb-crm-index</code>) — visible under DevTools &rarr; Application &rarr; IndexedDB.</p>
+      <p>Contact-search speed comes from the worker-owned encrypted IndexedDB database <code>gb-crm-index-secure</code>. Names remain searchable; full rows decrypt only for ranked visible results using locally generated, non-extractable keys.</p>
 
       <div className="docnote warn">
         <span className="dn-ico"><I.alert size={15} /></span>
         <div className="dn-b">
           <div className="dn-t">Safe to delete vs. not</div>
-          <p style={{ margin: 0 }}>Deleting <strong>cache</strong> keys is safe — they rebuild. Deleting <code>templates</code>, <code>featureFlags</code>, or <code>devSettings</code> is <strong>not</strong> — export a preset first if you’re going to experiment.</p>
+          <p style={{ margin: 0 }}>Deleting <strong>cache</strong> keys is safe — they rebuild. Deleting <code>templates</code>, <code>featureFlags</code>, or <code>devSettings</code> is <strong>not</strong> — create a private settings link with the scopes you need before experimenting.</p>
         </div>
       </div>
     </div>

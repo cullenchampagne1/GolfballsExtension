@@ -9,10 +9,10 @@
       "steps": [
         { "action": "Open Settings: click the extension icon, then the settings gear (or the Settings tab in the Template Editor window).", "expected": "The Settings panel opens with Theme at the top.", "visualCue": "Gear icon in the popup footer." },
         { "action": "Pick a theme variant — Dark, Slate, Light, or Cream.", "expected": "Every extension surface re-colors instantly.", "visualCue": "Theme section, top of Settings." },
-        { "action": "Set 'Email account host' to your own account name.", "expected": "Your From identity is now yours.", "visualCue": "Developer Settings section.", "warning": "Skip this and your emails may go out under someone else's identity — it ships with a default that isn't you." },
+        { "action": "Set 'Email account host' to your own account name.", "expected": "Your From identity is configured.", "visualCue": "Developer Settings section.", "warning": "Power Automate sends remain blocked while this required value is blank." },
         { "action": "Write your email signature in the signature editor.", "expected": "Signature saves; it will auto-append to Power Automate sends.", "visualCue": "Signature section." },
         { "action": "Review Settings → Features and switch off anything you won't use.", "expected": "Disabled features vanish from shelves, popups, and shortcuts immediately.", "visualCue": "Features section, grouped by area.", "tip": "Everything except Power Automate is on by default. Leaving it all on is fine." },
-        { "action": "(If your team shares config) Settings → User Presets → Import, and pick the team preset JSON.", "expected": "Team templates and settings merge in; a summary lists what was imported.", "visualCue": "User Presets section.", "commonMistake": "Importing the Settings scope overwrites your theme and toggles — untick scopes you want to keep your own." }
+        { "action": "(If your team shares config) paste its URL under Settings → Shared Settings Templates and select Preview.", "expected": "The template name and included scopes appear; tick only the scopes you want and import them.", "visualCue": "Shared Settings Templates section.", "commonMistake": "Importing the Settings scope overwrites your theme and toggles — untick scopes you want to keep your own." }
       ],
       "related": ["initial-configuration", "presets", "email-integrations"]
     },
@@ -143,9 +143,9 @@
       "estMinutes": 4,
       "prerequisites": ["A configuration worth sharing"],
       "steps": [
-        { "action": "Settings → User Presets → Save; name the preset and choose scopes.", "expected": "Scope checkboxes control what's bundled: settings, hidden-setting config, and each template type separately.", "visualCue": "Scope checklist in the save dialog.", "tip": "For a team template pack, tick only the template scopes and leave Settings out — people keep their own theme and toggles." },
-        { "action": "Export the preset to a JSON file and share it.", "expected": "A .json file downloads.", "visualCue": "Export button on the preset row." },
-        { "action": "Teammate: Settings → User Presets → Import, pick the file, confirm scopes.", "expected": "Templates merge by id (same id replaces, new id appends); settings scopes overwrite.", "visualCue": "Import summary.", "commonMistake": "Importing the Settings scope replaces the teammate's theme/toggles. Importing 'Hidden-setting config' applies the admin's locks — include it only on purpose." }
+        { "action": "Settings → Shared Settings Templates → Create URL; name the template and choose scopes.", "expected": "The extension stores only the chosen scopes on RevStack and creates a revocable opaque URL.", "visualCue": "Scope checklist in the create dialog.", "tip": "For a team template pack, tick only template scopes and leave Settings out so people keep their own theme and toggles." },
+        { "action": "Copy the generated URL and send it to the intended teammate.", "expected": "No JSON file is created; the URL identifies the server-side template.", "visualCue": "Copy URL button." },
+        { "action": "Teammate: paste the URL, select Preview, choose scopes, then Import.", "expected": "Templates merge by id (same id replaces, new id appends); settings scopes overwrite.", "visualCue": "Template preview and scope checklist.", "commonMistake": "Importing Settings replaces the teammate's theme/toggles. Server-managed policy remains independent and is reapplied on sync." }
       ],
       "related": ["presets", "hidden-settings"]
     },

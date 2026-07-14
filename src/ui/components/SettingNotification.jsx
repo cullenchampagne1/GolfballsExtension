@@ -32,7 +32,7 @@ export function useSettingNotification() {
   if (api) return api;
   if (typeof window !== 'undefined' && window.__gbNotify) return window.__gbNotify;
   return {
-    notify:  (m) => { try { console.log('[notify]', m); } catch {} },
+    notify:  () => {},
     confirm: (m) => Promise.resolve(window.confirm(m)),
     prompt:  (m, o = {}) => Promise.resolve(window.prompt(m, o.defaultValue || '')),
   };

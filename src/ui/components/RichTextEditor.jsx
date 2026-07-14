@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from '../icons.jsx';
 import { ColorButton } from './ColorButton.jsx';
+import { sanitizeHtml } from '../../lib/sanitizeHtml.js';
 
 /* ──────────────────────────────────────────────────────────────
    RichTextEditor — contenteditable rich-text surface with a
@@ -265,7 +266,7 @@ function chipHTML(name, meta) {
       + CHIP_BOLT
       + `</span>`;
   }
-  return `<span class="gb-rte-chip" contenteditable="false"><span class="gb-rte-chip-name">{{${name}}}</span>${CHIP_BOLT}</span>`;
+  return `<span class="gb-rte-chip" contenteditable="false"><span class="gb-rte-chip-name">{{${escapeHtml(name)}}}</span>${CHIP_BOLT}</span>`;
 }
 function highlightVars(html, meta) {
   return String(html || '').replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, n) => chipHTML(n.trim(), meta));
@@ -342,7 +343,7 @@ export function RichTextEditor({
     ensureStyle();
     const el = ref.current;
     if (!el) return;
-    el.innerHTML = highlightVars(normalizeInitial(initialHtml), varMetaRef.current);
+    el.innerHTML = highlightVars(sanitizeHtml(normalizeInitial(initialHtml)), varMetaRef.current);
     setEmpty(!el.textContent.trim());
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -350,7 +351,7 @@ export function RichTextEditor({
   const emit = useCallback(() => {
     const el = ref.current;
     if (!el || !onChange) return;
-    onChange(singleLine ? (el.textContent || '') : stripChips(el.innerHTML));
+    onChange(singleLine ? (el.textContent || '') : sanitizeHtml(stripChips(el.innerHTML)));
   }, [onChange, singleLine]);
 
   const refreshMarks = useCallback(() => {
@@ -445,16 +446,7 @@ export function RichTextEditor({
     }
     let html = e.clipboardData.getData('text/html');
     if (html) {
-      html = html
-        .replace(/<!--[\s\S]*?-->/g, '')
-        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-        .replace(/<(meta|link)[^>]*>/gi, '')
-        .replace(/ (class|lang|style)="[^"]*"/gi, '')
-        .replace(/<o:p>[\s\S]*?<\/o:p>/gi, '');
-      const tmp = document.createElement('div');
-      tmp.innerHTML = html;
-      tmp.querySelectorAll('script,style,object,embed,form,input').forEach(n => n.remove());
-      document.execCommand('insertHTML', false, tmp.innerHTML);
+      document.execCommand('insertHTML', false, sanitizeHtml(html));
     } else {
       document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
     }

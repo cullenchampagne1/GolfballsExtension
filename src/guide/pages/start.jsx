@@ -74,17 +74,17 @@ export function StartPage() {
       <p>Worth doing on day one, all in <a href="#settings">Settings</a> (popup → Manage gear):</p>
       <ul>
         <li><strong>Pick a theme</strong> — Dark, Slate, Light, or Cream. Applies live everywhere (including this guide — try the switcher top-right).</li>
-        <li><strong>Set your email identity</strong> — the "Email account host" field controls your From address. It ships with a default that isn't you; change it before sending anything.</li>
+        <li><strong>Set your email identity</strong> — the "Email account host" field controls your From address. It starts blank and Power Automate sends are blocked until you configure it.</li>
         <li><strong>Write your signature</strong> — auto-appended to emails sent through Power Automate.</li>
         <li><strong>Review the feature toggles</strong> — everything is on by default except Power Automate. Off means the buttons, shortcuts, and shelf actions disappear entirely.</li>
-        <li><strong>Import a team preset</strong> — if a teammate exported one, Settings → User Presets → Import gives you their templates and settings in one step.</li>
+        <li><strong>Open a team settings link</strong> — paste a teammate’s URL under Shared Settings Templates, preview its contents, then choose exactly which scopes to import.</li>
       </ul>
 
       <h2 className="sec">Start here</h2>
       <p>New to the extension? Read these in order. Each is a full page with the live UI and a walkthrough.</p>
       <div className="cardgrid">
         <FeatureCard icon={<I.mail size={17} />} title="The Popup" desc="Your home base — opens from the toolbar icon. Matched templates, live variables, charge, watch, tasks, proofs." go="#popup" />
-        <FeatureCard icon={<I.cog size={17} />} title="Settings & Manager" desc="Every toggle explained: features, theme, shortcuts, UI scale, presets, integrations." go="#settings" />
+        <FeatureCard icon={<I.cog size={17} />} title="Settings & Manager" desc="Every toggle explained: features, theme, shortcuts, UI scale, shared templates, integrations." go="#settings" />
         <FeatureCard icon={<I.edit size={17} />} title="Email Templates" desc="Templates with variables that fill from the live page — schema, code, regex sources, and A/B variations." go="#templates" />
         <FeatureCard icon={<GIcon.gift size={17} />} title="Gift Catalog" desc="Browse the full product range, customize with logos and monograms, and build tracked proposals." go="#catalog" />
       </div>
@@ -98,7 +98,7 @@ export function StartPage() {
         <li><strong>On-page helpers</strong> — Email/Chat Viewer, Image Viewer &amp; logo extraction, 3D Product Viewer, Margin Calculator (<span className="kbd">Ctrl+M</span>), Copy Order IDs, Signifyd glow.</li>
         <li><strong>Catalog &amp; proposals</strong> — Gift Catalog, item customization, gift sets, custom items, supplier import, promo codes, proposal emails.</li>
         <li><strong>Campaigns</strong> — Quick Send bulk email and the multi-step Campaign Manager with dry-run.</li>
-        <li><strong>Configuration</strong> — feature toggles, themes, keyboard shortcuts, per-surface UI scale, presets, Power Automate.</li>
+        <li><strong>Configuration</strong> — feature toggles, themes, keyboard shortcuts, per-surface UI scale, shared settings templates, Power Automate.</li>
       </ul>
 
       <div className="docnote info" style={{ marginTop: 28 }}>

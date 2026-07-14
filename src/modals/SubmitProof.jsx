@@ -141,7 +141,7 @@ const MOCK_REPS = [
   { val: '101', txt: 'Alice Johnson' },
   { val: '102', txt: 'Bob Smith' },
   { val: '103', txt: 'Carol White' },
-  { val: '15',  txt: 'Cullen Champagne' },
+  { val: '104', txt: 'Devon Reed' },
 ];
 const MOCK_ARTISTS = [
   { val: '42', txt: 'Marco Studio' },
@@ -155,9 +155,9 @@ const MOCK_ARTISTS = [
    no-op. addedDays drives the corner age chip on the thumb. */
 const MOCK_ACCOUNT = { name: 'Acme Industries', id: 'CUST-4650030' };
 const MOCK_GALLERY = [
-  { id: 'm_1', name: 'Acme Logo v3',    proofLink: null, thumbUrl: '', status: 'Approved', label: 'v3',  hue: 60, addedDays: 1, account: MOCK_ACCOUNT, contacts: ['Cullen Champagne', 'Rita Soto'] },
-  { id: 'm_2', name: 'Acme Logo v2',    proofLink: null, thumbUrl: '', status: 'Revised',  label: 'v2',  hue: 60, addedDays: 4, account: MOCK_ACCOUNT, contacts: ['Cullen Champagne'] },
-  { id: 'm_3', name: 'Acme Logo v1',    proofLink: null, thumbUrl: '', status: 'Rejected', label: 'v1',  hue: 60, addedDays: 4, account: MOCK_ACCOUNT, contacts: ['Cullen Champagne'] },
+  { id: 'm_1', name: 'Acme Logo v3',    proofLink: null, thumbUrl: '', status: 'Approved', label: 'v3',  hue: 60, addedDays: 1, account: MOCK_ACCOUNT, contacts: ['Devon Reed', 'Rita Soto'] },
+  { id: 'm_2', name: 'Acme Logo v2',    proofLink: null, thumbUrl: '', status: 'Revised',  label: 'v2',  hue: 60, addedDays: 4, account: MOCK_ACCOUNT, contacts: ['Devon Reed'] },
+  { id: 'm_3', name: 'Acme Logo v1',    proofLink: null, thumbUrl: '', status: 'Rejected', label: 'v1',  hue: 60, addedDays: 4, account: MOCK_ACCOUNT, contacts: ['Devon Reed'] },
   { id: 'm_4', name: 'Pre-prod sample', proofLink: null, thumbUrl: '', status: 'Pending',  label: 'pre', hue: 60, addedDays: 6, account: MOCK_ACCOUNT, contacts: [] },
 ];
 
@@ -247,7 +247,7 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
   const [salesRepId, setSalesRepId]   = useState('');
   const [artistId, setArtistId]       = useState('');
   // The rep's own name maps from their dev-setting sender local-part
-  // (e.g. "cullen") — used to auto-select their name in the rep dropdown.
+  // (for example, "devon") — used to auto-select their name in the rep dropdown.
   const emailLocalPart = useDevSetting('email.localPart');
   const [orderType, setOrderType]     = useState('Live Order');
   // Seed from the submitProof.defaultOrderType dev setting (re-applies only on
@@ -308,8 +308,8 @@ export function SubmitProof({ image, orderId: orderIdProp, customerId: customerI
     if (!lp) return;
     const norm = (s) => String(s || '').toLowerCase();
     const match =
-      reps.find((r) => norm(r.txt).split(/\s+/).includes(lp)) ||            // "cullen" ∈ "Cullen Champagne"
-      reps.find((r) => norm(r.txt).replace(/\s+/g, '') === lp) ||           // "cullenchampagne"
+      reps.find((r) => norm(r.txt).split(/\s+/).includes(lp)) ||            // "devon" ∈ "Devon Reed"
+      reps.find((r) => norm(r.txt).replace(/\s+/g, '') === lp) ||           // "devonreed"
       (lp.length >= 4 && reps.find((r) => norm(r.txt).replace(/\s+/g, '').startsWith(lp)));
     if (match) {
       setSalesRepId(match.val);

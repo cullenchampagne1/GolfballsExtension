@@ -497,7 +497,7 @@ export function NewPage() {
       <NcFieldTable rows={NC_SOURCE} />
 
       <h2 className="sec">Developer settings for New Contact</h2>
-      <p>Three registry knobs change how this modal behaves. They live in <a href="#settings">Settings</a> → Developer settings (or an admin can lock them via secret settings).</p>
+      <p>Three registry knobs change how this modal behaves. They live in <a href="#settings">Settings</a> → Developer settings and may be centrally managed by the authenticated administrator policy.</p>
       <table className="spectable">
         <thead><tr><th style={{ width: 250 }}>Setting</th><th style={{ width: 70 }}>Default</th><th>What it does</th></tr></thead>
         <tbody>{NC_DEV.map((r) => <tr key={r[0]}><td><b>{r[0]}</b></td><td>{r[1]}</td><td>{r[2]}</td></tr>)}</tbody>

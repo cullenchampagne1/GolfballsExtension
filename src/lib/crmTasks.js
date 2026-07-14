@@ -18,6 +18,12 @@ import { API } from './constants.js';
 const BASE = API.CRM;
 const TASKS_ENDPOINT = `${BASE}/golfballs/adminnew/Default.aspx?Page=349`;
 
+function numericId(value, label) {
+  const id = String(value == null ? '' : value).trim();
+  if (!/^\d{1,12}$/.test(id) || Number(id) <= 0) throw new Error(`Invalid ${label}`);
+  return id;
+}
+
 function contactIdFromHref(href) {
   const m = String(href || '').match(/[?&](?:customerID|customerId|id)=(\d+)/i);
   return m ? m[1] : '';
@@ -27,9 +33,11 @@ function contactIdFromHref(href) {
    (id + due date + subject). Mirrors TaskList's parseTasksFromHtml but
    trimmed to what completion needs. */
 export async function fetchOpenTasksForContact(contactId) {
+  const safeContactId = numericId(contactId, 'contact ID');
   const res = await fetch(TASKS_ENDPOINT, { credentials: 'include' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const html = await res.text();
+  if (html.length > 5_000_000) throw new Error('Task list response exceeds 5 MB');
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const out = [];
   doc.querySelectorAll('tr[id^="taskrow_"]').forEach((row) => {
@@ -38,24 +46,29 @@ export async function fetchOpenTasksForContact(contactId) {
     const cells = Array.from(row.querySelectorAll('td'));
     if (cells.length < 6) return;
     const conHref = cells[1].querySelector('a')?.getAttribute('href') || '';
-    if (String(contactIdFromHref(conHref)) !== String(contactId)) return;
+    if (String(contactIdFromHref(conHref)) !== safeContactId) return;
     const actionCell = cells[6] || cells[cells.length - 1];
     const statusVal = actionCell?.querySelector('input[id^="status_"]')?.value || '';
     if (statusVal.toLowerCase().includes('complete')) return; // already done
-    out.push({ id, dueDate: new Date((cells[2]?.textContent || '').trim()), subject: (cells[5]?.textContent || '').trim() });
+    if (/^\d{1,12}$/.test(id) && out.length < 500) {
+      out.push({ id, dueDate: new Date((cells[2]?.textContent || '').trim()), subject: (cells[5]?.textContent || '').trim().slice(0, 500) });
+    }
   });
   return out;
 }
 
 async function fetchTaskRaw(id) {
-  const r = await fetch(`${BASE}/golfballs/crm/Admin/Task/Get.ajax?${id}`, { credentials: 'include' });
+  const safeId = numericId(id, 'task ID');
+  const r = await fetch(`${BASE}/golfballs/crm/Admin/Task/Get.ajax?${safeId}`, { credentials: 'include' });
+  if (!r.ok) throw new Error(`Task lookup returned HTTP ${r.status}`);
   return r.json();
 }
 
 /* Mark one task complete — the legacy tlCompleteTask payload shape
    (TaskId numeric, taskStatusID 3). */
 export async function completeTaskById(id) {
-  const t = await fetchTaskRaw(id);
+  const safeId = numericId(id, 'task ID');
+  const t = await fetchTaskRaw(safeId);
   const params = {
     TaskId: Number(t.TaskId),
     Subject: t.Subject,
@@ -68,7 +81,8 @@ export async function completeTaskById(id) {
     employeeID: t.employeeID,
     Priority: t.Priority,
   };
-  await fetch(`${BASE}/golfballs/crm/Admin/Task/Update.ajax?${encodeURIComponent(JSON.stringify(params))}`, { credentials: 'include' });
+  const response = await fetch(`${BASE}/golfballs/crm/Admin/Task/Update.ajax?${encodeURIComponent(JSON.stringify(params))}`, { credentials: 'include' });
+  if (!response.ok) throw new Error(`Task update returned HTTP ${response.status}`);
 }
 
 /**
@@ -78,7 +92,8 @@ export async function completeTaskById(id) {
  * @returns { ok, detail? , error? }
  */
 export async function completeContactTasks(contactId, { mode = 'completeAll' } = {}) {
-  if (!contactId) return { ok: false, error: 'No contact id' };
+  if (!['completeAll', 'completeLatest'].includes(mode)) return { ok: false, error: 'Invalid completion mode' };
+  try { numericId(contactId, 'contact ID'); } catch { return { ok: false, error: 'Invalid contact ID' }; }
   let tasks;
   try { tasks = await fetchOpenTasksForContact(contactId); }
   catch (e) { return { ok: false, error: `Couldn't load tasks (${e?.message || 'error'})` }; }

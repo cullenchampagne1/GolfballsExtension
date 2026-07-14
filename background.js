@@ -1,17 +1,78 @@
 // background.js
-importScripts('defaults.js');
+importScripts('security-policy.js', 'installation-auth.js', 'settings-registry.js', 'remote-settings-policy.js', 'crm-index-store.js', 'defaults.js');
+
+const GB_SECURITY = globalThis.GBSecurity;
+if (!GB_SECURITY) throw new Error('Security policy failed to initialize');
+
+/**
+ * Read a response without allowing an absent or dishonest Content-Length to
+ * make the worker buffer an unbounded body. Callers choose a limit appropriate
+ * to the endpoint; the stream is cancelled immediately when that limit is hit.
+ */
+async function gbReadBytesLimited(response, maxBytes) {
+  const declared = Number(response.headers.get('content-length') || 0);
+  if (Number.isFinite(declared) && declared > maxBytes) throw new Error('Response exceeds size limit');
+
+  if (!response.body?.getReader) {
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength > maxBytes) throw new Error('Response exceeds size limit');
+    return new Uint8Array(buffer);
+  }
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel();
+        throw new Error('Response exceeds size limit');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const output = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return output;
+}
+
+async function gbReadTextLimited(response, maxBytes) {
+  return new TextDecoder().decode(await gbReadBytesLimited(response, maxBytes));
+}
+
+async function gbReadJsonLimited(response, maxBytes) {
+  const text = await gbReadTextLimited(response, maxBytes);
+  return JSON.parse(text.replace(/^\uFEFF/, ''));
+}
+
+function gbSerializeLimited(value, maxChars, label = 'Request') {
+  let text;
+  try { text = JSON.stringify(value); } catch { throw new Error(`${label} is not serializable`); }
+  if (text.length > maxChars) throw new Error(`${label} exceeds size limit`);
+  return text;
+}
 
 /* ── Proposal/Email debug interceptor ────────────────────────────────────────
    When devSettings['proposalDebug.enabled'] is on, wrap the worker's fetch and
-   record every PROPOSAL- and EMAIL-submit request (full request body + response
-   body + timing) into chrome.storage.local. The in-page debug panel
+   record bounded PROPOSAL- and EMAIL-submit request/response snippets and
+   timing into chrome.storage.local. The in-page debug panel
    (content/proposal-debug) reads + lists them so the rep can copy any one and
    show exactly what differs vs the website. Capture is OFF by default and
    matches only the relevant endpoints (catalog/upload/image traffic is ignored).
    ─────────────────────────────────────────────────────────────────────────── */
 const GB_DBG_KEY = 'gbProposalDebugLog';
-const GB_DBG_MAX = 60;                 // ring-buffer cap (newest first)
-const GB_DBG_BODY_CAP = 1200000;       // per-body char cap (saveProposal ~200KB)
+const GB_DBG_MAX = 20;                 // bounded diagnostics, newest first
+const GB_DBG_BODY_CAP = 100000;        // enough for shape comparison; limits PII retention
 let gbDebugOn = false;
 let gbDebugLog = [];
 try {
@@ -22,7 +83,13 @@ try {
 } catch { /* */ }
 chrome.storage.onChanged.addListener((ch, area) => {
   if (area !== 'local') return;
-  if (ch.devSettings) gbDebugOn = !!(ch.devSettings.newValue && ch.devSettings.newValue['proposalDebug.enabled']);
+  if (ch.devSettings) {
+    gbDebugOn = !!(ch.devSettings.newValue && ch.devSettings.newValue['proposalDebug.enabled']);
+    if (!gbDebugOn) {
+      gbDebugLog = [];
+      chrome.storage.local.remove(GB_DBG_KEY);
+    }
+  }
   // Keep the in-memory copy in sync when the panel clears the log.
   if (ch[GB_DBG_KEY] && Array.isArray(ch[GB_DBG_KEY].newValue)) gbDebugLog = ch[GB_DBG_KEY].newValue;
 });
@@ -80,7 +147,7 @@ globalThis.fetch = function (url, opts) {
   const method = (opts && opts.method) || 'GET';
   return _gbOrigFetch(url, opts).then(async (resp) => {
     let txt = '';
-    try { txt = await resp.clone().text(); } catch { /* */ }
+    try { txt = await gbReadTextLimited(resp.clone(), GB_DBG_BODY_CAP); } catch { txt = '…[omitted: response exceeded diagnostic cap]'; }
     gbDebugRecord({ ...cls, method, url: reqUrl, reqBody: bodyStr || null, status: resp.status, ok: resp.ok, respBody: txt, started });
     return resp;
   }).catch((e) => {
@@ -89,26 +156,13 @@ globalThis.fetch = function (url, opts) {
   });
 };
 
-/* Admin-only secret-settings console command, mirrored from
-   src/lib/secretSettings.js so it's also reachable from the service-worker
-   console (chrome://extensions → this extension → "service worker"):
-     __gbSecret.hide('taskListEnabled','giftCatalog.scale') · .show(…) · .list() · .clear() · .help()
-   A hidden key is removed from the Settings UI (its value is kept). */
-(function () {
-  const KEY = 'secret_settings';
-  const load = () => new Promise((r) => chrome.storage.local.get(KEY, (d) => r((d && d[KEY]) || {})));
-  const save = (m) => chrome.storage.local.set({ [KEY]: m || {} });
-  const norm = (keys) => keys.flat().filter((k) => typeof k === 'string');
-  globalThis.__gbSecret = {
-    async list() { const m = await load(); const k = Object.keys(m); console.log('[gb] hidden settings:', k); return k; },
-    async hide(...keys) { const m = await load(); for (const k of norm(keys)) m[k] = true; save(m); console.log('[gb] now hidden:', Object.keys(m)); return Object.keys(m); },
-    async show(...keys) { const m = await load(); for (const k of norm(keys)) delete m[k]; save(m); console.log('[gb] still hidden:', Object.keys(m)); return Object.keys(m); },
-    async clear() { save({}); console.log('[gb] all settings visible again'); return []; },
-    async hideDev() { const m = await load(); m['__devSection'] = true; save(m); chrome.storage.local.remove('devSettings'); console.log('[gb] Developer section hidden + dev fields reset to defaults'); return true; },
-    async showDev() { const m = await load(); delete m['__devSection']; save(m); console.log('[gb] Developer section visible again'); return false; },
-    help() { console.log('__gbSecret.hide("key", …) · .show(…) · .list() · .clear() · .hideDev() · .showDev()  — keys: feature-flag keys (taskListEnabled, …) or dev-setting keys (giftCatalog.scale, …)'); },
-  };
-})();
+/* Remove retired diagnostics and OAuth state that must not survive an upgrade.
+   The Graph reply experiment has no callers and its feature flag was retired;
+   deleting its tokens avoids retaining bearer credentials for dead code. */
+try {
+  chrome.storage.local.remove(['gbVarsDebug', 'gbByUrlDebug', 'gbBulkDebug', 'gbGraphToken', 'gbGraphRefresh']);
+  chrome.storage.session?.remove('gbGraphAccess');
+} catch { /* no storage */ }
 
 let editorWindowId   = null;
 let guideTabId       = null;   // the Operator's Guide tab (guide.html) — focus-or-create
@@ -215,16 +269,30 @@ function gbStorageGet(key) {
 }
 function gbStorageSet(key, val) { try { chrome.storage.local.set({ [key]: val }); } catch { /* ignore */ } }
 
+function gbReadCredentials() {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get('gbCredentials', (stored) => {
+        const value = stored && stored.gbCredentials;
+        resolve(value && typeof value === 'object' ? value : {});
+      });
+    } catch {
+      resolve({});
+    }
+  });
+}
+
 // Normalize to an absolute golfballs.com product URL. A bare path resolves
 // against the extension origin (chrome-extension://…/Golf-Balls/…) and 404s, so
 // strip any such prefix and rebuild the real URL.
 function gbProductUrl(url) {
   if (!url) return '';
   let u = String(url).replace(/^chrome-extension:\/\/[^/]+/i, '');
-  if (/^https?:\/\//i.test(u)) return u;
+  if (/^https?:\/\//i.test(u)) return GB_SECURITY.isProductUrl(u) ? u : '';
   if (!u.startsWith('/')) u = '/' + u;
   if (!/\.html?($|[?#])/i.test(u)) u += '.htm';
-  return 'https://www.golfballs.com' + u;
+  const resolved = 'https://www.golfballs.com' + u;
+  return GB_SECURITY.isProductUrl(resolved) ? resolved : '';
 }
 
 // Raw product object (__NEXT_DATA__.props.pageProps.product) — the full shape
@@ -241,9 +309,9 @@ async function gbFetchProductPage(rawUrl) {
   if (gbRawCache.has(url)) {                       // LRU touch
     const p = gbRawCache.get(url); gbRawCache.delete(url); gbRawCache.set(url, p); return p;
   }
-  const r = await fetch(url, { headers: { Accept: 'text/html,*/*', 'Accept-Language': 'en-US,en;q=0.9' }, credentials: 'include' });
+  const r = await fetch(url, { headers: { Accept: 'text/html,*/*', 'Accept-Language': 'en-US,en;q=0.9' }, credentials: 'include', redirect: 'error' });
   if (!r.ok) throw new Error('HTTP ' + r.status);
-  const html = await r.text();
+  const html = await gbReadTextLimited(r, 10_000_000);
   const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
   if (!m) throw new Error('__NEXT_DATA__ not found');
   const prod = JSON.parse(m[1])?.props?.pageProps?.product;
@@ -313,19 +381,23 @@ function gbLogoUserImage({ scale = 0.41, left = 250, top = 300, size = 500, src 
 async function gbUploadCustomLogo({ dataUrl, fileName = 'logo.png' }) {
   if (!dataUrl) throw new Error('No image data');
   const type = (/^data:([^;]+)/.exec(dataUrl) || [])[1] || 'image/png';
+  const extension = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/webp': 'webp' }[type.toLowerCase()] || 'png';
+  const baseName = String(fileName || 'logo').replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9._ -]+/g, '_').trim().slice(0, 100) || 'logo';
+  const safeFileName = `${baseName}.${extension}`;
   // 1. presign
   const sr = await fetch('https://master.api.icustomize.com/user/upload', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json', sitekey: 'golfballs' },
-    body: JSON.stringify({ name: fileName, type }),
+    body: JSON.stringify({ name: safeFileName, type }),
+    redirect: 'error',
   });
   if (!sr.ok) throw new Error('presign HTTP ' + sr.status);
-  const signedURL = (await sr.json()).signedURL;
-  if (!signedURL) throw new Error('no signedURL returned');
-  const filePath = new URL(signedURL).pathname.replace(/^\/static\.golfballs\.com\//, '').replace(/^\//, '');
+  const signed = GB_SECURITY.parseHttpsUrl((await gbReadJsonLimited(sr, 1_000_000)).signedURL);
+  if (!signed || !/(^|\.)s3(?:[.-][a-z0-9-]+)?\.amazonaws\.com$/i.test(signed.hostname)) throw new Error('invalid upload URL returned');
+  const filePath = signed.pathname.replace(/^\/static\.golfballs\.com\//, '').replace(/^\//, '');
   // 2. upload bytes to the presigned S3 URL (Content-Type MUST match what was signed)
   const blob = await (await fetch(dataUrl)).blob();
-  const pr = await fetch(signedURL, { method: 'PUT', headers: { 'Content-Type': type }, body: blob });
+  const pr = await fetch(signed.href, { method: 'PUT', headers: { 'Content-Type': type }, body: blob, redirect: 'error' });
   if (!pr.ok) throw new Error('S3 PUT HTTP ' + pr.status);
   // 3. crop → cropFilePath (the overlay the ball renders)
   const publicUrl = 'https://static.golfballs.com/' + filePath;
@@ -336,16 +408,13 @@ async function gbUploadCustomLogo({ dataUrl, fileName = 'logo.png' }) {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', sitekey: 'golfballs' },
       body: JSON.stringify({ userImage, url: GB_CONVERT_URL + '?fileName=' + publicUrl }),
+      redirect: 'error',
     });
-    if (cr.ok) cropFilePath = (await cr.json()).url || '';
-    else console.warn('[GB] cropImage HTTP ' + cr.status + ' — logo will render without the cropped overlay');
+    if (cr.ok) cropFilePath = (await gbReadJsonLimited(cr, 1_000_000)).url || '';
   } catch (e) {
-    /* crop is best-effort; the upload + fabric still drive the cart. Log it so
-       a broken/changed convert endpoint is diagnosable instead of silently
-       producing logo-less carts. */
-    console.warn('[GB] cropImage failed (convert endpoint?):', (e && e.message) || e);
+    /* Crop is best-effort; the upload and fabric still drive the cart. */
   }
-  return { filePath, fileName, cropFilePath, userImage };
+  return { filePath, fileName: safeFileName, cropFilePath, userImage };
 }
 
 // ── Smarty address autocomplete: stamp the golfballs Referer ─────────────────
@@ -394,9 +463,7 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
       }
     }
     if (Object.keys(toWrite).length) {
-      chrome.storage.local.set(toWrite, () => {
-        console.log('[GB] Seeded factory defaults:', Object.keys(toWrite).join(', '));
-      });
+      chrome.storage.local.set(toWrite);
     }
   });
 });
@@ -508,9 +575,16 @@ async function gbSnugzFetchParse(origin, urls, kind) {
   const out = [];
   for (const u of urls) {
     try {
-      const r = await fetch(u, { credentials: 'include' });
+      const safe = new URL(String(u || ''), origin);
+      if (safe.origin !== origin || !/^\/(?:category|product)\//i.test(safe.pathname)) {
+        out.push({ url: String(u || ''), error: 'Blocked URL' });
+        continue;
+      }
+      const r = await fetch(safe.href, { credentials: 'include', redirect: 'error' });
+      if (Number(r.headers.get('content-length') || 0) > 3_000_000) throw new Error('Response exceeds size limit');
       const html = await r.text();
-      out.push(kind === 'list' ? { url: u, slugs: parseList(html) } : { url: u, detail: parseDetail(html) });
+      if (html.length > 3_000_000) throw new Error('Response exceeds size limit');
+      out.push(kind === 'list' ? { url: safe.href, slugs: parseList(html) } : { url: safe.href, detail: parseDetail(html) });
     } catch (e) { out.push({ url: u, error: String((e && e.message) || e) }); }
     await new Promise((z) => setTimeout(z, 120));
   }
@@ -569,7 +643,9 @@ async function gbInvFetchCosts(origin, skus) {
   for (const sku of skus) {
     try {
       const r = await fetch('/office/Dynamics/Inventory.aspx?sku=' + encodeURIComponent(sku), { credentials: 'include', headers: { Accept: 'text/html,*/*' } });
+      if (Number(r.headers.get('content-length') || 0) > 2_000_000) throw new Error('Response exceeds size limit');
       const html = await r.text();
+      if (html.length > 2_000_000) throw new Error('Response exceeds size limit');
       const c = costFromHtml(html, sku);
       if (c === undefined) return { __auth: false };   // bounced to login — abort batch
       out[sku] = c;
@@ -586,7 +662,9 @@ async function gbInvFetchHtml(origin, sku) {
   try {
     const r = await fetch('/office/Dynamics/Inventory.aspx?sku=' + encodeURIComponent(sku), { credentials: 'include', headers: { Accept: 'text/html,*/*' } });
     if (r.status === 404) return { notFound: true };
+    if (Number(r.headers.get('content-length') || 0) > 2_000_000) throw new Error('Response exceeds size limit');
     const html = await r.text();
+    if (html.length > 2_000_000) throw new Error('Response exceeds size limit');
     if (/GenericErrorPage|aspxerrorpath/i.test(r.url || '') || /<title>[^<]*Login/i.test(html)) return { __auth: false };
     return { html };
   } catch (e) { return { error: String((e && e.message) || e) }; }
@@ -618,19 +696,58 @@ async function gbResolveInvTarget(sender) {
    without affecting real callers (EmailRunner, image preview, code recipes all
    target these). Mirrors manifest host_permissions, minus the Microsoft OAuth
    endpoints, which are reached only by the dedicated graph/token handlers. */
-function gbIsAllowedFetchHost(url) {
-  let host;
-  try { host = new URL(url, 'https://www.golfballs.com').hostname.toLowerCase(); }
-  catch { return false; }
-  return /(^|\.)golfballs\.com$/.test(host)
-      || /(^|\.)icustomize\.com$/.test(host)
-      || /(^|\.)gbcadmin\.com$/.test(host)
-      || /(^|\.)customizationapplications\.com$/.test(host)
-      || host === 's.customizationapps.com'
-      || host === 'd1tp32r8b76g0z.cloudfront.net'
-      || /(^|\.)hpgbrands\.com$/.test(host)
-      || host === 'brmth7.a.searchspring.io'
-      || host === 'snugzusa.com';
+function gbIsAllowedFetchUrl(url) {
+  return GB_SECURITY.isAllowedFetchUrl(url);
+}
+
+function gbValidateEmailPayload(payload) {
+  if (!payload || !Array.isArray(payload.emails) || payload.emails.length < 1 || payload.emails.length > 100) {
+    return 'Email payload must contain 1–100 messages';
+  }
+  let serializedLength = 0;
+  try { serializedLength = JSON.stringify(payload).length; } catch { return 'Email payload is not serializable'; }
+  if (serializedLength > 12_000_000) return 'Email payload exceeds 12 MB limit';
+  for (const email of payload.emails) {
+    if (!email || typeof email !== 'object') return 'Invalid email record';
+    if (typeof email.from !== 'string' || email.from.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.from)) {
+      return 'Invalid sender address';
+    }
+    if (typeof email.to !== 'string' || email.to.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.to)) {
+      return 'Invalid recipient address';
+    }
+    if (typeof email.subject !== 'string' || email.subject.length > 998) return 'Invalid email subject';
+    if (typeof email.htmlBody !== 'string' || email.htmlBody.length > 2_000_000) return 'Email body exceeds 2 MB limit';
+    if (/<\/?(?:script|iframe|object|embed|form|base|meta|link)\b|\bon[a-z]+\s*=|(?:javascript|vbscript)\s*:/i.test(email.htmlBody)) {
+      return 'Email body contains active content';
+    }
+    if (email.attachments != null) {
+      if (!Array.isArray(email.attachments) || email.attachments.length > 25) return 'Email has too many attachments';
+      for (const attachment of email.attachments) {
+        if (!attachment || typeof attachment !== 'object'
+            || typeof attachment.name !== 'string' || attachment.name.length > 160
+            || typeof attachment.contentType !== 'string' || attachment.contentType.length > 120
+            || typeof attachment.contentBytes !== 'string'
+            || !/^[A-Za-z0-9+/]*={0,2}$/.test(attachment.contentBytes)) {
+          return 'Email contains an invalid attachment';
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function gbValidateCalendarState(msg, includeEvent = false) {
+  if (!GB_SECURITY.isCalendarUrl(msg && msg.url)) return 'Blocked calendar URL';
+  const fields = ['viewState', 'viewStateGen', 'eventValidation'];
+  for (const field of fields) {
+    const value = msg && msg[field];
+    if (typeof value !== 'string' || value.length > 5_000_000) return `Invalid ${field}`;
+  }
+  if (includeEvent) {
+    if (!['ctl00$ApprovalDate', 'ctl00$DeviveryCommitment'].includes(msg.eventTarget)) return 'Blocked calendar event';
+    if (!/^-?\d{1,15}$/.test(String(msg.eventArgument || ''))) return 'Invalid calendar date offset';
+  }
+  return null;
 }
 
 /* FIREFOX dynamic browser theme — content scripts can't call the theme API,
@@ -638,13 +755,39 @@ function gbIsAllowedFetchHost(url) {
    in Chrome, where `browser.theme` doesn't exist. */
 try {
   if (typeof browser !== 'undefined' && browser.theme && browser.theme.update) {
-    chrome.runtime.onMessage.addListener((msg) => {
-      if (msg && msg.type === 'gbBrowserTheme' && msg.colors) {
+    chrome.runtime.onMessage.addListener((msg, sender) => {
+      let size = Infinity;
+      try { size = JSON.stringify(msg && msg.colors).length; } catch { /* invalid */ }
+      if (sender.id === chrome.runtime.id && msg && msg.type === 'gbBrowserTheme'
+          && msg.colors && typeof msg.colors === 'object' && size <= 10_000) {
         try { browser.theme.update({ colors: msg.colors }); } catch (e) {}
       }
     });
   }
 } catch (e) { /* no theme API */ }
+
+const GB_SETTINGS_SHARE_ID_RE = /^[A-Za-z0-9_-]{32}$/;
+function gbSettingsShareId(value) {
+  const raw = String(value || '').trim();
+  if (GB_SETTINGS_SHARE_ID_RE.test(raw)) return raw;
+  try {
+    const url = new URL(raw);
+    if (url.origin !== 'https://api.cullenchampagne.com' || url.search || url.hash) return '';
+    const match = url.pathname.match(/^\/extension\/settings-shares\/([A-Za-z0-9_-]{32})\/?$/);
+    return match ? match[1] : '';
+  } catch { return ''; }
+}
+
+function gbEmailTemplateShareId(value) {
+  const raw = String(value || '').trim();
+  if (GB_SETTINGS_SHARE_ID_RE.test(raw)) return raw;
+  try {
+    const url = new URL(raw);
+    if (url.origin !== 'https://api.cullenchampagne.com' || url.search || url.hash) return '';
+    const match = url.pathname.match(/^\/extension\/email-template-shares\/([A-Za-z0-9_-]{32})\/?$/);
+    return match ? match[1] : '';
+  } catch { return ''; }
+}
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
@@ -652,38 +795,148 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
      scripts, popup, editor). No externally_connectable is declared, so this
      is defense-in-depth: it fails safe if that ever changes and documents
      that page/other-extension senders are not trusted. */
-  if (sender.id !== chrome.runtime.id) return;
+  if (sender.id !== chrome.runtime.id || !msg || typeof msg !== 'object') return;
+
+  // ── Managed-key encrypted CRM index ─────────────────────────────────────
+  if (msg.action === 'crmIndexSearch') {
+    GBCrmIndex.search({ query: msg.query, limit: msg.limit, employeeId: msg.employeeId })
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to search secure CRM index' }));
+    return true;
+  }
+  if (msg.action === 'crmIndexPut') {
+    GBCrmIndex.indexRecords(msg.records, msg.employeeId)
+      .then((result) => sendResponse({ ok: true, ...result }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to update secure CRM index' }));
+    return true;
+  }
+  if (msg.action === 'crmIndexDelete') {
+    GBCrmIndex.deleteRecord(msg.id, msg.employeeId)
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to remove CRM index record' }));
+    return true;
+  }
+  if (msg.action === 'crmIndexClear') {
+    GBCrmIndex.clearIndex()
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to clear secure CRM index' }));
+    return true;
+  }
+
+  // ── Installation-authenticated settings share service ───────────────────
+  if (msg.action === 'settingsShareList') {
+    GBInstallationAuth.apiJson('/extension/settings-shares')
+      .then((payload) => sendResponse({ ok: true, shares: payload.shares || [] }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to list settings shares' }));
+    return true;
+  }
+  if (msg.action === 'emailTemplateShareCreate') {
+    let body = '';
+    try { body = JSON.stringify({ template: msg.template }); } catch { /* invalid */ }
+    if (!msg.template || typeof msg.template !== 'object' || Array.isArray(msg.template)
+        || body.length > 256_000) {
+      sendResponse({ ok: false, error: 'Invalid email template' });
+      return true;
+    }
+    GBInstallationAuth.apiJson('/extension/email-template-shares', {
+      method: 'POST', body,
+    }).then((share) => sendResponse({ ok: true, share }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to share email template' }));
+    return true;
+  }
+  if (msg.action === 'emailTemplateShareGet') {
+    const shareId = gbEmailTemplateShareId(msg.url || msg.shareId);
+    if (!shareId) { sendResponse({ ok: false, error: 'Enter a valid email template link' }); return true; }
+    GBInstallationAuth.apiJson(`/extension/email-template-shares/${shareId}`)
+      .then((share) => sendResponse({ ok: true, share }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to load email template' }));
+    return true;
+  }
+  if (msg.action === 'settingsShareCreate') {
+    const name = typeof msg.name === 'string' ? msg.name.trim() : '';
+    let body = '';
+    try { body = JSON.stringify({ name, scopes: msg.scopes }); } catch { /* invalid payload */ }
+    if (!name || name.length > 120 || !msg.scopes || typeof msg.scopes !== 'object'
+        || Array.isArray(msg.scopes) || body.length > 512_000) {
+      sendResponse({ ok: false, error: 'Invalid settings share' });
+      return true;
+    }
+    GBInstallationAuth.apiJson('/extension/settings-shares', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    }).then((share) => sendResponse({ ok: true, share }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to create settings share' }));
+    return true;
+  }
+  if (msg.action === 'settingsShareGet') {
+    const shareId = gbSettingsShareId(msg.url || msg.shareId);
+    if (!shareId) { sendResponse({ ok: false, error: 'Enter a valid settings share URL' }); return true; }
+    GBInstallationAuth.apiJson(`/extension/settings-shares/${shareId}`)
+      .then((share) => sendResponse({ ok: true, share }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to open settings share' }));
+    return true;
+  }
+  if (msg.action === 'settingsShareRecordImport') {
+    const shareId = gbSettingsShareId(msg.shareId);
+    const scopeIds = Array.isArray(msg.scopeIds)
+      ? [...new Set(msg.scopeIds.filter((id) => typeof id === 'string'))]
+      : [];
+    if (!shareId || scopeIds.length < 1 || scopeIds.length > 8) {
+      sendResponse({ ok: false, error: 'Invalid settings share import' });
+      return true;
+    }
+    GBInstallationAuth.apiJson(`/extension/settings-shares/${shareId}/imports`, {
+      method: 'POST',
+      body: JSON.stringify({ scope_ids: scopeIds }),
+    }).then((share) => sendResponse({ ok: true, share }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to retain imported settings share' }));
+    return true;
+  }
+  if (msg.action === 'settingsShareRevoke') {
+    const shareId = gbSettingsShareId(msg.shareId);
+    if (!shareId) { sendResponse({ ok: false, error: 'Invalid settings share' }); return true; }
+    GBInstallationAuth.apiJson(`/extension/settings-shares/${shareId}/revoke`, { method: 'POST' })
+      .then(() => sendResponse({ ok: true, shareId }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to revoke settings share' }));
+    return true;
+  }
 
   // ── Relay a message to all frames in the sender's tab ──────────────────────
   if (msg.action === 'broadcastToFrames' && msg.payload) {
     const tabId = sender?.tab?.id;
-    if (!tabId) { sendResponse({ ok: false, error: 'No sender tab' }); return true; }
-    chrome.tabs.sendMessage(tabId, msg.payload, { frameId: undefined })
-      .catch(err => console.warn('[GB] broadcastToFrames failed:', err.message));
+    const allowedActions = new Set([
+      'GB_SALES_REP_FOUND', 'GB_EMPLOYEE_ID', 'GB_NOTIFY', 'GB_OPEN_CALENDAR',
+      'GB_PUSH_DATES_AND_NOTE', 'GB_CALENDAR_STEP', 'GB_CALENDAR_DONE',
+      'GB_CALENDAR_ERROR', 'GB_AUTO_PUSH_STEP', 'GB_DATES_PUSHED',
+      'GB_AUTO_PUSH_ERROR', 'GB_CALENDAR_SAVE', 'GB_REQUEST_OPEN_CALENDAR',
+    ]);
+    let payloadSize = Infinity;
+    try { payloadSize = JSON.stringify(msg.payload).length; } catch { /* invalid */ }
+    if (!tabId || !allowedActions.has(msg.payload.action) || payloadSize > 20_000) {
+      sendResponse({ ok: false, error: 'Invalid frame broadcast' }); return true;
+    }
+    chrome.tabs.sendMessage(tabId, msg.payload, { frameId: undefined }).catch(() => {});
     sendResponse({ ok: true });
     return true;
   }
 
-  
+
   // ── 1. Image Proxy ─────────────────────────────────────────
   if (msg.action === 'proxyFetchImage' && msg.url) {
-    // First-party hosts fetch WITH the session — render endpoints (express
-    // Render.aspx on icustomize / customizationapplications) only return the
-    // composited image when the logged-in cookie rides along. Any OTHER host
-    // is fetched with credentials OMITTED instead of hard-blocked: the
-    // hardening's exfil vector was the session cookie riding on an arbitrary
-    // URL — a cookie-less image GET leaks nothing a plain <img> tag couldn't —
-    // and this keeps legitimate ingest working (custom-item thumbnails pasted
-    // from supplier sites get re-hosted to S3). Hosts outside host_permissions
-    // are still subject to CORS, so this succeeds only where the host allows
-    // cross-origin reads.
-    const cred = gbIsAllowedFetchHost(msg.url) ? 'include' : 'omit';
-    fetch(msg.url, { credentials: cred })
+    // Image reads are restricted to the central HTTPS allowlist. Several render
+    // endpoints require the signed-in session, so allowing arbitrary URLs here
+    // would create a credentialed cross-origin request primitive.
+    if (!gbIsAllowedFetchUrl(msg.url)) {
+      sendResponse({ ok: false, error: 'Blocked URL' });
+      return true;
+    }
+    fetch(msg.url, { credentials: 'include', redirect: 'error' })
       .then(async r => {
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        const buf = await r.arrayBuffer();
-        const type = r.headers.get('content-type') || 'image/png';
-        const bytes = new Uint8Array(buf);
+        const type = (r.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+        if (!/^image\/(?:png|jpe?g|gif|webp|bmp)$/i.test(type)) throw new Error('Response was not a supported image');
+        const bytes = await gbReadBytesLimited(r, 15 * 1024 * 1024);
         let binary = '';
         for (let i = 0; i < bytes.length; i += 8192) {
           binary += String.fromCharCode.apply(null, bytes.slice(i, i + 8192));
@@ -702,38 +955,73 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
    * included (credentials:'include'). Used by the email preview feature.
    */
   if (msg.action === 'fetchRaw' && msg.url) {
-    if (!gbIsAllowedFetchHost(msg.url)) { sendResponse({ ok: false, status: 0, text: '', error: 'Blocked host' }); return true; }
-    const opts = { credentials: 'include' };
-    if (msg.method && msg.method.toUpperCase() !== 'GET') {
-      opts.method = msg.method.toUpperCase();
-      if (msg.headers) opts.headers = msg.headers;
-      if (msg.body)    opts.body    = msg.body;
+    if (!gbIsAllowedFetchUrl(msg.url)) { sendResponse({ ok: false, status: 0, text: '', error: 'Blocked URL' }); return true; }
+    const method = String(msg.method || 'GET').toUpperCase();
+    if (!['GET', 'POST'].includes(method)) {
+      sendResponse({ ok: false, status: 0, text: '', error: 'Blocked method' });
+      return true;
     }
+    if (typeof msg.body === 'string' && msg.body.length > 2_000_000) {
+      sendResponse({ ok: false, status: 0, text: '', error: 'Request body exceeds 2 MB limit' });
+      return true;
+    }
+    if (method === 'POST' && !GB_SECURITY.isCrmCallLogUrl(msg.url)) {
+      sendResponse({ ok: false, status: 0, text: '', error: 'Blocked POST endpoint' });
+      return true;
+    }
+    const opts = { credentials: 'include', method };
+    if (method === 'POST') {
+      const contentType = msg.headers && (msg.headers['Content-Type'] || msg.headers['content-type']);
+      if (!/^(?:application\/json|application\/x-www-form-urlencoded)(?:\s*;|$)/i.test(String(contentType || ''))) {
+        sendResponse({ ok: false, status: 0, text: '', error: 'Blocked content type' });
+        return true;
+      }
+      opts.headers = {
+        Accept: 'application/json, text/html, */*',
+        ...(contentType ? { 'Content-Type': String(contentType).slice(0, 120) } : {}),
+      };
+      if (msg.body != null) opts.body = String(msg.body);
+    }
+    opts.redirect = 'error';
     fetch(msg.url, opts)
       .then(async r => {
-        const text = await r.text();
+        const text = await gbReadTextLimited(r, 10_000_000);
         sendResponse({ ok: r.ok, status: r.status, text });
       })
-      .catch(err => sendResponse({ ok: false, error: String(err), text: '' }));
+      .catch(err => sendResponse({ ok: false, error: String((err && err.message) || err), text: '' }));
     return true;
   }
 
   // ── Address autocomplete (Smarty US-Autocomplete-Pro — golfballs' own feed) ──
-  // The exact endpoint + embedded website key golfballs.com uses; a DNR rule
-  // (above) stamps the golfballs Referer so the key authorizes. Routed through
-  // the worker so the host-page CSP can't block it; no cookies needed.
+  // A DNR rule stamps the authorized golfballs Referer. The browser key is
+  // configured locally and deliberately kept out of source control/presets.
   if (msg.action === 'geocodeAddress' && typeof msg.q === 'string') {
-    const q = msg.q.trim();
+    const q = msg.q.trim().slice(0, 160);
     if (q.length < 2) { sendResponse({ ok: true, suggestions: [] }); return true; }
-    const url = 'https://us-autocomplete-pro.api.smartystreets.com/lookup?key=25666478969040630'
-      + '&search=' + encodeURIComponent(q) + '&max_results=6'
-      + (msg.selected ? '&selected=' + encodeURIComponent(msg.selected) : '');
-    fetch(url, { credentials: 'omit', headers: { Accept: 'application/json, text/plain, */*' } })
-      .then(async (r) => {
-        const data = await r.json().catch(() => ({}));
-        sendResponse({ ok: r.ok, suggestions: (data && data.suggestions) || [], error: r.ok ? undefined : ('HTTP ' + r.status) });
-      })
-      .catch((err) => sendResponse({ ok: false, error: String(err), suggestions: [] }));
+    (async () => {
+      const credentials = await gbReadCredentials();
+      const key = typeof credentials.addressAutocompleteKey === 'string'
+        ? credentials.addressAutocompleteKey.trim()
+        : '';
+      if (!/^[A-Za-z0-9_-]{8,128}$/.test(key)) {
+        sendResponse({ ok: false, error: 'Address autocomplete key is not configured', suggestions: [] });
+        return;
+      }
+      const params = new URLSearchParams({ key, search: q, max_results: '6' });
+      if (msg.selected) params.set('selected', String(msg.selected).slice(0, 240));
+      const url = `https://us-autocomplete-pro.api.smartystreets.com/lookup?${params}`;
+      try {
+        const response = await fetch(url, { credentials: 'omit', headers: { Accept: 'application/json' } });
+        const data = response.ok ? await gbReadJsonLimited(response, 1_000_000).catch(() => ({})) : {};
+        sendResponse({
+          ok: response.ok,
+          suggestions: Array.isArray(data && data.suggestions) ? data.suggestions.slice(0, 6) : [],
+          error: response.ok ? undefined : `HTTP ${response.status}`,
+        });
+      } catch (error) {
+        sendResponse({ ok: false, error: String(error), suggestions: [] });
+      }
+    })();
     return true;
   }
 
@@ -746,6 +1034,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Inventory URL (the iframe nav carries the session cookie), then read that
   // frame's own DOM via executeScript (same-origin → no CORS). Returns {ok,text}.
   if (msg.action === 'fetchInventory' && msg.sku) {
+    const sku = String(msg.sku).trim();
+    if (!/^[A-Za-z0-9._-]{1,80}$/.test(sku)) {
+      sendResponse({ ok: false, error: 'Invalid inventory SKU' });
+      return true;
+    }
     (async () => {
       try {
         const tgt = await gbResolveInvTarget(sender);
@@ -761,7 +1054,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         const r = await chrome.scripting.executeScript({
           target: { tabId: tgt.tabId, allFrames: tgt.allFrames }, world: 'MAIN',
-          func: gbInvFetchHtml, args: ['https://office.gbcadmin.com', msg.sku],
+          func: gbInvFetchHtml, args: ['https://office.gbcadmin.com', sku],
         });
         const hit = (r || []).map((x) => x && x.result).find((v) => v != null);
         if (!hit) { sendResponse({ ok: false, error: 'Inventory frame returned nothing (it may block embedding).' }); return; }
@@ -770,7 +1063,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (hit.error) { sendResponse({ ok: false, error: hit.error }); return; }
         sendResponse({ ok: true, text: hit.html || '' });
       } catch (err) {
-        console.warn('[GB] fetchInventory error:', err.message);
         sendResponse({ ok: false, error: String((err && err.message) || err) });
       }
     })();
@@ -783,12 +1075,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // one made on the web. Host-locked to api.golfballs.com; cookies flow via
   // credentials:'include' (the rep is signed into the CRM). Returns raw text.
   if (msg.action === 'crmAjax' && msg.url) {
-    if (!/^https:\/\/api\.golfballs\.com\//i.test(msg.url)) { sendResponse({ ok: false, error: 'Blocked host' }); return true; }
-    const opt = { method: msg.method || 'GET', credentials: 'include', headers: { Accept: 'application/json, text/html, */*' } };
-    if (msg.body != null) { opt.body = msg.body; opt.headers['Content-Type'] = msg.contentType || 'application/json'; }
-    fetch(msg.url, opt)
-      .then(async (r) => { const text = await r.text(); if (!r.ok) throw new Error('HTTP ' + r.status + (text ? ' — ' + text.slice(0, 200) : '')); sendResponse({ ok: true, text }); })
-      .catch((err) => { console.warn('[GB] crmAjax error:', err.message); sendResponse({ ok: false, error: String((err && err.message) || err) }); });
+    const url = GB_SECURITY.parseHttpsUrl(msg.url);
+    const method = String(msg.method || 'GET').toUpperCase();
+    const body = msg.body == null ? null : String(msg.body);
+    const contentType = String(msg.contentType || 'application/json').slice(0, 120);
+    if (!url || url.hostname !== 'api.golfballs.com' || url.hash
+        || !/^\/golfballs\/crm\/admin\//i.test(url.pathname)
+        || !['GET', 'POST'].includes(method)
+        || (method === 'GET' && body != null)
+        || (body != null && body.length > 2_000_000)
+        || !/^(?:application\/json|application\/x-www-form-urlencoded)(?:\s*;|$)/i.test(contentType)) {
+      sendResponse({ ok: false, error: 'Blocked CRM request' });
+      return true;
+    }
+    const opt = { method, credentials: 'include', redirect: 'error', headers: { Accept: 'application/json, text/html, */*' } };
+    if (body != null) { opt.body = body; opt.headers['Content-Type'] = contentType; }
+    fetch(url.href, opt)
+      .then(async (r) => { const text = await gbReadTextLimited(r, 10_000_000); if (!r.ok) throw new Error('HTTP ' + r.status); sendResponse({ ok: true, text }); })
+      .catch((err) => { sendResponse({ ok: false, error: String((err && err.message) || err) }); });
     return true;
   }
 
@@ -797,6 +1101,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // fetches Inventory.aspx for each SKU and returns { sku: cost|null }. The lib
   // calls this in chunks so it can report progress + cancel between batches.
   if (msg.action === 'fetchCosts' && Array.isArray(msg.skus)) {
+    const skus = msg.skus.map((sku) => String(sku).trim());
+    if (skus.length < 1 || skus.length > 100 || skus.some((sku) => !/^[A-Za-z0-9._-]{1,80}$/.test(sku))) {
+      sendResponse({ ok: false, error: 'Invalid inventory SKU batch' });
+      return true;
+    }
     (async () => {
       try {
         const tgt = await gbResolveInvTarget(sender);
@@ -812,14 +1121,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         }
         const r = await chrome.scripting.executeScript({
           target: { tabId: tgt.tabId, allFrames: tgt.allFrames }, world: 'MAIN',
-          func: gbInvFetchCosts, args: ['https://office.gbcadmin.com', msg.skus],
+          func: gbInvFetchCosts, args: ['https://office.gbcadmin.com', skus],
         });
         const hit = (r || []).map((x) => x && x.result).find((v) => v != null);
         if (!hit) { sendResponse({ ok: false, error: 'Cost frame returned nothing (it may block embedding).' }); return; }
         if (hit.__auth === false) { sendResponse({ ok: false, error: 'Not signed in to office.gbcadmin.com — open it in a tab and sign in, then retry.' }); return; }
         sendResponse({ ok: true, costs: hit });
       } catch (err) {
-        console.warn('[GB] fetchCosts error:', err.message);
         sendResponse({ ok: false, error: String((err && err.message) || err) });
       }
     })();
@@ -830,10 +1138,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // hpgbrands detail pages are ~540KB; parse the net-cost ladder, options, MOQ,
   // weight, lead time IN the worker so we never ship the whole page to the page.
   if (msg.action === 'hpgDetail' && msg.url) {
-    fetch(msg.url, { credentials: 'omit', headers: { Accept: 'text/html,*/*' } })
+    const hpgUrl = GB_SECURITY.parseHttpsUrl(msg.url);
+    if (!hpgUrl || !/(^|\.)hpgbrands\.com$/i.test(hpgUrl.hostname)) {
+      sendResponse({ ok: false, error: 'Blocked HPG URL' });
+      return true;
+    }
+    fetch(hpgUrl.href, { credentials: 'omit', redirect: 'error', headers: { Accept: 'text/html,*/*' } })
       .then(async (r) => {
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        const html = await r.text();
+        const html = await gbReadTextLimited(r, 3_000_000);
         sendResponse({ ok: true, data: gbParseHpgDetail(html) });
       })
       .catch((err) => sendResponse({ ok: false, error: String(err.message || err) }));
@@ -858,6 +1171,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // ── Repo import: SnugZ — fetch + parse a batch of URLs in the authed iframe ─
   if (msg.action === 'snugzFetch' && Array.isArray(msg.urls)) {
+    if (!['list', 'detail'].includes(msg.kind) || msg.urls.length < 1 || msg.urls.length > 50 || msg.urls.some((url) => {
+      const parsed = GB_SECURITY.parseHttpsUrl(url);
+      return !parsed || !/(^|\.)snugzusa\.com$/i.test(parsed.hostname);
+    })) {
+      sendResponse({ ok: false, error: 'Invalid SnugZ URL batch' });
+      return true;
+    }
     const tabId = sender && sender.tab && sender.tab.id;
     if (!tabId) { sendResponse({ ok: false, error: 'No tab context' }); return true; }
     (async () => {
@@ -874,32 +1194,37 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // ── 2. Brand product catalog fetch (for recommended_replacement) ──
   // Loads /Golf-Balls/{slug}.html, extracts __NEXT_DATA__, returns Solr docs.
   if (msg.action === 'fetchBrandProducts' && msg.slug) {
-    const url = `https://www.golfballs.com/Golf-Balls/${encodeURIComponent(msg.slug)}.html`;
+    const slug = String(msg.slug).trim();
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(slug)) {
+      sendResponse({ ok: false, error: 'Invalid brand slug', products: [] });
+      return true;
+    }
+    const url = `https://www.golfballs.com/Golf-Balls/${encodeURIComponent(slug)}.html`;
     fetch(url, {
       headers: { 'Accept': 'text/html,*/*', 'Accept-Language': 'en-US,en;q=0.9' },
-      credentials: 'include'
+      credentials: 'include',
+      redirect: 'error',
     })
     .then(async r => {
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      const html = await r.text();
- 
+      const html = await gbReadTextLimited(r, 10_000_000);
+
       const m = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
       if (!m) throw new Error('__NEXT_DATA__ not found');
- 
+
       const nextData = JSON.parse(m[1]);
       const page     = nextData?.props?.pageProps?.contentManagerPage?.page;
       const deps     = page?.dependencies;
       if (!Array.isArray(deps)) throw new Error('No dependencies array');
- 
+
       let products = [];
       for (const dep of deps) {
         const docs = dep?.value?.response?.docs;
         if (Array.isArray(docs) && docs.length > 0) { products = docs; break; }
       }
-      sendResponse({ ok: true, products });
+      sendResponse({ ok: true, products: products.slice(0, 1_000) });
     })
     .catch(err => {
-      console.warn('[GB] fetchBrandProducts error:', err.message);
       sendResponse({ ok: false, error: String(err) });
     });
     return true;
@@ -911,6 +1236,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Custom-Logo page calls: full-catalog searchTerm, default sort, and
   // exclude out-of-stock via facetQueries.
   if (msg.action === 'fetchGiftCatalog' && msg.searchTerm) {
+    const searchTerm = String(msg.searchTerm).trim();
+    const start = Math.max(0, Math.min(100_000, Math.trunc(Number(msg.start) || 0)));
+    const rows = Math.max(1, Math.min(200, Math.trunc(Number(msg.rows) || 60)));
+    if (!searchTerm || searchTerm.length > 300) {
+      sendResponse({ ok: false, error: 'Invalid catalog search', docs: [], numFound: 0 });
+      return true;
+    }
     // Static facet config the API requires (it iterates these — omitting
     // them 502s the backend). Lifted verbatim from the live page request.
     const GIFT_FACET_REQUEST = [{"name":"Brand","sort":"alphabetical","field":"brand_s","type":"field","alwaysShow":["Adidas","Bridgestone","Callaway Golf","FootJoy","Greg Norman","Nike","Taylor Made","Titleist","Wilson","Under Armour"]},{"name":"Item Type","field":"itemType_ss","type":"field","allowMultiValue":false},{"name":"Decoration","hide":true,"type":"field","field":"modificationName_ss","allowMultiValue":false}];
@@ -918,10 +1250,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const body = JSON.stringify({
       solrQuery: {
         queryType: 'select',
-        start: msg.start || 0,
-        rows: String(msg.rows || 60),
+        start,
+        rows: String(rows),
         sort: 'sort_default_i desc',
-        searchTerm: msg.searchTerm,
+        searchTerm,
         facetRequest: GIFT_FACET_REQUEST,
         facetQueries: GIFT_FACET_QUERIES,
         filterQuery: [],
@@ -934,15 +1266,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'sitekey': 'golfballs' },
       body,
       cache: 'no-store',   // never serve a CDN/proxy-cached price list on a manual refresh
+      redirect: 'error',
     })
       .then(async r => {
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        const j = await r.json();
+        const j = await gbReadJsonLimited(r, 5_000_000);
         const resp = (j && j.response) || {};
-        sendResponse({ ok: true, docs: resp.docs || [], numFound: resp.numFound || 0 });
+        sendResponse({ ok: true, docs: Array.isArray(resp.docs) ? resp.docs.slice(0, rows) : [], numFound: Number(resp.numFound) || 0 });
       })
       .catch(err => {
-        console.warn('[GB] fetchGiftCatalog error:', err.message);
         sendResponse({ ok: false, error: String(err), docs: [], numFound: 0 });
       });
     return true;
@@ -954,19 +1286,22 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // and returns the human cart/proposal number. msg.body = { cartData,
   // customerID, salesRepID } built by src/lib/cartSerializer.js.
   if (msg.action === 'giftSaveCart' && msg.body) {
+    let requestBody;
+    try { requestBody = gbSerializeLimited(msg.body, 12_000_000, 'Cart request'); }
+    catch (error) { sendResponse({ ok: false, error: error.message }); return true; }
     fetch('https://master.api.icustomize.com/user/saveCart', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'sitekey': 'golfballs' },
-      body: JSON.stringify(msg.body),
+      body: requestBody,
+      redirect: 'error',
     })
       .then(async r => {
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        const j = await r.json();
+        const j = await gbReadJsonLimited(r, 2_000_000);
         const d = (j && j.d) || {};
         sendResponse({ ok: true, cartNumber: d.cartNumber, cartID: d.cartID, message: d.success });
       })
       .catch(err => {
-        console.warn('[GB] giftSaveCart error:', err.message);
         sendResponse({ ok: false, error: String(err) });
       });
     return true;
@@ -978,13 +1313,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // (no auth), msg.body built by src/lib/cartSerializer.buildSaveProposalBody.
   // Returns the raw parsed response (the saved cart GUID) so the caller can verify.
   if (msg.action === 'giftSaveProposal' && msg.body) {
+    let requestBody;
+    try { requestBody = gbSerializeLimited(msg.body, 12_000_000, 'Proposal request'); }
+    catch (error) { sendResponse({ ok: false, error: error.message }); return true; }
     fetch('https://master.api.icustomize.com/user/saveProposal', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'sitekey': 'golfballs' },
-      body: JSON.stringify(msg.body),
+      body: requestBody,
+      redirect: 'error',
     })
       .then(async r => {
-        const text = await r.text();
+        const text = await gbReadTextLimited(r, 2_000_000);
         if (!r.ok) throw new Error('HTTP ' + r.status + (text ? ' — ' + text.slice(0, 200) : ''));
         let j = null; try { j = text ? JSON.parse(text) : null; } catch { j = text; }
         const d = (j && typeof j === 'object' && j.d !== undefined) ? j.d : j;
@@ -992,7 +1331,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: true, cartID, raw: j });
       })
       .catch(err => {
-        console.warn('[GB] giftSaveProposal error:', err.message);
         sendResponse({ ok: false, error: String(err.message || err) });
       });
     return true;
@@ -1004,20 +1342,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // orderLevelDiscount, itemLevelDiscounts, freeItems, promoDescription, … }.
   // sitekey-only (no auth). msg.body built by src/lib/saveProposal.validatePromo.
   if (msg.action === 'applyPromotion' && msg.body) {
+    let requestBody;
+    try { requestBody = gbSerializeLimited(msg.body, 12_000_000, 'Promotion request'); }
+    catch (error) { sendResponse({ ok: false, error: error.message }); return true; }
     fetch('https://master.api.icustomize.com/user/promotion', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'sitekey': 'golfballs' },
-      body: JSON.stringify(msg.body),
+      body: requestBody,
+      redirect: 'error',
     })
       .then(async r => {
-        const text = await r.text();
+        const text = await gbReadTextLimited(r, 2_000_000);
         if (!r.ok) throw new Error('HTTP ' + r.status + (text ? ' — ' + text.slice(0, 200) : ''));
         let j = null; try { j = text ? JSON.parse(text) : null; } catch { j = null; }
         const data = (j && typeof j === 'object' && j.d !== undefined) ? (typeof j.d === 'string' ? JSON.parse(j.d) : j.d) : j;
         sendResponse({ ok: true, promotion: data || null });
       })
       .catch(err => {
-        console.warn('[GB] applyPromotion error:', err.message);
         sendResponse({ ok: false, error: String(err.message || err) });
       });
     return true;
@@ -1033,15 +1374,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'sitekey': 'golfballs' },
       cache: 'no-store',
+      redirect: 'error',
     })
       .then(async r => {
         if (!r.ok) throw new Error('HTTP ' + r.status);
-        const j = await r.json();
+        const j = await gbReadJsonLimited(r, 2_000_000);
         const data = (j && j.d !== undefined) ? (typeof j.d === 'string' ? JSON.parse(j.d) : j.d) : j;
-        sendResponse({ ok: true, bundleOptions: (data && data.bundleOptions) || [], expiryDate: data && data.expiryDate });
+        sendResponse({ ok: true, bundleOptions: Array.isArray(data && data.bundleOptions) ? data.bundleOptions.slice(0, 500) : [], expiryDate: data && data.expiryDate });
       })
       .catch(err => {
-        console.warn('[GB] fetchPackageUpsell error:', err.message);
         sendResponse({ ok: false, error: String(err), bundleOptions: [] });
       });
     return true;
@@ -1055,27 +1396,31 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // line-less proposal. (The caller also caps concurrency to avoid stampeding
   // the backend into these timeouts in the first place.)
   if (msg.action === 'giftLoadCart' && msg.cartNumber != null) {
+    const cartNumber = String(msg.cartNumber).trim();
+    if (!/^[A-Za-z0-9{}._-]{1,128}$/.test(cartNumber)) {
+      sendResponse({ ok: false, error: 'Invalid cart identifier' });
+      return true;
+    }
     (async () => {
-      const url = 'https://master.api.icustomize.com/user/getCart/' + encodeURIComponent(msg.cartNumber);
+      const url = 'https://master.api.icustomize.com/user/getCart/' + encodeURIComponent(cartNumber);
       const attempts = 3;
       let lastErr = null;
       for (let i = 0; i < attempts; i++) {
         if (i > 0) await new Promise((res) => setTimeout(res, 600 * i)); // 0, 600, 1200ms
         try {
-          const r = await fetch(url, { method: 'GET', headers: { 'Accept': 'application/json', 'sitekey': 'golfballs' } });
+          const r = await fetch(url, { method: 'GET', redirect: 'error', headers: { 'Accept': 'application/json', 'sitekey': 'golfballs' } });
           if (!r.ok) {
             lastErr = new Error('HTTP ' + r.status);
             if (r.status >= 500) continue;   // transient — retry
             throw lastErr;                    // 4xx — don't retry
           }
-          const j = await r.json();
+          const j = await gbReadJsonLimited(r, 10_000_000);
           const d = j && j.d !== undefined ? j.d : j;
           const cartData = typeof d === 'string' ? JSON.parse(d) : d;
           sendResponse({ ok: true, cartData });
           return;
         } catch (err) { lastErr = err; }      // network/parse error — retry
       }
-      console.warn('[GB] giftLoadCart error after ' + attempts + ' tries:', lastErr && lastErr.message);
       sendResponse({ ok: false, error: String(lastErr) });
     })();
     return true;
@@ -1089,7 +1434,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     gbGetProductConfig(msg.url)
       .then((config) => sendResponse({ ok: true, config }))
       .catch((err) => {
-        console.warn('[GB] fetchProductConfig error:', err.message);
         sendResponse({ ok: false, error: String(err) });
       });
     return true;
@@ -1103,7 +1447,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     gbFetchProductPage(msg.url)
       .then((product) => sendResponse({ ok: true, product }))
       .catch((err) => {
-        console.warn('[GB] fetchProductRaw error:', err.message);
         sendResponse({ ok: false, error: String(err) });
       });
     return true;
@@ -1113,10 +1456,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // dataUrl = the aligned + rotation-baked decal; returns
   // { filePath, fileName, cropFilePath, userImage } for the cart line.
   if (msg.action === 'uploadCustomLogo' && msg.dataUrl) {
+    if (typeof msg.dataUrl !== 'string'
+        || msg.dataUrl.length > 20_000_000
+        || !/^data:image\/(?:png|jpe?g|webp);base64,[a-z0-9+/=\s]+$/i.test(msg.dataUrl)) {
+      sendResponse({ ok: false, error: 'Invalid or oversized logo image' });
+      return true;
+    }
     gbUploadCustomLogo(msg)
       .then((r) => sendResponse({ ok: true, ...r }))
       .catch((err) => {
-        console.warn('[GB] uploadCustomLogo error:', err.message);
         sendResponse({ ok: false, error: String(err) });
       });
     return true;
@@ -1124,53 +1472,52 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // ── 2. Calendar HTML Proxy (GET — initial state fetch) ─────
   if (msg.action === 'fetchCalendarState' && msg.url) {
-    console.log("[Background] Fetching URL:", msg.url);
-    
+    if (!GB_SECURITY.isCalendarUrl(msg.url)) {
+      sendResponse({ ok: false, error: 'Blocked calendar URL' });
+      return true;
+    }
     const fetchHeaders = {
-      "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-      "accept-language": "en-US,en;q=0.9",
-      "upgrade-insecure-requests": "1"
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Cache-Control': 'no-cache',
     };
-
-    if (msg.cookieStr)  fetchHeaders["Cookie"]        = msg.cookieStr;
-    if (msg.adminToken) fetchHeaders["adminsession"]  = msg.adminToken;
 
     fetch(msg.url, {
       headers: fetchHeaders,
-      referrer: msg.referrer,
-      referrerPolicy: "unsafe-url",
-      method: "GET",
-      mode: "cors",
-      credentials: "include",
-      cache: "no-store"
+      method: 'GET',
+      credentials: 'include',
+      cache: 'no-store',
+      referrerPolicy: 'no-referrer',
     })
     .then(async r => {
-      console.log(`[Background] Response Status: ${r.status}`);
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      const html = await r.text();
+      const html = await gbReadTextLimited(r, 10_000_000);
       if (html.includes('login') || html.includes('Log In')) {
         throw new Error("Server rejected session cookies and redirected to login screen.");
       }
       sendResponse({ ok: true, html: html });
     })
     .catch(err => {
-      console.error("[Background] Fetch Error:", err);
       sendResponse({ ok: false, error: String(err) });
     });
     return true;
   }
 
   // ── 7. Generate Proof Link (Scrape & Post) ─────────────────
-  // ── 7. Generate Proof Link (Scrape & Post) ─────────────────
   if (msg.action === 'generateProofLink') {
-    console.log('[Background] Initiating Proof Generation for Customer:', msg.customerId);
-    
-    const baseUrl = `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=128&customerID=${msg.customerId || ''}`;
+    const customerId = String(msg.customerId || '');
+    const orderId = String(msg.orderId || '');
+    if (!/^\d{1,12}$/.test(customerId) || (orderId && !/^\d{1,12}$/.test(orderId))) {
+      sendResponse({ ok: false, error: 'Invalid customer or order identifier' });
+      return true;
+    }
+    const proofName = String(msg.proofName || `Proof - ${orderId}`).slice(0, 200);
+    const notes = String(msg.notes || '').slice(0, 5_000);
+    const baseUrl = `https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=128&customerID=${customerId}`;
 
-    fetch(baseUrl, { method: 'GET' })
+    fetch(baseUrl, { method: 'GET', credentials: 'include', redirect: 'error', referrerPolicy: 'no-referrer' })
       .then(async r => {
         if (!r.ok) throw new Error('Failed to load Create page');
-        const html = await r.text();
+        const html = await gbReadTextLimited(r, 10_000_000);
 
         const vsMatch  = html.match(/id="__VIEWSTATE"\s+value="([^"]+)"/);
         const vsgMatch = html.match(/id="__VIEWSTATEGENERATOR"\s+value="([^"]+)"/);
@@ -1185,56 +1532,47 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         formData.append('__VIEWSTATE', vsMatch[1]);
         formData.append('__VIEWSTATEGENERATOR', vsgMatch ? vsgMatch[1] : '');
         formData.append('__EVENTVALIDATION', evMatch ? evMatch[1] : '');
-        
-        formData.append('ctl00$inputName', msg.proofName || `Proof - ${msg.orderId}`);
+
+        formData.append('ctl00$inputName', proofName);
         formData.append('ctl00$inputKeywords', '');
-        formData.append('ctl00$inputNotes', msg.notes || '');
-        formData.append('ctl00$inputLogoType', msg.logoType || 'Ball');
-        formData.append('ctl00$inputCustomerID', msg.customerId || '');
-        formData.append('ctl00$DropDownSalesRep', msg.salesRepId || '0'); 
-        formData.append('ctl00$DropDownArtist', msg.artistId || '42'); 
-        formData.append('ctl00$DropDownStatus', msg.logoStatus || '1'); 
-        
+        formData.append('ctl00$inputNotes', notes);
+        formData.append('ctl00$inputLogoType', ['Ball', 'Other'].includes(msg.logoType) ? msg.logoType : 'Ball');
+        formData.append('ctl00$inputCustomerID', customerId);
+        formData.append('ctl00$DropDownSalesRep', /^\d{1,12}$/.test(String(msg.salesRepId || '')) ? String(msg.salesRepId) : '0');
+        formData.append('ctl00$DropDownArtist', /^\d{1,12}$/.test(String(msg.artistId || '')) ? String(msg.artistId) : '42');
+        formData.append('ctl00$DropDownStatus', /^\d{1,4}$/.test(String(msg.logoStatus || '')) ? String(msg.logoStatus) : '1');
+
         // Use a proper File object instead of a blank Blob just to be safe with ASP.NET
         formData.append('ctl00$LogoUpload', new File([""], "empty.png", { type: "image/png" }));
         formData.append('ctl00$Button1', 'Create Logo');
 
-        console.log('[Background] POSTing to:', baseUrl);
-
         return fetch(baseUrl, {
           method: 'POST',
           body: formData,
-          redirect: 'follow'
+          credentials: 'include',
+          redirect: 'follow',
+          referrerPolicy: 'no-referrer',
         });
       })
       .then(async r => {
         const finalUrl = new URL(r.url);
         const messageParam = finalUrl.searchParams.get('message');
-        
+
         if (messageParam && messageParam.includes('http')) {
           const cleanLink = messageParam.replace('New Job Link ', '').trim();
-          console.log("Proof Link: " + cleanLink)
-          sendResponse({ ok: true, proofLink: cleanLink });
+          const parsedLink = GB_SECURITY.parseHttpsUrl(cleanLink);
+          if (!parsedLink || !/(^|\.)golfballs\.com$/i.test(parsedLink.hostname)) throw new Error('Server returned an invalid proof link');
+          sendResponse({ ok: true, proofLink: parsedLink.href });
         } else {
-          // 🚨 IF IT FAILS, READ THE HTML TO SEE ASP.NET'S ERROR 🚨
-          const htmlResponse = await r.text();
-          console.error('[GB] Server rejected the form. Final URL:', r.url);
-          
-          // Try to scrape any red ASP.NET error spans to make it blatantly obvious
-          const errorMatch = htmlResponse.match(/<span[^>]*style="color:Red[^>]*>([\s\S]*?)<\/span>/i);
-          if (errorMatch) {
-             console.error('🚨 ASP.NET ERROR MESSAGE:', errorMatch[1].replace(/<[^>]*>?/gm, '').trim());
-          }
-          
-          throw new Error('Server rejected the form. Check Background Console for details.');
+          await gbReadTextLimited(r, 2_000_000);
+          throw new Error('Server rejected the proof form');
         }
       })
       .catch(err => {
-        console.error('[Background] Proof Generation Error:', err);
         sendResponse({ ok: false, error: err.message });
       });
 
-    return true; 
+    return true;
   }
 
   // ── 3. Calendar Date-Selection POST ────────────────────────
@@ -1242,14 +1580,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Returns the fresh { viewState, viewStateGen, eventValidation } from the
   // server response so the caller can chain the next step.
   if (msg.action === 'postCalendarForm') {
+    const validationError = gbValidateCalendarState(msg, true);
+    if (validationError) { sendResponse({ ok: false, error: validationError }); return true; }
     const params = new URLSearchParams();
     params.set('__EVENTTARGET',        msg.eventTarget   || '');
     params.set('__EVENTARGUMENT',      msg.eventArgument || '');
     params.set('__VIEWSTATE',          msg.viewState     || '');
     params.set('__VIEWSTATEGENERATOR', msg.viewStateGen  || '');
     params.set('__EVENTVALIDATION',    msg.eventValidation || '');
-
-    console.log(`[Background] postCalendarForm → target=${msg.eventTarget} arg=${msg.eventArgument}`);
 
     fetch(msg.url, {
       method:      'POST',
@@ -1263,7 +1601,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     })
     .then(async r => {
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      const html = await r.text();
+      const html = await gbReadTextLimited(r, 10_000_000);
 
       // DOMParser is not available in service workers — use targeted regex instead.
       // The attribute order in ASP.NET output is always: id="…" value="…"
@@ -1278,7 +1616,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         vsMatch = vsAlt; // reassign to continue
       }
 
-      console.log(`[Background] postCalendarForm ✓ — new ViewState extracted.`);
       sendResponse({ ok: true, state: {
         viewState:       vsMatch[1],
         viewStateGen:    vsgMatch ? vsgMatch[1] : msg.viewStateGen,
@@ -1286,7 +1623,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }});
     })
     .catch(err => {
-      console.error('[Background] postCalendarForm error:', err);
       sendResponse({ ok: false, error: String(err) });
     });
     return true;
@@ -1296,6 +1632,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Equivalent to clicking "Update Delivery Date".
   // At this point ViewState already encodes the two selected dates.
   if (msg.action === 'submitCalendarUpdate') {
+    const validationError = gbValidateCalendarState(msg, false);
+    if (validationError) { sendResponse({ ok: false, error: validationError }); return true; }
     const params = new URLSearchParams();
     params.set('__EVENTTARGET',                  '');
     params.set('__EVENTARGUMENT',                '');
@@ -1303,8 +1641,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     params.set('__VIEWSTATEGENERATOR',           msg.viewStateGen  || '');
     params.set('__EVENTVALIDATION',              msg.eventValidation || '');
     params.set('ctl00$btnUpdateDeliveryDate',    'Update Delivery Date');
-
-    console.log('[Background] submitCalendarUpdate → firing final submit');
 
     fetch(msg.url, {
       method:      'POST',
@@ -1318,16 +1654,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     })
     .then(async r => {
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      const html = await r.text();
+      const html = await gbReadTextLimited(r, 10_000_000);
       // Detect silent redirect-to-login failure
       if (html.includes('id="login"') || (html.toLowerCase().includes('log in') && !html.includes('btnUpdateDeliveryDate'))) {
         throw new Error('Session expired during submit. Please refresh the order page and try again.');
       }
-      console.log('[Background] submitCalendarUpdate ✓');
       sendResponse({ ok: true });
     })
     .catch(err => {
-      console.error('[Background] submitCalendarUpdate error:', err);
       sendResponse({ ok: false, error: String(err) });
     });
     return true;
@@ -1335,12 +1669,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // Broadcasts to all frames, but only executes in admin.icustomize.com
   if (msg.action === 'chargeApiProxy') {
+    const method = String(msg.method || 'POST').toUpperCase();
+    if (!GB_SECURITY.isChargeRequest(msg.url, method)) {
+      sendResponse({ ok: false, status: 0, text: '', error: 'Blocked payment endpoint or method' });
+      return true;
+    }
     chrome.storage.local.get('orderTabId', async ({ orderTabId }) => {
-      console.log('[GB Charge BG] chargeApiProxy', msg.url, '| tabId:', orderTabId);
-
-      if (!orderTabId) {
+      if (!Number.isInteger(orderTabId) || orderTabId < 0) {
         const err = 'No orderTabId — reopen popup from the order page.';
-        console.error('[GB Charge BG]', err);
         sendResponse({ ok: false, status: 0, text: '', error: err });
         return;
       }
@@ -1355,6 +1691,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           bodyStr = JSON.stringify(msg.body);
         }
       }
+      if (bodyStr != null && bodyStr.length > 1_000_000) {
+        sendResponse({ ok: false, status: 0, text: '', error: 'Payment request exceeds 1 MB limit' });
+        return;
+      }
 
       try {
         // Execute in ALL frames attached to the order tab
@@ -1362,73 +1702,39 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           target: { tabId: orderTabId, allFrames: true },
           world: 'MAIN', // <-- CRITICAL: Forces script out of the extension sandbox and into the native page context
           func: async (url, method, bodyStr) => {
-            
+
             // GUARD: Only proceed if we are inside the correct iframe
             if (window.location.origin !== 'https://admin.icustomize.com') {
               return { ignored: true };
             }
 
-            console.log('[GB Charge FRAME] origin:', location.origin, '| fetch', method, url);
-
-            const isMasterApi  = url.includes('master.api.icustomize.com');
-            const isSaveAdjust = url.includes('SaveAdjustment');
-            const useJson      = isMasterApi || isSaveAdjust;
-
-            const headers = {
-              'Content-Type': useJson ? 'application/json;charset=UTF-8' : 'application/x-www-form-urlencoded',
-              'Accept': 'application/json, text/plain, */*'
-            };
-
-            // Bulletproof JWT scanner (Ported directly from your iframe_content.js)
-            function findJWT(storage) {
-                for (let i = 0; i < storage.length; i++) {
-                    try {
-                        const val = storage.getItem(storage.key(i));
-                        if (typeof val === 'string' && val.includes('eyJ')) {
-                            const match = val.match(/(eyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)/);
-                            if (match) return match[1];
-                        }
-                    } catch(e) {}
-                }
-                return null;
+            const allowed = new Map([
+              ['production-private-api.icustomize.com/api/user/paymentcreditcard/getuserpaymentmethods', 'POST'],
+              ['production-private-api.icustomize.com/api/user/paymentordercharge/saveadjustment', 'POST'],
+              ['production-private-api.icustomize.com/api/user/creditcardinfo/getbillinginfobybillingrequest', 'POST'],
+              ['master.api.icustomize.com/user/billingverify', 'PUT'],
+              ['master.api.icustomize.com/user/chargecard', 'PUT'],
+              ['master.api.icustomize.com/admin/editorder', 'PUT'],
+            ]);
+            let parsed;
+            try { parsed = new URL(url); } catch { return { ok: false, status: 0, text: '', error: 'Invalid payment URL' }; }
+            const key = `${parsed.hostname.toLowerCase()}${parsed.pathname.replace(/\/+$/, '').toLowerCase()}`;
+            const requestMethod = String(method || 'POST').toUpperCase();
+            if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.port || parsed.search || parsed.hash || allowed.get(key) !== requestMethod) {
+              return { ok: false, status: 0, text: '', error: 'Blocked payment endpoint or method' };
             }
 
-            // Check Local, then Session, then Cookies
-            let token = findJWT(localStorage) || findJWT(sessionStorage);
-            if (!token) {
-               const match = document.cookie.match(new RegExp('(^| )adminsession=([^;]+)', 'i'));
-               if (match) token = match[2];
+            if (typeof window.__gbAuthBrokerExecute !== 'function') {
+              return { ok: false, status: 0, text: '', error: 'Authenticated iCustomize bridge is unavailable — reload the order page' };
             }
-
-            if (token) {
-              // Be surgical with headers to avoid CORS Preflight rejections
-              if (isMasterApi) {
-                  headers['adminsession'] = token;
-                  console.log('[GB Charge FRAME] Token found. Setting adminsession for Master API.');
-              } else {
-                  headers['authorization'] = token;
-                  console.log('[GB Charge FRAME] Token found. Setting authorization for Private API.');
-              }
-            } else {
-              console.warn('[GB Charge FRAME] Token NOT found! The request will likely fail CORS.');
-            }
-
-            try {
-              const resp = await fetch(url, {
-                method: method || 'POST',
-                headers,
-                credentials: 'omit', // <-- REVERTED: Do not send cookies, the Authorization header is enough
-                body: bodyStr != null ? bodyStr : undefined
-              });
-              const text = await resp.text();
-              console.log('[GB Charge FRAME] response', resp.status, text.slice(0, 300));
-              return { ok: resp.ok, status: resp.status, text, error: null };
-            } catch (err) {
-              console.error('[GB Charge FRAME] fetch threw:', err.name, err.message);
-              return { ok: false, status: 0, text: '', error: err.name + ': ' + err.message };
-            }
+            return window.__gbAuthBrokerExecute({
+              action: 'chargeApi',
+              url: parsed.href,
+              method: requestMethod,
+              body: bodyStr,
+            });
           },
-          args: [msg.url, msg.method || 'POST', bodyStr]
+          args: [msg.url, method, bodyStr]
         });
 
         // Isolate the result from the iframe that didn't ignore the request
@@ -1438,56 +1744,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           sendResponse(validResult.result);
         } else {
           const err = 'Could not find admin.icustomize.com iframe. Please ensure the Credit Card Adjustment portlet is visible on the order page.';
-          console.error('[GB Charge BG]', err);
           sendResponse({ ok: false, status: 0, text: '', error: err });
         }
 
       } catch (err) {
-        console.error('[GB Charge BG] executeScript threw:', err.name, err.message);
         sendResponse({ ok: false, status: 0, text: '', error: err.name + ': ' + err.message });
       }
     });
     return true;
   }
 
-  // ── Open / focus editor popup window ───────────────────────
-  if (msg.action === 'openCaseTplEditor') {
-    // Open or focus editor window, then tell it to navigate to case templates
-    const focusAndNav = (windowId) => {
-      chrome.windows.update(windowId, { focused: true });
-      // Find the editor tab in that window and send it a navigation message
-      chrome.tabs.query({ windowId }, tabs => {
-        tabs.forEach(tab => {
-          if (tab.url && tab.url.includes('editor.html')) {
-            chrome.tabs.sendMessage(tab.id, { action: 'GB_OPEN_CASE_TPL_EDITOR' }).catch(() => {});
-          }
-        });
-      });
-    };
-    if (editorWindowId !== null) {
-      chrome.windows.get(editorWindowId, win => {
-        if (chrome.runtime.lastError || !win) {
-          editorWindowId = null;
-          createEditorWindow();
-          // Nav will fire when editor sends ready ping
-        } else {
-          focusAndNav(editorWindowId);
-        }
-      });
-    } else {
-      createEditorWindow();
-    }
-    // Store intent so newly-opened editor can navigate on load
-    chrome.storage.session?.set({ pendingNav: 'case-tpl' }).catch(() =>
-      chrome.storage.local.set({ pendingNav: 'case-tpl' })
-    );
-    sendResponse({ success: true });
-    return true;
-  }
-
   // ── Operator's Guide: focus the existing tab or open a new one ─
   if (msg.action === 'openGuide') {
-    const url = chrome.runtime.getURL('guide.html') + (msg.hash || '');
+    const hash = typeof msg.hash === 'string' && /^#[A-Za-z0-9_./?=&%-]{0,300}$/.test(msg.hash) ? msg.hash : '';
+    const url = chrome.runtime.getURL('guide.html') + hash;
     const createGuideTab = () => {
       chrome.tabs.create({ url, active: true }, (tab) => { guideTabId = tab?.id ?? null; });
     };
@@ -1529,12 +1799,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // ── Start pick: inject content script, switch to order tab ─
   if (msg.action === 'startPick') {
+    const fieldId = typeof msg.fieldId === 'string' ? msg.fieldId.trim().slice(0, 200) : '';
+    if (!fieldId) { sendResponse({ error: 'Invalid field identifier' }); return true; }
     chrome.storage.local.get(['orderTabId', 'editorTabId'], ({ orderTabId, editorTabId }) => {
       if (!orderTabId) {
         sendResponse({ error: "No order tab" });
         return;
       }
-      chrome.storage.local.set({ pickMode: { active: true, fieldId: msg.fieldId, editorTabId } }, () => {
+      chrome.storage.local.set({ pickMode: { active: true, fieldId, editorTabId } }, () => {
         chrome.scripting.executeScript(
           { target: { tabId: orderTabId }, files: [
         'theme.js',
@@ -1561,7 +1833,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // ── Hover preview during pick mode ────────────────────────────
   if (msg.action === 'pickHover') {
-    chrome.storage.local.set({ pickHover: { text: msg.text, ts: Date.now() } });
+    chrome.storage.local.set({ pickHover: { text: String(msg.text || '').slice(0, 1_000), ts: Date.now() } });
     return false;
   }
 
@@ -1573,10 +1845,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   // ── Power Automate: post email payload to HTTP trigger ─────────────────────
   if (msg.action === 'paAutomate') {
-    const { paUrl, payload } = msg;
-    if (!paUrl) { sendResponse({ ok: false, error: 'No Power Automate URL configured.' }); return true; }
+    const { payload } = msg;
+    const payloadError = gbValidateEmailPayload(payload);
+    if (payloadError) { sendResponse({ ok: false, error: payloadError }); return true; }
     (async () => {
       try {
+        const credentials = await gbReadCredentials();
+        const paUrl = credentials.powerAutomateUrl;
+        if (!GB_SECURITY.isPowerAutomateUrl(paUrl)) {
+          sendResponse({ ok: false, error: 'No valid Power Automate URL configured.' });
+          return;
+        }
         // Pull every <img> out of the body into inline CID attachments and
         // rewrite each tag to src="cid:…". Outlook ignores base64 data: URIs
         // and external/hotlink-protected URLs, so CID attachments are the
@@ -1597,15 +1876,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             }
           }
         }
+        const enrichedError = gbValidateEmailPayload(payload);
+        if (enrichedError) { sendResponse({ ok: false, error: enrichedError }); return; }
+        const outboundBody = gbSerializeLimited(payload, 12_000_000, 'Email payload');
         // PA direct-trigger URLs return 202 Accepted with no JSON body.
         // Treat any 2xx as success — don't require a parseable body.
         const r = await fetch(paUrl, {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify(payload),
+          body:    outboundBody,
+          credentials: 'omit',
+          redirect: 'error',
         });
         if (r.ok) {
-          const text = await r.text();
+          const text = await gbReadTextLimited(r, 1_000_000);
           try {
             const data = JSON.parse(text);
             if (typeof data.ok === 'boolean') {
@@ -1617,12 +1901,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             sendResponse({ ok: true, results: [{ status: 'sent' }] });
           }
         } else {
-          const body = await r.text();
-          console.warn('[GB PA] HTTP error', r.status, body.slice(0, 200));
           sendResponse({ ok: false, error: `HTTP ${r.status}` });
         }
       } catch (e) {
-        console.warn('[GB PA] Request failed:', e.message);
         sendResponse({ ok: false, error: e.message });
       }
     })();
@@ -1644,7 +1925,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.action === 'gbProposalNet' && msg.entry) {
     if (gbDebugOn) {
       const e = msg.entry;
-      gbDebugPush({
+      const url = GB_SECURITY.parseHttpsUrl(e.url);
+      let entrySize = Infinity;
+      try { entrySize = JSON.stringify(e).length; } catch { /* invalid */ }
+      if (url && gbIsAllowedFetchUrl(url.href) && entrySize <= 250_000) gbDebugPush({
         id: 'w' + (e.ts || Date.now()) + '_' + Math.random().toString(36).slice(2, 6),
         ts: e.ts || Date.now(), durationMs: e.durationMs || 0,
         cat: e.cat || 'proposal', label: e.label || 'Request',
@@ -1658,6 +1942,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.action === 'openMailto') {
+    if (!GB_SECURITY.isMailtoUrl(msg.url)) {
+      sendResponse({ ok: false, error: 'Invalid mailto URL' });
+      return true;
+    }
     gbDebugRecord({ cat: 'email', label: 'Open Mailto (Power Automate off)', method: 'MAILTO', url: msg.url, reqBody: null, status: 0, ok: true, respBody: null });
     try { chrome.tabs.create({ url: msg.url, active: false }); sendResponse({ ok: true }); }
     catch (e) { sendResponse({ ok: false, error: String(e?.message || e) }); }
@@ -1665,234 +1953,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
 
-  /* ── Email blast orchestrator ────────────────────────────────────
-     Pre-flight for the campaign engine. Iterates a list of contacts,
-     opens each in an inactive tab, asks the content script to resolve
-     template variables against that DOM, then fires the email through
-     Power Automate (re-using the paAutomate path's CID image
-     extraction). Random delay between [delayMin, delayMax] seconds
-     between sends, random variation pick per-contact when the
-     template has them. Progress + final results stream back to the
-     opener tab via chrome.runtime.sendMessage. */
-  if (msg.action === 'runEmailBlast') {
-    const { runId, contacts, template, delayMin = 15, delayMax = 45 } = msg;
-    if (!Array.isArray(contacts) || !contacts.length || !template) {
-      sendResponse({ ok: false, error: 'No contacts or template' });
-      return false;
-    }
-    runEmailBlast(runId, contacts, template, delayMin, delayMax)
-      .catch((e) => console.warn('[GB blast] orchestrator crashed:', e?.message));
-    sendResponse({ ok: true });
-    return true;
-  }
-
-  if (msg.action === 'downloadEml') {
-    chrome.downloads.download({
-      url:      msg.dataUrl,
-      filename: msg.filename || 'reply.eml',
-      saveAs:   false,        // go straight to Downloads, don't prompt
-    }, (downloadId) => {
-      sendResponse({ ok: !chrome.runtime.lastError, downloadId });
-    });
-    return true;
-  }
-
-  // ── Microsoft Graph: get OAuth token (PKCE via chrome.identity) ────────────
-  if (msg.action === 'graphGetToken') {
-    chrome.storage.local.get(['featureFlags', 'gbGraphToken'], async (data) => {
-      const flags = data.featureFlags || {};
-      if (!flags.replyWithTemplateEnabled) {
-        sendResponse({ ok: false, disabled: true });
-        return;
-      }
-
-      // Return cached token if still valid (5 min buffer)
-      const cached = data.gbGraphToken;
-      if (cached?.accessToken && cached.expiresAt - Date.now() > 300_000) {
-        sendResponse({ ok: true, token: cached.accessToken });
-        return;
-      }
-
-      const CLIENT_ID = flags.graphClientId || '';
-      if (!CLIENT_ID) {
-        sendResponse({ ok: false, error: 'Azure Client ID not configured. Add it in Settings → Features.' });
-        return;
-      }
-
-      // Use specific tenant if configured, otherwise 'common' (requires multi-tenant app)
-      const TENANT   = flags.graphTenantId || 'common';
-      const REDIRECT = `https://${chrome.runtime.id}.chromiumapp.org/`;
-      const SCOPE    = 'https://graph.microsoft.com/Mail.ReadWrite offline_access';
-      const verifier  = gbGenCodeVerifier();
-      const challenge = await gbCodeChallenge(verifier);
-
-      const authUrl = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/authorize?`
-        + new URLSearchParams({
-            client_id:             CLIENT_ID,
-            response_type:         'code',
-            response_mode:         'query',   // force code into query string, not fragment
-            redirect_uri:          REDIRECT,
-            scope:                 SCOPE,
-            code_challenge:        challenge,
-            code_challenge_method: 'S256',
-            prompt:                'select_account',
-          }).toString();
-
-      chrome.identity.launchWebAuthFlow({ url: authUrl, interactive: true }, async (responseUrl) => {
-        if (chrome.runtime.lastError || !responseUrl) {
-          sendResponse({ ok: false, error: chrome.runtime.lastError?.message || 'Auth cancelled' });
-          return;
-        }
-        try {
-          const parsed = new URL(responseUrl);
-
-          // Surface any Azure error before looking for code
-          const azureError = parsed.searchParams.get('error');
-          if (azureError) {
-            const desc = parsed.searchParams.get('error_description') || azureError;
-            throw new Error(`Azure error: ${desc}`);
-          }
-
-          // Code comes in query string (?code=) for SPA apps.
-          // Fall back to hash fragment (#code=) for Web platform apps.
-          let code = parsed.searchParams.get('code');
-          if (!code) {
-            const hashParams = new URLSearchParams(parsed.hash.replace(/^#/, ''));
-            code = hashParams.get('code');
-          }
-          if (!code) {
-            throw new Error(`No code in redirect. Full URL: ${responseUrl.slice(0, 200)}`);
-          }
-
-          const tokenResp = await fetch(`https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/token`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-              client_id:     CLIENT_ID,
-              grant_type:    'authorization_code',
-              code,
-              redirect_uri:  REDIRECT,
-              code_verifier: verifier,
-              scope:         SCOPE,
-            }).toString(),
-          });
-          const tokenData = await tokenResp.json();
-          if (tokenData.error) throw new Error(tokenData.error_description || tokenData.error);
-
-          const tokenRecord = {
-            accessToken:  tokenData.access_token,
-            refreshToken: tokenData.refresh_token,
-            expiresAt:    Date.now() + (tokenData.expires_in * 1000),
-          };
-          await new Promise(r => chrome.storage.local.set({ gbGraphToken: tokenRecord }, r));
-          sendResponse({ ok: true, token: tokenData.access_token });
-        } catch(e) {
-          sendResponse({ ok: false, error: e.message });
-        }
-      });
-    });
-    return true;
-  }
-
-  // ── Microsoft Graph: sign out ───────────────────────────────────────────────
-  if (msg.action === 'graphSignOut') {
-    chrome.storage.local.remove('gbGraphToken', () => sendResponse({ ok: true }));
-    return true;
-  }
-
-  // ── Microsoft Graph: send fresh email (no threading) ──────────────────────
-  if (msg.action === 'graphSendFresh') {
-    chrome.storage.local.get(['featureFlags', 'gbGraphToken'], async (data) => {
-      const flags = data.featureFlags || {};
-      if (!flags.replyWithTemplateEnabled) { sendResponse({ ok: false, disabled: true }); return; }
-
-      let token = data.gbGraphToken?.accessToken;
-      if (!token || data.gbGraphToken.expiresAt - Date.now() < 60_000) {
-        const refreshed = await gbRefreshToken(data.gbGraphToken?.refreshToken, flags.graphClientId || '');
-        if (!refreshed.ok) { sendResponse({ ok: false, error: refreshed.error, needsAuth: true }); return; }
-        token = refreshed.token;
-      }
-
-      try {
-        // DRAFT MODE (testing) — create draft, do not send
-        const resp = await fetch('https://graph.microsoft.com/v1.0/me/messages', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            subject: msg.subject,
-            body: { contentType: 'HTML', content: msg.htmlBody },
-            toRecipients: [{ emailAddress: { address: msg.to } }],
-          }),
-        });
-        if (!resp.ok && resp.status !== 202) {
-          if (resp.status === 401) { sendResponse({ ok: false, error: 'Token expired', needsAuth: true }); return; }
-          const err = await resp.json().catch(() => ({}));
-          throw new Error(err.error?.message || `Graph ${resp.status}`);
-        }
-        sendResponse({ ok: true });
-      } catch(e) {
-        sendResponse({ ok: false, error: e.message });
-      }
-    });
-    return true;
-  }
-
-
-  if (msg.action === 'graphSendReply') {
-    chrome.storage.local.get(['featureFlags', 'gbGraphToken'], async (data) => {
-      const flags = data.featureFlags || {};
-      if (!flags.replyWithTemplateEnabled) {
-        sendResponse({ ok: false, disabled: true });
-        return;
-      }
-
-      let token = data.gbGraphToken?.accessToken;
-      if (!token || data.gbGraphToken.expiresAt - Date.now() < 60_000) {
-        const refreshed = await gbRefreshToken(data.gbGraphToken?.refreshToken, flags.graphClientId || '');
-        if (!refreshed.ok) { sendResponse({ ok: false, error: refreshed.error, needsAuth: true }); return; }
-        token = refreshed.token;
-      }
-
-      const auth = { 'Authorization': `Bearer ${token}` };
-      try {
-        // Step 1: Create draft from raw MIME
-        const createResp = await fetch('https://graph.microsoft.com/v1.0/me/messages/$value', {
-          method: 'POST',
-          headers: { ...auth, 'Content-Type': 'text/plain' },
-          body: msg.mimeBase64,
-        });
-        if (!createResp.ok) {
-          const err = await createResp.json().catch(() => ({}));
-          if (createResp.status === 401) { sendResponse({ ok: false, error: 'Token expired', needsAuth: true }); return; }
-          throw new Error(err.error?.message || `Graph ${createResp.status}`);
-        }
-        const draft = await createResp.json();
-
-        // DRAFT MODE (testing) — skip send, leave as draft in Drafts folder
-        // const sendResp = await fetch(...)
-        sendResponse({ ok: true });
-      } catch(e) {
-        sendResponse({ ok: false, error: e.message });
-      }
-    });
-    return true;
-  }
-
-  // ── Microsoft Graph: check auth state ──────────────────────────────────────
-  if (msg.action === 'graphCheckAuth') {
-    chrome.storage.local.get(['featureFlags', 'gbGraphToken'], (data) => {
-      const flags   = data.featureFlags || {};
-      const enabled = !!flags.replyWithTemplateEnabled;
-      const hasToken = !!(data.gbGraphToken?.accessToken);
-      const expired  = data.gbGraphToken ? data.gbGraphToken.expiresAt - Date.now() < 60_000 : true;
-      sendResponse({ enabled, hasToken, expired: hasToken && expired });
-    });
-    return true;
-  }
-
-
   // ── Element picked by content script ───────────────────────
   if (msg.action === 'elementPicked') {
+    const selector = typeof msg.selector === 'string' ? msg.selector.slice(0, 2_000) : '';
+    const pickedText = typeof msg.text === 'string' ? msg.text.slice(0, 10_000) : '';
+    if (!selector) { sendResponse({ error: 'Invalid picked element' }); return true; }
     chrome.storage.local.get('pickMode', ({ pickMode }) => {
       if (!pickMode?.active) {
         sendResponse({ ignored: true });
@@ -1900,7 +1965,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       }
       chrome.storage.local.set({
         pickMode: { active: false },
-        pickResult: { fieldId: pickMode.fieldId, selector: msg.selector, text: msg.text, ts: Date.now() }
+        pickResult: { fieldId: pickMode.fieldId, selector, text: pickedText, ts: Date.now() }
       }, () => {
         if (editorWindowId) chrome.windows.update(editorWindowId, { focused: true });
         sendResponse({ success: true });
@@ -1951,6 +2016,8 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 // per-email `attachments` array into its send action.
 
 const GB_MAX_IMG_BYTES = 3 * 1024 * 1024; // skip images larger than 3 MB
+const GB_MAX_INLINE_IMAGE_BYTES = 8 * 1024 * 1024;
+const GB_SAFE_IMAGE_TYPE = /^image\/(?:png|jpe?g|gif|webp|bmp)$/i;
 
 /** ArrayBuffer → base64 string (chunked to stay within the call-stack limit). */
 function gbBufToBase64(buf) {
@@ -1970,7 +2037,6 @@ function gbExtFor(type) {
   if (t.includes('jpeg') || t.includes('jpg')) return 'jpg';
   if (t.includes('gif'))                 return 'gif';
   if (t.includes('webp'))                return 'webp';
-  if (t.includes('svg'))                 return 'svg';
   if (t.includes('bmp'))                 return 'bmp';
   return 'img';
 }
@@ -1999,40 +2065,49 @@ async function extractEmailImages(html) {
     const sm = m[0].match(srcRe);
     const url = sm && (sm[1] || sm[2] || '').trim();
     if (url) urls.add(url);
+    if (urls.size >= 20) break;
   }
   if (!urls.size) return result;
 
   // Resolve each src to raw image bytes.
   const found = [];
-  await Promise.all([...urls].map(async (raw) => {
+  let totalBytes = 0;
+  for (const raw of urls) {
     try {
       let contentType = '';
       let base64 = '';
+      let byteLength = 0;
       if (/^data:/i.test(raw)) {
         const dm = raw.match(/^data:([^;,]*);base64,([\s\S]*)$/i);
-        if (!dm) return;                                // non-base64 data URI — skip
-        contentType = dm[1] || 'image/png';
-        if (!/^image\//i.test(contentType)) return;
+        if (!dm) continue;                              // non-base64 data URI — skip
+        contentType = (dm[1] || 'image/png').split(';')[0].trim().toLowerCase();
+        if (!GB_SAFE_IMAGE_TYPE.test(contentType)) continue;
         base64 = dm[2].replace(/\s/g, '');
+        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) continue;
+        byteLength = Math.floor(base64.length * 3 / 4);
       } else if (/^cid:/i.test(raw)) {
-        return;                                         // already an inline ref
+        continue;                                       // already an inline ref
       } else {
         let fetchUrl = raw.replace(/&amp;/gi, '&');
         if (fetchUrl.startsWith('//')) fetchUrl = 'https:' + fetchUrl;
-        if (!/^https?:\/\//i.test(fetchUrl)) return;    // relative / blob: — can't resolve here
-        const resp = await fetch(fetchUrl, { referrerPolicy: 'no-referrer' });
-        if (!resp.ok) { console.warn('[GB PA] image fetch failed', resp.status, fetchUrl); return; }
-        contentType = resp.headers.get('content-type') || 'image/png';
-        if (!/^image\//i.test(contentType)) return;
-        const buf = await resp.arrayBuffer();
-        if (buf.byteLength > GB_MAX_IMG_BYTES) { console.warn('[GB PA] image too large, skipped', fetchUrl); return; }
-        base64 = gbBufToBase64(buf);
+        const parsed = GB_SECURITY.parseHttpsUrl(fetchUrl);
+        if (!parsed) continue;                           // relative / blob / plaintext — skip
+        const resp = await fetch(parsed.href, { credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer' });
+        if (!resp.ok) continue;
+        contentType = (resp.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+        if (!GB_SAFE_IMAGE_TYPE.test(contentType)) continue;
+        const bytes = await gbReadBytesLimited(resp, GB_MAX_IMG_BYTES);
+        byteLength = bytes.byteLength;
+        base64 = gbBufToBase64(bytes);
       }
-      if (base64) found.push({ raw, contentType, base64 });
+      if (!base64 || byteLength > GB_MAX_IMG_BYTES || totalBytes + byteLength > GB_MAX_INLINE_IMAGE_BYTES) continue;
+      totalBytes += byteLength;
+      found.push({ raw, contentType, base64 });
     } catch (e) {
-      console.warn('[GB PA] image extract error', e.message);
+      /* A remote image is optional; keep its original src when it cannot be
+         fetched or exceeds the attachment budget. */
     }
-  }));
+  }
 
   if (!found.length) return result;
 
@@ -2084,303 +2159,51 @@ async function extractEmailFileAttachments(html) {
   while ((m = markRe.exec(html))) {
     const nm = m[0].match(nameRe);
     specs.push({ tag: m[0], src: unesc(m[1]), name: unesc((nm && nm[1]) || '') || 'attachment' });
+    if (specs.length >= 20) break;
   }
   if (!specs.length) return result;
   let out = html;
-  await Promise.all(specs.map(async (spec) => {
+  let totalBytes = 0;
+  for (const spec of specs) {
     out = out.split(spec.tag).join('');                 // marker never reaches the recipient
     try {
       let contentType = '';
       let base64 = '';
+      let byteLength = 0;
       if (/^data:/i.test(spec.src)) {
         const dm = spec.src.match(/^data:([^;,]*);base64,([\s\S]*)$/i);
-        if (!dm) return;
-        contentType = dm[1] || 'application/octet-stream';
+        if (!dm) continue;
+        contentType = (dm[1] || 'application/octet-stream').split(';')[0].trim().toLowerCase();
         base64 = dm[2].replace(/\s/g, '');
+        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(base64)) continue;
+        byteLength = Math.floor(base64.length * 3 / 4);
       } else {
         let fetchUrl = spec.src.replace(/&amp;/gi, '&');
         if (fetchUrl.startsWith('//')) fetchUrl = 'https:' + fetchUrl;
-        if (!/^https?:\/\//i.test(fetchUrl)) return;
-        const resp = await fetch(fetchUrl, { referrerPolicy: 'no-referrer' });
-        if (!resp.ok) { console.warn('[GB PA] attachment fetch failed', resp.status, fetchUrl); return; }
-        contentType = resp.headers.get('content-type') || 'application/octet-stream';
-        const buf = await resp.arrayBuffer();
-        if (buf.byteLength > GB_MAX_ATTACH_BYTES) { console.warn('[GB PA] attachment too large, skipped', fetchUrl); return; }
-        base64 = gbBufToBase64(buf);
+        const parsed = GB_SECURITY.parseHttpsUrl(fetchUrl);
+        if (!parsed) continue;
+        const resp = await fetch(parsed.href, { credentials: 'omit', redirect: 'error', referrerPolicy: 'no-referrer' });
+        if (!resp.ok) continue;
+        contentType = (resp.headers.get('content-type') || 'application/octet-stream').split(';')[0].trim().toLowerCase();
+        const bytes = await gbReadBytesLimited(resp, GB_MAX_ATTACH_BYTES);
+        byteLength = bytes.byteLength;
+        base64 = gbBufToBase64(bytes);
       }
-      if (!base64) return;
+      if (!base64 || byteLength > GB_MAX_ATTACH_BYTES || totalBytes + byteLength > GB_MAX_ATTACH_BYTES) continue;
+      totalBytes += byteLength;
+      const safeName = String(spec.name || 'attachment')
+        .replace(/[\u0000-\u001f\u007f/\\:]+/g, '_').trim().slice(0, 160) || 'attachment';
       result.attachments.push({
         '@odata.type': '#microsoft.graph.fileAttachment',   // MUST be first — see extractEmailImages
-        name:          spec.name,
-        contentType:   contentType.split(';')[0],
+        name:          safeName,
+        contentType:   contentType.slice(0, 120),
         contentBytes:  base64,
         isInline:      false,
       });
     } catch (e) {
-      console.warn('[GB PA] attachment extract error', e.message);
+      /* Optional remote attachments fail closed without logging their URL. */
     }
-  }));
+  }
   result.html = out;
   return result;
-}
-
-
-// ── Email blast helpers ─────────────────────────────────────────────────────
-//
-// MVP for the campaign engine. Keep this self-contained inside the background
-// script so we don't have to ESM-import from the React layer — the goal is a
-// dumb sequential pipeline (open tab → resolve → send → close → wait) we can
-// iterate on without unblocking the UI.
-
-const gbSleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/* Replace {{var}} tokens with values from `vars`. Unknown tokens pass through
-   in their original form so the recipient at least sees that a variable was
-   meant to be there — better than silently dropping. Mirrors the popup's
-   renderStr (without dropConditional). */
-function gbRenderStr(str, vars) {
-  if (!str) return '';
-  return String(str).replace(/\{\{(\w+)\}\}/g, (_, k) => vars?.[k] ?? `{{${k}}}`);
-}
-
-/* Wait for a freshly-opened tab to finish loading. Resolves on the next
-   onUpdated event with status === 'complete', or after `timeoutMs` so a hung
-   page can't strand the orchestrator. */
-function gbWaitTabComplete(tabId, timeoutMs = 30000) {
-  return new Promise((resolve) => {
-    let done = false;
-    const finish = (ok) => {
-      if (done) return;
-      done = true;
-      try { chrome.tabs.onUpdated.removeListener(listener); } catch {}
-      resolve(ok);
-    };
-    const listener = (id, info) => {
-      if (id !== tabId) return;
-      if (info.status === 'complete') finish(true);
-    };
-    chrome.tabs.onUpdated.addListener(listener);
-    // Check current state in case the page was already done by the time we
-    // hooked the listener (rare but cheap to check).
-    chrome.tabs.get(tabId, (t) => {
-      if (chrome.runtime.lastError) return finish(false);
-      if (t?.status === 'complete') finish(true);
-    });
-    setTimeout(() => finish(false), timeoutMs);
-  });
-}
-
-/* Send a message to a content script and wait for its reply with a hard
-   timeout so a tab whose content script never loaded can't hang the run. */
-function gbAskTab(tabId, payload, timeoutMs = 8000) {
-  return new Promise((resolve) => {
-    let done = false;
-    const finish = (val) => { if (!done) { done = true; resolve(val); } };
-    try {
-      chrome.tabs.sendMessage(tabId, payload, (response) => {
-        if (chrome.runtime.lastError) finish(null);
-        else finish(response || null);
-      });
-    } catch { finish(null); }
-    setTimeout(() => finish(null), timeoutMs);
-  });
-}
-
-/* Get the saved Power Automate URL + email signature in one shot so each
-   contact iteration doesn't pay the storage roundtrip. */
-function gbReadEmailConfig() {
-  return new Promise((resolve) => {
-    try {
-      chrome.storage.local.get(['featureFlags', 'emailSignature'], (out) => {
-        resolve({
-          paUrl: out?.featureFlags?.powerAutomateUrl || '',
-          signature: out?.emailSignature || '',
-        });
-      });
-    } catch { resolve({ paUrl: '', signature: '' }); }
-  });
-}
-
-/* POST one rendered email to Power Automate. CID image extraction matches
-   what paAutomate does for the popup path so inline images render in Outlook
-   instead of getting stripped. */
-async function gbSendOnePA(paUrl, email) {
-  const fa  = await extractEmailFileAttachments(email.htmlBody || '');
-  const ext = await extractEmailImages(fa.html);
-  email.htmlBody = ext.html;
-  const extra = [...fa.attachments, ...ext.attachments];
-  if (extra.length) {
-    email.attachments = [...(email.attachments || []), ...extra];
-  }
-  const r = await fetch(paUrl, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ emails: [email] }),
-  });
-  if (!r.ok) {
-    return { ok: false, error: `HTTP ${r.status}` };
-  }
-  try {
-    const text = await r.text();
-    const data = JSON.parse(text);
-    if (typeof data.ok === 'boolean') return { ok: data.ok, error: data.error };
-  } catch { /* PA direct-trigger returns 202 with no body */ }
-  return { ok: true };
-}
-
-/* Broadcast progress to every tab — cheap, and avoids us having to track
-   which tab opened the runner. The runner UI filters by runId so older runs
-   don't bleed into a newer one. */
-function gbBroadcastBlast(msg) {
-  try {
-    chrome.tabs.query({}, (tabs) => {
-      for (const t of tabs || []) {
-        try { chrome.tabs.sendMessage(t.id, msg); } catch {}
-      }
-    });
-  } catch {}
-}
-
-/* The orchestrator itself. Sequential by design — runs in parallel would
-   risk burning through reps' background-tab capacity and the goal here is
-   the human-cadence drip the user described. */
-async function runEmailBlast(runId, contacts, template, delayMin, delayMax) {
-  const { paUrl, signature } = await gbReadEmailConfig();
-  if (!paUrl) {
-    gbBroadcastBlast({ runId, action: 'emailBlastProgress', current: 0, total: contacts.length, name: '', result: { name: '', status: 'error', error: 'No Power Automate URL configured' } });
-    gbBroadcastBlast({ runId, action: 'emailBlastDone' });
-    return;
-  }
-
-  const variations = Array.isArray(template.variations) ? template.variations : [];
-
-  for (let i = 0; i < contacts.length; i++) {
-    const c = contacts[i];
-    let result = { name: c.name, status: 'error', error: 'unknown' };
-    let tabId  = null;
-
-    try {
-      // Per-contact random variation pick. Falls back to the template's own
-      // subject/body when the template has no variations.
-      const v = variations.length ? variations[Math.floor(Math.random() * variations.length)] : null;
-      const rawSubject = v?.subject || template.subject || '';
-      const rawBody    = v?.body    || template.body    || '';
-
-      // 1. Open the contact page in an inactive tab.
-      const tab = await new Promise((resolve, reject) => {
-        chrome.tabs.create({ url: c.url, active: false }, (t) => {
-          if (chrome.runtime.lastError || !t) reject(new Error(chrome.runtime.lastError?.message || 'tab create failed'));
-          else resolve(t);
-        });
-      });
-      tabId = tab.id;
-
-      // 2. Wait for the page to finish loading.
-      const ok = await gbWaitTabComplete(tabId);
-      if (!ok) throw new Error('Tab load timed out');
-      // Give the content script a beat to settle (it injects at document_idle).
-      await gbSleep(700);
-
-      // 3. Resolve template vars against this tab's DOM.
-      const resolved = await gbAskTab(tabId, {
-        action:  'resolveVars',
-        vars:    template.vars    || {},
-        toField: template.toField || { type: 'auto' },
-      });
-      const resolvedVars = resolved?.resolved || {};
-      const toEmail = resolved?.toEmail || '';
-
-      if (!toEmail) {
-        result = { name: c.name, status: 'error', error: 'No recipient email' };
-      } else {
-        // 4. Render subject + body.
-        const subject  = gbRenderStr(rawSubject, resolvedVars);
-        const htmlBody = gbRenderStr(rawBody,    resolvedVars)
-                       + (signature ? '<br><div>' + signature + '</div>' : '');
-
-        // 5. Send via Power Automate.
-        const send = await gbSendOnePA(paUrl, {
-          to:        toEmail,
-          subject,
-          htmlBody,
-          replyMode: template.replyMode || 'standalone',
-        });
-        if (send.ok) result = { name: c.name, status: 'sent', email: toEmail };
-        else         result = { name: c.name, status: 'error', error: send.error || 'PA send failed', email: toEmail };
-      }
-    } catch (e) {
-      result = { name: c.name, status: 'error', error: e?.message || 'failed' };
-    } finally {
-      // 6. Close the background tab no matter what happened.
-      if (tabId != null) {
-        try { chrome.tabs.remove(tabId); } catch {}
-      }
-    }
-
-    // 7. Broadcast progress.
-    gbBroadcastBlast({
-      runId,
-      action: 'emailBlastProgress',
-      current: i + 1,
-      total: contacts.length,
-      name: c.name,
-      result,
-    });
-
-    // 8. Random delay between sends (skip after the last one).
-    if (i < contacts.length - 1) {
-      const lo = Math.max(0, Number(delayMin) || 0);
-      const hi = Math.max(lo, Number(delayMax) || lo);
-      const ms = (lo + Math.random() * (hi - lo)) * 1000;
-      await gbSleep(ms);
-    }
-  }
-
-  gbBroadcastBlast({ runId, action: 'emailBlastDone' });
-}
-
-
-// ── Graph OAuth PKCE helpers ──────────────────────────────────────────────────
-
-function gbGenCodeVerifier() {
-  const arr = new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  return btoa(String.fromCharCode(...arr))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-async function gbCodeChallenge(verifier) {
-  const data   = new TextEncoder().encode(verifier);
-  const digest = await crypto.subtle.digest('SHA-256', data);
-  return btoa(String.fromCharCode(...new Uint8Array(digest)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-async function gbRefreshToken(refreshToken, clientId) {
-  if (!refreshToken || !clientId) return { ok: false, error: 'No refresh token or client ID' };
-  try {
-    const REDIRECT = `https://${chrome.runtime.id}.chromiumapp.org/`;
-    const resp = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id:     clientId,
-        grant_type:    'refresh_token',
-        refresh_token: refreshToken,
-        redirect_uri:  REDIRECT,
-        scope:         'https://graph.microsoft.com/Mail.ReadWrite offline_access',
-      }).toString(),
-    });
-    const data2 = await resp.json();
-    if (data2.error) throw new Error(data2.error_description || data2.error);
-    const record = {
-      accessToken:  data2.access_token,
-      refreshToken: data2.refresh_token || refreshToken,
-      expiresAt:    Date.now() + (data2.expires_in * 1000),
-    };
-    await new Promise(r => chrome.storage.local.set({ gbGraphToken: record }, r));
-    return { ok: true, token: data2.access_token };
-  } catch(e) {
-    return { ok: false, error: e.message };
-  }
 }

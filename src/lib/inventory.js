@@ -18,24 +18,13 @@
        then optional PO rows [_, prmDate, onOrdr, poNumber].
    ─────────────────────────────────────────────────────────────────────────── */
 
+import { sendBackgroundMessage } from './backgroundMessage.js';
+
 const INV_URL = 'https://office.gbcadmin.com/office/Dynamics/Inventory.aspx?sku=';
 const CACHE_KEY = 'gbInventoryCache';
 const COST_KEY = 'gbCostMap';                 // persistent sku→cost (no TTL; cost doesn't change)
 const TTL_MS = 6 * 60 * 60 * 1000;            // 6h
 const _costMap = new Map();                   // sku → per-unit cost (sync read for margin)
-
-function _sendBg(action, payload = {}) {
-  return new Promise((resolve, reject) => {
-    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) { reject(new Error('Not in an extension context')); return; }
-    try {
-      chrome.runtime.sendMessage({ action, ...payload }, (resp) => {
-        if (chrome.runtime.lastError) { reject(new Error(chrome.runtime.lastError.message)); return; }
-        if (!resp || !resp.ok) { reject(new Error((resp && resp.error) || (action + ' failed'))); return; }
-        resolve(resp);
-      });
-    } catch (e) { reject(e); }
-  });
-}
 
 const _int = (s) => { const n = parseInt(String(s).replace(/[^0-9-]/g, ''), 10); return Number.isFinite(n) ? n : 0; };
 const _money = (s) => { const m = /\$?\s*([\d,]+\.?\d*)/.exec(String(s) || ''); return m ? Number(m[1].replace(/,/g, '')) : null; };
@@ -162,7 +151,7 @@ export async function importCosts(skus, { onProgress, signal, force = false, chu
   for (let i = 0; i < todo.length; i += chunk) {
     if (signal && signal.aborted) break;
     const batch = todo.slice(i, i + chunk);
-    const r = await _sendBg('fetchCosts', { skus: batch });   // throws on auth/embed failure → caller toasts
+    const r = await sendBackgroundMessage('fetchCosts', { skus: batch });   // throws on auth/embed failure → caller toasts
     const costs = r.costs || {};
     for (const sku of batch) {
       const c = costs[sku];
@@ -208,7 +197,7 @@ export async function getInventory(sku, { force = false } = {}) {
   // Fetch in the page (golfballs.com) context — it carries the gbcadmin session
   // cookie. A background service-worker fetch is a 3rd-party context and gets
   // bounced to the auth error page (see background.js `fetchInventory`).
-  const r = await _sendBg('fetchInventory', { sku: key });
+  const r = await sendBackgroundMessage('fetchInventory', { sku: key });
   const parsed = parseInventoryHtml(r.text || '', key);
   if (r.notFound) parsed.notFound = true;   // SKU has no Dynamics record (404)
   map[key] = { ts: Date.now(), parsed };

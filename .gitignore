@@ -1,6 +1,24 @@
-src/.DS_Store
+# Installed dependencies are reproducible from package-lock.json.
+node_modules/
 
-# Browser HTTP-archive captures — large, never belong in the repo.
-# (A 355 MB www.golfballs.com.har once got swept in by the auto-push
-#  hook's `git add -A` and blocked every push.)
+# Operating-system and editor state.
+.DS_Store
+**/.DS_Store
+.claude/settings.local.json
+*.log
+
+# Local test and coverage output.
+coverage/
+.nyc_output/
+
+# Browser captures can contain authenticated request headers and customer data.
 *.har
+
+# Local credentials and signing material must never enter version control.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx

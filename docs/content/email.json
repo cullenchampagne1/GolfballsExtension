@@ -223,17 +223,16 @@
       "title": "How Email Sending Works",
       "icon": "send",
       "tiers": ["intermediate", "advanced"],
-      "keywords": ["power automate", "outlook", "mailto", "signature", "images", "graph", "draft", "transport", "send", "copy"],
-      "summary": "Three transports — Power Automate (silent send), Outlook fallback (pre-filled window + Copy), and Microsoft Graph (draft-only) — and exactly when each is used.",
+      "keywords": ["power automate", "outlook", "mailto", "signature", "images", "transport", "send", "copy"],
+      "summary": "The two email transports — Power Automate silent delivery and the pre-filled Outlook fallback — and exactly when each is used.",
       "feature": "email-templates",
-      "covers": ["graph-replies"],
+      "covers": [],
       "coversFlags": ["powerAutomateEnabled"],
       "body": {
         "intermediate": [
           { "type": "table", "headers": ["Transport", "When it's used", "What happens"], "rows": [
             ["Power Automate", "powerAutomateEnabled is ON and a flow URL is set", "Email sends silently through your flow. Signature auto-appended. Inline images delivered as proper attachments. Supports multiple From senders + reply-threading."],
-            ["Outlook (mailto)", "Power Automate is OFF — the default", "A pre-filled Outlook window opens: formatting stripped to plain text, no signature. The popup adds a Copy button that puts the formatted HTML on your clipboard so a paste into Outlook keeps the styling."],
-            ["Microsoft Graph", "Reply-with-template after signing in with Microsoft", "Creates a DRAFT in your mailbox. It never sends automatically — review and send from Outlook."]
+            ["Outlook (mailto)", "Power Automate is OFF — the default", "A pre-filled Outlook window opens: formatting stripped to plain text, no signature. The popup adds a Copy button that puts the formatted HTML on your clipboard so a paste into Outlook keeps the styling."]
           ] },
           { "type": "callout", "kind": "warning", "title": "The most common surprise", "text": "Power Automate ships OFF. If Send keeps opening Outlook windows, that's the fallback working as designed — enable Power Automate and paste your flow URL in Settings to get silent sends." }
         ],
@@ -242,7 +241,7 @@
           { "type": "p", "text": "On Power Automate sends, images in the body are converted to inline CID attachments (up to 3 MB each) so Outlook renders them reliably. Your flow must forward the attachments array to its Outlook send action — if recipients see broken images, that's the usual culprit." },
           { "type": "heading", "text": "Senders and reply mode" },
           { "type": "p", "text": "With Power Automate on, the template editor header shows a sender picker (specific accounts or Random per send), and non-case templates gain a 'Reply to most recent email' toggle that threads the send into the existing conversation instead of starting fresh." },
-          { "type": "callout", "kind": "warning", "text": "Graph mode is draft-only by design. Creating a draft does NOT send the email — check your Outlook Drafts folder." }
+          { "type": "callout", "kind": "warning", "text": "Email account host starts blank. Power Automate delivery is blocked until you configure your own sender local-part in Settings." }
         ]
       },
       "related": ["email-integrations", "ts-outlook-opened", "bulk-email-selection"]

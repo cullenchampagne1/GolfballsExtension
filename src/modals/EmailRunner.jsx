@@ -7,6 +7,7 @@ import { sendEmail } from '../lib/emailSender.js';
 import { useDevSetting } from '../lib/devSettings.js';
 import { renderTemplate } from '../lib/variableResolution.js';
 import { directContactVariables } from '../lib/contactImport.js';
+import { loadCredentials } from '../lib/credentials.js';
 
 /* ───────────────────────────────────────────────────────────────
    EmailRunner — draggable bottom-anchored panel that drives a bulk
@@ -30,10 +31,10 @@ import { directContactVariables } from '../lib/contactImport.js';
    Composite ids (`${tplId}::${varId}`) drive the selection so the
    dropdown's active highlight + check mark land on the chosen row.
 
-   Orchestration runs in background.js: we send the list of
-   { url, name, id } contacts plus the chosen template and delay
-   bounds. Progress events come back via chrome.runtime.onMessage
-   filtered by a per-run runId so a stray older run can't bleed in.
+   Orchestration stays in this component: it resolves each selected contact,
+   renders the chosen variation, and delegates only privileged network actions
+   to the service worker. Keeping run state local makes cancellation, retry,
+   dry-run behavior, and per-row progress use one implementation.
 ─────────────────────────────────────────────────────────────── */
 
 /* Width matches the popup-popover footprint so the template picker
@@ -254,9 +255,8 @@ export function EmailRunner({
   useMock = false,
 }) {
   const toast = useToast();
-  /* Per-rep mailbox name (devSettings 'email.localPart'). Glues
-     onto the per-template domain at send time to form the From:
-     address — e.g. 'cullen' + 'golfballs.com' → cullen@golfballs.com. */
+  /* Per-rep mailbox name (devSettings 'email.localPart'). It is required for
+     Power Automate delivery and is never defaulted to a specific employee. */
   const emailLocalPart = useDevSetting('email.localPart');
   const [templates, setTemplates] = useState([]);
   const [selectedId, setSelectedId] = useState('');
@@ -321,8 +321,8 @@ export function EmailRunner({
           && t.type !== 'case'
           && (!t.type || t.type === 'email' || t.type === 'account'));
         setTemplates(eligible);
-        setPaUrl(out?.featureFlags?.powerAutomateUrl || '');
         setPaEnabled(out?.featureFlags?.powerAutomateEnabled === true);
+        loadCredentials().then((credentials) => setPaUrl(credentials.powerAutomateUrl));
       });
     } catch {}
   }, [open, useMock]);
@@ -445,6 +445,10 @@ export function EmailRunner({
        opening one Outlook window per contact (mailto, stripped, no sig).
        Mock mode forces the PA path so the playground drives the animation. */
     const paReady = useMock ? true : (paEnabled && !!paUrl);
+    if (paReady && !useMock && !String(emailLocalPart || '').trim()) {
+      toast?.error?.('Configure Email account host in Settings before sending', { duration: 6000 });
+      return;
+    }
     /* Reset row UI on the parent list, mark every contact in the
        blast as queued so the row badges flip from new → queued
        immediately, then bump the run token and kick off the loop.
@@ -614,19 +618,19 @@ export function EmailRunner({
           /* 4. Send. `from` resolves per-row: senderRandomize=true makes
              pickFromAddress fire a fresh random pick per contact so a
              50-row blast varies between senders; the local part comes
-             from the rep's devSetting (→ cullen@golfballs.com). emailSender
+             from the rep's required dev setting. emailSender
              picks the transport — PA-ready → paAutomate (HTML + sig);
              PA-off → open one Outlook window for this contact (stripped,
              no sig). We inject dispatchBg so mock mode + cancel routing
              survive, and pass an explicit config so mock mode (paReady
              forced true above) stays on the PA animation path. */
-          const from = pickFromAddress(selectedTpl, emailLocalPart);
+          const from = pickFromAddress(selectedTpl, useMock ? 'demo' : emailLocalPart);
           /* Last-chance cancel guard before the actual send — catches a
              cancel that arrived DURING the variable-resolution await
              above, which would otherwise fire one more send. */
           if (runTokenRef.current !== token) return;
           const res = await sendEmail(
-            { from, to: toEmail, subject, htmlBody, replyMode, signature, config: { paReady, powerAutomateUrl: paUrl } },
+            { from, to: toEmail, subject, htmlBody, replyMode, signature, config: { paReady } },
             { dispatch: dispatchBg },
           );
           if (res.state === 'sent' || res.state === 'opened') {

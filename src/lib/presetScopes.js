@@ -1,11 +1,11 @@
 /* ───────────────────────────────────────────────────────────────
-   presetScopes.js — what a user preset can carry.
+   presetScopes.js — what a shared settings template can carry.
 
-   A preset is a bundle of one or more scopes the user explicitly
-   picks at save time. Each scope is a self-contained slice of the
+   A shared template is a bundle of scopes the user explicitly picks
+   at creation time. Each scope is a self-contained slice of the
    extension's `chrome.storage.local` so that:
-     • Save = read those keys verbatim, snapshot them in the preset.
-     • Load = write each scope back. Arrays merge by id (existing id
+     • Create = read those keys and send bounded JSON to RevStack.
+     • Import = write selected scopes back. Arrays merge by id (existing id
        wins, new id appended) so sharing emails ADDS to the recipient
        instead of overwriting their library. Plain objects just
        merge-overwrite key by key.
@@ -42,13 +42,6 @@ export const PRESET_SCOPES = [
       'customPages',
       'emailSignature',
     ],
-    merge: 'overwrite',
-  },
-  {
-    id:    'secret',
-    label: 'Hidden-setting config',
-    desc:  'Which toggles are hidden from the settings UI (lock a feature on/off and hide its switch)',
-    keys:  ['secret_settings'],
     merge: 'overwrite',
   },
   // Email templates, split by `type` so a shared preset can carry just the
@@ -93,7 +86,22 @@ export const PRESET_SCOPES = [
   },
 ];
 
+/** Stable, versioned envelope used when the RevStack sharing API is not
+ * reachable or this installation's server credential has been revoked. */
+export const SETTINGS_TEMPLATE_FILE_KIND = 'golfballs-settings-template';
+export const SETTINGS_TEMPLATE_FILE_VERSION = 1;
+export const SETTINGS_TEMPLATE_FILE_MAX_BYTES = 512 * 1024;
+
 const ALL_KEYS = [...new Set(PRESET_SCOPES.flatMap((s) => s.keys))];
+
+function withoutCredentials(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const safe = { ...value };
+  delete safe.powerAutomateUrl;
+  delete safe.directSendUrl;
+  delete safe.addressAutocompleteKey;
+  return safe;
+}
 
 /** Read a chunk of storage; returns an object keyed by storage key. */
 function readKeys(keys) {
@@ -112,7 +120,7 @@ function writeKeys(obj) {
 }
 
 /**
- * Build a preset object from the user's current extension state. Only
+ * Build a scoped object from the user's current extension state. Only
  * the scopes listed in `scopeIds` are included.
  */
 export async function gatherScopes(scopeIds) {
@@ -131,7 +139,7 @@ export async function gatherScopes(scopeIds) {
         filteredCount = subset.length;
         bag[k] = subset;
       } else {
-        bag[k] = data[k];   // unfiltered key (e.g. folders) — captured whole
+        bag[k] = k === 'featureFlags' ? withoutCredentials(data[k]) : data[k];
       }
     }
     // For a filtered scope, only include it when its primary array has items
@@ -144,7 +152,7 @@ export async function gatherScopes(scopeIds) {
 }
 
 /**
- * Apply a preset's `scopes` blob back onto storage. Arrays merge by id;
+ * Apply a shared template's `scopes` blob back onto storage. Arrays merge by id;
  * objects overwrite per-key. Scopes the preset doesn't carry are left
  * completely untouched.
  *
@@ -170,7 +178,9 @@ export async function applyScopes(scopes) {
       // (i.e. the preset's settings bag wins over the current one). We
       // do per-key writes so unrelated keys in storage stay intact.
       for (const k of def.keys) {
-        if (incoming[k] !== undefined) writes[k] = incoming[k];
+        if (incoming[k] !== undefined) {
+          writes[k] = k === 'featureFlags' ? withoutCredentials(incoming[k]) : incoming[k];
+        }
       }
       continue;
     }
@@ -242,6 +252,10 @@ export function normalizePreset(p) {
     delete scopes.notes;
   }
 
+  if (scopes.settings?.featureFlags) {
+    scopes.settings = { ...scopes.settings, featureFlags: withoutCredentials(scopes.settings.featureFlags) };
+  }
+
   return { ...p, scopes };
 }
 
@@ -250,4 +264,51 @@ export function presetScopeIds(p) {
   const n = normalizePreset(p);
   if (!n || !n.scopes) return [];
   return PRESET_SCOPES.filter((s) => n.scopes[s.id]).map((s) => s.id);
+}
+
+/** Create the JSON-serializable offline equivalent of a server share. */
+export function buildSettingsTemplateFile(name, scopes) {
+  const safeName = String(name || '').trim().slice(0, 120);
+  if (!safeName) throw new Error('A settings template name is required');
+  const normalized = normalizePreset({ scopes });
+  const allowed = {};
+  for (const def of PRESET_SCOPES) {
+    const bag = normalized?.scopes?.[def.id];
+    if (bag && typeof bag === 'object' && !Array.isArray(bag)) allowed[def.id] = bag;
+  }
+  if (!Object.keys(allowed).length) throw new Error('The settings template has no supported scopes');
+  return {
+    schemaVersion: SETTINGS_TEMPLATE_FILE_VERSION,
+    kind: SETTINGS_TEMPLATE_FILE_KIND,
+    name: safeName,
+    createdAt: new Date().toISOString(),
+    scopes: allowed,
+  };
+}
+
+/** Parse and bound an offline settings file before it reaches applyScopes(). */
+export function parseSettingsTemplateFile(text) {
+  const source = String(text || '');
+  if (new TextEncoder().encode(source).byteLength > SETTINGS_TEMPLATE_FILE_MAX_BYTES) {
+    throw new Error('Settings template files must be 512 KB or smaller');
+  }
+  let raw;
+  try { raw = JSON.parse(source); }
+  catch (error) { throw new Error(`Not valid JSON — ${error.message}`); }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('The settings template must be a JSON object');
+  }
+  if (raw.kind !== SETTINGS_TEMPLATE_FILE_KIND || raw.schemaVersion !== SETTINGS_TEMPLATE_FILE_VERSION) {
+    throw new Error('This is not a supported Golfballs settings template file');
+  }
+  const name = String(raw.name || '').trim().slice(0, 120);
+  if (!name) throw new Error('The settings template is missing its name');
+  const normalized = normalizePreset(raw);
+  const scopes = {};
+  for (const def of PRESET_SCOPES) {
+    const bag = normalized?.scopes?.[def.id];
+    if (bag && typeof bag === 'object' && !Array.isArray(bag)) scopes[def.id] = bag;
+  }
+  if (!Object.keys(scopes).length) throw new Error('The settings template has no supported scopes');
+  return { ...raw, name, scopes, transport: 'json' };
 }

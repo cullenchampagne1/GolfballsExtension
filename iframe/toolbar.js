@@ -1,18 +1,6 @@
 // toolbar.js — quick-note toolbar, calendar button, note buttons + observers
 // Depends on: note-sender.js, calendar-bridge.js
 
-/* Target origin for messages posted UP to the embedding CRM page — derived
-   from the actual parent (ancestorOrigins → referrer) instead of '*', so the
-   rep name / employee ID aren't broadcast to an arbitrary embedder. */
-const __gbToolbarParentOrigin = (() => {
-  try {
-    const a = window.location.ancestorOrigins;
-    if (a && a.length) return a[0];
-    if (document.referrer) return new URL(document.referrer).origin;
-  } catch { /* fall through */ }
-  return '*';
-})();
-
   // ── Sales rep detection: scans notes, broadcasts name to parent ──────────
   /**
    * Scans the notes section body text for a "was assigned to [name]" pattern
@@ -25,7 +13,7 @@ const __gbToolbarParentOrigin = (() => {
     if (m) {
       window.__gbRepFound = true;
       const name = m[1] + (m[2] ? ' ' + m[2].charAt(0) : '');
-      window.parent.postMessage({ action: 'GB_SALES_REP_FOUND', salesRep: name.trim() }, __gbToolbarParentOrigin);
+      window.__gbIframeBridge?.post('GB_SALES_REP_FOUND', { salesRep: name.trim() });
     }
   }
 
@@ -114,7 +102,7 @@ const __gbToolbarParentOrigin = (() => {
             transform: translateY(0) !important; /* Pull new text in */
             opacity: 1 !important;
         }
-        
+
         /* Specific tweak for Calendar Button */
         #__gb-cal-btn {
             padding: 6px 10px !important;
@@ -163,7 +151,7 @@ function __gbRenderQuickNotes() {
         if (parent) {
             parent.style.setProperty('display', 'flex', 'important');
             parent.style.setProperty('align-items', 'center', 'important');
-            parent.style.setProperty('width', '100%', 'important'); 
+            parent.style.setProperty('width', '100%', 'important');
         }
 
         // --- Calendar Button Refactor ---
@@ -191,10 +179,10 @@ function __gbRenderQuickNotes() {
             'gap: 8px',
             'align-items: center',
             'margin-right: 12px',
-            'margin-left: auto',  
+            'margin-left: auto',
             'vertical-align: middle',
             'flex-shrink: 0',
-            'order: 1'           
+            'order: 1'
         ].join(' !important; ') + ' !important;';
 
         // --- Notes Buttons Refactor ---
@@ -203,14 +191,15 @@ function __gbRenderQuickNotes() {
             btn.id      = '__gb-qn-' + note.id;
             btn.className = 'gb-modern-btn'; // Use new class
             btn.type    = 'button';
-            
+
             // Build the HTML structure for the slider
             btn.innerHTML = `
                 <span class="gb-btn-text-wrapper">
-                    <span class="gb-text-normal">${note.name}</span>
+                    <span class="gb-text-normal"></span>
                     <span class="gb-text-state"></span>
                 </span>
             `;
+            btn.querySelector('.gb-text-normal').textContent = String(note.name || 'Quick note');
 
             btn.addEventListener('mousedown', e => e.preventDefault());
             btn.addEventListener('click', e => {
@@ -240,21 +229,30 @@ function __gbRenderQuickNotes() {
       __gbBroadcastSalesRep();
   });
   __gbNotesObserver.observe(document.body, { childList: true, subtree: true });
-  
+
   __gbRenderQuickNotes();
-  __gbBroadcastSalesRep(); 
-  
+  __gbBroadcastSalesRep();
+
   // Bloodhound Fallback: Check every 1.5 seconds in case the API loads the notes late
   setInterval(__gbBroadcastSalesRep, 1500);
 
-  // Broadcast the logged-in employee's ID from the JWT so the main page can
-  // use it for case actions (e.g. Mark as Junk → ClosedBy field).
-  (function () {
+  // Ask the authenticated broker for the minimum identity field needed by the
+  // main page. The reusable session credential never leaves the MAIN-world
+  // broker or crosses the extension message channel.
+  (async function () {
     try {
-      const token = __gbGetAuthToken ? __gbGetAuthToken() : null;
-      if (!token) return;
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      const id = payload.adminUserID || payload.employeeID || payload.EmployeeID || payload.sub;
-      if (id) window.parent.postMessage({ action: 'GB_EMPLOYEE_ID', employeeId: String(id) }, __gbToolbarParentOrigin);
+      if (typeof __gbGetAuthenticatedIdentity !== 'function') return;
+      // The admin app may not make its first authenticated request until after
+      // this toolbar renders. Retry briefly rather than restoring a storage or
+      // cookie fallback solely to obtain the employee ID.
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        const identity = await __gbGetAuthenticatedIdentity();
+        const id = identity && identity.employeeId;
+        if (id) {
+          window.__gbIframeBridge?.post('GB_EMPLOYEE_ID', { employeeId: String(id) });
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 750));
+      }
     } catch (_) {}
   })();

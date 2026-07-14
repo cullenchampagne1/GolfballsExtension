@@ -22,7 +22,7 @@
           { "type": "table", "headers": ["Helper", "Does"], "rows": [
             ["h.dom(sel) / h.domAll(sel) / h.domText(sel)", "Query the live page: first element, all elements, or the first match's text"],
             ["h.fetchText(url) / h.fetchJson(url)", "Fetch a page or JSON through the background worker (CORS-safe, allow-listed hosts)"],
-            ["h.send(action, payload)", "Call any background action directly"],
+            ["h.fetchText(url)", "Read text from an allowlisted HTTPS resource"],
             ["h.catalogSearch(q, {limit}) / h.catalogFind(q)", "Search the gift catalog by name similarity — top matches, or the single best one"],
             ["h.fmt.currency / h.fmt.number / h.fmt.date", "Format values for the email ($1,234.00 · 1,234 · MM/DD/YYYY)"],
             ["h.parseNumber / h.parseDate / h.normalizePhone", "Extract a number, parse a date, format a phone as (###) ###-####"],
@@ -45,38 +45,6 @@
       "related": ["email-templates-popup", "campaign-conditions"]
     },
     {
-      "slug": "console-commands",
-      "title": "Console Commands",
-      "icon": "code",
-      "tiers": ["advanced"],
-      "keywords": ["__gbSecret", "__gbScan", "hide setting", "console", "admin commands"],
-      "summary": "Two admin command objects available in the Settings page console: __gbSecret (hidden settings) and __gbScan (recent-orders scan clock).",
-      "covers": [],
-      "body": {
-        "advanced": [
-          { "type": "p", "text": "Open DevTools on the Settings/editor page. Two helper objects are installed:" },
-          { "type": "heading", "text": "__gbSecret — hidden-setting manager" },
-          { "type": "table", "headers": ["Command", "Effect"], "rows": [
-            ["__gbSecret.hide('key', …)", "Hide setting(s) from the Settings UI — values keep working, the switch disappears"],
-            ["__gbSecret.show('key', …)", "Un-hide setting(s)"],
-            ["__gbSecret.list()", "List currently hidden keys"],
-            ["__gbSecret.clear()", "Show everything again"],
-            ["__gbSecret.hideDev()", "Hide the entire Developer Settings section AND reset dev values to defaults"],
-            ["__gbSecret.showDev()", "Bring the Developer Settings section back"],
-            ["__gbSecret.help()", "Print this reference"]
-          ] },
-          { "type": "heading", "text": "__gbScan — recent-orders scan" },
-          { "type": "table", "headers": ["Command", "Effect"], "rows": [
-            ["__gbScan.status()", "Show when the recent-orders scan last ran"],
-            ["__gbScan.reset()", "Clear the scan clock — the next scan covers the last 7 days"],
-            ["__gbScan.help()", "Print this reference"]
-          ] },
-          { "type": "callout", "kind": "warning", "text": "There is deliberately no UI for these. Hidden settings are how an admin locks a feature on or off for a teammate's profile — document what you hide, or future-you will file the bug." }
-        ]
-      },
-      "related": ["hidden-settings", "ts-settings-vanished"]
-    },
-    {
       "slug": "modal-playground",
       "title": "The Modal Playground",
       "icon": "bolt",
@@ -97,44 +65,42 @@
       "title": "Hidden Settings",
       "icon": "eye",
       "tiers": ["advanced"],
-      "keywords": ["secret", "hidden", "locked", "secret settings", "admin lock"],
-      "summary": "How admins lock a feature on/off and remove its switch from the Settings UI — and how to see what's hidden.",
+      "keywords": ["remote policy", "hidden", "locked", "admin disabled", "configuration"],
+      "summary": "How the authenticated server policy manages feature values and visibility.",
       "covers": [],
       "body": {
         "advanced": [
-          { "type": "p", "text": "A hidden setting keeps its value but loses its switch: the feature stays in whatever state the admin set, and the toggle no longer appears in Settings. It's a soft lock for keeping team configurations consistent." },
+          { "type": "p", "text": "The extension periodically loads the authenticated Golfballs configuration. Managed values are applied locally and hidden controls are removed from Settings; an unavailable or invalid response leaves the last valid policy in place." },
           { "type": "list", "items": [
-            "Hide/show is console-only by design: __gbSecret.hide('taskListEnabled') etc. — see Console Commands.",
-            "Hidden state travels in presets via the 'Hidden-setting config' scope, so an admin can distribute locks with the team preset.",
-            "Audit any profile with __gbSecret.list()."
+            "Edit golfballs-extension-configuration.yaml through the RevStack administrator config editor.",
+            "value is authoritative when managed is true; hidden controls whether the setting appears.",
+            "A signed-in RevStack dashboard administrator bypasses the remote policy and keeps local settings."
           ] }
         ]
       },
-      "related": ["console-commands", "presets", "feature-toggles"]
+      "related": ["presets", "feature-toggles"]
     },
     {
       "slug": "debug-storage",
       "title": "Debug Storage Keys",
       "icon": "history",
       "tiers": ["advanced"],
-      "keywords": ["storage", "debug", "gbVarsDebug", "inspect", "logs"],
-      "summary": "Where the extension keeps its state, and which keys hold debug snapshots when you're chasing a problem.",
+      "keywords": ["storage", "debug", "proposal", "inspect", "logs"],
+      "summary": "Where the extension keeps state and how to use the bounded, opt-in proposal diagnostic log.",
       "covers": [],
       "body": {
         "advanced": [
-          { "type": "p", "text": "All state lives in chrome.storage.local (inspect via the service-worker console: chrome.storage.local.get(null)). Useful keys when debugging:" },
+          { "type": "p", "text": "Persistent extension state lives primarily in chrome.storage.local. The CRM search index lives in worker-owned extension IndexedDB; only names/ranking metadata are plaintext and complete rows require the managed device key. Useful keys when debugging:" },
           { "type": "table", "headers": ["Key", "Holds"], "rows": [
-            ["gbVarsDebug", "The latest variable-resolution snapshot — what each {{variable}} resolved to and from where"],
-            ["gbBulkDebug", "Per-recipient logs from the last bulk email run"],
-            ["gbByUrlDebug", "URL-based debug logs"],
-            ["devSettings / featureFlags / secret_settings", "The three configuration maps"],
+            ["gbProposalDebugLog", "A bounded proposal request/response trace, present only while proposalDebug.enabled is on"],
+            ["devSettings / featureFlags / gbRemoteSettingsPolicy", "Local values plus the last validated administrator policy metadata"],
             ["gbGiftCatalogCache_v5 / gbProductConfigCache / gbInventoryCache / gbCostMap", "The data caches (catalog, product config, inventory, costs)"]
           ] },
-          { "type": "p", "text": "Contact search speed comes from an IndexedDB database (gb-crm-index) — visible under DevTools → Application → IndexedDB." },
-          { "type": "callout", "kind": "warning", "text": "Deleting cache keys is safe (they rebuild). Deleting templates, featureFlags, or devSettings is not — export a preset first if you're going to experiment." }
+          { "type": "p", "text": "Contact search speed comes from the encrypted gb-crm-index-secure IndexedDB database owned by the extension service worker. Missing/rotated policy clears stale records and requires a rebuild." },
+          { "type": "callout", "kind": "warning", "text": "Proposal diagnostics can contain customer data. Enable them only while reproducing a problem, disable them immediately afterward, and never paste credentials into an export. Cache keys are safe to delete; templates and settings are not." }
         ]
       },
-      "related": ["console-commands", "presets"]
+      "related": ["presets"]
     }
   ]
 }

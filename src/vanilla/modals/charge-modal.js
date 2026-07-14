@@ -22,89 +22,89 @@
         @keyframes __gbChSpin    { to{transform:rotate(360deg)} }
         @keyframes __gbChPop     { 0%{transform:scale(0.5);opacity:0} 60%{transform:scale(1.15)} 100%{transform:scale(1);opacity:1} }
 
-        .__gb-charge-overlay { 
-          position: fixed; inset: 0; z-index: 999990 !important; 
-          display: flex; align-items: center; justify-content: center; 
-          background: rgba(0,0,0,.6) !important; 
-          backdrop-filter: blur(8px) !important; -webkit-backdrop-filter: blur(8px) !important; 
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important; 
-          animation: __gbChFadeIn .16s ease !important; 
+        .__gb-charge-overlay {
+          position: fixed; inset: 0; z-index: 999990 !important;
+          display: flex; align-items: center; justify-content: center;
+          background: rgba(0,0,0,.6) !important;
+          backdrop-filter: blur(8px) !important; -webkit-backdrop-filter: blur(8px) !important;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+          animation: __gbChFadeIn .16s ease !important;
         }
-        
-        .__gb-charge-card { 
-          background: rgba(17,17,17,.85) !important; 
-          backdrop-filter: blur(16px) !important; -webkit-backdrop-filter: blur(16px) !important; 
-          border: 1px solid rgba(255,255,255,.08) !important; 
-          border-radius: 18px !important; 
-          width: min(520px, calc(100vw - 24px)) !important; 
-          display: flex; flex-direction: column; 
-          box-shadow: 0 24px 70px rgba(0,0,0,.9), inset 0 0 0 1px rgba(255,255,255,.03) !important; 
-          animation: __gbChSlideUp .3s cubic-bezier(.34,1.56,.64,1) !important; 
-          overflow: hidden !important; 
+
+        .__gb-charge-card {
+          background: rgba(17,17,17,.85) !important;
+          backdrop-filter: blur(16px) !important; -webkit-backdrop-filter: blur(16px) !important;
+          border: 1px solid rgba(255,255,255,.08) !important;
+          border-radius: 18px !important;
+          width: min(520px, calc(100vw - 24px)) !important;
+          display: flex; flex-direction: column;
+          box-shadow: 0 24px 70px rgba(0,0,0,.9), inset 0 0 0 1px rgba(255,255,255,.03) !important;
+          animation: __gbChSlideUp .3s cubic-bezier(.34,1.56,.64,1) !important;
+          overflow: hidden !important;
         }
-        
-        .__gb-charge-hdr { 
-          background: rgba(0,0,0,.4) !important; 
-          padding: 14px 20px !important; 
-          display: flex !important; align-items: center !important; 
-          border-bottom: 1px solid rgba(255,255,255,.06) !important; 
+
+        .__gb-charge-hdr {
+          background: rgba(0,0,0,.4) !important;
+          padding: 14px 20px !important;
+          display: flex !important; align-items: center !important;
+          border-bottom: 1px solid rgba(255,255,255,.06) !important;
           gap: 12px !important; flex-shrink: 0 !important;
         }
-        .gb-charge-hdr-icon { 
-          width: 32px !important; height: 32px !important; 
-          background: rgba(var(--gb-brand-label-rgb, 125,184,42), .15) !important; 
-          border-radius: 8px !important; 
-          display: flex !important; align-items: center !important; justify-content: center !important; 
+        .gb-charge-hdr-icon {
+          width: 32px !important; height: 32px !important;
+          background: rgba(var(--gb-brand-label-rgb, 125,184,42), .15) !important;
+          border-radius: 8px !important;
+          display: flex !important; align-items: center !important; justify-content: center !important;
           flex-shrink: 0 !important; color: var(--gb-brand-label, #7db82a) !important;
           border: 1px solid rgba(var(--gb-brand-label-rgb, 125,184,42), .3) !important;
         }
-        
-        .__gb-charge-body { 
-          padding: 22px !important; display: flex !important; flex-direction: column !important; 
-          gap: 18px !important; position: relative !important; 
+
+        .__gb-charge-body {
+          padding: 22px !important; display: flex !important; flex-direction: column !important;
+          gap: 18px !important; position: relative !important;
         }
-        
-        .__gb-charge-footer { 
-          padding: 14px 20px !important; background: rgba(0,0,0,.3) !important; 
-          border-top: 1px solid rgba(255,255,255,.06) !important; 
+
+        .__gb-charge-footer {
+          padding: 14px 20px !important; background: rgba(0,0,0,.3) !important;
+          border-top: 1px solid rgba(255,255,255,.06) !important;
           display: flex !important; justify-content: flex-end !important; gap: 12px !important; flex-shrink: 0 !important;
         }
 
         /* Buttons */
-        .gb-btn-primary { 
-          background: var(--gb-brand-dark, #5f7d18) !important; color: var(--gb-brand-text, #d8eeaa) !important; 
-          border: 1px solid rgba(var(--gb-brand-label-rgb, 125,184,42), .4) !important; 
-          padding: 8px 24px !important; border-radius: 6px !important; font-size: 12px !important; 
-          font-weight: 600 !important; cursor: pointer !important; transition: all 0.2s !important; 
+        .gb-btn-primary {
+          background: var(--gb-brand-dark, #5f7d18) !important; color: var(--gb-brand-text, #d8eeaa) !important;
+          border: 1px solid rgba(var(--gb-brand-label-rgb, 125,184,42), .4) !important;
+          padding: 8px 24px !important; border-radius: 6px !important; font-size: 12px !important;
+          font-weight: 600 !important; cursor: pointer !important; transition: all 0.2s !important;
           display: flex !important; align-items: center !important; justify-content: center !important; gap: 6px !important;
           font-family: inherit !important;
         }
-        .gb-btn-primary:hover:not(:disabled) { 
-          background: var(--gb-brand, #6e901d) !important; border-color: var(--gb-brand-label, #7db82a) !important; color: #fff !important; 
+        .gb-btn-primary:hover:not(:disabled) {
+          background: var(--gb-brand, #6e901d) !important; border-color: var(--gb-brand-label, #7db82a) !important; color: #fff !important;
         }
-        .gb-btn-primary:disabled { 
+        .gb-btn-primary:disabled {
           opacity: 0.5 !important; cursor: not-allowed !important; pointer-events: none !important;
         }
-        
-        .gb-btn-close { 
-          margin-left: auto !important; background: rgba(255,255,255,.05) !important; color: rgba(255,255,255,.8) !important; 
-          border: 1px solid rgba(255,255,255,.1) !important; border-radius: 7px !important; 
-          padding: 6px 12px !important; font-size: 11px !important; font-weight: 600 !important; 
+
+        .gb-btn-close {
+          margin-left: auto !important; background: rgba(255,255,255,.05) !important; color: rgba(255,255,255,.8) !important;
+          border: 1px solid rgba(255,255,255,.1) !important; border-radius: 7px !important;
+          padding: 6px 12px !important; font-size: 11px !important; font-weight: 600 !important;
           cursor: pointer !important; transition: all .15s !important; display: flex !important; align-items: center !important; gap: 6px !important;
         }
         .gb-btn-close:hover { background: rgba(255,255,255,.12) !important; color: #fff !important; }
 
         /* Inputs */
-        .gb-input { 
-          background: rgba(0,0,0,.3) !important; border: 1px solid rgba(255,255,255,.1) !important; 
-          color: #fff !important; padding: 10px 14px !important; border-radius: 8px !important; 
-          width: 100% !important; box-sizing: border-box !important; font-family: inherit !important; 
+        .gb-input {
+          background: rgba(0,0,0,.3) !important; border: 1px solid rgba(255,255,255,.1) !important;
+          color: #fff !important; padding: 10px 14px !important; border-radius: 8px !important;
+          width: 100% !important; box-sizing: border-box !important; font-family: inherit !important;
           font-size: 13px !important; font-weight: 500 !important; height: 40px !important; outline: none !important;
           transition: border-color .15s, box-shadow .15s !important; color-scheme: dark !important;
         }
-        .gb-input:focus { 
-          border-color: var(--gb-brand-label, #7db82a) !important; 
-          box-shadow: 0 0 0 2px rgba(var(--gb-brand-label-rgb, 125,184,42), .15) !important; 
+        .gb-input:focus {
+          border-color: var(--gb-brand-label, #7db82a) !important;
+          box-shadow: 0 0 0 2px rgba(var(--gb-brand-label-rgb, 125,184,42), .15) !important;
         }
         .gb-input:disabled { opacity: 0.5 !important; cursor: not-allowed !important; pointer-events: none !important; }
         .gb-input::placeholder { color: rgba(255,255,255,.3) !important; }
@@ -112,36 +112,36 @@
         /* Dropdowns */
         .gb-dropdown-wrap { position: relative; width: 100%; }
         .gb-dropdown-btn {
-          width: 100% !important; background: rgba(0,0,0,.3) !important; border: 1px solid rgba(255,255,255,.1) !important; 
-          border-radius: 8px !important; padding: 10px 32px 10px 14px !important; font-size: 13px !important; 
-          font-weight: 500 !important; color: #fff !important; cursor: pointer !important; text-align: left !important; 
+          width: 100% !important; background: rgba(0,0,0,.3) !important; border: 1px solid rgba(255,255,255,.1) !important;
+          border-radius: 8px !important; padding: 10px 32px 10px 14px !important; font-size: 13px !important;
+          font-weight: 500 !important; color: #fff !important; cursor: pointer !important; text-align: left !important;
           display: flex !important; align-items: center !important; position: relative !important;
           height: 40px !important; box-sizing: border-box !important; font-family: inherit !important; transition: all .15s !important;
         }
         .gb-dropdown-btn:hover { background: rgba(255,255,255,.05) !important; border-color: rgba(255,255,255,.2) !important; }
-        .gb-dropdown-btn.open { 
-          border-color: var(--gb-brand-label, #7db82a) !important; background: rgba(255,255,255,.05) !important; 
-          box-shadow: 0 0 0 2px rgba(var(--gb-brand-label-rgb, 125,184,42), .15) !important; 
+        .gb-dropdown-btn.open {
+          border-color: var(--gb-brand-label, #7db82a) !important; background: rgba(255,255,255,.05) !important;
+          box-shadow: 0 0 0 2px rgba(var(--gb-brand-label-rgb, 125,184,42), .15) !important;
         }
         .gb-dropdown-btn:disabled { opacity: 0.5 !important; cursor: not-allowed !important; pointer-events: none !important; }
-        
+
         .gb-btn-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .gb-dropdown-chevron { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,.4); pointer-events: none; transition: transform .22s cubic-bezier(.34,1.56,.64,1), color .2s; }
         .gb-dropdown-btn.open .gb-dropdown-chevron { transform: translateY(-50%) rotate(180deg); color: var(--gb-brand-label, #7db82a); }
 
         .gb-dropdown-menu {
           position: absolute; top: calc(100% + 4px); left: 0; right: 0;
-          background: var(--gb-surface-elevated, #171717) !important; border: 1px solid rgba(255,255,255,.1) !important; 
-          border-radius: 9px !important; z-index: 999995 !important; max-height: 180px !important; overflow-y: auto !important; 
+          background: var(--gb-surface-elevated, #171717) !important; border: 1px solid rgba(255,255,255,.1) !important;
+          border-radius: 9px !important; z-index: 999995 !important; max-height: 180px !important; overflow-y: auto !important;
           scrollbar-width: thin !important; scrollbar-color: rgba(255,255,255,.1) transparent !important;
-          opacity: 0; transform: translateY(-5px) scaleY(.95); transform-origin: top center; pointer-events: none; 
+          opacity: 0; transform: translateY(-5px) scaleY(.95); transform-origin: top center; pointer-events: none;
           transition: opacity .16s ease, transform .18s cubic-bezier(.34,1.4,.64,1);
           box-shadow: 0 10px 30px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.03) !important;
         }
         .gb-dropdown-menu.open { opacity: 1; transform: translateY(0) scaleY(1); pointer-events: auto; }
-        .gb-dropdown-option { 
-          padding: 10px 14px !important; font-size: 12.5px !important; cursor: pointer !important; 
-          color: var(--gb-text-secondary, #ccc) !important; transition: background .1s !important; 
+        .gb-dropdown-option {
+          padding: 10px 14px !important; font-size: 12.5px !important; cursor: pointer !important;
+          color: var(--gb-text-secondary, #ccc) !important; transition: background .1s !important;
           border-bottom: 1px solid rgba(255,255,255,.05) !important; display: flex !important; align-items: center !important; gap: 9px !important;
         }
         .gb-dropdown-option:last-child { border-bottom: none !important; }
@@ -154,10 +154,10 @@
         }
 
         /* Payment Method Rows */
-        .gb-method-row { 
-          display: flex !important; align-items: center !important; padding: 12px 14px !important; 
-          background: rgba(0,0,0,.2) !important; border: 1px solid rgba(255,255,255,.08) !important; 
-          border-radius: 12px !important; cursor: pointer !important; transition: all 0.2s !important; margin-bottom: 8px !important; 
+        .gb-method-row {
+          display: flex !important; align-items: center !important; padding: 12px 14px !important;
+          background: rgba(0,0,0,.2) !important; border: 1px solid rgba(255,255,255,.08) !important;
+          border-radius: 12px !important; cursor: pointer !important; transition: all 0.2s !important; margin-bottom: 8px !important;
         }
         .gb-method-row:last-child { margin-bottom: 0 !important; }
         .gb-method-row:hover { background: rgba(var(--gb-brand-label-rgb, 125,184,42), .1) !important; border-color: rgba(var(--gb-brand-label-rgb, 125,184,42), .4) !important; }
@@ -166,12 +166,12 @@
         .gb-method-row.failed { border-color: var(--gb-error, #c86060) !important; background: rgba(var(--gb-error-rgb, 200,96,96), 0.1) !important; pointer-events: none !important; }
 
         /* Method Row Badges */
-        .gb-badge { 
-          width: 24px !important; height: 24px !important; min-width: 24px !important; min-height: 24px !important; 
-          border-radius: 50% !important; background: rgba(255,255,255,.1) !important; color: rgba(255,255,255,.6) !important; 
-          display: flex !important; align-items: center !important; justify-content: center !important; 
-          margin-right: 12px !important; flex-shrink: 0 !important; transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important; 
-          position: relative !important; overflow: hidden !important; 
+        .gb-badge {
+          width: 24px !important; height: 24px !important; min-width: 24px !important; min-height: 24px !important;
+          border-radius: 50% !important; background: rgba(255,255,255,.1) !important; color: rgba(255,255,255,.6) !important;
+          display: flex !important; align-items: center !important; justify-content: center !important;
+          margin-right: 12px !important; flex-shrink: 0 !important; transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+          position: relative !important; overflow: hidden !important;
         }
         .gb-method-row.selected .gb-badge { background: var(--gb-brand-label, #7db82a) !important; color: #111 !important; transform: scale(1.08) !important; box-shadow: 0 0 10px rgba(var(--gb-brand-label-rgb, 125,184,42), 0.4) !important; }
         .gb-method-row.succeeded .gb-badge { background: var(--gb-success, #38b000) !important; color: #111 !important; transform: scale(1.08) !important; box-shadow: 0 0 10px rgba(var(--gb-success-rgb, 56,176,0), 0.4) !important; }
@@ -204,25 +204,25 @@
         .gb-method-status { display: flex; align-items: center; gap: 8px; justify-content: flex-end; font-size: 11.5px; color: rgba(255,255,255,.5); }
         .gb-msg { display: flex; align-items: center; gap: 6px; }
         .gb-status-icon { width: 16px; height: 16px; animation: __gbChPop .4s cubic-bezier(.34,1.56,.64,1) both; }
-        
-        .gb-spin-small { 
-          width: 16px; height: 16px; 
-          border: 2px solid rgba(var(--gb-brand-label-rgb, 125,184,42), .2) !important; 
-          border-top-color: var(--gb-brand-label, #7db82a) !important; 
-          border-radius: 50% !important; 
-          box-sizing: border-box !important; 
-          animation: __gbChSpin .8s linear infinite !important; 
-          display: none; 
+
+        .gb-spin-small {
+          width: 16px; height: 16px;
+          border: 2px solid rgba(var(--gb-brand-label-rgb, 125,184,42), .2) !important;
+          border-top-color: var(--gb-brand-label, #7db82a) !important;
+          border-radius: 50% !important;
+          box-sizing: border-box !important;
+          animation: __gbChSpin .8s linear infinite !important;
+          display: none;
         }
         .gb-spin-small.active { display: block; }
 
         /* Refund theme overrides */
-        .gb-btn-primary.refund { 
-          background: rgba(var(--gb-error-rgb, 200,96,96), .2) !important; 
-          color: #fdd !important; 
+        .gb-btn-primary.refund {
+          background: rgba(var(--gb-error-rgb, 200,96,96), .2) !important;
+          color: #fdd !important;
           border: 1px solid rgba(var(--gb-error-rgb, 200,96,96), 0.4) !important;
         }
-        .gb-btn-primary.refund:hover:not(:disabled) { 
+        .gb-btn-primary.refund:hover:not(:disabled) {
           background: rgba(var(--gb-error-rgb, 200,96,96), .3) !important; color: #fff !important; border-color: var(--gb-error, #c86060) !important;
         }
         .__gb-charge-hdr.refund-hdr { background: rgba(var(--gb-error-rgb, 200,96,96), .15) !important; }
@@ -250,14 +250,14 @@
             Close
           </button>
         </div>
-        
+
         <div class="__gb-charge-body">
           <div style="display: grid; grid-template-columns: 1fr 1.2fr 1.5fr; gap: 14px;">
             <div>
               <label style="font-size:9px; font-weight:800; color:rgba(255,255,255,.5); margin-bottom:6px; display:block; text-transform:uppercase; letter-spacing:0.8px;">Amount</label>
               <input type="number" id="__gb-f-amount" class="gb-input" step="0.01" placeholder="0.00" value="${ctx.diffAmount != null ? Math.abs(ctx.diffAmount).toFixed(2) : (ctx.pageTotal ? ctx.pageTotal.toFixed(2) : '')}">
             </div>
-            
+
             <div>
               <label style="font-size:9px; font-weight:800; color:rgba(255,255,255,.5); margin-bottom:6px; display:block; text-transform:uppercase; letter-spacing:0.8px;">Reason</label>
               <div class="gb-dropdown-wrap" id="__gb-reason-wrap">
@@ -292,7 +292,7 @@
             </div>
           </div>
         </div>
-        
+
         <div class="__gb-charge-footer">
           <button type="button" class="gb-btn-primary" id="__gb-btn-run" disabled>
             ${ctx.isRefund ? 'Refund' : 'Run Charge'}
@@ -301,7 +301,7 @@
         </div>
       </div>
     `;
-    
+
     document.body.appendChild(overlay);
 
     // 3. Attach Custom Dropdown Listeners
@@ -331,11 +331,11 @@
         opt.addEventListener('click', (e) => {
             e.stopPropagation();
             const val = opt.getAttribute('data-value');
-            
+
             // Update UI & Hidden Input
             labelElement.textContent = val;
             hiddenInput.value = val;
-            
+
             // Manage Selected State
             options.forEach(o => o.classList.remove('selected'));
             opt.classList.add('selected');
@@ -443,7 +443,7 @@
 
         row.onclick = () => {
           if (running || allDone || row.classList.contains('failed') || row.classList.contains('succeeded')) return;
-          
+
           const idx = selection.indexOf(m.billingID);
           if (idx === -1) selection.push(m.billingID);
           else selection.splice(idx, 1);
@@ -452,7 +452,7 @@
           methods.forEach(mm => {
             const r = list.querySelector(`[data-id="${mm.billingID}"]`);
             const pos = selection.indexOf(mm.billingID);
-            
+
             if (pos === -1) {
               r.querySelector('.badge-num').textContent = '';
               r.classList.remove('selected');
@@ -566,7 +566,7 @@
   async function saveAdjustment(billingId, amount, transactionId, responseMessage, responseCode) {
       const reasonText = $('__gb-f-reason').value.trim() || 'Order Edit';
       const noteText   = $('__gb-f-note').value.trim()   || 'Order Charge';
-      
+
       // Return the result so callers can check for SaveAdjustment errors
       return await apiCall(
         `${PRIVATE_API}/API/User/PaymentOrderCharge/SaveAdjustment`,
@@ -613,7 +613,7 @@
               billingId: billing.billingId, customerId: billing.customerId, address: billing.address,
               accountType: ACCOUNT_TYPE, contact: billing.contact, processor: PROCESSOR
             });
-          } catch (e) { console.warn(e); }
+          } catch (e) { /* Optional adjustment history stays unavailable. */ }
 
           setMethodState(billingId, 'loading', 'Getting token…');
           billing = await apiCall(
@@ -767,7 +767,7 @@
       btnRun.disabled = true;
       btnRun.textContent = 'Running…';
       btnClose.style.display = 'none'; // Hide close button while running to prevent mid-charge exit
-      
+
       $('__gb-f-amount').disabled = true;
       $('__gb-f-reason').disabled = true;
       $('__gb-f-note').disabled = true;
@@ -786,7 +786,7 @@
       btnRun.disabled = false;
       btnRun.textContent = 'Done';
       btnRun.onclick = () => __gbCloseModal(overlay);
-      btnClose.style.display = 'flex'; 
+      btnClose.style.display = 'flex';
     };
 
     // ── Apply diff-based theme ───────────────────────────────────────────────
@@ -805,5 +805,4 @@
     // Kickoff
     loadMethods();
   }
-
 

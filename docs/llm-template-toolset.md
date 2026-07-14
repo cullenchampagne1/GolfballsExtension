@@ -72,7 +72,7 @@ Valid paths are ONLY those in §5 (per template type).
 { "type": "code", "body": "return h.fmt.currency(ctx.stats.ytdRevenue);", "async": false }
 ```
 - Receives `ctx` (the page's extracted schema tree — same paths as §5), `vars` (previously-resolved variables by name), `h` (helpers, §8).
-- **Set `"async": true`** whenever the body uses `await` (h.fetchText / h.fetchJson / h.send / h.catalog.* / h.product / h.parse).
+- **Set `"async": true`** whenever the body uses `await` (h.fetchText / h.fetchJson / h.catalog.* / h.product / h.parse).
 - Must `return` a value. Max 8,192 chars. **Forbidden** (hard-blocked): `fetch(`, `chrome.`, `eval(`, `Function(`, `setTimeout(`, `setInterval(`, `import(`, `XMLHttpRequest`, `Worker`, `while(true)`.
 - Code variables may read earlier variables via `vars.other_name` — resolution is automatically dependency-ordered.
 
@@ -149,7 +149,7 @@ Body: `<p>{{shop_link}}</p>`. Same for a linked image — return `'<a href="..."
 ```json
 "caseVars": [
   { "name": "order_no", "kind": "regex", "config": "order\\s+#?(\\d+)", "source": "body", "group": 1, "smart": {} },
-  { "name": "agent",    "kind": "literal", "config": "Cullen", "smart": {} }
+  { "name": "agent",    "kind": "literal", "config": "Alex", "smart": {} }
 ]
 ```
 `kind`: `"code" | "regex" | "literal"` (config holds the body/pattern/value).
@@ -306,7 +306,6 @@ h.pick(arr, key) → values           h.sum(arr, key?) → number
 ```
 Async (require `"async": true`):
 ```
-await h.send(action, payload?)      // call a background-worker action
 await h.fetchText(url) → string     // GET; allowed hosts: golfballs.com, icustomize.com, gbcadmin.com,
 await h.fetchJson(url) → object     //   customizationapplications.com, hpgbrands.com, snugzusa.com, searchspring
 await h.catalog.search(q, {limit}) → [{id,title,brand,label,short,price,orig,breaks,minQty,url,logo}]

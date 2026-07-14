@@ -19,6 +19,7 @@
    ─────────────────────────────────────────────────────────────────────────── */
 
 import { addCustomItems } from './customItems.js';
+import { sendBackgroundMessage } from './backgroundMessage.js';
 
 const SS_URL = 'https://brmth7.a.searchspring.io/api/search/search.json';
 const SS_DOMAIN = 'https://hpgbrands.com/search/';
@@ -37,19 +38,6 @@ const num = (v) => { const n = Number(String(v == null ? '' : v).replace(/[^0-9.
 const round2 = (n) => Math.round(n * 100) / 100;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const stopped = (signal) => !!(signal && signal.aborted);
-
-function sendBg(action, payload = {}) {
-  return new Promise((resolve, reject) => {
-    if (typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.sendMessage) { reject(new Error('Not in an extension context')); return; }
-    try {
-      chrome.runtime.sendMessage({ action, ...payload }, (resp) => {
-        if (chrome.runtime.lastError) { reject(new Error(chrome.runtime.lastError.message)); return; }
-        if (!resp || !resp.ok) { reject(new Error((resp && resp.error) || (action + ' failed'))); return; }
-        resolve(resp);
-      });
-    } catch (e) { reject(e); }
-  });
-}
 
 function plainText(html) {
   if (!html) return '';
@@ -72,7 +60,7 @@ export async function fetchHpgList({ perPage = 100, onProgress, maxPages = 500, 
     if (stopped(signal)) break;
     const url = `${SS_URL}?siteId=brmth7&resultsFormat=native&resultsPerPage=${perPage}&page=${page}&domain=${encodeURIComponent(SS_DOMAIN)}`;
     let data;
-    try { const r = await sendBg('fetchRaw', { url }); data = JSON.parse(r.text || '{}'); }
+    try { const r = await sendBackgroundMessage('fetchRaw', { url }); data = JSON.parse(r.text || '{}'); }
     catch (e) { if (page === 1) throw e; break; }
     const results = Array.isArray(data.results) ? data.results : [];
     for (const r of results) {
@@ -151,7 +139,7 @@ export async function enrichHpg(list, { onProgress, signal } = {}) {
     if (stopped(signal)) break;
     const batch = list.slice(i, i + CONCURRENCY);
     const settled = await Promise.all(batch.map(async (base) => {
-      try { const r = await sendBg('hpgDetail', { url: base.link }); return toRecord(base, r.data); }
+      try { const r = await sendBackgroundMessage('hpgDetail', { url: base.link }); return toRecord(base, r.data); }
       catch { return toRecord(base, null); }   // keep the product with fallback pricing
     }));
     records.push(...settled);

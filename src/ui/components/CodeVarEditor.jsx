@@ -28,7 +28,7 @@ import { CODE_RECIPES } from '../../lib/codeRecipes.js';
      ctx    the page's extracted JSON ("json block")
      vars   variables resolved before this one
      h      helpers — h.fmt.*, h.coalesce, and the async server
-            helpers h.send / h.fetchText / h.fetchJson
+            read-only helpers h.fetchText / h.fetchJson / h.catalog
    and must return a value that's coerced to a string for the email.
 
    Surface:

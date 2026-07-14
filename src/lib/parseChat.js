@@ -6,8 +6,8 @@
    blob of lines like:
 
      (09:14:00) <b>Visitor</b> Hi, my order hasn't shipped…
-     (09:15:00) <b>Cullen</b> Happy to help!
-     (09:16:00) <b>Cullen</b> [Transferred to Ren]
+     (09:15:00) <b>Alex</b> Happy to help!
+     (09:16:00) <b>Alex</b> [Transferred to Ren]
      see https://snapengage.com/transcripts/4521098
 
    Each line resolves to { kind, name?, time?, body }:

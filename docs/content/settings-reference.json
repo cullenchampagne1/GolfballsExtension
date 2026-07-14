@@ -64,7 +64,7 @@
       "covers": [],
       "body": {
         "advanced": [
-          { "type": "p", "text": "Settings → Custom Pages lists CRM pages the extension can take over — dashboard, search, task list, case index, contact details, and more. Toggle a page on and navigating to it loads the extension's interface instead of the stock CRM page." },
+          { "type": "p", "text": "Settings → Custom Pages exposes one switch per registered page scope. Enabling CRM activates the extension interface on supported CRM takeovers; disabling it uses the stock CRM pages. Scope values and visibility can be centrally managed by the authenticated policy." },
           { "type": "callout", "kind": "warning", "text": "Page overrides change what teammates see if you share a preset that includes them. Keep overrides out of shared presets unless the whole team wants them." }
         ]
       },
@@ -105,30 +105,30 @@
       "body": {
         "advanced": [
           { "type": "p", "text": "Developer Settings holds the low-stakes knobs that don't deserve a top-level toggle. They're grouped below exactly as registered in the build you're running — defaults, ranges, and descriptions come straight from the code." },
-          { "type": "callout", "kind": "info", "text": "Admins can hide this entire section (and reset it to defaults) with the __gbSecret.hideDev() console command — see the Power User Corner." },
+          { "type": "callout", "kind": "info", "text": "The authenticated remote policy can manage these values or hide this section. RevStack dashboard administrators bypass that policy." },
           { "type": "generated", "source": "devSettings" }
         ]
       },
-      "related": ["hidden-settings", "console-commands", "modal-playground"]
+      "related": ["hidden-settings", "modal-playground"]
     },
     {
       "slug": "presets",
-      "title": "Presets: Import / Export / Share",
+      "title": "Shared Settings Templates",
       "icon": "save",
       "tiers": ["intermediate", "advanced"],
-      "keywords": ["preset", "export", "import", "team", "share config", "backup"],
-      "summary": "Bundle settings and templates into named presets, export them as JSON, and import a teammate's — with scope-by-scope control over what's included.",
+      "keywords": ["settings link", "template", "URL", "import", "team", "share config", "backup"],
+      "summary": "Bundle selected settings and templates under a name, receive a revocable URL, and let another enrolled installation preview and choose what to import.",
       "covers": [],
       "body": {
         "intermediate": [
-          { "type": "p", "text": "Settings → User Presets saves the current state under a name. When saving (or importing) you choose scopes — which slices of configuration the preset carries:" },
+          { "type": "p", "text": "Settings → Shared Settings Templates stores selected scopes on RevStack under a name and returns an opaque URL. A recipient pastes that URL into their extension, previews the name and included scopes, and chooses what to import:" },
           { "type": "generated", "source": "importExportScopes" },
-          { "type": "p", "text": "Export writes the preset to a JSON file; a teammate imports it from the same panel. This is how teams distribute a standard template library and house style." }
+          { "type": "p", "text": "No file is downloaded or uploaded. Both creator and recipient authenticate through their own extension installation. The creator can list and revoke links created by that installation." }
         ],
         "advanced": [
           { "type": "heading", "text": "Merge behavior" },
           { "type": "p", "text": "Settings scopes overwrite on import. Template scopes merge by id: a template with the same id replaces yours, a new id appends. Importing never deletes templates that only exist on your side." },
-          { "type": "callout", "kind": "warning", "text": "The 'Hidden-setting config' scope carries which toggles are locked and hidden. Importing it applies those locks to you — only include it deliberately." }
+          { "type": "callout", "kind": "warning", "text": "Treat the opaque URL as a capability and share it only with intended recipients. Credentials, installation auth, Watch List data, and administrator policy are never included; managed policy is reapplied independently after import." }
         ]
       },
       "related": ["initial-configuration", "hidden-settings", "ts-settings-vanished"]

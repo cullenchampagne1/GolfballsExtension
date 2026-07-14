@@ -1,187 +1,142 @@
-/* ───────────────────────────────────────────────────────────────
-   crmIndex.js — local IndexedDB store + in-memory substring search
-   over CRM contacts/accounts the user has chosen to "index".
+/**
+ * Client facade for the zero-setup encrypted CRM index.
+ *
+ * Persistent IndexedDB and all cryptography live in the service worker. This
+ * content-script module receives only decrypted result batches selected by a
+ * plaintext name search. The former page-origin `gb-crm-index` database is
+ * deleted on first use so legacy plaintext Solr rows cannot survive upgrade.
+ */
+import { sendBackgroundMessage } from './backgroundMessage.js';
 
-   Why IndexedDB over chrome.storage.local:
-     The store is keyed per-record (Solr `id`) with upsert semantics,
-     and we only need to deserialise the records we care about — not a
-     whole blob. IndexedDB also scales to tens of thousands of records
-     without choking the storage quota chrome.storage.local enforces
-     (~10 MB total per origin).
+const LEGACY_DB_NAME = 'gb-crm-index';
+const PUT_BATCH_SIZE = 200;
+let legacyClearPromise = null;
 
-   Why substring search over a fancier engine (BM25, Fuse.js, etc.):
-     Reps mostly look up by name / account / phone fragments. Substring
-     scoring with prefix + word-boundary boosts handles 95% of those
-     queries in <10ms on ~10k records, with no dependency added. The
-     score breakdown is documented at `scoreRecord` if we ever want to
-     swap in something heavier.
-
-   Record shape:
-     The store accepts the same flat Solr docs CRMSearch already
-     receives — { id, recordType_s, contactName_t, accountName_t,
-     emails_tps, phones_ss, salesRep_s, accountID_s, ... }. We add
-     `indexedAt` (epoch ms) on every upsert so future code can age
-     out stale entries.
-
-   Public API:
-     openIndexDb()       — connection (used internally)
-     indexRecords(rows)  — bulk upsert; returns { added }
-     getAllIndexed()     — read every indexed row
-     deleteIndexed(id)   — remove one
-     clearIndex()        — remove all
-     searchIndexed(rows, query, opts?) — substring rank, top N
-─────────────────────────────────────────────────────────────── */
-
-const DB_NAME = 'gb-crm-index';
-const STORE   = 'records';
-const VERSION = 1;
-
-let _dbPromise = null;
-
-/** Open (or reuse) the singleton IndexedDB connection. Promise-cached
- *  so concurrent callers share a single open request. */
-export function openIndexDb() {
-  if (_dbPromise) return _dbPromise;
-  _dbPromise = new Promise((resolve, reject) => {
-    if (typeof indexedDB === 'undefined') {
-      reject(new Error('IndexedDB not available in this context'));
-      return;
+function clearLegacyPageIndex() {
+  if (legacyClearPromise) return legacyClearPromise;
+  legacyClearPromise = new Promise((resolve) => {
+    if (typeof indexedDB === 'undefined') { resolve(); return; }
+    let settled = false;
+    const finish = () => { if (!settled) { settled = true; resolve(); } };
+    try {
+      const request = indexedDB.deleteDatabase(LEGACY_DB_NAME);
+      request.onsuccess = finish;
+      request.onerror = finish;
+      request.onblocked = () => setTimeout(finish, 1_000);
+      setTimeout(finish, 2_000);
+    } catch {
+      finish();
     }
-    const req = indexedDB.open(DB_NAME, VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        db.createObjectStore(STORE, { keyPath: 'id' });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror   = () => reject(req.error);
   });
-  return _dbPromise;
+  return legacyClearPromise;
 }
 
-/** Bulk upsert. Records without an `id` are skipped — the keyPath is
- *  the Solr doc id, and a missing id would collide silently. Each
- *  upsert refreshes `indexedAt` so callers can show "indexed 5m ago"
- *  later if we expose it. */
+async function employeeId() {
+  if (typeof window !== 'undefined' && /^\d{1,12}$/.test(String(window.__gbEmployeeId || ''))) {
+    return String(window.__gbEmployeeId);
+  }
+  const stored = await new Promise((resolve) => {
+    try { chrome.storage.local.get('gbEmployeeId', (value) => resolve(value || {})); }
+    catch { resolve({}); }
+  });
+  const id = String(stored.gbEmployeeId || '');
+  if (!/^\d{1,12}$/.test(id)) throw new Error('Reload an authenticated order page before using the secure CRM index');
+  return id;
+}
+
+/** Encrypt and upsert full CRM rows in bounded worker messages. */
 export async function indexRecords(records) {
+  await clearLegacyPageIndex();
   if (!Array.isArray(records) || records.length === 0) return { added: 0 };
-  const db = await openIndexDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    const store = tx.objectStore(STORE);
-    let added = 0;
-    for (const r of records) {
-      if (!r?.id) continue;
-      // Drop transient flags (e.g. _forceExpanded) that might have been
-      // attached upstream — only persist the doc fields the consumer
-      // gave us, plus our timestamp.
-      const clean = { ...r, indexedAt: Date.now() };
-      store.put(clean);
-      added++;
-    }
-    tx.oncomplete = () => resolve({ added });
-    tx.onerror    = () => reject(tx.error);
-  });
+  const owner = await employeeId();
+  let added = 0;
+  for (let offset = 0; offset < records.length; offset += PUT_BATCH_SIZE) {
+    const response = await sendBackgroundMessage('crmIndexPut', {
+      employeeId: owner,
+      records: records.slice(offset, offset + PUT_BATCH_SIZE),
+    });
+    added += Number(response.added) || 0;
+  }
+  return { added };
 }
 
-export async function getAllIndexed() {
-  const db = await openIndexDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readonly');
-    const req = tx.objectStore(STORE).getAll();
-    req.onsuccess = () => resolve(req.result || []);
-    req.onerror   = () => reject(req.error);
+/** Rank plaintext names in the worker and decrypt only the requested top rows. */
+export async function queryIndexed(query = '', { limit = 100 } = {}) {
+  await clearLegacyPageIndex();
+  const response = await sendBackgroundMessage('crmIndexSearch', {
+    employeeId: await employeeId(),
+    query: String(query || '').slice(0, 500),
+    limit: Math.max(1, Math.min(200, Number(limit) || 100)),
   });
+  return {
+    rows: Array.isArray(response.rows) ? response.rows : [],
+    total: Number(response.total) || 0,
+    matched: Number(response.matched) || 0,
+    cleared: Number(response.cleared) || 0,
+  };
+}
+
+/** Compatibility helper: returns the most recently indexed top rows only. */
+export async function getAllIndexed() {
+  return (await queryIndexed('', { limit: 200 })).rows;
 }
 
 export async function deleteIndexed(id) {
-  const db = await openIndexDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).delete(id);
-    tx.oncomplete = () => resolve();
-    tx.onerror    = () => reject(tx.error);
-  });
+  await clearLegacyPageIndex();
+  await sendBackgroundMessage('crmIndexDelete', { employeeId: await employeeId(), id: String(id || '') });
 }
 
 export async function clearIndex() {
-  const db = await openIndexDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    tx.objectStore(STORE).clear();
-    tx.oncomplete = () => resolve();
-    tx.onerror    = () => reject(tx.error);
-  });
+  await clearLegacyPageIndex();
+  await sendBackgroundMessage('crmIndexClear');
 }
 
-/* ── Search ──────────────────────────────────────────────────
-   Each candidate record builds a lazy `_search` haystack on first
-   access (joined lowercase representation of every searchable
-   field). The haystack is cached on the record so successive
-   queries don't re-stringify. */
-
+/* In-memory search remains for spreadsheet imports and mock data. Persisted
+   secure-index searches use queryIndexed() so only the visible top result batch
+   is ever decrypted into the content script. */
 const SEARCHABLE_FIELDS = [
   'contactName_t', 'accountName_t', 'accountID_s', 'salesRep_s',
   'salesRepID_s', 'role_s', 'recordType_s', 'id',
 ];
 const SEARCHABLE_ARRAY_FIELDS = ['emails_tps', 'phones_ss'];
 
-function buildHaystack(r) {
+function buildHaystack(record) {
   const parts = [];
-  for (const f of SEARCHABLE_FIELDS) {
-    const v = r[f];
-    if (v != null && v !== '') parts.push(String(v));
+  for (const field of SEARCHABLE_FIELDS) {
+    const value = record[field];
+    if (value != null && value !== '') parts.push(String(value));
   }
-  for (const f of SEARCHABLE_ARRAY_FIELDS) {
-    const arr = r[f];
-    if (Array.isArray(arr)) {
-      for (const x of arr) if (x) parts.push(String(x));
-    }
+  for (const field of SEARCHABLE_ARRAY_FIELDS) {
+    const values = record[field];
+    if (Array.isArray(values)) for (const value of values) if (value) parts.push(String(value));
   }
   return parts.join(' ').toLowerCase();
 }
 
-/** Score one record against a query already split into lowercase
- *  tokens. ALL tokens must appear somewhere in the haystack (AND
- *  semantics) — partial matches don't count. Per-token scoring:
- *
- *    prefix-of-haystack hit:   +length × 2 + 5
- *    word-boundary hit:        +length × 2 + 3
- *    interior substring hit:   +length × 2
- *
- *  Returns -1 when not all tokens match. */
-function scoreRecord(hay, tokens) {
+function scoreRecord(haystack, tokens) {
   let score = 0;
-  for (const t of tokens) {
-    const idx = hay.indexOf(t);
-    if (idx < 0) return -1;
-    score += t.length * 2;
-    if (idx === 0) score += 5;
-    else if (hay[idx - 1] === ' ') score += 3;
+  for (const token of tokens) {
+    const index = haystack.indexOf(token);
+    if (index < 0) return -1;
+    score += token.length * 2;
+    if (index === 0) score += 5;
+    else if (haystack[index - 1] === ' ') score += 3;
   }
   return score;
 }
 
 export function searchIndexed(records, query, { limit = 100 } = {}) {
   if (!Array.isArray(records) || records.length === 0) return [];
-  const q = (query || '').toLowerCase().trim();
-  if (!q) {
-    // No query — return all (capped). Newer records come first so the
-    // freshly-indexed entries are most visible.
-    return records
-      .slice()
-      .sort((a, b) => (b.indexedAt || 0) - (a.indexedAt || 0))
-      .slice(0, limit);
+  const normalized = String(query || '').toLowerCase().trim();
+  if (!normalized) {
+    return records.slice().sort((a, b) => (b.indexedAt || 0) - (a.indexedAt || 0)).slice(0, limit);
   }
-  const tokens = q.split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return records.slice(0, limit);
+  const tokens = normalized.split(/\s+/).filter(Boolean);
   const scored = [];
-  for (const r of records) {
-    if (!r._search) r._search = buildHaystack(r);
-    const score = scoreRecord(r._search, tokens);
-    if (score >= 0) scored.push({ r, score });
+  for (const record of records) {
+    const score = scoreRecord(buildHaystack(record), tokens);
+    if (score >= 0) scored.push({ record, score });
   }
   scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit).map((s) => s.r);
+  return scored.slice(0, limit).map((entry) => entry.record);
 }

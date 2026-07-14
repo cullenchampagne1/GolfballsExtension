@@ -153,6 +153,19 @@ export function qtDiffDays(d) {
   return Math.round((d - t) / 86400000);
 }
 
+/**
+ * Convert a CRM-style absolute date into the non-negative relative day count
+ * consumed by task templates. Invalid values return `null`; extreme future
+ * dates are capped to ten years so they cannot create unbounded schedules.
+ */
+export function daysOutFromCrmDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(0, 0, 0, 0);
+  return Math.min(3_650, Math.max(0, qtDiffDays(date)));
+}
+
 /** Canonical due-value → { daysOut, crmDate, human, isToday, isPast, kind }.
  *  `due` is { kind:'relative', days } or { kind:'specific', date }. */
 export function qtResolveDue(due) {
@@ -182,7 +195,9 @@ export function buildCustomTaskTemplate({
     subject: (subject || '').trim(),
     body: (body || '').trim(),
     priority: parseInt(priority, 10) || DEFAULT_PRIORITY,
-    daysOut: daysOut == null || daysOut === '' ? null : (parseInt(daysOut, 10) >= 0 ? parseInt(daysOut, 10) : null),
+    daysOut: daysOut == null || daysOut === ''
+      ? null
+      : Math.min(3_650, Math.max(0, parseInt(daysOut, 10) || 0)),
     categoryId: parseInt(categoryId, 10) || 0,
   };
 }

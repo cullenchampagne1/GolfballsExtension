@@ -44,7 +44,7 @@
     { key: 'numberDisplay.enabled', label: 'Animated number displays', desc: 'Counts up to the value over time. Turn off for instant snap.', type: 'bool', default: true },
     { key: 'popup.ignorePageContext', label: 'Popup: ignore page context', desc: 'Show all order + account templates in the popup regardless of the current page.', type: 'bool', default: false },
     { key: 'marginCalc.draggable', label: 'Margin Calculator: draggable mode', desc: 'When on, the calculator is a draggable tool window with a click-through backdrop.', type: 'bool', default: true },
-    { key: 'email.localPart', label: 'Email account host', desc: 'Local part of the sender address (before @). e.g. "cullen" → cullen@golfballs.com.', type: 'string', default: 'cullen' },
+    { key: 'email.localPart', label: 'Email account host', desc: 'Required local part of the sender address (before @), for example "alex".', type: 'string', default: '' },
     { key: 'golfballViewer.ballScale', label: 'Golfball viewer: default ball scale', desc: 'Initial scale of the ball when 3D opens (1 = native size).', type: 'number', default: 1 },
   ];
 

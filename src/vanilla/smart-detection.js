@@ -40,15 +40,11 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
   }
 
   let __gbBroadcastedSalesRep = '';
-  /* Only trust the sales-rep broadcast from our own origin or the
-     admin.icustomize.com toolbar iframe — otherwise any frame on the
-     page could spoof the rep name attached to outgoing notes/emails. */
-  const GB_TRUSTED_ORIGIN_RE = /^https?:\/\/([a-z0-9-]+\.)*golfballs\.com$/i;
-  window.addEventListener('message', (event) => {
-      const o = event.origin;
-      if (o !== window.location.origin && o !== 'https://admin.icustomize.com' && !GB_TRUSTED_ORIGIN_RE.test(o)) return;
-      if (event.data && event.data.action === 'GB_SALES_REP_FOUND' && typeof event.data.salesRep === 'string') {
-          __gbBroadcastedSalesRep = event.data.salesRep;
+  /* The iframe routes through chrome.runtime, which page JavaScript cannot
+     invoke, rather than the spoofable DOM postMessage channel. */
+  chrome.runtime.onMessage.addListener((message) => {
+      if (message?.action === 'GB_SALES_REP_FOUND' && typeof message.salesRep === 'string') {
+          __gbBroadcastedSalesRep = message.salesRep.slice(0, 100);
       }
   });
 
@@ -57,7 +53,7 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
     for (let i = 0; i < 3; i++) {
       if (!row) break;
       const anchor = row.querySelector('a.nodes') || row.querySelector('a[href*=".htm"]');
-      if (anchor && anchor.href) return anchor.href.split('?')[0]; 
+      if (anchor && anchor.href) return anchor.href.split('?')[0];
       row = row.previousElementSibling;
     }
     return '';
@@ -172,7 +168,7 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
         if (isNaN(amount)) continue;
         rows.push({ trans: text(cells[0]), note: text(cells[1]), dateTime: text(cells[2]), cardHolder: text(cells[3]), type: text(cells[4]), last4: text(cells[5]), amount });
       }
-      break; 
+      break;
     }
     return rows;
   }
@@ -191,14 +187,14 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
   function getOOSItemNames(doc = document) {
     const names = new Set();
     const candidates = doc.querySelectorAll('span, td, div, p');
-    
+
     for (const el of candidates) {
       const raw = (el.innerText || el.textContent || '');
       if (!/\boos\b/i.test(raw)) continue;
-      
+
       const row = el.closest('tr');
       if (!row) continue;
-      
+
       let searchEl = row;
       for (let attempt = 0; attempt < 3; attempt++) {
         if (!searchEl) break;
@@ -206,7 +202,7 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
         if (a) {
           const itemName = (a.innerText || a.textContent || '').trim();
           if (itemName) names.add(itemName);
-          break; 
+          break;
         }
         searchEl = searchEl.nextElementSibling;
       }
@@ -239,13 +235,13 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
     if (!str1 || !str2) return 0;
     const s1 = str1.toLowerCase().replace(/[^a-z0-9]/g, '');
     const s2 = str2.toLowerCase().replace(/[^a-z0-9]/g, '');
-    
+
     if (s1 === s2) return 1;
     if (s1.length < 2 || s2.length < 2) return 0;
 
     let bigrams1 = new Set();
     for (let i = 0; i < s1.length - 1; i++) bigrams1.add(s1.substring(i, i + 2));
-    
+
     let bigrams2 = new Set();
     for (let i = 0; i < s2.length - 1; i++) bigrams2.add(s2.substring(i, i + 2));
 
@@ -259,7 +255,7 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
   function buildTargetProfile(oosName, catalogProducts) {
     const profile = { name: oosName, price: null, decorations: [] };
     const exactMatch = catalogProducts.find(p => p.title_s && p.title_s.toLowerCase() === oosName.toLowerCase());
-    
+
     if (exactMatch) {
       profile.price = exactMatch.price_d;
       profile.decorations = exactMatch.modificationName_ss || [];
@@ -282,7 +278,7 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
 
     if (oosProfile.price && candidate.price_d) {
       const priceDiff = Math.abs(oosProfile.price - candidate.price_d);
-      const priceRatio = Math.max(0, 1 - (priceDiff / 15)); 
+      const priceRatio = Math.max(0, 1 - (priceDiff / 15));
       score += (priceRatio * 30);
     }
 
@@ -292,7 +288,7 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
       const decRatio = matchingDecs.length / oosProfile.decorations.length;
       score += (decRatio * 20);
     } else if (oosProfile.decorations.length === 0) {
-      if (!candidate.modificationName_ss || candidate.modificationName_ss.includes('None')) score += 10; 
+      if (!candidate.modificationName_ss || candidate.modificationName_ss.includes('None')) score += 10;
     }
     return score;
   }
@@ -307,12 +303,12 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
   }
 
   async function getRecommendedReplacement(doc = document) {
-    const rawOOS = getOOSItemNames(doc); 
+    const rawOOS = getOOSItemNames(doc);
     const oosNames = rawOOS.split('\n').filter(Boolean);
     if (!oosNames.length) return '';
 
     const results   = [];
-    const seenSlugs = {}; 
+    const seenSlugs = {};
 
     for (const oosName of oosNames) {
       const slug = detectBrandSlug(oosName);
@@ -483,7 +479,7 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
     };
 
     const raw = {
-      ...pageVars, 
+      ...pageVars,
       orderCount_i:        findStat('Order Count'),
       lastOrderDate_dt:    findStat('Last Order Date'),
       priorYearRevenue_f:  findStat('Prior Year Revenue'),
@@ -516,7 +512,7 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
 
       if (op === 'exists')     { if (!rawVal) return false; continue; }
       if (op === 'not_exists') { if ( rawVal) return false; continue; }
-      if (rawVal == null)      return false; 
+      if (rawVal == null)      return false;
 
       if (field.endsWith('_dt')) {
         const d = parseDate(rawVal);

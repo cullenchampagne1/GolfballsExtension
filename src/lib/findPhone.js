@@ -126,7 +126,7 @@ export function extractPhonesFromOrderHtml(html) {
 ──────────────────────────────────────────────────────────── */
 export async function findPhone(deps) {
   const { fetchOrderLinks, fetchOrderPage, saveContact, toast, contactName = 'Contact' } = deps || {};
-  if (!toast) { console.warn('findPhone: toast surface required'); return; }
+  if (!toast) return;
   if (!fetchOrderLinks || !fetchOrderPage || !saveContact) {
     toast.error('Find phone — wiring missing');
     return;
@@ -155,10 +155,7 @@ export async function findPhone(deps) {
         seen.add(c.phone);
         candidates.push({ ...c, orderUrl: url || links[i] });
       }
-    } catch (err) {
-      // One order failing isn't fatal — keep scanning the rest.
-      console.warn('[findPhone] order fetch failed:', err?.message || err);
-    }
+    } catch (err) { /* One order failing isn't fatal; keep scanning. */ }
   }
 
   // Dismiss the scanning pill regardless of outcome.

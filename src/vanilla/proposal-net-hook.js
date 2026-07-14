@@ -10,7 +10,7 @@
   if (window.__gbProposalNetHook) return;
   window.__gbProposalNetHook = true;
 
-  var CAP = 1200000;
+  var CAP = 100000;
   function cap(s) { if (s == null) return null; s = String(s); return s.length > CAP ? s.slice(0, CAP) + '\n…[truncated]' : s; }
 
   function classify(url, body) {
@@ -43,7 +43,7 @@
           reqBody: cap(reqBody), status: status || 0, ok: !!ok,
           respBody: cap(respBody), error: error ? String(error) : null
         }
-      }, '*');
+      }, window.location.origin);
     } catch (e) { /* */ }
   }
 

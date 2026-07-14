@@ -209,14 +209,14 @@ export function deprecatedVarNames(template) {
  * @param {object} [opts]
  * @param {boolean} [opts.dryRun=true]  when true, returns the plans + logs but
  *                                      does NOT signal a write (result mirrors input)
- * @param {Function} [opts.log]         sink for the dry-run report (default console)
+ * @param {Function} [opts.log]         optional caller-owned report sink
  * @returns {{ plans, migrated, changed }}  `migrated` is the rewritten array;
  *          `changed` is true if anything would change. Caller persists `migrated`
  *          only when dryRun is false.
  */
 export function migrateTemplates(templates, opts = {}) {
   const dryRun = opts.dryRun !== false;
-  const log = opts.log || ((...a) => console.log(...a)); // eslint-disable-line no-console
+  const log = typeof opts.log === 'function' ? opts.log : () => {};
   const list = Array.isArray(templates) ? templates : [];
 
   const plans = [];
