@@ -563,7 +563,7 @@ const OD_CALLOUTS = [
   { n: 3, target: 'footer', title: 'Update Dates', text: 'Hands both dates to the multi-step save chain; disabled until both are picked.' },
 ];
 const OD_STEPS = [
-  { target: 'header', caption: 'On an order page the notes toolbar has a calendar button — it opens the Order Date Manager for that order.', hold: 2400 },
+  { target: 'header', caption: 'On an order page, Manage order dates in the Actions Shelf opens the Order Date Manager for that order.', hold: 2400 },
   { target: 'approval', caption: 'Pick the approval date on the left calendar. Today is dotted; the chosen day glows and the readout fills in.', run: (api) => api.pickApproval(4), hold: 2800 },
   { target: 'commitment', caption: 'Then the commitment date on the right — set it before approval and a warning flags it.', run: (api) => api.pickCommitment(9), hold: 2800 },
   { target: 'footer', caption: 'Update Dates runs the save. It lights up only once both dates are picked.', hold: 2600 },
@@ -586,7 +586,7 @@ export function CalendarPage() {
       <h1 className="title">Order Dates</h1>
       <p className="lede">
         Approval and commitment dates without the form maze. On an order page the notes-area toolbar
-        gets a calendar button — it opens the Order Date Manager: two mini-calendars, approval on the
+        gets a smart action — it opens the Order Date Manager: two mini-calendars, approval on the
         left, commitment on the right. Watch it work below, then read each piece beside its live control.
       </p>
 
@@ -613,9 +613,9 @@ export function CalendarPage() {
         <p>If a step fails (usually an expired admin session) <strong>the toast names the failing step</strong> and the chain stops — nothing half-saves silently. Re-open the calendar and run it again; the chain restarts from the top and is safe to repeat. Repeated failure at step one means your session expired — reload the order page.</p>
       </TourBox>
 
-      <h2 className="sec">The notes toolbar around it</h2>
+      <h2 className="sec">The order actions around it</h2>
       <ul>
-        <li><strong>Quick note</strong> — a one-click save button for order notes, with your note templates a click away (a note template can also auto-shift dates via its “push dates forward” setting).</li>
+        <li><strong>Quick Order Note</strong> — a keyboard-first picker and custom composer for saved order-note templates. <strong>Apply last note</strong> repeats the last saved template you used.</li>
         <li><strong>Auto Push</strong> — the Settings toggle that lets date and note updates push to the order automatically as part of the save chain.</li>
       </ul>
     </div>

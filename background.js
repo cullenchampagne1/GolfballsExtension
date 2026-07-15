@@ -1,8 +1,10 @@
 // background.js
-importScripts('security-policy.js', 'installation-auth.js', 'settings-registry.js', 'remote-settings-policy.js', 'crm-index-store.js', 'defaults.js');
+importScripts('security-policy.js', 'calendar-form-state.js', 'installation-auth.js', 'settings-registry.js', 'remote-settings-policy.js', 'crm-index-store.js', 'defaults.js');
 
 const GB_SECURITY = globalThis.GBSecurity;
 if (!GB_SECURITY) throw new Error('Security policy failed to initialize');
+const GB_CALENDAR_FORM = globalThis.GBCalendarForm;
+if (!GB_CALENDAR_FORM) throw new Error('Calendar form-state helper failed to initialize');
 
 /**
  * Read a response without allowing an absent or dishonest Content-Length to
@@ -738,16 +740,14 @@ function gbValidateEmailPayload(payload) {
 
 function gbValidateCalendarState(msg, includeEvent = false) {
   if (!GB_SECURITY.isCalendarUrl(msg && msg.url)) return 'Blocked calendar URL';
-  const fields = ['viewState', 'viewStateGen', 'eventValidation'];
-  for (const field of fields) {
-    const value = msg && msg[field];
-    if (typeof value !== 'string' || value.length > 5_000_000) return `Invalid ${field}`;
-  }
+  const fields = GB_CALENDAR_FORM.normalizeFields(msg && msg.fields)
+    || GB_CALENDAR_FORM.fromLegacy(msg);
+  if (!fields) return 'Invalid calendar form state';
   if (includeEvent) {
     if (!['ctl00$ApprovalDate', 'ctl00$DeviveryCommitment'].includes(msg.eventTarget)) return 'Blocked calendar event';
     if (!/^-?\d{1,15}$/.test(String(msg.eventArgument || ''))) return 'Invalid calendar date offset';
   }
-  return null;
+  return { fields };
 }
 
 /* FIREFOX dynamic browser theme — content scripts can't call the theme API,
@@ -910,6 +910,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       'GB_PUSH_DATES_AND_NOTE', 'GB_CALENDAR_STEP', 'GB_CALENDAR_DONE',
       'GB_CALENDAR_ERROR', 'GB_AUTO_PUSH_STEP', 'GB_DATES_PUSHED',
       'GB_AUTO_PUSH_ERROR', 'GB_CALENDAR_SAVE', 'GB_REQUEST_OPEN_CALENDAR',
+      'GB_APPLY_QUICK_NOTE', 'GB_QUICK_NOTE_DONE', 'GB_QUICK_NOTE_ERROR',
     ]);
     let payloadSize = Infinity;
     try { payloadSize = JSON.stringify(msg.payload).length; } catch { /* invalid */ }
@@ -1571,14 +1572,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Returns the fresh { viewState, viewStateGen, eventValidation } from the
   // server response so the caller can chain the next step.
   if (msg.action === 'postCalendarForm') {
-    const validationError = gbValidateCalendarState(msg, true);
-    if (validationError) { sendResponse({ ok: false, error: validationError }); return true; }
-    const params = new URLSearchParams();
-    params.set('__EVENTTARGET',        msg.eventTarget   || '');
-    params.set('__EVENTARGUMENT',      msg.eventArgument || '');
-    params.set('__VIEWSTATE',          msg.viewState     || '');
-    params.set('__VIEWSTATEGENERATOR', msg.viewStateGen  || '');
-    params.set('__EVENTVALIDATION',    msg.eventValidation || '');
+    const validation = gbValidateCalendarState(msg, true);
+    if (typeof validation === 'string') { sendResponse({ ok: false, error: validation }); return true; }
+    const params = GB_CALENDAR_FORM.buildParams(validation.fields, {
+      eventTarget: msg.eventTarget,
+      eventArgument: String(msg.eventArgument || ''),
+    });
 
     fetch(msg.url, {
       method:      'POST',
@@ -1594,24 +1593,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const html = await gbReadTextLimited(r, 10_000_000);
 
-      // DOMParser is not available in service workers — use targeted regex instead.
-      // The attribute order in ASP.NET output is always: id="…" value="…"
-      let vsMatch  = html.match(/id="__VIEWSTATE"\s+value="([^"]+)"/);
-      const vsgMatch = html.match(/id="__VIEWSTATEGENERATOR"\s+value="([^"]+)"/);
-      const evMatch  = html.match(/id="__EVENTVALIDATION"\s+value="([^"]+)"/);
-
-      if (!vsMatch) {
-        // Sometimes the attribute order is reversed: value="…" … id="…"
-        const vsAlt = html.match(/name="__VIEWSTATE"[^>]*value="([^"]+)"/);
-        if (!vsAlt) throw new Error('__VIEWSTATE missing from server response. Session may have expired.');
-        vsMatch = vsAlt; // reassign to continue
-      }
-
-      sendResponse({ ok: true, state: {
-        viewState:       vsMatch[1],
-        viewStateGen:    vsgMatch ? vsgMatch[1] : msg.viewStateGen,
-        eventValidation: evMatch  ? evMatch[1]  : msg.eventValidation
-      }});
+      const fields = GB_CALENDAR_FORM.normalizeFields(GB_CALENDAR_FORM.extractHiddenFields(html));
+      if (!fields) throw new Error('__VIEWSTATE missing from server response. Session may have expired.');
+      sendResponse({ ok: true, state: { fields } });
     })
     .catch(err => {
       sendResponse({ ok: false, error: String(err) });
@@ -1623,15 +1607,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Equivalent to clicking "Update Delivery Date".
   // At this point ViewState already encodes the two selected dates.
   if (msg.action === 'submitCalendarUpdate') {
-    const validationError = gbValidateCalendarState(msg, false);
-    if (validationError) { sendResponse({ ok: false, error: validationError }); return true; }
-    const params = new URLSearchParams();
-    params.set('__EVENTTARGET',                  '');
-    params.set('__EVENTARGUMENT',                '');
-    params.set('__VIEWSTATE',                    msg.viewState     || '');
-    params.set('__VIEWSTATEGENERATOR',           msg.viewStateGen  || '');
-    params.set('__EVENTVALIDATION',              msg.eventValidation || '');
-    params.set('ctl00$btnUpdateDeliveryDate',    'Update Delivery Date');
+    const validation = gbValidateCalendarState(msg, false);
+    if (typeof validation === 'string') { sendResponse({ ok: false, error: validation }); return true; }
+    const params = GB_CALENDAR_FORM.buildParams(validation.fields, { submit: true });
 
     fetch(msg.url, {
       method:      'POST',

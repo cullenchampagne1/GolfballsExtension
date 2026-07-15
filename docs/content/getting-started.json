@@ -32,7 +32,7 @@
       "icon": "zap",
       "tiers": ["beginner"],
       "keywords": ["install", "popup", "shelf", "where", "start", "begin"],
-      "summary": "Where the extension's UI lives: the toolbar popup, the floating Actions Shelf, buttons injected into CRM pages, and the order-notes toolbar.",
+      "summary": "Where the extension's UI lives: the toolbar popup, the floating Actions Shelf, buttons injected into CRM pages, and order-page actions.",
       "covers": ["popup"],
       "body": {
         "beginner": [
@@ -41,7 +41,7 @@
             ["Popup", "Click the extension icon in Chrome's toolbar", "Pick an email template for the current page, see variables resolve live, and reach quick actions"],
             ["Actions Shelf", "Floating pill, bottom-right of every CRM page (double-tap Shift)", "Context-aware launcher: the actions change based on whether you're on an order, contact, or account"],
             ["Injected buttons", "Email rows, text rows, and product images on CRM pages", "Hover an email row for a thread preview; hover an order image for the Image Viewer"],
-            ["Order-notes toolbar", "Inside the notes area on order pages", "One-click note save and the Order Date Manager calendar"]
+            ["Order actions", "Actions Shelf on order pages", "Quick Order Note, Apply last note, and the Order Date Manager"]
           ] },
           { "type": "callout", "kind": "info", "text": "If something listed here isn't visible, its feature toggle may be off — see Settings → Features, or the troubleshooting article \"A modal or button isn't appearing\"." }
         ]

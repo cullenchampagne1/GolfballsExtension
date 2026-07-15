@@ -4,11 +4,13 @@ import { ensureTheme } from '../lib/theme.js';
 import { ToastHost } from '../ui/components/ToastHost.jsx';
 import { ActionsShelf } from '../ui/components/ActionsShelf.jsx';
 import { actionRegistry } from '../lib/actionRegistry.js';
-import { I, Icon } from '../ui/index.js';
+import { I, Icon, TYPE_ICONS } from '../ui/index.js';
 import { loadDevSettings, STORAGE_KEY as DEV_STORAGE_KEY } from '../lib/devSettings.js';
 import { loadFlags } from '../lib/flags.js';
 import { findPhone } from '../lib/findPhone.js';
 import { detectPageType as sharedDetectPageType, getPageContext } from '../lib/pageContext.js';
+import { loadLastOrderNote } from '../lib/quickOrderNote.js';
+import { submitOrderNote } from '../lib/submitOrderNote.js';
 
 /* ───────────────────────────────────────────────────────────────
    actions-shelf.jsx — the persistent smart-actions shelf overlay.
@@ -149,6 +151,9 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
   let _copyIdsActionUnsub = null;
   let _findPhoneActionUnsub = null;
   let _orderDatesActionUnsub = null;
+  let _quickNoteActionUnsub = null;
+  let _lastNoteActionUnsub = null;
+  let _lastNoteLoadGeneration = 0;
 
   function registerCallAction(pageType, displayName) {
     if (_callActionUnsub) { _callActionUnsub(); _callActionUnsub = null; }
@@ -432,6 +437,55 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
     });
   }
 
+  /* Order detail page — move the old iframe button row into the same
+     keyboard-first modal pattern used by Quick Task and Call Log. A second
+     action repeats the most recently applied saved template without opening
+     the picker. */
+  function registerOrderNoteActions(pageType) {
+    if (_quickNoteActionUnsub) { _quickNoteActionUnsub(); _quickNoteActionUnsub = null; }
+    if (_lastNoteActionUnsub) { _lastNoteActionUnsub(); _lastNoteActionUnsub = null; }
+    const generation = ++_lastNoteLoadGeneration;
+    if (pageType !== 'order') return;
+    const orderId = readOrderId();
+    _quickNoteActionUnsub = actionRegistry.register({
+      id: 'gb-quick-order-note',
+      label: 'Apply order note',
+      icon: <TYPE_ICONS.note size={13} />,
+      hint: 'Choose a saved note or compose a custom one',
+      smartFor: ['order'],
+      handler: () => {
+        if (typeof window.__gbShowQuickOrderNoteModal === 'function') {
+          window.__gbShowQuickOrderNoteModal({ orderId });
+        } else {
+          window.__gbToast?.error?.('Quick Order Note failed to load — reload the page and try again.', { duration: 5000 });
+        }
+      },
+    });
+
+    loadLastOrderNote().then((last) => {
+      if (generation !== _lastNoteLoadGeneration || actionRegistry.getPage() !== 'order') return;
+      _lastNoteActionUnsub = actionRegistry.register({
+        id: 'gb-apply-last-order-note',
+        label: 'Apply last note',
+        icon: <I.check size={13} />,
+        hint: last ? (last.name || last.subject || 'Repeat the most recently applied note') : 'Choose a note first',
+        smartFor: ['order'],
+        handler: async () => {
+          // Re-read at click time: the modal may have established a "last"
+          // template since this action was registered on page load.
+          const latest = await loadLastOrderNote();
+          if (!latest) {
+            window.__gbShowQuickOrderNoteModal?.({ orderId });
+            return;
+          }
+          const result = await submitOrderNote(latest);
+          if (result?.ok) window.__gbToast?.success?.(`Order note applied: ${latest.name || latest.subject}`, { duration: 2400 });
+          else window.__gbToast?.error?.(`Couldn't apply note: ${result?.error || 'unknown error'}`, { duration: 5000 });
+        },
+      });
+    });
+  }
+
   function registerTaskAction(pageType, displayName) {
     if (_taskActionUnsub) { _taskActionUnsub(); _taskActionUnsub = null; }
     if ((window.__gbFeatureFlags || {}).quickTaskEnabled === false) return;
@@ -499,6 +553,7 @@ if (!window.__gbActionsShelfLoaded && !__gbIsPdfDocument()) {
     registerCopyOrdersAction(type);
     registerFindPhoneAction(type);
     registerOrderDatesAction(type);
+    registerOrderNoteActions(type);
   }
 
   /* ── Mount the shelf overlay ────────────────────────────────

@@ -3,6 +3,7 @@
 // Depends on: note-sender.js, date-utils.js
 
 const __gbPostToParent = (action, payload = {}) => window.__gbIframeBridge?.post(action, payload);
+const __gbCalendarForm = globalThis.GBCalendarForm;
 
 
 // ── Background-proxied fetch helpers (called from iframe — cookies flow) ───────
@@ -45,9 +46,7 @@ function __gbPostCalendarStep(url, state) {
     try {
       chrome.runtime.sendMessage({
         action: 'postCalendarForm', url,
-        viewState:       state.viewState,
-        viewStateGen:    state.viewStateGen,
-        eventValidation: state.eventValidation,
+        fields:          state.fields,
         eventTarget:     state.eventTarget,
         eventArgument:   state.eventArgument
       }, (r) => {
@@ -73,9 +72,7 @@ function __gbCalendarFinalSubmit(url, state) {
     try {
       chrome.runtime.sendMessage({
         action: 'submitCalendarUpdate', url,
-        viewState:       state.viewState,
-        viewStateGen:    state.viewStateGen,
-        eventValidation: state.eventValidation
+        fields:          state.fields
       }, (r) => {
         clearTimeout(t);
         if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
@@ -145,13 +142,9 @@ async function __gbShowCalendarModal() {
     const html = await __gbFetchCalendarHtml(__gbCalendarUrl);
     const doc  = new DOMParser().parseFromString(html, 'text/html');
 
-    __gbCalendarState = {
-      viewState:       doc.getElementById('__VIEWSTATE')?.value         || '',
-      viewStateGen:    doc.getElementById('__VIEWSTATEGENERATOR')?.value || '',
-      eventValidation: doc.getElementById('__EVENTVALIDATION')?.value   || '',
-    };
+    __gbCalendarState = { fields: __gbCalendarForm?.extractHiddenFields(html) || {} };
 
-    if (!__gbCalendarState.viewState) throw new Error('__VIEWSTATE missing. Session may have expired.');
+    if (!__gbCalendarForm?.normalizeFields(__gbCalendarState.fields)) throw new Error('__VIEWSTATE missing. Session may have expired.');
 
     __gbPostToParent('GB_OPEN_CALENDAR', {
       data: {
@@ -180,19 +173,19 @@ let __gbPendingPushBtn  = null;
  * the target approval and (conditionally) commitment offsets, runs the full
  * postback chain, then submits the note on success.
  * @param {{subject:string, body:string, audienceVal?:string, daysOut:number}} note - The note template with days-out value.
- * @param {HTMLButtonElement} btn - The toolbar button that triggered the action.
- * @returns {Promise<void>}
+ * @param {HTMLButtonElement|null} btn - Optional legacy toolbar button.
+ * @returns {Promise<{ok:boolean,error?:string}>}
  */
 async function __gbPushDatesAndSubmitNote(note, btn) {
   const urlParams = new URLSearchParams(window.location.search);
   const orderID   = urlParams.get('entityID');
-  if (!orderID) { alert('[GB] Could not find Order ID.'); return; }
+  if (!orderID) return { ok: false, error: 'Could not find Order ID' };
 
   const calendarUrl = `https://api.golfballs.com/golfballs/AdminNew/default.aspx?folder=Orders&page=DeliveryDateCalendar&orderID=${orderID}`;
 
-  const stateText = btn.querySelector('.gb-text-state');
+  const stateText = btn?.querySelector('.gb-text-state');
   if (stateText) stateText.textContent = 'Syncing...';
-  btn.classList.add('show-state', 'is-saving');
+  btn?.classList.add('show-state', 'is-saving');
 
   const up = __gbPostToParent;
 
@@ -200,12 +193,8 @@ async function __gbPushDatesAndSubmitNote(note, btn) {
     const html = await __gbFetchCalendarHtml(calendarUrl);
     const doc  = new DOMParser().parseFromString(html, 'text/html');
 
-    const calState = {
-      viewState:       doc.getElementById('__VIEWSTATE')?.value         || '',
-      viewStateGen:    doc.getElementById('__VIEWSTATEGENERATOR')?.value || '',
-      eventValidation: doc.getElementById('__EVENTVALIDATION')?.value   || '',
-    };
-    if (!calState.viewState) throw new Error('Could not load calendar state. Session may have expired.');
+    const calState = { fields: __gbCalendarForm?.extractHiddenFields(html) || {} };
+    if (!__gbCalendarForm?.normalizeFields(calState.fields)) throw new Error('Could not load calendar state. Session may have expired.');
 
     const newApproval = new Date();
     newApproval.setDate(newApproval.getDate() + note.daysOut);
@@ -248,28 +237,53 @@ async function __gbPushDatesAndSubmitNote(note, btn) {
       await __gbCalendarFinalSubmit(calendarUrl, state);
 
       // Trigger note submit
-      if (__gbPendingPushNote && __gbPendingPushBtn) {
-        __gbSubmitNoteDirectly(__gbPendingPushNote, __gbPendingPushBtn);
+      if (__gbPendingPushNote) {
+        const noteResult = await __gbSubmitNoteDirectly(__gbPendingPushNote, __gbPendingPushBtn);
         __gbPendingPushNote = null;
         __gbPendingPushBtn  = null;
+        if (!noteResult?.ok) throw new Error(noteResult?.error || 'Note save failed');
       }
       up('GB_DATES_PUSHED', {});
+      return { ok: true };
 
     } catch (chainErr) {
-      btn.classList.remove('show-state', 'is-saving');
+      btn?.classList.remove('show-state', 'is-saving');
       if (stateText) stateText.textContent = 'Failed';
       up('GB_AUTO_PUSH_ERROR', { error: (chainErr.message || String(chainErr)).slice(0, 80) });
+      return { ok: false, error: chainErr.message || String(chainErr) };
     }
 
   } catch (err) {
-    btn.classList.remove('show-state', 'is-saving');
+    btn?.classList.remove('show-state', 'is-saving');
     up('GB_NOTIFY', { message: 'Date push failed: ' + String(err.message || err).slice(0, 80), type: 'error', duration: 5000 });
+    return { ok: false, error: err.message || String(err) };
   }
 }
 
 // ── Handle GB_CALENDAR_SAVE broadcast from background ────────────────────────
 // Relayed via chrome.tabs.sendMessage(allFrames) so it reaches this iframe.
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg.action === 'GB_APPLY_QUICK_NOTE') {
+    const note = msg.note && typeof msg.note === 'object' ? msg.note : null;
+    const requestId = typeof msg.requestId === 'string' ? msg.requestId.slice(0, 120) : '';
+    const valid = note
+      && String(note.subject || '').length <= 500
+      && String(note.body || '').length <= 10_000
+      && String(note.audienceVal || '').length <= 160
+      && (note.daysOut == null || (Number.isInteger(note.daysOut) && note.daysOut >= 0 && note.daysOut <= 3650));
+    if (!requestId || !valid) { sendResponse({ ok: false }); return true; }
+    (async () => {
+      const result = note.daysOut != null
+        ? await __gbPushDatesAndSubmitNote(note, null)
+        : await __gbSubmitNoteDirectly(note, null);
+      __gbPostToParent(result?.ok ? 'GB_QUICK_NOTE_DONE' : 'GB_QUICK_NOTE_ERROR', {
+        requestId,
+        error: result?.error ? String(result.error).slice(0, 240) : undefined,
+      });
+    })();
+    sendResponse({ ok: true });
+    return true;
+  }
   // Parent (e.g. the actions-shelf "Manage order dates" action) asks this
   // iframe to scrape the current dates and post GB_OPEN_CALENDAR back up.
   if (msg.action === 'GB_REQUEST_OPEN_CALENDAR') {

@@ -155,13 +155,13 @@
       "covers": [],
       "body": {
         "intermediate": [
-          { "type": "p", "text": "The editor's Notes tab holds the templates behind the one-click buttons in Quick Task, Call Log, and the order-notes toolbar. Each subtype has its own fields; all subjects and bodies accept {{date}} and {{time}} chips (the Insert row above each field drops them at the caret)." },
+          { "type": "p", "text": "The editor's Notes tab holds the templates behind Quick Task, Call Log, and the order-page Quick Order Note modal. Each subtype has its own fields; all subjects and bodies accept {{date}} and {{time}} chips (the Insert row above each field drops them at the caret)." },
           { "type": "table", "headers": ["Type", "Used on", "Fields"], "rows": [
-            ["Note", "Order pages (notes toolbar)", "Button label · Audience value (must exactly match an option in the page's Audience dropdown) · Subject · Body · Push dates forward (days) — auto-shifts the order's Approval and Commitment dates when clicked"],
+            ["Note", "Order pages (Actions Shelf)", "Picker label · Audience value (must exactly match an option in the page's Audience dropdown) · Subject · Body · Push dates forward (days) — routes through the order date-push chain when applied"],
             ["Task", "Contact + account pages (Quick Task)", "Button label · Task subject (becomes the CRM task name) · Description · Priority (High/Medium/Low, default Medium) · Due (days out from today) · Category (searchable CRM list)"],
             ["Call Log", "Contact pages (Call Log)", "Button label · Direction (Outbound/Inbound) · Category (searchable CRM list) · Left voicemail toggle · Subject · Description · Next-step actions (up to 4 numbered steps)"]
           ] },
-          { "type": "callout", "kind": "bestPractice", "text": "Name button labels for the moment of use ('Proof Requested', 'Promo Follow-Up') — they render as one-click buttons in the modals, so reps pick by label at speed." }
+          { "type": "callout", "kind": "bestPractice", "text": "Name picker labels for the moment of use ('Proof Requested', 'Promo Follow-Up') so reps can filter or choose them quickly. The last successfully applied saved note is also available through Apply last note." }
         ]
       },
       "related": ["quick-task", "call-log", "order-date-manager", "template-editor"]

@@ -120,7 +120,7 @@
  * back to built-in defaults) and wires each button to either a direct note
  * submission or a date-push-then-submit flow.
  */
-function __gbRenderQuickNotes() {
+function __gbRenderLegacyQuickNotes() {
     if (__gbNotesBuildingToolbar) return;
 
     const addBtn       = __gbFindAddNoteButton();
@@ -221,6 +221,14 @@ function __gbRenderQuickNotes() {
         }
         addBtn.insertAdjacentElement('afterend', toolbar);
     });
+  }
+
+  // Quick Notes and Order Dates now live in the top-frame action shelf. The
+  // iframe remains responsible for authenticated submission and identity
+  // broadcasts, but no longer injects action buttons into iCustomize's UI.
+  function __gbRenderQuickNotes() {
+      document.getElementById('__gb-qn-toolbar')?.remove();
+      document.getElementById('__gb-cal-btn')?.remove();
   }
 
   // ── OBSERVERS & TRIGGERS ── //

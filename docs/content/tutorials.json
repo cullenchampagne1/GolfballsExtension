@@ -85,7 +85,7 @@
       "estMinutes": 2,
       "prerequisites": ["On an order page", "calendarEnabled is on"],
       "steps": [
-        { "action": "Find the toolbar in the order-notes area and click the calendar button.", "expected": "The Order Date Manager opens with two mini-calendars.", "visualCue": "Toolbar inside the notes iframe." },
+        { "action": "Open the Actions Shelf and choose Manage order dates.", "expected": "The Order Date Manager opens with two mini-calendars.", "visualCue": "Smart actions for the current order." },
         { "action": "Pick the approval date on the left calendar, the commitment date on the right.", "expected": "Selected dates show in the readouts under each calendar.", "visualCue": "Date readouts." },
         { "action": "Click Update Dates.", "expected": "A step-by-step progress toast walks the save; it confirms when both dates are committed.", "visualCue": "Centered step notification.", "commonMistake": "If a step fails, the toast names it. Nothing half-saves — re-open and retry. Repeated failure at step one means your admin session expired; reload the page." }
       ],

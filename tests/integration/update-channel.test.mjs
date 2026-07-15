@@ -1,0 +1,88 @@
+/**
+ * Integration flow — the self-hosted update channel.
+ *
+ * Chains manifest.json (public key → deterministic extension id) →
+ * revstack.project.json (declared public routes / CORS) → the published
+ * ../.golfballs-extension-production/public/updates.xml (appid / version /
+ * codebase) → the .crx artifact on disk. Publication assertions skip
+ * gracefully when the production folder is not checked out.
+ */
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { MANIFEST, ROOT } from './helpers/harness.mjs';
+
+const PROJECT = JSON.parse(readFileSync(new URL('revstack.project.json', ROOT), 'utf8'));
+const PROD_PUBLIC = new URL('../.golfballs-extension-production/public/', ROOT);
+const UPDATES_URL = new URL('updates.xml', PROD_PUBLIC);
+const hasProduction = existsSync(UPDATES_URL);
+
+/** Chrome's extension id: sha256(DER public key), first 32 hex chars mapped 0-f → a-p. */
+function deriveExtensionId(manifestKey) {
+  return createHash('sha256')
+    .update(Buffer.from(manifestKey, 'base64'))
+    .digest('hex')
+    .slice(0, 32)
+    .replace(/[0-9a-f]/g, (digit) => 'abcdefghijklmnop'[Number.parseInt(digit, 16)]);
+}
+
+const extensionId = deriveExtensionId(MANIFEST.key);
+
+function parseUpdatesXml(xml) {
+  const appid = (xml.match(/<app\s+appid='([^']*)'/) || [])[1] || '';
+  const updatecheck = (xml.match(/<updatecheck\s+([^>]*)\/>/) || [])[1] || '';
+  const grab = (attr) => (updatecheck.match(new RegExp(`${attr}='([^']*)'`)) || [])[1] || '';
+  return { appid, version: grab('version'), codebase: grab('codebase') };
+}
+
+describe('update channel', () => {
+  it('pins the manifest key to the deterministic extension id used across the project', () => {
+    assert.match(extensionId, /^[a-p]{32}$/);
+    assert.ok(
+      PROJECT.cors_origins.includes(`chrome-extension://${extensionId}`),
+      'revstack CORS allowlist must name the derived extension origin',
+    );
+  });
+
+  it('declares the update endpoints as public revstack routes matching the manifest update_url', () => {
+    const updateUrl = new URL(MANIFEST.update_url);
+    assert.equal(updateUrl.origin, 'https://api.cullenchampagne.com');
+    assert.ok(
+      PROJECT.public_routes.some((route) => route.method === 'GET' && route.path === updateUrl.pathname),
+      `public_routes must expose ${updateUrl.pathname}`,
+    );
+    assert.ok(
+      PROJECT.public_routes.some((route) => route.method === 'GET' && route.path.endsWith('/releases/*')),
+      'public_routes must expose the release artifacts',
+    );
+    assert.ok(
+      MANIFEST.host_permissions.includes('https://api.cullenchampagne.com/*'),
+      'the extension must be permitted to reach its own update origin',
+    );
+  });
+
+  it('publishes updates.xml whose appid/version/codebase chain back to the manifest', { skip: !hasProduction && 'production folder not checked out' }, () => {
+    const { appid, version, codebase } = parseUpdatesXml(readFileSync(UPDATES_URL, 'utf8'));
+    assert.equal(appid, extensionId, 'updates.xml must target the derived extension id');
+    assert.equal(version, MANIFEST.version, 'the published version must match the manifest');
+
+    const codebaseUrl = new URL(codebase);
+    assert.equal(codebaseUrl.origin, new URL(MANIFEST.update_url).origin, 'the crx must be served from the update origin');
+    const releasesRoute = PROJECT.public_routes.find((route) => route.path.endsWith('/releases/*'));
+    assert.ok(
+      codebaseUrl.pathname.startsWith(releasesRoute.path.replace(/\*$/, '')),
+      'the codebase path must sit under the declared public releases route',
+    );
+    assert.ok(codebaseUrl.pathname.includes(version), 'release artifact is versioned');
+  });
+
+  it('keeps the published .crx artifact on disk for the advertised codebase', { skip: !hasProduction && 'production folder not checked out' }, () => {
+    const { codebase } = parseUpdatesXml(readFileSync(UPDATES_URL, 'utf8'));
+    const fileName = new URL(codebase).pathname.split('/').at(-1);
+    assert.ok(
+      existsSync(new URL(`releases/${fileName}`, PROD_PUBLIC)),
+      `releases/${fileName} must exist next to updates.xml`,
+    );
+  });
+});

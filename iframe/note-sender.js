@@ -59,8 +59,8 @@ window.__gbIframeReady = true;
    * page UI. Animates the triggering button through saving/saved/error states
    * and reloads the page on success.
    * @param {{subject:string, body:string, audienceVal?:string}} note - The note template to submit.
-   * @param {HTMLButtonElement} buttonElement - The button that triggered the action.
-   * @returns {Promise<void>}
+   * @param {HTMLButtonElement|null} buttonElement - Optional legacy toolbar button.
+   * @returns {Promise<{ok:boolean,error?:string}>}
    */
   async function __gbSubmitNoteDirectly(note, buttonElement) {
     const urlParams = new URLSearchParams(window.location.search);
@@ -68,8 +68,9 @@ window.__gbIframeReady = true;
     const entityName = urlParams.get('entityName') || 'order';
 
     if (!entityID) {
-        alert("[GB] Could not find Order ID in the URL. Are you on an order page?");
-        return;
+        const error = 'Could not find Order ID in the iframe URL';
+        if (buttonElement) alert("[GB] Could not find Order ID in the URL. Are you on an order page?");
+        return { ok: false, error };
     }
 
     const now = new Date();
@@ -78,9 +79,9 @@ window.__gbIframeReady = true;
     const replace = s => (s || '').replace(/\{\{date\}\}/gi, dateStr).replace(/\{\{time\}\}/gi, timeStr);
 
     // --- Modern Animation Trigger: Saving ---
-    const stateText = buttonElement.querySelector('.gb-text-state');
+    const stateText = buttonElement?.querySelector('.gb-text-state');
     if (stateText) stateText.textContent = "Saving...";
-    buttonElement.classList.add('show-state', 'is-saving');
+    buttonElement?.classList.add('show-state', 'is-saving');
 
     try {
         const response = await __gbAuthBrokerRequest({
@@ -97,22 +98,25 @@ window.__gbIframeReady = true;
         if (response.ok) {
             // --- Modern Animation Trigger: Success ---
             if (stateText) stateText.textContent = "Saved ✓";
-            buttonElement.classList.remove('is-saving');
-            buttonElement.classList.add('is-saved');
+            buttonElement?.classList.remove('is-saving');
+            buttonElement?.classList.add('is-saved');
 
             setTimeout(() => window.location.reload(), 600);
+            return { ok: true };
         } else {
-            const detail = response.error ? `: ${response.error}` : '';
-            alert(`Failed to save note via API (HTTP ${response.status || 0})${detail}.`);
+            const error = response.error || `HTTP ${response.status || 0}`;
+            if (buttonElement) alert(`Failed to save note via API (${error}).`);
 
             // --- Revert Animation on Fail ---
-            buttonElement.classList.remove('show-state', 'is-saving');
+            buttonElement?.classList.remove('show-state', 'is-saving');
+            return { ok: false, error };
         }
     } catch (error) {
-        alert("Network error while saving note.");
+        if (buttonElement) alert("Network error while saving note.");
 
         // --- Revert Animation on Fail ---
-        buttonElement.classList.remove('show-state', 'is-saving');
+        buttonElement?.classList.remove('show-state', 'is-saving');
+        return { ok: false, error: error?.message || 'Network error while saving note' };
     }
   }
 

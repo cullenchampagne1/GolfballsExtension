@@ -75,12 +75,12 @@
       "tutorial": "set-order-dates",
       "body": {
         "beginner": [
-          { "type": "p", "text": "On an order page, the notes-area toolbar has a calendar button. It opens the Order Date Manager: two mini-calendars side by side — approval date on the left, commitment date on the right." },
+          { "type": "p", "text": "On an order page, open Manage order dates from the Actions Shelf. It opens the Order Date Manager: two mini-calendars side by side — approval date on the left, commitment date on the right." },
           { "type": "p", "text": "Pick both dates and click Update Dates. The save runs a multi-step process on the admin site; a step-by-step toast shows exactly where it is, and confirms when both dates are committed." }
         ],
         "intermediate": [
           { "type": "heading", "text": "Quick Notes and Auto Push" },
-          { "type": "p", "text": "The same toolbar has a one-click note-save button. With Auto Push enabled (Settings → Features), date and note updates push to the order automatically as part of the save chain." },
+          { "type": "p", "text": "The same Actions Shelf opens Quick Order Note, a keyboard-first picker and custom composer backed by your saved note templates. Apply last note repeats the most recently used saved template. Templates with Push dates forward configured route into the existing date-and-note push chain." },
           { "type": "callout", "kind": "tip", "text": "If a save fails mid-chain, the toast names the failing step. Nothing half-saves silently — re-open the calendar and retry." }
         ]
       },

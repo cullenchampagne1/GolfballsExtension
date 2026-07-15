@@ -5,7 +5,7 @@
 
 export const HELP_CONTENT = {
   "version": "3.3",
-  "generatedAt": "2026-07-14",
+  "generatedAt": "2026-07-15",
   "tree": [
     {
       "title": "Getting Started",
@@ -1911,7 +1911,7 @@ export const HELP_CONTENT = {
         "intermediate": [
           {
             "type": "p",
-            "text": "The editor's Notes tab holds the templates behind the one-click buttons in Quick Task, Call Log, and the order-notes toolbar. Each subtype has its own fields; all subjects and bodies accept {{date}} and {{time}} chips (the Insert row above each field drops them at the caret)."
+            "text": "The editor's Notes tab holds the templates behind Quick Task, Call Log, and the order-page Quick Order Note modal. Each subtype has its own fields; all subjects and bodies accept {{date}} and {{time}} chips (the Insert row above each field drops them at the caret)."
           },
           {
             "type": "table",
@@ -1923,8 +1923,8 @@ export const HELP_CONTENT = {
             "rows": [
               [
                 "Note",
-                "Order pages (notes toolbar)",
-                "Button label · Audience value (must exactly match an option in the page's Audience dropdown) · Subject · Body · Push dates forward (days) — auto-shifts the order's Approval and Commitment dates when clicked"
+                "Order pages (Actions Shelf)",
+                "Picker label · Audience value (must exactly match an option in the page's Audience dropdown) · Subject · Body · Push dates forward (days) — routes through the order date-push chain when applied"
               ],
               [
                 "Task",
@@ -1941,7 +1941,7 @@ export const HELP_CONTENT = {
           {
             "type": "callout",
             "kind": "bestPractice",
-            "text": "Name button labels for the moment of use ('Proof Requested', 'Promo Follow-Up') — they render as one-click buttons in the modals, so reps pick by label at speed."
+            "text": "Name picker labels for the moment of use ('Proof Requested', 'Promo Follow-Up') so reps can filter or choose them quickly. The last successfully applied saved note is also available through Apply last note."
           }
         ]
       },
@@ -2379,7 +2379,7 @@ export const HELP_CONTENT = {
         "start",
         "begin"
       ],
-      "summary": "Where the extension's UI lives: the toolbar popup, the floating Actions Shelf, buttons injected into CRM pages, and the order-notes toolbar.",
+      "summary": "Where the extension's UI lives: the toolbar popup, the floating Actions Shelf, buttons injected into CRM pages, and order-page actions.",
       "covers": [
         "popup"
       ],
@@ -2413,9 +2413,9 @@ export const HELP_CONTENT = {
                 "Hover an email row for a thread preview; hover an order image for the Image Viewer"
               ],
               [
-                "Order-notes toolbar",
-                "Inside the notes area on order pages",
-                "One-click note save and the Order Date Manager calendar"
+                "Order actions",
+                "Actions Shelf on order pages",
+                "Quick Order Note, Apply last note, and the Order Date Manager"
               ]
             ]
           },
@@ -3726,7 +3726,7 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "On an order page, the notes-area toolbar has a calendar button. It opens the Order Date Manager: two mini-calendars side by side — approval date on the left, commitment date on the right."
+            "text": "On an order page, open Manage order dates from the Actions Shelf. It opens the Order Date Manager: two mini-calendars side by side — approval date on the left, commitment date on the right."
           },
           {
             "type": "p",
@@ -3740,7 +3740,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "The same toolbar has a one-click note-save button. With Auto Push enabled (Settings → Features), date and note updates push to the order automatically as part of the save chain."
+            "text": "The same Actions Shelf opens Quick Order Note, a keyboard-first picker and custom composer backed by your saved note templates. Apply last note repeats the most recently used saved template. Templates with Push dates forward configured route into the existing date-and-note push chain."
           },
           {
             "type": "callout",
@@ -6755,9 +6755,9 @@ export const HELP_CONTENT = {
       ],
       "steps": [
         {
-          "action": "Find the toolbar in the order-notes area and click the calendar button.",
+          "action": "Open the Actions Shelf and choose Manage order dates.",
           "expected": "The Order Date Manager opens with two mini-calendars.",
-          "visualCue": "Toolbar inside the notes iframe."
+          "visualCue": "Smart actions for the current order."
         },
         {
           "action": "Pick the approval date on the left calendar, the commitment date on the right.",
@@ -7557,7 +7557,7 @@ export const HELP_CONTENT = {
         "start",
         "begin"
       ],
-      "description": "Where the extension's UI lives: the toolbar popup, the floating Actions Shelf, buttons injected into CRM pages, and the order-notes toolbar.",
+      "description": "Where the extension's UI lives: the toolbar popup, the floating Actions Shelf, buttons injected into CRM pages, and order-page actions.",
       "article": "first-launch",
       "shortcut": null,
       "flag": null
