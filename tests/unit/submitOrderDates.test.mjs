@@ -48,6 +48,19 @@ describe('submitOrderDates — real iframe-bridge path', () => {
     window.__gbActiveCalendar = null;
   });
 
+  it('sends no approval offset when the server rendered only commitment', () => {
+    const calls = installChrome();
+    submitOrderDates({
+      calendarUrl: CALENDAR_URL,
+      approval: null,
+      commitment: COMMITMENT,
+      availableCalendars: { approval: false, commitment: true },
+    });
+    assert.equal(calls[0].payload.approvalOffset, null);
+    assert.equal(calls[0].payload.commitmentOffset, '9598');
+    window.__gbActiveCalendar = null;
+  });
+
   it('converts the bridge’s 1-based step numbers to 0-based callbacks', () => {
     installChrome();
     const steps = [];

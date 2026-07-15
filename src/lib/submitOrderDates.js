@@ -31,8 +31,11 @@ const hasChromeRuntime = () => {
  *   onStep(stepIndex0Based, label?) · onDone() · onError(message)
  * Dev simulation when there's no calendarUrl / chrome runtime.
  */
-export function submitOrderDates({ calendarUrl, approval, commitment, onStep, onDone, onError }) {
-  if (!approval || !commitment) { onError?.('Pick both dates first'); return; }
+export function submitOrderDates({ calendarUrl, approval, commitment, availableCalendars = { approval: true, commitment: true }, onStep, onDone, onError }) {
+  if ((availableCalendars.approval !== false && !approval) || (availableCalendars.commitment !== false && !commitment)) {
+    const expectsBoth = availableCalendars.approval !== false && availableCalendars.commitment !== false;
+    onError?.(expectsBoth ? 'Pick both dates first' : 'Pick the available date first'); return;
+  }
 
   /* ── Dev / playground simulation ── */
   if (!calendarUrl || !hasChromeRuntime()) {
@@ -60,8 +63,8 @@ export function submitOrderDates({ calendarUrl, approval, commitment, onStep, on
       payload: {
         action: 'GB_CALENDAR_SAVE',
         calendarUrl,
-        approvalOffset: String(aspOffset(approval)),
-        commitmentOffset: String(aspOffset(commitment)),
+        approvalOffset: approval ? String(aspOffset(approval)) : null,
+        commitmentOffset: commitment ? String(aspOffset(commitment)) : null,
       },
     });
   } catch (err) {
@@ -75,7 +78,7 @@ export function submitOrderDates({ calendarUrl, approval, commitment, onStep, on
  * update. `toast` must be a persistent host (window.__gbToast on a real
  * page, the playground's toast) so it survives the modal closing.
  */
-export function runOrderDateUpdate(toast, { orderID, calendarUrl, approval, commitment } = {}) {
+export function runOrderDateUpdate(toast, { orderID, calendarUrl, approval, commitment, availableCalendars } = {}) {
   if (!toast?.step) return;
   const id = toast.step({
     steps: ORDER_DATE_STEPS,
@@ -84,7 +87,7 @@ export function runOrderDateUpdate(toast, { orderID, calendarUrl, approval, comm
     placement: 'top-center',
   });
   submitOrderDates({
-    calendarUrl, approval, commitment,
+    calendarUrl, approval, commitment, availableCalendars,
     onStep: (i) => toast.update?.(id, { currentStep: i }),
     onDone: () => {
       toast.update?.(id, { currentStep: ORDER_DATE_STEPS.length });

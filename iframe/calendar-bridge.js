@@ -83,7 +83,7 @@ function __gbCalendarFinalSubmit(url, state) {
   });
 }
 
-// ── Run the full 3-step postback chain from within the iframe ─────────────────
+// ── Run the available calendar postbacks from within the iframe ───────────────
 // Step messages go UP to parent so the calendar UI can show progress.
 /**
  * Runs the full three-step calendar postback chain (select approval date,
@@ -99,18 +99,18 @@ async function __gbRunCalendarChain(calendarUrl, calState, approvalOffset, commi
   const up = __gbPostToParent;
 
   try {
-    up('GB_CALENDAR_STEP', { step: 1, label: 'Selecting approval date…' });
-    const s1 = await __gbPostCalendarStep(calendarUrl, {
-      ...calState, eventTarget: 'ctl00$ApprovalDate', eventArgument: approvalOffset
-    });
+    const plan = __gbCalendarForm?.buildPostbackPlan(calState.targets, { approvalOffset, commitmentOffset }) || [];
+    if (!plan.length) throw new Error('No editable calendar was returned by the server.');
 
-    up('GB_CALENDAR_STEP', { step: 2, label: 'Selecting commitment date…' });
-    const s2 = await __gbPostCalendarStep(calendarUrl, {
-      ...s1, eventTarget: 'ctl00$DeviveryCommitment', eventArgument: commitmentOffset
-    });
+    let state = calState;
+    for (let i = 0; i < plan.length; i += 1) {
+      const event = plan[i];
+      up('GB_CALENDAR_STEP', { step: i + 1, label: `Selecting ${event.label}…` });
+      state = await __gbPostCalendarStep(calendarUrl, { ...state, ...event });
+    }
 
-    up('GB_CALENDAR_STEP', { step: 3, label: 'Saving to server…' });
-    await __gbCalendarFinalSubmit(calendarUrl, s2);
+    up('GB_CALENDAR_STEP', { step: plan.length + 1, label: 'Saving to server…' });
+    await __gbCalendarFinalSubmit(calendarUrl, state);
 
     up('GB_CALENDAR_DONE', {});
   } catch (err) {
@@ -142,9 +142,11 @@ async function __gbShowCalendarModal() {
     const html = await __gbFetchCalendarHtml(__gbCalendarUrl);
     const doc  = new DOMParser().parseFromString(html, 'text/html');
 
-    __gbCalendarState = { fields: __gbCalendarForm?.extractHiddenFields(html) || {} };
+    const targets = __gbCalendarForm?.detectCalendarTargets(html) || {};
+    __gbCalendarState = { fields: __gbCalendarForm?.extractHiddenFields(html) || {}, targets };
 
     if (!__gbCalendarForm?.normalizeFields(__gbCalendarState.fields)) throw new Error('__VIEWSTATE missing. Session may have expired.');
+    if (!targets.approval && !targets.commitment) throw new Error('No editable calendar was returned by the server.');
 
     __gbPostToParent('GB_OPEN_CALENDAR', {
       data: {
@@ -152,6 +154,7 @@ async function __gbShowCalendarModal() {
         calendarUrl:       __gbCalendarUrl,
         defaultApproval:   __gbParseDateFromCell('ctl00_ApprovalDate',      doc),
         defaultCommitment: __gbParseDateFromCell('ctl00_DeviveryCommitment', doc),
+        availableCalendars: targets,
       },
     });
 
@@ -193,8 +196,10 @@ async function __gbPushDatesAndSubmitNote(note, btn) {
     const html = await __gbFetchCalendarHtml(calendarUrl);
     const doc  = new DOMParser().parseFromString(html, 'text/html');
 
-    const calState = { fields: __gbCalendarForm?.extractHiddenFields(html) || {} };
+    const targets = __gbCalendarForm?.detectCalendarTargets(html) || {};
+    const calState = { fields: __gbCalendarForm?.extractHiddenFields(html) || {}, targets };
     if (!__gbCalendarForm?.normalizeFields(calState.fields)) throw new Error('Could not load calendar state. Session may have expired.');
+    if (!targets.approval && !targets.commitment) throw new Error('No editable calendar was returned by the server.');
 
     const newApproval = new Date();
     newApproval.setDate(newApproval.getDate() + note.daysOut);
@@ -212,28 +217,30 @@ async function __gbPushDatesAndSubmitNote(note, btn) {
       }
     }
 
+    // Some orders render only Delivery Commitment. ASP.NET event validation
+    // registers offsets per rendered control, so never post an ApprovalDate
+    // event to that page. In that shape the quick-note target date applies to
+    // the sole editable commitment calendar.
+    if (!targets.approval && targets.commitment) commitmentOffset = approvalOffset;
+
     // Tell parent to show the progress bar
     up('GB_PUSH_DATES_AND_NOTE', { daysOut: note.daysOut, commitmentOffset });
 
     __gbPendingPushNote = note;
     __gbPendingPushBtn  = btn;
-    const totalSteps = commitmentOffset !== null ? 3 : 2;
-
     // Run the chain right here in the iframe
     try {
-      up('GB_AUTO_PUSH_STEP', { step: 0.3, label: 'Pushing approval date…' });
-      let state = await __gbPostCalendarStep(calendarUrl, {
-        ...calState, eventTarget: 'ctl00$ApprovalDate', eventArgument: approvalOffset
-      });
-      up('GB_AUTO_PUSH_STEP', { step: 1, label: commitmentOffset ? 'Pushing commitment date…' : 'Saving changes…' });
+      const plan = __gbCalendarForm?.buildPostbackPlan(targets, { approvalOffset, commitmentOffset }) || [];
+      if (!plan.length) throw new Error('No editable calendar was returned by the server.');
 
-      if (commitmentOffset !== null) {
-        state = await __gbPostCalendarStep(calendarUrl, {
-          ...state, eventTarget: 'ctl00$DeviveryCommitment', eventArgument: commitmentOffset
-        });
-        up('GB_AUTO_PUSH_STEP', { step: 2, label: 'Saving changes…' });
+      let state = calState;
+      for (let i = 0; i < plan.length; i += 1) {
+        const event = plan[i];
+        up('GB_AUTO_PUSH_STEP', { step: i, label: `Pushing ${event.label}…` });
+        state = await __gbPostCalendarStep(calendarUrl, { ...state, ...event });
       }
 
+      up('GB_AUTO_PUSH_STEP', { step: plan.length, label: 'Saving changes…' });
       await __gbCalendarFinalSubmit(calendarUrl, state);
 
       // Trigger note submit

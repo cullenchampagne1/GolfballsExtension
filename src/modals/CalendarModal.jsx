@@ -142,15 +142,19 @@ export function CalendarModal({
   orderID,
   defaultApproval,
   defaultCommitment,
+  availableCalendars = { approval: true, commitment: true },
   layout = 'side-by-side',
   onSubmit,
   onClosed,
   bindClose,
 }) {
-  const [approval, setApproval] = useState(() => toDate(defaultApproval) || addDays(new Date(), 5));
-  const [commitment, setCommitment] = useState(() => toDate(defaultCommitment) || addDays(new Date(), 7));
+  const hasApproval = availableCalendars.approval !== false;
+  const hasCommitment = availableCalendars.commitment !== false;
+  const [approval, setApproval] = useState(() => hasApproval ? (toDate(defaultApproval) || addDays(new Date(), 5)) : null);
+  const [commitment, setCommitment] = useState(() => hasCommitment ? (toDate(defaultCommitment) || addDays(new Date(), 7)) : null);
   const stacked = layout === 'stacked';
-  const canSave = !!(approval && commitment);
+  const visibleCount = Number(hasApproval) + Number(hasCommitment);
+  const canSave = visibleCount > 0 && (!hasApproval || !!approval) && (!hasCommitment || !!commitment);
   const draggable = useDevSetting('calendar.draggable') ?? false;
 
   const bindCloseRef = useRef(null);
@@ -167,7 +171,7 @@ export function CalendarModal({
 
   return (
     <FloatingPanel
-      width={stacked ? 420 : 620}
+      width={stacked || visibleCount === 1 ? 420 : 620}
       backdrop
       draggable={draggable}
       visible={modalVisible}
@@ -182,16 +186,16 @@ export function CalendarModal({
 
       <div style={{ padding: 28 }}>
         <div style={{
-          display: stacked ? 'flex' : 'grid',
+          display: stacked || visibleCount === 1 ? 'flex' : 'grid',
           flexDirection: stacked ? 'column' : undefined,
           gridTemplateColumns: stacked ? undefined : '1fr auto 1fr',
           gap: stacked ? 28 : 24,
           alignItems: stacked ? 'center' : 'start',
           justifyItems: 'center',
         }}>
-          <CalColumn label="Approval Date" value={approval} onChange={setApproval} />
-          {!stacked && <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--gb-border-subtle)' }} />}
-          <CalColumn label="Commitment Date" value={commitment} onChange={setCommitment} />
+          {hasApproval && <CalColumn label="Approval Date" value={approval} onChange={setApproval} />}
+          {!stacked && visibleCount === 2 && <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--gb-border-subtle)' }} />}
+          {hasCommitment && <CalColumn label="Commitment Date" value={commitment} onChange={setCommitment} />}
         </div>
       </div>
 

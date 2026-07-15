@@ -29,14 +29,15 @@ if (!window.__gbOrderCalendarLoaded) {
   const HOST_ID = '__gb-order-calendar';
 
   window.__gbOpenOrderCalendar = function (data = {}) {
-    const { orderID, calendarUrl, defaultApproval, defaultCommitment } = data;
+    const { orderID, calendarUrl, defaultApproval, defaultCommitment, availableCalendars } = data;
     mountFloating(HOST_ID, ({ onClosed, bindClose }) => (
       <CalendarModal
         orderID={orderID}
         defaultApproval={defaultApproval}
         defaultCommitment={defaultCommitment}
+        availableCalendars={availableCalendars}
         onSubmit={({ approval, commitment }) => {
-          runOrderDateUpdate(window.__gbToast, { orderID, calendarUrl, approval, commitment });
+          runOrderDateUpdate(window.__gbToast, { orderID, calendarUrl, approval, commitment, availableCalendars });
         }}
         onClosed={onClosed}
         bindClose={bindClose}

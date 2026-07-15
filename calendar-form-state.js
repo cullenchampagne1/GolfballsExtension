@@ -69,10 +69,35 @@
     return params;
   }
 
+  function hasElementId(html, id) {
+    const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`\\bid\\s*=\\s*(["'])${escaped}\\1`, 'i').test(String(html || ''));
+  }
+
+  function detectCalendarTargets(html) {
+    return {
+      approval: hasElementId(html, 'ctl00_ApprovalDate'),
+      commitment: hasElementId(html, 'ctl00_DeviveryCommitment'),
+    };
+  }
+
+  function buildPostbackPlan(targets, { approvalOffset = null, commitmentOffset = null } = {}) {
+    const plan = [];
+    if (targets?.approval && approvalOffset != null) {
+      plan.push({ eventTarget: 'ctl00$ApprovalDate', eventArgument: String(approvalOffset), label: 'approval date' });
+    }
+    if (targets?.commitment && commitmentOffset != null) {
+      plan.push({ eventTarget: 'ctl00$DeviveryCommitment', eventArgument: String(commitmentOffset), label: 'commitment date' });
+    }
+    return plan;
+  }
+
   root.GBCalendarForm = Object.freeze({
     ALLOWED_NAME,
+    buildPostbackPlan,
     buildParams,
     decodeAttribute,
+    detectCalendarTargets,
     extractHiddenFields,
     fromLegacy,
     normalizeFields,

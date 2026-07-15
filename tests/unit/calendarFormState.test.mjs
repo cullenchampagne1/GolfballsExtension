@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 await import('../../calendar-form-state.js');
-const { extractHiddenFields, normalizeFields, buildParams } = globalThis.GBCalendarForm;
+const { extractHiddenFields, normalizeFields, buildParams, detectCalendarTargets, buildPostbackPlan } = globalThis.GBCalendarForm;
 
 describe('ASP.NET calendar hidden-state extraction', () => {
   it('preserves split ViewState fragments and decodes HTML entities', () => {
@@ -30,6 +30,24 @@ describe('ASP.NET calendar hidden-state extraction', () => {
     });
     assert.equal(normalizeFields({ __EVENTVALIDATION: 'event-only' }), null);
     assert.equal(normalizeFields({ __VIEWSTATE: 'state', 'ctl00$evil': 'x' }), null);
+  });
+});
+
+describe('ASP.NET calendar event targeting', () => {
+  it('posts the selected offset only to the sole calendar rendered by the server', () => {
+    const html = `<table id="ctl00_DeviveryCommitment"><a href="javascript:__doPostBack('ctl00$DeviveryCommitment','9697')">20</a></table>`;
+    const targets = detectCalendarTargets(html);
+    assert.deepEqual(targets, { approval: false, commitment: true });
+    assert.deepEqual(buildPostbackPlan(targets, { approvalOffset: '9697', commitmentOffset: '9697' }), [{
+      eventTarget: 'ctl00$DeviveryCommitment', eventArgument: '9697', label: 'commitment date',
+    }]);
+  });
+
+  it('keeps both registered postbacks when both calendars are rendered', () => {
+    const targets = detectCalendarTargets('<table id="ctl00_ApprovalDate"></table><table id="ctl00_DeviveryCommitment"></table>');
+    assert.deepEqual(buildPostbackPlan(targets, { approvalOffset: '9697', commitmentOffset: '9699' }).map((x) => x.eventTarget), [
+      'ctl00$ApprovalDate', 'ctl00$DeviveryCommitment',
+    ]);
   });
 });
 
