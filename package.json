@@ -30,6 +30,7 @@
   "tests": [
     { "name": "email · MIME/EML parsing → renderable HTML", "file": "tests/unit/emailParse.test.mjs" },
     { "name": "email · composer slash-command templates", "file": "tests/unit/emailComposerCommands.test.mjs" },
+    { "name": "email · contact-page composer transport", "file": "tests/unit/contactEmail.test.mjs" },
     { "name": "email · clicked-thread reply routing", "file": "tests/unit/emailReply.test.mjs" },
     { "name": "email · signature, plain-text & mailto/PA payloads", "file": "tests/unit/emailSender.test.mjs" },
     { "name": "email · HTML sanitizer strips scripts & bypasses", "file": "tests/unit/sanitizeHtml.test.mjs" },

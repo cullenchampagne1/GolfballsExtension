@@ -49,7 +49,7 @@ describe('email composer slash commands', () => {
   it('evaluates variables through the live-page resolver before rendering the body', async () => {
     const calls = [];
     const template = {
-      id: 'a1', type: 'account', body: '<p>Hi {{first}}, your rep is {{rep}}.</p>',
+      id: 'a1', type: 'account', subject: 'Following up with {{first}}', body: '<p>Hi {{first}}, your rep is {{rep}}.</p>',
       vars: { first: { type: 'schema', path: 'contact.firstName' }, rep: { type: 'code', body: 'return ctx.account.rep' } },
     };
     const result = await evaluateAccountEmailTemplate(template, async (vars, toField) => {
@@ -57,6 +57,7 @@ describe('email composer slash commands', () => {
       return { resolved: { first: 'Pat', rep: 'Cullen' } };
     });
     assert.equal(result.htmlBody, '<p>Hi Pat, your rep is Cullen.</p>');
+    assert.equal(result.subject, 'Following up with Pat');
     assert.deepEqual(calls[0], { vars: template.vars, toField: { type: 'auto' } });
   });
 });

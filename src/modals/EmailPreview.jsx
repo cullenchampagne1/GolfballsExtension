@@ -329,10 +329,18 @@ function MetaRow({ k, children }) {
   );
 }
 
-/* Sticky freeform reply composer. The host supplies the Power Automate send
-   bridge; this component only owns draft/edit/discard state. */
-function ReplyComposer({ replyTo, subject, onSend, sending, accountTemplates, onApplyAccountTemplate, savedProposals, onApplySavedProposal }) {
-  const [expanded, setExpanded] = useState(false);
+/* Shared rich email composer. Thread replies keep it collapsed/sticky with a
+   fixed subject; contact pages open it immediately with an editable subject.
+   The host owns transport while this component owns draft, slash commands,
+   template application, keyboard selection, and discard state. */
+export function EmailComposer({
+  replyTo, subject, onSend, sending, accountTemplates, onApplyAccountTemplate,
+  savedProposals, onApplySavedProposal, initiallyExpanded = false,
+  editableSubject = false, onDiscard, transportLabel = 'Power Automate',
+  placeholder = 'Write your reply…  Type / for commands', sticky = true,
+}) {
+  const [expanded, setExpanded] = useState(initiallyExpanded);
+  const [draftSubject, setDraftSubject] = useState(subject || '');
   const [body, setBody] = useState('');
   const [nonce, setNonce] = useState(0); // bump to reset the editor on discard
   const [slashQuery, setSlashQuery] = useState(null);
@@ -341,10 +349,13 @@ function ReplyComposer({ replyTo, subject, onSend, sending, accountTemplates, on
   const slashApiRef = useRef(null);
   const hasText = body.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim().length > 0;
   const closeSlash = () => { setSlashQuery(null); slashApiRef.current = null; setActiveIndex(0); };
-  const discard = () => { setBody(''); setExpanded(false); closeSlash(); setNonce((n) => n + 1); };
+  const discard = () => {
+    setBody(''); setExpanded(false); closeSlash(); setNonce((n) => n + 1);
+    onDiscard?.();
+  };
   const send = async () => {
     if (!hasText || sending) return;
-    const result = await onSend?.({ to: replyTo, subject, htmlBody: body });
+    const result = await onSend?.({ to: replyTo, subject: draftSubject.trim(), htmlBody: body });
     if (result?.ok) discard();
   };
 
@@ -376,6 +387,7 @@ function ReplyComposer({ replyTo, subject, onSend, sending, accountTemplates, on
       if (result.mode === 'insert') status?.setText(result.text || 'Not implemented yet.');
       else {
         setBody(result.htmlBody || '');
+        if (editableSubject && result.subject) setDraftSubject(result.subject);
         setNonce((n) => n + 1);
       }
     } else {
@@ -401,7 +413,7 @@ function ReplyComposer({ replyTo, subject, onSend, sending, accountTemplates, on
 
   return (
     <div style={{
-      position: 'sticky', bottom: 0,
+      position: sticky ? 'sticky' : 'relative', bottom: sticky ? 0 : 'auto',
       background: 'var(--gb-surface-canvas)',
       boxShadow: '0 -24px 28px -16px var(--gb-surface-canvas)',
       paddingTop: 12, marginTop: 18, zIndex: 3,
@@ -449,7 +461,7 @@ function ReplyComposer({ replyTo, subject, onSend, sending, accountTemplates, on
               fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6,
               color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)',
               textTransform: 'uppercase', flexShrink: 0,
-            }}>Power Automate</span>
+            }}>{transportLabel}</span>
           </button>
         )}
 
@@ -467,14 +479,19 @@ function ReplyComposer({ replyTo, subject, onSend, sending, accountTemplates, on
               <span style={{ color: 'var(--gb-text-primary)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{replyTo}</span>
               <span style={{ flex: 1 }} />
               <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>SUBJECT</span>
-              <span style={{ color: 'var(--gb-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{subject}</span>
+              {editableSubject ? (
+                <input value={draftSubject} onChange={(e) => setDraftSubject(e.target.value)} placeholder="Email subject"
+                  style={{ width: 280, maxWidth: '42%', height: 27, padding: '0 8px', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-sm)', outline: 'none', background: 'var(--gb-surface-2)', color: 'var(--gb-text-primary)', font: '11.5px var(--gb-font-sans)' }} />
+              ) : (
+                <span style={{ color: 'var(--gb-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{draftSubject}</span>
+              )}
             </div>
             <div ref={editorWrapRef} style={{ position: 'relative', padding: '4px 6px' }}>
               <RichTextEditor
                 key={nonce}
                 initialHtml={body}
                 onChange={setBody}
-                placeholder="Write your reply…  Type / for commands"
+                placeholder={placeholder}
                 minHeight={120}
                 onSlashQueryChange={onSlashQueryChange}
                 onSlashNavigate={(direction) => setActiveIndex((index) => Math.max(0, Math.min(index + direction, Math.max(0, slashResults.length - 1))))}
@@ -531,7 +548,7 @@ function ReplyComposer({ replyTo, subject, onSend, sending, accountTemplates, on
             }}>
               <span style={{ flex: 1 }} />
               <Btn size="sm" variant="ghost" onClick={discard} disabled={sending || !!applyingTemplateId}>Discard</Btn>
-              <Btn size="sm" variant="primary" status="brand" icon={<I.send size={11} />} disabled={!hasText || sending || !!applyingTemplateId}
+              <Btn size="sm" variant="primary" status="brand" icon={<I.send size={11} />} disabled={!hasText || !draftSubject.trim() || sending || !!applyingTemplateId}
                 onClick={send}>
                 {sending ? 'Sending…' : 'Send'}
               </Btn>
@@ -749,7 +766,7 @@ export function EmailPreview({
               {replyEnabled && !loading && thread.length > 0 && (() => {
                 const cust = splitAddress(findCustomerAddress(thread, email?.from || meta?.from));
                 return (
-                  <ReplyComposer
+                  <EmailComposer
                     replyTo={cust.email ? `${cust.name} <${cust.email}>` : cust.name}
                     subject={subject}
                     onSend={onSendReply}

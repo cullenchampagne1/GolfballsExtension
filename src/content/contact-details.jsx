@@ -15,6 +15,10 @@ import { submitCallLog } from '../lib/submitCallLog.js';
 import { submitQuickTask, readTaskContext } from '../lib/submitQuickTask.js';
 import { buildCustomTaskTemplate, daysOutFromCrmDate, loadTaskTemplates } from '../lib/quickTask.js';
 import { loadCallTemplates } from '../lib/callLog.js';
+import { sendContactEmail } from '../lib/contactEmail.js';
+import { readEmailConfig } from '../lib/emailSender.js';
+import { accountEmailTemplates, evaluateAccountEmailTemplate, savedProposalPlaceholder } from '../lib/emailComposerCommands.js';
+import { EmailComposer } from '../modals/EmailPreview.jsx';
 import { ARMOR, ActivityFilter, Btn, Card, CasesPanel, DASH, DataCtx, DetailErrorBoundary, EmailsPanel, EmptyRow, I, IconBtn, InlineSearch, OrdersPanel, PAGE_ZOOM, ScrollArea, SectionTitle, StatsStrip, SystemCard, Tag, Td, Th, ThemeSelector, activityType, crmGo, crmHref, fmtDate, fmtDateTime, fullName, priTone, tableStyle, trStyle, useD } from '../lib/detail-shared.jsx';
 import { AccountInfoCard, ActivityDetailModal, AltLookupsCard, ContactInfoCard, EditTaskModal, FormField, Hero, MailerCard, MiniSelect, ModalCtx, ModalShell, OpenTaskRow, OpportunitiesPanel, PRIORITY_OPTS, PatchCtx, ProofsPanel, QL_KEY, QT_KEY, Sidebar, TArea, TInput, TemplateModal, UI_CSS, adapt, currentEmployeeId, fromDateInput, gbToast, nextTaskTempId, priLabel, toDateInput, todayMDY, useModal, usePatch, useTemplates } from '../lib/contact-detail-shared.jsx';
 
@@ -29,6 +33,78 @@ async function taskContext(fallbackContactId, extra = {}) {
   if (!ctx.employeeId || ctx.employeeId === '0') { const fb = currentEmployeeId(); if (fb && fb !== '0') ctx.employeeId = fb; }
   if (!ctx.contactId && fallbackContactId) ctx.contactId = String(fallbackContactId);
   return { ...ctx, ...extra };
+}
+
+function ContactEmailModal() {
+  const D = useD();
+  const { closeModal } = useModal();
+  const [config, setConfig] = useState(null);
+  const [proposals, setProposals] = useState([]);
+  const [sending, setSending] = useState(false);
+  const to = String(D.contact.email || '').trim();
+  const contactName = fullName(D.contact) || 'Contact';
+
+  useEffect(() => {
+    let live = true;
+    readEmailConfig().then((next) => { if (live) setConfig(next); });
+    try {
+      chrome.storage.local.get('gbSavedProposals', (data) => {
+        if (live) setProposals(Array.isArray(data?.gbSavedProposals) ? data.gbSavedProposals : []);
+      });
+    } catch (e) {}
+    return () => { live = false; };
+  }, []);
+
+  const applyTemplate = async (template) => {
+    try {
+      const resolver = window.__gbResolveAllVarsAsync;
+      const result = await evaluateAccountEmailTemplate(template, (vars, toField) => {
+        if (typeof resolver !== 'function') throw new Error('Reload this page before using account templates');
+        return resolver(vars, toField, document);
+      });
+      return { ok: true, htmlBody: result.htmlBody, subject: result.subject };
+    } catch (error) {
+      const message = error?.message || 'Could not evaluate that template';
+      gbToast(message, 'error');
+      return { ok: false, error: message };
+    }
+  };
+
+  const send = async (draft) => {
+    if (sending) return { ok: false };
+    setSending(true);
+    const result = await sendContactEmail({ ...draft, config: config || undefined });
+    setSending(false);
+    if (result.state === 'sent') {
+      gbToast(`Email sent to ${contactName}`, 'success'); return { ok: true };
+    }
+    if (result.state === 'opened') {
+      gbToast(`Opened email to ${contactName} in Outlook`, 'success'); return { ok: true };
+    }
+    gbToast(result.error || 'Could not send email', 'error');
+    return { ok: false, error: result.error };
+  };
+
+  return (
+    <ModalShell title="Send Email" icon={<I.send />} subtitle={`${contactName} · ${to}`} width={780}>
+      <EmailComposer
+        replyTo={to}
+        subject=""
+        onSend={send}
+        sending={sending}
+        accountTemplates={accountEmailTemplates(config?.templates)}
+        onApplyAccountTemplate={applyTemplate}
+        savedProposals={proposals}
+        onApplySavedProposal={async (proposal) => ({ ok: true, mode: 'insert', text: savedProposalPlaceholder(proposal) })}
+        initiallyExpanded
+        editableSubject
+        sticky={false}
+        onDiscard={closeModal}
+        transportLabel={config ? (config.paReady ? 'Power Automate' : 'Outlook') : 'Checking…'}
+        placeholder="Write your email…  Type / for commands"
+      />
+    </ModalShell>
+  );
 }
 /* ════════════════════════════════════════════════════════════
    TOP BAR
@@ -554,7 +630,10 @@ function App({ store }) {
             padding: '20px 28px 60px',
             display: 'flex', flexDirection: 'column', gap: 14,
           }}>
-            <Hero />
+            <Hero onSendEmail={() => {
+              if (!String(D.contact.email || '').trim()) { gbToast('This contact has no email address', 'error'); return; }
+              openModal(<ContactEmailModal />);
+            }} />
 
             {/* Account Info + Contact Info side-by-side, always visible */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>

@@ -135,6 +135,7 @@ export async function evaluateAccountEmailTemplate(template, resolveVariables) {
   const result = await resolveVariables(vars, template.toField || { type: 'auto' });
   return {
     htmlBody: renderTemplate(template.body || '', result?.resolved || {}, vars),
+    subject: renderTemplate(template.subject || '', result?.resolved || {}, vars),
     resolvedVars: result?.resolved || {},
   };
 }

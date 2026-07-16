@@ -251,7 +251,7 @@ async function crmCreateLookup(contactId, lookupTypeId, content) {
   if (!r.ok) throw new Error('lookup failed');
 }
 
-export function Hero() {
+export function Hero({ onSendEmail }) {
   const D = useD();
   const { openModal } = useModal();
   const c = D.contact, a = D.account;
@@ -344,7 +344,10 @@ export function Hero() {
         }}>
           <Btn variant="primary" icon={<I.edit />} full onClick={() => openModal(<ContactEditModal />)}>Edit Contact</Btn>
           <Btn variant="tinted" status="info" icon={<I.phone />} full onClick={() => { try { window.__gbShowCallLogModal && window.__gbShowCallLogModal(); } catch (e) {} }}>Log Call</Btn>
-          <Btn variant="tinted" status="info" icon={<I.send />} full onClick={() => { try { window.__gbOpenTemplate && window.__gbOpenTemplate(); } catch (e) {} }}>Send Email</Btn>
+          <Btn variant="tinted" status="info" icon={<I.send />} full onClick={() => {
+            if (onSendEmail) onSendEmail();
+            else { try { window.__gbOpenTemplate && window.__gbOpenTemplate(); } catch (e) {} }
+          }}>Send Email</Btn>
           <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
             <DncButton />
             <IconBtn size="sm" icon={<I.more />} />
