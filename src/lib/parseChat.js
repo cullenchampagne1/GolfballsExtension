@@ -58,3 +58,30 @@ export function parseChat(rawText) {
   }
   return { messages };
 }
+
+export function isChatTranscript(rawText) {
+  const { messages } = parseChat(rawText);
+  return messages.some((message) => message.kind === 'visitor' || message.kind === 'agent');
+}
+
+export function chatTranscriptSummary(rawText) {
+  const { messages } = parseChat(rawText);
+  const spoken = messages.filter((message) => message.kind === 'visitor' || message.kind === 'agent');
+  if (!spoken.length) return null;
+  const participants = [...new Set(spoken.map((message) => message.name).filter(Boolean))];
+  return {
+    count: spoken.length,
+    participants,
+    last: spoken[spoken.length - 1],
+  };
+}
+
+export function safeChatTranscriptUrl(rawText) {
+  const match = String(rawText || '').match(/https:\/\/[^\s<>"']+/i);
+  if (!match) return '';
+  try {
+    const url = new URL(match[0]);
+    const host = url.hostname.toLowerCase();
+    return (host === 'snapengage.com' || host.endsWith('.snapengage.com')) ? url.href : '';
+  } catch { return ''; }
+}

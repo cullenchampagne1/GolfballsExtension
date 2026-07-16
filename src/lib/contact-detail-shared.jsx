@@ -15,6 +15,7 @@ import { DatePicker } from '../ui/components/DatePicker.jsx';
 import { completeTaskById } from './crmTasks.js';
 import { loadTaskTemplates } from './quickTask.js';
 import { loadCallTemplates } from './callLog.js';
+import { isChatTranscript, parseChat, safeChatTranscriptUrl } from './parseChat.js';
 import { ARMOR, AVATAR_COLOR, Btn, CRM_CHILD_PAGE, Card, ContactPill, DASH, Dot, EmptyRow, I, IconBtn, KV, NAV, PAGE_ZOOM, TOP_PAGE, ProofCard, ScrollArea, SectionTitle, Tag, Td, Th, accountHref, crmGo, crmHref, fmt$, fmtDate, fmtDateTime, fullName, goUrl, initials, isEmpty, num, oppHref, priTone, recordBackTo, tableStyle, trStyle, txt, useD, yearsSince } from './detail-shared.jsx';
 
 export const PatchCtx = React.createContext(() => {});
@@ -701,6 +702,10 @@ export function ActivityDetailModal({ activityId }) {
   }, [activityId]);
   let meta = {};
   try { if (a && a.MetaData) meta = JSON.parse(a.MetaData); } catch (e) {}
+  const description = a && (a.ActivityDescription || a.Description || '');
+  const subject = a && (a.ActivitySubject || a.Subject || '');
+  const transcriptSource = isChatTranscript(description) ? description : (isChatTranscript(subject) ? subject : '');
+  const transcript = transcriptSource ? parseChat(transcriptSource).messages : [];
   const row = (label, val) => (val === 0 || val) ? (
     <div style={{ display: 'flex', gap: 12, padding: '6px 0', borderBottom: '1px dashed var(--gb-border-subtle)' }}>
       <span style={{ width: 112, fontSize: 11, color: 'var(--gb-text-muted)', fontWeight: 500, flexShrink: 0 }}>{label}</span>
@@ -708,14 +713,14 @@ export function ActivityDetailModal({ activityId }) {
     </div>
   ) : null;
   return (
-    <ModalShell title="Activity Detail" icon={<I.history />} width={480} footer={<Btn variant="ghost" size="sm" onClick={closeModal}>Close</Btn>}>
+    <ModalShell title={transcript.length ? 'Live Chat Transcript' : 'Activity Detail'} icon={transcript.length ? <I.chat /> : <I.history />} width={transcript.length ? 720 : 480} footer={<Btn variant="ghost" size="sm" onClick={closeModal}>Close</Btn>}>
       {err
         ? <div style={{ padding: 18, textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12 }}>Couldn’t load activity.</div>
         : !a
         ? <div style={{ padding: 18, textAlign: 'center', color: 'var(--gb-text-muted)', fontSize: 12 }}>Loading…</div>
         : <>
-          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{a.ActivitySubject || 'Activity'}</div>
-          {a.ActivityDescription && <div style={{ fontSize: 12.5, color: 'var(--gb-text-secondary)', lineHeight: 1.5, padding: '9px 11px', background: 'var(--gb-surface-2)', borderRadius: 'var(--gb-r-sm)' }}>{a.ActivityDescription}</div>}
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{transcript.length ? 'Customer conversation' : (subject || 'Activity')}</div>
+          {transcript.length ? <ChatTranscript messages={transcript} /> : description && <div style={{ fontSize: 12.5, color: 'var(--gb-text-secondary)', lineHeight: 1.5, padding: '9px 11px', background: 'var(--gb-surface-2)', borderRadius: 'var(--gb-r-sm)', whiteSpace: 'pre-wrap' }}>{description}</div>}
           <div>
             {row('Direction', a.Direction)}
             {row('Employee', a.Employee)}
@@ -728,6 +733,32 @@ export function ActivityDetailModal({ activityId }) {
           </div>
         </>}
     </ModalShell>
+  );
+}
+
+function ChatTranscript({ messages }) {
+  return (
+    <div className="gb-scroll" style={{ maxHeight: 'min(560px, 65vh)', overflowY: 'auto', padding: '12px 14px', background: 'var(--gb-surface-canvas)', border: '1px solid var(--gb-border-subtle)', borderRadius: 'var(--gb-r-md)', display: 'flex', flexDirection: 'column', gap: 9 }}>
+      {messages.map((message, index) => {
+        if (message.kind === 'link') {
+          const href = safeChatTranscriptUrl(message.body);
+          return href ? <a key={index} href={href} target="_blank" rel="noopener noreferrer" style={{ alignSelf: 'center', display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 3, padding: '6px 10px', borderRadius: 'var(--gb-r-pill)', border: '1px solid var(--gb-border-default)', background: 'var(--gb-fill-subtle)', color: 'var(--gb-brand-label)', textDecoration: 'none', fontSize: 10.5, fontWeight: 650 }}><I.ext size={10} />Open original SnapEngage transcript</a> : null;
+        }
+        if (message.kind === 'system') return <div key={index} style={{ alignSelf: 'center', maxWidth: '80%', padding: '4px 9px', borderRadius: 'var(--gb-r-pill)', background: 'var(--gb-fill-subtle)', color: 'var(--gb-text-muted)', fontSize: 10.5, textAlign: 'center' }}>{message.time && <span style={{ fontFamily: 'var(--gb-font-mono)', marginRight: 6 }}>{message.time}</span>}{message.body}</div>;
+        if (message.kind === 'note') return <div key={index} style={{ alignSelf: 'center', maxWidth: '90%', padding: '7px 10px', borderLeft: '2px solid var(--gb-border-strong)', color: 'var(--gb-text-muted)', fontSize: 11.5 }}>{message.body}</div>;
+        const visitor = message.kind === 'visitor';
+        const bot = /\bbot\b/i.test(message.name || '');
+        return (
+          <div key={index} style={{ alignSelf: visitor ? 'flex-start' : 'flex-end', width: 'min(78%, 520px)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: visitor ? 'flex-start' : 'flex-end', gap: 7, margin: '0 3px 3px', fontSize: 9.5, color: 'var(--gb-text-muted)' }}>
+              <span style={{ fontWeight: 750, color: bot ? 'var(--gb-text-muted)' : visitor ? 'var(--gb-success-fg)' : 'var(--gb-brand-label)' }}>{message.name || (visitor ? 'Visitor' : 'Agent')}</span>
+              <span style={{ fontFamily: 'var(--gb-font-mono)' }}>{message.time}</span>
+            </div>
+            <div style={{ padding: '8px 11px', borderRadius: visitor ? '4px 12px 12px 12px' : '12px 4px 12px 12px', border: `1px solid ${bot ? 'var(--gb-border-default)' : visitor ? 'var(--gb-success-tint-border)' : 'var(--gb-brand-tint-border)'}`, background: bot ? 'var(--gb-fill-subtle)' : visitor ? 'var(--gb-success-tint-soft)' : 'var(--gb-brand-tint-soft)', color: 'var(--gb-text-primary)', fontSize: 12, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{message.body}</div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

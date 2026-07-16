@@ -19,6 +19,7 @@ import { sendContactEmail } from '../lib/contactEmail.js';
 import { readEmailConfig } from '../lib/emailSender.js';
 import { accountEmailTemplates, evaluateAccountEmailTemplate, savedProposalPlaceholder } from '../lib/emailComposerCommands.js';
 import { EmailComposer } from '../modals/EmailPreview.jsx';
+import { chatTranscriptSummary } from '../lib/parseChat.js';
 import { ARMOR, ActivityFilter, Btn, Card, CasesPanel, DASH, DataCtx, DetailErrorBoundary, EmailsPanel, EmptyRow, I, IconBtn, InlineSearch, OrdersPanel, PAGE_ZOOM, ScrollArea, SectionTitle, StatsStrip, SystemCard, Tag, Td, Th, ThemeSelector, activityType, crmGo, crmHref, fmtDate, fmtDateTime, fullName, priTone, tableStyle, trStyle, useD } from '../lib/detail-shared.jsx';
 import { AccountInfoCard, ActivityDetailModal, AltLookupsCard, ContactInfoCard, EditTaskModal, FormField, Hero, MailerCard, MiniSelect, ModalCtx, ModalShell, OpenTaskRow, OpportunitiesPanel, PRIORITY_OPTS, PatchCtx, ProofsPanel, QL_KEY, QT_KEY, Sidebar, TArea, TInput, TemplateModal, UI_CSS, adapt, currentEmployeeId, fromDateInput, gbToast, nextTaskTempId, priLabel, toDateInput, todayMDY, useModal, usePatch, useTemplates } from '../lib/contact-detail-shared.jsx';
 
@@ -141,6 +142,7 @@ function ActivityRow({ a, last, onDelete }) {
   const [hover, setHover] = useState(false);
   const { openModal } = useModal();
   const meta = activityType(a);
+  const chat = meta.key === 'chat' ? chatTranscriptSummary(a.subject || a.description || '') : null;
   const isNote = !!a.localNote;
   const clickable = !!a.id && !isNote;
   return (
@@ -166,10 +168,16 @@ function ActivityRow({ a, last, onDelete }) {
       }}>{React.cloneElement(meta.icon, { size: 13 })}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 12.5, color: 'var(--gb-text-primary)', fontWeight: 500, lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-          {a.subject || <span style={{ color: 'var(--gb-text-ghost)' }}>—</span>}
+          {chat ? (
+            <>
+              <span style={{ display: 'block', fontWeight: 700 }}>Live Chat · {chat.count} message{chat.count === 1 ? '' : 's'}</span>
+              <span style={{ display: 'block', marginTop: 2, color: 'var(--gb-text-muted)', fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chat.last.name}: {chat.last.body}</span>
+            </>
+          ) : (a.subject || <span style={{ color: 'var(--gb-text-ghost)' }}>—</span>)}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 5, flexWrap: 'wrap' }}>
           {a.category && <Tag tone={meta.tone} size="xs">{a.category}</Tag>}
+          {chat && <Tag tone="success" size="xs">Transcript</Tag>}
           {a.direction && <Tag tone="neutral" size="xs">{a.direction}</Tag>}
           {a.employee && <span style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', fontWeight: 600 }}>{a.employee}</span>}
         </div>

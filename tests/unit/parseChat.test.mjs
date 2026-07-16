@@ -7,7 +7,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseChat } from '../../src/lib/parseChat.js';
+import { chatTranscriptSummary, isChatTranscript, parseChat, safeChatTranscriptUrl } from '../../src/lib/parseChat.js';
 
 describe('parseChat', () => {
   it('classifies a full transcript into visitor/agent/system/link/note lines in order', () => {
@@ -74,5 +74,17 @@ describe('parseChat', () => {
     const { messages } = parseChat('https://example.com/x\nSee http://example.com/y');
     assert.equal(messages[0].kind, 'note');
     assert.equal(messages[1].kind, 'link');
+  });
+
+  it('summarizes a real Live Chat blob and extracts only safe SnapEngage links', () => {
+    const raw = '(14:31:58) <b>Approval Bot</b> This chat may be recorded.<br />(14:31:59) <b>Visitor</b> Looking for an Irish logo<br />(14:32:34) <b>Matt</b> Happy to help<br />See https://www.snapengage.com/viewcase?c=abc for chat transcript';
+    assert.equal(isChatTranscript(raw), true);
+    assert.deepEqual(chatTranscriptSummary(raw), {
+      count: 3,
+      participants: ['Approval Bot', 'Visitor', 'Matt'],
+      last: { kind: 'agent', name: 'Matt', time: '14:32:34', body: 'Happy to help' },
+    });
+    assert.equal(safeChatTranscriptUrl(raw), 'https://www.snapengage.com/viewcase?c=abc');
+    assert.equal(safeChatTranscriptUrl('See https://example.com/transcript'), '');
   });
 });

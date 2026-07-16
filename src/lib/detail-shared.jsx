@@ -7,6 +7,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { THEME_VARIANTS, loadTheme, saveTheme, applyTheme } from '../lib/theme.js';
 import { queryIndexed } from '../lib/crmIndex.js';
+import { isChatTranscript } from './parseChat.js';
 
 export const Icon = ({ size = 14, sw = 1.8, children, style }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
@@ -70,7 +71,7 @@ export function activityType(activity = {}) {
   if (/\b(image|proof|logo|art file|mockup)\b/.test(signal)) return { key: 'image', icon: <I.camera />, tone: 'error' };
   if (/\b(email|e-mail)\b|email sent|followup email/.test(signal)) return { key: 'email', icon: <I.mail />, tone: 'warning' };
   if (/\b(call|phone|voicemail|vm)\b|left a message/.test(signal)) return { key: 'call', icon: <I.phone />, tone: 'success' };
-  if (/\b(chat|case|support)\b/.test(signal)) return { key: 'chat', icon: <I.chat />, tone: 'success' };
+  if (/\b(chat|case|support)\b/.test(signal) || isChatTranscript(activity.subject || activity.description || '')) return { key: 'chat', icon: <I.chat />, tone: 'success' };
   if (/\bnote\b|logged a note|comment/.test(signal)) return { key: 'note', icon: <I.note />, tone: 'brand' };
   return { key: 'workflow', icon: <I.cog />, tone: 'info' };
 }
