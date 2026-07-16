@@ -429,12 +429,20 @@
   function dropConditional(template, vars, resolved) {
     if (!template || !vars) return template || '';
     let out = String(template);
-    for (const [name, def] of Object.entries(vars)) {
-      const smart = def && def.smart;
-      if (!smart || !smart.conditional) continue;
-      const val = resolved ? resolved[name] : '';
-      if (val != null && String(val).length > 0) continue;
-      const placeholder = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const expressions = Array.from(out.matchAll(/\{\{\s*([^}]+?)\s*\}\}/g), (match) => match[1]);
+    for (const expression of new Set(expressions)) {
+      const names = String(expression).split('|').map((name) => name.trim()).filter(Boolean);
+      const conditionalDef = names.map((name) => vars[name]).find((def) => def?.smart?.conditional);
+      if (!conditionalDef) continue;
+      const hasValue = names.some((name) => {
+        const value = resolved?.[name];
+        return value != null && String(value).length > 0;
+      });
+      if (hasValue) continue;
+      const placeholder = names
+        .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+        .join('\\s*\\|\\s*');
+      const smart = conditionalDef.smart;
       const scope = smart.conditionalScope || 'sentence';
       let rx;
       if (scope === 'paragraph') {
@@ -483,6 +491,14 @@
         default:           return false;
       }
     });
+  }
+
+  /* Explicit bridge for React content-script bundles. Top-level declarations
+     from separate MV3 content scripts are not a reliable cross-bundle API;
+     publishing the resolver on the isolated world's window gives the Email
+     Preview slash menu the same live-page evaluation path as the popup. */
+  if (typeof window !== 'undefined') {
+    window.__gbResolveAllVarsAsync = resolveAllVarsAsync;
   }
 
   // ═══════════════════════════════════════════════════════

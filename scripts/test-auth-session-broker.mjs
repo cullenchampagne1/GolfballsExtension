@@ -17,6 +17,20 @@ function installBroker() {
   });
   const calls = [];
   const win = dom.window;
+  class FakeXMLHttpRequest {
+    constructor() {
+      this.status = 200;
+      this.listeners = new Map();
+    }
+    open(method, url) { this.method = method; this.url = String(url); }
+    setRequestHeader(name, value) { this.headers ||= {}; this.headers[name] = value; }
+    addEventListener(name, listener) { this.listeners.set(name, listener); }
+    send(body) {
+      calls.push({ url: this.url, options: { method: this.method, headers: this.headers || {}, body } });
+      this.listeners.get('loadend')?.();
+    }
+  }
+  win.XMLHttpRequest = FakeXMLHttpRequest;
   win.Headers = Headers;
   win.Request = Request;
   win.Response = Response;
@@ -85,6 +99,18 @@ const privateCharge = await win.__gbAuthBrokerExecute({
 });
 assert.equal(privateCharge.ok, true);
 assert.equal(calls.at(-1).options.headers.authorization, token);
+
+const xhrOnly = installBroker();
+const xhr = new xhrOnly.win.XMLHttpRequest();
+xhr.open('GET', 'https://master.api.icustomize.com/user/getCart/123');
+xhr.setRequestHeader('AdminSession', token);
+xhr.send();
+const xhrIdentity = await xhrOnly.win.__gbAuthBrokerExecute({ action: 'identity' });
+assert.deepEqual(JSON.parse(JSON.stringify(xhrIdentity)), {
+  ok: true,
+  identity: { employeeId: '42', employeeName: 'Test Employee' },
+});
+xhrOnly.dom.window.close();
 
 const blocked = await win.__gbAuthBrokerExecute({
   action: 'chargeApi',

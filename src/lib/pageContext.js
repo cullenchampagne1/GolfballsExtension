@@ -1,5 +1,7 @@
-import { PAGE_TYPE } from './constants.js';
 import { runEngine } from './page-engine/index.js';
+import { detectPageType, pageUrl } from './pageType.js';
+
+export { detectPageType } from './pageType.js';
 
 /* ───────────────────────────────────────────────────────────────
    pageContext.js — the single "what page am I on + what's on it"
@@ -22,18 +24,6 @@ import { runEngine } from './page-engine/index.js';
 /* Resolve the page URL the way the engine's registry does: the live
    document uses window.location; a fetched/parsed Document carries its
    origin URL on body.dataset.gbSourceUrl (set by the fetch proxy). */
-function docUrl(doc) {
-  if (doc && typeof doc.URL === 'string' && doc.URL && doc.URL !== 'about:blank') {
-    // A real Document — prefer the explicit source-url marker, else its URL.
-    const marked = doc.body && doc.body.dataset && doc.body.dataset.gbSourceUrl;
-    if (marked) return marked;
-  }
-  if (doc === (typeof document !== 'undefined' ? document : null) && typeof window !== 'undefined') {
-    return window.location.href;
-  }
-  return (doc && doc.body && doc.body.dataset && doc.body.dataset.gbSourceUrl) || (doc && doc.URL) || '';
-}
-
 function param(url, re) {
   const m = String(url || '').match(re);
   return m ? m[1] : null;
@@ -50,25 +40,6 @@ function numericId(v, re) {
   return m ? m[1] : null;
 }
 
-/* The superset detector — actions-shelf's version (the only one with the
-   `order-index` branch) made canonical. URL checks first, then the
-   #tbContactId DOM marker, then the looser id-param fallbacks. */
-export function detectPageType(doc = (typeof document !== 'undefined' ? document : null)) {
-  const url = docUrl(doc);
-  if (/[?&]page=ViewOrder/i.test(url) && /[?&]orderID=/i.test(url)) return PAGE_TYPE.ORDER;
-  if (/[?&]Page=240\b/i.test(url)) return PAGE_TYPE.CONTACT;
-  if (/[?&]Page=271\b/i.test(url)) return PAGE_TYPE.ACCOUNT;
-  // Opportunity (Page=280&opportunityID=…) — MUST come before the #tbContactId
-  // fallback below, because the opportunity page also renders a contact id and
-  // would otherwise be mis-detected as a contact (hijacking the takeover).
-  if (/[?&]Page=280\b/i.test(url)) return PAGE_TYPE.OPPORTUNITY;
-  if (doc && typeof doc.getElementById === 'function' && doc.getElementById('tbContactId')) return PAGE_TYPE.CONTACT;
-  if (/[?&]accountID=\d+/i.test(url)) return PAGE_TYPE.ACCOUNT;
-  if (/[?&]customerID=\d+/i.test(url)) return PAGE_TYPE.CONTACT;
-  if (/[?&]Folder=Orders\b/i.test(url)) return PAGE_TYPE.ORDER_INDEX;
-  return PAGE_TYPE.OTHER;
-}
-
 export function getPageContext(doc = (typeof document !== 'undefined' ? document : null)) {
   const pageType = detectPageType(doc);
   let data = null;
@@ -78,7 +49,7 @@ export function getPageContext(doc = (typeof document !== 'undefined' ? document
     if (engine) { data = engine.data; schemaId = engine.schemaId; }
   } catch { /* engine failure must never break callers — fall back to ids/url */ }
 
-  const url = docUrl(doc);
+  const url = pageUrl(doc);
   const ids = {
     /* orderID from the URL is safe today (no order schema yet). */
     order:   param(url, /[?&]orderID=(\d+)/i),

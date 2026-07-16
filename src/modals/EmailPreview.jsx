@@ -6,6 +6,7 @@ import { CategorizeRail } from '../ui/components/CategorizeRail.jsx';
 import { categorySections, recommendedFromTemplate } from '../lib/caseMatch.js';
 import { splitThreadHtml } from '../lib/emailParse.js';
 import { useDevSetting } from '../lib/devSettings.js';
+import { emailComposerCommandRegistry, searchEmailComposerEntries } from '../lib/emailComposerCommands.js';
 
 const OUR_DOMAINS = /(golfballs\.com|loyaltylogo\.com|gbcadmin)/i;
 function plainPreview(html, n = 120) {
@@ -328,22 +329,60 @@ function MetaRow({ k, children }) {
   );
 }
 
-/* Sticky reply composer — draft-only (no send transport yet). The Send
-   button is intentionally not wired to a backend; clicking it explains that
-   and points the rep to copy + Outlook. Uses the same RichTextEditor as the
-   template/signature editors for the full formatting toolbar. */
-function ReplyComposer({ replyTo, subject }) {
+/* Sticky freeform reply composer. The host supplies the Power Automate send
+   bridge; this component only owns draft/edit/discard state. */
+function ReplyComposer({ replyTo, subject, onSend, sending, accountTemplates, onApplyAccountTemplate, savedProposals, onApplySavedProposal }) {
   const [expanded, setExpanded] = useState(false);
   const [body, setBody] = useState('');
   const [nonce, setNonce] = useState(0); // bump to reset the editor on discard
+  const [slashQuery, setSlashQuery] = useState(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [applyingTemplateId, setApplyingTemplateId] = useState(null);
+  const slashApiRef = useRef(null);
   const hasText = body.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim().length > 0;
-  const discard = () => { setBody(''); setExpanded(false); setNonce((n) => n + 1); };
+  const closeSlash = () => { setSlashQuery(null); slashApiRef.current = null; setActiveIndex(0); };
+  const discard = () => { setBody(''); setExpanded(false); closeSlash(); setNonce((n) => n + 1); };
+  const send = async () => {
+    if (!hasText || sending) return;
+    const result = await onSend?.({ to: replyTo, subject, htmlBody: body });
+    if (result?.ok) discard();
+  };
 
   /* Reply seed: blank — the signature is appended on the BACKEND at send
      time, so we no longer prefill it here (it was doubling up). Just open
      with an empty composer and the caret at the top. */
   const editorWrapRef = useRef(null);
-  const replyInitialHtml = '';
+  const slashResults = searchEmailComposerEntries({
+    templates: accountTemplates,
+    proposals: savedProposals,
+    query: slashQuery || '',
+    registry: emailComposerCommandRegistry,
+  }).slice(0, 7);
+  const onSlashQueryChange = (state) => {
+    if (!state) { closeSlash(); return; }
+    slashApiRef.current = state.api;
+    setSlashQuery(state.query);
+  };
+  const chooseSlashResult = async (entry, api = slashApiRef.current) => {
+    if (!entry || !api || applyingTemplateId) return;
+    const status = api.setLoading(entry.label);
+    closeSlash();
+    setApplyingTemplateId(entry.id);
+    const result = entry.commandId === 'saved-proposals'
+      ? await onApplySavedProposal?.(entry.value)
+      : await onApplyAccountTemplate?.(entry.value);
+    setApplyingTemplateId(null);
+    if (result?.ok) {
+      if (result.mode === 'insert') status?.setText(result.text || 'Not implemented yet.');
+      else {
+        setBody(result.htmlBody || '');
+        setNonce((n) => n + 1);
+      }
+    } else {
+      status?.setError(result?.error || 'Template failed');
+    }
+  };
+  useEffect(() => { setActiveIndex(0); }, [slashQuery]);
   /* On open, focus the editor and collapse the caret to the start — a
      contentEditable seeded with HTML otherwise lands the caret at the end. */
   useEffect(() => {
@@ -401,7 +440,7 @@ function ReplyComposer({ replyTo, subject }) {
                 Reply to {replyTo}
               </div>
               <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1, fontFamily: 'var(--gb-font-mono)' }}>
-                Click to write a draft
+                Click to write a reply
               </div>
             </div>
             <span style={{
@@ -410,7 +449,7 @@ function ReplyComposer({ replyTo, subject }) {
               fontSize: 9.5, fontWeight: 700, letterSpacing: 0.6,
               color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)',
               textTransform: 'uppercase', flexShrink: 0,
-            }}>Draft</span>
+            }}>Power Automate</span>
           </button>
         )}
 
@@ -430,27 +469,71 @@ function ReplyComposer({ replyTo, subject }) {
               <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--gb-text-muted)' }}>SUBJECT</span>
               <span style={{ color: 'var(--gb-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 280 }}>{subject}</span>
             </div>
-            <div ref={editorWrapRef} style={{ padding: '4px 6px' }}>
+            <div ref={editorWrapRef} style={{ position: 'relative', padding: '4px 6px' }}>
               <RichTextEditor
                 key={nonce}
-                initialHtml={replyInitialHtml}
+                initialHtml={body}
                 onChange={setBody}
-                placeholder="Write your reply…"
+                placeholder="Write your reply…  Type / for commands"
                 minHeight={120}
+                onSlashQueryChange={onSlashQueryChange}
+                onSlashNavigate={(direction) => setActiveIndex((index) => Math.max(0, Math.min(index + direction, Math.max(0, slashResults.length - 1))))}
+                onSlashExecute={(api) => chooseSlashResult(slashResults[activeIndex], api)}
+                onSlashCancel={closeSlash}
               />
+              {slashQuery !== null && (
+                <div style={{
+                  position: 'absolute', left: 14, bottom: 12, width: 290, zIndex: 5,
+                  border: '1px solid var(--gb-border-default)',
+                  borderRadius: 'var(--gb-r-md)', background: 'var(--gb-surface-2)',
+                  boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden',
+                }}>
+                  <div style={{ maxHeight: 164, overflowY: 'auto', padding: 4 }}>
+                    {slashResults.length === 0 && (
+                      <div style={{ padding: '10px 9px', color: 'var(--gb-text-muted)', fontSize: 11 }}>
+                        No registered matches for /{slashQuery}
+                      </div>
+                    )}
+                    {slashResults.map((item, index) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        disabled={!!applyingTemplateId}
+                        onMouseEnter={() => setActiveIndex(index)}
+                        onMouseDown={(e) => { e.preventDefault(); chooseSlashResult(item); }}
+                        style={{
+                          width: '100%', display: 'flex', alignItems: 'center', gap: 9,
+                          border: 0, borderRadius: 5, padding: '7px 8px', cursor: applyingTemplateId ? 'wait' : 'pointer',
+                          textAlign: 'left', background: index === activeIndex ? 'var(--gb-brand-tint-soft)' : 'transparent',
+                          color: 'var(--gb-text-primary)', fontFamily: 'inherit',
+                        }}
+                      >
+                        <span style={{ width: 23, height: 23, borderRadius: 5, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-fill-subtle)', color: 'var(--gb-brand-label)', fontWeight: 800, fontSize: 11 }}>
+                          /
+                        </span>
+                        <span style={{ minWidth: 0 }}>
+                          <span style={{ display: 'block', fontSize: 11.5, fontWeight: 650, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label || item.name || 'Untitled template'}</span>
+                          <span style={{ display: 'block', marginTop: 1, fontSize: 10, color: 'var(--gb-text-muted)' }}>{item.description}</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ padding: '4px 8px', borderTop: '1px solid var(--gb-border-subtle)', color: 'var(--gb-text-muted)', font: '9.5px var(--gb-font-mono)' }}>
+                    ↑↓ choose · Tab or Enter run · Esc close
+                  </div>
+                </div>
+              )}
             </div>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '8px 14px', borderTop: '1px solid var(--gb-border-subtle)',
               background: 'var(--gb-surface-2)',
             }}>
-              <IconBtn size="sm" variant="ghost" icon={<I.bolt />} tooltip="Pick template" />
-              <IconBtn size="sm" variant="ghost" icon={<I.copy />} tooltip="Attach" />
               <span style={{ flex: 1 }} />
-              <Btn size="sm" variant="ghost" onClick={discard}>Discard</Btn>
-              <Btn size="sm" variant="primary" status="brand" icon={<I.send size={11} />} disabled={!hasText}
-                onClick={() => window.__gbToast?.info?.("Reply sending isn't wired up yet — copy the draft and send from Outlook for now.", { duration: 3200 })}>
-                Send
+              <Btn size="sm" variant="ghost" onClick={discard} disabled={sending || !!applyingTemplateId}>Discard</Btn>
+              <Btn size="sm" variant="primary" status="brand" icon={<I.send size={11} />} disabled={!hasText || sending || !!applyingTemplateId}
+                onClick={send}>
+                {sending ? 'Sending…' : 'Send'}
               </Btn>
             </div>
           </div>
@@ -505,6 +588,13 @@ export function EmailPreview({
   caseTemplates = [],
   onSendTemplate,
   sendingTemplate = false,
+  replyEnabled = false,
+  onSendReply,
+  sendingReply = false,
+  accountTemplates = [],
+  onApplyAccountTemplate,
+  savedProposals = [],
+  onApplySavedProposal,
   onApplyCategory,
   onJunk,
   applyState,
@@ -656,12 +746,18 @@ export function EmailPreview({
                   Reply target is always the CUSTOMER (the non-golfballs
                   party), so opening a message we sent still drafts a
                   reply TO them, not back to ourselves. */}
-              {!loading && thread.length > 0 && (() => {
+              {replyEnabled && !loading && thread.length > 0 && (() => {
                 const cust = splitAddress(findCustomerAddress(thread, email?.from || meta?.from));
                 return (
                   <ReplyComposer
                     replyTo={cust.email ? `${cust.name} <${cust.email}>` : cust.name}
-                    subject={`RE: ${subject}`}
+                    subject={subject}
+                    onSend={onSendReply}
+                    sending={sendingReply}
+                    accountTemplates={accountTemplates}
+                    onApplyAccountTemplate={onApplyAccountTemplate}
+                    savedProposals={savedProposals}
+                    onApplySavedProposal={onApplySavedProposal}
                   />
                 );
               })()}
@@ -678,7 +774,7 @@ export function EmailPreview({
                 focused={focused}
                 onFocus={setFocused}
                 onApply={(c, s) => onApplyCategory?.(c, s)}
-                topSlot={
+                topSlot={replyEnabled ? (
                   <TemplateSendBar
                     templates={caseTemplates}
                     selectedId={selectedTplId}
@@ -686,7 +782,7 @@ export function EmailPreview({
                     onSend={() => selectedTpl && onSendTemplate?.(selectedTpl)}
                     sending={sendingTemplate}
                   />
-                }
+                ) : null}
               />
               {/* Junk action pinned under the rail */}
               <div style={{

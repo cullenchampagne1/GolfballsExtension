@@ -122,6 +122,41 @@
     return pending;
   };
 
+  // iCustomize also issues authenticated requests through XMLHttpRequest
+  // (including Axios' browser adapter). Observe the same two headers there so
+  // the broker does not depend on the application choosing the fetch adapter.
+  const xhrProto = root.XMLHttpRequest && root.XMLHttpRequest.prototype;
+  if (xhrProto) {
+    const originalOpen = xhrProto.open;
+    const originalSetRequestHeader = xhrProto.setRequestHeader;
+    const originalSend = xhrProto.send;
+
+    xhrProto.open = function authenticatedXhrOpen(method, url, ...rest) {
+      const parsed = parseAllowedUrl(url);
+      this.__gbAuthCaptureUrl = parsed && CAPTURE_HOSTS.has(parsed.hostname.toLowerCase()) ? parsed : null;
+      if (this.__gbAuthCaptureUrl && /\/(?:logout|logoff|signout)(?:[/?#]|$)/i.test(this.__gbAuthCaptureUrl.pathname)) {
+        clearCredentials();
+      }
+      return originalOpen.call(this, method, url, ...rest);
+    };
+
+    xhrProto.setRequestHeader = function authenticatedXhrSetHeader(name, value) {
+      if (this.__gbAuthCaptureUrl && ['adminsession', 'authorization'].includes(String(name || '').toLowerCase())) {
+        rememberCredential(name, String(value || ''));
+      }
+      return originalSetRequestHeader.call(this, name, value);
+    };
+
+    xhrProto.send = function authenticatedXhrSend(...args) {
+      if (this.__gbAuthCaptureUrl) {
+        this.addEventListener('loadend', () => {
+          if (this.status === 401) clearCredentials();
+        }, { once: true });
+      }
+      return originalSend.apply(this, args);
+    };
+  }
+
   async function readTextLimited(response) {
     const declared = Number(response.headers.get('content-length') || 0);
     if (Number.isFinite(declared) && declared > MAX_RESPONSE_BYTES) throw new Error('Response exceeds size limit');

@@ -72,6 +72,24 @@ function ensureStyle() {
     .gb-rte-content p:last-child { margin-bottom: 0; }
     .gb-rte-content a { color: var(--gb-brand-label); }
     .gb-rte-content ul, .gb-rte-content ol { margin: 0 0 8px; padding-left: 22px; }
+    .gb-rte-slash-status {
+      display: inline-flex; align-items: center; vertical-align: baseline;
+      margin: 0 2px; padding: 1px 7px; border-radius: 999px !important;
+      border: 1px solid var(--gb-brand-tint-border);
+      background: var(--gb-brand-tint-soft); color: var(--gb-brand-label);
+      font-family: var(--gb-font-mono); font-size: .9em; font-weight: 700;
+      user-select: all;
+    }
+    .gb-rte-slash-status[data-state="loading"]::before {
+      content: ''; width: 7px; height: 7px; margin-right: 5px;
+      border: 1.5px solid currentColor; border-right-color: transparent;
+      border-radius: 50%; animation: gb-rte-slash-spin .7s linear infinite;
+    }
+    .gb-rte-slash-status[data-state="error"] {
+      border-color: var(--gb-error-tint-border); background: var(--gb-error-tint-soft);
+      color: var(--gb-error-fg);
+    }
+    @keyframes gb-rte-slash-spin { to { transform: rotate(360deg); } }
     /* Thin themed scrollbars on RTE — fixes the chunky native bar that
        appears on long single-line subjects and tall bodies. */
     .gb-rte-content::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -314,6 +332,7 @@ const Sep = ({ sz }) => (
 export function RichTextEditor({
   initialHtml, onChange, onChipClick, variables = [], singleLine = false,
   size = 'md', minHeight, placeholder = '', onAttachmentResize,
+  onSlashQueryChange, onSlashExecute, onSlashNavigate, onSlashCancel,
 }) {
   const sz       = SIZES[size] || SIZES.md;
   const bodyMinH = minHeight != null ? minHeight : sz.minHeight;
@@ -328,6 +347,8 @@ export function RichTextEditor({
   // the buttons reflect the current choice instead of a static muted color.
   const [textColor, setTextColor] = useState('#7db82a');
   const [bgColor,   setBgColor]   = useState('#fff170');
+  const slashRef = useRef(null);
+  const slashSuppressedRef = useRef(false);
 
   /* name → {kind, attach} for attachment variables — drives the chip
      renderer (inline block vs paperclip pill). Kept in a ref so the
@@ -453,7 +474,89 @@ export function RichTextEditor({
   }
 
   function onKeyDown(e) {
-    if (singleLine && e.key === 'Enter') e.preventDefault();
+    if (singleLine && e.key === 'Enter') { e.preventDefault(); return; }
+    if (!slashRef.current) return;
+    if (e.key === 'Escape') {
+      e.preventDefault(); slashSuppressedRef.current = true; slashRef.current = null;
+      onSlashQueryChange?.(null); onSlashCancel?.(); return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault(); onSlashNavigate?.(e.key === 'ArrowDown' ? 1 : -1); return;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault(); onSlashExecute?.(slashRef.current.api); return;
+    }
+  }
+
+  function slashContext() {
+    if (!onSlashQueryChange) return null;
+    const sel = window.getSelection();
+    if (!sel?.isCollapsed || !sel.rangeCount || !ref.current?.contains(sel.anchorNode)) return null;
+    try {
+      const before = document.createRange();
+      before.selectNodeContents(ref.current);
+      before.setEnd(sel.anchorNode, sel.anchorOffset);
+      const match = before.toString().match(/(?:^|\s)\/([^\s/]*)$/);
+      if (!match || sel.anchorNode.nodeType !== Node.TEXT_NODE) return null;
+      const tokenLength = match[1].length + 1;
+      if (sel.anchorOffset < tokenLength) return null;
+      const range = document.createRange();
+      range.setStart(sel.anchorNode, sel.anchorOffset - tokenLength);
+      range.setEnd(sel.anchorNode, sel.anchorOffset);
+      return { query: match[1], range };
+    } catch { return null; }
+  }
+
+  function replaceSlashWithStatus(range, label) {
+    const span = document.createElement('span');
+    span.className = 'gb-rte-slash-status';
+    span.contentEditable = 'false';
+    span.dataset.state = 'loading';
+    span.textContent = `Loading ${label}…`;
+    const spacer = document.createTextNode('\u00a0');
+    range.deleteContents();
+    range.insertNode(spacer);
+    range.insertNode(span);
+    const caret = document.createRange();
+    caret.setStartAfter(spacer); caret.collapse(true);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(caret);
+    slashRef.current = null;
+    onSlashQueryChange?.(null);
+    setEmpty(false);
+    emit();
+    return {
+      setError(message) {
+        if (!span.isConnected) return;
+        span.dataset.state = 'error';
+        span.textContent = message || 'Template failed';
+        emit();
+      },
+      setText(message) {
+        if (!span.isConnected) return;
+        const text = document.createTextNode(String(message || ''));
+        span.replaceWith(text);
+        const caret = document.createRange();
+        caret.setStartAfter(text); caret.collapse(true);
+        const selection = window.getSelection(); selection.removeAllRanges(); selection.addRange(caret);
+        emit();
+      },
+    };
+  }
+
+  function refreshSlashContext() {
+    if (slashSuppressedRef.current) return;
+    const context = slashContext();
+    if (!context) {
+      if (slashRef.current) onSlashQueryChange?.(null);
+      slashRef.current = null;
+      return;
+    }
+    const api = {
+      query: context.query,
+      setLoading: (label) => replaceSlashWithStatus(context.range, label),
+    };
+    slashRef.current = { ...context, api };
+    onSlashQueryChange({ query: context.query, api });
   }
 
   // Clicking a {{variable}} chip (name or bolt) opens its smart-options
@@ -474,6 +577,8 @@ export function RichTextEditor({
     saveSelection();
     refreshMarks();
     emit();
+    slashSuppressedRef.current = false;
+    refreshSlashContext();
   }
 
   const md = fn => e => { e.preventDefault(); fn(); };
@@ -575,7 +680,7 @@ export function RichTextEditor({
           onKeyDown={onKeyDown}
           onClick={onClickContent}
           onMouseDown={onContentMouseDown}
-          onKeyUp={() => { saveSelection(); refreshMarks(); }}
+          onKeyUp={() => { saveSelection(); refreshMarks(); refreshSlashContext(); }}
           onMouseUp={() => { saveSelection(); refreshMarks(); }}
           onBlur={saveSelection}
           style={{

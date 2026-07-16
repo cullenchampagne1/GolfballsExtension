@@ -1046,6 +1046,11 @@ function PlaygroundSurface() {
               body: (EMAIL_FIXTURES.thread.email.bodyHtml || '').replace(/<[^>]+>/g, ' '),
             }))}
             onSendTemplate={(tpl) => toast?.info?.(`Send "${tpl.name}" (playground — no transport)`, { duration: 2500 })}
+            replyEnabled
+            onSendReply={({ to }) => {
+              toast?.success?.(`Reply sent to ${to} (playground)`, { duration: 2200 });
+              return Promise.resolve({ ok: true });
+            }}
             onApplyCategory={(category, subcategory) => toast?.success?.(`Applied ${category} · ${subcategory}`, { duration: 1800 })}
             onJunk={() => toast?.info?.('Marked as junk')}
             applyState={null}

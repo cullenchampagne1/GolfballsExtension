@@ -70,12 +70,20 @@ export function renderTemplate(template, resolved, defs) {
 export function dropConditional(template, defs, resolved) {
   if (!template || !defs) return template || '';
   let out = String(template);
-  for (const [name, def] of Object.entries(defs)) {
-    const smart = def && def.smart;
-    if (!smart || !smart.conditional) continue;
-    const val = resolved ? resolved[name] : '';
-    if (val != null && String(val).length > 0) continue;
-    const placeholder = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const expressions = Array.from(out.matchAll(/\{\{\s*([^}]+?)\s*\}\}/g), (match) => match[1]);
+  for (const expression of new Set(expressions)) {
+    const names = String(expression).split('|').map((name) => name.trim()).filter(Boolean);
+    const conditionalDef = names.map((name) => defs[name]).find((def) => def?.smart?.conditional);
+    if (!conditionalDef) continue;
+    const hasValue = names.some((name) => {
+      const value = resolved?.[name];
+      return value != null && String(value).length > 0;
+    });
+    if (hasValue) continue;
+    const placeholder = names
+      .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('\\s*\\|\\s*');
+    const smart = conditionalDef.smart;
     const scope = smart.conditionalScope || 'sentence';
     let rx;
     if (scope === 'paragraph') {

@@ -209,9 +209,9 @@ function ReplyBar() {
       <span style={{ width: 26, height: 26, borderRadius: '50%', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><I.send size={11} /></span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--gb-text-secondary)' }}>Reply to Rob King</div>
-        <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>RE: Order #4471829 — drafts a reply, doesn't send</div>
+        <div style={{ fontSize: 9.5, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)' }}>RE: Order #4471829 — sends through Power Automate</div>
       </div>
-      <Tag size="xs" tone="neutral" mono>DRAFT</Tag>
+      <Tag size="xs" tone="brand" mono>POWER AUTOMATE</Tag>
     </div>
   );
 }
@@ -395,7 +395,7 @@ export function EmailViewerPage() {
       <p>You never choose “email vs chat” or “case vs inbox.” The extension reads it off the page you opened the preview from:</p>
       <ul>
         <li><strong>On a case page</strong> (the URL carries a <code>caseID</code>) it opens in <strong>Case mode</strong> — the Categorize rail appears on the right to tag the case and fire a reply template. A small <strong>Case ⇄ Inbox</strong> view toggle lets you glance at the raw email, but the <em>type</em> was already decided for you.</li>
-        <li><strong>On an inbox / history row</strong> (no <code>caseID</code>) it opens <strong>read-only</strong> — just the thread, narrower, no rail.</li>
+        <li><strong>On an inbox / history row</strong> (no <code>caseID</code>) it opens as the narrower thread view with no rail. When Power Automate is ready, the freeform reply composer appears below the thread.</li>
         <li><strong>Email vs chat</strong> is the row’s own kind: an email case (Page=268 with a MessageID) opens the Email Viewer; a SnapEngage chat or a notes blob opens the Chat Viewer. Same chrome, different body.</li>
       </ul>
 

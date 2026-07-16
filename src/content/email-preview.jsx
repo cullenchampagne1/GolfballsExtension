@@ -7,20 +7,8 @@ import { parseEml, isFullHtmlPage, stripPageChrome, plainTextBody } from '../lib
 import { filterCaseTemplates, pickBestCaseTemplate, recommendedFromTemplate, matchesCaseTpl } from '../lib/caseMatch.js';
 import { pickFromAddress } from '../lib/sender.js';
 import { sendEmail, readEmailConfig } from '../lib/emailSender.js';
-
-/* The party on the thread that ISN'T us — the reply target. */
-const OUR_DOMAINS = /(golfballs\.com|loyaltylogo\.com|gbcadmin)/i;
-function bareEmail(s) {
-  const m = String(s || '').match(/<([^>]+)>/);
-  return (m ? m[1] : String(s || '')).trim();
-}
-function customerEmail(email, meta) {
-  const from = bareEmail(email?.from || meta?.from);
-  const to = bareEmail(email?.to || meta?.to);
-  if (from && !OUR_DOMAINS.test(from)) return from;
-  if (to && !OUR_DOMAINS.test(to)) return to;
-  return from || to || '';
-}
+import { bareEmail, replyRecipient, replySenderAccount, replySubject, sendThreadReply } from '../lib/emailReply.js';
+import { accountEmailTemplates, evaluateAccountEmailTemplate, savedProposalPlaceholder } from '../lib/emailComposerCommands.js';
 
 /* ───────────────────────────────────────────────────────────────
    email-preview.jsx — content-script entry for the React Email
@@ -116,6 +104,9 @@ if (!window.__gbEmailPreviewLoaded) {
     const [recommended, setRecommended] = useState([]);
     const [caseTemplates, setCaseTemplates] = useState([]);
     const [sendingTemplate, setSendingTemplate] = useState(false);
+    const [sendingReply, setSendingReply] = useState(false);
+    const [emailConfig, setEmailConfig] = useState(null);
+    const [savedProposals, setSavedProposals] = useState([]);
     const [applyState, setApplyState] = useState(null); // 'saving' | { category, subcategory }
 
     useEffect(() => {
@@ -165,6 +156,26 @@ if (!window.__gbEmailPreviewLoaded) {
       return () => { alive = false; };
     }, [target]);
 
+    useEffect(() => {
+      let alive = true;
+      readEmailConfig().then((config) => { if (alive) setEmailConfig(config); });
+      const onStorageChanged = (changes, area) => {
+        if (!alive || area !== 'local' || !changes.gbSavedProposals) return;
+        const next = changes.gbSavedProposals.newValue;
+        setSavedProposals(Array.isArray(next) ? next : []);
+      };
+      try {
+        chrome.storage.local.get('gbSavedProposals', (data) => {
+          if (alive) setSavedProposals(Array.isArray(data?.gbSavedProposals) ? data.gbSavedProposals : []);
+        });
+        chrome.storage.onChanged.addListener(onStorageChanged);
+      } catch { /* saved proposals remain empty */ }
+      return () => {
+        alive = false;
+        try { chrome.storage.onChanged.removeListener(onStorageChanged); } catch { /* ignore */ }
+      };
+    }, [target]);
+
     const onApplyCategory = async (category, subcategory) => {
       if (applyState === 'saving') return;
       setApplyState('saving');
@@ -178,23 +189,22 @@ if (!window.__gbEmailPreviewLoaded) {
       }
     };
 
-    /* Send the picked reply template — mirrors the popup: post to the
-       Power Automate flow when it's enabled + configured, otherwise open
-       an Outlook (mailto) compose window. */
+    /* Send a picked case template through the same PA-only reply channel as
+       the freeform composer. Both controls are hidden unless PA is ready. */
     const onSendTemplate = async (tpl) => {
       if (sendingTemplate) return;
-      const to = customerEmail(email, target.meta);
+      const cfg = emailConfig || await readEmailConfig();
+      if (!cfg.paReady) return;
+      const to = replyRecipient(email, target.meta);
       if (!to) { toast?.error?.('No customer email to reply to', { duration: 4000 }); return; }
-      const baseSubject = (email?.subject || target.meta?.subject || '').replace(/^\s*RE:\s*/i, '');
-      const subject = `RE: ${baseSubject}`;
+      const subject = replySubject(email?.subject || target.meta?.subject);
       const rawBody = tpl.body || '';
 
       setSendingTemplate(true);
-      /* Build + transport handled by emailSender: PA-ready → send the
-         reply through PA (HTML + signature); PA-off → open an Outlook
-         reply (mailto, stripped to plain text, no signature). */
-      const cfg = await readEmailConfig();
-      const from = pickFromAddress(tpl, cfg.localPart);
+      const senderTemplate = (tpl.senderAccount || tpl.senderRandomize)
+        ? tpl
+        : { ...tpl, senderAccount: replySenderAccount(email, target.meta) };
+      const from = pickFromAddress(senderTemplate, cfg.localPart);
       const res = await sendEmail({
         from, to, subject,
         htmlBody: rawBody,
@@ -205,12 +215,58 @@ if (!window.__gbEmailPreviewLoaded) {
       setSendingTemplate(false);
       if (res.state === 'sent') {
         toast?.success?.(`Reply sent to ${to}`, { duration: 4000 });
-      } else if (res.state === 'opened') {
-        toast?.info?.(`Opening Outlook reply to ${to}`, { duration: 2500 });
       } else {
         toast?.error?.(`Send failed: ${res.error || 'Power Automate error'}`, { duration: 6000 });
       }
     };
+
+    const onSendReply = async ({ to, subject, htmlBody }) => {
+      if (sendingReply) return { ok: false };
+      const cfg = emailConfig || await readEmailConfig();
+      if (!cfg.paReady) return { ok: false, error: 'Power Automate is not enabled' };
+      const recipient = bareEmail(to) || replyRecipient(email, target.meta);
+
+      setSendingReply(true);
+      const res = await sendThreadReply({
+        email,
+        meta: target.meta,
+        to,
+        subject,
+        htmlBody,
+        config: cfg,
+      });
+      setSendingReply(false);
+      if (res.state === 'sent') {
+        toast?.success?.(`Reply sent to ${recipient}`, { duration: 4000 });
+        return { ok: true };
+      }
+      toast?.error?.(`Send failed: ${res.error || 'Power Automate error'}`, { duration: 6000 });
+      return { ok: false, error: res.error };
+    };
+
+    const onApplyAccountTemplate = async (template) => {
+      try {
+        const resolver = window.__gbResolveAllVarsAsync;
+        const result = await evaluateAccountEmailTemplate(template, (vars, toField) => {
+          if (typeof resolver !== 'function') throw new Error('Reload this page before using account templates');
+          return resolver(vars, toField, document);
+        });
+        return { ok: true, htmlBody: result.htmlBody };
+      } catch (error) {
+        const message = error?.message || 'Could not evaluate that template';
+        toast?.error?.(message, { duration: 5000 });
+        return { ok: false, error: message };
+      }
+    };
+
+    /* Registry seam for the eventual workflow: resolve/create the account's
+       opportunity, attach the saved proposal, then insert the proposal into
+       the message. For now selection intentionally pastes a clear placeholder. */
+    const onApplySavedProposal = async (proposal) => ({
+      ok: true,
+      mode: 'insert',
+      text: savedProposalPlaceholder(proposal),
+    });
 
     const onJunk = async () => {
       if (applyState === 'saving') return;
@@ -237,6 +293,13 @@ if (!window.__gbEmailPreviewLoaded) {
         caseTemplates={caseTemplates}
         onSendTemplate={onSendTemplate}
         sendingTemplate={sendingTemplate}
+        replyEnabled={emailConfig?.paReady === true}
+        onSendReply={onSendReply}
+        sendingReply={sendingReply}
+        accountTemplates={accountEmailTemplates(emailConfig?.templates)}
+        onApplyAccountTemplate={onApplyAccountTemplate}
+        savedProposals={savedProposals}
+        onApplySavedProposal={onApplySavedProposal}
         applyState={applyState}
         onApplyCategory={onApplyCategory}
         onJunk={onJunk}

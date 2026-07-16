@@ -59,6 +59,9 @@ assert.equal(manifest.host_permissions.includes('https://*.customizationapplicat
 assert.equal(manifest.host_permissions.includes('https://admin.icustomize.com/*'), true);
 assert.equal(manifest.host_permissions.includes('https://master.api.icustomize.com/*'), true);
 assert.equal(manifest.permissions.includes('theme'), false, 'unused theme permission must not return');
+assert.equal(manifest.permissions.includes('nativeMessaging'), false, 'retired desktop companion permission must not return');
+const backgroundEntrySource = await readFile(new URL('../background.js', import.meta.url), 'utf8');
+assert.equal(backgroundEntrySource.includes('companion-update.js'), false, 'retired companion updater must not load');
 assert.match(manifest.content_security_policy.sandbox, /default-src 'none'/);
 
 const settingsSource = await readFile(new URL('../src/pages/SettingsPanel.jsx', import.meta.url), 'utf8');

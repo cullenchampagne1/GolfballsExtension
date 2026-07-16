@@ -360,6 +360,8 @@ if (window.__gbLoaded_smartDetection) {} else { window.__gbLoaded_smartDetection
     if (doc.getElementById('tbContactId')) return 'contact';
     if (/[?&]accountID=\d+/i.test(url)) return 'account';
     if (/[?&]customerID=\d+/i.test(url)) return 'contact';
+    if (/[?&]Folder=Orders\b/i.test(url)
+        || (/\/golfballs\/adminnew\/default\.aspx(?:[?#]|$)/i.test(url) && /[?&]Page=20(?:&|#|$)/i.test(url))) return 'order-index';
     return 'other';
   }
 

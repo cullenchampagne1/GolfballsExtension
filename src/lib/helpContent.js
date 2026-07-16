@@ -2037,12 +2037,12 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "The reply bar at the bottom ('Reply to Email <address>') expands into a composer: To, Subject (pre-filled RE:), and a rich-text body seeded with your signature. The reply target is resolved automatically to the customer side of the thread — our own domains are skipped."
+            "text": "When Power Automate is enabled and configured, the reply bar expands into a composer with the clicked thread's customer and RE: subject already selected. Write any rich-text reply and Send routes it through Power Automate with your signature. Type / at the start of a word and keep typing to filter every registered composer action inline. Account templates and saved proposals appear directly in the small menu; use ↑/↓ and Tab or Enter to run the highlighted result. Account templates evaluate against the current CRM page. Saved proposals currently insert 'Not implemented yet.'; a later version will resolve or create the opportunity and attach the proposal. The /query becomes a loading chip until the draft is populated or the chip reports an error."
           },
           {
             "type": "callout",
-            "kind": "warning",
-            "text": "The composer writes a DRAFT — it does not send from here. Finish and send the draft from Outlook."
+            "kind": "info",
+            "text": "Reply controls are hidden when Power Automate is unavailable. The sender stays on the clicked email's internal channel: golfballs.com or loyaltylogo.com."
           }
         ]
       },

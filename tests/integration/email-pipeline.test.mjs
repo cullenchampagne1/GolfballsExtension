@@ -18,6 +18,7 @@ globalThis.document = dom.window.document;
 const { parseEml } = await import('../../src/lib/emailParse.js');
 const { sanitizeHtml } = await import('../../src/lib/sanitizeHtml.js');
 const { htmlToPlainText, buildMailtoUrl, withSignature, sendEmail } = await import('../../src/lib/emailSender.js');
+const { sendThreadReply } = await import('../../src/lib/emailReply.js');
 
 const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const RAW_HTML = '<div><p>Café pricing — see <img src="cid:logo123"> below.</p>'
@@ -144,6 +145,28 @@ describe('email pipeline', () => {
     assert.equal(email.htmlBody.includes('<script'), false, 'the PA body is sanitized');
     assert.ok(email.htmlBody.includes('<br><div><b>Rep Name</b> · Golfballs.com</div>'), 'signature is glued via withSignature');
     assert.equal(email.htmlBody, sanitizeHtml(withSignature(parsed.bodyHtml, '<b>Rep Name</b> · Golfballs.com')));
+  });
+
+  it('routes a freeform reply through the clicked email channel', async () => {
+    const dispatched = [];
+    const result = await sendThreadReply({
+      email: {
+        from: 'Pat Buyer <buyer@example.com>',
+        to: 'Cullen <cullen@loyaltylogo.com>',
+        subject: 'RE: Order update',
+      },
+      subject: 'RE: RE: Order update',
+      htmlBody: '<p>Thanks, Pat.</p>',
+      config: { paReady: true, localPart: 'cullen', signature: '<b>Cullen</b>' },
+    }, { dispatch: async (message) => { dispatched.push(message); return { ok: true }; } });
+
+    assert.deepEqual(result, { state: 'sent', transport: 'pa', error: null });
+    const email = dispatched[0].payload.emails[0];
+    assert.equal(email.from, 'cullen@loyaltylogo.com');
+    assert.equal(email.to, 'buyer@example.com');
+    assert.equal(email.subject, 'RE: Order update');
+    assert.equal(email.replyMode, 'reply');
+    assert.equal(email.htmlBody, '<p>Thanks, Pat.</p><br><div><b>Cullen</b></div>');
   });
 
   it('falls back to a plain-text mailto window when Power Automate is off', async () => {

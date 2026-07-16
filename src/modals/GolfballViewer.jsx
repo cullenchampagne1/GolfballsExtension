@@ -235,14 +235,14 @@ function knockoutWhiteToCanvas(url) {
 }
 
 /* HDRI scene registry — one entry per scene. Add a row, drop the
-   matching .exr in /icons, and the drawer picks it up automatically.
+   matching .exr in /assets, and the drawer picks it up automatically.
    `icon` is the glyph component used in the drawer chip; `file` is
    the manifest-listed web-accessible resource path. */
 export const SCENES = [
-  { key: 'goldenGate',  label: 'Golden Gate hills', file: 'assets/golden_gate_hills_4k.exr', icon: 'bridge' },
-  { key: 'sunsetFairway', label: 'Sunset fairway',   file: 'assets/sunset_fairway_4k.exr',   icon: 'sunset' },
-  { key: 'lilienstein', label: 'Lilienstein',       file: 'assets/lilienstein_4k.exr',      icon: 'mountain' },
-  { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'assets/moonlit_golf_4k.exr',     icon: 'moon' },
+  { key: 'goldenGate',  label: 'Golden Gate hills', file: 'assets/golden_gate_hills_2k.exr', icon: 'bridge' },
+  { key: 'sunsetFairway', label: 'Sunset fairway',   file: 'assets/sunset_fairway_2k.exr',   icon: 'sunset' },
+  { key: 'lilienstein', label: 'Lilienstein',       file: 'assets/lilienstein_2k.exr',      icon: 'mountain' },
+  { key: 'moonlitGolf', label: 'Moonlit golf',      file: 'assets/moonlit_golf_2k.exr',     icon: 'moon' },
 ];
 
 /* ── Export-photo (snapshot) framing ──────────────────────────────────────────

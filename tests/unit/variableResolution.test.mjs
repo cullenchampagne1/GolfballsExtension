@@ -116,10 +116,6 @@ describe('dropConditional', () => {
   });
 
   it('drops the sentence around an OR-block whose candidates are ALL empty', () => {
-    // KNOWN BUG (this test fails until fixed): renderTemplate's doc promises an
-    // OR-block is "empty for conditional purposes only when EVERY candidate
-    // resolved empty", but dropConditional's regex only matches the bare
-    // {{name}} form — {{nick|first}} sails through untouched.
     const defs = { nick: { smart: { conditional: true } }, first: { smart: { conditional: true } } };
     assert.equal(
       dropConditional('Keep. Use {{nick|first}} here. End.', defs, {}),
