@@ -75,6 +75,7 @@
     { "name": "flow · chrome update channel chain", "file": "tests/integration/update-channel.test.mjs" },
     { "name": "guard · publisher CRX excludes development artifacts", "file": "tests/integration/publisher-packaging.test.mjs" },
     { "name": "guard · browser-store ZIP safety and determinism", "file": "tests/integration/store-packaging.test.mjs" },
+    { "name": "guard · slim proof-toolkit ZIP features", "file": "tests/integration/proof-submit-package.test.mjs" },
     { "name": "guard · security policy allowlists", "id": "guard-security", "command": ["node", "scripts/test-security.mjs"] },
     { "name": "guard · auth session broker", "id": "guard-auth-broker", "command": ["node", "scripts/test-auth-session-broker.mjs"] },
     { "name": "guard · crm index encryption", "id": "guard-crm-index", "command": ["node", "scripts/test-crm-index-encryption.mjs"] },
