@@ -35,6 +35,37 @@ window.__gbContentReady = true;
       gbNotify(message, type, duration);
     }
 
+    /* Large action toast for a new customer reply relayed by the background
+       email-relay poll. Functions can't cross the runtime boundary, so the
+       View handler is reconstructed HERE from the serializable `viewUrl` the
+       background pre-resolved (contact page for the sender's email). Dismiss +
+       View sit together on the right; the toast is sticky until dismissed. */
+    if (action === 'GB_EMAIL_RELAY_NOTIFY') {
+      handled = true;
+      const toast = window.__gbToast;
+      if (toast && typeof toast.action === 'function') {
+        const viewUrl = payload && payload.viewUrl;
+        toast.action({
+          tone: (payload && payload.tone) || 'brand',
+          title: (payload && payload.title) || 'New customer reply',
+          message: message || '',
+          align: 'right',
+          secondary: 'Dismiss',
+          primary: 'View',
+          onPrimary: () => {
+            if (viewUrl) {
+              try { window.location.href = viewUrl; } catch { /* navigation blocked */ }
+            } else {
+              toast.info?.('No contact is linked to this email yet', { duration: 4000 });
+            }
+          },
+        });
+      } else {
+        // No toast host on this page — fall back to the simple pill path.
+        gbNotify((payload && payload.title) || message, 'info', 6000);
+      }
+    }
+
     if (action === 'GB_OPEN_CALENDAR') {
       handled = true;
       if (window.__gbFeatureFlags?.calendarEnabled !== false) {

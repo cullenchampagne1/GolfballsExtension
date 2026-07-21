@@ -44,6 +44,10 @@ export function ActionToast({
   // icon tile so the visual rhythm matches.
   icon,
   size = 'md',
+  // Footer button layout. 'split' (default) keeps secondary at the left edge
+  // and primary at the right (legacy behavior). 'right' clusters BOTH buttons
+  // on the right, so a Dismiss/View pair reads as one right-aligned group.
+  align = 'split',
 }) {
   const handlePrimary = () => {
     if (onPrimary) onPrimary();
@@ -88,8 +92,9 @@ export function ActionToast({
         borderTop: '1px solid var(--gb-border-subtle)',
         background: t.bg,
       }}>
+        {align === 'right' && <div style={{ flex: 1 }} />}
         {secondary && <Btn variant="ghost" size={s.btn} onClick={handleSecondary}>{secondary}</Btn>}
-        <div style={{ flex: 1 }} />
+        {align !== 'right' && <div style={{ flex: 1 }} />}
         <Btn variant="tinted" status={tone} size={s.btn} icon={<I.bolt />} onClick={handlePrimary}>{primary}</Btn>
       </div>
     </div>
