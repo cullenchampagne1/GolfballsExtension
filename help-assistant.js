@@ -102,8 +102,8 @@
       return [400, 401, 403, 404, 409, 422, 429].includes(status);
     }
 
-    async function send(message, context, { retry = false } = {}) {
-      const requestId = State.makeRequestId(now());
+    async function send(message, context, { retry = false, requestIdOverride = '' } = {}) {
+      const requestId = requestIdOverride || State.makeRequestId(now());
       let body;
       let optimistic;
       await mutate((current) => {
@@ -136,6 +136,10 @@
             message: friendlyError(error),
             status: error?.status,
             retryMessage: body.message,
+            // A POST can reach the backend before its response reaches Chrome.
+            // Reusing the id lets the backend return that run instead of
+            // creating a duplicate when the user retries.
+            reuseRequestId: true,
             now: now(),
           });
         });
@@ -148,7 +152,10 @@
       const state = await getState();
       const message = state.lastError?.retryMessage;
       if (!message) throw new Error('There is no failed question to retry');
-      return send(message, context, { retry: true });
+      const requestIdOverride = state.lastError.reuseRequestId
+        ? state.lastError.requestId
+        : '';
+      return send(message, context, { retry: true, requestIdOverride });
     }
 
     async function poll({ force = false } = {}) {
@@ -226,6 +233,7 @@
           if (current.active?.status !== 'submitting') return current;
           return State.failTurn(current, {
             message: 'The browser closed before the help request was confirmed. Your question is ready to retry.',
+            reuseRequestId: true,
             now: now(),
           });
         });
@@ -270,10 +278,11 @@
     }
 
     async function clearConversation() {
-      const state = await getState();
-      if (state.active) throw new Error('Cancel the active response before clearing this conversation');
-      clearScheduledPoll();
-      return storageSet(State.emptyState(now()));
+      return mutate((current) => {
+        if (current.active) throw new Error('Cancel the active response before clearing this conversation');
+        clearScheduledPoll();
+        return State.emptyState(now());
+      });
     }
 
     async function feedback(runId, rating) {

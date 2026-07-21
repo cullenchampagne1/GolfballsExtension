@@ -80,7 +80,11 @@ describe('Help Companion state', () => {
     let state = State.beginTurn(State.emptyState(10), {
       message: 'Why is the shelf hidden?', requestId: 'help:request-1234', now: 10,
     });
-    state = State.failTurn(state, { message: 'Service unavailable', status: 503, now: 20 });
+    state = State.failTurn(state, {
+      message: 'Service unavailable', status: 503, reuseRequestId: true, now: 20,
+    });
+    assert.equal(state.lastError.reuseRequestId, true);
+    assert.equal(State.normalizeState(state).lastError.reuseRequestId, true);
     const retryId = 'help:request-5678';
     const request = State.buildRequest(state, state.lastError.retryMessage, {}, retryId, { retry: true });
     state = State.beginTurn(state, {

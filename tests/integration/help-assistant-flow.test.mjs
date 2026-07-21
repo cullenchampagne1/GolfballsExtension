@@ -91,5 +91,33 @@ describe('Help Companion background flow', () => {
     assert.equal(cancelled.messages.length, 1, 'the user question remains visible after cancellation');
     assert.ok(flow.requests.some(({ url, method }) => url.endsWith('/run_12345678-abcd/cancel') && method === 'POST'));
   });
-});
 
+  it('reuses the request id when submission succeeds remotely but Chrome loses the response', async () => {
+    let submissions = 0;
+    const { fetchMock, requests } = createFetchMock((url) => {
+      if (!new URL(url).pathname.endsWith('/assistant/messages')) return undefined;
+      submissions += 1;
+      if (submissions === 1) throw new TypeError('Network connection lost after upload');
+      return jsonResponse({ run_id: 'run_recovered-1234', status: 'queued', poll_after_ms: 3000 }, 202);
+    });
+    const stored = { gbApiInstallation: validInstallation() };
+    const { chrome } = createChrome({ stored });
+    const context = createContext({ chrome, fetchImpl: fetchMock });
+    loadScript(context, 'installation-auth.js');
+    loadScript(context, 'help-chat-state.js');
+    loadScript(context, 'help-assistant.js');
+    const controller = context.GBHelpAssistant.createController({ setTimer: () => 1, clearTimer: () => {} });
+
+    const failed = await controller.send('Where is the export setting?', {});
+    assert.equal(failed.lastError.reuseRequestId, true);
+    const recovered = await controller.retry({});
+    assert.equal(recovered.active.runId, 'run_recovered-1234');
+
+    const bodies = requests
+      .filter(({ url }) => new URL(url).pathname.endsWith('/assistant/messages'))
+      .map(({ options }) => JSON.parse(options.body));
+    assert.equal(bodies.length, 2);
+    assert.equal(bodies[1].request_id, bodies[0].request_id);
+    assert.equal(recovered.messages.filter(({ role }) => role === 'user').length, 1);
+  });
+});

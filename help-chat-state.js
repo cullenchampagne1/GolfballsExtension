@@ -162,6 +162,7 @@
           message,
           requestId: safeId(value.lastError.requestId ?? value.lastError.request_id),
           retryMessage: bounded(value.lastError.retryMessage ?? value.lastError.retry_message, 4_000),
+          reuseRequestId: value.lastError.reuseRequestId === true || value.lastError.reuse_request_id === true,
           status: Math.max(0, Math.floor(finite(value.lastError.status, 0))),
           at: Math.max(0, finite(value.lastError.at)),
         };
@@ -236,7 +237,13 @@
     return state;
   }
 
-  function failTurn(stateValue, { message, status = 0, now = Date.now(), retryMessage } = {}) {
+  function failTurn(stateValue, {
+    message,
+    status = 0,
+    now = Date.now(),
+    retryMessage,
+    reuseRequestId = false,
+  } = {}) {
     const state = normalizeState(stateValue, now);
     const active = state.active;
     const lastUser = [...state.messages].reverse().find((item) => item.role === 'user');
@@ -245,6 +252,7 @@
       message: bounded(message, 500) || 'The help response could not be completed.',
       requestId: active?.requestId || '',
       retryMessage: bounded(retryMessage, 4_000) || lastUser?.text || '',
+      reuseRequestId: reuseRequestId === true,
       status: Math.max(0, Math.floor(finite(status, 0))),
       at: finite(now),
     };
