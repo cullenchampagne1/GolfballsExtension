@@ -146,6 +146,12 @@ function Row({ item, onView, onAccount, onToggleDone }) {
           textDecoration: done ? 'line-through' : 'none',
         }}>
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{who}</span>
+          {item.count > 1 && (
+            <span title={`${item.count} messages in this thread`} style={{
+              fontSize: 9.5, fontWeight: 700, lineHeight: 1, padding: '2px 5px', borderRadius: 999,
+              background: 'var(--gb-brand-tint-medium)', color: 'var(--gb-brand-label)', flexShrink: 0,
+            }}>{item.count}</span>
+          )}
           {done && <span style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--gb-success-fg)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Done</span>}
         </div>
         {item.subject && (
@@ -167,7 +173,7 @@ function Row({ item, onView, onAccount, onToggleDone }) {
           </div>
         ) : (
           <span style={{ fontSize: 10, color: 'var(--gb-text-muted)', whiteSpace: 'nowrap' }}>
-            {formatHumanDate(item.createdAt || item.receivedAt)}
+            {formatHumanDate(item.updatedAt || item.createdAt || item.receivedAt)}
           </span>
         )}
       </div>
@@ -247,7 +253,7 @@ export function Notifications({ onClosed, bindClose }) {
         || String(n.contactName || '').toLowerCase().includes(q)
         || String(n.contactEmail || '').toLowerCase().includes(q)
         || String(n.subject || '').toLowerCase().includes(q))
-      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      .sort((a, b) => ((b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0)));
   }, [items, filter, search]);
 
   const onView = useCallback((item) => {

@@ -183,7 +183,7 @@
       try {
         if (root.GBNotifications) await root.GBNotifications.add({
           contactEmail: msg.contact_email, contactName: msg.contact_name,
-          subject: msg.subject, preview: msg.preview,
+          subject: msg.subject, preview: msg.preview, body: msg.body,
           messageId: msg.message_id, viewUrl, receivedAt: msg.received_at,
         });
       } catch { /* store write is best-effort */ }

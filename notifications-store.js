@@ -53,28 +53,69 @@
     } catch { /* action API unavailable (e.g. during tests) */ }
   }
 
-  // Append one email notification. Idempotent by messageId so re-polls of the
-  // same inbound reply never double-record it.
+  // Thread key: a reply chain shares the sender + base subject (Re:/Fwd:
+  // stripped), so replies to the same conversation fold into one notification.
+  function normSubject(s) {
+    return String(s || '').replace(/^(\s*(re|fwd?|fw)\s*:\s*)+/i, '').trim().toLowerCase();
+  }
+  function threadKey(entry) {
+    return `${normEmail(entry.contactEmail)}::${normSubject(entry.subject)}`;
+  }
+
+  // Record one inbound reply. Replies in the SAME open thread update that one
+  // notification to the latest message (bumping preview/subject/body/view target
+  // and a reply count) instead of stacking rows — the rep only needs to respond
+  // to the latest in the chain. Idempotent per message id across re-polls.
   async function add(entry) {
     if (!entry || !entry.contactEmail) return null;
     const bag = await read();
     const items = list(bag);
     const messageId = entry.messageId || '';
-    if (messageId && items.some((n) => n && n.messageId === messageId)) return null;
+    if (messageId && items.some((n) => n && Array.isArray(n.messageIds) && n.messageIds.includes(messageId))) return null;
     const now = Date.now();
+    const key = threadKey(entry);
+
+    // Fold into an existing OPEN notification for the same thread.
+    const idx = items.findIndex((n) => n && n.status === 'open' && n.threadKey === key);
+    if (idx >= 0) {
+      const prev = items[idx];
+      const messageIds = [...(prev.messageIds || []), ...(messageId ? [messageId] : [])];
+      const updated = {
+        ...prev,
+        contactName: entry.contactName || prev.contactName,
+        subject: entry.subject || prev.subject,
+        preview: entry.preview || prev.preview,
+        body: entry.body || prev.body,
+        messageId: messageId || prev.messageId,
+        viewUrl: entry.viewUrl || prev.viewUrl,
+        receivedAt: entry.receivedAt || prev.receivedAt,
+        messageIds,
+        count: messageIds.length,
+        updatedAt: now,
+      };
+      const next = [updated, ...items.slice(0, idx), ...items.slice(idx + 1)].slice(0, MAX);
+      await write(next);
+      await paintBadge(next, bag.featureFlags);
+      return updated;
+    }
+
     const record = {
       id: `n_${now}_${Math.floor((now % 100000))}`,
       type: 'email',
       status: 'open',
+      threadKey: key,
       contactEmail: normEmail(entry.contactEmail),
       contactName: entry.contactName || '',
       subject: entry.subject || '',
       preview: entry.preview || '',
       body: entry.body || '',
       messageId,
+      messageIds: messageId ? [messageId] : [],
+      count: 1,
       viewUrl: entry.viewUrl || '',
       receivedAt: entry.receivedAt || new Date(now).toISOString(),
       createdAt: now,
+      updatedAt: now,
       completedAt: null,
       completedReason: '',
     };
