@@ -292,6 +292,47 @@
     return { rows, total: current.length, matched: ranked.length, cleared: cleared + corrupt.length };
   }
 
+  function storedEmployeeId() {
+    return new Promise((resolve) => {
+      try { chrome.storage.local.get('gbEmployeeId', (d) => resolve((d && d.gbEmployeeId) || '')); }
+      catch { resolve(''); }
+    });
+  }
+
+  /* Resolve an email address to a contact using the ALREADY-INDEXED records.
+     Each email lives inside its encrypted record (emails_tps / email_tp), so no
+     re-index is required — we scan current records, decrypting until an email
+     matches, and return the CRM contact id for the View link. Runs entirely in
+     the worker (no network, no cookies), which is why it works from the
+     background email-relay poll where a cross-site Solr fetch can't carry the
+     golfballs session. employeeId is taken from the argument or chrome.storage
+     so the same key that indexed the record decrypts it. */
+  async function searchByEmail(input) {
+    const email = String((input && input.email) || input || '').trim().toLowerCase();
+    if (!email) return null;
+    let employeeId = input && input.employeeId;
+    if (!employeeId) employeeId = await storedEmployeeId();
+    let keys;
+    try { keys = await deriveKeys(employeeId); } catch { return null; }
+    const all = await readAll();
+    const current = all.filter((record) => record && record.schemaVersion === RECORD_SCHEMA_VERSION
+      && record.keyVersion === keys.keyVersion && record.owner === keys.owner
+      && typeof record.ciphertext === 'string' && typeof record.iv === 'string');
+    for (const record of current) {
+      let doc;
+      try { doc = await decryptRecord(record, keys); } catch { continue; }
+      const emails = [].concat(doc.emails_tps || [], doc.email_tp || [])
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter(Boolean);
+      if (!emails.includes(email)) continue;
+      const id = String(doc.id || '');
+      const match = id.match(/^contact_(.+)$/i);
+      const contactId = String((match && match[1]) || doc.importContactID_s || '').trim();
+      return { id, contactId, contactName: doc.contactName_t || '', email };
+    }
+    return null;
+  }
+
   async function deleteRecord(id, employeeId) {
     const keys = await deriveKeys(employeeId);
     await deleteStorageKeys([await storageKeyFor(id, keys)]);
@@ -310,6 +351,7 @@
   root.GBCrmIndex = Object.freeze({
     indexRecords,
     search,
+    searchByEmail,
     deleteRecord,
     clearIndex,
   });

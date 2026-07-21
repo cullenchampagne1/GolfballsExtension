@@ -61,10 +61,11 @@
 
   // ── Contact resolution ──────────────────────────────────────────────────────
   // Resolve the sender's email to a CRM contact so the toast's View button can
-  // jump straight to the contact page. Index-first (fast, when the worker CRM
-  // index can answer by email — currently a no-op until it gains searchByEmail),
-  // then the authenticated Solr CRM search as the live fallback. Runs in the
-  // service worker; the golfballs session cookie rides along via credentials.
+  // jump straight to the contact page. Index-FIRST: GBCrmIndex.searchByEmail
+  // decrypts the local CRM index in the worker (no network, no cookies) — the
+  // fast, reliable path the rep asked for. Solr is only a best-effort fallback
+  // when the contact isn't indexed; a background cross-site fetch may not carry
+  // the golfballs session, so the index is the path that actually resolves.
   const SOLR_ENDPOINT = 'https://api.golfballs.com/Golfballs/WebServices/Private/SolrIndexCrm.asmx/Query';
   const SOLR_QF = 'id^100 accountID_s^100 contactName_t^120 accountName_t^120 email_tp^25 emails_tps^25 phones_ss^25';
   const CONTACT_PAGE = 'https://api.golfballs.com/golfballs/adminnew/Default.aspx?Page=240&customerID=';
@@ -84,9 +85,9 @@
     return contactId ? CONTACT_PAGE + encodeURIComponent(contactId) : '';
   }
 
-  // Fast path: the encrypted worker CRM index. GBCrmIndex.search is name-only
-  // today, so this returns null until the index exposes an email lookup — the
-  // "use the index when available" hook the rep asked for.
+  // Fast path: the encrypted worker CRM index resolves email→contact locally
+  // (GBCrmIndex.searchByEmail). Returns null when the index is empty or the
+  // contact isn't indexed, so the Solr fallback can try.
   async function resolveViaIndex(email) {
     const idx = root.GBCrmIndex;
     if (!idx || typeof idx.searchByEmail !== 'function') return null;
