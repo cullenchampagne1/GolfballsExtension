@@ -847,6 +847,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to list settings shares' }));
     return true;
   }
+  if (msg.action === 'getConsumerFlow') {
+    // Fetch the personalized Power Automate flow zip through the extension's
+    // authenticated channel (the key never leaves the worker) and hand the page
+    // base64 bytes so it can trigger a plain <a download> (no downloads perm).
+    (async () => {
+      try {
+        const part = String(msg.localPart || '').trim();
+        const resp = await GBInstallationAuth.apiFetch(`/extension/email-exchange-flow?localPart=${encodeURIComponent(part)}`);
+        if (!resp.ok) { sendResponse({ ok: false, error: `HTTP ${resp.status}` }); return; }
+        const bytes = new Uint8Array(await resp.arrayBuffer());
+        let binary = '';
+        const CHUNK = 0x8000;
+        for (let i = 0; i < bytes.length; i += CHUNK) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+        sendResponse({ ok: true, base64: btoa(binary), filename: 'EmailExchangeService.zip' });
+      } catch (error) { sendResponse({ ok: false, error: error?.message || 'Could not download the flow' }); }
+    })();
+    return true;
+  }
   if (msg.action === 'emailTemplateShareCreate') {
     let body = '';
     try { body = JSON.stringify({ template: msg.template }); } catch { /* invalid */ }

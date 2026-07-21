@@ -1074,6 +1074,36 @@ export function SettingsPanel({ remotePolicy }) {
     return ok ? Promise.resolve() : Promise.reject(new Error('invalid flow url'));
   };
 
+  // The consumer Power Automate flow download is gated on the email account
+  // host (email.localPart) — the server personalizes the flow to that address.
+  const [emailLocalPart, setEmailLocalPart] = useState('');
+  const [flowBusy, setFlowBusy] = useState(false);
+  useEffect(() => {
+    const read = () => { try { chrome.storage.local.get('devSettings', (d) => setEmailLocalPart(String((d.devSettings || {})['email.localPart'] || '').trim())); } catch { /* */ } };
+    read();
+    const onChange = (ch, area) => { if (area === 'local' && ch.devSettings) read(); };
+    try { chrome.storage.onChanged.addListener(onChange); } catch { /* */ }
+    return () => { try { chrome.storage.onChanged.removeListener(onChange); } catch { /* */ } };
+  }, []);
+  const downloadFlow = async () => {
+    if (!emailLocalPart || flowBusy) return;
+    setFlowBusy(true);
+    try {
+      const r = await sendBackgroundMessage('getConsumerFlow', { localPart: emailLocalPart });
+      const binary = atob(r.base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/zip' }));
+      const link = document.createElement('a');
+      link.href = url; link.download = r.filename || 'EmailExchangeService.zip';
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      window.__gbToast?.success?.('Power Automate flow downloaded');
+    } catch (error) {
+      window.__gbToast?.error?.(error?.message || 'Could not download the flow');
+    } finally { setFlowBusy(false); }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, fontFamily: 'var(--gb-font-sans)' }}>
 
@@ -1182,6 +1212,17 @@ export function SettingsPanel({ remotePolicy }) {
                 <Dot tone={paStatus === 'ok' ? 'brand' : paStatus === 'fail' ? 'error' : 'muted'} glow={paStatus === 'ok'} size={5} />
                 {paStatus === 'ok' ? 'URL valid — saved automatically' : paStatus === 'fail' ? 'Paste the full URL from Power Automate' : 'Not tested'}
               </span>
+            </div>
+
+            <div style={{ marginTop: 12, borderTop: '1px solid var(--gb-border-subtle)', paddingTop: 12 }}>
+              <Btn variant="secondary" size="sm" icon={<I.send />} disabled={!emailLocalPart || flowBusy} onClick={downloadFlow}>
+                {flowBusy ? 'Preparing…' : 'Download my Power Automate flow'}
+              </Btn>
+              <div style={{ fontSize: 10.5, color: emailLocalPart ? 'var(--gb-text-muted)' : 'var(--gb-warning-fg)', marginTop: 6, lineHeight: 1.5 }}>
+                {emailLocalPart
+                  ? 'Import the downloaded zip in Power Automate, then paste its flow URL above.'
+                  : 'Set your Email account host in Developer Settings first to enable the download.'}
+              </div>
             </div>
           </ExpandableFeature>
         </div>
