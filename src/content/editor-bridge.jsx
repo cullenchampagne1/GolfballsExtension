@@ -82,7 +82,7 @@ function toast(msg, isError = false) {
 
 // ── Storage ────────────────────────────────────────────────────
 function loadStorage() {
-  return new Promise((res) => chrome.storage.local.get(['templates', 'noteTemplates', 'orderTabId'], res));
+  return new Promise((res) => chrome.storage.local.get(['templates', 'noteTemplates', 'orderTabId', 'gbEditorLaunchIntent'], res));
 }
 async function saveTemplates() {
   return new Promise((res) => chrome.storage.local.set({ templates }, res));
@@ -292,6 +292,21 @@ function closeSettings() {
   $(_settingsPreviousView)?.classList.add('view-animate');
 }
 
+function consumeLaunchIntent(intent) {
+  if (!intent || intent.view !== 'settings') return;
+  const createdAt = Number(intent.createdAt || 0);
+  if (createdAt && Date.now() - createdAt > 60_000) {
+    chrome.storage.local.remove('gbEditorLaunchIntent');
+    return;
+  }
+  const run = () => {
+    openSettings();
+    chrome.storage.local.remove('gbEditorLaunchIntent');
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once: true });
+  else run();
+}
+
 // ── Install bridges + start ────────────────────────────────────
 // Expose to the React content bundles + legacy callers.
 window.openTemplate     = openTemplate;
@@ -315,6 +330,7 @@ chrome.storage.onChanged.addListener((changes) => {
   if (changes.templates)     templates     = changes.templates.newValue     || [];
   if (changes.noteTemplates) noteTemplates = changes.noteTemplates.newValue || [];
   if (changes.orderTabId)    orderTabId    = changes.orderTabId.newValue    || null;
+  if (changes.gbEditorLaunchIntent?.newValue) consumeLaunchIntent(changes.gbEditorLaunchIntent.newValue);
 });
 
 // Settings gear in the legacy editor.html chrome (React's sidebar also
@@ -337,9 +353,13 @@ async function init() {
     if (mig.changed) { templates = mig.migrated; await saveTemplates(); }
   } catch (e) { toast('A stored template could not be upgraded automatically.', true); }
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', wireGearButton);
+    document.addEventListener('DOMContentLoaded', () => {
+      wireGearButton();
+      consumeLaunchIntent(data.gbEditorLaunchIntent);
+    });
   } else {
     wireGearButton();
+    consumeLaunchIntent(data.gbEditorLaunchIntent);
   }
 }
 init();

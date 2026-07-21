@@ -1,0 +1,109 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { createChrome, createContext, loadScript } from '../integration/helpers/harness.mjs';
+
+function loadState() {
+  const { chrome } = createChrome();
+  const context = createContext({ chrome, fetchImpl: async () => new Response('{}') });
+  loadScript(context, 'help-chat-state.js');
+  return context.GBHelpChatState;
+}
+
+describe('Help Companion state', () => {
+  it('builds a bounded backend request from real conversation turns and safe context', () => {
+    const State = loadState();
+    const messages = Array.from({ length: 15 }, (_, index) => ({
+      id: `user:${index}`,
+      role: index % 2 ? 'assistant' : 'user',
+      text: `turn ${index}`,
+      createdAt: index,
+    }));
+    const request = State.buildRequest(
+      { ...State.emptyState(1), messages },
+      'Where is the theme setting?',
+      {
+        extension_version: '3.3.0',
+        edition: 'admin',
+        surface: 'actions-shelf',
+        page_type: 'contact',
+        answer_mode: 'technical',
+        feature_states: { actionsShelfEnabled: true, invalid: 'yes' },
+        unexpected: 'must not cross the contract',
+      },
+      'help:request-1234',
+    );
+
+    assert.equal(request.message, 'Where is the theme setting?');
+    assert.equal(request.history.length, 12);
+    assert.equal(request.history.at(-1).role, 'user');
+    assert.equal(request.history.at(-1).content, 'turn 14');
+    assert.equal(request.context.page_type, 'contact');
+    assert.equal(request.context.answer_mode, 'technical');
+    assert.equal(JSON.stringify(request.context.feature_states), JSON.stringify({ actionsShelfEnabled: true }));
+    assert.equal(Object.hasOwn(request.context, 'unexpected'), false);
+  });
+
+  it('applies a completed structured answer once and increments unread once', () => {
+    const State = loadState();
+    let state = State.beginTurn(State.emptyState(10), {
+      message: 'How do I open the guide?', requestId: 'help:request-1234', now: 10,
+    });
+    state = State.applyRun(state, { run_id: 'run_12345678', status: 'queued', poll_after_ms: 3000 }, 20);
+    const completed = {
+      run_id: 'run_12345678', status: 'completed',
+      answer: {
+        text: 'Open the guide from Settings.',
+        steps: [{ text: 'Open Settings.', citation_ids: ['guide-1'] }],
+        citations: [{ id: 'guide-1', title: 'Settings', kind: 'guide', source: 'guide', guide_route: '#settings', excerpt: 'Open Settings.' }],
+        actions: [{ type: 'open_guide', target: '#settings', label: 'Open guide', citation_id: 'guide-1' }],
+        suggested_questions: ['Where are feature flags?'],
+        confidence: 0.91,
+      },
+    };
+    state = State.applyRun(state, completed, 30);
+
+    assert.equal(state.active, null);
+    assert.equal(state.messages.length, 2);
+    assert.equal(state.messages[1].text, 'Open the guide from Settings.');
+    assert.equal(state.messages[1].citations[0].guideRoute, '#settings');
+    assert.equal(state.messages[1].actions[0].type, 'open_guide');
+    assert.equal(state.unread, 1);
+
+    state = State.applyRun(state, completed, 40);
+    assert.equal(state.messages.length, 2, 'repeat polling must not duplicate the answer');
+    assert.equal(state.unread, 1, 'repeat polling must not duplicate unread state');
+    assert.equal(State.markRead(state, 50).unread, 0);
+  });
+
+  it('keeps a failed question retryable without duplicating its user bubble', () => {
+    const State = loadState();
+    let state = State.beginTurn(State.emptyState(10), {
+      message: 'Why is the shelf hidden?', requestId: 'help:request-1234', now: 10,
+    });
+    state = State.failTurn(state, { message: 'Service unavailable', status: 503, now: 20 });
+    const retryId = 'help:request-5678';
+    const request = State.buildRequest(state, state.lastError.retryMessage, {}, retryId, { retry: true });
+    state = State.beginTurn(state, {
+      message: request.message, requestId: retryId, reuseLastUser: true, now: 30,
+    });
+
+    assert.equal(request.history.length, 0, 'the retried prompt must not also appear in history');
+    assert.equal(state.messages.filter((item) => item.role === 'user').length, 1);
+    assert.equal(state.active.requestId, retryId);
+  });
+
+  it('drops unsupported answer actions and bounds stored answer content', () => {
+    const State = loadState();
+    const answer = State.normalizeAnswer({
+      text: 'x'.repeat(30_000),
+      actions: [
+        { type: 'open_guide', target: '#manual/actions-shelf', label: 'Open guide' },
+        { type: 'run_javascript', target: 'alert(1)', label: 'Run' },
+      ],
+      citations: [{ id: '../bad', title: 'Bad id' }, { id: 'safe-id', title: 'Safe citation' }],
+    });
+    assert.equal(answer.text.length, 24_000);
+    assert.equal(JSON.stringify(answer.actions.map((item) => item.type)), JSON.stringify(['open_guide']));
+    assert.equal(JSON.stringify(answer.citations.map((item) => item.id)), JSON.stringify(['safe-id']));
+  });
+});

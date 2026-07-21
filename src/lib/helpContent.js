@@ -2581,9 +2581,13 @@ export const HELP_CONTENT = {
         "quick actions",
         "floating",
         "pill",
-        "launcher"
+        "launcher",
+        "ai help",
+        "help companion",
+        "chat",
+        "unread"
       ],
-      "summary": "The floating bottom-right launcher on every CRM page. Double-tap Shift to toggle it; its actions adapt to the page you're on.",
+      "summary": "The floating bottom-right launcher on every CRM page. Double-tap Shift to toggle it; its actions adapt to the page you're on and its Help Companion can answer toolkit questions.",
       "feature": "actions-shelf",
       "flag": "actionsShelfEnabled",
       "shortcut": "Shift Shift",
@@ -2599,6 +2603,15 @@ export const HELP_CONTENT = {
           {
             "type": "p",
             "text": "The list is context-aware. Contact/account pages add calling and quick-task actions; order pages add dates and notes; the order index adds Copy order IDs. Four launchers remain available everywhere: Open Image Viewer, Open Contacts, Open Tasks, and Gifting Catalog."
+          },
+          {
+            "type": "p",
+            "text": "AI Help Companion is the first shelf destination everywhere. Open it to ask how a feature works, where a setting lives, what the current page supports, or how to troubleshoot a workflow. The shelf widens into the conversation; Back returns to actions without stopping a response."
+          },
+          {
+            "type": "callout",
+            "kind": "tip",
+            "text": "You can close the shelf or navigate while Help Companion is thinking. The service worker keeps polling, saves the answer in extension storage, and shows an unread count on the shelf when it is ready."
           }
         ],
         "intermediate": [
@@ -2673,8 +2686,29 @@ export const HELP_CONTENT = {
                 "Gifting Catalog",
                 "Opens the catalog / proposal builder",
                 "everywhere"
+              ],
+              [
+                "AI Help Companion",
+                "Morphs the shelf into grounded extension help with guide links, safe settings actions, retry/cancel, feedback, and unread replies",
+                "everywhere"
               ]
             ]
+          },
+          {
+            "type": "heading",
+            "text": "Help Companion conversation flow"
+          },
+          {
+            "type": "p",
+            "text": "Press Enter to send or Shift+Enter for a new line. How-to answers focus on operator steps; Technical answers can explain implementation details. A response runs in the extension service worker, so Back, outside-click, Escape, page navigation, and MV3 worker suspension do not discard it. Use the stop button to cancel deliberately."
+          },
+          {
+            "type": "p",
+            "text": "Answers are retrieved from the extension's own guide, inventory, and allowlisted source. The UI renders returned text as plain content and supports only four inert action types: open a guide route, open extension settings, show/copy a shortcut, or copy text. It does not execute arbitrary code or send customer/page content; only the page type, extension version, answer mode, and boolean feature states are included as context."
+          },
+          {
+            "type": "p",
+            "text": "Conversation history is caller-owned and stored locally under gbHelpChatStateV1, capped to 40 messages. The backend receives at most the latest 12 turns for each question and retains completed run recovery only briefly. Clear removes the local conversation; thumbs-up/down records content-free feedback."
           },
           {
             "type": "heading",
@@ -8157,9 +8191,13 @@ export const HELP_CONTENT = {
         "quick actions",
         "floating",
         "pill",
-        "launcher"
+        "launcher",
+        "ai help",
+        "help companion",
+        "chat",
+        "unread"
       ],
-      "description": "The floating bottom-right launcher on every CRM page. Double-tap Shift to toggle it; its actions adapt to the page you're on.",
+      "description": "The floating bottom-right launcher on every CRM page. Double-tap Shift to toggle it; its actions adapt to the page you're on and its Help Companion can answer toolkit questions.",
       "article": "actions-shelf",
       "shortcut": "Shift Shift",
       "flag": "actionsShelfEnabled"

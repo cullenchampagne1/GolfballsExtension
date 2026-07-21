@@ -1,5 +1,5 @@
 // background.js
-importScripts('security-policy.js', 'calendar-form-state.js', 'installation-auth.js', 'settings-registry.js', 'remote-settings-policy.js', 'crm-index-store.js', 'defaults.js');
+importScripts('security-policy.js', 'calendar-form-state.js', 'installation-auth.js', 'help-chat-state.js', 'help-assistant.js', 'settings-registry.js', 'remote-settings-policy.js', 'crm-index-store.js', 'defaults.js');
 /* @admin:start */
 importScripts('notifications-store.js', 'email-relay-poll.js');
 /* @admin:end */
@@ -8,6 +8,17 @@ const GB_SECURITY = globalThis.GBSecurity;
 if (!GB_SECURITY) throw new Error('Security policy failed to initialize');
 const GB_CALENDAR_FORM = globalThis.GBCalendarForm;
 if (!GB_CALENDAR_FORM) throw new Error('Calendar form-state helper failed to initialize');
+const GB_HELP_ASSISTANT = globalThis.GBHelpAssistant?.createController();
+if (!GB_HELP_ASSISTANT) throw new Error('Help assistant failed to initialize');
+
+// Resume a pending run whenever MV3 wakes the worker. A one-shot alarm is the
+// durable wake-up; the in-memory timer provides the responsive 3-second path
+// while the worker is already alive.
+GB_HELP_ASSISTANT.resume().catch(() => {});
+chrome.runtime.onStartup?.addListener(() => { GB_HELP_ASSISTANT.resume().catch(() => {}); });
+chrome.alarms?.onAlarm?.addListener((alarm) => {
+  if (alarm?.name === GB_HELP_ASSISTANT.ALARM_NAME) GB_HELP_ASSISTANT.poll({ force: true }).catch(() => {});
+});
 
 /**
  * Read a response without allowing an absent or dishonest Content-Length to
@@ -817,6 +828,16 @@ function gbProductStoreId(value) {
   } catch { return ''; }
 }
 
+function gbHelpReply(promise, sendResponse, fallback) {
+  Promise.resolve(promise)
+    .then((state) => sendResponse({ ok: true, state }))
+    .catch((error) => sendResponse({
+      ok: false,
+      error: GB_HELP_ASSISTANT.friendlyError(error, fallback),
+      status: Number(error?.status || 0),
+    }));
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   /* Only service messages from this extension's own contexts (content
@@ -824,6 +845,69 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
      is defense-in-depth: it fails safe if that ever changes and documents
      that page/other-extension senders are not trusted. */
   if (sender.id !== chrome.runtime.id || !msg || typeof msg !== 'object') return;
+
+  // ── Installation-authenticated Help Companion ──────────────────────────
+  // The content shelf never receives the installation credential and never
+  // calls the backend directly. All run state is persisted by this worker, so
+  // backing out of chat or navigating the CRM cannot abandon a response.
+  if (msg.action === 'helpAssistantGetState') {
+    gbHelpReply(
+      GB_HELP_ASSISTANT.resume().then(() => GB_HELP_ASSISTANT.getState()),
+      sendResponse,
+      'Unable to load the help conversation.',
+    );
+    return true;
+  }
+  if (msg.action === 'helpAssistantSend') {
+    gbHelpReply(
+      GB_HELP_ASSISTANT.send(msg.message, msg.context),
+      sendResponse,
+      'Unable to send the help question.',
+    );
+    return true;
+  }
+  if (msg.action === 'helpAssistantRetry') {
+    gbHelpReply(
+      GB_HELP_ASSISTANT.retry(msg.context),
+      sendResponse,
+      'Unable to retry the help question.',
+    );
+    return true;
+  }
+  if (msg.action === 'helpAssistantCancel') {
+    gbHelpReply(
+      GB_HELP_ASSISTANT.cancel(),
+      sendResponse,
+      'Unable to cancel the help response.',
+    );
+    return true;
+  }
+  if (msg.action === 'helpAssistantMarkRead') {
+    gbHelpReply(GB_HELP_ASSISTANT.markRead(), sendResponse, 'Unable to update the unread state.');
+    return true;
+  }
+  if (msg.action === 'helpAssistantClear') {
+    gbHelpReply(GB_HELP_ASSISTANT.clearConversation(), sendResponse, 'Unable to clear the help conversation.');
+    return true;
+  }
+  if (msg.action === 'helpAssistantFeedback') {
+    gbHelpReply(
+      GB_HELP_ASSISTANT.feedback(msg.runId, msg.rating),
+      sendResponse,
+      'Unable to save help feedback.',
+    );
+    return true;
+  }
+  if (msg.action === 'helpAssistantStatus') {
+    GB_HELP_ASSISTANT.status()
+      .then((status) => sendResponse({ ok: true, status }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: GB_HELP_ASSISTANT.friendlyError(error, 'Help Companion status is unavailable.'),
+        status: Number(error?.status || 0),
+      }));
+    return true;
+  }
 
   // ── Managed-key encrypted CRM index ─────────────────────────────────────
   if (msg.action === 'crmIndexSearch') {
@@ -1845,6 +1929,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.action === 'openEditor') {
+    if (msg.openSettings === true) {
+      const target = typeof msg.settingsTarget === 'string' ? msg.settingsTarget.trim().slice(0, 160) : '';
+      chrome.storage.local.set({
+        gbEditorLaunchIntent: { view: 'settings', target, createdAt: Date.now() },
+      });
+    }
     if (editorWindowId !== null) {
       chrome.windows.get(editorWindowId, (win) => {
         if (chrome.runtime.lastError || !win) {

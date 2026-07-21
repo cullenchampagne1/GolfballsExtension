@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useActionRegistry, actionRegistry } from '../../lib/actionRegistry.js';
+import { HelpCompanionEntry, HelpCompanionPanel, useHelpAssistant } from './HelpCompanion.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    ActionsShelf — bottom-right floating shelf with page-aware
@@ -46,18 +47,18 @@ function useShelfKeyframes() {
 
 /* Outside-click / Escape closer — wraps both shelf trigger + panel
    in a single hit-test so clicking either keeps it alive. */
-function useDismissShelf(ref, onDismiss, when) {
+function useDismissShelf(ref, onDismiss, onEscape, when) {
   useEffect(() => {
     if (!when) return;
     const onDown = (e) => { if (ref.current && !ref.current.contains(e.target)) onDismiss(); };
-    const onKey  = (e) => { if (e.key === 'Escape') onDismiss(); };
+    const onKey  = (e) => { if (e.key === 'Escape') onEscape(); };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [when]);
+  }, [when, onDismiss, onEscape]);
 }
 
 /* ── Inline icons ─────────────────────────────────────────────
@@ -235,8 +236,9 @@ function GroupHeader({ label }) {
 }
 
 /* ── Trigger variants: pill / fab / tab ─────────────────────── */
-function ShelfTrigger({ variant, count, open, onClick }) {
+function ShelfTrigger({ variant, count, unread = 0, open, onClick }) {
   const [hover, setHover] = useState(false);
+  const signalCount = unread > 0 ? unread : count;
 
   if (variant === 'fab') {
     return (
@@ -258,7 +260,7 @@ function ShelfTrigger({ variant, count, open, onClick }) {
         }}
       >
         <SparkleIcon size={20} />
-        {count > 0 && !open && (
+        {signalCount > 0 && !open && (
           <span style={{
             position: 'absolute', top: -4, right: -4,
             minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9,
@@ -268,7 +270,7 @@ function ShelfTrigger({ variant, count, open, onClick }) {
             fontSize: 10, fontWeight: 800, fontFamily: 'var(--gb-font-mono)',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
             boxShadow: '0 2px 6px rgba(0,0,0,.5)',
-          }}>{count}</span>
+          }}>{signalCount > 9 ? '9+' : signalCount}</span>
         )}
       </button>
     );
@@ -305,7 +307,7 @@ function ShelfTrigger({ variant, count, open, onClick }) {
           position: 'relative',
         }}>
           <SparkleIcon size={13} />
-          {count > 0 && (
+          {signalCount > 0 && (
             <span style={{
               position: 'absolute', top: -3, right: -3,
               width: 8, height: 8, borderRadius: '50%',
@@ -354,7 +356,7 @@ function ShelfTrigger({ variant, count, open, onClick }) {
         flexShrink: 0,
       }}>
         <SparkleIcon size={12} style={{ animation: 'gb-as-twinkle 2.2s ease-in-out infinite' }} />
-        {count > 0 && (
+        {signalCount > 0 && (
           <span style={{
             position: 'absolute', top: -2, right: -2,
             width: 7, height: 7, borderRadius: '50%',
@@ -367,13 +369,13 @@ function ShelfTrigger({ variant, count, open, onClick }) {
       <span style={{
         fontSize: 12.5, fontWeight: 700, color: 'var(--gb-text-primary)', letterSpacing: -0.1,
       }}>Actions</span>
-      {count > 0 && (
+      {signalCount > 0 && (
         <>
           <span style={{ width: 1, height: 14, background: 'var(--gb-border-default)' }} />
           <span style={{
             fontSize: 10.5, fontWeight: 700, color: 'var(--gb-brand-label)',
             fontFamily: 'var(--gb-font-mono)',
-          }}>{count}</span>
+          }}>{unread > 0 ? `${unread > 9 ? '9+' : unread} new` : count}</span>
         </>
       )}
     </button>
@@ -397,10 +399,30 @@ export function ActionsShelf({
 }) {
   useShelfKeyframes();
   const [open, setOpen] = useState(false);
+  const [view, setView] = useState('actions');
+  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
   const ref = useRef(null);
-  useDismissShelf(ref, () => setOpen(false), open);
+  const { actions, page, pageLabel, pageSubLabel, topModalLabel } = useActionRegistry();
+  const help = useHelpAssistant(page);
 
-  const { actions, pageLabel, pageSubLabel, topModalLabel } = useActionRegistry();
+  const closeShelf = () => {
+    setOpen(false);
+    // Let the shared container finish its exit before resetting its inner
+    // destination; otherwise chat flashes back to the action list mid-close.
+    setTimeout(() => setView('actions'), 180);
+  };
+  useDismissShelf(
+    ref,
+    closeShelf,
+    () => { if (view === 'chat') setView('actions'); else closeShelf(); },
+    open,
+  );
+
+  useEffect(() => {
+    const onResize = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   // Modal-smart and page-smart now live in separate sections; keep
   // a single "smart" count for the trigger badge so the user still
   // sees one number summarising everything contextual.
@@ -485,7 +507,8 @@ export function ActionsShelf({
       if (e.key === 'Shift' && !e.repeat) {
         const now = Date.now();
         if (lastShiftDownAt && !otherKeyBetween && (now - lastShiftDownAt) < TAP_WINDOW_MS) {
-          setOpen((v) => !v);
+          if (open) closeShelf();
+          else { setView('actions'); setOpen(true); }
           lastShiftDownAt = 0;
           otherKeyBetween = false;
           return;
@@ -502,7 +525,7 @@ export function ActionsShelf({
       // Number keys 1-9 trigger only while the shelf is open and
       // ONLY when no modifier is held (so Alt+1 / Ctrl+1 / Cmd+1
       // still pass through to the browser's tab-switch handlers).
-      if (open && /^[1-9]$/.test(e.key)
+      if (open && view === 'actions' && /^[1-9]$/.test(e.key)
           && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey
           && !isTypingTarget(e.target)) {
         const row = actionRows[parseInt(e.key, 10) - 1];
@@ -537,7 +560,11 @@ export function ActionsShelf({
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
     };
-  }, [open, actionRows]);
+  }, [open, view, actionRows]);
+
+  const availableWidth = Math.max(240, viewport.width - (variant === 'tab' ? 12 : rightOffset + 12));
+  const panelWidth = Math.min(view === 'chat' ? 540 : 320, availableWidth);
+  const panelHeight = Math.min(660, Math.max(220, viewport.height - bottomOffset - 80));
 
   return (
     <div
@@ -562,14 +589,18 @@ export function ActionsShelf({
           // Exit: scales back down and fades to nothing
           // Same spring curve as the design's keyframe entry; the exit
           // is slightly faster and more linear so it closes cleanly.
-          initial={{ opacity: 0, y: 10, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: 0.22, ease: [0.34, 1.4, 0.64, 1] } }}
+          initial={{ opacity: 0, y: 10, scale: 0.96, width: Math.min(320, availableWidth) }}
+          animate={{ opacity: 1, y: 0, scale: 1, width: panelWidth, height: view === 'chat' ? panelHeight : 'auto' }}
           exit={{    opacity: 0, y: 6, scale: 0.96, transition: { duration: 0.14, ease: [0.4, 0, 0.2, 1] } }}
+          transition={{
+            opacity: { duration: .18 }, y: { duration: .22, ease: [0.34, 1.4, 0.64, 1] }, scale: { duration: .2 },
+            width: { type: 'spring', stiffness: 360, damping: 34, mass: .9 },
+            height: { type: 'spring', stiffness: 340, damping: 35, mass: .95 },
+          }}
           style={{
             position: 'absolute',
             bottom: 'calc(100% + 10px)',
             right: 0,
-            width: 320,
             maxHeight: `calc(100vh - ${bottomOffset + 80}px)`,
             background: 'var(--gb-surface-modal, var(--gb-surface-1))',
             border: '1px solid var(--gb-border-default)',
@@ -580,118 +611,124 @@ export function ActionsShelf({
             display: 'flex', flexDirection: 'column',
           }}
         >
-          {showContextHeader && (
-            <div style={{
-              padding: '11px 13px',
-              background: 'var(--gb-fill-inverse-strong, var(--gb-surface-2))',
-              borderBottom: '1px solid var(--gb-border-subtle)',
-              display: 'flex', alignItems: 'center', gap: 9,
-              flexShrink: 0,
-            }}>
-              <div style={{
-                width: 26, height: 26, borderRadius: 'var(--gb-r-sm)', flexShrink: 0,
-                background: 'var(--gb-brand-tint-medium)',
-                border: '1px solid var(--gb-brand-tint-border)',
-                color: 'var(--gb-brand-label)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <PageIcon size={13} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{
-                  fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8,
-                  color: 'var(--gb-text-muted)',
-                }}>You're on</div>
-                <div style={{
-                  fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)',
-                  letterSpacing: -0.1, marginTop: 1,
-                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                }}>{headerLabel}</div>
-                {headerSubLabel && (
-                  <div style={{
-                    fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1,
-                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    fontWeight: 500,
-                  }}>{headerSubLabel}</div>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                style={{
-                  width: 22, height: 22, borderRadius: 'var(--gb-r-sm)',
-                  background: 'var(--gb-fill-subtle)',
-                  border: '1px solid var(--gb-border-default)',
-                  color: 'var(--gb-text-tertiary)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer',
-                  padding: 0,
-                }}
+          <AnimatePresence initial={false} mode="wait">
+            {view === 'chat' ? (
+              <motion.div
+                key="help-chat"
+                initial={{ opacity: 0, x: 18 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 12 }}
+                transition={{ duration: .18, ease: [0.2, .8, .2, 1] }}
+                style={{ width: '100%', height: '100%', minHeight: 0, display: 'flex' }}
               >
-                <ChevIcon size={11} style={{ transform: 'rotate(-180deg)' }} />
-              </button>
-            </div>
-          )}
+                <HelpCompanionPanel client={help} onBack={() => setView('actions')} pageLabel={headerLabel} compact={panelWidth < 390} />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="actions-list"
+                initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }}
+                transition={{ duration: .15, ease: [0.4, 0, .2, 1] }}
+                style={{ width: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}
+              >
+                {showContextHeader && (
+                  <div style={{
+                    padding: '11px 13px',
+                    background: 'var(--gb-fill-inverse-strong, var(--gb-surface-2))',
+                    borderBottom: '1px solid var(--gb-border-subtle)',
+                    display: 'flex', alignItems: 'center', gap: 9,
+                    flexShrink: 0,
+                  }}>
+                    <div style={{
+                      width: 26, height: 26, borderRadius: 'var(--gb-r-sm)', flexShrink: 0,
+                      background: 'var(--gb-brand-tint-medium)',
+                      border: '1px solid var(--gb-brand-tint-border)',
+                      color: 'var(--gb-brand-label)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <PageIcon size={13} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.8,
+                        color: 'var(--gb-text-muted)',
+                      }}>You're on</div>
+                      <div style={{
+                        fontSize: 12, fontWeight: 700, color: 'var(--gb-text-primary)',
+                        letterSpacing: -0.1, marginTop: 1,
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>{headerLabel}</div>
+                      {headerSubLabel && (
+                        <div style={{
+                          fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1,
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                          fontWeight: 500,
+                        }}>{headerSubLabel}</div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={closeShelf}
+                      style={{
+                        width: 22, height: 22, borderRadius: 'var(--gb-r-sm)',
+                        background: 'var(--gb-fill-subtle)',
+                        border: '1px solid var(--gb-border-default)',
+                        color: 'var(--gb-text-tertiary)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', padding: 0,
+                      }}
+                    >
+                      <ChevIcon size={11} style={{ transform: 'rotate(-180deg)' }} />
+                    </button>
+                  </div>
+                )}
 
-          <div style={{ padding: '6px 6px 8px', flex: 1, minHeight: 0, overflowY: 'auto' }}>
-            {rows.length === 0 && (
-              <div style={{
-                padding: '24px 16px',
-                fontSize: 11.5,
-                color: 'var(--gb-text-muted)',
-                textAlign: 'center',
-              }}>
-                No actions registered yet.
-              </div>
+                <div className="gb-thin-scroll" style={{ padding: '6px 6px 8px', flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                  <HelpCompanionEntry state={help.state} loading={help.loading} onOpen={() => setView('chat')} />
+                  {rows.length === 0 && (
+                    <div style={{ padding: '12px 16px 18px', fontSize: 10.5, color: 'var(--gb-text-muted)', textAlign: 'center' }}>
+                      No other actions are registered for this page.
+                    </div>
+                  )}
+                  {rows.map((r) => {
+                    if (r.kind === 'header-smart') return <SmartHeader key={r.key} count={r.count} />;
+                    if (r.kind === 'header')       return <GroupHeader  key={r.key} label={r.label} />;
+                    if (r.kind === 'divider')      return <div key={r.key} style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '6px 10px' }} />;
+                    const num = shortcutFor.get(r.key);
+                    const action = !showShortcuts
+                      ? { ...r.action, kbd: undefined }
+                      : num
+                        ? { ...r.action, kbd: num }
+                        : { ...r.action, kbd: undefined };
+                    return (
+                      <ActionRow
+                        key={r.key}
+                        action={action}
+                        index={r.index}
+                        smart={r.smart}
+                        onPick={(a) => {
+                          try { a.handler && a.handler(); } catch (err) { /* Keep the shelf responsive. */ }
+                          if (!a.keepOpen) closeShelf();
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+
+                <div style={{
+                  padding: '8px 13px',
+                  borderTop: '1px solid var(--gb-border-subtle)',
+                  background: 'var(--gb-fill-subtle)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  fontSize: 10, color: 'var(--gb-text-muted)', fontWeight: 500,
+                  flexShrink: 0,
+                }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--gb-brand-label)', boxShadow: '0 0 6px var(--gb-brand-label)' }} />
+                    <span>Suggestions update with the page</span>
+                  </span>
+                  <Kbd>esc</Kbd>
+                </div>
+              </motion.div>
             )}
-            {rows.map((r) => {
-              if (r.kind === 'header-smart') return <SmartHeader key={r.key} count={r.count} />;
-              if (r.kind === 'header')       return <GroupHeader  key={r.key} label={r.label} />;
-              if (r.kind === 'divider')      return <div key={r.key} style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '6px 10px' }} />;
-              /* Override `kbd` with the assigned number-key shortcut
-                 (1, 2, 3…). The string a caller passed to register()
-                 was cosmetic; the number reflects the actual key
-                 that fires the action when the shelf is open. Rows
-                 past the 9th get no shortcut (and no kbd badge). */
-              const num = shortcutFor.get(r.key);
-              const action = !showShortcuts
-                ? { ...r.action, kbd: undefined }
-                : num
-                  ? { ...r.action, kbd: num }
-                  : { ...r.action, kbd: undefined };
-              return (
-                <ActionRow
-                  key={r.key}
-                  action={action}
-                  index={r.index}
-                  smart={r.smart}
-                  onPick={(a) => {
-                    try { a.handler && a.handler(); } catch (err) { /* Keep the shelf responsive. */ }
-                    if (!a.keepOpen) setOpen(false);
-                  }}
-                />
-              );
-            })}
-          </div>
-
-          <div style={{
-            padding: '8px 13px',
-            borderTop: '1px solid var(--gb-border-subtle)',
-            background: 'var(--gb-fill-subtle)',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            fontSize: 10, color: 'var(--gb-text-muted)', fontWeight: 500,
-            flexShrink: 0,
-          }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              <span style={{
-                width: 5, height: 5, borderRadius: '50%',
-                background: 'var(--gb-brand-label)',
-                boxShadow: '0 0 6px var(--gb-brand-label)',
-              }} />
-              <span>Suggestions update with the page</span>
-            </span>
-            <Kbd>esc</Kbd>
-          </div>
+          </AnimatePresence>
         </motion.div>
       )}
       </AnimatePresence>
@@ -699,8 +736,12 @@ export function ActionsShelf({
       <ShelfTrigger
         variant={variant}
         count={smartCount}
+        unread={help.state?.unread || 0}
         open={open}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          if (open) closeShelf();
+          else { setView('actions'); setOpen(true); }
+        }}
       />
     </div>
   );

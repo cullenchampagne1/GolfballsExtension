@@ -23,6 +23,8 @@
   const REQUEST_BODY_LIMIT = EXTENSION_JSON_LIMIT;
   const API_KEY_RE = /^rsk_[a-f0-9]{12}_[A-Za-z0-9_-]{40,80}$/;
   const INSTALLATION_ID_RE = /^[a-f0-9-]{32,40}$/i;
+  const ASSISTANT_BASE = '/projects/golfballs-extension/assistant';
+  const ASSISTANT_RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,79}$/;
   let enrollmentPromise = null;
 
   function runtimeIdentity() {
@@ -159,15 +161,33 @@
     }
   }
 
+  function isAllowedApiRoute(url, method) {
+    // Existing product APIs live under /extension/*. The project assistant is
+    // intentionally narrower: exact project, exact endpoints, exact methods,
+    // no query-string widening. This preserves apiFetch as a non-general
+    // authenticated request primitive.
+    if (url.pathname.startsWith('/extension/')) return true;
+    if (url.search) return false;
+    if (url.pathname === `${ASSISTANT_BASE}/status`) return method === 'GET';
+    if (url.pathname === `${ASSISTANT_BASE}/messages`) return method === 'POST';
+    if (url.pathname === `${ASSISTANT_BASE}/feedback`) return method === 'POST';
+    const runMatch = url.pathname.match(new RegExp(`^${ASSISTANT_BASE}/runs/([^/]+)(/cancel)?$`));
+    if (!runMatch) return false;
+    let runId = '';
+    try { runId = decodeURIComponent(runMatch[1]); } catch { return false; }
+    if (!ASSISTANT_RUN_ID_RE.test(runId)) return false;
+    return runMatch[2] ? method === 'POST' : method === 'GET';
+  }
+
   async function apiFetch(path, options = {}) {
     const url = new URL(String(path || ''), API_ORIGIN);
-    if (url.origin !== API_ORIGIN || !url.pathname.startsWith('/extension/')) {
+    const method = String(options.method || 'GET').toUpperCase();
+    if (url.origin !== API_ORIGIN || !isAllowedApiRoute(url, method)) {
       throw new Error('Blocked non-extension API path');
     }
     if (url.username || url.password || url.port || url.hash) {
       throw new Error('Blocked malformed extension API URL');
     }
-    const method = String(options.method || 'GET').toUpperCase();
     if (!['GET', 'POST'].includes(method)) throw new Error('Blocked extension API method');
     if (options.body != null
         && (typeof options.body !== 'string' || options.body.length > REQUEST_BODY_LIMIT)) {
@@ -213,7 +233,10 @@
 
   /** Bounded JSON helper for fixed `/extension/*` product endpoints. */
   async function apiJson(path, options = {}) {
-    const requestOptions = { ...options };
+    const responseLimit = Number.isFinite(Number(options.responseLimit))
+      ? Math.max(1_024, Math.min(CONFIG_RESPONSE_LIMIT, Number(options.responseLimit)))
+      : CONFIG_RESPONSE_LIMIT;
+    const { responseLimit: _responseLimit, ...requestOptions } = options;
     if (requestOptions.body != null) {
       const headers = new Headers(requestOptions.headers || {});
       if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
@@ -222,14 +245,20 @@
     const response = await apiFetch(path, requestOptions);
     let payload;
     try {
-      payload = await readResponseJson(response, CONFIG_RESPONSE_LIMIT, 'Extension API');
+      payload = await readResponseJson(response, responseLimit, 'Extension API');
     } catch (error) {
-      if (!response.ok) throw new Error(`Extension API request failed with HTTP ${response.status}`);
+      if (!response.ok) {
+        const httpError = new Error(`Extension API request failed with HTTP ${response.status}`);
+        httpError.status = response.status;
+        throw httpError;
+      }
       throw error;
     }
     if (!response.ok) {
       const detail = typeof payload?.detail === 'string' ? payload.detail.slice(0, 240) : '';
-      throw new Error(detail || `Extension API request failed with HTTP ${response.status}`);
+      const error = new Error(detail || `Extension API request failed with HTTP ${response.status}`);
+      error.status = response.status;
+      throw error;
     }
     return payload;
   }

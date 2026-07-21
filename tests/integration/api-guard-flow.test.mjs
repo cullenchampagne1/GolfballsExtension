@@ -1,5 +1,6 @@
 /**
- * Integration flow — the /extension/* API guard in GBInstallationAuth.apiFetch.
+ * Integration flow — the fixed product + project-assistant route guard in
+ * GBInstallationAuth.apiFetch.
  *
  * Real installation-auth.js in a vm sandbox with a pre-enrolled credential.
  * Happy GET/POST calls must carry the installation Bearer key with
@@ -15,7 +16,10 @@ import {
 
 function makeSandbox() {
   const { fetchMock, requests } = createFetchMock((url) => {
-    if (url.startsWith(`${API_ORIGIN}/extension/`)) return jsonResponse({ ok: true, path: new URL(url).pathname });
+    if (url.startsWith(`${API_ORIGIN}/extension/`)
+        || url.startsWith(`${API_ORIGIN}/projects/golfballs-extension/assistant/`)) {
+      return jsonResponse({ ok: true, path: new URL(url).pathname });
+    }
     return undefined;
   });
   const sandbox = loadInstallationAuth({
@@ -61,6 +65,29 @@ describe('extension API guard', () => {
       headers: { Authorization: 'Bearer caller-controlled' },
     });
     assert.equal(requests[0].options.headers.get('Authorization'), `Bearer ${API_KEY}`);
+  });
+
+  it('allows only the declared Golfballs assistant routes with their exact methods', async () => {
+    const { client, requests } = makeSandbox();
+    const runId = 'run_12345678-abcd';
+
+    await client.apiFetch('/projects/golfballs-extension/assistant/status');
+    await client.apiFetch('/projects/golfballs-extension/assistant/messages', { method: 'POST', body: '{}' });
+    await client.apiFetch(`/projects/golfballs-extension/assistant/runs/${runId}`);
+    await client.apiFetch(`/projects/golfballs-extension/assistant/runs/${runId}/cancel`, { method: 'POST', body: '{}' });
+    await client.apiFetch('/projects/golfballs-extension/assistant/feedback', { method: 'POST', body: '{}' });
+
+    assert.equal(requests.length, 5);
+    assert.ok(requests.every(({ options }) => options.headers.get('Authorization') === `Bearer ${API_KEY}`));
+    assert.ok(requests.every(({ options }) => options.credentials === 'omit'));
+
+    await assert.rejects(client.apiFetch('/projects/golfballs-extension/assistant/messages'), /Blocked non-extension API path/);
+    await assert.rejects(client.apiFetch('/projects/golfballs-extension/assistant/status', { method: 'POST' }), /Blocked non-extension API path/);
+    await assert.rejects(client.apiFetch('/projects/golfballs-extension/assistant/runs/short'), /Blocked non-extension API path/);
+    await assert.rejects(client.apiFetch('/projects/golfballs-extension/assistant/admin/status'), /Blocked non-extension API path/);
+    await assert.rejects(client.apiFetch('/projects/revstack-backend/assistant/status'), /Blocked non-extension API path/);
+    await assert.rejects(client.apiFetch('/projects/golfballs-extension/assistant/status?admin=1'), /Blocked non-extension API path/);
+    assert.equal(requests.length, 5, 'rejected project paths must not reach fetch');
   });
 
   it('rejects non-/extension/ paths and foreign origins without touching the network', async () => {

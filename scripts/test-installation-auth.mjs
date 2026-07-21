@@ -131,11 +131,23 @@ assert.equal(requests[3].options.headers.get('Authorization'), `Bearer ${apiKey}
 assert.equal(requests[3].options.headers.get('Content-Type'), 'application/json');
 assert.equal(requests[3].options.credentials, 'omit');
 
+const assistantStatus = await client.apiJson('/projects/golfballs-extension/assistant/status', {
+  responseLimit: 512 * 1024,
+});
+assert.equal(assistantStatus.ok, true);
+assert.equal(requests[4].url, 'https://api.cullenchampagne.com/projects/golfballs-extension/assistant/status');
+assert.equal(requests[4].options.headers.get('Authorization'), `Bearer ${apiKey}`);
+assert.equal(Object.hasOwn(requests[4].options, 'responseLimit'), false, 'local response guard options must not leak into fetch');
+
 await assert.rejects(
   client.apiFetch('https://evil.example/extension/ping'),
   /Blocked non-extension API path/,
 );
 await assert.rejects(client.apiFetch('/graph/search'), /Blocked non-extension API path/);
+await assert.rejects(
+  client.apiFetch('/projects/golfballs-extension/assistant/admin/status'),
+  /Blocked non-extension API path/,
+);
 await assert.rejects(
   client.apiFetch('/extension/ping', { method: 'DELETE' }),
   /Blocked extension API method/,
