@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { I, Icon } from '../icons.jsx';
+import {
+  executeHelpActionOnce, helpActionContext, isExecutableHelpAction,
+} from '../../lib/helpActions.js';
 
 const STORAGE_KEY = 'gbHelpChatStateV1';
 
@@ -85,9 +88,11 @@ function safeFeatureStates() {
   return out;
 }
 
-function helpContext(page, answerMode) {
+async function helpContext(page, answerMode) {
   let extensionVersion = '';
   try { extensionVersion = chrome.runtime.getManifest()?.version || ''; } catch { /* */ }
+  let actionContext = {};
+  try { actionContext = await helpActionContext(); } catch { /* context is optional */ }
   return {
     extension_version: String(extensionVersion).slice(0, 40),
     edition: (typeof __ADMIN__ !== 'undefined' && __ADMIN__) ? 'admin' : 'consumer',
@@ -95,7 +100,9 @@ function helpContext(page, answerMode) {
     page_type: String(page || 'unknown').slice(0, 60),
     answer_mode: answerMode === 'technical' ? 'technical' : 'operator',
     feature_states: safeFeatureStates(),
-    hidden_settings: [],
+    hidden_settings: actionContext.hidden_settings || [],
+    available_resources: actionContext.available_resources || [],
+    page_url: actionContext.page_url || undefined,
   };
 }
 
@@ -169,8 +176,8 @@ export function useHelpAssistant(page) {
     service,
     refresh,
     checkStatus,
-    send: (message, answerMode) => call({ action: 'helpAssistantSend', message, context: helpContext(page, answerMode) }),
-    retry: (answerMode) => call({ action: 'helpAssistantRetry', context: helpContext(page, answerMode) }),
+    send: async (message, answerMode) => call({ action: 'helpAssistantSend', message, context: await helpContext(page, answerMode) }),
+    retry: async (answerMode) => call({ action: 'helpAssistantRetry', context: await helpContext(page, answerMode) }),
     cancel: () => call({ action: 'helpAssistantCancel' }),
     markRead: () => call({ action: 'helpAssistantMarkRead' }),
     clear: () => call({ action: 'helpAssistantClear' }),
@@ -320,6 +327,55 @@ async function copyText(text) {
   }
 }
 
+function ExecutableActionCard({ action, receiptId, onAction }) {
+  const [receipt, setReceipt] = useState({ status: 'running', message: 'Validating this action…', url: '' });
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    setReceipt({ status: 'running', message: 'Validating this action…', url: '' });
+    onAction(action, receiptId).then((result) => {
+      if (alive) setReceipt(result || { status: 'failed', message: 'The action did not return a receipt.', url: '' });
+    });
+    return () => { alive = false; };
+  }, [receiptId, attempt]);
+
+  const succeeded = receipt.status === 'succeeded';
+  const failed = receipt.status === 'failed';
+  const summary = action.type === 'set_theme_palette'
+    ? (action.value || 'Custom brand palette')
+    : action.options?.length
+      ? action.options.join(' · ')
+      : action.value || action.target;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
+      style={{ width: '100%', padding: '9px 10px', display: 'grid', gridTemplateColumns: '28px minmax(0,1fr) auto', gap: 8, alignItems: 'center', borderRadius: 10, background: succeeded ? 'var(--gb-success-tint-soft)' : failed ? 'var(--gb-error-tint-soft)' : 'var(--gb-brand-tint-soft)', border: `1px solid ${succeeded ? 'var(--gb-success-tint-border)' : failed ? 'var(--gb-error-tint-border)' : 'var(--gb-brand-tint-border)'}` }}
+    >
+      <span style={{ width: 28, height: 28, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: succeeded ? 'var(--gb-success-tint-medium)' : failed ? 'var(--gb-error-tint-medium)' : 'var(--gb-brand-tint-medium)', color: succeeded ? 'var(--gb-success-fg)' : failed ? 'var(--gb-error-fg)' : 'var(--gb-brand-label)' }}>
+        {action.type.startsWith('share_') ? <I.link size={12} /> : action.type.startsWith('set_theme') ? <I.sparkle size={12} /> : <I.cog size={12} />}
+      </span>
+      <span style={{ minWidth: 0 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <strong style={{ color: 'var(--gb-text-primary)', fontSize: 10.5, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{action.label}</strong>
+          <code style={{ padding: '1px 4px', borderRadius: 4, color: 'var(--gb-text-muted)', background: 'var(--gb-fill-subtle)', fontFamily: 'var(--gb-font-mono)', fontSize: 7.75, whiteSpace: 'nowrap' }}>{action.type}</code>
+        </span>
+        <span style={{ display: 'block', marginTop: 3, color: failed ? 'var(--gb-error-fg)' : succeeded ? 'var(--gb-success-fg)' : 'var(--gb-text-muted)', fontSize: 9.25, lineHeight: 1.35, fontWeight: 620, overflowWrap: 'anywhere' }}>{receipt.message}</span>
+        {!failed && summary && <span style={{ display: 'block', marginTop: 2, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', fontSize: 8.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{action.target} → {summary}</span>}
+        {action.type === 'set_theme_palette' && action.options?.length === 4 && (
+          <span style={{ display: 'flex', gap: 3, marginTop: 5 }}>{action.options.map((color) => <span key={color} title={color} style={{ width: 15, height: 5, borderRadius: 999, background: color, border: '1px solid color-mix(in srgb, currentColor 18%, transparent)' }} />)}</span>
+        )}
+      </span>
+      {receipt.status === 'running' ? (
+        <span style={{ width: 15, height: 15, borderRadius: '50%', border: '2px solid var(--gb-border-default)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-help-orbit .8s linear infinite' }} />
+      ) : failed ? (
+        <button type="button" onClick={() => setAttempt((value) => value + 1)} style={{ height: 24, padding: '0 7px', borderRadius: 7, background: 'var(--gb-error-tint-medium)', color: 'var(--gb-error-fg)', border: '1px solid var(--gb-error-tint-border)', fontSize: 9, fontWeight: 750, cursor: 'pointer' }}>Retry</button>
+      ) : receipt.url ? (
+        <button type="button" title="Copy generated link" onClick={async () => { const copied = await copyText(receipt.url); window.__gbToast?.[copied ? 'success' : 'error']?.(copied ? 'Link copied' : 'Could not copy link', { duration: 1700 }); }} style={{ width: 27, height: 25, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--gb-success-tint-medium)', color: 'var(--gb-success-fg)', border: '1px solid var(--gb-success-tint-border)', cursor: 'pointer' }}><I.copy size={10} /></button>
+      ) : <I.check size={12} style={{ color: 'var(--gb-success-fg)' }} />}
+    </motion.div>
+  );
+}
+
 function AssistantMessage({ message, onAction, onFeedback, isLast, onSuggestion }) {
   return (
     <motion.div
@@ -354,7 +410,9 @@ function AssistantMessage({ message, onAction, onFeedback, isLast, onSuggestion 
 
         {message.actions?.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 7 }}>
-            {message.actions.map((action, index) => (
+            {message.actions.map((action, index) => isExecutableHelpAction(action) ? (
+              <ExecutableActionCard key={`${action.type}-${index}`} action={action} receiptId={`${message.runId || message.id || 'answer'}:${index}`} onAction={onAction} />
+            ) : (
               <button key={`${action.type}-${index}`} type="button" onClick={() => onAction(action)} style={{
                 height: 27, padding: '0 9px', display: 'inline-flex', alignItems: 'center', gap: 6,
                 borderRadius: 8, background: 'var(--gb-brand-tint-medium)', color: 'var(--gb-brand-label)',
@@ -523,23 +581,30 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
     }
   }, [draft, active, localBusy, answerMode, client]);
 
-  const handleAction = useCallback(async (action) => {
+  const handleAction = useCallback(async (action, receiptId = '') => {
     const type = action?.type;
     const target = String(action?.target || '');
+    if (isExecutableHelpAction(action)) {
+      const receipt = await executeHelpActionOnce(receiptId, action);
+      window.__gbToast?.[receipt.status === 'succeeded' ? 'success' : 'error']?.(receipt.message, { duration: 2300 });
+      return receipt;
+    }
     if (type === 'open_guide') {
       const hash = target.startsWith('#') ? target : `#${target.replace(/^\/+/, '')}`;
       chrome.runtime.sendMessage({ action: 'openGuide', hash });
-      return;
+      return { status: 'succeeded', message: 'Opened guide', url: '' };
     }
     if (type === 'open_settings') {
       chrome.runtime.sendMessage({ action: 'openEditor', openSettings: true, settingsTarget: target });
       window.__gbToast?.info?.('Opening extension settings', { duration: 1800 });
-      return;
+      return { status: 'succeeded', message: 'Opened settings', url: '' };
     }
     if (type === 'show_shortcut' || type === 'copy_text') {
       const copied = await copyText(target);
       window.__gbToast?.[copied ? 'success' : 'error']?.(copied ? (type === 'show_shortcut' ? 'Shortcut copied' : 'Copied') : 'Could not copy', { duration: 1700 });
+      return { status: copied ? 'succeeded' : 'failed', message: copied ? 'Copied' : 'Could not copy', url: '' };
     }
+    return { status: 'failed', message: 'Unsupported action', url: '' };
   }, []);
 
   const handleFeedback = useCallback(async (runId, rating) => {
@@ -657,7 +722,7 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
           </motion.button>
         </div>
         <div style={{ minHeight: 15, padding: '4px 3px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, color: 'var(--gb-text-muted)', fontSize: 8.5, lineHeight: 1.25, fontWeight: 550 }}>
-          <span>Grounded help · no browser or customer data is sent</span>
+          <span>Grounded help · route shape and visible setting state are sent; customer page content is not</span>
           <span style={{ fontFamily: 'var(--gb-font-mono)', opacity: draft.length > 3200 ? 1 : .55 }}>{draft.length > 3200 ? `${draft.length}/4000` : '↵ send · ⇧↵ line'}</span>
         </div>
       </footer>

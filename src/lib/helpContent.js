@@ -2712,12 +2712,12 @@ export const HELP_CONTENT = {
           {
             "type": "callout",
             "kind": "info",
-            "title": "Grounded and read-only",
-            "text": "The backend searches the generated guide, tutorials, inventory, assistant knowledge bank, personality policy, and safe extension source excerpts. The completion receives only the most relevant excerpts, has no write tools, cannot execute code, and cannot inspect the live Chrome tab or customer data."
+            "title": "Grounded knowledge, guarded actions",
+            "text": "The backend searches the generated guide, tutorials, inventory, assistant knowledge bank, personality policy, and safe extension source excerpts. It cannot execute code or inspect customer/page content. Explicit requests can return a typed feature, setting, theme, palette, or share action; both the backend and extension validate it against live registries before it runs."
           },
           {
             "type": "p",
-            "text": "Answers are retrieved from the extension's own guide, inventory, and allowlisted source. The UI renders returned text as plain content and supports only four inert action types: open a guide route, open extension settings, show/copy a shortcut, or copy text. It does not execute arbitrary code or send customer/page content; only the page type, extension version, answer mode, and boolean feature states are included as context."
+            "text": "The companion receives page type, a sanitized route with record identifiers replaced by *, extension version, answer mode, boolean feature state, hidden-setting keys, and ids/names of locally available email templates. It never receives DOM text, customer fields, email bodies, credentials, or arbitrary storage values. Executable actions appear as one-time live receipts; share receipts expose their generated link."
           },
           {
             "type": "p",

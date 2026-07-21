@@ -13,7 +13,11 @@
   const MAX_MESSAGES = 40;
   const MAX_HISTORY = 12;
   const ACTIVE_STATUSES = new Set(['submitting', 'queued', 'running']);
-  const ACTION_TYPES = new Set(['open_guide', 'open_settings', 'show_shortcut', 'copy_text']);
+  const ACTION_TYPES = new Set([
+    'open_guide', 'open_settings', 'show_shortcut', 'copy_text',
+    'set_feature', 'set_setting', 'set_theme_preset', 'set_theme_palette',
+    'share_settings', 'share_email_template',
+  ]);
 
   const bounded = (value, max) => String(value == null ? '' : value).trim().slice(0, max);
   const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -64,6 +68,10 @@
     return {
       type,
       target,
+      value: bounded(value.value, 500),
+      options: Array.isArray(value.options)
+        ? value.options.map((item) => bounded(item, 120)).filter(Boolean).slice(0, 16)
+        : [],
       label: bounded(value.label, 100) || 'Open',
       citationId: safeId(value.citation_id ?? value.citationId),
     };
@@ -182,17 +190,30 @@
         if (safeKey && typeof enabled === 'boolean') featureStates[safeKey] = enabled;
       }
     }
+    const resources = Array.isArray(raw.available_resources)
+      ? raw.available_resources.slice(0, 80).map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const kind = safeId(item.kind);
+        const id = safeId(item.id);
+        if (!kind || !id) return null;
+        return { kind, id, label: bounded(item.label, 120) || id };
+      }).filter(Boolean)
+      : [];
     return {
       extension_version: bounded(raw.extension_version, 40) || undefined,
       edition: raw.edition === 'consumer' ? 'consumer' : 'admin',
       surface: bounded(raw.surface, 60) || undefined,
       guide_route: bounded(raw.guide_route, 240) || undefined,
       page_type: bounded(raw.page_type, 60) || undefined,
+      page_url: /^https?:\/\//.test(String(raw.page_url || ''))
+        ? bounded(raw.page_url, 500) || undefined
+        : undefined,
       answer_mode: raw.answer_mode === 'technical' ? 'technical' : 'operator',
       feature_states: featureStates,
       hidden_settings: Array.isArray(raw.hidden_settings)
         ? raw.hidden_settings.map((item) => bounded(item, 160)).filter(Boolean).slice(0, 160)
         : [],
+      available_resources: resources,
     };
   }
 

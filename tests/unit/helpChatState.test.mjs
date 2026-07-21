@@ -28,6 +28,8 @@ describe('Help Companion state', () => {
         page_type: 'contact',
         answer_mode: 'technical',
         feature_states: { actionsShelfEnabled: true, invalid: 'yes' },
+        page_url: 'https://www.golfballs.com/admin/Page.aspx?Page=240&customerID=*',
+        available_resources: [{ kind: 'email_template', id: 'tpl-follow-up', label: 'Follow up' }],
         unexpected: 'must not cross the contract',
       },
       'help:request-1234',
@@ -39,6 +41,8 @@ describe('Help Companion state', () => {
     assert.equal(request.history.at(-1).content, 'turn 14');
     assert.equal(request.context.page_type, 'contact');
     assert.equal(request.context.answer_mode, 'technical');
+    assert.equal(request.context.page_url, 'https://www.golfballs.com/admin/Page.aspx?Page=240&customerID=*');
+    assert.equal(request.context.available_resources[0].id, 'tpl-follow-up');
     assert.equal(JSON.stringify(request.context.feature_states), JSON.stringify({ actionsShelfEnabled: true }));
     assert.equal(Object.hasOwn(request.context, 'unexpected'), false);
   });
@@ -102,12 +106,14 @@ describe('Help Companion state', () => {
       text: 'x'.repeat(30_000),
       actions: [
         { type: 'open_guide', target: '#manual/actions-shelf', label: 'Open guide' },
+        { type: 'set_feature', target: 'actionsShelfEnabled', value: 'false', options: [], label: 'Disable shelf' },
         { type: 'run_javascript', target: 'alert(1)', label: 'Run' },
       ],
       citations: [{ id: '../bad', title: 'Bad id' }, { id: 'safe-id', title: 'Safe citation' }],
     });
     assert.equal(answer.text.length, 24_000);
-    assert.equal(JSON.stringify(answer.actions.map((item) => item.type)), JSON.stringify(['open_guide']));
+    assert.equal(JSON.stringify(answer.actions.map((item) => item.type)), JSON.stringify(['open_guide', 'set_feature']));
+    assert.equal(answer.actions[1].value, 'false');
     assert.equal(JSON.stringify(answer.citations.map((item) => item.id)), JSON.stringify(['safe-id']));
   });
 });

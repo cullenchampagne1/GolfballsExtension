@@ -72,13 +72,25 @@ class HelpAgentCorpusTests(unittest.TestCase):
             self.assertFalse(any(value in source for value in forbidden), source)
             self.assertIsNone(secret.search(str(chunk.get("text") or "")), chunk["id"])
 
-    def test_inert_action_targets_come_only_from_live_registries(self):
+    def test_action_targets_come_only_from_live_registries(self):
         routes = set(self.descriptor["guide_routes"])
         self.assertIn("#manual/margin-calculator", routes)
         self.assertIn("#workflows/run-campaign", routes)
         self.assertIn("crmSearch", self.descriptor["shortcut_targets"])
         margin = self.by_id["registry:devSetting:marginCalc.minAllowedMargin"]
         self.assertEqual(margin["setting_keys"], ["marginCalc.minAllowedMargin"])
+        targets = {
+            (item["action_type"], item["id"]): item
+            for item in self.descriptor["action_targets"]
+        }
+        self.assertEqual(targets[("set_feature", "actionsShelfEnabled")]["value_type"], "bool")
+        self.assertEqual(
+            targets[("set_setting", "marginCalc.minAllowedMargin")]["maximum"], 100
+        )
+        self.assertIn("nord", targets[("set_theme_preset", "theme")]["allowed_values"])
+        self.assertIn(
+            "settings-appearance", targets[("share_settings", "settings")]["option_values"]
+        )
 
     def test_generic_backend_retrieval_resolves_real_guide_and_setting_queries(self):
         manager = ASSISTANT.AssistantManager(_StatusOnlyRunner())

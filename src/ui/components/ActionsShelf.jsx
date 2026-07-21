@@ -401,7 +401,9 @@ export function ActionsShelf({
   const [open, setOpen] = useState(false);
   const [view, setView] = useState('actions');
   const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const [actionsHeight, setActionsHeight] = useState(0);
   const ref = useRef(null);
+  const actionsViewRef = useRef(null);
   const { actions, page, pageLabel, pageSubLabel, topModalLabel } = useActionRegistry();
   const help = useHelpAssistant(page);
 
@@ -565,6 +567,19 @@ export function ActionsShelf({
   const availableWidth = Math.max(240, viewport.width - (variant === 'tab' ? 12 : rightOffset + 12));
   const panelWidth = Math.min(view === 'chat' ? 540 : 320, availableWidth);
   const panelHeight = Math.min(660, Math.max(220, viewport.height - bottomOffset - 80));
+  const resolvedHeight = view === 'chat'
+    ? panelHeight
+    : (actionsHeight ? Math.min(actionsHeight, panelHeight) : 'auto');
+
+  useEffect(() => {
+    if (!open || view !== 'actions' || !actionsViewRef.current) return undefined;
+    const node = actionsViewRef.current;
+    const measure = () => setActionsHeight(Math.ceil(node.scrollHeight));
+    measure();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    observer?.observe(node);
+    return () => observer?.disconnect();
+  }, [open, view, rows.length, showContextHeader, help.state?.unread]);
 
   return (
     <div
@@ -590,7 +605,7 @@ export function ActionsShelf({
           // Same spring curve as the design's keyframe entry; the exit
           // is slightly faster and more linear so it closes cleanly.
           initial={{ opacity: 0, y: 10, scale: 0.96, width: Math.min(320, availableWidth) }}
-          animate={{ opacity: 1, y: 0, scale: 1, width: panelWidth, height: view === 'chat' ? panelHeight : 'auto' }}
+          animate={{ opacity: 1, y: 0, scale: 1, width: panelWidth, height: resolvedHeight }}
           exit={{    opacity: 0, y: 6, scale: 0.96, transition: { duration: 0.14, ease: [0.4, 0, 0.2, 1] } }}
           transition={{
             opacity: { duration: .18 }, y: { duration: .22, ease: [0.34, 1.4, 0.64, 1] }, scale: { duration: .2 },
@@ -611,7 +626,7 @@ export function ActionsShelf({
             display: 'flex', flexDirection: 'column',
           }}
         >
-          <AnimatePresence initial={false} mode="wait">
+          <AnimatePresence initial={false} mode="popLayout">
             {view === 'chat' ? (
               <motion.div
                 key="help-chat"
@@ -624,9 +639,10 @@ export function ActionsShelf({
             ) : (
               <motion.div
                 key="actions-list"
+                ref={actionsViewRef}
                 initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }}
                 transition={{ duration: .15, ease: [0.4, 0, .2, 1] }}
-                style={{ width: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}
+                style={{ width: '100%', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}
               >
                 {showContextHeader && (
                   <div style={{
