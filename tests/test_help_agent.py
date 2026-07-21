@@ -143,6 +143,7 @@ class HelpAgentCorpusTests(unittest.TestCase):
             "GET /assistant/admin/status",
             "POST /assistant/admin/reindex",
             "POST /assistant/admin/grants",
+            "POST /keys/assistant-access",
         }
         self.assertTrue(expected_docs <= set(manifest["api_docs"]["routes"]))
         compile((ROOT / ".revstack" / "routes.py").read_text(), "routes.py", "exec")
