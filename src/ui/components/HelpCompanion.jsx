@@ -464,12 +464,16 @@ function EmptyConversation({ loading, pageLabel, onQuestion, compact }) {
 }
 
 function ModeSwitch({ value, onChange }) {
+  const modes = [
+    { id: 'operator', label: 'Using it', title: 'Using it: focus on where controls live, what to do, and what to expect.' },
+    { id: 'technical', label: 'Under the hood', title: 'Under the hood: focus on architecture, code, storage, and data flow.' },
+  ];
   return (
-    <div role="radiogroup" aria-label="Answer detail" style={{ position: 'relative', height: 24, padding: 2, display: 'inline-grid', gridTemplateColumns: '1fr 1fr', gap: 1, borderRadius: 8, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)' }}>
-      {['operator', 'technical'].map((mode) => (
-        <button key={mode} type="button" role="radio" aria-checked={value === mode} onClick={() => onChange(mode)} style={{ position: 'relative', zIndex: 1, height: 18, padding: '0 7px', border: 0, background: 'transparent', color: value === mode ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-sans)', fontSize: 8.75, fontWeight: 750, cursor: 'pointer', transition: 'color var(--gb-anim-fast)' }}>
-          {value === mode && <motion.span layoutId="gb-help-mode" transition={{ type: 'spring', stiffness: 440, damping: 34 }} style={{ position: 'absolute', inset: 0, zIndex: -1, borderRadius: 5.5, background: 'var(--gb-fill-medium)', border: '1px solid var(--gb-border-default)', boxShadow: '0 1px 4px rgba(0,0,0,.15)' }} />}
-          {mode === 'operator' ? 'How-to' : 'Technical'}
+    <div role="radiogroup" aria-label="Answer perspective" style={{ position: 'relative', height: 24, padding: 2, display: 'inline-grid', gridTemplateColumns: '1fr 1fr', gap: 1, borderRadius: 8, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)' }}>
+      {modes.map((mode) => (
+        <button key={mode.id} type="button" role="radio" aria-checked={value === mode.id} aria-label={mode.title} title={mode.title} onClick={() => onChange(mode.id)} style={{ position: 'relative', zIndex: 1, height: 18, padding: '0 7px', border: 0, background: 'transparent', color: value === mode.id ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-sans)', fontSize: 8.75, fontWeight: 750, cursor: 'pointer', transition: 'color var(--gb-anim-fast)', whiteSpace: 'nowrap' }}>
+          {value === mode.id && <motion.span layoutId="gb-help-mode" transition={{ type: 'spring', stiffness: 440, damping: 34 }} style={{ position: 'absolute', inset: 0, zIndex: -1, borderRadius: 5.5, background: 'var(--gb-fill-medium)', border: '1px solid var(--gb-border-default)', boxShadow: '0 1px 4px rgba(0,0,0,.15)' }} />}
+          {mode.label}
         </button>
       ))}
     </div>

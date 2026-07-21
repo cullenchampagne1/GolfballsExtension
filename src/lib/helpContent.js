@@ -2707,7 +2707,13 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "Press Enter to send or Shift+Enter for a new line. How-to answers focus on operator steps; Technical answers can explain implementation details. A response runs in the extension service worker, so Back, outside-click, Escape, page navigation, and MV3 worker suspension do not discard it. Use the stop button to cancel deliberately."
+            "text": "Press Enter to send or Shift+Enter for a new line. Using it focuses on visible controls and operator workflows; Under the hood focuses on architecture, source, storage, and data flow. A response runs in the extension service worker, so Back, outside-click, Escape, page navigation, and MV3 worker suspension do not discard it. Use the stop button to cancel deliberately."
+          },
+          {
+            "type": "callout",
+            "kind": "info",
+            "title": "Grounded and read-only",
+            "text": "The backend searches the generated guide, tutorials, inventory, assistant knowledge bank, personality policy, and safe extension source excerpts. The completion receives only the most relevant excerpts, has no write tools, cannot execute code, and cannot inspect the live Chrome tab or customer data."
           },
           {
             "type": "p",

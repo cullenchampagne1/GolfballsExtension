@@ -69,6 +69,7 @@
     { "name": "guard · AI help knowledge corpus", "id": "guard-help-agent", "command": ["../.venv/bin/python", "tests/test_help_agent.py"] },
     { "name": "flow · ASP.NET calendar form-state reconstruction", "file": "tests/unit/calendarFormState.test.mjs" },
     { "name": "flow · install enrollment lifecycle", "file": "tests/integration/enrollment-lifecycle.test.mjs" },
+    { "name": "ui · one-time installation identity confirmation", "file": "tests/unit/installationIdentityNotice.test.mjs" },
     { "name": "flow · api fetch guard & bearer auth", "file": "tests/integration/api-guard-flow.test.mjs" },
     { "name": "flow · Help Companion background recovery", "file": "tests/integration/help-assistant-flow.test.mjs" },
     { "name": "flow · settings share create→import→revoke", "file": "tests/integration/settings-share-lifecycle.test.mjs" },

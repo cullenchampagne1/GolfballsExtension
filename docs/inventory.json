@@ -233,6 +233,7 @@
     { "key": "gbCredentials", "area": "local", "contains": "Power Automate trigger URL; excluded from presets and broadcasts" },
     { "key": "gbApiInstallation", "area": "local", "contains": "worker-owned RevStack installation UUID, per-install API key, safe prefix, enrollment time, pinned extension ID, and version; excluded from presets, broadcasts, and runtime messages" },
     { "key": "gbInstallationIdentity", "area": "local", "contains": "non-secret cached registration status, display name, optional email local-part, source, and timestamps for the existing installation key" },
+    { "key": "gbInstallationIdentityNoticeV1", "area": "local", "contains": "non-secret signature recording that the one-time installation identity confirmation has already faded out" },
     { "key": "gbRemoteSettingsPolicy", "area": "local", "contains": "last validated policy revision, visibility maps, apply time, and administrator-bypass state" },
     { "key": "gbRemoteSettingsBackup", "area": "local", "contains": "pre-policy feature/developer values used for reversible administrator bypass" },
     { "key": "gbTheme", "area": "local", "contains": "{ variant, colors } theme record" },
@@ -376,7 +377,7 @@
     { "id": "copy-ids", "name": "Copy Order IDs", "surface": "order index action", "flag": "copyIdsEnabled", "summary": "Copy all listed order IDs to the clipboard." },
     { "id": "signifyd-glow", "name": "Signifyd Glow", "surface": "order index rows", "flag": "signifydGlowEnabled", "summary": "Color-codes order rows by fraud score." },
     { "id": "actions-shelf", "name": "Actions Shelf", "surface": "floating shelf", "flag": "actionsShelfEnabled", "summary": "Context-aware quick-action launcher on every CRM page (Shift×2)." },
-    { "id": "help-companion", "name": "AI Help Companion", "surface": "morphing Actions Shelf destination", "flag": "actionsShelfEnabled", "summary": "Grounded toolkit help with worker-owned async runs, local conversation recovery, guide/settings actions, cancellation, feedback, and unread replies." },
+    { "id": "help-companion", "name": "AI Help Companion", "surface": "morphing Actions Shelf destination", "flag": "actionsShelfEnabled", "summary": "Conversational, grounded toolkit help with Using it / Under the hood perspectives, guide and source retrieval, worker-owned async runs, local conversation recovery, safe actions, cancellation, feedback, and unread replies." },
     { "id": "settings", "name": "Settings, Theme, Scales & Sharing", "surface": "editor Settings panel", "flag": null, "summary": "Theme variants, scaling, toggles, shortcuts, policy-managed custom pages, and scoped server settings links." },
     { "id": "code-variables", "name": "Code Variables & Recipes", "surface": "template/campaign editors", "flag": null, "audience": "advanced", "summary": "Sandboxed JS expressions with prebuilt recipes (OOS scanner, replacement recommender)." }
   ],

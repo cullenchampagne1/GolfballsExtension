@@ -30,6 +30,9 @@ import { EMPTY_CREDENTIALS, loadCredentials, saveCredentials } from '../lib/cred
 import { isPowerAutomateUrl } from '../lib/security.js';
 import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
 import { listProductStores, revokeProductStore } from '../lib/customItems.js';
+import {
+  IDENTITY_NOTICE_KEY, identityNoticeSignature, shouldShowIdentityConfirmation,
+} from '../lib/installationIdentityNotice.js';
 
 /* ───────────────────────────────────────────────────────────────
    SettingsPanel — the fully-featured Manage → Settings page.
@@ -1075,15 +1078,18 @@ function ProductStoresSection() {
 function InstallationIdentityNotice() {
   const [identity, setIdentity] = useState(null);
   const [name, setName] = useState('');
-  const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
+  const [noticeSeen, setNoticeSeen] = useState('');
+  const [noticeReady, setNoticeReady] = useState(false);
 
   const applyIdentity = useCallback((value) => {
     if (!value || typeof value !== 'object') return;
     const next = {
       registered: value.registered === true && !!String(value.displayName || '').trim(),
+      installationId: String(value.installationId || '').trim(),
       displayName: String(value.displayName || '').trim(),
       localPart: String(value.localPart || '').trim(),
+      updatedAt: String(value.updatedAt || '').trim(),
     };
     setIdentity(next);
     if (next.registered) setName(next.displayName);
@@ -1102,6 +1108,14 @@ function InstallationIdentityNotice() {
 
   useEffect(() => {
     load().catch(() => {});
+    try {
+      chrome.storage.local.get(IDENTITY_NOTICE_KEY, (stored) => {
+        setNoticeSeen(String(stored?.[IDENTITY_NOTICE_KEY] || ''));
+        setNoticeReady(true);
+      });
+    } catch {
+      setNoticeReady(true);
+    }
     const onStorage = (changes, area) => {
       if (area === 'local' && changes.gbInstallationIdentity?.newValue) {
         applyIdentity(changes.gbInstallationIdentity.newValue);
@@ -1112,6 +1126,22 @@ function InstallationIdentityNotice() {
       try { chrome.storage.onChanged.removeListener(onStorage); } catch { /* */ }
     };
   }, [load, applyIdentity]);
+
+  useEffect(() => {
+    if (!noticeReady || !identity?.registered) return undefined;
+    const signature = identityNoticeSignature(identity);
+    if (!signature || signature === noticeSeen) return undefined;
+    const timer = setTimeout(() => {
+      try {
+        chrome.storage.local.set({ [IDENTITY_NOTICE_KEY]: signature }, () => {
+          setNoticeSeen(signature);
+        });
+      } catch {
+        setNoticeSeen(signature);
+      }
+    }, 3200);
+    return () => clearTimeout(timer);
+  }, [identity, noticeReady, noticeSeen]);
 
   const save = async () => {
     const displayName = name.trim().replace(/\s+/g, ' ');
@@ -1125,7 +1155,6 @@ function InstallationIdentityNotice() {
         'setInstallationIdentity', { displayName },
       );
       applyIdentity(response.identity);
-      setEditing(false);
       window.__gbToast?.success?.(`Extension registered to ${response.identity.displayName}`);
     } catch (saveError) {
       setError(saveError?.message || 'Unable to save your name');
@@ -1133,78 +1162,62 @@ function InstallationIdentityNotice() {
     }
   };
 
-  if (!identity && !error) return null;
-  if (!identity && error) {
-    return (
-      <motion.section layout initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}>
-        <Callout tone="error" icon={<I.user />} title="Registration status unavailable">
-          <div>{error}</div>
-          <Btn variant="tinted" status="error" size="xs" onClick={load} style={{ marginTop: 8 }}>
-            Retry
-          </Btn>
-        </Callout>
-      </motion.section>
-    );
-  }
-
-  const needsName = !identity.registered || editing;
+  const signature = identityNoticeSignature(identity);
+  const showRegistered = noticeReady && shouldShowIdentityConfirmation(identity, noticeSeen);
+  const showPrompt = !!(identity && !identity.registered);
+  const showError = !identity && !!error;
   return (
-    <motion.section layout initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}>
-      <Callout
-        tone={needsName ? 'warning' : 'brand'}
-        icon={<I.user />}
-        title={needsName ? 'Tell RevStack who uses this extension' : `Registered as ${identity.displayName}`}
-      >
-        {needsName ? (
-          <>
-            <div style={{ marginBottom: 9 }}>
-              Your existing API key stays in place. This name labels API access,
-              settings links, and email links created from this browser.
-            </div>
-            <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
-              <Input
-                size="sm"
-                value={name}
-                onChange={setName}
-                error={!!error}
-                placeholder="Your name"
-                leading={<I.user />}
-                autoComplete="name"
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') save().catch(() => {});
-                }}
-              />
-              <Btn variant="tinted" status="warning" size="sm" onClick={save}>
-                {identity.registered ? 'Update' : 'Register'}
+    <AnimatePresence initial={false}>
+      {(showError || showPrompt || showRegistered) && (
+        <motion.section
+          layout
+          initial={{ opacity: 0, y: -8, height: 0 }}
+          animate={{ opacity: 1, y: 0, height: 'auto' }}
+          exit={{ opacity: 0, y: -7, height: 0, marginBottom: -24 }}
+          transition={{ duration: 0.32, ease: [0.2, 0.8, 0.2, 1] }}
+          style={{ overflow: 'hidden' }}
+        >
+          {showError ? (
+            <Callout tone="error" icon={<I.user />} title="Registration status unavailable">
+              <div>{error}</div>
+              <Btn variant="tinted" status="error" size="xs" onClick={load} style={{ marginTop: 8 }}>
+                Retry
               </Btn>
-              {identity.registered && (
-                <Btn variant="ghost" size="sm" onClick={() => {
-                  setEditing(false);
-                  setError('');
-                  setName(identity.displayName);
-                }}>
-                  Cancel
+            </Callout>
+          ) : showPrompt ? (
+            <Callout tone="warning" icon={<I.user />} title="Tell RevStack who uses this extension">
+              <div style={{ marginBottom: 9 }}>
+                Your existing API key stays in place. This name labels API access,
+                settings links, and email links created from this browser.
+              </div>
+              <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
+                <Input
+                  size="sm"
+                  value={name}
+                  onChange={setName}
+                  error={!!error}
+                  placeholder="Your name"
+                  leading={<I.user />}
+                  autoComplete="name"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') save().catch(() => {});
+                  }}
+                />
+                <Btn variant="tinted" status="warning" size="sm" onClick={save}>
+                  Register
                 </Btn>
-              )}
-            </div>
-            {error && <div style={{ marginTop: 6, color: 'var(--gb-error-fg)' }}>{error}</div>}
-          </>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ flex: 1 }}>
-              New and historical shared items are attributed to this user
-              {identity.localPart ? ` · ${identity.localPart}` : ''}.
-            </span>
-            <Btn variant="ghost" size="xs" onClick={() => {
-              setName(identity.displayName);
-              setEditing(true);
-            }}>
-              Edit
-            </Btn>
-          </div>
-        )}
-      </Callout>
-    </motion.section>
+              </div>
+              {error && <div style={{ marginTop: 6, color: 'var(--gb-error-fg)' }}>{error}</div>}
+            </Callout>
+          ) : (
+            <Callout tone="brand" icon={<I.user />} title={`Registered as ${identity.displayName}`}>
+              Shared items from this browser are now attributed to this user
+              {identity.localPart ? ` · ${identity.localPart}` : ''}. This confirmation will close automatically.
+            </Callout>
+          )}
+        </motion.section>
+      )}
+    </AnimatePresence>
   );
 }
 
