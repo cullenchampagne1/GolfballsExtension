@@ -13,6 +13,8 @@
   const API_ORIGIN = 'https://api.cullenchampagne.com';
   const ENROLLMENT_URL = `${API_ORIGIN}/auth/extension-installation`;
   const STORAGE_KEY = 'gbApiInstallation';
+  const IDENTITY_CACHE_KEY = 'gbInstallationIdentity';
+  const IDENTITY_PATH = '/extension/identity';
   const RESPONSE_LIMIT = 32_000;
   // Settings snapshots can legitimately contain large template libraries and
   // custom-page definitions. Keep the browser guard aligned with the backend's
@@ -26,6 +28,8 @@
   const ASSISTANT_BASE = '/projects/golfballs-extension/assistant';
   const ASSISTANT_RUN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,79}$/;
   let enrollmentPromise = null;
+  let identityPromise = null;
+  let identitySyncTimer = null;
 
   function runtimeIdentity() {
     const manifest = chrome.runtime.getManifest();
@@ -45,14 +49,18 @@
     });
   }
 
-  function storageSet(value) {
+  function storageSetKey(key, value, errorMessage) {
     return new Promise((resolve, reject) => {
-      chrome.storage.local.set({ [STORAGE_KEY]: value }, () => {
+      chrome.storage.local.set({ [key]: value }, () => {
         const error = chrome.runtime.lastError;
-        if (error) reject(new Error(error.message || 'Unable to save installation credential'));
+        if (error) reject(new Error(error.message || errorMessage));
         else resolve();
       });
     });
+  }
+
+  function storageSet(value) {
+    return storageSetKey(STORAGE_KEY, value, 'Unable to save installation credential');
   }
 
   function normalizeInstallation(value) {
@@ -263,6 +271,117 @@
     return payload;
   }
 
+  function normalizeLocalPart(value) {
+    const localPart = String(value || '').trim().toLowerCase();
+    return /^[a-z0-9](?:[a-z0-9._+-]{0,62}[a-z0-9])?$/.test(localPart)
+      ? localPart
+      : '';
+  }
+
+  function normalizeDisplayName(value) {
+    const name = String(value || '').trim().replace(/\s+/g, ' ');
+    return name && name.length <= 120 && !/[\u0000-\u001f\u007f]/.test(name)
+      ? name
+      : '';
+  }
+
+  function displayNameFromLocalPart(localPart) {
+    return normalizeLocalPart(localPart)
+      .split(/[._+-]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ')
+      .slice(0, 120);
+  }
+
+  function normalizeIdentity(value) {
+    const raw = value && typeof value === 'object' ? value : {};
+    const displayName = normalizeDisplayName(raw.display_name ?? raw.displayName);
+    const localPart = normalizeLocalPart(raw.local_part ?? raw.localPart);
+    const registered = raw.registered === true && !!displayName;
+    return {
+      registered,
+      installationId: String(raw.installation_id ?? raw.installationId ?? '').slice(0, 40),
+      displayName: registered ? displayName : '',
+      localPart: registered ? localPart : '',
+      source: registered ? String(raw.source || '').slice(0, 32) : '',
+      createdAt: registered ? String(raw.created_at ?? raw.createdAt ?? '').slice(0, 40) : '',
+      updatedAt: registered ? String(raw.updated_at ?? raw.updatedAt ?? '').slice(0, 40) : '',
+      promptRequired: !registered,
+    };
+  }
+
+  async function cacheIdentity(value) {
+    const identity = normalizeIdentity(value);
+    await storageSetKey(
+      IDENTITY_CACHE_KEY, identity, 'Unable to save installation identity status',
+    );
+    return identity;
+  }
+
+  async function fetchIdentity() {
+    return cacheIdentity(await apiJson(IDENTITY_PATH));
+  }
+
+  async function localIdentityPart() {
+    const devSettings = await storageGet('devSettings');
+    return normalizeLocalPart(devSettings?.['email.localPart']);
+  }
+
+  async function updateIdentity({ displayName, localPart = '', source = 'settings_prompt' } = {}) {
+    const name = normalizeDisplayName(displayName);
+    const part = normalizeLocalPart(localPart);
+    if (!name) throw new Error('Enter your name before registering this extension');
+    if (localPart && !part) throw new Error('The configured email account host is invalid');
+    if (!['email_local_part', 'settings_prompt', 'settings_edit'].includes(source)) {
+      throw new Error('Invalid installation identity source');
+    }
+    return cacheIdentity(await apiJson(IDENTITY_PATH, {
+      method: 'POST',
+      body: JSON.stringify({
+        display_name: name,
+        local_part: part || null,
+        source,
+      }),
+    }));
+  }
+
+  async function syncIdentityFromStorage() {
+    if (identityPromise) return identityPromise;
+    identityPromise = (async () => {
+      await ensureInstallation();
+      const [identity, localPart] = await Promise.all([
+        fetchIdentity(), localIdentityPart(),
+      ]);
+      if (!localPart) return identity;
+      if (identity.registered && identity.localPart === localPart) return identity;
+      const keepChosenName = identity.registered && identity.source !== 'email_local_part';
+      return updateIdentity({
+        displayName: keepChosenName
+          ? identity.displayName
+          : displayNameFromLocalPart(localPart),
+        localPart,
+        source: keepChosenName ? 'settings_edit' : 'email_local_part',
+      });
+    })();
+    try {
+      return await identityPromise;
+    } finally {
+      identityPromise = null;
+    }
+  }
+
+  async function registerIdentity(displayName) {
+    await ensureInstallation();
+    const localPart = await localIdentityPart();
+    const cached = normalizeIdentity(await storageGet(IDENTITY_CACHE_KEY));
+    return updateIdentity({
+      displayName,
+      localPart,
+      source: cached.registered ? 'settings_edit' : 'settings_prompt',
+    });
+  }
+
   async function getStatus() {
     const installation = normalizeInstallation(await storageGet(STORAGE_KEY));
     if (!installation) return { enrolled: false };
@@ -277,19 +396,39 @@
   }
 
   function enrollInBackground() {
-    ensureInstallation().catch(() => {});
+    syncIdentityFromStorage().catch(() => {});
   }
 
   chrome.runtime.onInstalled?.addListener(enrollInBackground);
   chrome.runtime.onStartup?.addListener(enrollInBackground);
+  chrome.storage.onChanged?.addListener((changes, area) => {
+    if (area !== 'local' || !changes?.devSettings) return;
+    const previous = normalizeLocalPart(
+      changes.devSettings.oldValue?.['email.localPart'],
+    );
+    const next = normalizeLocalPart(
+      changes.devSettings.newValue?.['email.localPart'],
+    );
+    if (next && next !== previous) {
+      if (identitySyncTimer != null) clearTimeout(identitySyncTimer);
+      identitySyncTimer = setTimeout(() => {
+        identitySyncTimer = null;
+        syncIdentityFromStorage().catch(() => {});
+      }, 800);
+    }
+  });
 
   root.GBInstallationAuth = Object.freeze({
     API_ORIGIN,
     STORAGE_KEY,
+    IDENTITY_CACHE_KEY,
     apiFetch,
     apiJson,
     fetchConfiguration,
     ensureInstallation,
     getStatus,
+    fetchIdentity,
+    syncIdentityFromStorage,
+    registerIdentity,
   });
 })(globalThis);

@@ -48,6 +48,8 @@ if (hasBackend) {
 
 // --- Runtime /extension/* contract (each call ↔ each route) ------------------
 const RUNTIME = [
+  { name: 'identity:read',          in: 'installation-auth.js', literal: '/extension/identity',                 method: 'get',  route: '/identity' },
+  { name: 'identity:update',        in: 'installation-auth.js', literal: '/extension/identity',                 method: 'post', route: '/identity' },
   { name: 'configuration',          in: 'installation-auth.js', literal: '/extension/configuration',            method: 'get',  route: '/configuration' },
   { name: 'settings-shares:list',   in: 'background.js',        literal: '/extension/settings-shares',          method: 'get',  route: '/settings-shares' },
   { name: 'settings-shares:create', in: 'background.js',        literal: '/extension/settings-shares',          method: 'post', route: '/settings-shares' },

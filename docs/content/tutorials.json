@@ -7,7 +7,8 @@
       "estMinutes": 5,
       "prerequisites": ["Extension installed"],
       "steps": [
-        { "action": "Open Settings: click the extension icon, choose Manage in the popup header, then open the Settings tab in the Manager window.", "expected": "The Settings panel opens with Theme at the top.", "visualCue": "Manage button in the popup header." },
+        { "action": "Open Settings: click the extension icon, choose Manage in the popup header, then open the Settings tab in the Manager window.", "expected": "The Settings panel opens and checks this installation's identity.", "visualCue": "Manage button in the popup header." },
+        { "action": "If the identity notice appears, enter your name and choose Register.", "expected": "The current API key is labeled with your name and future or historical shared links are attributed to you.", "visualCue": "Identity notice at the top of Settings.", "tip": "If Email account host was already configured, the extension derives and registers your name automatically." },
         { "action": "Pick a theme variant — Dark, Slate, Light, Cream, Nord, Dracula, Rosé, or Tokyo Night.", "expected": "Every extension surface re-colors instantly.", "visualCue": "Theme section, top of Settings." },
         { "action": "Set 'Email account host' to your own account name.", "expected": "Your From identity is configured.", "visualCue": "Developer Settings section.", "warning": "Power Automate sends remain blocked while this required value is blank." },
         { "action": "Write your email signature in the signature editor.", "expected": "Signature saves; it will auto-append to Power Automate sends.", "visualCue": "Signature section." },

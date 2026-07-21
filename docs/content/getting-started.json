@@ -59,14 +59,16 @@
       "tutorial": "initial-configuration",
       "body": {
         "beginner": [
-          { "type": "p", "text": "Open the Settings page (extension popup → Manage in the header → Settings tab). Five things are worth doing on day one:" },
+          { "type": "p", "text": "Open the Settings page (extension popup → Manage in the header → Settings tab). Six things are worth doing on day one:" },
           { "type": "list", "items": [
+            "Confirm your name — Settings registers the current installation to you so API access and anything you share can be attributed. If Email account host is already configured, this happens automatically.",
             "Pick a theme — Dark, Slate, Light, Cream, Nord, Dracula, Rosé, or Tokyo Night. Changes apply live everywhere.",
             "Set your email account host — the 'Email account host' field under Developer Settings controls the From identity on sends. It starts blank and must be configured before Power Automate delivery.",
             "Write your email signature — Settings → signature editor. It's auto-appended to emails sent through Power Automate.",
             "Review feature toggles — everything except Power Automate is on by default. Turn off what you won't use.",
             "Open a team settings link — paste the URL under Shared Settings Templates, preview it, and choose which scopes to import."
           ] },
+          { "type": "callout", "kind": "info", "title": "No reinstall required", "text": "The identity notice updates your existing installation key. It never creates a replacement key, and historical settings or email links pick up the registered name automatically." },
           { "type": "callout", "kind": "warning", "title": "Configure the From identity", "text": "Power Automate sends fail closed while 'Email account host' is blank, preventing accidental delivery under another employee's identity." },
           { "type": "callout", "kind": "tip", "text": "Power Automate is off by default. Without it, Send opens a pre-filled Outlook window instead of sending silently. See \"How Email Sending Works\" before enabling it." }
         ]

@@ -846,6 +846,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
      that page/other-extension senders are not trusted. */
   if (sender.id !== chrome.runtime.id || !msg || typeof msg !== 'object') return;
 
+  // ── Installation user identity ─────────────────────────────────────────
+  // The settings UI never sees the API key. It can read/update only the
+  // human profile bound by the backend to this worker's existing credential.
+  if (msg.action === 'getInstallationIdentity') {
+    GBInstallationAuth.syncIdentityFromStorage()
+      .then((identity) => sendResponse({ ok: true, identity }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: error?.message || 'Unable to load extension identity',
+      }));
+    return true;
+  }
+  if (msg.action === 'setInstallationIdentity') {
+    GBInstallationAuth.registerIdentity(msg.displayName)
+      .then((identity) => sendResponse({ ok: true, identity }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: error?.message || 'Unable to register extension identity',
+      }));
+    return true;
+  }
+
   // ── Installation-authenticated Help Companion ──────────────────────────
   // The content shelf never receives the installation credential and never
   // calls the backend directly. All run state is persisted by this worker, so

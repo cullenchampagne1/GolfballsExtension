@@ -1071,6 +1071,143 @@ function ProductStoresSection() {
   );
 }
 
+/* ── Installation identity ──────────────────────────────────── */
+function InstallationIdentityNotice() {
+  const [identity, setIdentity] = useState(null);
+  const [name, setName] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [error, setError] = useState('');
+
+  const applyIdentity = useCallback((value) => {
+    if (!value || typeof value !== 'object') return;
+    const next = {
+      registered: value.registered === true && !!String(value.displayName || '').trim(),
+      displayName: String(value.displayName || '').trim(),
+      localPart: String(value.localPart || '').trim(),
+    };
+    setIdentity(next);
+    if (next.registered) setName(next.displayName);
+  }, []);
+
+  const load = useCallback(async () => {
+    setError('');
+    try {
+      const response = await sendBackgroundMessage('getInstallationIdentity');
+      applyIdentity(response.identity);
+    } catch (loadError) {
+      setError(loadError?.message || 'Unable to load registration status');
+      throw loadError;
+    }
+  }, [applyIdentity]);
+
+  useEffect(() => {
+    load().catch(() => {});
+    const onStorage = (changes, area) => {
+      if (area === 'local' && changes.gbInstallationIdentity?.newValue) {
+        applyIdentity(changes.gbInstallationIdentity.newValue);
+      }
+    };
+    try { chrome.storage.onChanged.addListener(onStorage); } catch { /* */ }
+    return () => {
+      try { chrome.storage.onChanged.removeListener(onStorage); } catch { /* */ }
+    };
+  }, [load, applyIdentity]);
+
+  const save = async () => {
+    const displayName = name.trim().replace(/\s+/g, ' ');
+    if (!displayName) {
+      setError('Enter your name so shared items can be attributed to you.');
+      throw new Error('A name is required');
+    }
+    setError('');
+    try {
+      const response = await sendBackgroundMessage(
+        'setInstallationIdentity', { displayName },
+      );
+      applyIdentity(response.identity);
+      setEditing(false);
+      window.__gbToast?.success?.(`Extension registered to ${response.identity.displayName}`);
+    } catch (saveError) {
+      setError(saveError?.message || 'Unable to save your name');
+      throw saveError;
+    }
+  };
+
+  if (!identity && !error) return null;
+  if (!identity && error) {
+    return (
+      <motion.section layout initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}>
+        <Callout tone="error" icon={<I.user />} title="Registration status unavailable">
+          <div>{error}</div>
+          <Btn variant="tinted" status="error" size="xs" onClick={load} style={{ marginTop: 8 }}>
+            Retry
+          </Btn>
+        </Callout>
+      </motion.section>
+    );
+  }
+
+  const needsName = !identity.registered || editing;
+  return (
+    <motion.section layout initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}>
+      <Callout
+        tone={needsName ? 'warning' : 'brand'}
+        icon={<I.user />}
+        title={needsName ? 'Tell RevStack who uses this extension' : `Registered as ${identity.displayName}`}
+      >
+        {needsName ? (
+          <>
+            <div style={{ marginBottom: 9 }}>
+              Your existing API key stays in place. This name labels API access,
+              settings links, and email links created from this browser.
+            </div>
+            <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
+              <Input
+                size="sm"
+                value={name}
+                onChange={setName}
+                error={!!error}
+                placeholder="Your name"
+                leading={<I.user />}
+                autoComplete="name"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') save().catch(() => {});
+                }}
+              />
+              <Btn variant="tinted" status="warning" size="sm" onClick={save}>
+                {identity.registered ? 'Update' : 'Register'}
+              </Btn>
+              {identity.registered && (
+                <Btn variant="ghost" size="sm" onClick={() => {
+                  setEditing(false);
+                  setError('');
+                  setName(identity.displayName);
+                }}>
+                  Cancel
+                </Btn>
+              )}
+            </div>
+            {error && <div style={{ marginTop: 6, color: 'var(--gb-error-fg)' }}>{error}</div>}
+          </>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ flex: 1 }}>
+              New and historical shared items are attributed to this user
+              {identity.localPart ? ` · ${identity.localPart}` : ''}.
+            </span>
+            <Btn variant="ghost" size="xs" onClick={() => {
+              setName(identity.displayName);
+              setEditing(true);
+            }}>
+              Edit
+            </Btn>
+          </div>
+        )}
+      </Callout>
+    </motion.section>
+  );
+}
+
 /* ── Main Settings Panel ─────────────────────────────────────── */
 export function SettingsPanel({ remotePolicy }) {
   const [theme, setTheme] = useState(DEFAULT_THEME);
@@ -1225,6 +1362,8 @@ export function SettingsPanel({ remotePolicy }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, fontFamily: 'var(--gb-font-sans)' }}>
+
+      <InstallationIdentityNotice />
 
       {/* Installation-authenticated shared settings templates */}
       <SettingsLinksManager onPresetLoad={() => setRefreshKey(k => k + 1)} />

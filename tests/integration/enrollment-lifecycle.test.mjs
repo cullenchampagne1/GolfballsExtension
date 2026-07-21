@@ -97,4 +97,77 @@ describe('enrollment lifecycle', () => {
     assert.equal(enrollments(requests).length, 1, 'parallel callers share a single enrollment request');
     assert.equal(a.apiKey, b.apiKey);
   });
+
+  it('backfills an existing installation from email.localPart without re-enrolling', async () => {
+    const identityRequests = [];
+    const { fetchMock, requests } = createFetchMock((url, options) => {
+      const path = new URL(url).pathname;
+      if (path !== '/extension/identity') return enrollmentRouter(url);
+      identityRequests.push({ method: String(options.method || 'GET'), body: options.body });
+      if (String(options.method || 'GET').toUpperCase() === 'POST') {
+        const body = JSON.parse(options.body);
+        return jsonResponse({
+          registered: true,
+          installation_id: INSTALLATION_ID,
+          display_name: body.display_name,
+          local_part: body.local_part,
+          source: body.source,
+        });
+      }
+      return jsonResponse({ registered: false, installation_id: INSTALLATION_ID });
+    });
+    const sandbox = loadInstallationAuth({
+      stored: {
+        gbApiInstallation: validInstallation(),
+        devSettings: { 'email.localPart': 'taylor.smith' },
+      },
+      fetchImpl: fetchMock,
+    });
+
+    sandbox.listeners.startup[0]();
+    await settle();
+
+    assert.equal(enrollments(requests).length, 0);
+    assert.deepEqual(identityRequests.map(({ method }) => method), ['GET', 'POST']);
+    const submitted = JSON.parse(identityRequests[1].body);
+    assert.equal(submitted.display_name, 'Taylor Smith');
+    assert.equal(submitted.local_part, 'taylor.smith');
+    assert.equal(submitted.source, 'email_local_part');
+    assert.equal(sandbox.stored.gbInstallationIdentity.displayName, 'Taylor Smith');
+    assert.equal(sandbox.stored.gbApiInstallation.apiKey, API_KEY);
+  });
+
+  it('keeps the existing key and requests a Settings name when no local part exists', async () => {
+    const { fetchMock, requests } = createFetchMock((url, options) => {
+      if (new URL(url).pathname === '/extension/identity') {
+        if (String(options.method || 'GET').toUpperCase() === 'POST') {
+          const body = JSON.parse(options.body);
+          return jsonResponse({
+            registered: true,
+            installation_id: INSTALLATION_ID,
+            display_name: body.display_name,
+            local_part: body.local_part,
+            source: body.source,
+          });
+        }
+        return jsonResponse({ registered: false, installation_id: INSTALLATION_ID });
+      }
+      return enrollmentRouter(url);
+    });
+    const sandbox = loadInstallationAuth({
+      stored: { gbApiInstallation: validInstallation(), devSettings: {} },
+      fetchImpl: fetchMock,
+    });
+
+    const identity = await sandbox.client.syncIdentityFromStorage();
+    assert.equal(identity.promptRequired, true);
+    assert.equal(enrollments(requests).length, 0);
+
+    const registered = await sandbox.client.registerIdentity('Jordan Lee');
+    assert.equal(registered.displayName, 'Jordan Lee');
+    assert.equal(registered.localPart, '');
+    assert.equal(registered.source, 'settings_prompt');
+    assert.equal(enrollments(requests).length, 0);
+    assert.equal(sandbox.stored.gbApiInstallation.installationId, INSTALLATION_ID);
+  });
 });

@@ -2534,17 +2534,24 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "Open the Settings page (extension popup → Manage in the header → Settings tab). Five things are worth doing on day one:"
+            "text": "Open the Settings page (extension popup → Manage in the header → Settings tab). Six things are worth doing on day one:"
           },
           {
             "type": "list",
             "items": [
+              "Confirm your name — Settings registers the current installation to you so API access and anything you share can be attributed. If Email account host is already configured, this happens automatically.",
               "Pick a theme — Dark, Slate, Light, Cream, Nord, Dracula, Rosé, or Tokyo Night. Changes apply live everywhere.",
               "Set your email account host — the 'Email account host' field under Developer Settings controls the From identity on sends. It starts blank and must be configured before Power Automate delivery.",
               "Write your email signature — Settings → signature editor. It's auto-appended to emails sent through Power Automate.",
               "Review feature toggles — everything except Power Automate is on by default. Turn off what you won't use.",
               "Open a team settings link — paste the URL under Shared Settings Templates, preview it, and choose which scopes to import."
             ]
+          },
+          {
+            "type": "callout",
+            "kind": "info",
+            "title": "No reinstall required",
+            "text": "The identity notice updates your existing installation key. It never creates a replacement key, and historical settings or email links pick up the registered name automatically."
           },
           {
             "type": "callout",
@@ -6956,8 +6963,14 @@ export const HELP_CONTENT = {
       "steps": [
         {
           "action": "Open Settings: click the extension icon, choose Manage in the popup header, then open the Settings tab in the Manager window.",
-          "expected": "The Settings panel opens with Theme at the top.",
+          "expected": "The Settings panel opens and checks this installation's identity.",
           "visualCue": "Manage button in the popup header."
+        },
+        {
+          "action": "If the identity notice appears, enter your name and choose Register.",
+          "expected": "The current API key is labeled with your name and future or historical shared links are attributed to you.",
+          "visualCue": "Identity notice at the top of Settings.",
+          "tip": "If Email account host was already configured, the extension derives and registers your name automatically."
         },
         {
           "action": "Pick a theme variant — Dark, Slate, Light, Cream, Nord, Dracula, Rosé, or Tokyo Night.",
@@ -8909,7 +8922,7 @@ export const HELP_CONTENT = {
       "keywords": [
         "beginner"
       ],
-      "description": "6 steps · ~5 min",
+      "description": "7 steps · ~5 min",
       "tutorial": "initial-configuration"
     },
     {

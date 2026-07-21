@@ -87,10 +87,11 @@ for (let attempt = 0; attempt < 10 && !stored.gbApiInstallation; attempt += 1) {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-assert.equal(requests.length, 1, 'first install must enroll exactly once');
-assert.equal(requests[0].url, 'https://api.cullenchampagne.com/auth/extension-installation');
-assert.equal(requests[0].options.credentials, 'omit');
-assert.equal(requests[0].options.redirect, 'error');
+const enrollmentRequest = requests.find(({ url }) => url.endsWith('/auth/extension-installation'));
+assert.ok(enrollmentRequest, 'first install must enroll exactly once');
+assert.equal(enrollmentRequest.url, 'https://api.cullenchampagne.com/auth/extension-installation');
+assert.equal(enrollmentRequest.options.credentials, 'omit');
+assert.equal(enrollmentRequest.options.redirect, 'error');
 assert.equal(stored.gbApiInstallation.installationId, installationId);
 assert.equal(stored.gbApiInstallation.apiKey, apiKey);
 assert.equal(stored.gbApiInstallation.extensionId, expectedId);
@@ -99,7 +100,11 @@ const client = context.GBInstallationAuth;
 await client.ensureInstallation();
 startupListeners[0]();
 await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(requests.length, 1, 'startup and repeated ensure must reuse the installation key');
+assert.equal(
+  requests.filter(({ url }) => url.endsWith('/auth/extension-installation')).length,
+  1,
+  'startup and repeated ensure must reuse the installation key',
+);
 
 const status = await client.getStatus();
 assert.equal(status.enrolled, true);
@@ -111,33 +116,32 @@ const apiResponse = await client.apiFetch('/extension/ping', {
   headers: { Authorization: 'Bearer caller-controlled' },
 });
 assert.equal(apiResponse.status, 200);
-assert.equal(requests.length, 2);
-assert.equal(requests[1].options.headers.get('Authorization'), `Bearer ${apiKey}`);
-assert.equal(requests[1].options.credentials, 'omit');
+assert.equal(requests.at(-1).options.headers.get('Authorization'), `Bearer ${apiKey}`);
+assert.equal(requests.at(-1).options.credentials, 'omit');
 
 const configuration = await client.fetchConfiguration();
 assert.deepEqual(configuration, { ok: true });
-assert.equal(requests[2].url, 'https://api.cullenchampagne.com/extension/configuration');
-assert.equal(requests[2].options.headers.Authorization, `Bearer ${apiKey}`);
-assert.equal(requests[2].options.credentials, 'include', 'dashboard cookie must be available for admin bypass');
+assert.equal(requests.at(-1).url, 'https://api.cullenchampagne.com/extension/configuration');
+assert.equal(requests.at(-1).options.headers.Authorization, `Bearer ${apiKey}`);
+assert.equal(requests.at(-1).options.credentials, 'include', 'dashboard cookie must be available for admin bypass');
 
 const shareResponse = await client.apiJson('/extension/settings-shares', {
   method: 'POST',
   body: JSON.stringify({ name: 'Team defaults', scopes: { settings: {} } }),
 });
 assert.equal(shareResponse.ok, true);
-assert.equal(requests[3].url, 'https://api.cullenchampagne.com/extension/settings-shares');
-assert.equal(requests[3].options.headers.get('Authorization'), `Bearer ${apiKey}`);
-assert.equal(requests[3].options.headers.get('Content-Type'), 'application/json');
-assert.equal(requests[3].options.credentials, 'omit');
+assert.equal(requests.at(-1).url, 'https://api.cullenchampagne.com/extension/settings-shares');
+assert.equal(requests.at(-1).options.headers.get('Authorization'), `Bearer ${apiKey}`);
+assert.equal(requests.at(-1).options.headers.get('Content-Type'), 'application/json');
+assert.equal(requests.at(-1).options.credentials, 'omit');
 
 const assistantStatus = await client.apiJson('/projects/golfballs-extension/assistant/status', {
   responseLimit: 512 * 1024,
 });
 assert.equal(assistantStatus.ok, true);
-assert.equal(requests[4].url, 'https://api.cullenchampagne.com/projects/golfballs-extension/assistant/status');
-assert.equal(requests[4].options.headers.get('Authorization'), `Bearer ${apiKey}`);
-assert.equal(Object.hasOwn(requests[4].options, 'responseLimit'), false, 'local response guard options must not leak into fetch');
+assert.equal(requests.at(-1).url, 'https://api.cullenchampagne.com/projects/golfballs-extension/assistant/status');
+assert.equal(requests.at(-1).options.headers.get('Authorization'), `Bearer ${apiKey}`);
+assert.equal(Object.hasOwn(requests.at(-1).options, 'responseLimit'), false, 'local response guard options must not leak into fetch');
 
 await assert.rejects(
   client.apiFetch('https://evil.example/extension/ping'),
