@@ -201,6 +201,46 @@ export async function clearCustomItems() {
   return list.length;
 }
 
+/* ── Product stores ──────────────────────────────────────────────────────────
+   A curated set of custom items hosted on the backend and shared through an
+   opaque link that persists until revoked. An admin picks items and creates a
+   store; anyone with the link imports them without re-running an import. */
+
+/* Create a store from custom-item records. Returns the backend store
+   { id, name, url, item_count, … } — surface `url` as the shareable link. */
+export async function createProductStore(name, items) {
+  const clean = (items || []).map(normalizeCustomItem);
+  const res = await sendBackgroundMessage('productStoreCreate', { name: (name || '').trim(), items: clean });
+  if (!res || !res.ok) throw new Error((res && res.error) || 'Unable to create store');
+  return res.store;
+}
+
+/* List the installation's active (unrevoked) stores. */
+export async function listProductStores() {
+  const res = await sendBackgroundMessage('productStoreList');
+  if (!res || !res.ok) throw new Error((res && res.error) || 'Unable to list stores');
+  return Array.isArray(res.stores) ? res.stores : [];
+}
+
+/* Revoke one store by id. */
+export async function revokeProductStore(id) {
+  const res = await sendBackgroundMessage('productStoreRevoke', { storeId: id });
+  if (!res || !res.ok) throw new Error((res && res.error) || 'Unable to revoke store');
+  return true;
+}
+
+/* Import a shared store (by link or id) into the local custom-items library.
+   Dedupes by sku via addCustomItems. Returns { added, updated, name }. */
+export async function importProductStore(linkOrId) {
+  const res = await sendBackgroundMessage('productStoreFetch', { url: linkOrId });
+  if (!res || !res.ok) throw new Error((res && res.error) || 'Unable to load store');
+  const store = res.store || {};
+  const items = Array.isArray(store.items) ? store.items : [];
+  if (!items.length) return { added: 0, updated: 0, name: store.name || '' };
+  const { added, updated } = await addCustomItems(items);
+  return { added, updated, name: store.name || '' };
+}
+
 /* Map a stored custom item → a synthetic catalog product the modal's ProductCard
    and addToProposal understand. `isCustom` + `custom` let the cart serializer
    route it to buildCustomItemLine instead of fetching a (non-existent) page. */

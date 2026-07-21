@@ -32,6 +32,9 @@
     "gbEmailRelayPoll",
     "emailRelay.notifications",
     "notificationsEnabled",
-    "notifications-store"
+    "notifications-store",
+    "importHpgCatalog",
+    "importSnugzCatalog",
+    "fetchHpgList"
   ]
 }

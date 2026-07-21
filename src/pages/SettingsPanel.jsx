@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   SectionLabel, Card, Callout, Btn, IconBtn, Input, Dropdown, Field,
@@ -29,6 +29,7 @@ import { DEV_SETTINGS, defaultDevSettings, loadDevSettings, saveDevSettings } fr
 import { EMPTY_CREDENTIALS, loadCredentials, saveCredentials } from '../lib/credentials.js';
 import { isPowerAutomateUrl } from '../lib/security.js';
 import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
+import { listProductStores, revokeProductStore } from '../lib/customItems.js';
 
 /* ───────────────────────────────────────────────────────────────
    SettingsPanel — the fully-featured Manage → Settings page.
@@ -1012,6 +1013,64 @@ function EmailLinksSection() {
   );
 }
 
+/* ── Product stores: list this installation's shared custom-item stores and
+      revoke them. Stores persist until revoked; mirrors the email-links list. */
+function ProductStoresSection() {
+  const [stores, setStores] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { const list = await listProductStores(); setStores(list); }
+    catch { setStores([]); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const copyLink = (url) => {
+    try { navigator.clipboard.writeText(url); window.__gbToast?.success?.('Store link copied'); }
+    catch { window.__gbToast?.error?.('Could not copy link'); }
+  };
+
+  const revoke = async (id) => {
+    setBusyId(id);
+    try {
+      await revokeProductStore(id);
+      setStores((prev) => prev.filter((s) => s.id !== id));
+      window.__gbToast?.success?.('Store revoked');
+    } catch (error) {
+      window.__gbToast?.error?.(error?.message || 'Unable to revoke store');
+    } finally { setBusyId(null); }
+  };
+
+  return (
+    <section>
+      <SectionLabel action={<Btn variant="ghost" size="xs" onClick={load} disabled={loading}>Refresh</Btn>}>Product Stores</SectionLabel>
+      {loading ? (
+        <Card><div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', padding: '4px 2px' }}>Loading…</div></Card>
+      ) : stores.length === 0 ? (
+        <Card><div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', padding: '4px 2px' }}>No shared stores. Select custom items in the Gift Catalog to create a shareable store link.</div></Card>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {stores.map((store) => (
+            <Card key={store.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{store.name || 'Product store'}</div>
+                <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>
+                  {store.item_count || 0} item{(store.item_count || 0) === 1 ? '' : 's'} · opened {store.access_count || 0}×
+                </div>
+              </div>
+              <IconBtn size="md" icon={<I.copy />} onClick={() => copyLink(store.url)} title="Copy store link" />
+              <IconBtn size="md" icon={<I.trash />} danger onClick={() => revoke(store.id)} disabled={busyId === store.id} title="Revoke this store" />
+            </Card>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* ── Main Settings Panel ─────────────────────────────────────── */
 export function SettingsPanel({ remotePolicy }) {
   const [theme, setTheme] = useState(DEFAULT_THEME);
@@ -1290,6 +1349,8 @@ export function SettingsPanel({ remotePolicy }) {
       )}
 
       <EmailLinksSection />
+
+      <ProductStoresSection />
 
       {/* Custom Pages — one switch per registered scope. The page engine still
           consumes page-id arrays internally, preserving its stable contract. */}

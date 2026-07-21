@@ -9,9 +9,9 @@ import { CustomizeBlock, ProductOptions, colorNameOf, ImageAlignModal } from './
 import { buildProposalDraft, copyToClipboard, loadSavedProposals, saveProposalDraft, removeSavedProposal, updateSavedProposal, linesFromSaved, fetchRawProduct, saveProposalToOpportunity, fetchOpportunitiesForAccount, loadCurrentProposal, saveCurrentProposal, validatePromo, fetchActiveProposalEntries, proposalCartUrl, loadKnownPromos, addKnownPromo, submitProposalEmail } from '../lib/saveProposal.js';
 import { promoDiscount, freeLinesFromPromo } from '../lib/cartSerializer.js';
 import { usd, onSale, hasPromo, isDeal, money, rid, nfmt, relTime, priceAtQty, isTierPrice, SECOND_POLE_FEE, lineHasImprint, lineSecondPoleFee, linePriceAt, lineIsTierPrice, priceAtBreaks, topPrice, lowPrice, saleCut, netP, netTop, netLow } from '../lib/giftCatalogMath.js';
-import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS } from '../lib/customItems.js';
-import { importHpgCatalog } from '../lib/hpgImport.js';
-import { importSnugzCatalog } from '../lib/snugzImport.js';
+import { loadCustomItems, saveCustomItem, removeCustomItem, removeCustomItems, customItemToProduct, uploadCustomItemImage, ingestImageUrl, needsIngest, costAtQty, repoOf, REPOS, createProductStore, importProductStore } from '../lib/customItems.js';
+// The built-in supplier ingesters are admin-only and loaded lazily (see REPO_RUN
+// below) so the served build never bundles them.
 import { getInventory, peekInventory, cachedCostForSku, primeCostCache, importCosts } from '../lib/inventory.js';
 import { bundleSingle, setBundleCatalog } from '../lib/bundleCost.js';
 import { ProposalEmailModal, ProposalEmailComposer } from './ProposalEmail.jsx';
@@ -2243,18 +2243,42 @@ function CustomAddTile({ onNew, minH }) {
   );
 }
 
-const REPO_RUN = { hpg: importHpgCatalog, snugz: importSnugzCatalog };
+// Admin-only: the built-in supplier ingesters ship only in the admin build.
+// Lazy dynamic imports inside the `__ADMIN__` branch mean the served build
+// (__ADMIN__ === false → `{}`) never references hpgImport/snugzImport, so esbuild
+// leaves them out entirely. Consumers get custom items from shared store links.
+const REPO_RUN = __ADMIN__ ? {
+  hpg: (opts) => import('../lib/hpgImport.js').then((m) => m.importHpgCatalog(opts)),
+  snugz: (opts) => import('../lib/snugzImport.js').then((m) => m.importSnugzCatalog(opts)),
+} : {};
 
 /* Repo import modal — pick a supplier "repo" and pull its customizable catalog in
    as custom items. A link input is stubbed for a future per-URL import. Running
    shows a live progress animation that can be cancelled mid-flight. */
 function RepoImportModal({ onClose, onImported }) {
   const [repo, setRepo] = useState('hpg');
-  const [mode, setMode] = useState('builtin');   // 'builtin' = brand catalog | 'link' = shared store link
+  const [mode, setMode] = useState(__ADMIN__ ? 'builtin' : 'link');   // 'builtin' = brand catalog | 'link' = shared store link
+  const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
   const [prog, setProg] = useState(null);   // { label, count, total }
   const signalRef = useRef(null);
   const repoOptions = Object.keys(REPOS).map((id) => ({ id, label: REPOS[id].name }));
+
+  // Import a curated store someone shared. The waiting happens on the backend
+  // fetch; there is no cancellable per-product loop, so the progress UI just
+  // spins. Reuses onImported so the gallery reloads and toasts identically.
+  const runLink = () => {
+    const val = link.trim();
+    if (!val || busy) return;
+    setBusy(true);
+    setProg({ label: 'Loading store…' });
+    importProductStore(val)
+      .then((res) => onImported('link', res))
+      .catch((e) => {
+        try { window.__gbToast && window.__gbToast.error && window.__gbToast.error((e && e.message) || 'Import failed', { duration: 4500 }); } catch { /* */ }
+        setBusy(false);
+      });
+  };
 
   const run = () => {
     const fn = REPO_RUN[repo];
@@ -2305,7 +2329,7 @@ function RepoImportModal({ onClose, onImported }) {
               <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--gb-brand-label)' }}><I.download size={18} /></div>
             </div>
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>Importing {REPOS[repo].name}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{mode === 'link' ? 'Importing store' : `Importing ${REPOS[repo].name}`}</div>
               <div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', marginTop: 3 }}>{(prog && prog.label) || 'Working…'}</div>
             </div>
             <div style={{ width: '100%', height: 7, borderRadius: 4, background: 'var(--gb-fill-subtle)', overflow: 'hidden' }}>
@@ -2317,18 +2341,21 @@ function RepoImportModal({ onClose, onImported }) {
           <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* Two mutually-exclusive sources — a built-in brand catalog OR a
                 shared store link — behind a segmented toggle so neither reads as
-                half-configured. Only the selected path's controls show. */}
-            <div role="tablist" style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)' }}>
-              {[{ id: 'builtin', label: 'Built-in brands' }, { id: 'link', label: 'From a link' }].map((opt) => (
-                <button key={opt.id} type="button" role="tab" aria-selected={mode === opt.id} onClick={() => setMode(opt.id)}
-                  style={{ flex: 1, padding: '6px 8px', borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, letterSpacing: .2,
-                    background: mode === opt.id ? 'var(--gb-surface-modal)' : 'transparent',
-                    color: mode === opt.id ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)',
-                    boxShadow: mode === opt.id ? '0 1px 2px rgba(0,0,0,.10)' : 'none' }}>{opt.label}</button>
-              ))}
-            </div>
+                half-configured. Built-in brand import is admin-only, so the
+                served build shows just the "From a link" path (no toggle). */}
+            {__ADMIN__ && (
+              <div role="tablist" style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)' }}>
+                {[{ id: 'builtin', label: 'Built-in brands' }, { id: 'link', label: 'From a link' }].map((opt) => (
+                  <button key={opt.id} type="button" role="tab" aria-selected={mode === opt.id} onClick={() => setMode(opt.id)}
+                    style={{ flex: 1, padding: '6px 8px', borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, letterSpacing: .2,
+                      background: mode === opt.id ? 'var(--gb-surface-modal)' : 'transparent',
+                      color: mode === opt.id ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)',
+                      boxShadow: mode === opt.id ? '0 1px 2px rgba(0,0,0,.10)' : 'none' }}>{opt.label}</button>
+                ))}
+              </div>
+            )}
 
-            {mode === 'builtin' ? (
+            {(__ADMIN__ && mode === 'builtin') ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Brand catalog</label>
                 <Dropdown size="sm" value={repo} onChange={setRepo} options={repoOptions} />
@@ -2337,14 +2364,91 @@ function RepoImportModal({ onClose, onImported }) {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Store link</label>
-                <Input size="sm" value="" onChange={() => {}} disabled placeholder="Paste a shared store link…" />
-                <span style={{ fontSize: 10, color: 'var(--gb-text-ghost)', fontStyle: 'italic' }}>Coming soon — import a curated set of products someone shared with you.</span>
+                <Input size="sm" value={link} onChange={setLink} placeholder="Paste a shared store link…" onKeyDown={(e) => { if (e.key === 'Enter') runLink(); }} />
+                <span style={{ fontSize: 10, color: 'var(--gb-text-ghost)' }}>Import a curated set of products someone shared with you.</span>
               </div>
             )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <Btn variant="ghost" size="md" onClick={onClose}>Cancel</Btn>
-              <Btn variant="primary" size="md" icon={<I.download />} onClick={run} disabled={mode !== 'builtin'}>Import</Btn>
+              {(__ADMIN__ && mode === 'builtin')
+                ? <Btn variant="primary" size="md" icon={<I.download />} onClick={run}>Import</Btn>
+                : <Btn variant="primary" size="md" icon={<I.download />} onClick={runLink} disabled={!link.trim()}>Import</Btn>}
+            </div>
+          </div>
+        )}
+      </motion.div>
+    </motion.div>
+  );
+}
+
+/* Share the selected custom items as a persistent store and surface the link.
+   Two steps: name the store, then copy the generated link. */
+function CreateStoreModal({ items, onClose, onCreated }) {
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [created, setCreated] = useState(null);   // backend store { url, name, item_count }
+  const [copied, setCopied] = useState(false);
+  const toast = useToast();
+  const count = items.length;
+
+  const create = () => {
+    const nm = name.trim();
+    if (!nm || busy) return;
+    setBusy(true);
+    createProductStore(nm, items)
+      .then((store) => setCreated(store))
+      .catch((e) => { toast?.error?.((e && e.message) || 'Could not create store'); setBusy(false); });
+  };
+  const copy = () => {
+    if (!created) return;
+    try { navigator.clipboard.writeText(created.url); setCopied(true); setTimeout(() => setCopied(false), 1400); toast?.success?.('Store link copied'); } catch { /* */ }
+  };
+
+  return (
+    <motion.div onClick={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: .16 }}
+      style={{ position: 'absolute', inset: 0, zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, background: 'var(--gb-backdrop)', backdropFilter: 'var(--gb-backdrop-blur)', WebkitBackdropFilter: 'var(--gb-backdrop-blur)' }}>
+      <motion.div initial={{ opacity: 0, scale: .96, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: .97 }} transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+        style={{ width: 420, maxWidth: '92%', background: 'var(--gb-surface-modal)', border: '1px solid var(--gb-border-default)', borderRadius: 'var(--gb-r-xl)', boxShadow: 'var(--gb-shadow-modal)', overflow: 'hidden' }}>
+        <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 11, background: 'var(--gb-fill-inverse-strong)', borderBottom: '1px solid var(--gb-border-subtle)' }}>
+          <div style={{ width: 30, height: 30, borderRadius: 'var(--gb-r-md)', flexShrink: 0, background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', color: 'var(--gb-brand-label)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><I.link size={16} /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--gb-text-primary)' }}>{created ? 'Store ready' : 'Share as a store'}</div>
+            <div style={{ fontSize: 11, color: 'var(--gb-text-muted)', marginTop: 1 }}>{count} custom item{count === 1 ? '' : 's'} — anyone with the link imports them</div>
+          </div>
+          {!busy && <IconBtn size="sm" icon={<I.close />} onClick={onClose} />}
+        </div>
+
+        {created ? (
+          <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Store link</label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <Input size="sm" value={created.url} onChange={() => {}} readOnly onFocus={(e) => e.target.select()} style={{ flex: 1 }} />
+                <IconBtn size="md" variant="secondary" active={copied} icon={copied ? <I.check size={14} /> : <I.copy size={14} />} onClick={copy} title="Copy store link" />
+              </div>
+              <span style={{ fontSize: 10, color: 'var(--gb-text-ghost)' }}>The link works until you revoke it under Settings → Product Stores.</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Btn variant="primary" size="md" onClick={() => onCreated?.()}>Done</Btn>
+            </div>
+          </div>
+        ) : busy ? (
+          <div style={{ padding: '28px 22px 22px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+            <span style={{ width: 32, height: 32, borderRadius: '50%', border: '3px solid var(--gb-brand-tint-soft)', borderTopColor: 'var(--gb-brand-label)', animation: 'gb-spin .8s linear infinite' }} />
+            <div style={{ fontSize: 12, color: 'var(--gb-text-muted)' }}>Creating store…</div>
+          </div>
+        ) : (
+          <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Store name</label>
+              <Input size="sm" value={name} onChange={setName} placeholder="e.g. Fall gift picks" onKeyDown={(e) => { if (e.key === 'Enter') create(); }} autoFocus />
+              <span style={{ fontSize: 10, color: 'var(--gb-text-ghost)' }}>{count} custom item{count === 1 ? '' : 's'} will be shared. The link persists until you revoke it.</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <Btn variant="ghost" size="md" onClick={onClose}>Cancel</Btn>
+              <Btn variant="primary" size="md" icon={<I.link />} onClick={create} disabled={!name.trim()}>Create link</Btn>
             </div>
           </div>
         )}
@@ -2360,14 +2464,15 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
   const [selectMode, setSelectMode] = useState(false);
   const [sel, setSel] = useState(() => new Set());
   const [repoOpen, setRepoOpen] = useState(false);
+  const [storeItems, setStoreItems] = useState(null);   // records staged for a new store (opens CreateStoreModal)
   const toast = useToast();
   const lastIdx = useRef(null);
   const scrollRef = useRef(null);
   const onRepoImported = (repoId, res) => {
     setRepoOpen(false);
     if (onReload) onReload();
-    const r = REPOS[repoId];
-    toast?.success?.(`Imported ${res.added} new + ${res.updated} updated from ${r ? r.name : repoId}`, { duration: 4000 });
+    const label = (res && res.name) || REPOS[repoId]?.name || repoId;
+    toast?.success?.(`Imported ${res.added} new + ${res.updated} updated from ${label}`, { duration: 4000 });
   };
   // Driven by the shared catalog search bar — a leading "/" is a catalog command,
   // so it filters nothing here.
@@ -2472,11 +2577,13 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
           </>
         )}
       </div>
-      {/* Bulk-delete — floats bottom-right while selecting. */}
+      {/* Select-mode actions — float bottom-right: share the picks as a store, or delete them. */}
       <AnimatePresence>
         {selectMode && sel.size > 0 && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} transition={{ duration: .16 }}
-            style={{ position: 'absolute', right: 18, bottom: 18, zIndex: 6 }}>
+            style={{ position: 'absolute', right: 18, bottom: 18, zIndex: 6, display: 'flex', gap: 8 }}>
+            <Btn variant="primary" size="md" icon={<I.link />} onClick={() => { const recs = items.filter((ci) => sel.has(ci.id)); if (recs.length) setStoreItems(recs); }}
+              style={{ boxShadow: '0 6px 18px -6px rgba(0,0,0,.45)' }}>Create store</Btn>
             {/* variant=primary so its hover is a brightness filter (keeps the solid
                 fill) — the `danger` variant's hover animates backgroundColor to a
                 tint, which made the button go transparent on hover. */}
@@ -2484,6 +2591,9 @@ function CustomItemsGallery({ items, compact, colMin, inProposal, onAdd, onNew, 
               style={{ background: 'var(--gb-error-fg, var(--gb-error))', color: '#fff', border: '1px solid var(--gb-error-fg, var(--gb-error))', boxShadow: '0 6px 18px -6px rgba(0,0,0,.45)' }}>Delete {nfmt(sel.size)}</Btn>
           </motion.div>
         )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {storeItems && <CreateStoreModal key="create-store" items={storeItems} onClose={() => setStoreItems(null)} onCreated={() => { setStoreItems(null); exitSelect(); }} />}
       </AnimatePresence>
     </div>
   );

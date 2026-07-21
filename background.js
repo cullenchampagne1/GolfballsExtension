@@ -806,6 +806,17 @@ function gbEmailTemplateShareId(value) {
   } catch { return ''; }
 }
 
+function gbProductStoreId(value) {
+  const raw = String(value || '').trim();
+  if (GB_SETTINGS_SHARE_ID_RE.test(raw)) return raw;
+  try {
+    const url = new URL(raw);
+    if (url.origin !== 'https://api.cullenchampagne.com' || url.search || url.hash) return '';
+    const match = url.pathname.match(/^\/extension\/product-stores\/([A-Za-z0-9_-]{32})\/?$/);
+    return match ? match[1] : '';
+  } catch { return ''; }
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   /* Only service messages from this extension's own contexts (content
@@ -948,6 +959,42 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     GBInstallationAuth.apiJson(`/extension/email-template-shares/${shareId}/revoke`, { method: 'POST' })
       .then(() => sendResponse({ ok: true, shareId }))
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to revoke email link' }));
+    return true;
+  }
+  if (msg.action === 'productStoreCreate') {
+    const name = typeof msg.name === 'string' ? msg.name.trim() : '';
+    const items = Array.isArray(msg.items) ? msg.items : null;
+    let body = '';
+    try { body = JSON.stringify({ name, items }); } catch { /* invalid */ }
+    if (!name || name.length > 120 || !items || items.length < 1 || body.length > 1024 * 1024 * 1024) {
+      sendResponse({ ok: false, error: 'Invalid store' });
+      return true;
+    }
+    GBInstallationAuth.apiJson('/extension/product-stores', { method: 'POST', body })
+      .then((store) => sendResponse({ ok: true, store }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to create store' }));
+    return true;
+  }
+  if (msg.action === 'productStoreList') {
+    GBInstallationAuth.apiJson('/extension/product-stores')
+      .then((payload) => sendResponse({ ok: true, stores: payload.stores || [] }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to list stores' }));
+    return true;
+  }
+  if (msg.action === 'productStoreRevoke') {
+    const storeId = gbProductStoreId(msg.storeId);
+    if (!storeId) { sendResponse({ ok: false, error: 'Invalid store' }); return true; }
+    GBInstallationAuth.apiJson(`/extension/product-stores/${storeId}/revoke`, { method: 'POST' })
+      .then(() => sendResponse({ ok: true, storeId }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to revoke store' }));
+    return true;
+  }
+  if (msg.action === 'productStoreFetch') {
+    const storeId = gbProductStoreId(msg.url || msg.storeId);
+    if (!storeId) { sendResponse({ ok: false, error: 'Enter a valid store link' }); return true; }
+    GBInstallationAuth.apiJson(`/extension/product-stores/${storeId}`)
+      .then((store) => sendResponse({ ok: true, store }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to load store' }));
     return true;
   }
 
