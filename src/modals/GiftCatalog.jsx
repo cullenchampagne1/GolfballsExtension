@@ -2250,6 +2250,7 @@ const REPO_RUN = { hpg: importHpgCatalog, snugz: importSnugzCatalog };
    shows a live progress animation that can be cancelled mid-flight. */
 function RepoImportModal({ onClose, onImported }) {
   const [repo, setRepo] = useState('hpg');
+  const [mode, setMode] = useState('builtin');   // 'builtin' = brand catalog | 'link' = shared store link
   const [busy, setBusy] = useState(false);
   const [prog, setProg] = useState(null);   // { label, count, total }
   const signalRef = useRef(null);
@@ -2314,18 +2315,36 @@ function RepoImportModal({ onClose, onImported }) {
           </div>
         ) : (
           <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Repo link</label>
-              <Input size="sm" value="" onChange={() => {}} disabled placeholder="Paste a repo link to add a new source…" />
-              <span style={{ fontSize: 10, color: 'var(--gb-text-ghost)', fontStyle: 'italic' }}>Coming soon</span>
+            {/* Two mutually-exclusive sources — a built-in brand catalog OR a
+                shared store link — behind a segmented toggle so neither reads as
+                half-configured. Only the selected path's controls show. */}
+            <div role="tablist" style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 'var(--gb-r-md)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)' }}>
+              {[{ id: 'builtin', label: 'Built-in brands' }, { id: 'link', label: 'From a link' }].map((opt) => (
+                <button key={opt.id} type="button" role="tab" aria-selected={mode === opt.id} onClick={() => setMode(opt.id)}
+                  style={{ flex: 1, padding: '6px 8px', borderRadius: 5, border: 'none', cursor: 'pointer', fontSize: 11, fontWeight: 700, letterSpacing: .2,
+                    background: mode === opt.id ? 'var(--gb-surface-modal)' : 'transparent',
+                    color: mode === opt.id ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)',
+                    boxShadow: mode === opt.id ? '0 1px 2px rgba(0,0,0,.10)' : 'none' }}>{opt.label}</button>
+              ))}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Repo</label>
-              <Dropdown size="sm" value={repo} onChange={setRepo} options={repoOptions} />
-            </div>
+
+            {mode === 'builtin' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Brand catalog</label>
+                <Dropdown size="sm" value={repo} onChange={setRepo} options={repoOptions} />
+                <span style={{ fontSize: 10, color: 'var(--gb-text-ghost)' }}>Pulls {REPOS[repo]?.name || 'the supplier'}’s full customizable catalog into your custom items.</span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <label style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .6, color: 'var(--gb-text-muted)' }}>Store link</label>
+                <Input size="sm" value="" onChange={() => {}} disabled placeholder="Paste a shared store link…" />
+                <span style={{ fontSize: 10, color: 'var(--gb-text-ghost)', fontStyle: 'italic' }}>Coming soon — import a curated set of products someone shared with you.</span>
+              </div>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
               <Btn variant="ghost" size="md" onClick={onClose}>Cancel</Btn>
-              <Btn variant="primary" size="md" icon={<I.download />} onClick={run}>Import</Btn>
+              <Btn variant="primary" size="md" icon={<I.download />} onClick={run} disabled={mode !== 'builtin'}>Import</Btn>
             </div>
           </div>
         )}
