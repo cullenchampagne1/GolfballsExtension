@@ -12,6 +12,11 @@ import {
 import { dirname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateRawSync } from 'node:zlib';
+import { execFileSync } from 'node:child_process';
+import {
+  IS_ADMIN_BUILD, isAdminRootFile, isAdminContentScript,
+  stripAdminRegions, findLeak,
+} from './strip-admin.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = resolve(SCRIPT_DIR, '..');
@@ -126,6 +131,14 @@ export function createStoreManifest(sourceManifest, packageJson) {
   const icons = Object.fromEntries(ICON_SIZES.map((size) => [String(size), `icons/icon${size}.png`]));
   manifest.icons = icons;
   manifest.action = { ...(manifest.action || {}), default_icon: { ...icons } };
+
+  // Consumer build: drop admin-only content scripts so the served manifest
+  // never references (or requires) their bundles.
+  if (!IS_ADMIN_BUILD && Array.isArray(manifest.content_scripts)) {
+    for (const group of manifest.content_scripts) {
+      if (Array.isArray(group.js)) group.js = group.js.filter((path) => !isAdminContentScript(path));
+    }
+  }
   return manifest;
 }
 
@@ -202,13 +215,29 @@ function pageReferences(path, bytes) {
   return refs;
 }
 
-export function collectStoreEntries(root, manifest) {
-  const paths = [
-    ...RUNTIME_ROOT_FILES.filter((path) => existsSync(resolve(root, path))),
-    ...RUNTIME_DIRECTORIES.flatMap((directory) => walkFiles(root, directory)),
-  ];
-  const uniquePaths = [...new Set(paths)].sort((a, b) => a.localeCompare(b, 'en'));
-  const entries = uniquePaths.map((path) => ({ path, bytes: readFileSync(resolve(root, path)) }));
+export function collectStoreEntries(root, manifest, { stageRoot = null } = {}) {
+  const consumer = !!stageRoot;
+  // In the consumer build, react-dist comes from the stripped staging build;
+  // everything else (incl. the already-stripped settings-registry.js) from the repo.
+  const sourceFor = (relPath) => (
+    consumer && relPath.startsWith('react-dist/') ? resolve(stageRoot, relPath) : resolve(root, relPath)
+  );
+  const rootFilePaths = RUNTIME_ROOT_FILES
+    .filter((path) => !(consumer && isAdminRootFile(path)))
+    .filter((path) => existsSync(sourceFor(path)));
+  const dirPaths = RUNTIME_DIRECTORIES.flatMap((directory) => (
+    directory === 'react-dist' && consumer ? walkFiles(stageRoot, directory) : walkFiles(root, directory)
+  ));
+  const uniquePaths = [...new Set([...rootFilePaths, ...dirPaths])].sort((a, b) => a.localeCompare(b, 'en'));
+  const entries = uniquePaths.map((path) => {
+    let bytes = readFileSync(sourceFor(path));
+    // Strip @admin regions from every RAW shipped .js (root workers + src/vanilla
+    // + iframe). react-dist bundles are already stripped by the consumer build.
+    if (consumer && path.endsWith('.js') && !path.startsWith('react-dist/')) {
+      bytes = Buffer.from(stripAdminRegions(bytes.toString('utf8')), 'utf8');
+    }
+    return { path, bytes };
+  });
   entries.push({ path: 'manifest.json', bytes: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`) });
   entries.sort((a, b) => a.path.localeCompare(b.path, 'en'));
 
@@ -318,11 +347,36 @@ export function createDeterministicZip(entries) {
   return Buffer.concat([...localParts, centralBytes, end]);
 }
 
+// Consumer build: produce a stripped react-dist + settings-registry in a
+// staging dir so the committed full artifacts are never touched.
+function runConsumerStaging(root) {
+  const stageRoot = resolve(root, 'dist/store-stage');
+  rmSync(stageRoot, { recursive: true, force: true });
+  mkdirSync(stageRoot, { recursive: true });
+  // Stripped vite build (admin entries skipped, __ADMIN__ DCE'd) → staging.
+  // The committed settings-registry.js already excludes admin keys, so only
+  // react-dist needs a consumer rebuild.
+  execFileSync('node', ['build.js'], {
+    cwd: root, stdio: 'inherit',
+    env: { ...process.env, GB_ADMIN: '0', GB_OUT_BASE: 'dist/store-stage/react-dist' },
+  });
+  return stageRoot;
+}
+
 export function buildStorePackage({ root = DEFAULT_ROOT, outputDirectory = resolve(root, 'dist/store') } = {}) {
   const packageJson = readJson(resolve(root, 'package.json'), 'package.json');
   const sourceManifest = readJson(resolve(root, 'manifest.json'), 'manifest.json');
   const manifest = createStoreManifest(sourceManifest, packageJson);
-  const entries = collectStoreEntries(root, manifest);
+  const stageRoot = IS_ADMIN_BUILD ? null : runConsumerStaging(root);
+  const entries = collectStoreEntries(root, manifest, { stageRoot });
+  // The proof of "completely excluded": no admin token may survive into the
+  // served package. A miss fails the build rather than silently shipping.
+  if (!IS_ADMIN_BUILD) {
+    for (const entry of entries) {
+      const leak = findLeak(entry.path, entry.bytes);
+      if (leak) throw new Error(`Admin leak in consumer package: token "${leak.token}" in ${leak.path}`);
+    }
+  }
   const bytes = createDeterministicZip(entries);
   mkdirSync(outputDirectory, { recursive: true });
   const output = resolve(outputDirectory, `${packageJson.name}-${manifest.version}.zip`);

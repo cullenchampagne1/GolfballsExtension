@@ -18,11 +18,16 @@ import react from '@vitejs/plugin-react';
 import { existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { IS_ADMIN_BUILD, isAdminEntry } from './scripts/strip-admin.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 
 const isWatch = process.argv.includes('--watch');
 const mode = isWatch ? 'development' : 'production';
+// GB_ADMIN=0 → the served/consumer build: __ADMIN__ is false so admin code is
+// dead-code-eliminated, admin entries are skipped, and output goes to a staging
+// base (so the committed full react-dist is never overwritten).
+const OUT_BASE = process.env.GB_OUT_BASE || 'react-dist';
 
 // Each surface = one src dir → one react-dist dir. The first three are
 // React components (.jsx → IIFE); the fourth is ES-module bridge entries
@@ -40,19 +45,29 @@ const surfaces = [
 let total = 0;
 for (const { srcDir, outDir, suffix, stripSuffix } of surfaces) {
   const srcPath = resolve(root, srcDir);
-  const outPath = resolve(root, outDir);
+  const outPath = resolve(root, outDir.replace(/^react-dist(?=\/|$)/, OUT_BASE));
   if (!existsSync(srcPath)) continue;
   const entries = readdirSync(srcPath).filter((f) => f.endsWith(suffix));
   if (entries.length === 0) continue;
 
   for (const file of entries) {
+    const relEntry = `${srcDir}/${file}`;
+    if (!IS_ADMIN_BUILD && isAdminEntry(relEntry)) {
+      console.log(`skip admin-only ${relEntry} (consumer build)`);
+      continue;
+    }
     const name = file.slice(0, file.length - stripSuffix.length);
-    console.log(`building ${srcDir}/${name} (${mode})...`);
+    console.log(`building ${srcDir}/${name} (${mode}${IS_ADMIN_BUILD ? '' : ', consumer'})...`);
     await build({
       configFile: false,
       mode,
       // React's npm build branches on process.env.NODE_ENV; it must be a literal.
-      define: { 'process.env.NODE_ENV': JSON.stringify(mode) },
+      // __ADMIN__ gates admin-only inline code — a literal so esbuild DCE's the
+      // `if (__ADMIN__) { … }` / `{__ADMIN__ && …}` blocks out of the consumer build.
+      define: {
+        'process.env.NODE_ENV': JSON.stringify(mode),
+        __ADMIN__: JSON.stringify(IS_ADMIN_BUILD),
+      },
       plugins: [react()],
       /* Emit ASCII-only output (escape every non-ASCII char to \uXXXX).
          Chrome's content-script loader runs strict UTF-8 validation that

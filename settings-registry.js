@@ -116,10 +116,6 @@
       "type": "bool",
       "default": false
     },
-    "emailRelay.notifications": {
-      "type": "bool",
-      "default": false
-    },
     "golfballViewer.showDebugHud": {
       "type": "bool",
       "default": false

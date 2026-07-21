@@ -192,13 +192,13 @@ function PopupApp() {
         catch { res(); }
       });
 
-      const data = await storageGet(['templates', 'watchList', 'featureFlags', 'gbNotifications']);
+      const data = await storageGet(['templates', 'watchList', 'featureFlags', ...(__ADMIN__ ? ['gbNotifications'] : [])]);
       const credentials = await loadCredentials();
       const tpls = (data.templates || []).filter((t) => t.enabled !== false && t.type !== 'case');
       const mergedFlags = {
         chargeEnabled: true, orderEditEnabled: true, submitProofEnabled: true,
         taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true,
-        notificationsEnabled: true,
+        ...(__ADMIN__ ? { notificationsEnabled: true } : {}),
         ...(data.featureFlags || {}),
       };
       // Read ignorePageContext directly from storage on init so we can branch
@@ -213,7 +213,7 @@ function PopupApp() {
       setTab(currentTab);
       setAllTemplates(tpls);
       setWatchList(data.watchList || []);
-      setNotifications(data.gbNotifications || []);
+      if (__ADMIN__) setNotifications(data.gbNotifications || []);
       setFlags(mergedFlags);
       setPaConfigured(isPowerAutomateUrl(credentials.powerAutomateUrl));
 
@@ -423,12 +423,12 @@ function PopupApp() {
         setFlags({
           chargeEnabled: true, orderEditEnabled: true, submitProofEnabled: true,
           taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true,
-          notificationsEnabled: true,
+          ...(__ADMIN__ ? { notificationsEnabled: true } : {}),
           ...next,
         });
       }
       if (changes.watchList) setWatchList(changes.watchList.newValue || []);
-      if (changes.gbNotifications) setNotifications(changes.gbNotifications.newValue || []);
+      if (__ADMIN__ && changes.gbNotifications) setNotifications(changes.gbNotifications.newValue || []);
       if (changes.templates) {
         const next = (changes.templates.newValue || [])
           .filter((t) => t.enabled !== false && t.type !== 'case');
@@ -823,11 +823,11 @@ function MainView({
     window.close();
   };
 
-  const onNotifications = async () => {
+  const onNotifications = __ADMIN__ ? async () => {
     if (!tab) return;
     await sendMessage(tab.id, { action: 'showNotificationsModal' });
     window.close();
-  };
+  } : undefined;
 
   /* Resolve the subject/body for this send. Picks the variation (a pinned
      saved one, a uniform random roll across [original, …saved] when the
@@ -1093,7 +1093,7 @@ function MainView({
               <Btn full size="sm" icon={<I.search />} onClick={onCrmSearch}>CRM Search</Btn>
             </Reveal>
           )}
-          {flags.notificationsEnabled && (
+          {__ADMIN__ && flags.notificationsEnabled && (
             <Reveal key="notifications">
               <Btn full size="sm" icon={<I.alert />} onClick={onNotifications} badge={notifCount} badgeTone="brand">Notifications</Btn>
             </Reveal>

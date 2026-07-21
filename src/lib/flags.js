@@ -5,6 +5,14 @@
    and writes these; content scripts gate their features on them.
 ─────────────────────────────────────────────────────────────── */
 
+/* __ADMIN__ is a build-time define: true in the full/dev build, false in the
+   served (consumer) build. Guarded so node tooling that imports this module
+   (the settings-registry generator) treats it as the full build. Admin-only
+   feature entries below are wrapped in `...(ADMIN ? … : …)` so the consumer
+   build dead-code-eliminates them entirely. */
+/* eslint-disable no-undef */
+const ADMIN = (typeof __ADMIN__ !== 'undefined') ? __ADMIN__ : true;
+
 /** Default on/off state for every feature flag. */
 export const FEATURE_DEFAULTS = {
   copyIdsEnabled:           true,
@@ -31,7 +39,8 @@ export const FEATURE_DEFAULTS = {
   crmNewContactEnabled:     true,   // CRM Create Contact modal + Ctrl+Q keybind
   textPreviewEnabled:       true,   // Text/chat transcript row preview (was sharing emailPreviewEnabled)
   campaignManagerEnabled:   true,   // React Campaign Manager surface (replaces the legacy vanilla editor)
-  notificationsEnabled:     true,   // Notifications modal + icon badge for relayed customer emails
+  // Admin-only: excluded from the served (consumer) build.
+  ...(ADMIN ? { notificationsEnabled: true } : {}),
 };
 // NOTE: the 3D golfball viewer is part of the Image Viewer (it renders inside
 // ImagePreview.jsx), so it has no separate flag — `imagePreviewEnabled` covers it.
@@ -65,7 +74,8 @@ export const FEATURE_FLAGS = [
   { key: 'emailPreviewEnabled',   section: 'Email & Templates', name: 'Email Preview',     desc: 'Hover preview of emails in Case Email History.',                      icon: 'mail' },
   { key: 'textPreviewEnabled',    section: 'Email & Templates', name: 'Text Preview',      desc: 'Hover preview of case notes / chat transcripts.',                     icon: 'mail' },
   { key: 'campaignManagerEnabled', section: 'Email & Templates', name: 'Campaign Manager', desc: 'Multi-step campaign automation (from CRM Search / Tasks).',            icon: 'megaphone' },
-  { key: 'notificationsEnabled',   section: 'Email & Templates', name: 'Notifications',    desc: 'Track relayed customer email replies, with an icon badge and a notifications modal.', icon: 'alert' },
+  // Admin-only: excluded from the served (consumer) build.
+  ...(ADMIN ? [{ key: 'notificationsEnabled', section: 'Email & Templates', name: 'Notifications', desc: 'Track relayed customer email replies, with an icon badge and a notifications modal.', icon: 'alert' }] : []),
   // ── CRM & Contacts ──
   { key: 'crmSearchEnabled',       section: 'CRM & Contacts', name: 'CRM Search',        desc: 'Quick search for customers and orders (Ctrl+K).',  icon: 'search' },
   { key: 'crmNewContactEnabled',   section: 'CRM & Contacts', name: 'New Contact',       desc: 'Quick-create a CRM contact (Ctrl+Q).',             icon: 'user' },

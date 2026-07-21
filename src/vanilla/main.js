@@ -35,6 +35,7 @@ window.__gbContentReady = true;
       gbNotify(message, type, duration);
     }
 
+    /* @admin:start */
     /* Large action toast for a new customer reply relayed by the background
        email-relay poll. Functions can't cross the runtime boundary, so the
        View handler is reconstructed HERE from the serializable `viewUrl` the
@@ -65,6 +66,7 @@ window.__gbContentReady = true;
         gbNotify((payload && payload.title) || message, 'info', 6000);
       }
     }
+    /* @admin:end */
 
     if (action === 'GB_OPEN_CALENDAR') {
       handled = true;
@@ -364,10 +366,12 @@ window.__gbContentReady = true;
       return true;
     }
 
+    /* @admin:start */
     if (msg.action === 'showNotificationsModal') {
       if (typeof window.__gbShowNotificationsModal === 'function') window.__gbShowNotificationsModal();
       return true;
     }
+    /* @admin:end */
 
     if (msg.action === 'sendViaPA') {
       // Build the lean payload, send to PA, and surface the real result

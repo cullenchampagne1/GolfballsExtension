@@ -302,11 +302,11 @@
   /* Resolve an email address to a contact using the ALREADY-INDEXED records.
      Each email lives inside its encrypted record (emails_tps / email_tp), so no
      re-index is required — we scan current records, decrypting until an email
-     matches, and return the CRM contact id for the View link. Runs entirely in
-     the worker (no network, no cookies), which is why it works from the
-     background email-relay poll where a cross-site Solr fetch can't carry the
-     golfballs session. employeeId is taken from the argument or chrome.storage
-     so the same key that indexed the record decrypts it. */
+     matches, and return the CRM contact id. Runs entirely in the worker (no
+     network, no cookies), so a background caller resolves reliably where a
+     cross-site Solr fetch can't carry the golfballs session. employeeId is
+     taken from the argument or chrome.storage so the same key that indexed the
+     record decrypts it. */
   async function searchByEmail(input) {
     const email = String((input && input.email) || input || '').trim().toLowerCase();
     if (!email) return null;

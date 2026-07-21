@@ -1,5 +1,8 @@
 // background.js
-importScripts('security-policy.js', 'calendar-form-state.js', 'installation-auth.js', 'settings-registry.js', 'remote-settings-policy.js', 'notifications-store.js', 'email-relay-poll.js', 'crm-index-store.js', 'defaults.js');
+importScripts('security-policy.js', 'calendar-form-state.js', 'installation-auth.js', 'settings-registry.js', 'remote-settings-policy.js', 'crm-index-store.js', 'defaults.js');
+/* @admin:start */
+importScripts('notifications-store.js', 'email-relay-poll.js');
+/* @admin:end */
 
 const GB_SECURITY = globalThis.GBSecurity;
 if (!GB_SECURITY) throw new Error('Security policy failed to initialize');
@@ -95,6 +98,7 @@ chrome.storage.onChanged.addListener((ch, area) => {
   // Keep the in-memory copy in sync when the panel clears the log.
   if (ch[GB_DBG_KEY] && Array.isArray(ch[GB_DBG_KEY].newValue)) gbDebugLog = ch[GB_DBG_KEY].newValue;
 });
+/* @admin:start */
 // ── Notifications icon badge ────────────────────────────────────────────────
 // Reflect the count of OPEN customer-email notifications on the toolbar icon.
 // Painted on every worker spin-up and whenever the store or the feature flag
@@ -107,6 +111,7 @@ chrome.storage.onChanged.addListener((ch, area) => {
     try { GBNotifications.paintBadge(); } catch { /* */ }
   }
 });
+/* @admin:end */
 const _gbCap = (s) => (s == null ? null : (String(s).length > GB_DBG_BODY_CAP ? String(s).slice(0, GB_DBG_BODY_CAP) + '\n…[truncated]' : String(s)));
 /* Classify a request → { cat: 'proposal'|'email', label } or null (ignore). */
 function gbDebugClassify(url, bodyStr) {
@@ -1870,6 +1875,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           redirect: 'error',
         });
         if (r.ok) {
+          /* @admin:start */
           // Auto-complete: replying to a customer clears their open email
           // notification(s). Every PA send (popup + all ESM paths) funnels here
           // with the recipient in scope, so this is the one universal hook.
@@ -1880,6 +1886,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
               }
             }
           } catch { /* notification bookkeeping must never block a send */ }
+          /* @admin:end */
           const text = await gbReadTextLimited(r, 1_000_000);
           try {
             const data = JSON.parse(text);

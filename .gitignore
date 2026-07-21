@@ -26,3 +26,4 @@ coverage/
 # Extension release channel state (1GB+ workspace, signing key, published CRXs)
 # — managed by ./golfballs, never versioned.
 .golfballs-extension-production/
+dist/store-stage/
