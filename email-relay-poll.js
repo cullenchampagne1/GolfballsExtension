@@ -42,10 +42,15 @@
     return !!(dev && dev[FLAG]);
   }
 
-  function queryTabs() {
+  // The single golfballs tab the rep is actually looking at (active tab of the
+  // last-focused window), or null if that tab isn't a golfballs page. Transient
+  // toasts target only this tab so a reply isn't announced on every open CRM tab
+  // — which forced the rep to dismiss the same toast page by page. The badge and
+  // notifications modal still reflect the reply everywhere.
+  function activeGolfballsTab() {
     return new Promise((resolve) => {
-      try { chrome.tabs.query({ url: GOLFBALLS_TABS }, (tabs) => resolve(tabs || [])); }
-      catch { resolve([]); }
+      try { chrome.tabs.query({ active: true, lastFocusedWindow: true, url: GOLFBALLS_TABS }, (tabs) => resolve((tabs || [])[0] || null)); }
+      catch { resolve(null); }
     });
   }
 
@@ -172,7 +177,8 @@
     if (!res) return false;
     if (!Array.isArray(res.messages) || res.messages.length === 0) return true;
 
-    const tabs = await queryTabs();
+    const activeTab = await activeGolfballsTab();
+    const toastTabs = activeTab ? [activeTab] : [];
     let toasts = 0;
     for (const msg of res.messages) {
       // Pre-resolve the contact so View is instant; a miss still records.
@@ -188,12 +194,12 @@
           messageId: msg.message_id, viewUrl, receivedAt: msg.received_at,
         });
       } catch { /* store write is best-effort */ }
-      // Transient toast, only when a golfballs tab is open and within the cap.
-      if (tabs.length && toasts < MAX_TOASTS) { sendToTabs(tabs, relayNotifyPayload(msg, viewUrl)); toasts += 1; }
+      // Transient toast — only on the tab the rep is looking at, within the cap.
+      if (toastTabs.length && toasts < MAX_TOASTS) { sendToTabs(toastTabs, relayNotifyPayload(msg, viewUrl)); toasts += 1; }
     }
-    if (tabs.length) {
+    if (toastTabs.length) {
       const overflow = res.messages.length - toasts;
-      if (overflow > 0) pillToTabs(tabs, `+${overflow} more new customer ${overflow === 1 ? 'reply' : 'replies'}`);
+      if (overflow > 0) pillToTabs(toastTabs, `+${overflow} more new customer ${overflow === 1 ? 'reply' : 'replies'}`);
     }
     // The store owns every reply, so advance the cursor unconditionally.
     if (typeof res.cursor !== 'undefined') await setStorage({ [CURSOR_KEY]: res.cursor });

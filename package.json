@@ -65,6 +65,7 @@
     { "name": "ui · ASP date offsets & calendar cells", "file": "tests/unit/dateUtils.test.mjs" },
     { "name": "ui · admin page-context routing", "file": "tests/unit/pageContext.test.mjs" },
     { "name": "guard · operator-guide content coverage", "file": "tests/unit/helpContent.test.mjs" },
+    { "name": "guard · AI help knowledge corpus", "id": "guard-help-agent", "command": ["../.venv/bin/python", "tests/test_help_agent.py"] },
     { "name": "flow · ASP.NET calendar form-state reconstruction", "file": "tests/unit/calendarFormState.test.mjs" },
     { "name": "flow · install enrollment lifecycle", "file": "tests/integration/enrollment-lifecycle.test.mjs" },
     { "name": "flow · api fetch guard & bearer auth", "file": "tests/integration/api-guard-flow.test.mjs" },
