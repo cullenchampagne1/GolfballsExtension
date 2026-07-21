@@ -353,13 +353,27 @@ function runConsumerStaging(root) {
   const stageRoot = resolve(root, 'dist/store-stage');
   rmSync(stageRoot, { recursive: true, force: true });
   mkdirSync(stageRoot, { recursive: true });
-  // Stripped vite build (admin entries skipped, __ADMIN__ DCE'd) → staging.
-  // The committed settings-registry.js already excludes admin keys, so only
-  // react-dist needs a consumer rebuild.
-  execFileSync('node', ['build.js'], {
-    cwd: root, stdio: 'inherit',
-    env: { ...process.env, GB_ADMIN: '0', GB_OUT_BASE: 'dist/store-stage/react-dist' },
-  });
+  // The committed helpContent.js carries the full (admin) doc set, including the
+  // notification-feature articles. Regenerate a consumer copy over it — admin
+  // articles, tutorials, and nav entries pruned — for the duration of the
+  // stripped build only, then restore the admin version. This keeps the
+  // notification docs out of the served guide bundle without a second committed
+  // file. (settings-registry.js already excludes admin keys permanently.)
+  const helpFile = resolve(root, 'src/lib/helpContent.js');
+  const helpBackup = readFileSync(helpFile);
+  try {
+    execFileSync('node', ['scripts/build-help-content.mjs'], {
+      cwd: root, stdio: 'inherit',
+      env: { ...process.env, GB_ADMIN: '0', GB_HELP_OUT: helpFile },
+    });
+    // Stripped vite build (admin entries skipped, __ADMIN__ DCE'd) → staging.
+    execFileSync('node', ['build.js'], {
+      cwd: root, stdio: 'inherit',
+      env: { ...process.env, GB_ADMIN: '0', GB_OUT_BASE: 'dist/store-stage/react-dist' },
+    });
+  } finally {
+    writeFileSync(helpFile, helpBackup); // restore the committed admin doc set
+  }
   return stageRoot;
 }
 

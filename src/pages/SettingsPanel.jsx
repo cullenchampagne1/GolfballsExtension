@@ -952,6 +952,66 @@ function DevSettingRow({ def, value, onChange }) {
   );
 }
 
+/* ── Email links: list this installation's temp email-template links and
+      revoke them. Mirrors the settings-share revoke, on the email-share API. */
+function EmailLinksSection() {
+  const [links, setLinks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try { const r = await sendBackgroundMessage('emailShareList'); setLinks(Array.isArray(r?.shares) ? r.shares : []); }
+    catch { setLinks([]); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const revoke = async (id) => {
+    setBusyId(id);
+    try {
+      await sendBackgroundMessage('emailShareRevoke', { shareId: id });
+      setLinks((prev) => prev.filter((l) => l.id !== id));
+      window.__gbToast?.success?.('Email link revoked');
+    } catch (error) {
+      window.__gbToast?.error?.(error?.message || 'Unable to revoke email link');
+    } finally { setBusyId(null); }
+  };
+
+  const expiryLabel = (iso) => {
+    const ms = new Date(iso).getTime() - Date.now();
+    if (!Number.isFinite(ms)) return '';
+    if (ms <= 0) return 'expired';
+    const h = Math.floor(ms / 3600000);
+    return h >= 1 ? `expires in ${h}h` : `expires in ${Math.max(1, Math.round(ms / 60000))}m`;
+  };
+
+  return (
+    <section>
+      <SectionLabel action={<Btn variant="ghost" size="xs" onClick={load} disabled={loading}>Refresh</Btn>}>Email Links</SectionLabel>
+      {loading ? (
+        <Card><div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', padding: '4px 2px' }}>Loading…</div></Card>
+      ) : links.length === 0 ? (
+        <Card><div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', padding: '4px 2px' }}>No active email links. Links you share expire after 24 hours.</div></Card>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {links.map((link) => (
+            <Card key={link.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link.name || 'Email link'}</div>
+                <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>
+                  {expiryLabel(link.expires_at)} · opened {link.access_count || 0}×
+                </div>
+              </div>
+              <IconBtn size="md" icon={<I.trash />} danger onClick={() => revoke(link.id)} disabled={busyId === link.id} title="Revoke this email link" />
+            </Card>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* ── Main Settings Panel ─────────────────────────────────────── */
 export function SettingsPanel({ remotePolicy }) {
   const [theme, setTheme] = useState(DEFAULT_THEME);
@@ -1228,6 +1288,8 @@ export function SettingsPanel({ remotePolicy }) {
         </div>
       </section>
       )}
+
+      <EmailLinksSection />
 
       {/* Custom Pages — one switch per registered scope. The page engine still
           consumes page-id arrays internally, preserving its stable contract. */}

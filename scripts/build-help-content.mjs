@@ -29,7 +29,20 @@ import path from 'node:path';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CONTENT_DIR = path.join(ROOT, 'docs', 'content');
-const OUT_FILE = path.join(ROOT, 'src', 'lib', 'helpContent.js');
+const OUT_FILE = process.env.GB_HELP_OUT
+  ? path.resolve(process.env.GB_HELP_OUT)
+  : path.join(ROOT, 'src', 'lib', 'helpContent.js');
+
+/* Consumer (served) build strips admin-only docs so the notification feature is
+   never referenced in the published guide. admin-only.json names the pieces;
+   flags.js / devSettings.js already report ADMIN=false under GB_ADMIN=0, so the
+   matching flags/dev-settings drop out of the coverage checks automatically. */
+const IS_CONSUMER = process.env.GB_ADMIN === '0';
+const readJson0 = (p) => JSON.parse(readFileSync(p, 'utf8'));
+const ADMIN_ONLY = readJson0(path.join(ROOT, 'admin-only.json'));
+const ADMIN_HELP_DOCS = new Set(IS_CONSUMER ? (ADMIN_ONLY.helpDocs || []) : []);
+const ADMIN_MODAL_IDS = new Set(IS_CONSUMER ? (ADMIN_ONLY.adminModals || []) : []);
+const ADMIN_TUTORIAL_IDS = new Set(IS_CONSUMER ? (ADMIN_ONLY.adminTutorials || []) : []);
 
 const { FEATURE_FLAGS, FEATURE_DEFAULTS, KEYBOARD_SHORTCUTS_DEFAULTS } =
   await import(path.join(ROOT, 'src/lib/flags.js'));
@@ -46,6 +59,7 @@ let tutorials = [];
 let tree = null;
 
 for (const file of readdirSync(CONTENT_DIR).filter((f) => f.endsWith('.json')).sort()) {
+  if (ADMIN_HELP_DOCS.has(file)) continue; // consumer build: drop admin-only articles
   const data = readJson(path.join(CONTENT_DIR, file));
   if (data.tree) tree = data.tree;
   if (data.tutorials) tutorials = data.tutorials;
@@ -56,6 +70,24 @@ for (const file of readdirSync(CONTENT_DIR).filter((f) => f.endsWith('.json')).s
 
 if (!tree) fail('docs/content/tree.json missing or has no "tree"');
 if (!tutorials.length) fail('docs/content/tutorials.json missing or empty');
+
+// Consumer build: drop admin-only tutorials (they live in the shared
+// tutorials.json but document admin features).
+if (IS_CONSUMER) tutorials = tutorials.filter((t) => !ADMIN_TUTORIAL_IDS.has(t.id));
+
+/* Consumer build: prune nav-tree entries that point at the stripped articles so
+   the reachability/dangling-reference checks below still pass. */
+if (IS_CONSUMER) {
+  const liveSlugs = new Set(articles.map((a) => a.slug));
+  const liveTutorials = new Set(tutorials.map((t) => t.id));
+  const pruneNodes = (nodes) => nodes
+    .map((n) => ({
+      ...n,
+      ...(n.items ? { items: n.items.filter((it) => (!it.article || liveSlugs.has(it.article)) && (!it.tutorial || liveTutorials.has(it.tutorial))) } : {}),
+      ...(n.groups ? { groups: pruneNodes(n.groups) } : {}),
+    }));
+  tree = pruneNodes(tree);
+}
 
 /* ── 2. Expand "generated" blocks from the live registries ───── */
 
@@ -266,11 +298,20 @@ for (const key of Object.keys(FEATURE_DEFAULTS)) {
 // every inventory modal needs to appear in some article's covers[]. This keeps
 // a newly added modal from becoming invisible simply because inventory drifted.
 const modalDir = path.join(ROOT, 'src', 'modals');
+// Consumer build: the admin-only modals' source files stay on disk but their
+// only entry is stripped, so exclude them from the coverage check alongside
+// their (removed) covering article.
+const adminModalFiles = new Set(
+  (inventory.modals || [])
+    .filter((m) => ADMIN_MODAL_IDS.has(m.id))
+    .map((m) => path.basename(m.file || '')),
+);
+const activeInventoryModals = (inventory.modals || []).filter((m) => !ADMIN_MODAL_IDS.has(m.id));
 const sourceModalFiles = new Set(
-  readdirSync(modalDir).filter((file) => file.endsWith('.jsx')),
+  readdirSync(modalDir).filter((file) => file.endsWith('.jsx') && !adminModalFiles.has(file)),
 );
 const inventoryModalFiles = new Set(
-  (inventory.modals || []).map((modal) => path.basename(modal.file || '')),
+  activeInventoryModals.map((modal) => path.basename(modal.file || '')),
 );
 for (const file of sourceModalFiles) {
   if (!inventoryModalFiles.has(file)) errors.push(`inventory: src/modals/${file} is not registered`);
@@ -281,7 +322,7 @@ for (const file of inventoryModalFiles) {
 
 const coveredIds = new Set();
 for (const a of articles) for (const c of a.covers || []) coveredIds.add(c);
-for (const m of inventory.modals || []) {
+for (const m of activeInventoryModals) {
   if (!coveredIds.has(m.id)) errors.push(`coverage: modal "${m.id}" (${m.displayName}) has no covering article`);
 }
 

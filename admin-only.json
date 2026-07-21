@@ -14,6 +14,15 @@
     "notificationsEnabled",
     "emailRelay.notifications"
   ],
+  "helpDocs": [
+    "notifications.json"
+  ],
+  "adminModals": [
+    "notifications"
+  ],
+  "adminTutorials": [
+    "handle-customer-reply"
+  ],
   "leakTokens": [
     "gbNotifications",
     "GBNotifications",

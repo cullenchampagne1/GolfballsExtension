@@ -11,7 +11,9 @@
    feature entries below are wrapped in `...(ADMIN ? … : …)` so the consumer
    build dead-code-eliminates them entirely. */
 /* eslint-disable no-undef */
-const ADMIN = (typeof __ADMIN__ !== 'undefined') ? __ADMIN__ : true;
+const ADMIN = (typeof __ADMIN__ !== 'undefined')
+  ? __ADMIN__
+  : !(typeof process !== 'undefined' && process.env && process.env.GB_ADMIN === '0');
 
 /** Default on/off state for every feature flag. */
 export const FEATURE_DEFAULTS = {

@@ -936,6 +936,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to revoke settings share' }));
     return true;
   }
+  if (msg.action === 'emailShareList') {
+    GBInstallationAuth.apiJson('/extension/email-template-shares')
+      .then((payload) => sendResponse({ ok: true, shares: payload.shares || [] }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to list email links' }));
+    return true;
+  }
+  if (msg.action === 'emailShareRevoke') {
+    const shareId = /^[A-Za-z0-9_-]{32}$/.test(String(msg.shareId || '')) ? String(msg.shareId) : '';
+    if (!shareId) { sendResponse({ ok: false, error: 'Invalid email link' }); return true; }
+    GBInstallationAuth.apiJson(`/extension/email-template-shares/${shareId}/revoke`, { method: 'POST' })
+      .then(() => sendResponse({ ok: true, shareId }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to revoke email link' }));
+    return true;
+  }
 
   // ── Relay a message to all frames in the sender's tab ──────────────────────
   if (msg.action === 'broadcastToFrames' && msg.payload) {

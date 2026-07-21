@@ -21,7 +21,7 @@ export const PAGES = {
   start: StartPage,
   workflows: WorkflowsPage,
   popup: PopupPage,
-  notifications: NotificationsPage,
+  ...(__ADMIN__ ? { notifications: NotificationsPage } : {}),
   settings: SettingsPage,
   templates: TemplatesPage,
   watchlist: WatchListPage,
