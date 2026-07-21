@@ -5,7 +5,7 @@
 
 export const HELP_CONTENT = {
   "version": "3.3",
-  "generatedAt": "2026-07-15",
+  "generatedAt": "2026-07-21",
   "tree": [
     {
       "title": "Getting Started",
@@ -56,6 +56,9 @@ export const HELP_CONTENT = {
             },
             {
               "article": "how-email-sending-works"
+            },
+            {
+              "article": "reply-notifications"
             }
           ]
         },
@@ -74,6 +77,9 @@ export const HELP_CONTENT = {
             },
             {
               "article": "order-date-manager"
+            },
+            {
+              "article": "quick-order-note"
             },
             {
               "article": "watch-list"
@@ -110,6 +116,9 @@ export const HELP_CONTENT = {
             },
             {
               "article": "phone-finder"
+            },
+            {
+              "article": "recent-orders-scan"
             }
           ]
         },
@@ -143,6 +152,9 @@ export const HELP_CONTENT = {
             },
             {
               "article": "build-email-proposal"
+            },
+            {
+              "article": "proposal-checkout-preview"
             },
             {
               "article": "gifting-glossary"
@@ -229,6 +241,12 @@ export const HELP_CONTENT = {
             },
             {
               "tutorial": "watch-order"
+            },
+            {
+              "tutorial": "handle-customer-reply"
+            },
+            {
+              "tutorial": "apply-order-note"
             }
           ]
         },
@@ -249,6 +267,12 @@ export const HELP_CONTENT = {
             },
             {
               "tutorial": "share-config"
+            },
+            {
+              "tutorial": "use-custom-crm-workspace"
+            },
+            {
+              "tutorial": "scan-recent-orders"
             }
           ]
         },
@@ -577,7 +601,7 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "Open it from the popup, the shelf on an order page, or the Image Viewer (the image rides along). Order # and Customer ID pre-fill from the page. The right column shows the customer's previous proofs — check it before submitting a duplicate."
+            "text": "Open it from the popup on an order page or from the Image Viewer (the image rides along). Order # and Customer ID pre-fill from the page. The right column shows the customer's previous proofs — check it before submitting a duplicate."
           },
           {
             "type": "heading",
@@ -984,7 +1008,59 @@ export const HELP_CONTENT = {
       "related": [
         "query-builder",
         "bulk-email-selection",
-        "new-contact"
+        "new-contact",
+        "recent-orders-scan"
+      ],
+      "sectionLabel": "Core Features / CRM & Contacts"
+    },
+    {
+      "slug": "recent-orders-scan",
+      "title": "Scan for Recent Orders",
+      "icon": "history",
+      "tiers": [
+        "intermediate",
+        "advanced"
+      ],
+      "keywords": [
+        "recent orders",
+        "my clients",
+        "scan",
+        "last query",
+        "watermark",
+        "morning routine"
+      ],
+      "summary": "CRM Search's contextual shelf routines: rerun the last query or scan a saved My Clients audience for orders created since the prior scan.",
+      "feature": "crm-search",
+      "flag": "crmSearchEnabled",
+      "covers": [],
+      "tutorial": "scan-recent-orders",
+      "body": {
+        "intermediate": [
+          {
+            "type": "p",
+            "text": "While CRM Search is open, the Actions Shelf registers two modal-specific actions. Run last query repeats the most recently applied CRM search. Scan for recent orders runs a saved client audience against the time since your last scan."
+          },
+          {
+            "type": "callout",
+            "kind": "warning",
+            "text": "The scan requires a saved Query Builder query named exactly 'My Clients'. If it is missing, the action tells you to create it instead of silently substituting another audience."
+          },
+          {
+            "type": "p",
+            "text": "On the first run, the scan covers the previous seven days. After a successful run it stores a local watermark under gbScanRecentOrders_lastRun; later runs continue from that point. Results load into CRM Search where you can inspect, select, export, email, or launch a campaign."
+          }
+        ],
+        "advanced": [
+          {
+            "type": "p",
+            "text": "Use __gbScan.status() in the page console to inspect the local scan clock and __gbScan.reset() to clear it so the next scan covers seven days again. The saved query remains the audience source either way."
+          }
+        ]
+      },
+      "related": [
+        "crm-search",
+        "query-builder",
+        "campaign-manager"
       ],
       "sectionLabel": "Core Features / CRM & Contacts"
     },
@@ -1126,7 +1202,7 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "Press Ctrl+Q (or use the Actions Shelf). Search for and attach the account, then fill first name, last name, email, phone, and company. Create posts the contact straight to the CRM."
+            "text": "Press Ctrl+Q. Search for and attach the account, then fill first name, last name, email, phone, and company. Create posts the contact straight to the CRM."
           },
           {
             "type": "callout",
@@ -2458,12 +2534,12 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "Open the Settings page (extension popup → settings gear, or the Settings tab in the Template Editor). Five things are worth doing on day one:"
+            "text": "Open the Settings page (extension popup → Manage in the header → Settings tab). Five things are worth doing on day one:"
           },
           {
             "type": "list",
             "items": [
-              "Pick a theme — Dark, Slate, Light, or Cream. Changes apply live everywhere.",
+              "Pick a theme — Dark, Slate, Light, Cream, Nord, Dracula, Rosé, or Tokyo Night. Changes apply live everywhere.",
               "Set your email account host — the 'Email account host' field under Developer Settings controls the From identity on sends. It starts blank and must be configured before Power Automate delivery.",
               "Write your email signature — Settings → signature editor. It's auto-appended to emails sent through Power Automate.",
               "Review feature toggles — everything except Power Automate is on by default. Turn off what you won't use.",
@@ -2522,7 +2598,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "The list is context-aware: on an order page you'll see Margin Calc, Submit Proof, and Charge; on a contact page you'll see Log Call, Add Task, and Gift Catalog. General actions like Search CRM are always available."
+            "text": "The list is context-aware. Contact/account pages add calling and quick-task actions; order pages add dates and notes; the order index adds Copy order IDs. Four launchers remain available everywhere: Open Image Viewer, Open Contacts, Open Tasks, and Gifting Catalog."
           }
         ],
         "intermediate": [
@@ -2559,33 +2635,18 @@ export const HELP_CONTENT = {
                 "contact"
               ],
               [
-                "My Tasks",
-                "Opens the Task List",
-                "contact, account"
-              ],
-              [
-                "Search CRM",
-                "Opens CRM Search",
-                "everywhere"
-              ],
-              [
-                "Gift Catalog",
-                "Opens the catalog / proposal builder",
-                "contact, account"
-              ],
-              [
-                "Watch",
-                "Inline watch-add form for this record",
-                "order, contact"
-              ],
-              [
-                "Margin Calc / Submit Proof / Charge",
-                "The order-page toolkit",
+                "Manage order dates",
+                "Opens the Order Date Manager ('Change approval & commitment dates for #…')",
                 "order"
               ],
               [
-                "Manage order dates",
-                "Opens the Order Date Manager ('Change approval & commitment dates for #…')",
+                "Apply order note",
+                "Opens the saved-note picker and custom composer",
+                "order"
+              ],
+              [
+                "Apply last note",
+                "Repeats the last applied saved note template; otherwise opens the picker",
                 "order"
               ],
               [
@@ -2594,11 +2655,34 @@ export const HELP_CONTENT = {
                 "order index"
               ],
               [
-                "New Contact",
-                "Opens the contact creator",
-                "contact, account"
+                "Open Image Viewer",
+                "Opens the drop/paste/extract image workspace",
+                "everywhere"
+              ],
+              [
+                "Open Contacts",
+                "Opens CRM Search",
+                "everywhere"
+              ],
+              [
+                "Open Tasks",
+                "Opens the Task List",
+                "everywhere"
+              ],
+              [
+                "Gifting Catalog",
+                "Opens the catalog / proposal builder",
+                "everywhere"
               ]
             ]
+          },
+          {
+            "type": "heading",
+            "text": "Actions added by an open modal"
+          },
+          {
+            "type": "p",
+            "text": "CRM Search adds Run last query and Scan for recent orders while it is open. Task List adds Only overdue + due today (or Show all tasks when active). These entries disappear when their modal closes because the shelf is reflecting that modal's current context."
           },
           {
             "type": "p",
@@ -3445,7 +3529,63 @@ export const HELP_CONTENT = {
         "proposal-panel",
         "proposal-breakdown",
         "promo-codes",
-        "how-email-sending-works"
+        "how-email-sending-works",
+        "proposal-checkout-preview"
+      ],
+      "sectionLabel": "Core Features / Gifting & Proposals"
+    },
+    {
+      "slug": "proposal-checkout-preview",
+      "title": "Proposal Checkout Preview",
+      "icon": "card",
+      "tiers": [
+        "intermediate",
+        "advanced"
+      ],
+      "keywords": [
+        "checkout",
+        "place order",
+        "shipping",
+        "billing",
+        "payment",
+        "mock",
+        "preview",
+        "address autocomplete"
+      ],
+      "summary": "A feature-rich checkout UI embedded in the proposal flow, currently provided for preview and validation only—it does not submit a real order.",
+      "feature": "proposal-checkout",
+      "flag": "giftCatalogEnabled",
+      "covers": [
+        "proposal-checkout"
+      ],
+      "body": {
+        "intermediate": [
+          {
+            "type": "callout",
+            "kind": "warning",
+            "title": "Preview only — no real order is placed",
+            "text": "Proposal Checkout currently validates its form and generates a mock GB confirmation number in the browser. Place Order does not POST an order, charge a card, reserve inventory, or write a CRM order."
+          },
+          {
+            "type": "p",
+            "text": "The preview is useful for reviewing the intended checkout experience: single-address or multi-destination shipping and item allocation, billing, payment fields, promotions/gift certificates, rep-only admin fields, address suggestions, purchase summary, and animated completion states."
+          },
+          {
+            "type": "p",
+            "text": "Use the existing saved-cart and proposal-email flows for operational customer work. A checkout confirmation shown by this component is not proof of an order."
+          }
+        ],
+        "advanced": [
+          {
+            "type": "p",
+            "text": "The source explicitly leaves the order POST as TODO(backend). A production launch requires a defined order endpoint, authenticated payment handling/tokenization, server-side price and inventory validation, idempotency, error recovery, and integration tests before the preview warning can be removed."
+          }
+        ]
+      },
+      "related": [
+        "proposal-panel",
+        "build-email-proposal",
+        "gift-catalog"
       ],
       "sectionLabel": "Core Features / Gifting & Proposals"
     },
@@ -3554,6 +3694,111 @@ export const HELP_CONTENT = {
       "sectionLabel": "Core Features / Gifting & Proposals"
     },
     {
+      "slug": "reply-notifications",
+      "title": "Customer Reply Notifications",
+      "icon": "alert",
+      "tiers": [
+        "beginner",
+        "advanced"
+      ],
+      "keywords": [
+        "notifications",
+        "email relay",
+        "customer reply",
+        "badge",
+        "inbound email",
+        "done",
+        "reopen"
+      ],
+      "summary": "Admin-build inbox for inbound customer replies: near-real-time relay polling, toolbar badge, local thread list, CRM links, and automatic completion after a reply.",
+      "feature": "reply-notifications",
+      "flag": "notificationsEnabled",
+      "covers": [
+        "notifications"
+      ],
+      "tutorial": "handle-customer-reply",
+      "body": {
+        "beginner": [
+          {
+            "type": "callout",
+            "kind": "warning",
+            "title": "Admin build only",
+            "text": "This capability is compiled only into the admin build. Turn on both Settings → Features → Notifications and Developer Settings → Email Relay: customer reply notifications. The RevStack relay endpoints and this extension installation must also be active."
+          },
+          {
+            "type": "p",
+            "text": "When a customer replies through the email relay, the popup gains an open-count badge and the Notifications button. Open golfballs.com tabs also receive a toast. The notification is stored even when no matching tab is open; only the transient toast is skipped."
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Control",
+              "What it does"
+            ],
+            "rows": [
+              [
+                "Open / All / Done",
+                "Filters the stored reply list; each tab shows its live count."
+              ],
+              [
+                "Search",
+                "Matches contact name, contact email, or subject."
+              ],
+              [
+                "View account",
+                "Opens the resolved CRM contact when the sender could be matched."
+              ],
+              [
+                "View email",
+                "Opens the relayed message in the existing email viewer."
+              ],
+              [
+                "Mark done / Reopen",
+                "Closes or restores a reply manually. A Power Automate reply to the same address closes it automatically."
+              ],
+              [
+                "Clear completed",
+                "Removes Done rows after a confirmation click."
+              ]
+            ]
+          },
+          {
+            "type": "callout",
+            "kind": "info",
+            "text": "A missing CRM match does not lose the message. It only disables View account; View email, Done/Reopen, search, and the badge continue to work."
+          }
+        ],
+        "advanced": [
+          {
+            "type": "heading",
+            "text": "Polling, storage, and deduplication"
+          },
+          {
+            "type": "p",
+            "text": "Enabling the relay first primes its cursor to the newest message, preventing historical mail from appearing as new. A 25-second authenticated long poll handles near-real-time delivery; a one-minute alarm recovers the loop after suspension or an offline response."
+          },
+          {
+            "type": "p",
+            "text": "Messages are stored newest-first in chrome.storage.local under gbNotifications, capped at 200. Message IDs make re-polls idempotent. Open messages with the same normalized sender and subject (Re:/Fwd: removed) fold into one thread and show a reply count."
+          },
+          {
+            "type": "heading",
+            "text": "Contact resolution"
+          },
+          {
+            "type": "p",
+            "text": "The worker checks the encrypted local CRM index first, then tries a session-backed Solr lookup. Resolution is best-effort and is used only to build the CRM account shortcut; it is not required to persist or display the email."
+          }
+        ]
+      },
+      "related": [
+        "email-thread-preview",
+        "how-email-sending-works",
+        "email-integrations"
+      ],
+      "sectionLabel": "Core Features / Email"
+    },
+    {
       "slug": "margin-calculator",
       "title": "Margin Calculator",
       "icon": "calc",
@@ -3582,7 +3827,7 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "Press Ctrl+M on an order page (or use the Actions Shelf). The fields: Item Cost and Selling Price on the first row, Gross Margin % and Markup % below, then Qty, Unit Profit, and the animated Total Profit readout. Enter any two values and the rest compute as you type; Clear all resets."
+            "text": "Press Ctrl+M on an order page. The fields: Item Cost and Selling Price on the first row, Gross Margin % and Markup % below, then Qty, Unit Profit, and the animated Total Profit readout. Enter any two values and the rest compute as you type; Clear all resets."
           },
           {
             "type": "callout",
@@ -3631,7 +3876,6 @@ export const HELP_CONTENT = {
       "feature": "charge",
       "flag": "chargeEnabled",
       "covers": [
-        "charge-window",
         "charge-modal",
         "charge"
       ],
@@ -3639,7 +3883,7 @@ export const HELP_CONTENT = {
         "intermediate": [
           {
             "type": "p",
-            "text": "From the popup's ACTIONS section or the Actions Shelf on an order page, Charge opens a modal pre-loaded with the order's charge rows and the difference between the page total and what's been captured."
+            "text": "From the popup on an order page, Charge opens a modal pre-loaded with the order's charge rows and the difference between the page total and what's been captured."
           },
           {
             "type": "p",
@@ -3751,7 +3995,90 @@ export const HELP_CONTENT = {
       },
       "related": [
         "ts-date-update-failed",
-        "order-edit"
+        "order-edit",
+        "quick-order-note"
+      ],
+      "sectionLabel": "Core Features / Orders & Pricing"
+    },
+    {
+      "slug": "quick-order-note",
+      "title": "Quick Order Note",
+      "icon": "edit",
+      "tiers": [
+        "beginner",
+        "intermediate"
+      ],
+      "keywords": [
+        "quick note",
+        "order note",
+        "apply last note",
+        "audience",
+        "push dates",
+        "note template"
+      ],
+      "summary": "Apply a saved order-note template or compose a custom note from the Actions Shelf, with audience selection and optional date pushing.",
+      "feature": "quick-notes",
+      "flag": "autoPushEnabled",
+      "covers": [
+        "quick-order-note"
+      ],
+      "tutorial": "apply-order-note",
+      "body": {
+        "beginner": [
+          {
+            "type": "p",
+            "text": "On an order page, open the Actions Shelf and choose Apply order note. The compact modal starts as a searchable template picker. Pick a saved note to review it, or enter composer mode for a one-off note."
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Control",
+              "Purpose"
+            ],
+            "rows": [
+              [
+                "Template picker",
+                "Filters the note templates created in Manager → Notes."
+              ],
+              [
+                "Audience",
+                "Selects the exact audience value the order page expects."
+              ],
+              [
+                "Subject and body",
+                "The note content; saved templates can use {{date}} and {{time}}."
+              ],
+              [
+                "Push dates forward",
+                "Routes the configured day offset through the existing date-and-note push chain."
+              ],
+              [
+                "Apply",
+                "Posts the note through the authenticated order-notes iframe."
+              ]
+            ]
+          },
+          {
+            "type": "p",
+            "text": "After a saved template is applied, the shelf can expose Apply last note for a one-click repeat. This repeats the last saved template, not arbitrary free-form text."
+          }
+        ],
+        "intermediate": [
+          {
+            "type": "callout",
+            "kind": "warning",
+            "text": "The Audience value in a template must exactly match an option on the order page. If it does not, review the template in Manager → Notes before applying it."
+          },
+          {
+            "type": "p",
+            "text": "Date pushing uses the same multi-step calendar bridge as Order Date Manager. Progress and a failing step appear in toasts; a failed chain does not report success silently."
+          }
+        ]
+      },
+      "related": [
+        "note-templates",
+        "order-date-manager",
+        "ts-date-update-failed"
       ],
       "sectionLabel": "Core Features / Orders & Pricing"
     },
@@ -3780,7 +4107,7 @@ export const HELP_CONTENT = {
         "beginner": [
           {
             "type": "p",
-            "text": "Watch an order or contact from the popup's TRACKING section or the Actions Shelf — it lands on your Watch List with a link back to where it came from. Filter chips (All / Active / High priority / Completed) carry live counts, and the search box matches title, context, and due date."
+            "text": "Watch an order or contact from the popup's Watch button — it lands on your Watch List with a link back to where it came from. Filter chips (All / Active / High priority / Completed) carry live counts, and the search box matches title, context, and due date."
           },
           {
             "type": "heading",
@@ -4171,7 +4498,7 @@ export const HELP_CONTENT = {
         "zoom",
         "appearance"
       ],
-      "summary": "Four theme variants, eight customizable accent colors, and independent zoom for every UI surface.",
+      "summary": "Eight theme variants, eight customizable accent colors, and independent zoom for every UI surface.",
       "covers": [
         "settings"
       ],
@@ -4183,7 +4510,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "Settings → Theme offers Dark (default), Slate, Light, and Cream. Switching applies live to every surface — modals, popup, editor, shelf — no reload needed."
+            "text": "Settings → Theme offers Dark (default), Slate, Light, Cream, Nord, Dracula, Rosé, and Tokyo Night. Switching applies live to every surface — modals, popup, editor, shelf — no reload needed."
           },
           {
             "type": "p",
@@ -4276,6 +4603,11 @@ export const HELP_CONTENT = {
                 "Campaign Manager",
                 "On",
                 "Multi-step campaign automation (from CRM Search / Tasks)."
+              ],
+              [
+                "Notifications",
+                "On",
+                "Track relayed customer email replies, with an icon badge and a notifications modal."
               ]
             ],
             "meta": {
@@ -4286,7 +4618,8 @@ export const HELP_CONTENT = {
                 "submitProofEnabled",
                 "emailPreviewEnabled",
                 "textPreviewEnabled",
-                "campaignManagerEnabled"
+                "campaignManagerEnabled",
+                "notificationsEnabled"
               ]
             }
           },
@@ -4540,16 +4873,53 @@ export const HELP_CONTENT = {
       "keywords": [
         "custom page",
         "override",
-        "dashboard",
-        "replace page"
+        "contact details",
+        "account details",
+        "opportunity details",
+        "replace page",
+        "workspace"
       ],
-      "summary": "Replace selected CRM pages (dashboard, search, task list, …) with the extension's own UI.",
+      "summary": "Replace Contact Details, Account Details, and Opportunity Details with focused extension workspaces backed by live CRM data.",
       "covers": [],
       "body": {
         "advanced": [
           {
             "type": "p",
-            "text": "Settings → Custom Pages exposes one switch per registered page scope. Enabling CRM activates the extension interface on supported CRM takeovers; disabling it uses the stock CRM pages. Scope values and visibility can be centrally managed by the authenticated policy."
+            "text": "Settings → Custom Pages → CRM exposes the registered takeovers. The implemented pages are Contact Details, Account Details, and Opportunity Details. Enable only the pages you want; a disabled page falls back to the stock CRM interface. Values and visibility can be centrally managed by authenticated policy."
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Workspace",
+              "Information and actions"
+            ],
+            "rows": [
+              [
+                "Contact Details",
+                "Contact/account facts, revenue and order history, proof art, tasks, opportunities, activities, email history, account contacts, a standalone email composer, account templates, and email/chat transcript reading."
+              ],
+              [
+                "Account Details",
+                "Account profile, linked contacts, activity, and account-level rollups in a focused dashboard."
+              ],
+              [
+                "Opportunity Details",
+                "Opportunity facts, open tasks, email history, proposal selection, line-item breakdown, margin review, and proposal email entry points."
+              ]
+            ]
+          },
+          {
+            "type": "heading",
+            "text": "What writes where"
+          },
+          {
+            "type": "p",
+            "text": "CRM records and actions use the live page schema and CRM endpoints. Extension-local context notes and caches remain local unless a control explicitly says it writes to CRM. Turning a takeover off deletes neither source."
+          },
+          {
+            "type": "callout",
+            "kind": "warning",
+            "text": "The Contact composer currently exposes an 'insert saved proposal' slash command that is visibly marked Not implemented yet. Use the Gift Catalog / Proposal Email flow for a real proposal insert or send."
           },
           {
             "type": "callout",
@@ -4558,9 +4928,12 @@ export const HELP_CONTENT = {
           }
         ]
       },
+      "tutorial": "use-custom-crm-workspace",
       "related": [
         "presets",
-        "feature-toggles"
+        "feature-toggles",
+        "crm-search",
+        "recent-orders-scan"
       ],
       "sectionLabel": "Settings Reference"
     },
@@ -4785,6 +5158,34 @@ export const HELP_CONTENT = {
             "meta": {
               "settingKeys": [
                 "proposalDebug.enabled"
+              ]
+            }
+          },
+          {
+            "type": "heading",
+            "text": "emailRelay"
+          },
+          {
+            "type": "table",
+            "headers": [
+              "Setting",
+              "Type",
+              "Default",
+              "Range",
+              "What it does"
+            ],
+            "rows": [
+              [
+                "Email Relay: customer reply notifications",
+                "bool",
+                "Off",
+                "",
+                "Poll the RevStack email relay for new inbound customer emails and raise a toast when a customer replies. Requires the relay endpoints to be live on the backend. Off = no polling, no notifications."
+              ]
+            ],
+            "meta": {
+              "settingKeys": [
+                "emailRelay.notifications"
               ]
             }
           },
@@ -6520,12 +6921,12 @@ export const HELP_CONTENT = {
       ],
       "steps": [
         {
-          "action": "Open Settings: click the extension icon, then the settings gear (or the Settings tab in the Template Editor window).",
+          "action": "Open Settings: click the extension icon, choose Manage in the popup header, then open the Settings tab in the Manager window.",
           "expected": "The Settings panel opens with Theme at the top.",
-          "visualCue": "Gear icon in the popup footer."
+          "visualCue": "Manage button in the popup header."
         },
         {
-          "action": "Pick a theme variant — Dark, Slate, Light, or Cream.",
+          "action": "Pick a theme variant — Dark, Slate, Light, Cream, Nord, Dracula, Rosé, or Tokyo Night.",
           "expected": "Every extension surface re-colors instantly.",
           "visualCue": "Theme section, top of Settings."
         },
@@ -6603,7 +7004,7 @@ export const HELP_CONTENT = {
       ],
       "steps": [
         {
-          "action": "Double-tap Shift and click Log Call.",
+          "action": "Double-tap Shift. Choose Call <name> to dial and open the logger, or Log incoming call to open it without dialing.",
           "expected": "Call Log opens showing the contact's name and phone, with the template filter focused.",
           "visualCue": "Floating shelf, bottom-right."
         },
@@ -6619,10 +7020,9 @@ export const HELP_CONTENT = {
           "visualCue": "Toast on completion."
         },
         {
-          "action": "Open Quick Task (shelf → Add Task), pick a template, and set the due date.",
-          "expected": "Due date accepts shorthand: +1d, +1w, or mm/dd/yy.",
-          "visualCue": "Due field in the composer.",
-          "commonMistake": "Typing 'next week' doesn't parse — use +1w."
+          "action": "Open Quick task for <name>, pick a template, and set the due date.",
+          "expected": "Use Today, Tomorrow, In 3 days, Next week, or enter a date as mm/dd/yy.",
+          "visualCue": "Due control in the composer."
         },
         {
           "action": "Submit the task.",
@@ -6950,9 +7350,9 @@ export const HELP_CONTENT = {
       ],
       "steps": [
         {
-          "action": "On an order (or contact) page, open the popup's TRACKING section — or the shelf — and click Watch.",
-          "expected": "A small add form appears with the order pre-linked.",
-          "visualCue": "TRACKING section in the popup."
+          "action": "On an order (or contact) page, click the extension icon and choose Watch Order or Watch Contact.",
+          "expected": "A small add form appears with the current record pre-linked.",
+          "visualCue": "Watch button beside Watch List in the popup."
         },
         {
           "action": "Give it a title, priority, and optional due date, then add.",
@@ -7006,6 +7406,156 @@ export const HELP_CONTENT = {
         "query-builder",
         "crm-search",
         "run-campaign"
+      ]
+    },
+    {
+      "id": "handle-customer-reply",
+      "title": "Handle a customer reply",
+      "tier": "beginner",
+      "estMinutes": 3,
+      "prerequisites": [
+        "Admin build",
+        "Notifications and Email Relay reply notifications are enabled",
+        "A new relay reply is available"
+      ],
+      "steps": [
+        {
+          "action": "Open the extension popup and choose Notifications.",
+          "expected": "The Open tab lists unresolved customer replies; its count matches the toolbar badge.",
+          "visualCue": "Notifications button below CRM Search in the admin popup."
+        },
+        {
+          "action": "Search by name, email, or subject if needed, then open the reply row.",
+          "expected": "The relayed message opens in the Email Viewer.",
+          "visualCue": "Hover actions also expose View email and View account."
+        },
+        {
+          "action": "Open the linked account when available and prepare the reply.",
+          "expected": "The CRM contact opens in a new tab. A missing match only disables this shortcut.",
+          "visualCue": "Person icon on row hover."
+        },
+        {
+          "action": "Send the reply through Power Automate, or return to Notifications and mark the row done manually.",
+          "expected": "Power Automate auto-completes open notifications for that recipient; manual Done produces the same closed state.",
+          "visualCue": "The row moves from Open to Done and the badge decrements."
+        }
+      ],
+      "related": [
+        "reply-notifications",
+        "email-thread-preview",
+        "how-email-sending-works"
+      ]
+    },
+    {
+      "id": "apply-order-note",
+      "title": "Apply an order note",
+      "tier": "beginner",
+      "estMinutes": 2,
+      "prerequisites": [
+        "On an order page",
+        "At least one note template exists, or you have text for a custom note"
+      ],
+      "steps": [
+        {
+          "action": "Open the Actions Shelf and choose Apply order note.",
+          "expected": "Quick Order Note opens with the template filter focused.",
+          "visualCue": "Contextual order action near Manage order dates."
+        },
+        {
+          "action": "Pick a saved note, or enter composer mode and fill Audience, Subject, and Body.",
+          "expected": "The preview contains exactly what will be posted.",
+          "visualCue": "Audience must match an option from the order page."
+        },
+        {
+          "action": "Review any Push dates forward value, then choose Apply.",
+          "expected": "The note posts through the order-notes iframe; configured date movement runs through the date-push chain.",
+          "visualCue": "Progress/success toast.",
+          "warning": "A failing date-push step is reported by name; do not assume the date moved until success appears."
+        },
+        {
+          "action": "For an unchanged repeat, use Apply last note the next time the shelf opens.",
+          "expected": "The most recently applied saved template posts without reopening the picker.",
+          "visualCue": "Apply last note only appears after a saved-template application."
+        }
+      ],
+      "related": [
+        "quick-order-note",
+        "note-templates",
+        "order-date-manager"
+      ]
+    },
+    {
+      "id": "use-custom-crm-workspace",
+      "title": "Use a custom CRM workspace",
+      "tier": "intermediate",
+      "estMinutes": 4,
+      "prerequisites": [
+        "The relevant Contact, Account, or Opportunity takeover is enabled under Settings → Custom Pages → CRM"
+      ],
+      "steps": [
+        {
+          "action": "Open a Contact Details, Account Details, or Opportunity Details record.",
+          "expected": "The registered extension workspace replaces the stock detail page for that page only.",
+          "visualCue": "Metric cards and focused data sections replace the legacy CRM layout."
+        },
+        {
+          "action": "Review the record sections and open the related task, activity, email, order, proof, contact, or proposal you need.",
+          "expected": "Links and actions retain the current record context.",
+          "visualCue": "Each workspace exposes a different set of sections appropriate to its record type."
+        },
+        {
+          "action": "On Contact Details, use the standalone composer for a normal template email; on Opportunity Details, use proposal selection/breakdown for quote work.",
+          "expected": "The operational email or proposal flow opens with the record context supplied.",
+          "visualCue": "Do not use the Contact composer's saved-proposal slash command; it is marked Not implemented yet."
+        },
+        {
+          "action": "If you need the stock page, turn off only that takeover in Settings.",
+          "expected": "The stock CRM page returns without deleting CRM records or extension-local data.",
+          "visualCue": "Custom Pages → CRM list."
+        }
+      ],
+      "related": [
+        "custom-crm-pages",
+        "crm-search",
+        "build-email-proposal"
+      ]
+    },
+    {
+      "id": "scan-recent-orders",
+      "title": "Scan My Clients for recent orders",
+      "tier": "intermediate",
+      "estMinutes": 4,
+      "prerequisites": [
+        "crmSearchEnabled is on",
+        "A saved Query Builder query named exactly My Clients"
+      ],
+      "steps": [
+        {
+          "action": "Open CRM Search with Ctrl/Cmd+K, then expand the Actions Shelf.",
+          "expected": "CRM Search's modal-specific actions join the shelf.",
+          "visualCue": "Run last query and Scan for recent orders."
+        },
+        {
+          "action": "Choose Scan for recent orders.",
+          "expected": "The saved My Clients audience is searched for orders since the prior scan; the first run covers seven days.",
+          "visualCue": "Progress and result count appear in CRM Search.",
+          "commonMistake": "A differently named query is not used. Save it as exactly My Clients."
+        },
+        {
+          "action": "Inspect the results before selecting, exporting, emailing, or starting a campaign.",
+          "expected": "Only the records you intentionally select move into a bulk action.",
+          "visualCue": "Selection summary appears after checking rows."
+        },
+        {
+          "action": "Run the scan again on a later day.",
+          "expected": "It continues from the successful local watermark instead of repeating the original seven-day window.",
+          "visualCue": "Advanced recovery: __gbScan.status() inspects the clock; __gbScan.reset() clears it."
+        }
+      ],
+      "related": [
+        "recent-orders-scan",
+        "crm-search",
+        "query-builder"
       ]
     }
   ],
@@ -7162,6 +7712,23 @@ export const HELP_CONTENT = {
       "description": "Instant local typeahead over your indexed contacts, Enter for a full server search, rich result columns, and bulk selection for campaigns.",
       "article": "crm-search",
       "shortcut": "Ctrl+K",
+      "flag": "crmSearchEnabled"
+    },
+    {
+      "id": "article:recent-orders-scan",
+      "category": "Articles",
+      "title": "Scan for Recent Orders",
+      "keywords": [
+        "recent orders",
+        "my clients",
+        "scan",
+        "last query",
+        "watermark",
+        "morning routine"
+      ],
+      "description": "CRM Search's contextual shelf routines: rerun the last query or scan a saved My Clients audience for orders created since the prior scan.",
+      "article": "recent-orders-scan",
+      "shortcut": null,
       "flag": "crmSearchEnabled"
     },
     {
@@ -7794,6 +8361,25 @@ export const HELP_CONTENT = {
       "flag": "giftCatalogEnabled"
     },
     {
+      "id": "article:proposal-checkout-preview",
+      "category": "Articles",
+      "title": "Proposal Checkout Preview",
+      "keywords": [
+        "checkout",
+        "place order",
+        "shipping",
+        "billing",
+        "payment",
+        "mock",
+        "preview",
+        "address autocomplete"
+      ],
+      "description": "A feature-rich checkout UI embedded in the proposal flow, currently provided for preview and validation only—it does not submit a real order.",
+      "article": "proposal-checkout-preview",
+      "shortcut": null,
+      "flag": "giftCatalogEnabled"
+    },
+    {
       "id": "article:gifting-glossary",
       "category": "Articles",
       "title": "Gifting Glossary",
@@ -7811,6 +8397,24 @@ export const HELP_CONTENT = {
       "article": "gifting-glossary",
       "shortcut": null,
       "flag": null
+    },
+    {
+      "id": "article:reply-notifications",
+      "category": "Articles",
+      "title": "Customer Reply Notifications",
+      "keywords": [
+        "notifications",
+        "email relay",
+        "customer reply",
+        "badge",
+        "inbound email",
+        "done",
+        "reopen"
+      ],
+      "description": "Admin-build inbox for inbound customer replies: near-real-time relay polling, toolbar badge, local thread list, CRM links, and automatic completion after a reply.",
+      "article": "reply-notifications",
+      "shortcut": null,
+      "flag": "notificationsEnabled"
     },
     {
       "id": "article:margin-calculator",
@@ -7877,6 +8481,23 @@ export const HELP_CONTENT = {
       "article": "order-date-manager",
       "shortcut": null,
       "flag": "calendarEnabled"
+    },
+    {
+      "id": "article:quick-order-note",
+      "category": "Articles",
+      "title": "Quick Order Note",
+      "keywords": [
+        "quick note",
+        "order note",
+        "apply last note",
+        "audience",
+        "push dates",
+        "note template"
+      ],
+      "description": "Apply a saved order-note template or compose a custom note from the Actions Shelf, with audience selection and optional date pushing.",
+      "article": "quick-order-note",
+      "shortcut": null,
+      "flag": "autoPushEnabled"
     },
     {
       "id": "article:watch-list",
@@ -8008,7 +8629,7 @@ export const HELP_CONTENT = {
         "zoom",
         "appearance"
       ],
-      "description": "Four theme variants, eight customizable accent colors, and independent zoom for every UI surface.",
+      "description": "Eight theme variants, eight customizable accent colors, and independent zoom for every UI surface.",
       "article": "theme-appearance",
       "shortcut": null,
       "flag": null
@@ -8053,10 +8674,13 @@ export const HELP_CONTENT = {
       "keywords": [
         "custom page",
         "override",
-        "dashboard",
-        "replace page"
+        "contact details",
+        "account details",
+        "opportunity details",
+        "replace page",
+        "workspace"
       ],
-      "description": "Replace selected CRM pages (dashboard, search, task list, …) with the extension's own UI.",
+      "description": "Replace Contact Details, Account Details, and Opportunity Details with focused extension workspaces backed by live CRM data.",
       "article": "custom-crm-pages",
       "shortcut": null,
       "flag": null
@@ -8361,6 +8985,46 @@ export const HELP_CONTENT = {
       "tutorial": "query-builder-tutorial"
     },
     {
+      "id": "tutorial:handle-customer-reply",
+      "category": "Tutorials",
+      "title": "Handle a customer reply",
+      "keywords": [
+        "beginner"
+      ],
+      "description": "4 steps · ~3 min",
+      "tutorial": "handle-customer-reply"
+    },
+    {
+      "id": "tutorial:apply-order-note",
+      "category": "Tutorials",
+      "title": "Apply an order note",
+      "keywords": [
+        "beginner"
+      ],
+      "description": "4 steps · ~2 min",
+      "tutorial": "apply-order-note"
+    },
+    {
+      "id": "tutorial:use-custom-crm-workspace",
+      "category": "Tutorials",
+      "title": "Use a custom CRM workspace",
+      "keywords": [
+        "intermediate"
+      ],
+      "description": "4 steps · ~4 min",
+      "tutorial": "use-custom-crm-workspace"
+    },
+    {
+      "id": "tutorial:scan-recent-orders",
+      "category": "Tutorials",
+      "title": "Scan My Clients for recent orders",
+      "keywords": [
+        "intermediate"
+      ],
+      "description": "4 steps · ~4 min",
+      "tutorial": "scan-recent-orders"
+    },
+    {
       "id": "flag:emailTemplatesEnabled",
       "category": "Settings",
       "title": "Email Templates",
@@ -8443,6 +9107,18 @@ export const HELP_CONTENT = {
       "description": "Multi-step campaign automation (from CRM Search / Tasks).",
       "article": "feature-toggles",
       "flag": "campaignManagerEnabled"
+    },
+    {
+      "id": "flag:notificationsEnabled",
+      "category": "Settings",
+      "title": "Notifications",
+      "keywords": [
+        "notificationsEnabled",
+        "Email & Templates"
+      ],
+      "description": "Track relayed customer email replies, with an icon badge and a notifications modal.",
+      "article": "feature-toggles",
+      "flag": "notificationsEnabled"
     },
     {
       "id": "flag:crmSearchEnabled",
@@ -8674,6 +9350,16 @@ export const HELP_CONTENT = {
         "proposalDebug.enabled"
       ],
       "description": "Records every proposal- and email-submit network request (full request + response bodies, timing) and shows them in a draggable panel on golfballs.com pages, each with a Copy button. Use it to compare our requests vs the website. Off = no interception.",
+      "article": "developer-settings"
+    },
+    {
+      "id": "devSetting:emailRelay.notifications",
+      "category": "Settings",
+      "title": "Email Relay: customer reply notifications",
+      "keywords": [
+        "emailRelay.notifications"
+      ],
+      "description": "Poll the RevStack email relay for new inbound customer emails and raise a toast when a customer replies. Requires the relay endpoints to be live on the backend. Off = no polling, no notifications.",
       "article": "developer-settings"
     },
     {

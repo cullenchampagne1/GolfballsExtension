@@ -945,6 +945,14 @@ export function ProposalsPage() {
         it. Saved drafts also expose <strong>Copy command</strong> and <strong>Save to account</strong> from the breakdown.
       </p>
 
+      <div className="docnote warn" style={{ marginTop: 24 }}>
+        <span className="dn-ico"><I.alert size={15} /></span>
+        <div className="dn-b">
+          <div className="dn-t">Proposal Checkout is a preview, not an order submission</div>
+          <p style={{ margin: 0 }}>The embedded checkout validates shipping, billing, payment fields, multi-destination allocation, and address suggestions, but <strong>Place Order currently generates a mock confirmation number in the browser</strong>. It does not post an order, charge a card, reserve inventory, or write a CRM order. Use the saved-cart and proposal-email flows for operational customer work. See the <a href="#manual/proposal-checkout-preview">checkout preview reference</a>.</p>
+        </div>
+      </div>
+
       <div className="docnote brand" style={{ marginTop: 24 }}>
         <span className="dn-ico"><I.send size={15} /></span>
         <div className="dn-b">

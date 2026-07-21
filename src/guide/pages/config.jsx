@@ -19,7 +19,7 @@ import { SCALE_CATEGORIES } from '../../lib/scales.js';
    THEMES PAGE
 ═══════════════════════════════════════════════════════════════════ */
 
-/* The four shell variants — clicking one previews it (local only). */
+/* The registered shell variants — clicking one previews it (local only). */
 function VariantSnippet() {
   const [v, setV] = useState('dark');
   return (
@@ -146,7 +146,7 @@ export function ThemesPage() {
       </p>
 
       <TourBox n={1} eyebrow="Base look" title="Theme variant" live={<VariantSnippet />} flip>
-        <p>This is the master look-and-feel switch. Pick one of four shells: <strong>Dark</strong> (the default), <strong>Slate</strong> (deeper, bluer blacks), <strong>Light</strong>, or <strong>Cream</strong> (a warm, paper-like off-white). Each card is a tiny preview of that look — click one and the whole extension restyles at once: the popup, every modal, the floating shelf, the templates editor, and this guide. No reload, no waiting.</p>
+        <p>This is the master look-and-feel switch. Pick one of eight shells: <strong>Dark</strong> (the default), <strong>Slate</strong>, <strong>Light</strong>, <strong>Cream</strong>, <strong>Nord</strong>, <strong>Dracula</strong>, <strong>Rosé</strong>, or <strong>Tokyo Night</strong>. Each card previews its own surfaces and signature accent — click one and the whole extension restyles at once: the popup, every modal, the floating shelf, the templates editor, and this guide. No reload, no waiting.</p>
         <p>Choosing a variant only sets the backgrounds, text, and borders — it doesn't lock your accent. The <strong>Theme Colors</strong> and <strong>UI Scale</strong> controls below layer on top of whichever variant you pick, so you can run, say, Light with your own brand accent at a slightly larger size. Click a card here — the preview is live.</p>
       </TourBox>
 

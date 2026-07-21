@@ -44,9 +44,9 @@ export function StartPage() {
             <strong> order-notes toolbar</strong> (one-click notes and the order-date calendar).
           </p>
           <p style={{ margin: 0 }}>
-            Every screen in this guide is the <strong>real interface running live</strong> on sample data —
-            watch a guided walkthrough, hover numbered hotspots, or click around yourself. Nothing
-            you do here touches a real order.
+            Interactive examples reuse production components where practical and otherwise provide a
+            faithful sample-data reproduction. Use the new workflows for an end-to-end checklist and
+            the full reference when you need to look up one control. Nothing you do here touches a real order.
           </p>
         </div>
       </div>
@@ -71,9 +71,9 @@ export function StartPage() {
       </div>
 
       <h2 className="sec">First five minutes</h2>
-      <p>Worth doing on day one, all in <a href="#settings">Settings</a> (popup → Manage gear):</p>
+      <p>Worth doing on day one, all in <a href="#settings">Settings</a> (popup → Manage in the header → Settings):</p>
       <ul>
-        <li><strong>Pick a theme</strong> — Dark, Slate, Light, or Cream. Applies live everywhere (including this guide — try the switcher top-right).</li>
+        <li><strong>Pick a theme</strong> — Dark, Slate, Light, Cream, Nord, Dracula, Rosé, or Tokyo Night. Applies live everywhere (including this guide — try the switcher top-right).</li>
         <li><strong>Set your email identity</strong> — the "Email account host" field controls your From address. It starts blank and Power Automate sends are blocked until you configure it.</li>
         <li><strong>Write your signature</strong> — auto-appended to emails sent through Power Automate.</li>
         <li><strong>Review the feature toggles</strong> — everything is on by default except Power Automate. Off means the buttons, shortcuts, and shelf actions disappear entirely.</li>
@@ -87,6 +87,8 @@ export function StartPage() {
         <FeatureCard icon={<I.cog size={17} />} title="Settings & Manager" desc="Every toggle explained: features, theme, shortcuts, UI scale, shared templates, integrations." go="#settings" />
         <FeatureCard icon={<I.edit size={17} />} title="Email Templates" desc="Templates with variables that fill from the live page — schema, code, regex sources, and A/B variations." go="#templates" />
         <FeatureCard icon={<GIcon.gift size={17} />} title="Gift Catalog" desc="Browse the full product range, customize with logos and monograms, and build tracked proposals." go="#catalog" />
+        <FeatureCard icon={<I.play size={17} />} title="Guided Workflows" desc="End-to-end checklists that double as refreshers; optional progress stays in this browser." go="#workflows" />
+        <FeatureCard icon={<I.bookmark size={17} />} title="Full Reference" desc="Every authored article, setting, shortcut, and troubleshooting note with exact deep links." go="#manual" />
       </div>
 
       <h2 className="sec">The full toolkit</h2>

@@ -204,8 +204,7 @@ export function ChargePage() {
         Two payment tools that ride on top of an order page. <strong>Charge</strong> runs a real
         credit-card charge or refund against the order without leaving it; <strong>Order Edit</strong> opens
         the CRM’s order editor in a framed window with a live financial summary beside it. Both open from the
-        popup’s <strong>Actions</strong> section or the Actions Shelf. The pieces below are live snippets of
-        the real controls.
+        popup’s action stack while you are on the order. The pieces below are live snippets of the real controls.
       </p>
 
       <div className="docnote warn">
@@ -405,8 +404,8 @@ export function ProofPage() {
       <div className="eyebrow">Daily Driver</div>
       <h1 className="title">Submit Proof</h1>
       <p className="lede">
-        The full proof-request form, sent straight to the art team. Open it from the popup, the Actions Shelf
-        on an order page, or the <a href="#image-viewer">Image Viewer</a> (the image rides along). Order # and
+        The full proof-request form, sent straight to the art team. Open it from the popup on an order page or
+        the <a href="#image-viewer">Image Viewer</a> (the image rides along). Order # and
         Customer ID pre-fill from the page; the right column shows the customer’s previous proofs so you can
         catch a duplicate before submitting. Build it up below, piece by piece.
       </p>
@@ -525,7 +524,7 @@ export function MarginPage() {
       <div className="eyebrow">On-page Helpers</div>
       <h1 className="title">Margin Calculator</h1>
       <p className="lede">
-        Press <span className="kbd">Ctrl+M</span> on any order page (or use the Actions Shelf) for instant
+        Press <span className="kbd">Ctrl+M</span> (or your configured Margin shortcut) on any order page for instant
         cost / price / margin / markup / profit math. <strong>Enter any two values and the rest compute as you
         type.</strong> It can pull real per-unit costs from inventory and flags anything below your minimum
         margin. The real calculator is reproduced below — type in the live fields.

@@ -3,7 +3,7 @@ import { I } from '../../ui/index.js';
 import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
 import {
   VariantCard, ShortcutRow, ExpandablePA, DevRow, FeaturesLive,
-  FEATURE_FLAGS, FEATURE_DEFAULTS, THEME_VARIANTS, SHORTCUT_ROWS, DEV_ROWS,
+  FEATURE_FLAGS, FEATURE_DEFAULTS, THEME_VARIANTS, SHORTCUT_ROWS, DEV_ROWS, DEV_SETTINGS,
 } from '../lib/settings-live.jsx';
 
 /* ───────────────────────────────────────────────────────────────
@@ -103,7 +103,7 @@ export function SettingsPage() {
       </p>
 
       <TourBox n={1} eyebrow="Appearance" title="Theme variant" live={<VariantSnippet />} flip>
-        <p>Pick a base look — <strong>Dark</strong> (default), <strong>Slate</strong> (deeper, bluer blacks), <strong>Light</strong>, or <strong>Cream</strong> (warm paper). It restyles the whole extension at once: popup, every modal, the shelf, the editor — and this guide.</p>
+        <p>Pick a base look — <strong>Dark</strong> (default), <strong>Slate</strong>, <strong>Light</strong>, <strong>Cream</strong>, <strong>Nord</strong>, <strong>Dracula</strong>, <strong>Rosé</strong>, or <strong>Tokyo Night</strong>. It restyles the whole extension at once: popup, every modal, the shelf, the editor — and this guide.</p>
         <p>Below the variants in the real panel sit <strong>Theme Colors</strong> — eight pickers that override the brand accent and the four status colors — and <strong>UI Scale</strong>, a 50–150% zoom slider per surface (modals, popovers, notifications, shelf, popup, editor) so the extension can run larger or smaller than the host site. Click a card — it's live.</p>
       </TourBox>
 
@@ -123,7 +123,7 @@ export function SettingsPage() {
       </TourBox>
 
       <TourBox n={5} eyebrow="Power-user" title="Developer settings" live={<DevSnippet />} flip>
-        <p>The long tail: <strong>119 registry-driven knobs</strong> — animation timing, draggable vs. centered per modal, the minimum-margin threshold, the catalog re-index interval, 3D viewer tuning. Most reps never open this section; the ones shown here are real rows from the registry.</p>
+        <p>The long tail: <strong>{DEV_SETTINGS.length} registry-driven knobs in this build</strong> — animation timing, draggable vs. centered per modal, the minimum-margin threshold, the catalog re-index interval, 3D viewer tuning. Most reps never open this section; the ones shown here are real rows from the registry.</p>
         <p>One matters on day one: <strong>Email account host</strong> is the local part of your From address. It starts blank and must be configured before Power Automate can send.</p>
       </TourBox>
 

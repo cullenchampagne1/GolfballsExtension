@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Golfballs.com Sales Toolkit — Chrome extension layering email/proposal, CRM workflow, and order tools onto the golfballs.com admin CRM. See README.md.",
   "scripts": {
+    "prebuild": "npm run help-content",
     "build": "node --max-old-space-size=8192 build.js",
     "watch": "node --max-old-space-size=8192 build.js --watch",
     "audit": "node scripts/audit-source.mjs",
@@ -12,6 +13,7 @@
     "help-content": "node scripts/build-help-content.mjs",
     "remote-config": "node scripts/build-remote-settings-config.mjs",
     "pack:store": "GB_ADMIN=0 node --max-old-space-size=4096 scripts/package-store.mjs",
+    "pretest": "npm run help-content",
     "test": "npm run test:security && npm run test:auth-broker && npm run test:crm-index && npm run test:installation && npm run test:remote-policy && npm run test:contact-import && npm run test:employee-identity && npm run test:sharing-fallback && npm run test:remote-integrity && npm run test:backend-integration && npm run test:unit && npm run test:integration",
     "test:security": "node scripts/test-security.mjs",
     "test:auth-broker": "node scripts/test-auth-session-broker.mjs",
@@ -62,6 +64,7 @@
     { "name": "ui · display scales clamp & persist", "file": "tests/unit/scales.test.mjs" },
     { "name": "ui · ASP date offsets & calendar cells", "file": "tests/unit/dateUtils.test.mjs" },
     { "name": "ui · admin page-context routing", "file": "tests/unit/pageContext.test.mjs" },
+    { "name": "guard · operator-guide content coverage", "file": "tests/unit/helpContent.test.mjs" },
     { "name": "flow · ASP.NET calendar form-state reconstruction", "file": "tests/unit/calendarFormState.test.mjs" },
     { "name": "flow · install enrollment lifecycle", "file": "tests/integration/enrollment-lifecycle.test.mjs" },
     { "name": "flow · api fetch guard & bearer auth", "file": "tests/integration/api-guard-flow.test.mjs" },

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { I, Btn, Tag, Switch, Dot } from '../../ui/index.js';
 import { TourBox, MiniFrame } from '../lib/tourbox.jsx';
+import { DEV_SETTINGS } from '../lib/settings-live.jsx';
 
 /* ───────────────────────────────────────────────────────────────
    reference.jsx — the four "look it up" pages: Troubleshooting,
@@ -377,7 +378,7 @@ function CodeEditorSnippet() {
 
 const PU_FLAG_ROWS = [
   ['Feature flags', 'featureFlags', 'On/off for every tool — the Features list in Settings. Off = the tool vanishes everywhere.'],
-  ['Developer Settings', 'devSettings', '119 low-level knobs: animation timing, per-modal draggable mode, margin threshold, catalog re-index interval, 3D viewer tuning.'],
+  ['Developer Settings', 'devSettings', `${DEV_SETTINGS.length} low-level knobs in this build: animation timing, per-modal draggable mode, margin threshold, catalog re-index interval, 3D viewer tuning.`],
   ['Remote policy', 'gbRemoteSettingsPolicy', 'Last validated revision, visibility maps, and administrator-bypass state. Policy does not travel in presets.'],
 ];
 
@@ -495,12 +496,23 @@ export function PowerUserPage() {
 
 const RELEASES = [
   {
-    version: '3.3.7',
+    version: '3.3 (July)',
     tag: 'Latest',
+    date: 'Jul 21',
+    summary: 'Complete searchable reference coverage, guided workflows, reply notifications, and clearer preview boundaries.',
+    highlights: [
+      { icon: 'bookmark', text: 'Full Reference now exposes every authored help article at an exact deep link; guide search also includes tutorials and settings.', link: ['#manual', 'Full Reference'] },
+      { icon: 'play', text: 'Guided Workflows turns the existing tutorials into optional-progress checklists that remain useful as refresher sheets.', link: ['#workflows', 'Guided Workflows'] },
+      { icon: 'alert', text: 'Customer Reply Notifications now has setup, lifecycle, storage, and troubleshooting documentation.', link: ['#notifications', 'Notifications'] },
+      { icon: 'card', text: 'Proposal Checkout is now explicitly labeled as a non-operational preview until a real order backend is implemented.', link: ['#manual/proposal-checkout-preview', 'Checkout preview'] },
+    ],
+  },
+  {
+    version: '3.3.7',
     date: 'Jun 13–15',
     summary: 'The Operator’s Guide goes live, plus template-variation naming and proposal polish.',
     highlights: [
-      { icon: 'bolt', text: 'Operator’s Guide: a full in-app manual — every feature has its own page with the real interface running live on sample data, in Tour, Play, or Try-it modes. Open it from the help icon beside the gear.', link: ['#start', 'Getting Started'] },
+      { icon: 'bolt', text: 'Operator’s Guide: hand-built feature walkthroughs joined the extension, with interactive sample-data screens and a searchable manual.', link: ['#start', 'Getting Started'] },
       { icon: 'edit', text: 'Template editor: the initial email becomes a named “Variation 1” block; rename variations inline and the custom names are honored in the picker, runner, and campaigns.', link: ['#templates', 'Email Templates'] },
       { icon: 'mail', text: 'The Classic proposal email now matches the website-generated layout exactly.' },
       { icon: 'card', text: 'Proposal reliability: free-quantity promo lines no longer drop from saved proposals, and carts no longer come back empty under concurrent load.' },
@@ -644,7 +656,7 @@ export function WhatsNewPage() {
         <span className="dn-ico"><I.megaphone size={15} /></span>
         <div className="dn-b">
           <div className="dn-t">New here? Start with the live guide</div>
-          <p style={{ margin: 0 }}>Every feature now has a walkthrough page with the real interface running on sample data — open the Operator’s Guide from the help icon beside the gear, or jump straight to <a href="#start">Getting Started</a>.</p>
+          <p style={{ margin: 0 }}>Use the hand-built pages for visual walkthroughs, <a href="#workflows">Guided Workflows</a> for end-to-end tasks, and <a href="#manual">Full Reference</a> when you need one exact setting or control.</p>
         </div>
       </div>
     </div>

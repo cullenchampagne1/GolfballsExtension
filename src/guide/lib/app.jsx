@@ -35,6 +35,10 @@ const SWATCH = {
   midnight: { canvas: '#050507', s1: '#0d0f12', brand: '#a3e030' },
   light:    { canvas: '#f4f5f6', s1: '#ffffff', brand: '#4d6b14' },
   cream:    { canvas: '#f5efe2', s1: '#fffaf0', brand: '#5a7a14' },
+  nord:     { canvas: '#242933', s1: '#353b48', brand: '#88c0d0' },
+  dracula:  { canvas: '#21222c', s1: '#2d2f3d', brand: '#bd93f9' },
+  rose:     { canvas: '#16141f', s1: '#1f1d2e', brand: '#ebbcba' },
+  tokyo:    { canvas: '#16161e', s1: '#1f2335', brand: '#7aa2f7' },
 };
 
 function Swatch({ id, size = 18 }) {

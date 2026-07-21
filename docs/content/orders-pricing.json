@@ -14,7 +14,7 @@
       "covers": ["margin-calc", "inventory-costs"],
       "body": {
         "beginner": [
-          { "type": "p", "text": "Press Ctrl+M on an order page (or use the Actions Shelf). The fields: Item Cost and Selling Price on the first row, Gross Margin % and Markup % below, then Qty, Unit Profit, and the animated Total Profit readout. Enter any two values and the rest compute as you type; Clear all resets." },
+          { "type": "p", "text": "Press Ctrl+M on an order page. The fields: Item Cost and Selling Price on the first row, Gross Margin % and Markup % below, then Qty, Unit Profit, and the animated Total Profit readout. Enter any two values and the rest compute as you type; Clear all resets." },
           { "type": "callout", "kind": "warning", "title": "Minimum margin guardrail", "text": "If the margin falls below your minimum (default 30%), the calculator flags it in red. Adjust the threshold under Settings → Developer Settings → 'Minimum allowed margin'." }
         ],
         "intermediate": [
@@ -34,10 +34,10 @@
       "summary": "Run a credit-card charge or refund adjustment against an order without leaving the page.",
       "feature": "charge",
       "flag": "chargeEnabled",
-      "covers": ["charge-window", "charge-modal", "charge"],
+      "covers": ["charge-modal", "charge"],
       "body": {
         "intermediate": [
-          { "type": "p", "text": "From the popup's ACTIONS section or the Actions Shelf on an order page, Charge opens a modal pre-loaded with the order's charge rows and the difference between the page total and what's been captured." },
+          { "type": "p", "text": "From the popup on an order page, Charge opens a modal pre-loaded with the order's charge rows and the difference between the page total and what's been captured." },
           { "type": "p", "text": "Review the rows, confirm or adjust the amount, and Run Charge. A spinner shows progress and a toast reports the result. Refunds use the same flow with a negative adjustment." },
           { "type": "callout", "kind": "warning", "text": "Charges are real money movements. The amount field pre-fills with the computed difference — always verify it against the order before running." }
         ]
@@ -128,7 +128,7 @@
       "covers": ["watch-list"],
       "body": {
         "beginner": [
-          { "type": "p", "text": "Watch an order or contact from the popup's TRACKING section or the Actions Shelf — it lands on your Watch List with a link back to where it came from. Filter chips (All / Active / High priority / Completed) carry live counts, and the search box matches title, context, and due date." },
+          { "type": "p", "text": "Watch an order or contact from the popup's Watch button — it lands on your Watch List with a link back to where it came from. Filter chips (All / Active / High priority / Completed) carry live counts, and the search box matches title, context, and due date." },
           { "type": "heading", "text": "Reading a row" },
           { "type": "list", "items": [
             "A colored stripe on the left shows how long the item has been waiting: nothing (<1h), blue (1–4h), amber (4–6h), red (6h+). When anything goes red, the modal header tints red too and the subtitle counts the criticals.",

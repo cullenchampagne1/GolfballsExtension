@@ -90,7 +90,7 @@
       "covers": ["submit-proof"],
       "body": {
         "beginner": [
-          { "type": "p", "text": "Open it from the popup, the shelf on an order page, or the Image Viewer (the image rides along). Order # and Customer ID pre-fill from the page. The right column shows the customer's previous proofs — check it before submitting a duplicate." },
+          { "type": "p", "text": "Open it from the popup on an order page or from the Image Viewer (the image rides along). Order # and Customer ID pre-fill from the page. The right column shows the customer's previous proofs — check it before submitting a duplicate." },
           { "type": "heading", "text": "The form, top to bottom" },
           { "type": "table", "headers": ["Field", "Detail"], "rows": [
             ["Item(s) being proofed", "Multi-select chips — Ball, Apparel, Hats, Towels, Bags, Gloves, Poker Chip, Ball Marker, Divot Tools, Tees, Flags, the Gift Set variants, Other. Pick several; each gets its own proof block."],

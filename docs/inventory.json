@@ -1,6 +1,6 @@
 {
   "$schema": "inventory of the Golfballs.com Chrome extension — source of truth for all documentation generation",
-  "generatedAt": "2026-07-13",
+  "generatedAt": "2026-07-21",
   "extension": {
     "name": "Golfballs.com",
     "version": "3.3",
@@ -14,9 +14,9 @@
       "id": "popup",
       "name": "Extension Popup",
       "entryPoint": "popup.html (toolbar icon)",
-      "purpose": "Primary launcher: pick an email template for the current CRM page, see resolved variables stream in, and reach quick actions (Charge, Order Edit, Watch, Submit Proof, Quick Task, Task List, CRM Search, Call Log).",
-      "mainSections": ["Template dropdown", "ACTIONS (Charge / Order Edit)", "TRACKING (Watch / Watch List)", "TOOLS (Quick Task, Task List, CRM Search, Call Log, Submit Proof)", "RESOLVED variables list", "Send footer"],
-      "relatedFeatures": ["email-templates", "charge", "order-edit", "watch-list", "submit-proof"]
+      "purpose": "Primary launcher: pick an email template for the current CRM page, see resolved variables stream in, and reach Charge, Order Edit, Watch/Watch List, My Tasks, CRM Search, admin Notifications, and Submit Proof.",
+      "mainSections": ["Header with Manage", "Template picker", "Action stack (Charge / Order Edit / Watch + Watch List / My Tasks / CRM Search / admin Notifications / Submit Proof)", "Resolved variables", "Send footer"],
+      "relatedFeatures": ["email-templates", "charge", "order-edit", "watch-list", "reply-notifications", "submit-proof"]
     },
     {
       "id": "editor",
@@ -36,14 +36,6 @@
       "audience": "internal/advanced"
     },
     {
-      "id": "charge-window",
-      "name": "Charge Window",
-      "entryPoint": "charge.html (popup window via background 'openChargeWindow'; in-page variant via vanilla charge-modal.js)",
-      "purpose": "Run a credit-card charge or refund adjustment against an order.",
-      "mainSections": ["Charge rows list", "Amount input", "Run Charge / Close"],
-      "relatedFeatures": ["charge"]
-    },
-    {
       "id": "sandbox",
       "name": "Code Sandbox (hidden)",
       "entryPoint": "sandbox.html (invisible iframe; MV3 sandboxed page)",
@@ -55,13 +47,13 @@
   ],
 
   "modals": [
-    { "id": "quick-task", "component": "QuickTask", "file": "src/modals/QuickTask.jsx", "displayName": "Quick Task", "purpose": "Keyboard-first CRM task creator with templates, category, priority and relative due dates.", "openedBy": ["actions shelf 'Add Task'", "popup Tools", "window.__gbShowQuickTaskModal()"], "pageContext": ["contact", "account", "order"], "flag": "quickTaskEnabled", "submits": "CRM Task/Create.ajax" },
+    { "id": "quick-task", "component": "QuickTask", "file": "src/modals/QuickTask.jsx", "displayName": "Quick Task", "purpose": "Keyboard-first CRM task creator with templates, category, priority and relative due dates.", "openedBy": ["Actions Shelf 'Quick task for <name>'", "custom CRM workspace task actions", "window.__gbShowQuickTaskModal()"], "pageContext": ["contact", "account", "order"], "flag": "quickTaskEnabled", "submits": "CRM Task/Create.ajax" },
     { "id": "task-list", "component": "TaskList", "file": "src/modals/TaskList.jsx", "displayName": "My Tasks", "purpose": "Searchable, filterable view of the rep's CRM task list with bulk select, open-tabs, and campaign launch.", "openedBy": ["Ctrl+X (configurable)", "actions shelf", "popup Tools"], "pageContext": ["contact", "account", "any"], "flag": "taskListEnabled", "subModals": ["EmailRunner"], "dataSource": "scrapes CRM Page=349 task table" },
     { "id": "crm-search", "component": "CRMSearch", "file": "src/modals/CRMSearch.jsx", "displayName": "CRM Search", "purpose": "Instant search of contacts/accounts/orders via CRM Solr; filter chips, saved queries, bulk selection for campaigns.", "openedBy": ["Ctrl+K (configurable)", "actions shelf", "popup Tools"], "pageContext": ["any"], "flag": "crmSearchEnabled", "subModals": ["QueryBuilder"], "dataSource": "POST SolrIndexCrm.asmx/Query + worker-owned encrypted IndexedDB gb-crm-index-secure" },
     { "id": "query-builder", "component": "QueryBuilder", "file": "src/modals/QueryBuilder.jsx", "displayName": "Query Builder", "purpose": "Advanced grouped AND/OR condition builder that compiles to Solr syntax; save/load named queries.", "openedBy": ["filter button inside CRM Search"], "pageContext": ["inside CRMSearch"], "flag": "crmSearchEnabled", "audience": "advanced" },
-    { "id": "call-log", "component": "CallLog", "file": "src/modals/CallLog.jsx", "displayName": "Call Log", "purpose": "Keyboard-first call logger: template filter bar, '/' composer (category, direction, voicemail, subject, note), live preview, submit to CRM activity log.", "openedBy": ["actions shelf 'Log Call'", "popup Tools", "window.__gbShowCallLogModal()"], "pageContext": ["contact", "account"], "flag": "callLogEnabled", "submits": "CRM activity-log endpoint (Page=272 form)" },
-    { "id": "watch-list", "component": "WatchList", "file": "src/modals/WatchList.jsx", "displayName": "My Watch List", "purpose": "Personal cross-session to-do/watch list with priorities, due dates, completion, and links back to the order/contact each item came from.", "openedBy": ["popup Tracking section", "actions shelf 'Watch'"], "pageContext": ["any"], "flag": "watchListEnabled", "storage": "watchList (chrome.storage.local)", "notes": "Completed items auto-delete after watchList.autoDeleteCompletedDays (default 5)." },
-    { "id": "margin-calc", "component": "MarginCalc", "file": "src/modals/MarginCalc.jsx", "displayName": "Margin Calculator", "purpose": "Cost/price/margin/markup/profit calculator with animated totals and a minimum-margin warning.", "openedBy": ["Ctrl+M (configurable)", "actions shelf"], "pageContext": ["order"], "flag": "marginCalcEnabled", "relatedSettings": ["marginCalc.minAllowedMargin", "marginCalc.draggable"] },
+    { "id": "call-log", "component": "CallLog", "file": "src/modals/CallLog.jsx", "displayName": "Call Log", "purpose": "Keyboard-first call logger: template filter bar, '/' composer (category, direction, voicemail, subject, note), live preview, submit to CRM activity log.", "openedBy": ["Actions Shelf 'Call <name>' / 'Log incoming call'", "custom Opportunity workspace", "window.__gbShowCallLogModal()"], "pageContext": ["contact", "account"], "flag": "callLogEnabled", "submits": "CRM activity-log endpoint (Page=272 form)" },
+    { "id": "watch-list", "component": "WatchList", "file": "src/modals/WatchList.jsx", "displayName": "My Watch List", "purpose": "Personal cross-session to-do/watch list with priorities, due dates, completion, and links back to the order/contact each item came from.", "openedBy": ["popup Watch List button"], "pageContext": ["any"], "flag": "watchListEnabled", "storage": "watchList (chrome.storage.local)", "notes": "Completed items auto-delete after watchList.autoDeleteCompletedDays (default 5)." },
+    { "id": "margin-calc", "component": "MarginCalc", "file": "src/modals/MarginCalc.jsx", "displayName": "Margin Calculator", "purpose": "Cost/price/margin/markup/profit calculator with animated totals and a minimum-margin warning.", "openedBy": ["Ctrl+M (configurable)", "window.__gbShowMarginCalcModal()"], "pageContext": ["order"], "flag": "marginCalcEnabled", "relatedSettings": ["marginCalc.minAllowedMargin", "marginCalc.draggable"] },
     { "id": "email-preview", "component": "EmailPreview", "file": "src/modals/EmailPreview.jsx", "displayName": "Email Preview", "purpose": "Hover/click preview of full email threads from Case Email History, with auto case-categorization chips and a recommended reply template.", "openedBy": ["injected preview button on email rows"], "pageContext": ["contact (email history)"], "flag": "emailPreviewEnabled", "libs": ["emailParse", "caseMatch"] },
     { "id": "text-preview", "component": "TextPreview", "file": "src/modals/TextPreview.jsx", "displayName": "Text Preview", "purpose": "Preview of case notes / SMS / chat transcripts with recommended reply template.", "openedBy": ["injected preview button on text/note rows"], "pageContext": ["contact"], "flag": "textPreviewEnabled" },
     { "id": "image-preview", "component": "ImagePreview", "file": "src/modals/ImagePreview.jsx", "displayName": "Image Viewer", "purpose": "Zoom/pan viewer for customer logo art with multi-source resolution (render overlay, express upload, CDN), color extraction, download, Submit Proof and 3D ball preview.", "openedBy": ["hover-expand button injected on order images", "window.__gbOpenImagePreview()"], "pageContext": ["order"], "flag": "imagePreviewEnabled", "subModals": ["GrassMockupComposer", "GolfballViewer", "SubmitProof"], "libs": ["logoArming"] },
@@ -71,11 +63,14 @@
     { "id": "gift-customize", "component": "giftCustomize", "file": "src/modals/giftCustomize.jsx", "displayName": "Customize Item", "purpose": "Per-product option selection: imprint type (logo/text/monogram), colors, dual-pole second imprint, gift-set packaging upsell with live 3D preview, quantity/price ladder.", "openedBy": ["'Customize' on a Gift Catalog card"], "pageContext": ["inside GiftCatalog"], "flag": "giftCatalogEnabled", "libs": ["giftImprints", "giftSets", "giftSetLayout"] },
     { "id": "proposal-email", "component": "ProposalEmail", "file": "src/modals/ProposalEmail.jsx", "displayName": "Proposal Email", "purpose": "Compose and send an HTML proposal email with line items, pricing, discounts/free promo lines, 3D render snapshots, and cart link; tracks the proposal server-side (CreateProposalEmail + TrackProposal + Opportunity update).", "openedBy": ["'Email Proposal' inside Gift Catalog"], "pageContext": ["inside GiftCatalog"], "flag": "giftCatalogEnabled", "libs": ["saveProposal", "proposalSnapshots", "cartSerializer", "emailSender"] },
     { "id": "email-runner", "component": "EmailRunner", "file": "src/modals/EmailRunner.jsx", "displayName": "Campaign Runner", "purpose": "Bulk-email selected rows from Task List or CRM Search: pick a template, preview, then watch per-recipient progress with retry.", "openedBy": ["'Run Campaign' with rows selected in TaskList/CRMSearch"], "pageContext": ["inside TaskList/CRMSearch"], "flag": "campaignManagerEnabled", "backend": "local EmailRunner orchestration using validated fetchRaw and paAutomate worker calls" },
-    { "id": "campaign-manager", "component": "CampaignManager", "file": "src/modals/CampaignManager.jsx", "displayName": "Campaign Manager", "purpose": "Define multi-step outreach campaigns (email / task / call-log / code actions) with grouped AND/OR conditions, audience ordering, pacing + jitter, dry-run simulation, and pause/resume.", "openedBy": ["popup Tools", "actions shelf"], "pageContext": ["any"], "flag": "campaignManagerEnabled", "libs": ["campaign/*", "matchEngine"], "storage": "campaigns" },
+    { "id": "campaign-manager", "component": "CampaignManager", "file": "src/modals/CampaignManager.jsx", "displayName": "Campaign Manager", "purpose": "Define multi-step outreach campaigns (email / task / call-log / code actions) with grouped AND/OR conditions, audience ordering, pacing + jitter, dry-run simulation, and pause/resume.", "openedBy": ["Run Campaign from selected CRM Search rows", "Run Campaign from selected Task List rows", "window.__gbOpenCampaignManager()"], "pageContext": ["inside TaskList/CRMSearch"], "flag": "campaignManagerEnabled", "libs": ["campaign/*", "matchEngine"], "storage": "campaigns" },
     { "id": "calendar", "component": "CalendarModal", "file": "src/modals/CalendarModal.jsx", "displayName": "Order Date Manager", "purpose": "Pick approval + commitment dates on two mini calendars; saving runs a multi-step ASP.NET postback chain through the admin.icustomize.com iframe with step-by-step progress toasts.", "openedBy": ["calendar button in iframe toolbar", "window.__gbOpenOrderCalendar()"], "pageContext": ["order (via iframe)"], "flag": "calendarEnabled", "relatedFlags": ["autoPushEnabled"] },
-    { "id": "crm-create-contact", "component": "CRMCreateContact", "file": "src/modals/CRMCreateContact.jsx", "displayName": "New Contact", "purpose": "Quick-create a CRM contact: account search/attach, name, email, phone, company.", "openedBy": ["Ctrl+Q (configurable)", "actions shelf"], "pageContext": ["contact", "account", "any"], "flag": "crmNewContactEnabled", "relatedSettings": ["crmCreateContact.requireAccount"] },
-    { "id": "submit-proof", "component": "SubmitProof", "file": "src/modals/SubmitProof.jsx", "displayName": "Submit Proof", "purpose": "Submit decoration proof art to the CRM: image, order/customer IDs, item + artist dropdowns (scraped live), notes, and gallery of prior proofs.", "openedBy": ["popup", "Image Viewer", "actions shelf", "window.__gbOpenSubmitProof()"], "pageContext": ["order"], "flag": "submitProofEnabled", "submits": "CRM Page=128", "relatedSettings": ["submitProof.defaultOrderType"] },
-    { "id": "quick-task-popover", "component": "QuickTaskPopover", "file": "src/modals/QuickTaskPopover.jsx", "displayName": "Quick Task (popover)", "purpose": "Compact inline variant of Quick Task for fast entry.", "openedBy": ["contextual"], "pageContext": ["contact", "account"], "flag": "quickTaskEnabled" }
+    { "id": "crm-create-contact", "component": "CRMCreateContact", "file": "src/modals/CRMCreateContact.jsx", "displayName": "New Contact", "purpose": "Quick-create a CRM contact: account search/attach, name, email, phone, company.", "openedBy": ["Ctrl+Q (configurable)", "window.__gbShowCrmCreateContactModal()"], "pageContext": ["contact", "account", "any"], "flag": "crmNewContactEnabled", "relatedSettings": ["crmCreateContact.requireAccount"] },
+    { "id": "submit-proof", "component": "SubmitProof", "file": "src/modals/SubmitProof.jsx", "displayName": "Submit Proof", "purpose": "Submit decoration proof art to the CRM: image, order/customer IDs, item + artist dropdowns (scraped live), notes, and gallery of prior proofs.", "openedBy": ["popup", "Image Viewer", "window.__gbOpenSubmitProof()"], "pageContext": ["order"], "flag": "submitProofEnabled", "submits": "CRM Page=128", "relatedSettings": ["submitProof.defaultOrderType"] },
+    { "id": "quick-task-popover", "component": "QuickTaskPopover", "file": "src/modals/QuickTaskPopover.jsx", "displayName": "Quick Task (popover)", "purpose": "Compact inline variant of Quick Task for fast entry.", "openedBy": ["contextual"], "pageContext": ["contact", "account"], "flag": "quickTaskEnabled" },
+    { "id": "notifications", "component": "Notifications", "file": "src/modals/Notifications.jsx", "displayName": "Customer Reply Notifications", "purpose": "Admin-build inbox for relayed inbound customer replies with Open/All/Done filters, search, account/email actions, and manual completion.", "openedBy": ["admin popup Notifications button"], "pageContext": ["any golfballs.com tab"], "flag": "notificationsEnabled", "relatedSettings": ["emailRelay.notifications"], "storage": "gbNotifications (chrome.storage.local; max 200)" },
+    { "id": "proposal-checkout", "component": "CheckoutComposer", "file": "src/modals/ProposalCheckout.jsx", "displayName": "Proposal Checkout Preview", "purpose": "Preview-only shipping, billing, payment, multi-destination allocation, address-suggestion, and order-summary UI. Place Order generates a mock confirmation and performs no order POST or charge.", "openedBy": ["Checkout from a saved/current proposal inside Gift Catalog"], "pageContext": ["inside GiftCatalog"], "flag": "giftCatalogEnabled", "status": "preview-only" },
+    { "id": "quick-order-note", "component": "QuickOrderNote", "file": "src/modals/QuickOrderNote.jsx", "displayName": "Quick Order Note", "purpose": "Keyboard-first saved-note picker and custom order-note composer with audience and optional date pushing.", "openedBy": ["Actions Shelf 'Apply order note'", "window.__gbShowQuickOrderNoteModal()"], "pageContext": ["order"], "flag": "autoPushEnabled", "submits": "authenticated order-notes iframe relay" }
   ],
 
   "vanillaUI": [
@@ -97,17 +92,20 @@
     "what": "Persistent floating pill, bottom-right of every golfballs.com CRM page; expands into a context-aware vertical action list. Toggle with double-tap Shift. Actions register via actionRegistry; ordering: modal-contextual → page-contextual → general → danger.",
     "flag": "actionsShelfEnabled",
     "actions": [
-      { "id": "add-task", "label": "Add Task", "opens": "QuickTask", "smartFor": ["contact", "account"] },
-      { "id": "view-tasks", "label": "My Tasks", "opens": "TaskList", "smartFor": ["contact", "account"] },
-      { "id": "search-crm", "label": "Search CRM", "opens": "CRMSearch", "smartFor": ["contact", "account", "order"], "general": true },
-      { "id": "log-call", "label": "Log Call", "opens": "CallLog", "smartFor": ["contact", "account"] },
-      { "id": "margin-calc", "label": "Margin Calc", "opens": "MarginCalc", "smartFor": ["order"] },
-      { "id": "gift-catalog", "label": "Gift Catalog", "opens": "GiftCatalog", "smartFor": ["contact", "account"] },
-      { "id": "watch-add", "label": "Watch", "opens": "Watch-add form", "smartFor": ["order", "contact"] },
-      { "id": "submit-proof", "label": "Submit Proof", "opens": "SubmitProof", "smartFor": ["order"] },
-      { "id": "charge", "label": "Charge", "opens": "Charge modal", "smartFor": ["order"] },
-      { "id": "copy-order-ids", "label": "Copy Order IDs", "opens": "clipboard action", "smartFor": ["order-index"], "flag": "copyIdsEnabled" },
-      { "id": "crm-new-contact", "label": "New Contact", "opens": "CRMCreateContact", "smartFor": ["contact", "account"] }
+      { "id": "gb-call-contact", "label": "Call <name>", "opens": "tel: dialer then CallLog", "smartFor": ["contact", "account"], "when": "usable phone exists" },
+      { "id": "gb-log-incoming-call", "label": "Log incoming call", "opens": "CallLog without dialing", "smartFor": ["contact", "account"] },
+      { "id": "gb-find-phone", "label": "Find phone", "opens": "order-history phone scan", "smartFor": ["contact"], "when": "phone missing and orders exist" },
+      { "id": "gb-quick-task", "label": "Quick task for <name>", "opens": "QuickTask", "smartFor": ["contact", "account"] },
+      { "id": "gb-copy-order-ids", "label": "Copy order IDs", "opens": "clipboard action", "smartFor": ["order-index"], "flag": "copyIdsEnabled" },
+      { "id": "gb-order-dates", "label": "Manage order dates", "opens": "CalendarModal", "smartFor": ["order"], "flag": "calendarEnabled" },
+      { "id": "gb-quick-order-note", "label": "Apply order note", "opens": "QuickOrderNote", "smartFor": ["order"] },
+      { "id": "gb-apply-last-order-note", "label": "Apply last note", "opens": "last saved note or QuickOrderNote", "smartFor": ["order"] },
+      { "id": "gb-open-image-viewer", "label": "Open Image Viewer", "opens": "ImagePreview", "general": true, "flag": "imagePreviewEnabled" },
+      { "id": "gb-open-contacts", "label": "Open Contacts", "opens": "CRMSearch", "general": true, "flag": "crmSearchEnabled" },
+      { "id": "gb-open-tasks", "label": "Open Tasks", "opens": "TaskList", "general": true, "flag": "taskListEnabled" },
+      { "id": "gb-open-gift-catalog", "label": "Gifting Catalog", "opens": "GiftCatalog", "general": true, "flag": "giftCatalogEnabled" },
+      { "id": "crm-last-query / scan-recent-orders", "label": "Run last query / Scan for recent orders", "opens": "CRM Search routines", "modalContext": "CRMSearch" },
+      { "id": "task-list-urgent", "label": "Only overdue + due today / Show all tasks", "opens": "Task List due filter", "modalContext": "TaskList" }
     ]
   },
 
@@ -142,6 +140,7 @@
     { "name": "emailPreviewEnabled", "default": true, "section": "Email & Templates", "controls": "Email thread preview in Case Email History" },
     { "name": "textPreviewEnabled", "default": true, "section": "Email & Templates", "controls": "Case note / chat transcript preview" },
     { "name": "campaignManagerEnabled", "default": true, "section": "Email & Templates", "controls": "Campaign Manager + Campaign Runner" },
+    { "name": "notificationsEnabled", "default": true, "section": "Email & Templates", "controls": "Admin-build popup button, toolbar badge, and customer-reply Notifications modal", "audience": "admin build" },
     { "name": "crmSearchEnabled", "default": true, "section": "CRM & Contacts", "controls": "CRM Search modal (Ctrl+K)" },
     { "name": "crmNewContactEnabled", "default": true, "section": "CRM & Contacts", "controls": "New Contact modal (Ctrl+Q)" },
     { "name": "callLogEnabled", "default": true, "section": "CRM & Contacts", "controls": "Call Log modal" },
@@ -163,7 +162,7 @@
   "settings": {
     "storageKey": "devSettings (chrome.storage.local; flat object merged over registry defaults)",
     "panelSections": ["Theme", "UI Scales", "Features", "Keyboard Shortcuts", "Custom Pages (policy-managed globally and per scope)", "Developer Settings (hideable)", "Shared Settings Templates"],
-    "theme": { "variants": ["dark", "midnight", "light", "cream"], "colorPickers": ["brand", "action button", "button deep", "button border", "error", "warning", "success", "info"], "storage": ["gbTheme", "themeColors"] },
+    "theme": { "variants": ["dark", "midnight", "light", "cream", "nord", "dracula", "rose", "tokyo"], "colorPickers": ["brand", "action button", "button deep", "button border", "error", "warning", "success", "info"], "storage": ["gbTheme", "themeColors"] },
     "uiScales": { "surfaces": ["modals", "popovers", "toasts", "shelf", "popup", "editor", "playground"], "range": "50–150%", "storage": "uiScales" },
     "keyboardShortcuts": { "configurable": ["taskList (X)", "marginCalc (M)", "crmSearch (K)", "crmNewContact (Q)"], "storage": "keyboardShortcuts" },
     "customPages": { "what": "Per-scope switches that enable supported extension page takeovers", "scopes": ["crm"], "implementedPages": ["contact_details", "account_details", "opportunity_details"], "storage": "customPages page-id arrays retained as the engine contract" },
@@ -171,6 +170,7 @@
       { "key": "numberDisplay.enabled", "type": "boolean", "default": true, "label": "Animated number displays" },
       { "key": "numberDisplay.durationMs", "type": "number", "default": 400, "range": "0–5000 ms", "label": "Number display duration" },
       { "key": "popup.ignorePageContext", "type": "boolean", "default": false, "label": "Popup: ignore page context" },
+      { "key": "emailRelay.notifications", "type": "boolean", "default": false, "label": "Email Relay: customer reply notifications", "audience": "admin build" },
       { "key": "popup.ignoreContext.charge", "type": "boolean", "default": false, "label": "Popup: ignore context — Charge Card" },
       { "key": "popup.ignoreContext.orderEdit", "type": "boolean", "default": false, "label": "Popup: ignore context — Order Edit" },
       { "key": "popup.ignoreContext.watch", "type": "boolean", "default": false, "label": "Popup: ignore context — Watch Order" },
@@ -258,6 +258,8 @@
     { "key": "gbCostMap", "area": "local", "contains": "SKU → cost map (persistent)" },
     { "key": "crmSavedQueries / crmQuickPresets / gbCrmLastQuery", "area": "local", "contains": "Query Builder saved queries, quick presets, last search" },
     { "key": "gbScanRecentOrders_lastRun", "area": "local", "contains": "recent-orders scan watermark" },
+    { "key": "gbNotifications", "area": "local", "contains": "newest-first customer reply notification threads (max 200)" },
+    { "key": "gbEmailRelayCursor", "area": "local", "contains": "last processed email-relay cursor" },
     { "key": "gbLocalNotes", "area": "local", "contains": "bounded personal contact notes (100 per contact, 4,000 characters each)" },
     { "key": "gbEmailSendLog", "area": "local", "contains": "recipient-to-last-sent timestamps used by Campaign Runner skip-recent controls" },
     { "key": "gbCpQuickTasks / gbCpQuickLogs", "area": "local", "contains": "contact-detail quick task and call-log template preferences" },
@@ -302,7 +304,7 @@
     { "service": "HPG Brands / SnugZ USA", "endpoints": ["Searchspring API + product detail pages"], "usedFor": "supplier product import into custom items", "auth": "public / session iframe" },
     { "service": "admin.icustomize.com", "endpoints": ["charge portlet API", "order notes", "delivery calendar"], "usedFor": "charges, notes, order dates", "auth": "JWT from frame context / session" },
     { "service": "OpenStreetMap Nominatim", "endpoints": ["/search"], "usedFor": "address geocoding", "auth": "public HTTPS endpoint with bounded queries and responses" },
-    { "service": "RevStack API (api.cullenchampagne.com)", "endpoints": ["POST /auth/extension-installation", "GET /extension/configuration", "GET/POST /extension/settings-shares*"], "usedFor": "anonymous installation enrollment, fixed-name administrator settings policy, and revocable scoped settings-template URLs", "auth": "unique server-issued rsk_ bearer per extension installation; dashboard admin cookie enables policy bypass without exposing the cookie; 30 requests/minute; server-revocable" }
+    { "service": "RevStack API (api.cullenchampagne.com)", "endpoints": ["POST /auth/extension-installation", "GET /extension/configuration", "GET/POST /extension/settings-shares*", "GET /extension/email-relay/pending"], "usedFor": "anonymous installation enrollment, administrator settings policy, revocable settings-template URLs, and admin-build inbound reply relay", "auth": "unique server-issued rsk_ bearer per extension installation; dashboard admin cookie enables policy bypass without exposing the cookie; rate-limited and server-revocable" }
   ],
 
   "messageHandlers": {
@@ -319,7 +321,8 @@
     { "name": "Watch list auto-cleanup", "trigger": "Watch List open", "what": "Deletes completed items older than watchList.autoDeleteCompletedDays." },
     { "name": "Signifyd glow", "trigger": "MutationObserver on order index", "what": "Re-applies fraud-score row glow as rows render." },
     { "name": "Theme live-update", "trigger": "storage change / GB_APPLY_THEME broadcast", "what": "Rebuilds CSS custom properties in every frame instantly." },
-    { "name": "CRM index capture", "trigger": "index action after CRM search", "what": "Encrypts complete CRM rows in worker-owned IndexedDB while retaining names for ranked local search." }
+    { "name": "CRM index capture", "trigger": "index action after CRM search", "what": "Encrypts complete CRM rows in worker-owned IndexedDB while retaining names for ranked local search." },
+    { "name": "Customer reply relay", "trigger": "emailRelay.notifications enabled in the admin build", "what": "Primes a cursor, maintains a 25-second authenticated long poll with a one-minute recovery alarm, stores/folds inbound reply notifications, updates the toolbar badge, and raises toasts on open golfballs.com tabs." }
   ],
 
   "emailPipeline": {
@@ -343,8 +346,9 @@
   "features": [
     { "id": "email-templates", "name": "Email Templates & Smart Send", "surface": "popup + editor", "flag": "emailTemplatesEnabled", "summary": "Rule-matched email templates per page type with live variable resolution and one-click send." },
     { "id": "email-preview", "name": "Email Thread Preview & Case Categorization", "surface": "EmailPreview modal", "flag": "emailPreviewEnabled", "summary": "Read full threads inline; auto-recommended case categories and reply templates." },
+    { "id": "reply-notifications", "name": "Customer Reply Notifications", "surface": "admin popup + Notifications modal + toolbar badge", "flag": "notificationsEnabled + emailRelay.notifications", "summary": "Admin-build inbound email relay inbox with local thread folding, CRM links, toasts, and automatic completion after a reply." },
     { "id": "text-preview", "name": "Text/Chat Preview", "surface": "TextPreview modal", "flag": "textPreviewEnabled", "summary": "Inline preview of notes/SMS/chat with recommended replies." },
-    { "id": "charge", "name": "Charge / Refund", "surface": "charge modal/window", "flag": "chargeEnabled", "summary": "Run card adjustments against an order without leaving the page." },
+    { "id": "charge", "name": "Charge / Refund", "surface": "in-page charge modal", "flag": "chargeEnabled", "summary": "Run card adjustments against an order without leaving the page." },
     { "id": "order-edit", "name": "Order Edit", "surface": "order-edit modal", "flag": "orderEditEnabled", "summary": "Edit order dates/totals/notes inline." },
     { "id": "order-dates", "name": "Order Date Manager + Auto-Push", "surface": "CalendarModal + iframe toolbar", "flag": "calendarEnabled/autoPushEnabled", "summary": "Set approval & commitment dates with automated multi-step save." },
     { "id": "quick-notes", "name": "Quick Notes (iframe toolbar)", "surface": "iframe toolbar", "flag": "autoPushEnabled", "summary": "One-click order note save with modern UI in the notes iframe." },
@@ -362,6 +366,7 @@
     { "id": "3d-viewer", "name": "3D Product Viewer", "surface": "GolfballViewer", "flag": "imagePreviewEnabled/giftCatalogEnabled", "summary": "Interactive 3D balls, accessories and assembled gift sets with logo/text/monogram decals, dual-pole." },
     { "id": "gift-catalog", "name": "Gift Catalog & Customization", "surface": "GiftCatalog + giftCustomize", "flag": "giftCatalogEnabled", "summary": "Full-site product index with customization (logo/text/monogram), gift-set upsells and quote building." },
     { "id": "proposals", "name": "Proposal Builder & Email", "surface": "ProposalEmail", "flag": "giftCatalogEnabled", "summary": "Server-tracked proposals with pricing ladders, promos/free items, 3D snapshots and cart links." },
+    { "id": "proposal-checkout", "name": "Proposal Checkout Preview", "surface": "CheckoutComposer inside GiftCatalog", "flag": "giftCatalogEnabled", "status": "preview-only", "summary": "Shipping/billing/payment and multi-destination checkout preview; Place Order is mock and performs no order POST or charge." },
     { "id": "promos", "name": "Promo Codes", "surface": "proposal flow", "flag": "giftCatalogEnabled", "summary": "Validate and apply icustomize promotions (incl. FREE_QUANTITY) to proposals." },
     { "id": "custom-items", "name": "Custom / Service Items", "surface": "GiftCatalog custom items", "flag": "giftCatalogEnabled", "summary": "One-off service products with price ladders; addable to any proposal." },
     { "id": "supplier-import", "name": "Supplier Import (HPG / SnugZ)", "surface": "custom items repo UI", "flag": "giftCatalogEnabled", "summary": "Import third-party customizable products with cost ladders and markup." },
@@ -391,7 +396,7 @@
     "location": "src/ui/components/ (≈70 components), exported via src/ui/index.js",
     "keyComponents": ["Btn", "IconBtn", "Card", "Callout (6 tones, dismissible, persistId)", "Input", "Textarea", "Dropdown", "Tabs", "Segmented", "CollapsibleSection", "CollapsibleChecklist", "FloatingPanel (draggable/physics)", "ModalShell/ModalHeader/ModalFooter", "SmartModal", "SmartPopover", "Field", "Switch", "Checkbox", "Slider", "Tag/Chip/PillTag/SwitchTag", "Kbd", "SectionLabel", "KeyVal", "RichTextEditor", "EmailHtmlView", "ToastHost/useToast", "PillToast/ActionToast/StepToast", "FeatureSpotlight", "ExpandableFeature", "ProofCard", "ColorBank/ColorSpotlight/ColorPicker", "KeyboardComposer", "NumberDisplay", "Spinner"],
     "icons": ["mail", "phone", "cog", "card", "edit", "eye", "check", "send", "search", "close", "plus", "chevd", "chevr", "trash", "alert", "bolt", "copy", "user", "filter", "more", "sun", "moon", "calc", "refresh", "shuffle", "download", "upload", "save", "bookmark", "megaphone", "flow", "branch", "clock", "users", "play", "pause", "rewind", "target", "grip", "sliders", "history", "sparkle", "zap", "flag", "link", "task", "code"],
-    "theme": { "variants": ["dark", "midnight", "light", "cream"], "variables": ["--gb-surface-deep/canvas/1/2/3/modal", "--gb-text-primary/secondary/tertiary/muted/ghost", "--gb-border-subtle/default/strong", "--gb-brand(-label/-dark/-border)", "--gb-error/warning/success/info", "--gb-{tone}-tint-soft/medium/strong/border", "--gb-fill-faint…strong", "--gb-r-xs…pill", "--gb-font-sans/mono", "--gb-anim-fast/anim/anim-bounce"], "switching": "[data-theme] attr; theme-init.js pre-paint, src/lib/theme.js live" },
+    "theme": { "variants": ["dark", "midnight", "light", "cream", "nord", "dracula", "rose", "tokyo"], "variables": ["--gb-surface-deep/canvas/1/2/3/modal", "--gb-text-primary/secondary/tertiary/muted/ghost", "--gb-border-subtle/default/strong", "--gb-brand(-label/-dark/-border)", "--gb-error/warning/success/info", "--gb-{tone}-tint-soft/medium/strong/border", "--gb-fill-faint…strong", "--gb-r-xs…pill", "--gb-font-sans/mono", "--gb-anim-fast/anim/anim-bounce"], "switching": "[data-theme] attr; theme-init.js pre-paint, src/lib/theme.js live" },
     "modalMounting": "mountFloating(id, render) → host div[data-gb-scale=modals], render({ onClosed, bindClose }); re-call animates close",
     "editorRouting": "editor.html sidebar .sb-tabs → activeTab state → src/pages/*.jsx renders into #editor; new views = new tab button + page component + sidebar switch case",
     "build": "Vite per-entry IIFE bundles via build.js: src/content/*.jsx → react-dist/content/*.js; add manifest content_scripts entry (or load on extension page directly)"

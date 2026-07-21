@@ -243,6 +243,11 @@ walkTree(tree, (item) => item.article && inTree.add(item.article));
 for (const a of articles) {
   if (!inTree.has(a.slug)) errors.push(`article "${a.slug}" is not in the nav tree`);
 }
+const tutorialsInTree = new Set();
+walkTree(tree, (item) => item.tutorial && tutorialsInTree.add(item.tutorial));
+for (const t of tutorials) {
+  if (!tutorialsInTree.has(t.id)) errors.push(`tutorial "${t.id}" is not in the nav tree`);
+}
 
 /* ── 4. Coverage check (build-breaking) ──────────────────────── */
 
@@ -257,7 +262,23 @@ for (const key of Object.keys(FEATURE_DEFAULTS)) {
   if (!coveredFlags.has(key)) errors.push(`coverage: feature flag "${key}" has no covering article`);
 }
 
-// 4b. Every inventory modal needs to appear in some article's covers[].
+// 4b. Inventory must exactly enumerate the React modal source directory, then
+// every inventory modal needs to appear in some article's covers[]. This keeps
+// a newly added modal from becoming invisible simply because inventory drifted.
+const modalDir = path.join(ROOT, 'src', 'modals');
+const sourceModalFiles = new Set(
+  readdirSync(modalDir).filter((file) => file.endsWith('.jsx')),
+);
+const inventoryModalFiles = new Set(
+  (inventory.modals || []).map((modal) => path.basename(modal.file || '')),
+);
+for (const file of sourceModalFiles) {
+  if (!inventoryModalFiles.has(file)) errors.push(`inventory: src/modals/${file} is not registered`);
+}
+for (const file of inventoryModalFiles) {
+  if (!sourceModalFiles.has(file)) errors.push(`inventory: registered modal src/modals/${file} does not exist`);
+}
+
 const coveredIds = new Set();
 for (const a of articles) for (const c of a.covers || []) coveredIds.add(c);
 for (const m of inventory.modals || []) {

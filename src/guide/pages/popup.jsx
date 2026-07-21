@@ -47,6 +47,7 @@ function ActionsSnippet() {
         </div>
         <Btn full size="sm" icon={<Ic.checkbox />}>My Tasks</Btn>
         <Btn full size="sm" icon={<I.search />}>CRM Search</Btn>
+        <Btn full size="sm" icon={<I.alert />} badge={2} badgeTone="brand">Notifications</Btn>
         <Btn full size="sm" icon={<Ic.paperclip />}>Submit Proof</Btn>
       </div>
     </MiniFrame>
@@ -142,6 +143,7 @@ export function PopupPage() {
           <li><strong>Order Edit</strong> — opens the edit modal on the order page.</li>
           <li><strong>Watch + Watch List</strong> — flag this record on your private list; the badge counts open items and <strong>pulses red once something has waited 6+ hours</strong>.</li>
           <li><strong>My Tasks · CRM Search · Submit Proof</strong> — the same tools as <span className="kbd">Ctrl+X</span> / <span className="kbd">Ctrl+K</span> / the shelf, one click away.</li>
+          <li><strong>Notifications</strong> — admin build only; the badge counts open customer replies from the email relay.</li>
         </ul>
         <p>A <strong>greyed</strong> button means this page lacks the data it needs (no order number, no capture gap). A <strong>missing</strong> button means its feature toggle is off — see the note below.</p>
       </TourBox>

@@ -107,7 +107,7 @@
       "covers": ["crm-create-contact", "crm-new-contact"],
       "body": {
         "beginner": [
-          { "type": "p", "text": "Press Ctrl+Q (or use the Actions Shelf). Search for and attach the account, then fill first name, last name, email, phone, and company. Create posts the contact straight to the CRM." },
+          { "type": "p", "text": "Press Ctrl+Q. Search for and attach the account, then fill first name, last name, email, phone, and company. Create posts the contact straight to the CRM." },
           { "type": "callout", "kind": "info", "text": "By default a contact must be attached to an account. Admins can relax this under Developer Settings → 'New Contact requires an account'." }
         ]
       },

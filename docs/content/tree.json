@@ -53,8 +53,8 @@
             { "article": "quick-task" },
             { "article": "task-list" },
             { "article": "call-log" },
-            { "article": "phone-finder" }
-            ,{ "article": "recent-orders-scan" }
+            { "article": "phone-finder" },
+            { "article": "recent-orders-scan" }
           ]
         },
         {
