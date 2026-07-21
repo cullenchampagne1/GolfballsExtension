@@ -364,6 +364,11 @@ window.__gbContentReady = true;
       return true;
     }
 
+    if (msg.action === 'showNotificationsModal') {
+      if (typeof window.__gbShowNotificationsModal === 'function') window.__gbShowNotificationsModal();
+      return true;
+    }
+
     if (msg.action === 'sendViaPA') {
       // Build the lean payload, send to PA, and surface the real result
       // as a page toast. The popup has already closed by the time PA

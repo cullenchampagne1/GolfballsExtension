@@ -197,6 +197,7 @@ function PopupApp() {
       const mergedFlags = {
         chargeEnabled: true, orderEditEnabled: true, submitProofEnabled: true,
         taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true,
+        notificationsEnabled: true,
         ...(data.featureFlags || {}),
       };
       // Read ignorePageContext directly from storage on init so we can branch
@@ -420,6 +421,7 @@ function PopupApp() {
         setFlags({
           chargeEnabled: true, orderEditEnabled: true, submitProofEnabled: true,
           taskListEnabled: true, crmSearchEnabled: true, watchListEnabled: true,
+          notificationsEnabled: true,
           ...next,
         });
       }
@@ -816,6 +818,12 @@ function MainView({
     window.close();
   };
 
+  const onNotifications = async () => {
+    if (!tab) return;
+    await sendMessage(tab.id, { action: 'showNotificationsModal' });
+    window.close();
+  };
+
   /* Resolve the subject/body for this send. Picks the variation (a pinned
      saved one, a uniform random roll across [original, …saved] when the
      template has variations and nothing is pinned, or the parent) and
@@ -1078,6 +1086,11 @@ function MainView({
           {flags.crmSearchEnabled && (
             <Reveal key="crmSearch">
               <Btn full size="sm" icon={<I.search />} onClick={onCrmSearch}>CRM Search</Btn>
+            </Reveal>
+          )}
+          {flags.notificationsEnabled && (
+            <Reveal key="notifications">
+              <Btn full size="sm" icon={<I.alert />} onClick={onNotifications}>Notifications</Btn>
             </Reveal>
           )}
           {flags.submitProofEnabled && (

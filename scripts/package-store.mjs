@@ -29,6 +29,7 @@ export const RUNTIME_ROOT_FILES = Object.freeze([
   'email-relay-poll.js',
   'guide.html',
   'installation-auth.js',
+  'notifications-store.js',
   'playground.html',
   'popup.html',
   'remote-settings-policy.js',

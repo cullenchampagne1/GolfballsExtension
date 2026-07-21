@@ -112,20 +112,27 @@ if (!window.__gbEmailPreviewLoaded) {
     useEffect(() => {
       let alive = true;
       (async () => {
-        const url = 'https://api.golfballs.com/golfballs/adminnew/Default.aspx'
-          + `?Page=268&MessageGUID=${encodeURIComponent(target.messageGuid || '')}`
-          + `&MessageID=${encodeURIComponent(target.messageId || '')}`;
-        const resp = await send({ action: 'fetchRaw', url });
-        if (!alive) return;
-        const raw = resp?.text || '';
         let parsed;
-        if (!raw) {
-          parsed = { ...target.meta, bodyHtml: '' };
-        } else if (isFullHtmlPage(raw)) {
-          parsed = { ...target.meta, bodyHtml: stripPageChrome(raw) };
+        if (target.email) {
+          // Payload path (relayed Notifications email): render the supplied
+          // email directly — a relayed reply has no CRM message id to fetch.
+          // Shape: { from, to, subject, date, bodyHtml }.
+          parsed = { ...target.email };
         } else {
-          const p = parseEml(raw);
-          parsed = p.bodyHtml ? p : { ...target.meta, bodyHtml: plainTextBody(raw) };
+          const url = 'https://api.golfballs.com/golfballs/adminnew/Default.aspx'
+            + `?Page=268&MessageGUID=${encodeURIComponent(target.messageGuid || '')}`
+            + `&MessageID=${encodeURIComponent(target.messageId || '')}`;
+          const resp = await send({ action: 'fetchRaw', url });
+          if (!alive) return;
+          const raw = resp?.text || '';
+          if (!raw) {
+            parsed = { ...target.meta, bodyHtml: '' };
+          } else if (isFullHtmlPage(raw)) {
+            parsed = { ...target.meta, bodyHtml: stripPageChrome(raw) };
+          } else {
+            const p = parseEml(raw);
+            parsed = p.bodyHtml ? p : { ...target.meta, bodyHtml: plainTextBody(raw) };
+          }
         }
         // Fall back to the row-scraped meta for any field the EML lacked.
         parsed.from = parsed.from || target.meta?.from || '';

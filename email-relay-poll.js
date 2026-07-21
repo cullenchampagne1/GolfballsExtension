@@ -173,21 +173,31 @@
       if (!res || !Array.isArray(res.messages) || res.messages.length === 0) return;
 
       const tabs = await queryTabs();
-      // No golfballs tab open → hold the cursor and retry next tick so the
-      // reply isn't silently consumed with nowhere to show it.
-      if (!tabs.length) return;
-
-      const shown = res.messages.slice(0, MAX_TOASTS);
-      for (const msg of shown) {
-        // Pre-resolve the contact so View is instant; a miss still notifies.
+      let toasts = 0;
+      for (const msg of res.messages) {
+        // Pre-resolve the contact so View is instant; a miss still records.
         let viewUrl = '';
         try { const c = await resolveContact(msg.contact_email); if (c) viewUrl = c.viewUrl; }
-        catch { /* resolution is best-effort; notify without a View target */ }
-        sendToTabs(tabs, relayNotifyPayload(msg, viewUrl));
+        catch { /* resolution is best-effort */ }
+        // Persist to the notifications store (badge + modal), idempotent by
+        // message id. This happens whether or not a tab is open, so the badge
+        // and modal never miss a reply.
+        try {
+          if (root.GBNotifications) await root.GBNotifications.add({
+            contactEmail: msg.contact_email, contactName: msg.contact_name,
+            subject: msg.subject, preview: msg.preview,
+            messageId: msg.message_id, viewUrl, receivedAt: msg.received_at,
+          });
+        } catch { /* store write is best-effort */ }
+        // Transient toast, only when a golfballs tab is open and within the cap.
+        if (tabs.length && toasts < MAX_TOASTS) { sendToTabs(tabs, relayNotifyPayload(msg, viewUrl)); toasts += 1; }
       }
-      const overflow = res.messages.length - shown.length;
-      if (overflow > 0) pillToTabs(tabs, `+${overflow} more new customer ${overflow === 1 ? 'reply' : 'replies'}`);
+      if (tabs.length) {
+        const overflow = res.messages.length - toasts;
+        if (overflow > 0) pillToTabs(tabs, `+${overflow} more new customer ${overflow === 1 ? 'reply' : 'replies'}`);
+      }
 
+      // The store now owns every reply, so advance the cursor unconditionally.
       if (typeof res.cursor !== 'undefined') await setStorage({ [CURSOR_KEY]: res.cursor });
     } finally {
       polling = false;

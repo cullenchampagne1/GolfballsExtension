@@ -1,5 +1,5 @@
 // background.js
-importScripts('security-policy.js', 'calendar-form-state.js', 'installation-auth.js', 'settings-registry.js', 'remote-settings-policy.js', 'email-relay-poll.js', 'crm-index-store.js', 'defaults.js');
+importScripts('security-policy.js', 'calendar-form-state.js', 'installation-auth.js', 'settings-registry.js', 'remote-settings-policy.js', 'notifications-store.js', 'email-relay-poll.js', 'crm-index-store.js', 'defaults.js');
 
 const GB_SECURITY = globalThis.GBSecurity;
 if (!GB_SECURITY) throw new Error('Security policy failed to initialize');
@@ -94,6 +94,18 @@ chrome.storage.onChanged.addListener((ch, area) => {
   }
   // Keep the in-memory copy in sync when the panel clears the log.
   if (ch[GB_DBG_KEY] && Array.isArray(ch[GB_DBG_KEY].newValue)) gbDebugLog = ch[GB_DBG_KEY].newValue;
+});
+// ── Notifications icon badge ────────────────────────────────────────────────
+// Reflect the count of OPEN customer-email notifications on the toolbar icon.
+// Painted on every worker spin-up and whenever the store or the feature flag
+// changes (the modal, poll, and send-hook all mutate the same storage key).
+const GB_NOTIF_KEY = (globalThis.GBNotifications && GBNotifications.STORAGE_KEY) || 'gbNotifications';
+try { if (globalThis.GBNotifications) GBNotifications.paintBadge(); } catch { /* action API unavailable */ }
+chrome.storage.onChanged.addListener((ch, area) => {
+  if (area !== 'local') return;
+  if ((ch[GB_NOTIF_KEY] || ch.featureFlags) && globalThis.GBNotifications) {
+    try { GBNotifications.paintBadge(); } catch { /* */ }
+  }
 });
 const _gbCap = (s) => (s == null ? null : (String(s).length > GB_DBG_BODY_CAP ? String(s).slice(0, GB_DBG_BODY_CAP) + '\n…[truncated]' : String(s)));
 /* Classify a request → { cat: 'proposal'|'email', label } or null (ignore). */
@@ -1858,6 +1870,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           redirect: 'error',
         });
         if (r.ok) {
+          // Auto-complete: replying to a customer clears their open email
+          // notification(s). Every PA send (popup + all ESM paths) funnels here
+          // with the recipient in scope, so this is the one universal hook.
+          try {
+            if (globalThis.GBNotifications && Array.isArray(payload && payload.emails)) {
+              for (const em of payload.emails) {
+                if (em && em.to) GBNotifications.markDoneByEmail(em.to, 'replied');
+              }
+            }
+          } catch { /* notification bookkeeping must never block a send */ }
           const text = await gbReadTextLimited(r, 1_000_000);
           try {
             const data = JSON.parse(text);
