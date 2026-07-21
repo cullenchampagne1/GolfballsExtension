@@ -76,7 +76,7 @@ class HelpAgentCorpusTests(unittest.TestCase):
         routes = set(self.descriptor["guide_routes"])
         self.assertIn("#manual/margin-calculator", routes)
         self.assertIn("#workflows/run-campaign", routes)
-        self.assertIn("keyboardShortcuts.crmSearch", self.descriptor["shortcut_targets"])
+        self.assertIn("crmSearch", self.descriptor["shortcut_targets"])
         margin = self.by_id["registry:devSetting:marginCalc.minAllowedMargin"]
         self.assertEqual(margin["setting_keys"], ["marginCalc.minAllowedMargin"])
 
@@ -100,6 +100,22 @@ class HelpAgentCorpusTests(unittest.TestCase):
             self.assertIn(
                 "guide:tutorial:run-campaign", {row["id"] for row in campaign}
             )
+            consumer = manager.retrieve(
+                self.descriptor["id"],
+                "reply notifications emailRelay.notifications",
+                edition="consumer",
+                limit=12,
+            )
+            consumer_ids = {row["id"] for row in consumer}
+            self.assertNotIn(
+                "registry:devSetting:emailRelay.notifications", consumer_ids
+            )
+            self.assertNotIn(
+                "guide:article:reply-notifications:beginner", consumer_ids
+            )
+            self.assertFalse(any(
+                row["source"] == "src/modals/Notifications.jsx" for row in consumer
+            ))
         finally:
             manager.unregister(self.descriptor["id"])
 
