@@ -25,11 +25,12 @@
   const FLAG = 'emailRelay.notifications';
   const ENDPOINT = '/extension/email-relay/pending';
   const POLL_MINUTES = 1;          // alarm cadence — a keepalive/respawn safety net
-  const WAIT_SECONDS = 25;         // long-poll hold time (backend caps at 30)
+  const LOOP_SECONDS = 6;          // client-side gap between immediate polls
   const MAX_TOASTS = 5;            // cap per tick; summarize the overflow
   const GOLFBALLS_TABS = ['https://www.golfballs.com/*', 'https://api.golfballs.com/*'];
   let polling = false;
-  let longPolling = false;
+  let looping = false;
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
   const getStorage = (keys) => new Promise((resolve) =>
     chrome.storage.local.get(keys, (v) => resolve(v || {})));
@@ -211,25 +212,29 @@
     } finally { polling = false; }
   }
 
-  // Continuous long-poll for near-real-time delivery: each request is held open
-  // on the backend (~WAIT_SECONDS) and returns the instant a reply lands; the
-  // loop then re-issues immediately. An error/offline result breaks the loop and
-  // the alarm respawns it within a minute. Guarded so only one loop runs.
-  async function longPollLoop() {
-    if (longPolling) return;
-    longPolling = true;
+  // Client-side poll loop for timely delivery WITHOUT holding a backend
+  // connection open: each request returns immediately (wait=0), then the loop
+  // waits LOOP_SECONDS on THIS side before polling again. Keeping the wait on the
+  // extension — rather than as a server-held long-poll — stops the relay's other
+  // endpoints (notably the Power Automate outbound webhook) from queuing behind a
+  // held connection through the Cloudflare tunnel. An error/offline result breaks
+  // the loop and the 1-minute alarm respawns it. Guarded so only one loop runs.
+  async function pollLoop() {
+    if (looping) return;
+    looping = true;
     try {
       while (await flagOn()) {
         const stored = await getStorage(CURSOR_KEY);
         const since = Number(stored[CURSOR_KEY]) || 0;
-        const ok = await processResult(await fetchPending(since, WAIT_SECONDS));
-        if (!ok) break;   // offline / no long-poll support → let the alarm retry
+        const ok = await processResult(await fetchPending(since, 0));
+        if (!ok) break;   // offline / error → let the alarm respawn the loop
+        await sleep(LOOP_SECONDS * 1000);
       }
-    } finally { longPolling = false; }
+    } finally { looping = false; }
   }
 
-  function ensureLongPoll() {
-    flagOn().then((on) => { if (on && !longPolling) longPollLoop().catch(() => {}); }).catch(() => {});
+  function ensureLoop() {
+    flagOn().then((on) => { if (on && !looping) pollLoop().catch(() => {}); }).catch(() => {});
   }
 
   /* Create the alarm only while enabled; clear it when disabled. On a fresh
@@ -247,8 +252,8 @@
     } else if (!on && existing) {
       try { chrome.alarms.clear(ALARM_NAME); } catch { /* ignore */ }
     }
-    // Start (or keep) the real-time long-poll loop whenever enabled.
-    if (on) ensureLongPoll();
+    // Start (or keep) the client-side poll loop whenever enabled.
+    if (on) ensureLoop();
   }
 
   const reconcileQuietly = () => { reconcile().catch(() => {}); };
@@ -256,7 +261,7 @@
   chrome.runtime.onInstalled.addListener(reconcileQuietly);
   chrome.runtime.onStartup.addListener(reconcileQuietly);
   chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm && alarm.name === ALARM_NAME) { ensureLongPoll(); poll().catch(() => {}); }
+    if (alarm && alarm.name === ALARM_NAME) { ensureLoop(); poll().catch(() => {}); }
   });
   // Re-arm as soon as the rep toggles the flag (no wait for the next alarm).
   chrome.storage.onChanged.addListener((changes, area) => {
