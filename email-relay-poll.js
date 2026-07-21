@@ -24,10 +24,12 @@
   const DEV_KEY = 'devSettings';
   const FLAG = 'emailRelay.notifications';
   const ENDPOINT = '/extension/email-relay/pending';
-  const POLL_MINUTES = 1;          // chrome.alarms floor for a packed extension
+  const POLL_MINUTES = 1;          // alarm cadence — a keepalive/respawn safety net
+  const WAIT_SECONDS = 25;         // long-poll hold time (backend caps at 30)
   const MAX_TOASTS = 5;            // cap per tick; summarize the overflow
   const GOLFBALLS_TABS = ['https://www.golfballs.com/*', 'https://api.golfballs.com/*'];
   let polling = false;
+  let longPolling = false;
 
   const getStorage = (keys) => new Promise((resolve) =>
     chrome.storage.local.get(keys, (v) => resolve(v || {})));
@@ -145,10 +147,11 @@
     };
   }
 
-  async function fetchPending(since) {
+  async function fetchPending(since, waitSeconds) {
     const auth = root.GBInstallationAuth;
     if (!auth || typeof auth.apiJson !== 'function') return null;
-    const q = `${ENDPOINT}?since=${encodeURIComponent(since)}&limit=25`;
+    let q = `${ENDPOINT}?since=${encodeURIComponent(since)}&limit=25`;
+    if (waitSeconds) q += `&wait=${encodeURIComponent(waitSeconds)}`;
     try { return await auth.apiJson(q); }
     catch { return null; }              // backend not deployed yet / offline → stay quiet
   }
@@ -156,12 +159,47 @@
   /* First enable: record the latest cursor WITHOUT notifying, so only mail that
      arrives after the rep turns the feature on is announced. */
   async function prime() {
-    const res = await fetchPending(0);
+    const res = await fetchPending(0, 0);
     if (res && typeof res.cursor !== 'undefined') {
       await setStorage({ [CURSOR_KEY]: res.cursor });
     }
   }
 
+  // Record + notify for one pending result. Returns true when the fetch
+  // succeeded (empty or not), false on error/offline so the caller stops looping.
+  async function processResult(res) {
+    if (!res) return false;
+    if (!Array.isArray(res.messages) || res.messages.length === 0) return true;
+
+    const tabs = await queryTabs();
+    let toasts = 0;
+    for (const msg of res.messages) {
+      // Pre-resolve the contact so View is instant; a miss still records.
+      let viewUrl = '';
+      try { const c = await resolveContact(msg.contact_email); if (c) viewUrl = c.viewUrl; }
+      catch { /* resolution is best-effort */ }
+      // Persist to the notifications store (badge + modal), idempotent by
+      // message id, whether or not a tab is open.
+      try {
+        if (root.GBNotifications) await root.GBNotifications.add({
+          contactEmail: msg.contact_email, contactName: msg.contact_name,
+          subject: msg.subject, preview: msg.preview,
+          messageId: msg.message_id, viewUrl, receivedAt: msg.received_at,
+        });
+      } catch { /* store write is best-effort */ }
+      // Transient toast, only when a golfballs tab is open and within the cap.
+      if (tabs.length && toasts < MAX_TOASTS) { sendToTabs(tabs, relayNotifyPayload(msg, viewUrl)); toasts += 1; }
+    }
+    if (tabs.length) {
+      const overflow = res.messages.length - toasts;
+      if (overflow > 0) pillToTabs(tabs, `+${overflow} more new customer ${overflow === 1 ? 'reply' : 'replies'}`);
+    }
+    // The store owns every reply, so advance the cursor unconditionally.
+    if (typeof res.cursor !== 'undefined') await setStorage({ [CURSOR_KEY]: res.cursor });
+    return true;
+  }
+
+  // One short (non-blocking) catch-up poll — the alarm safety net.
   async function poll() {
     if (polling) return;
     polling = true;
@@ -169,39 +207,29 @@
       if (!(await flagOn())) return;
       const stored = await getStorage(CURSOR_KEY);
       const since = Number(stored[CURSOR_KEY]) || 0;
-      const res = await fetchPending(since);
-      if (!res || !Array.isArray(res.messages) || res.messages.length === 0) return;
+      await processResult(await fetchPending(since, 0));
+    } finally { polling = false; }
+  }
 
-      const tabs = await queryTabs();
-      let toasts = 0;
-      for (const msg of res.messages) {
-        // Pre-resolve the contact so View is instant; a miss still records.
-        let viewUrl = '';
-        try { const c = await resolveContact(msg.contact_email); if (c) viewUrl = c.viewUrl; }
-        catch { /* resolution is best-effort */ }
-        // Persist to the notifications store (badge + modal), idempotent by
-        // message id. This happens whether or not a tab is open, so the badge
-        // and modal never miss a reply.
-        try {
-          if (root.GBNotifications) await root.GBNotifications.add({
-            contactEmail: msg.contact_email, contactName: msg.contact_name,
-            subject: msg.subject, preview: msg.preview,
-            messageId: msg.message_id, viewUrl, receivedAt: msg.received_at,
-          });
-        } catch { /* store write is best-effort */ }
-        // Transient toast, only when a golfballs tab is open and within the cap.
-        if (tabs.length && toasts < MAX_TOASTS) { sendToTabs(tabs, relayNotifyPayload(msg, viewUrl)); toasts += 1; }
+  // Continuous long-poll for near-real-time delivery: each request is held open
+  // on the backend (~WAIT_SECONDS) and returns the instant a reply lands; the
+  // loop then re-issues immediately. An error/offline result breaks the loop and
+  // the alarm respawns it within a minute. Guarded so only one loop runs.
+  async function longPollLoop() {
+    if (longPolling) return;
+    longPolling = true;
+    try {
+      while (await flagOn()) {
+        const stored = await getStorage(CURSOR_KEY);
+        const since = Number(stored[CURSOR_KEY]) || 0;
+        const ok = await processResult(await fetchPending(since, WAIT_SECONDS));
+        if (!ok) break;   // offline / no long-poll support → let the alarm retry
       }
-      if (tabs.length) {
-        const overflow = res.messages.length - toasts;
-        if (overflow > 0) pillToTabs(tabs, `+${overflow} more new customer ${overflow === 1 ? 'reply' : 'replies'}`);
-      }
+    } finally { longPolling = false; }
+  }
 
-      // The store now owns every reply, so advance the cursor unconditionally.
-      if (typeof res.cursor !== 'undefined') await setStorage({ [CURSOR_KEY]: res.cursor });
-    } finally {
-      polling = false;
-    }
+  function ensureLongPoll() {
+    flagOn().then((on) => { if (on && !longPolling) longPollLoop().catch(() => {}); }).catch(() => {});
   }
 
   /* Create the alarm only while enabled; clear it when disabled. On a fresh
@@ -219,6 +247,8 @@
     } else if (!on && existing) {
       try { chrome.alarms.clear(ALARM_NAME); } catch { /* ignore */ }
     }
+    // Start (or keep) the real-time long-poll loop whenever enabled.
+    if (on) ensureLongPoll();
   }
 
   const reconcileQuietly = () => { reconcile().catch(() => {}); };
@@ -226,7 +256,7 @@
   chrome.runtime.onInstalled.addListener(reconcileQuietly);
   chrome.runtime.onStartup.addListener(reconcileQuietly);
   chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm && alarm.name === ALARM_NAME) poll().catch(() => {});
+    if (alarm && alarm.name === ALARM_NAME) { ensureLongPoll(); poll().catch(() => {}); }
   });
   // Re-arm as soon as the rep toggles the flag (no wait for the next alarm).
   chrome.storage.onChanged.addListener((changes, area) => {

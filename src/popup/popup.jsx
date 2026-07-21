@@ -141,6 +141,7 @@ function PopupApp() {
   const [flags, setFlags] = useState({});
   const [paConfigured, setPaConfigured] = useState(false);
   const [watchList, setWatchList] = useState([]);
+  const [notifications, setNotifications] = useState([]);
 
   // ── dev settings — live-subscribed so every toggle reflects instantly ──
   // Single hook covers every devSettings knob this popup reads (ignore-context
@@ -191,7 +192,7 @@ function PopupApp() {
         catch { res(); }
       });
 
-      const data = await storageGet(['templates', 'watchList', 'featureFlags']);
+      const data = await storageGet(['templates', 'watchList', 'featureFlags', 'gbNotifications']);
       const credentials = await loadCredentials();
       const tpls = (data.templates || []).filter((t) => t.enabled !== false && t.type !== 'case');
       const mergedFlags = {
@@ -212,6 +213,7 @@ function PopupApp() {
       setTab(currentTab);
       setAllTemplates(tpls);
       setWatchList(data.watchList || []);
+      setNotifications(data.gbNotifications || []);
       setFlags(mergedFlags);
       setPaConfigured(isPowerAutomateUrl(credentials.powerAutomateUrl));
 
@@ -426,6 +428,7 @@ function PopupApp() {
         });
       }
       if (changes.watchList) setWatchList(changes.watchList.newValue || []);
+      if (changes.gbNotifications) setNotifications(changes.gbNotifications.newValue || []);
       if (changes.templates) {
         const next = (changes.templates.newValue || [])
           .filter((t) => t.enabled !== false && t.type !== 'case');
@@ -485,6 +488,7 @@ function PopupApp() {
           flags={flags}
           paConfigured={paConfigured}
           watchList={watchList}
+          notifications={notifications}
           tab={tab}
           ignoreCharge={ignoreCharge}
           ignoreOrderEdit={ignoreOrderEdit}
@@ -702,7 +706,7 @@ function MainView({
   pendingVars = [], toPending = false,
   selectedVariationId, onSelectVariation,
   tpl,
-  resolving, resolvedVars, resolvedTo, pageInfo, flags, paConfigured, watchList, tab,
+  resolving, resolvedVars, resolvedTo, pageInfo, flags, paConfigured, watchList, notifications = [], tab,
   ignoreCharge, ignoreOrderEdit, ignoreWatch, ignoreProof, ignorePageContext,
   onOpenWatchAdd, onOpenProof,
 }) {
@@ -752,6 +756,7 @@ function MainView({
      stores `done: true` on completed rows. */
   const watchCount = watchList.filter((i) => !i.done).length;
   const watchHasCrit = watchList.some((i) => !i.done && (Date.now() - i.addedAt) >= 6 * 3600000);
+  const notifCount = notifications.filter((n) => n && n.status === 'open').length;
 
   const proofDisabledReal = !(knownType && (pageInfo.contactId || pageInfo.accountId || pageInfo.orderNo));
   const proofDisabled = ignoreProof ? false : proofDisabledReal;
@@ -1090,7 +1095,7 @@ function MainView({
           )}
           {flags.notificationsEnabled && (
             <Reveal key="notifications">
-              <Btn full size="sm" icon={<I.alert />} onClick={onNotifications}>Notifications</Btn>
+              <Btn full size="sm" icon={<I.alert />} onClick={onNotifications} badge={notifCount} badgeTone="brand">Notifications</Btn>
             </Reveal>
           )}
           {flags.submitProofEnabled && (
