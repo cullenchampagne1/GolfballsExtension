@@ -84,7 +84,37 @@
           { "type": "callout", "kind": "tip", "text": "If a save fails mid-chain, the toast names the failing step. Nothing half-saves silently — re-open the calendar and retry." }
         ]
       },
-      "related": ["ts-date-update-failed", "order-edit"]
+      "related": ["ts-date-update-failed", "order-edit", "quick-order-note"]
+    },
+    {
+      "slug": "quick-order-note",
+      "title": "Quick Order Note",
+      "icon": "edit",
+      "tiers": ["beginner", "intermediate"],
+      "keywords": ["quick note", "order note", "apply last note", "audience", "push dates", "note template"],
+      "summary": "Apply a saved order-note template or compose a custom note from the Actions Shelf, with audience selection and optional date pushing.",
+      "feature": "quick-notes",
+      "flag": "autoPushEnabled",
+      "covers": ["quick-order-note"],
+      "tutorial": "apply-order-note",
+      "body": {
+        "beginner": [
+          { "type": "p", "text": "On an order page, open the Actions Shelf and choose Apply order note. The compact modal starts as a searchable template picker. Pick a saved note to review it, or enter composer mode for a one-off note." },
+          { "type": "table", "headers": ["Control", "Purpose"], "rows": [
+            ["Template picker", "Filters the note templates created in Manager → Notes."],
+            ["Audience", "Selects the exact audience value the order page expects."],
+            ["Subject and body", "The note content; saved templates can use {{date}} and {{time}}."],
+            ["Push dates forward", "Routes the configured day offset through the existing date-and-note push chain."],
+            ["Apply", "Posts the note through the authenticated order-notes iframe."]
+          ] },
+          { "type": "p", "text": "After a saved template is applied, the shelf can expose Apply last note for a one-click repeat. This repeats the last saved template, not arbitrary free-form text." }
+        ],
+        "intermediate": [
+          { "type": "callout", "kind": "warning", "text": "The Audience value in a template must exactly match an option on the order page. If it does not, review the template in Manager → Notes before applying it." },
+          { "type": "p", "text": "Date pushing uses the same multi-step calendar bridge as Order Date Manager. Progress and a failing step appear in toasts; a failed chain does not report success silently." }
+        ]
+      },
+      "related": ["note-templates", "order-date-manager", "ts-date-update-failed"]
     },
     {
       "slug": "watch-list",

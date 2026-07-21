@@ -102,11 +102,13 @@ function ThemeSwitcher() {
 export const NAV = [
   { group: 'Overview', items: [
     { id: 'start', title: 'Getting Started', icon: 'bolt', slugs: ['what-this-extension-does', 'first-launch', 'initial-configuration', 'actions-shelf', 'keyboard-shortcuts'] },
+    { id: 'workflows', title: 'Guided Workflows', icon: 'flow', slugs: [] },
   ]},
   { group: 'Daily Driver', items: [
     { id: 'popup', title: 'The Popup', icon: 'mail', slugs: ['email-templates-popup', 'how-email-sending-works'] },
+    { id: 'notifications', title: 'Notifications', icon: 'alert', slugs: ['reply-notifications'] },
     { id: 'templates', title: 'Email Templates', icon: 'edit', slugs: ['template-editor', 'template-variables', 'note-templates'] },
-    { id: 'charge', title: 'Charge & Order Edit', icon: 'card', slugs: ['charge-refund', 'order-edit'], partial: true },
+    { id: 'charge', title: 'Charge & Order Edit', icon: 'card', slugs: ['charge-refund', 'order-edit'] },
     { id: 'proof', title: 'Submit Proof', icon: 'send', slugs: ['submit-proof'] },
   ]},
   { group: 'Configuration', items: [
@@ -119,12 +121,13 @@ export const NAV = [
     { id: 'tasks', title: 'Task List', icon: 'check', slugs: ['task-list'] },
     { id: 'quicktask', title: 'Quick Task', icon: 'bolt', slugs: ['quick-task'] },
     { id: 'calls', title: 'Call Log', icon: 'phone', slugs: ['call-log'] },
-    { id: 'calendar', title: 'Order Dates', icon: 'clock', slugs: ['order-date-manager'], partial: true },
+    { id: 'calendar', title: 'Order Dates', icon: 'clock', slugs: ['order-date-manager', 'quick-order-note'] },
   ]},
   { group: 'Find People', items: [
     { id: 'crm-search', title: 'CRM Search', icon: 'search', slugs: ['crm-search', 'phone-finder'] },
     { id: 'crm-query', title: 'Query Builder', icon: 'filter', slugs: ['query-builder'] },
     { id: 'crm-new', title: 'New Contact', icon: 'user', slugs: ['new-contact'] },
+    { id: 'crm-workspaces', title: 'CRM Workspaces', icon: 'grid', slugs: ['custom-crm-pages', 'recent-orders-scan'] },
   ]},
   { group: 'On-page Helpers', items: [
     { id: 'viewer-email', title: 'Email / Chat Viewer', icon: 'mail', slugs: ['email-thread-preview', 'text-note-preview'] },
@@ -141,6 +144,7 @@ export const NAV = [
     { id: 'campaigns', title: 'Campaign Manager', icon: 'flow', slugs: ['campaign-manager', 'campaign-conditions'] },
   ]},
   { group: 'Reference', items: [
+    { id: 'manual', title: 'Full Reference', icon: 'stack', slugs: [] },
     { id: 'troubleshooting', title: 'Troubleshooting', icon: 'alert', slugs: ['ts-outlook-opened', 'ts-variable-unresolved', 'ts-catalog-stale', 'ts-modal-not-appearing', 'ts-no-cost', 'ts-date-update-failed', 'ts-3d-blank', 'ts-settings-vanished'] },
     { id: 'faq', title: 'FAQ', icon: 'more', slugs: ['faq'] },
     { id: 'power', title: 'Power User', icon: 'zap', slugs: ['code-variables', 'hidden-settings', 'modal-playground', 'debug-storage'] },
@@ -151,27 +155,23 @@ export const NAV = [
 const FLAT = NAV.flatMap((g) => g.items.map((it) => ({ ...it, group: g.group })));
 const findNav = (id) => FLAT.find((x) => x.id === id);
 
-/* slug → route, derived from the nav so search lands on the right page. */
-const ROUTE_FOR_SLUG = {};
-for (const it of FLAT) for (const s of it.slugs || []) if (!ROUTE_FOR_SLUG[s]) ROUTE_FOR_SLUG[s] = it.id;
-
 /* Search corpus: nav pages (title match) + the generated help index
-   (165 records: articles, settings, FAQ, shortcuts — keywords already
-   authored), each resolved to its guide route. */
+   (articles, tutorials, settings, FAQ, shortcuts — keywords already
+   authored). Generated records land on their exact article/tutorial rather
+   than a broad hand-built page, so nothing authored is unreachable. */
 const SEARCH_ROWS = [
   ...FLAT.map((it) => ({ key: `nav:${it.id}`, route: it.id, title: it.title, sub: it.group, hay: `${it.title} ${it.group}`.toLowerCase(), wip: it.wip, partial: it.partial })),
   ...HELP_SEARCH_INDEX
-    .filter((r) => r.article && ROUTE_FOR_SLUG[r.article])
+    .filter((r) => r.article || r.tutorial)
     .map((r) => {
-      const route = ROUTE_FOR_SLUG[r.article];
-      const nav = findNav(route);
+      const route = r.tutorial
+        ? `workflows/${encodeURIComponent(r.tutorial)}`
+        : `manual/${encodeURIComponent(r.article)}`;
       return {
         key: r.id, route,
         title: r.title,
-        sub: `${nav?.group} · ${nav?.title}`,
+        sub: r.tutorial ? 'Guided Workflows' : (r.category || 'Full Reference'),
         hay: `${r.title} ${(r.keywords || []).join(' ')} ${r.description || ''}`.toLowerCase(),
-        wip: nav?.wip,
-        partial: nav?.partial,
       };
     }),
 ];
@@ -270,12 +270,16 @@ function WipPage({ id }) {
 }
 
 export function App() {
-  const [route, setRoute] = useState(() => (window.location.hash || '#start').slice(1));
+  const readRoute = () => {
+    const raw = (window.location.hash || '#start').slice(1);
+    try { return decodeURIComponent(raw); } catch { return raw; }
+  };
+  const [route, setRoute] = useState(readRoute);
   const version = (typeof chrome !== 'undefined' && chrome.runtime?.getManifest?.()?.version) || '3.3';
 
   useEffect(() => {
     const onHash = () => {
-      setRoute((window.location.hash || '#start').slice(1));
+      setRoute(readRoute());
       window.scrollTo(0, 0);
     };
     window.addEventListener('hashchange', onHash);
@@ -294,8 +298,10 @@ export function App() {
   }, []);
 
   const navigate = (id) => { window.location.hash = '#' + id; };
-  const nav = findNav(route) || FLAT[0];
-  const Page = PAGES[route];
+  const [baseRoute, ...detailParts] = route.split('/');
+  const detailId = detailParts.join('/');
+  const nav = findNav(baseRoute) || FLAT[0];
+  const Page = PAGES[baseRoute];
 
   return (
     <div className="app">
@@ -308,8 +314,8 @@ export function App() {
           <ThemeSwitcher />
         </div>
         <div className="content">
-          <div className="page-enter" key={nav.id}>
-            {Page ? <Page /> : <WipPage id={nav.id} />}
+          <div className="page-enter" key={route}>
+            {Page ? <Page itemId={detailId || null} /> : <WipPage id={nav.id} />}
           </div>
         </div>
       </div>

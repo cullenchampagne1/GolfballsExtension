@@ -7,12 +7,12 @@
       "icon": "sun",
       "tiers": ["beginner"],
       "keywords": ["theme", "dark", "light", "slate", "cream", "color", "scale", "zoom", "appearance"],
-      "summary": "Four theme variants, eight customizable accent colors, and independent zoom for every UI surface.",
+      "summary": "Eight theme variants, eight customizable accent colors, and independent zoom for every UI surface.",
       "covers": ["settings"],
       "body": {
         "beginner": [
           { "type": "heading", "text": "Theme variants" },
-          { "type": "p", "text": "Settings → Theme offers Dark (default), Slate, Light, and Cream. Switching applies live to every surface — modals, popup, editor, shelf — no reload needed." },
+          { "type": "p", "text": "Settings → Theme offers Dark (default), Slate, Light, Cream, Nord, Dracula, Rosé, and Tokyo Night. Switching applies live to every surface — modals, popup, editor, shelf — no reload needed." },
           { "type": "p", "text": "Color pickers let you override the brand accent, action-button colors, and the four status colors (error, warning, success, info). All tinted backgrounds and borders derive from these automatically." },
           { "type": "heading", "text": "UI Scales" },
           { "type": "p", "text": "Each surface has its own zoom slider (50–150%): modals, popovers, toasts, the shelf, the popup, the editor, and the playground. Scale just the things you find small without blowing up the whole browser." }
@@ -59,16 +59,25 @@
       "title": "Custom CRM Pages",
       "icon": "flag",
       "tiers": ["advanced"],
-      "keywords": ["custom page", "override", "dashboard", "replace page"],
-      "summary": "Replace selected CRM pages (dashboard, search, task list, …) with the extension's own UI.",
+      "keywords": ["custom page", "override", "contact details", "account details", "opportunity details", "replace page", "workspace"],
+      "summary": "Replace Contact Details, Account Details, and Opportunity Details with focused extension workspaces backed by live CRM data.",
       "covers": [],
       "body": {
         "advanced": [
-          { "type": "p", "text": "Settings → Custom Pages exposes one switch per registered page scope. Enabling CRM activates the extension interface on supported CRM takeovers; disabling it uses the stock CRM pages. Scope values and visibility can be centrally managed by the authenticated policy." },
+          { "type": "p", "text": "Settings → Custom Pages → CRM exposes the registered takeovers. The implemented pages are Contact Details, Account Details, and Opportunity Details. Enable only the pages you want; a disabled page falls back to the stock CRM interface. Values and visibility can be centrally managed by authenticated policy." },
+          { "type": "table", "headers": ["Workspace", "Information and actions"], "rows": [
+            ["Contact Details", "Contact/account facts, revenue and order history, proof art, tasks, opportunities, activities, email history, account contacts, a standalone email composer, account templates, and email/chat transcript reading."],
+            ["Account Details", "Account profile, linked contacts, activity, and account-level rollups in a focused dashboard."],
+            ["Opportunity Details", "Opportunity facts, open tasks, email history, proposal selection, line-item breakdown, margin review, and proposal email entry points."]
+          ] },
+          { "type": "heading", "text": "What writes where" },
+          { "type": "p", "text": "CRM records and actions use the live page schema and CRM endpoints. Extension-local context notes and caches remain local unless a control explicitly says it writes to CRM. Turning a takeover off deletes neither source." },
+          { "type": "callout", "kind": "warning", "text": "The Contact composer currently exposes an 'insert saved proposal' slash command that is visibly marked Not implemented yet. Use the Gift Catalog / Proposal Email flow for a real proposal insert or send." },
           { "type": "callout", "kind": "warning", "text": "Page overrides change what teammates see if you share a preset that includes them. Keep overrides out of shared presets unless the whole team wants them." }
         ]
       },
-      "related": ["presets", "feature-toggles"]
+      "tutorial": "use-custom-crm-workspace",
+      "related": ["presets", "feature-toggles", "crm-search", "recent-orders-scan"]
     },
     {
       "slug": "email-integrations",

@@ -274,7 +274,29 @@
           { "type": "p", "text": "Sending uploads the 3D snapshots, then runs the same server-side bookkeeping as a quote from the website: it creates the proposal email record, registers it for tracking, and updates the opportunity's value on the account. The cart link is only included when the cart saved successfully — if the CTA is missing from a preview, re-save the proposal first. A toast confirms 'Proposal sent to <email>'." }
         ]
       },
-      "related": ["proposal-panel", "proposal-breakdown", "promo-codes", "how-email-sending-works"]
+      "related": ["proposal-panel", "proposal-breakdown", "promo-codes", "how-email-sending-works", "proposal-checkout-preview"]
+    },
+    {
+      "slug": "proposal-checkout-preview",
+      "title": "Proposal Checkout Preview",
+      "icon": "card",
+      "tiers": ["intermediate", "advanced"],
+      "keywords": ["checkout", "place order", "shipping", "billing", "payment", "mock", "preview", "address autocomplete"],
+      "summary": "A feature-rich checkout UI embedded in the proposal flow, currently provided for preview and validation only—it does not submit a real order.",
+      "feature": "proposal-checkout",
+      "flag": "giftCatalogEnabled",
+      "covers": ["proposal-checkout"],
+      "body": {
+        "intermediate": [
+          { "type": "callout", "kind": "warning", "title": "Preview only — no real order is placed", "text": "Proposal Checkout currently validates its form and generates a mock GB confirmation number in the browser. Place Order does not POST an order, charge a card, reserve inventory, or write a CRM order." },
+          { "type": "p", "text": "The preview is useful for reviewing the intended checkout experience: single-address or multi-destination shipping and item allocation, billing, payment fields, promotions/gift certificates, rep-only admin fields, address suggestions, purchase summary, and animated completion states." },
+          { "type": "p", "text": "Use the existing saved-cart and proposal-email flows for operational customer work. A checkout confirmation shown by this component is not proof of an order." }
+        ],
+        "advanced": [
+          { "type": "p", "text": "The source explicitly leaves the order POST as TODO(backend). A production launch requires a defined order endpoint, authenticated payment handling/tokenization, server-side price and inventory validation, idempotency, error recovery, and integration tests before the preview warning can be removed." }
+        ]
+      },
+      "related": ["proposal-panel", "build-email-proposal", "gift-catalog"]
     },
     {
       "slug": "gifting-glossary",

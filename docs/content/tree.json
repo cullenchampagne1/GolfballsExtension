@@ -25,7 +25,8 @@
             { "article": "note-templates" },
             { "article": "email-thread-preview" },
             { "article": "text-note-preview" },
-            { "article": "how-email-sending-works" }
+            { "article": "how-email-sending-works" },
+            { "article": "reply-notifications" }
           ]
         },
         {
@@ -36,6 +37,7 @@
             { "article": "charge-refund" },
             { "article": "order-edit" },
             { "article": "order-date-manager" },
+            { "article": "quick-order-note" },
             { "article": "watch-list" },
             { "article": "copy-order-ids" },
             { "article": "signifyd-glow" }
@@ -52,6 +54,7 @@
             { "article": "task-list" },
             { "article": "call-log" },
             { "article": "phone-finder" }
+            ,{ "article": "recent-orders-scan" }
           ]
         },
         {
@@ -67,6 +70,7 @@
             { "article": "supplier-import" },
             { "article": "promo-codes" },
             { "article": "build-email-proposal" },
+            { "article": "proposal-checkout-preview" },
             { "article": "gifting-glossary" }
           ]
         },
@@ -114,7 +118,9 @@
             { "tutorial": "initial-configuration" },
             { "tutorial": "send-first-email" },
             { "tutorial": "log-call-task" },
-            { "tutorial": "watch-order" }
+            { "tutorial": "watch-order" },
+            { "tutorial": "handle-customer-reply" },
+            { "tutorial": "apply-order-note" }
           ]
         },
         {
@@ -124,7 +130,9 @@
             { "tutorial": "triage-case-email" },
             { "tutorial": "set-order-dates" },
             { "tutorial": "verify-logo" },
-            { "tutorial": "share-config" }
+            { "tutorial": "share-config" },
+            { "tutorial": "use-custom-crm-workspace" },
+            { "tutorial": "scan-recent-orders" }
           ]
         },
         {

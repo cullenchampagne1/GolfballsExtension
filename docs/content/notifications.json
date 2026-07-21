@@ -1,0 +1,40 @@
+{
+  "section": "Core Features / Email",
+  "articles": [
+    {
+      "slug": "reply-notifications",
+      "title": "Customer Reply Notifications",
+      "icon": "alert",
+      "tiers": ["beginner", "advanced"],
+      "keywords": ["notifications", "email relay", "customer reply", "badge", "inbound email", "done", "reopen"],
+      "summary": "Admin-build inbox for inbound customer replies: near-real-time relay polling, toolbar badge, local thread list, CRM links, and automatic completion after a reply.",
+      "feature": "reply-notifications",
+      "flag": "notificationsEnabled",
+      "covers": ["notifications"],
+      "tutorial": "handle-customer-reply",
+      "body": {
+        "beginner": [
+          { "type": "callout", "kind": "warning", "title": "Admin build only", "text": "This capability is compiled only into the admin build. Turn on both Settings → Features → Notifications and Developer Settings → Email Relay: customer reply notifications. The RevStack relay endpoints and this extension installation must also be active." },
+          { "type": "p", "text": "When a customer replies through the email relay, the popup gains an open-count badge and the Notifications button. Open golfballs.com tabs also receive a toast. The notification is stored even when no matching tab is open; only the transient toast is skipped." },
+          { "type": "table", "headers": ["Control", "What it does"], "rows": [
+            ["Open / All / Done", "Filters the stored reply list; each tab shows its live count."],
+            ["Search", "Matches contact name, contact email, or subject."],
+            ["View account", "Opens the resolved CRM contact when the sender could be matched."],
+            ["View email", "Opens the relayed message in the existing email viewer."],
+            ["Mark done / Reopen", "Closes or restores a reply manually. A Power Automate reply to the same address closes it automatically."],
+            ["Clear completed", "Removes Done rows after a confirmation click."]
+          ] },
+          { "type": "callout", "kind": "info", "text": "A missing CRM match does not lose the message. It only disables View account; View email, Done/Reopen, search, and the badge continue to work." }
+        ],
+        "advanced": [
+          { "type": "heading", "text": "Polling, storage, and deduplication" },
+          { "type": "p", "text": "Enabling the relay first primes its cursor to the newest message, preventing historical mail from appearing as new. A 25-second authenticated long poll handles near-real-time delivery; a one-minute alarm recovers the loop after suspension or an offline response." },
+          { "type": "p", "text": "Messages are stored newest-first in chrome.storage.local under gbNotifications, capped at 200. Message IDs make re-polls idempotent. Open messages with the same normalized sender and subject (Re:/Fwd: removed) fold into one thread and show a reply count." },
+          { "type": "heading", "text": "Contact resolution" },
+          { "type": "p", "text": "The worker checks the encrypted local CRM index first, then tries a session-backed Solr lookup. Resolution is best-effort and is used only to build the CRM account shortcut; it is not required to persist or display the email." }
+        ]
+      },
+      "related": ["email-thread-preview", "how-email-sending-works", "email-integrations"]
+    }
+  ]
+}

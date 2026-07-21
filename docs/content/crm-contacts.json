@@ -29,7 +29,30 @@
           { "type": "p", "text": "The Query Builder button adds structured filters; active filters render as removable tags above the results. See the Query Builder article for the full field and operator catalog." }
         ]
       },
-      "related": ["query-builder", "bulk-email-selection", "new-contact"]
+      "related": ["query-builder", "bulk-email-selection", "new-contact", "recent-orders-scan"]
+    },
+    {
+      "slug": "recent-orders-scan",
+      "title": "Scan for Recent Orders",
+      "icon": "history",
+      "tiers": ["intermediate", "advanced"],
+      "keywords": ["recent orders", "my clients", "scan", "last query", "watermark", "morning routine"],
+      "summary": "CRM Search's contextual shelf routines: rerun the last query or scan a saved My Clients audience for orders created since the prior scan.",
+      "feature": "crm-search",
+      "flag": "crmSearchEnabled",
+      "covers": [],
+      "tutorial": "scan-recent-orders",
+      "body": {
+        "intermediate": [
+          { "type": "p", "text": "While CRM Search is open, the Actions Shelf registers two modal-specific actions. Run last query repeats the most recently applied CRM search. Scan for recent orders runs a saved client audience against the time since your last scan." },
+          { "type": "callout", "kind": "warning", "text": "The scan requires a saved Query Builder query named exactly 'My Clients'. If it is missing, the action tells you to create it instead of silently substituting another audience." },
+          { "type": "p", "text": "On the first run, the scan covers the previous seven days. After a successful run it stores a local watermark under gbScanRecentOrders_lastRun; later runs continue from that point. Results load into CRM Search where you can inspect, select, export, email, or launch a campaign." }
+        ],
+        "advanced": [
+          { "type": "p", "text": "Use __gbScan.status() in the page console to inspect the local scan clock and __gbScan.reset() to clear it so the next scan covers seven days again. The saved query remains the audience source either way." }
+        ]
+      },
+      "related": ["crm-search", "query-builder", "campaign-manager"]
     },
     {
       "slug": "query-builder",

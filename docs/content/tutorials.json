@@ -7,8 +7,8 @@
       "estMinutes": 5,
       "prerequisites": ["Extension installed"],
       "steps": [
-        { "action": "Open Settings: click the extension icon, then the settings gear (or the Settings tab in the Template Editor window).", "expected": "The Settings panel opens with Theme at the top.", "visualCue": "Gear icon in the popup footer." },
-        { "action": "Pick a theme variant — Dark, Slate, Light, or Cream.", "expected": "Every extension surface re-colors instantly.", "visualCue": "Theme section, top of Settings." },
+        { "action": "Open Settings: click the extension icon, choose Manage in the popup header, then open the Settings tab in the Manager window.", "expected": "The Settings panel opens with Theme at the top.", "visualCue": "Manage button in the popup header." },
+        { "action": "Pick a theme variant — Dark, Slate, Light, Cream, Nord, Dracula, Rosé, or Tokyo Night.", "expected": "Every extension surface re-colors instantly.", "visualCue": "Theme section, top of Settings." },
         { "action": "Set 'Email account host' to your own account name.", "expected": "Your From identity is configured.", "visualCue": "Developer Settings section.", "warning": "Power Automate sends remain blocked while this required value is blank." },
         { "action": "Write your email signature in the signature editor.", "expected": "Signature saves; it will auto-append to Power Automate sends.", "visualCue": "Signature section." },
         { "action": "Review Settings → Features and switch off anything you won't use.", "expected": "Disabled features vanish from shelves, popups, and shortcuts immediately.", "visualCue": "Features section, grouped by area.", "tip": "Everything except Power Automate is on by default. Leaving it all on is fine." },
@@ -36,10 +36,10 @@
       "estMinutes": 4,
       "prerequisites": ["On a contact or account page", "callLogEnabled and quickTaskEnabled are on"],
       "steps": [
-        { "action": "Double-tap Shift and click Log Call.", "expected": "Call Log opens showing the contact's name and phone, with the template filter focused.", "visualCue": "Floating shelf, bottom-right." },
+        { "action": "Double-tap Shift. Choose Call <name> to dial and open the logger, or Log incoming call to open it without dialing.", "expected": "Call Log opens showing the contact's name and phone, with the template filter focused.", "visualCue": "Floating shelf, bottom-right." },
         { "action": "Type to filter call templates; press a number key or Enter to pick one — or press '/' to compose from scratch.", "expected": "The composer pre-fills; '/' walks you through category → direction → voicemail → subject → note.", "visualCue": "Live preview pane updates as you type.", "tip": "The entire flow works without the mouse — Enter advances each field." },
         { "action": "Submit the call log.", "expected": "Success confirmation; the call is in the CRM activity log.", "visualCue": "Toast on completion." },
-        { "action": "Open Quick Task (shelf → Add Task), pick a template, and set the due date.", "expected": "Due date accepts shorthand: +1d, +1w, or mm/dd/yy.", "visualCue": "Due field in the composer.", "commonMistake": "Typing 'next week' doesn't parse — use +1w." },
+        { "action": "Open Quick task for <name>, pick a template, and set the due date.", "expected": "Use Today, Tomorrow, In 3 days, Next week, or enter a date as mm/dd/yy.", "visualCue": "Due control in the composer." },
         { "action": "Submit the task.", "expected": "Task attaches to the contact in the CRM with your category, priority, and due date.", "visualCue": "" }
       ],
       "related": ["call-log", "quick-task", "keyboard-shortcuts"]
@@ -156,7 +156,7 @@
       "estMinutes": 2,
       "prerequisites": ["watchListEnabled is on"],
       "steps": [
-        { "action": "On an order (or contact) page, open the popup's TRACKING section — or the shelf — and click Watch.", "expected": "A small add form appears with the order pre-linked.", "visualCue": "TRACKING section in the popup." },
+        { "action": "On an order (or contact) page, click the extension icon and choose Watch Order or Watch Contact.", "expected": "A small add form appears with the current record pre-linked.", "visualCue": "Watch button beside Watch List in the popup." },
         { "action": "Give it a title, priority, and optional due date, then add.", "expected": "The item lands on your Watch List with a link back to the order.", "visualCue": "" },
         { "action": "Open Watch List any time to review; tick items done as they resolve.", "expected": "Filter chips show live counts; completed items auto-clean after 5 days.", "visualCue": "Filter chips across the top.", "tip": "Watch List is local and private — use Quick Task instead when the team needs to see the follow-up in the CRM." }
       ],
@@ -175,6 +175,62 @@
         { "action": "Click Save and name the query.", "expected": "It appears in your saved queries for one-click reuse — and as a campaign audience.", "visualCue": "Saved queries list.", "tip": "Verify the audience visually here before ever pointing a campaign at it." }
       ],
       "related": ["query-builder", "crm-search", "run-campaign"]
+    },
+    {
+      "id": "handle-customer-reply",
+      "title": "Handle a customer reply",
+      "tier": "beginner",
+      "estMinutes": 3,
+      "prerequisites": ["Admin build", "Notifications and Email Relay reply notifications are enabled", "A new relay reply is available"],
+      "steps": [
+        { "action": "Open the extension popup and choose Notifications.", "expected": "The Open tab lists unresolved customer replies; its count matches the toolbar badge.", "visualCue": "Notifications button below CRM Search in the admin popup." },
+        { "action": "Search by name, email, or subject if needed, then open the reply row.", "expected": "The relayed message opens in the Email Viewer.", "visualCue": "Hover actions also expose View email and View account." },
+        { "action": "Open the linked account when available and prepare the reply.", "expected": "The CRM contact opens in a new tab. A missing match only disables this shortcut.", "visualCue": "Person icon on row hover." },
+        { "action": "Send the reply through Power Automate, or return to Notifications and mark the row done manually.", "expected": "Power Automate auto-completes open notifications for that recipient; manual Done produces the same closed state.", "visualCue": "The row moves from Open to Done and the badge decrements." }
+      ],
+      "related": ["reply-notifications", "email-thread-preview", "how-email-sending-works"]
+    },
+    {
+      "id": "apply-order-note",
+      "title": "Apply an order note",
+      "tier": "beginner",
+      "estMinutes": 2,
+      "prerequisites": ["On an order page", "At least one note template exists, or you have text for a custom note"],
+      "steps": [
+        { "action": "Open the Actions Shelf and choose Apply order note.", "expected": "Quick Order Note opens with the template filter focused.", "visualCue": "Contextual order action near Manage order dates." },
+        { "action": "Pick a saved note, or enter composer mode and fill Audience, Subject, and Body.", "expected": "The preview contains exactly what will be posted.", "visualCue": "Audience must match an option from the order page." },
+        { "action": "Review any Push dates forward value, then choose Apply.", "expected": "The note posts through the order-notes iframe; configured date movement runs through the date-push chain.", "visualCue": "Progress/success toast.", "warning": "A failing date-push step is reported by name; do not assume the date moved until success appears." },
+        { "action": "For an unchanged repeat, use Apply last note the next time the shelf opens.", "expected": "The most recently applied saved template posts without reopening the picker.", "visualCue": "Apply last note only appears after a saved-template application." }
+      ],
+      "related": ["quick-order-note", "note-templates", "order-date-manager"]
+    },
+    {
+      "id": "use-custom-crm-workspace",
+      "title": "Use a custom CRM workspace",
+      "tier": "intermediate",
+      "estMinutes": 4,
+      "prerequisites": ["The relevant Contact, Account, or Opportunity takeover is enabled under Settings → Custom Pages → CRM"],
+      "steps": [
+        { "action": "Open a Contact Details, Account Details, or Opportunity Details record.", "expected": "The registered extension workspace replaces the stock detail page for that page only.", "visualCue": "Metric cards and focused data sections replace the legacy CRM layout." },
+        { "action": "Review the record sections and open the related task, activity, email, order, proof, contact, or proposal you need.", "expected": "Links and actions retain the current record context.", "visualCue": "Each workspace exposes a different set of sections appropriate to its record type." },
+        { "action": "On Contact Details, use the standalone composer for a normal template email; on Opportunity Details, use proposal selection/breakdown for quote work.", "expected": "The operational email or proposal flow opens with the record context supplied.", "visualCue": "Do not use the Contact composer's saved-proposal slash command; it is marked Not implemented yet." },
+        { "action": "If you need the stock page, turn off only that takeover in Settings.", "expected": "The stock CRM page returns without deleting CRM records or extension-local data.", "visualCue": "Custom Pages → CRM list." }
+      ],
+      "related": ["custom-crm-pages", "crm-search", "build-email-proposal"]
+    },
+    {
+      "id": "scan-recent-orders",
+      "title": "Scan My Clients for recent orders",
+      "tier": "intermediate",
+      "estMinutes": 4,
+      "prerequisites": ["crmSearchEnabled is on", "A saved Query Builder query named exactly My Clients"],
+      "steps": [
+        { "action": "Open CRM Search with Ctrl/Cmd+K, then expand the Actions Shelf.", "expected": "CRM Search's modal-specific actions join the shelf.", "visualCue": "Run last query and Scan for recent orders." },
+        { "action": "Choose Scan for recent orders.", "expected": "The saved My Clients audience is searched for orders since the prior scan; the first run covers seven days.", "visualCue": "Progress and result count appear in CRM Search.", "commonMistake": "A differently named query is not used. Save it as exactly My Clients." },
+        { "action": "Inspect the results before selecting, exporting, emailing, or starting a campaign.", "expected": "Only the records you intentionally select move into a bulk action.", "visualCue": "Selection summary appears after checking rows." },
+        { "action": "Run the scan again on a later day.", "expected": "It continues from the successful local watermark instead of repeating the original seven-day window.", "visualCue": "Advanced recovery: __gbScan.status() inspects the clock; __gbScan.reset() clears it." }
+      ],
+      "related": ["recent-orders-scan", "crm-search", "query-builder"]
     }
   ]
 }

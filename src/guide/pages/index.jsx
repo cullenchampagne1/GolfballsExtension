@@ -10,13 +10,18 @@ import { EmailViewerPage, ImageViewerPage, Viewer3DPage } from './viewers.jsx';
 import { CatalogPage, ProposalsPage } from './catalog.jsx';
 import { QuickSendPage, CampaignsPage } from './campaigns.jsx';
 import { TroubleshootingPage, FaqPage, PowerUserPage, WhatsNewPage } from './reference.jsx';
+import { ManualPage, WorkflowsPage } from './reference-content.jsx';
+import { NotificationsPage } from './notifications.jsx';
+import { CRMWorkspacesPage } from './workspaces.jsx';
 
 /* Route → page component. Every route has a bespoke, hand-built page that
    visually reproduces the real modal/surface (live snippets + TourBox deep
    explanations), matching the Settings and Email Templates reference pages. */
 export const PAGES = {
   start: StartPage,
+  workflows: WorkflowsPage,
   popup: PopupPage,
+  notifications: NotificationsPage,
   settings: SettingsPage,
   templates: TemplatesPage,
   watchlist: WatchListPage,
@@ -27,6 +32,7 @@ export const PAGES = {
   'crm-search': SearchPage,
   'crm-query': QBPage,
   'crm-new': NewPage,
+  'crm-workspaces': CRMWorkspacesPage,
   themes: ThemesPage,
   shortcuts: ShortcutsPage,
   charge: ChargePage,
@@ -40,6 +46,7 @@ export const PAGES = {
   proposals: ProposalsPage,
   quicksend: QuickSendPage,
   campaigns: CampaignsPage,
+  manual: ManualPage,
   troubleshooting: TroubleshootingPage,
   faq: FaqPage,
   power: PowerUserPage,
