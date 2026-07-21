@@ -1,5 +1,5 @@
 // background.js
-importScripts('security-policy.js', 'calendar-form-state.js', 'installation-auth.js', 'settings-registry.js', 'remote-settings-policy.js', 'crm-index-store.js', 'defaults.js');
+importScripts('security-policy.js', 'calendar-form-state.js', 'installation-auth.js', 'settings-registry.js', 'remote-settings-policy.js', 'email-relay-poll.js', 'crm-index-store.js', 'defaults.js');
 
 const GB_SECURITY = globalThis.GBSecurity;
 if (!GB_SECURITY) throw new Error('Security policy failed to initialize');

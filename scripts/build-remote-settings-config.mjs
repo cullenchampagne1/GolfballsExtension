@@ -19,6 +19,11 @@ const workspaceRoot = path.resolve(extensionRoot, '..');
 const yamlPath = path.join(workspaceRoot, 'api-access-configs', 'golfballs-extension-configuration.yaml');
 const registryPath = path.join(extensionRoot, 'settings-registry.js');
 
+// Installation-local dev settings: a shared server policy never forces or hides
+// these — each stays a per-install choice. email.localPart guards sender
+// identity; emailRelay.notifications is a per-rep opt-in the rep toggles locally.
+const INSTALLATION_LOCAL_KEYS = new Set(['email.localPart', 'emailRelay.notifications']);
+
 const featureMeta = Object.fromEntries(FEATURE_FLAGS.map((item) => [item.key, item]));
 const developerRows = DEV_SETTINGS.filter((item) => item.type !== 'action');
 const developerDefaults = defaultDevSettings();
@@ -45,7 +50,7 @@ for (const row of developerRows) {
     `  ${row.key}:`,
     `    value: ${scalar(developerDefaults[row.key])}`,
     '    hidden: false',
-    `    managed: ${row.key === 'email.localPart' ? 'false' : 'true'}`,
+    `    managed: ${INSTALLATION_LOCAL_KEYS.has(row.key) ? 'false' : 'true'}`,
     `    label: ${scalar(row.label)}`,
   );
 }

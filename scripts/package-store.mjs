@@ -26,6 +26,7 @@ export const RUNTIME_ROOT_FILES = Object.freeze([
   'custom-pages-sandbox.html',
   'defaults.js',
   'editor.html',
+  'email-relay-poll.js',
   'guide.html',
   'installation-auth.js',
   'playground.html',

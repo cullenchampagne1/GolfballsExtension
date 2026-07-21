@@ -90,6 +90,13 @@ export const DEV_SETTINGS = [
     default: false,
   },
   {
+    key:     'emailRelay.notifications',
+    label:   'Email Relay: customer reply notifications',
+    desc:    'Poll the RevStack email relay for new inbound customer emails and raise a toast when a customer replies. Requires the relay endpoints to be live on the backend. Off = no polling, no notifications.',
+    type:    'bool',
+    default: false,
+  },
+  {
     key:     'golfballViewer.showDebugHud',
     label:   'Golfball viewer: camera debug HUD',
     desc:    'Overlay the 3D viewer with a live camera-position / orbit-angle readout plus a copy button. Use it to dial in a default camera framing.',
