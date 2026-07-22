@@ -118,6 +118,34 @@ class HelpAgentCorpusTests(unittest.TestCase):
         self.assertIn("dark with yellow accents", knowledge)
         self.assertIn("must be command-complete", knowledge)
         self.assertIn("how-to question is not permission", knowledge)
+        managed_sources = {
+            chunk["source"] for chunk in self.chunks
+            if chunk["id"].startswith("assistant:")
+        }
+        self.assertIn("golfballs-agent/system.md", managed_sources)
+        self.assertIn("golfballs-agent/personality.md", managed_sources)
+        self.assertIn("golfballs-agent/knowledge/product.md", managed_sources)
+        self.assertIn("golfballs-agent/knowledge/research.md", managed_sources)
+        self.assertFalse(any(source.startswith("docs/assistant/") for source in managed_sources))
+
+    def test_manifest_registers_bounded_memory_and_progressive_effort(self):
+        self.assertEqual(self.descriptor["memory_policy"], {
+            "enabled": True,
+            "project_ids": ["golfballs-extension"],
+            "categories": ["golfballs-crm", "golfballs-extension"],
+            "entity_terms": [
+                "Golfballs Toolkit", "golfballs-extension", "Golfballs CRM",
+            ],
+            "max_queries": 2,
+            "max_facts": 8,
+        })
+        self.assertEqual(self.descriptor["effort_policy"], {
+            "default": "low", "technical": "medium",
+            "troubleshooting": "high", "ticket": "high",
+        })
+        research = self.by_id["assistant:research-policy:1"]["text"]
+        self.assertIn("Prefer a local source citation", research)
+        self.assertIn("before proposing a ticket", research)
 
     def test_generic_backend_retrieval_resolves_real_guide_and_setting_queries(self):
         manager = ASSISTANT.AssistantManager(_StatusOnlyRunner())
