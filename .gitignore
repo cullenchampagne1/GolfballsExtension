@@ -35,3 +35,9 @@ __pycache__/
 .golfballs-extension-production/
 dist/store-stage/
 dist/store/
+
+# Backend integration — lives on the local backend machine only, never in the
+# shared extension source (loaded by the RevStack backend's ProjectManager).
+.revstack/
+revstack.project.json
+golfballs
