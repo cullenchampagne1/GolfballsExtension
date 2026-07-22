@@ -169,6 +169,52 @@ export function seedHistoricalHelpActionReceipts(receipts, receiptIds, now = Dat
   );
 }
 
+const RECEIPT_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,179}$/;
+
+function receiptHash(value) {
+  let hash = 0x811c9dc5;
+  for (const char of String(value || '')) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(36);
+}
+
+/**
+ * Prefer the backend-issued, per-action receipt. Older persisted messages do
+ * not have one, so derive a stable local identity from visible message/action
+ * content and creation time. It deliberately excludes runId: reopening or
+ * importing history must never make an old command executable again.
+ */
+export function helpActionReceiptId(message, action, index = 0) {
+  const issued = String(action?.receiptId ?? action?.receipt_id ?? '').trim();
+  if (RECEIPT_ID.test(issued)) return issued;
+  const position = Math.max(0, Math.floor(Number(index) || 0));
+  const createdAt = Math.max(0, Math.floor(Number(message?.createdAt) || 0));
+  const material = JSON.stringify([
+    createdAt,
+    String(message?.text || '').slice(0, 2_000),
+    String(action?.type || ''),
+    String(action?.target || ''),
+    String(action?.value || ''),
+    Array.isArray(action?.options) ? action.options.map(String).slice(0, 16) : [],
+    position,
+  ]);
+  return `legacy:${createdAt.toString(36)}:${receiptHash(material)}:${position}`;
+}
+
+export function hasIssuedHelpActionReceipt(action) {
+  return RECEIPT_ID.test(String(action?.receiptId ?? action?.receipt_id ?? '').trim());
+}
+
+export function helpActionReceiptDecision(receipts, receiptId, { retry = false } = {}) {
+  const existing = receipts && typeof receipts === 'object' ? receipts[receiptId] : null;
+  return {
+    existing: existing && typeof existing === 'object' ? existing : null,
+    execute: !existing || (retry === true && existing.status !== 'succeeded'),
+  };
+}
+
 /** Keep route shape useful to retrieval without sending record identifiers. */
 export function sanitizePageRoute(value) {
   try {

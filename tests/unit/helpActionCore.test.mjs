@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createSerialHelpActionRunner, orderHelpActions, planHelpAction, sanitizePageRoute,
+  createSerialHelpActionRunner, hasIssuedHelpActionReceipt, helpActionReceiptDecision,
+  helpActionReceiptId, orderHelpActions, planHelpAction, sanitizePageRoute,
   seedHistoricalHelpActionReceipts,
 } from '../../src/lib/helpActionCore.js';
 
@@ -83,6 +84,35 @@ describe('Help Companion action policy', () => {
     assert.equal(receipts['run-old:0'].message, 'Already applied');
     assert.equal(receipts['run-old:1'].message, 'Historical action was not replayed.');
     assert.equal(Object.hasOwn(receipts, 'not a valid receipt'), false);
+  });
+
+  it('uses server receipts for new actions and stable non-run identities for old history', () => {
+    const action = {
+      type: 'set_feature', target: 'actionsShelfEnabled', value: 'false', options: [],
+    };
+    assert.equal(
+      helpActionReceiptId({}, { ...action, receiptId: 'act_0123456789abcdef' }, 0),
+      'act_0123456789abcdef',
+    );
+    assert.equal(hasIssuedHelpActionReceipt({ receiptId: 'act_0123456789abcdef' }), true);
+    assert.equal(hasIssuedHelpActionReceipt(action), false);
+
+    const first = helpActionReceiptId({ runId: 'run-one', createdAt: 123, text: 'Done.' }, action, 0);
+    const restored = helpActionReceiptId({ runId: 'run-two', createdAt: 123, text: 'Done.' }, action, 0);
+    assert.equal(first, restored, 'legacy receipt identity must not depend on a backend run id');
+    assert.match(first, /^legacy:/);
+  });
+
+  it('does not replay succeeded or failed receipts unless a failed action is explicitly retried', () => {
+    const receipts = {
+      done: { status: 'succeeded', message: 'Applied' },
+      failed: { status: 'failed', message: 'Could not apply' },
+    };
+    assert.equal(helpActionReceiptDecision(receipts, 'done').execute, false);
+    assert.equal(helpActionReceiptDecision(receipts, 'failed').execute, false);
+    assert.equal(helpActionReceiptDecision(receipts, 'failed', { retry: true }).execute, true);
+    assert.equal(helpActionReceiptDecision(receipts, 'done', { retry: true }).execute, false);
+    assert.equal(helpActionReceiptDecision(receipts, 'new').execute, true);
   });
 
   it('rejects invented, hidden, out-of-range, and malformed model operations', () => {

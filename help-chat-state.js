@@ -16,7 +16,7 @@
   const ACTION_TYPES = new Set([
     'open_guide', 'open_settings', 'show_shortcut', 'copy_text',
     'set_feature', 'set_setting', 'set_theme_preset', 'set_theme_palette',
-    'share_settings', 'share_email_template', 'submit_ticket',
+    'share_settings', 'share_email_template', 'request_data_access', 'submit_ticket',
   ]);
 
   const bounded = (value, max) => String(value == null ? '' : value).trim().slice(0, max);
@@ -34,6 +34,10 @@
   const safeId = (value, fallback = '') => {
     const id = bounded(value, 100);
     return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/.test(id) ? id : fallback;
+  };
+  const safeReceiptId = (value) => {
+    const id = bounded(value, 180);
+    return /^[A-Za-z0-9][A-Za-z0-9._:-]{0,179}$/.test(id) ? id : '';
   };
 
   function makeRequestId(now = Date.now()) {
@@ -84,6 +88,7 @@
         : [],
       label: bounded(value.label, 100) || 'Open',
       citationId: safeId(value.citation_id ?? value.citationId),
+      receiptId: safeReceiptId(value.receipt_id ?? value.receiptId),
     };
   }
 
@@ -211,9 +216,29 @@
         const kind = safeId(item.kind);
         const id = safeId(item.id);
         if (!kind || !id) return null;
-        return { kind, id, label: bounded(item.label, 120) || id };
+        return {
+          kind, id, label: bounded(item.label, 120) || id,
+          summary: bounded(item.summary, 1_200) || undefined,
+        };
       }).filter(Boolean)
       : [];
+    let resourceAccess;
+    if (raw.resource_access && typeof raw.resource_access === 'object' && !Array.isArray(raw.resource_access)) {
+      const requestId = safeId(raw.resource_access.request_id);
+      const target = safeId(raw.resource_access.target);
+      if (requestId && target) {
+        resourceAccess = {
+          request_id: requestId,
+          target,
+          query: bounded(raw.resource_access.query, 120),
+          options: Array.isArray(raw.resource_access.options)
+            ? raw.resource_access.options.map((item) => safeId(item)).filter(Boolean).slice(0, 16)
+            : [],
+          result_count: Math.max(0, Math.min(10_000, Math.floor(finite(raw.resource_access.result_count, 0)))),
+          truncated: raw.resource_access.truncated === true,
+        };
+      }
+    }
     return {
       extension_version: bounded(raw.extension_version, 40) || undefined,
       edition: raw.edition === 'consumer' ? 'consumer' : 'admin',
@@ -228,6 +253,7 @@
         ? raw.hidden_settings.map((item) => bounded(item, 160)).filter(Boolean).slice(0, 160)
         : [],
       available_resources: resources,
+      resource_access: resourceAccess,
     };
   }
 

@@ -38,6 +38,7 @@ function makeFlow() {
   const context = createContext({ chrome: parts.chrome, fetchImpl: fetchMock });
   loadScript(context, 'installation-auth.js');
   loadScript(context, 'help-chat-state.js');
+  loadScript(context, 'help-data-access.js');
   loadScript(context, 'help-assistant.js');
   const controllerOptions = { setTimer: () => 1, clearTimer: () => {} };
   return {
@@ -111,6 +112,7 @@ describe('Help Companion background flow', () => {
     const context = createContext({ chrome, fetchImpl: fetchMock });
     loadScript(context, 'installation-auth.js');
     loadScript(context, 'help-chat-state.js');
+    loadScript(context, 'help-data-access.js');
     loadScript(context, 'help-assistant.js');
     const controller = context.GBHelpAssistant.createController({ setTimer: () => 1, clearTimer: () => {} });
 
@@ -125,5 +127,49 @@ describe('Help Companion background flow', () => {
     assert.equal(bodies.length, 2);
     assert.equal(bodies[1].request_id, bodies[0].request_id);
     assert.equal(recovered.messages.filter(({ role }) => role === 'user').length, 1);
+  });
+
+  it('asks once, filters local templates, and submits only the approved projection', async () => {
+    const flow = makeFlow();
+    flow.stored.templates = [
+      {
+        id: 'tpl-order-follow-up', name: 'Order follow up', type: 'order', enabled: true,
+        subject: 'Checking on your order', body: '<p>Private body must remain local.</p>',
+      },
+      { id: 'tpl-case-follow-up', name: 'Case follow up', type: 'case', enabled: true },
+    ];
+    const action = {
+      type: 'request_data_access', target: 'email_templates', value: 'order follow up',
+      options: ['type:order', 'state:enabled', 'fields:metadata', 'limit:5'],
+      label: 'Find my order follow-up template',
+    };
+    const first = await flow.controller.resolveDataAccess(
+      'act_access0123456789', action,
+      { edition: 'admin', surface: 'actions-shelf' }, 'allow',
+    );
+    assert.equal(first.approval.status, 'submitted');
+    assert.equal(first.approval.resultCount, 1);
+
+    const posts = flow.requests.filter(({ url, method }) => (
+      new URL(url).pathname.endsWith('/assistant/messages') && method === 'POST'
+    ));
+    assert.equal(posts.length, 1);
+    const submitted = JSON.parse(posts[0].options.body);
+    assert.equal(submitted.context.available_resources[0].id, 'tpl-order-follow-up');
+    assert.match(submitted.context.available_resources[0].summary, /Checking on your order/);
+    assert.doesNotMatch(JSON.stringify(submitted), /Private body must remain local/);
+    assert.equal(submitted.context.resource_access.target, 'email_templates');
+
+    await flow.controller.resolveDataAccess(
+      'act_access0123456789', action,
+      { edition: 'admin', surface: 'actions-shelf' }, 'allow',
+    );
+    assert.equal(
+      flow.requests.filter(({ url, method }) => (
+        new URL(url).pathname.endsWith('/assistant/messages') && method === 'POST'
+      )).length,
+      1,
+      'an approval receipt must not submit approved data twice',
+    );
   });
 });

@@ -5,12 +5,13 @@ import {
 } from './theme.js';
 import { PRESET_SCOPES, gatherScopes } from './presetScopes.js';
 import {
-  createSerialHelpActionRunner, MUTATION_ACTION_TYPES, planHelpAction, sanitizePageRoute,
+  createSerialHelpActionRunner, helpActionReceiptDecision, helpActionReceiptId,
+  hasIssuedHelpActionReceipt,
+  MUTATION_ACTION_TYPES, planHelpAction, sanitizePageRoute,
   seedHistoricalHelpActionReceipts,
 } from './helpActionCore.js';
 
 const RECEIPTS_KEY = 'gbHelpActionReceiptsV1';
-const RECEIPTS_LEDGER_KEY = 'gbHelpActionReceiptLedgerV2';
 const COLOR_KEYS = ['--gb-brand-label', '--gb-brand', '--gb-brand-dark', '--gb-brand-border'];
 
 function storageGet(keys) {
@@ -61,15 +62,16 @@ export function isExecutableHelpAction(action) {
 }
 
 export async function prepareHelpActionReceipts(receiptIds) {
-  const stored = await storageGet([RECEIPTS_KEY, RECEIPTS_LEDGER_KEY]);
-  if (stored[RECEIPTS_LEDGER_KEY] === true) return;
+  if (!Array.isArray(receiptIds) || receiptIds.length === 0) return;
+  const stored = await storageGet(RECEIPTS_KEY);
   await storageSet({
     [RECEIPTS_KEY]: seedHistoricalHelpActionReceipts(
       stored[RECEIPTS_KEY], receiptIds, Date.now(),
     ),
-    [RECEIPTS_LEDGER_KEY]: true,
   });
 }
+
+export { helpActionReceiptId, hasIssuedHelpActionReceipt };
 
 export async function helpActionContext() {
   const env = await environment();
@@ -78,17 +80,12 @@ export async function helpActionContext() {
     ...Object.keys(env.policy?.hiddenDeveloperSettings || {}),
     ...(env.policy?.developerSectionHidden ? Object.keys(settingRules) : []),
   ];
-  const resources = env.templates
-    .filter((item) => item && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(String(item.id || '')))
-    .slice(0, 80)
-    .map((item) => ({
-      kind: 'email_template',
-      id: String(item.id),
-      label: String(item.name || item.id).trim().slice(0, 120),
-    }));
   return {
     hidden_settings: [...new Set(hidden)].slice(0, 160),
-    available_resources: resources,
+    // Local resources are disclosed only by the explicit one-time approval
+    // flow. Keeping this empty prevents a normal help turn from leaking even
+    // template names to the backend.
+    available_resources: [],
     page_url: sanitizePageRoute(globalThis.location?.href),
   };
 }
@@ -162,14 +159,15 @@ async function execute(action, receiptId) {
   return { message: `Created a link for “${operation.template.name || 'email template'}”`, url: response.share?.url || '' };
 }
 
-async function executeHelpActionOnceNow(receiptId, action) {
+async function executeHelpActionOnceNow(receiptId, action, { retry = false } = {}) {
   const safeReceipt = String(receiptId || '').slice(0, 180);
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,179}$/.test(safeReceipt)) throw new Error('The action receipt is invalid');
   const stored = await storageGet(RECEIPTS_KEY);
   const receipts = stored[RECEIPTS_KEY] && typeof stored[RECEIPTS_KEY] === 'object'
     ? stored[RECEIPTS_KEY]
     : {};
-  if (receipts[safeReceipt]?.status === 'succeeded') return receipts[safeReceipt];
+  const decision = helpActionReceiptDecision(receipts, safeReceipt, { retry });
+  if (!decision.execute) return decision.existing;
   try {
     const result = await execute(action, safeReceipt);
     const receipt = {
@@ -192,7 +190,14 @@ async function executeHelpActionOnceNow(receiptId, action) {
     await storageSet({ [RECEIPTS_KEY]: trimmed });
     return receipt;
   } catch (error) {
-    return { status: 'failed', message: String(error?.message || 'Action failed').slice(0, 240), url: '', at: Date.now() };
+    const receipt = {
+      status: 'failed', message: String(error?.message || 'Action failed').slice(0, 240),
+      url: '', at: Date.now(),
+    };
+    const next = { ...receipts, [safeReceipt]: receipt };
+    const trimmed = Object.fromEntries(Object.entries(next).sort((a, b) => (b[1]?.at || 0) - (a[1]?.at || 0)).slice(0, 400));
+    await storageSet({ [RECEIPTS_KEY]: trimmed });
+    return receipt;
   }
 }
 
@@ -201,6 +206,6 @@ async function executeHelpActionOnceNow(receiptId, action) {
 // observes the receipt written before it instead of overwriting a stale snapshot.
 const executeHelpActionSerial = createSerialHelpActionRunner(executeHelpActionOnceNow);
 
-export function executeHelpActionOnce(receiptId, action) {
-  return executeHelpActionSerial(receiptId, action);
+export function executeHelpActionOnce(receiptId, action, options) {
+  return executeHelpActionSerial(receiptId, action, options);
 }

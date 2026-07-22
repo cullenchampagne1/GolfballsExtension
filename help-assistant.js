@@ -10,10 +10,14 @@
 
   const State = root.GBHelpChatState;
   if (!State) throw new Error('Help chat state failed to initialize');
+  const DataAccess = root.GBHelpDataAccess;
+  if (!DataAccess) throw new Error('Help data-access policy failed to initialize');
 
   const BASE_PATH = '/projects/golfballs-extension/assistant';
   const ALARM_NAME = 'gb-help-assistant-poll';
+  const APPROVALS_KEY = 'gbHelpDataApprovalsV1';
   const RESPONSE_LIMIT = 512 * 1024;
+  const APPROVAL_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,179}$/;
 
   function createController({
     chromeApi = root.chrome,
@@ -27,26 +31,78 @@
     let timerId = null;
     let pollPromise = null;
     let mutationQueue = Promise.resolve();
+    let approvalQueue = Promise.resolve();
 
-    function storageGet() {
+    function rawStorageGet(keys) {
       return new Promise((resolve, reject) => {
-        chromeApi.storage.local.get(State.STORAGE_KEY, (result) => {
+        chromeApi.storage.local.get(keys, (result) => {
           const error = chromeApi.runtime?.lastError;
-          if (error) reject(new Error(error.message || 'Unable to read help conversation'));
-          else resolve(State.normalizeState(result?.[State.STORAGE_KEY], now()));
+          if (error) reject(new Error(error.message || 'Unable to read extension storage'));
+          else resolve(result || {});
         });
       });
     }
 
-    function storageSet(state) {
-      const normalized = State.normalizeState(state, now());
+    function rawStorageSet(value) {
       return new Promise((resolve, reject) => {
-        chromeApi.storage.local.set({ [State.STORAGE_KEY]: normalized }, () => {
+        chromeApi.storage.local.set(value, () => {
           const error = chromeApi.runtime?.lastError;
-          if (error) reject(new Error(error.message || 'Unable to save help conversation'));
-          else resolve(normalized);
+          if (error) reject(new Error(error.message || 'Unable to save extension storage'));
+          else resolve();
         });
       });
+    }
+
+    function rawStorageRemove(key) {
+      return new Promise((resolve) => chromeApi.storage.local.remove(key, resolve));
+    }
+
+    function storageGet() {
+      return rawStorageGet(State.STORAGE_KEY)
+        .then((result) => State.normalizeState(result?.[State.STORAGE_KEY], now()));
+    }
+
+    function storageSet(state) {
+      const normalized = State.normalizeState(state, now());
+      return rawStorageSet({ [State.STORAGE_KEY]: normalized }).then(() => normalized);
+    }
+
+    const safeApprovalId = (value) => {
+      const id = String(value || '').trim();
+      if (!APPROVAL_ID.test(id)) throw new Error('The data approval identifier is invalid');
+      return id;
+    };
+
+    async function approvalLedger() {
+      const raw = (await rawStorageGet(APPROVALS_KEY))[APPROVALS_KEY];
+      return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    }
+
+    async function saveApproval(id, value) {
+      const current = await approvalLedger();
+      const next = { ...current, [id]: value };
+      const trimmed = Object.fromEntries(
+        Object.entries(next).sort((left, right) => Number(right[1]?.at || 0) - Number(left[1]?.at || 0)).slice(0, 100),
+      );
+      await rawStorageSet({ [APPROVALS_KEY]: trimmed });
+      return value;
+    }
+
+    async function dataApprovalStatus(receiptId) {
+      const id = safeApprovalId(receiptId);
+      const value = (await approvalLedger())[id];
+      if (!value || typeof value !== 'object') return null;
+      return {
+        status: ['pending', 'submitted', 'denied', 'failed'].includes(value.status) ? value.status : 'failed',
+        requestId: String(value.requestId || '').slice(0, 80),
+        query: String(value.query || '').slice(0, 120),
+        fields: value.fields === 'content' ? 'content' : 'metadata',
+        resultCount: Math.max(0, Math.min(20, Number(value.resultCount) || 0)),
+        totalMatches: Math.max(0, Math.min(10_000, Number(value.totalMatches) || 0)),
+        truncated: value.truncated === true,
+        message: String(value.message || '').slice(0, 240),
+        at: Math.max(0, Number(value.at) || 0),
+      };
     }
 
     function mutate(fn) {
@@ -146,6 +202,70 @@
         clearScheduledPoll();
         return state;
       }
+    }
+
+    async function resolveDataAccess(receiptId, action, context, decision) {
+      const task = approvalQueue.then(async () => {
+        const id = safeApprovalId(receiptId);
+        const plan = DataAccess.planRequest(action);
+        const existing = await dataApprovalStatus(id);
+        if (existing?.status === 'submitted' || existing?.status === 'denied') {
+          return { state: await getState(), approval: existing };
+        }
+        if (decision === 'deny') {
+          const approval = await saveApproval(id, {
+            status: 'denied', requestId: existing?.requestId || '',
+            query: plan.query, fields: plan.fields, resultCount: 0,
+            totalMatches: 0, truncated: false,
+            message: 'Access was not shared.', at: now(),
+          });
+          return { state: await getState(), approval };
+        }
+        if (decision !== 'allow') throw new Error('Choose whether to allow this data request');
+        const currentState = await getState();
+        if (currentState.active) throw new Error('Wait for the current Help Companion response to finish');
+
+        const stored = await rawStorageGet('templates');
+        const result = DataAccess.filterEmailTemplates(stored.templates, action);
+        const requestId = existing?.requestId || State.makeRequestId(now());
+        await saveApproval(id, {
+          status: 'pending', requestId, query: plan.query, fields: plan.fields,
+          resultCount: result.resources.length, totalMatches: result.resultCount,
+          truncated: result.truncated, message: 'Sending approved results once…', at: now(),
+        });
+
+        const approvalContext = {
+          ...(context && typeof context === 'object' ? context : {}),
+          available_resources: result.resources,
+          resource_access: {
+            request_id: requestId,
+            target: plan.target,
+            query: plan.query,
+            options: plan.options,
+            result_count: result.resources.length,
+            truncated: result.truncated,
+          },
+        };
+        const continuation = DataAccess.continuationMessage(result);
+        const state = await send(continuation, approvalContext, {
+          retry: existing?.status === 'failed',
+          requestIdOverride: requestId,
+        });
+        const failed = state.lastError?.requestId === requestId;
+        const approval = await saveApproval(id, {
+          status: failed ? 'failed' : 'submitted', requestId,
+          query: plan.query, fields: plan.fields,
+          resultCount: result.resources.length, totalMatches: result.resultCount,
+          truncated: result.truncated,
+          message: failed
+            ? (state.lastError?.message || 'Approved results could not be sent.')
+            : `${result.resources.length} matching template${result.resources.length === 1 ? '' : 's'} shared once.`,
+          at: now(),
+        });
+        return { state, approval };
+      });
+      approvalQueue = task.then(() => undefined, () => undefined);
+      return task;
     }
 
     async function retry(context) {
@@ -278,11 +398,13 @@
     }
 
     async function clearConversation() {
-      return mutate((current) => {
+      const state = await mutate((current) => {
         if (current.active) throw new Error('Cancel the active response before clearing this conversation');
         clearScheduledPoll();
         return State.emptyState(now());
       });
+      await rawStorageRemove(APPROVALS_KEY);
+      return state;
     }
 
     async function feedback(runId, rating) {
@@ -313,9 +435,13 @@
       clearConversation,
       feedback,
       status,
+      dataApprovalStatus,
+      resolveDataAccess,
       friendlyError,
     });
   }
 
-  root.GBHelpAssistant = Object.freeze({ BASE_PATH, ALARM_NAME, RESPONSE_LIMIT, createController });
+  root.GBHelpAssistant = Object.freeze({
+    BASE_PATH, ALARM_NAME, APPROVALS_KEY, RESPONSE_LIMIT, createController,
+  });
 })(globalThis);

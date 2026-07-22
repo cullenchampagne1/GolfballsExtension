@@ -58,7 +58,10 @@ describe('Help Companion state', () => {
         text: 'Open the guide from Settings.',
         steps: [{ text: 'Open Settings.', citation_ids: ['guide-1'] }],
         citations: [{ id: 'guide-1', title: 'Settings', kind: 'guide', source: 'guide', guide_route: '#settings', excerpt: 'Open Settings.' }],
-        actions: [{ type: 'open_guide', target: '#settings', label: 'Open guide', citation_id: 'guide-1' }],
+        actions: [{
+          type: 'open_guide', target: '#settings', label: 'Open guide',
+          citation_id: 'guide-1', receipt_id: 'act_0123456789abcdef',
+        }],
         suggested_questions: ['Where are feature flags?'],
         confidence: 0.91,
       },
@@ -70,6 +73,7 @@ describe('Help Companion state', () => {
     assert.equal(state.messages[1].text, 'Open the guide from Settings.');
     assert.equal(state.messages[1].citations[0].guideRoute, '#settings');
     assert.equal(state.messages[1].actions[0].type, 'open_guide');
+    assert.equal(state.messages[1].actions[0].receiptId, 'act_0123456789abcdef');
     assert.equal(state.unread, 1);
 
     state = State.applyRun(state, completed, 40);
@@ -107,14 +111,16 @@ describe('Help Companion state', () => {
         { type: 'open_guide', target: '#manual/actions-shelf', label: 'Open guide' },
         { type: 'set_feature', target: 'actionsShelfEnabled', value: 'false', options: [], label: 'Disable shelf' },
         { type: 'submit_ticket', target: 'bug', value: 'The shelf does not open.', options: [], label: 'Shelf does not open' },
+        { type: 'request_data_access', target: 'email_templates', value: 'order', options: ['fields:metadata'], label: 'Allow templates', receipt_id: 'act_access1234' },
         { type: 'run_javascript', target: 'alert(1)', label: 'Run' },
       ],
       citations: [{ id: '../bad', title: 'Bad id' }, { id: 'safe-id', title: 'Safe citation' }],
     });
     assert.equal(answer.text.length, 24_000);
-    assert.equal(JSON.stringify(answer.actions.map((item) => item.type)), JSON.stringify(['open_guide', 'set_feature', 'submit_ticket']));
+    assert.equal(JSON.stringify(answer.actions.map((item) => item.type)), JSON.stringify(['open_guide', 'set_feature', 'submit_ticket', 'request_data_access']));
     assert.equal(answer.actions[1].value, 'false');
     assert.equal(answer.actions[2].target, 'bug');
+    assert.equal(answer.actions[3].receiptId, 'act_access1234');
     assert.equal(JSON.stringify(answer.citations.map((item) => item.id)), JSON.stringify(['safe-id']));
   });
 

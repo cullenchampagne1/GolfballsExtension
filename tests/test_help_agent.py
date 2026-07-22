@@ -93,6 +93,18 @@ class HelpAgentCorpusTests(unittest.TestCase):
         self.assertIn(
             "settings-appearance", targets[("share_settings", "settings")]["option_values"]
         )
+        self.assertIn(
+            "fields:metadata",
+            targets[("request_data_access", "email_templates")]["option_values"],
+        )
+
+    def test_personality_names_creator_and_allows_harmless_general_chat(self):
+        prompt = self.descriptor["system_prompt"]
+        self.assertIn("created by Cullen Champagne", prompt)
+        self.assertIn("Harmless questions do not have to be about the extension", prompt)
+        personality = self.by_id["assistant:personality:1"]["text"]
+        self.assertIn("dry, playful sarcasm", personality)
+        self.assertIn("not a reason to reject small talk", personality)
 
     def test_generic_backend_retrieval_resolves_real_guide_and_setting_queries(self):
         manager = ASSISTANT.AssistantManager(_StatusOnlyRunner())

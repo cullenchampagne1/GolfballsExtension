@@ -65,6 +65,7 @@
     { "name": "ui · Actions Shelf panel motion", "file": "tests/unit/shelfMotion.test.mjs" },
     { "name": "ui · Help Companion conversation state", "file": "tests/unit/helpChatState.test.mjs" },
     { "name": "ui · Help Companion guarded actions", "file": "tests/unit/helpActionCore.test.mjs" },
+    { "name": "guard · Help Companion approved local data", "file": "tests/unit/helpDataAccess.test.mjs" },
     { "name": "ui · ASP date offsets & calendar cells", "file": "tests/unit/dateUtils.test.mjs" },
     { "name": "ui · admin page-context routing", "file": "tests/unit/pageContext.test.mjs" },
     { "name": "guard · operator-guide content coverage", "file": "tests/unit/helpContent.test.mjs" },

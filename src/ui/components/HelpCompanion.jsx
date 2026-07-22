@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { I, Icon } from '../icons.jsx';
 import {
-  executeHelpActionOnce, helpActionContext, isExecutableHelpAction, prepareHelpActionReceipts,
+  executeHelpActionOnce, hasIssuedHelpActionReceipt, helpActionContext,
+  helpActionReceiptId, isExecutableHelpAction, prepareHelpActionReceipts,
 } from '../../lib/helpActions.js';
 import {
   createSerialHelpActionRunner, orderHelpActions,
@@ -186,6 +187,20 @@ export function useHelpAssistant(page) {
     markRead: () => call({ action: 'helpAssistantMarkRead' }),
     clear: () => call({ action: 'helpAssistantClear' }),
     feedback: (runId, rating) => call({ action: 'helpAssistantFeedback', runId, rating }),
+    dataApprovalStatus: async (receiptId) => (
+      await runtimeMessage({ action: 'helpAssistantDataApprovalStatus', receiptId })
+    ).approval || null,
+    resolveDataAccess: async (receiptId, request, decision) => {
+      const response = await runtimeMessage({
+        action: 'helpAssistantResolveDataAccess',
+        receiptId,
+        request,
+        decision,
+        context: await helpContext(page),
+      });
+      applyResponse(response);
+      return response.approval || null;
+    },
   };
 }
 
@@ -331,18 +346,20 @@ async function copyText(text) {
   }
 }
 
-function ExecutableActionCard({ action, receiptId, onAction, ready }) {
-  const [receipt, setReceipt] = useState({ status: 'running', message: 'Checking action history…', url: '' });
+function ExecutableActionCard({ action, receiptId, historical = false, onAction, ready }) {
+  const [receipt, setReceipt] = useState(historical
+    ? { status: 'succeeded', message: 'Historical action was not replayed.', url: '' }
+    : { status: 'running', message: 'Checking action history…', url: '' });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    if (!ready) return undefined;
+    if (!ready || historical) return undefined;
     let alive = true;
     setReceipt({ status: 'running', message: 'Validating this action…', url: '' });
-    onAction(action, receiptId).then((result) => {
+    onAction(action, receiptId, { retry: attempt > 0 }).then((result) => {
       if (alive) setReceipt(result || { status: 'failed', message: 'The action did not return a receipt.', url: '' });
     });
     return () => { alive = false; };
-  }, [ready, receiptId, attempt]);
+  }, [ready, historical, receiptId, attempt]);
 
   const succeeded = receipt.status === 'succeeded';
   const failed = receipt.status === 'failed';
@@ -386,7 +403,82 @@ function ExecutableActionCard({ action, receiptId, onAction, ready }) {
   );
 }
 
-function AssistantMessage({ message, onAction, onFeedback, isLast, onSuggestion, actionsReady }) {
+function DataAccessActionCard({ action, receiptId, historical = false, onStatus, onResolve }) {
+  const [approval, setApproval] = useState(historical ? {
+    status: 'denied', message: 'Historical request expired and was not replayed.',
+  } : null);
+  const [phase, setPhase] = useState(historical ? 'idle' : 'loading');
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (historical) return undefined;
+    let alive = true;
+    onStatus(receiptId)
+      .then((value) => { if (alive) { setApproval(value); setPhase('idle'); } })
+      .catch(() => { if (alive) setPhase('idle'); });
+    return () => { alive = false; };
+  }, [historical, receiptId]);
+
+  const resolve = async (decision) => {
+    setPhase(decision === 'allow' ? 'approving' : 'denying');
+    setError('');
+    try {
+      const value = await onResolve(receiptId, action, decision);
+      setApproval(value);
+      setPhase('idle');
+      window.__gbToast?.[decision === 'allow' ? 'success' : 'info']?.(
+        decision === 'allow' ? 'Approved results shared once' : 'Access not shared',
+        { duration: 1800 },
+      );
+    } catch (reason) {
+      setError(reason?.message || 'The data request could not be updated');
+      setPhase('idle');
+    }
+  };
+
+  const option = (prefix, fallback) => action.options?.find((value) => value.startsWith(prefix))?.slice(prefix.length) || fallback;
+  const filter = action.value === '*' ? 'All saved templates' : `Matches “${action.value || 'all'}”`;
+  const type = option('type:', 'any');
+  const fields = option('fields:', 'metadata');
+  const limit = option('limit:', '10');
+  const terminal = approval?.status === 'submitted' || approval?.status === 'denied';
+  const failed = approval?.status === 'failed';
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }}
+      style={{ width: '100%', padding: '10px', borderRadius: 11, background: 'linear-gradient(145deg, var(--gb-brand-tint-soft), var(--gb-fill-subtle))', border: '1px solid var(--gb-brand-tint-border)', boxShadow: 'inset 0 1px 0 var(--gb-fill-faint)' }}
+    >
+      <div style={{ display: 'grid', gridTemplateColumns: '30px minmax(0,1fr)', gap: 9, alignItems: 'start' }}>
+        <span style={{ width: 30, height: 30, borderRadius: 9, display: 'grid', placeItems: 'center', color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)' }}><I.eye size={13} /></span>
+        <span style={{ minWidth: 0 }}>
+          <strong style={{ display: 'block', color: 'var(--gb-text-primary)', fontSize: 10.75, lineHeight: 1.3 }}>{action.label || 'Allow one-time access'}</strong>
+          <span style={{ display: 'block', marginTop: 3, color: 'var(--gb-text-muted)', fontSize: 9.5, lineHeight: 1.45 }}>The extension will filter locally first. Only the approved results go to Help Companion.</span>
+        </span>
+      </div>
+      <div style={{ marginTop: 8, padding: '7px 8px', display: 'flex', flexWrap: 'wrap', gap: 5, borderRadius: 8, background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)' }}>
+        {[filter, type === 'any' ? 'Any email type' : `${type} templates`, fields === 'content' ? 'Names + subjects + body' : 'Names + types + subjects', `Up to ${limit}`].map((text) => (
+          <span key={text} style={{ padding: '2px 6px', borderRadius: 999, color: 'var(--gb-text-tertiary)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', fontSize: 8.75, fontWeight: 650 }}>{text}</span>
+        ))}
+      </div>
+      {(approval || error) && (
+        <div style={{ marginTop: 7, color: error || failed ? 'var(--gb-error-fg)' : approval?.status === 'submitted' ? 'var(--gb-success-fg)' : 'var(--gb-text-muted)', fontSize: 9.5, lineHeight: 1.4, fontWeight: 620 }}>
+          {error || approval?.message || (approval?.status === 'denied' ? 'Access was not shared.' : '')}
+        </div>
+      )}
+      {!terminal && (
+        <div style={{ marginTop: 9, display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+          {!failed && <button type="button" disabled={phase !== 'idle'} onClick={() => resolve('deny')} style={{ height: 27, padding: '0 9px', borderRadius: 8, background: 'transparent', color: 'var(--gb-text-muted)', border: '1px solid var(--gb-border-default)', fontFamily: 'var(--gb-font-sans)', fontSize: 9.5, fontWeight: 700, cursor: phase === 'idle' ? 'pointer' : 'wait' }}>Not now</button>}
+          <button type="button" disabled={phase !== 'idle'} onClick={() => resolve('allow')} style={{ height: 27, padding: '0 10px', display: 'inline-flex', alignItems: 'center', gap: 5, borderRadius: 8, background: 'linear-gradient(145deg, var(--gb-brand), var(--gb-brand-dark))', color: 'var(--gb-text-on-brand)', border: '1px solid var(--gb-brand-border)', fontFamily: 'var(--gb-font-sans)', fontSize: 9.5, fontWeight: 750, cursor: phase === 'idle' ? 'pointer' : 'wait' }}>
+            {phase !== 'idle' && <span style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px solid currentColor', borderTopColor: 'transparent', animation: 'gb-help-orbit .7s linear infinite' }} />}
+            {failed ? 'Retry' : 'Allow once'}
+          </button>
+        </div>
+      )}
+      {approval?.status === 'submitted' && <I.check size={12} style={{ margin: '7px 0 0 auto', color: 'var(--gb-success-fg)' }} />}
+    </motion.div>
+  );
+}
+
+function AssistantMessage({ message, onAction, onDataStatus, onDataResolve, onFeedback, isLast, onSuggestion, actionsReady }) {
   const queuedAction = useMemo(() => createSerialHelpActionRunner(onAction), [onAction]);
   const orderedActions = useMemo(() => orderHelpActions(message.actions), [message.actions]);
   return (
@@ -425,8 +517,12 @@ function AssistantMessage({ message, onAction, onFeedback, isLast, onSuggestion,
             {orderedActions.map((action, index) => {
               const originalIndex = message.actions.indexOf(action);
               const receiptIndex = originalIndex >= 0 ? originalIndex : index;
-              return isExecutableHelpAction(action) ? (
-                <ExecutableActionCard key={`${action.type}-${receiptIndex}`} action={action} receiptId={`${message.runId || message.id || 'answer'}:${receiptIndex}`} onAction={queuedAction} ready={actionsReady} />
+              const receiptId = helpActionReceiptId(message, action, receiptIndex);
+              const historical = !hasIssuedHelpActionReceipt(action);
+              return action.type === 'request_data_access' ? (
+                <DataAccessActionCard key={`${action.type}-${receiptId}`} action={action} receiptId={receiptId} historical={historical} onStatus={onDataStatus} onResolve={onDataResolve} />
+              ) : isExecutableHelpAction(action) ? (
+                <ExecutableActionCard key={`${action.type}-${receiptId}`} action={action} receiptId={receiptId} historical={historical} onAction={queuedAction} ready={actionsReady} />
               ) : (
                 <button key={`${action.type}-${receiptIndex}`} type="button" onClick={() => onAction(action)} style={{
                   height: 27, padding: '0 9px', display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -557,8 +653,8 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
     let alive = true;
     const receiptIds = messages.flatMap((message) => (
       message.role !== 'assistant' ? [] : (message.actions || []).flatMap((action, index) => (
-        isExecutableHelpAction(action)
-          ? [`${message.runId || message.id || 'answer'}:${index}`]
+        isExecutableHelpAction(action) && !hasIssuedHelpActionReceipt(action)
+          ? [helpActionReceiptId(message, action, index)]
           : []
       ))
     ));
@@ -596,11 +692,11 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
     }
   }, [draft, active, localBusy, client]);
 
-  const handleAction = useCallback(async (action, receiptId = '') => {
+  const handleAction = useCallback(async (action, receiptId = '', options = {}) => {
     const type = action?.type;
     const target = String(action?.target || '');
     if (isExecutableHelpAction(action)) {
-      const receipt = await executeHelpActionOnce(receiptId, action);
+      const receipt = await executeHelpActionOnce(receiptId, action, options);
       window.__gbToast?.[receipt.status === 'succeeded' ? 'success' : 'error']?.(receipt.message, { duration: 2300 });
       return receipt;
     }
@@ -621,6 +717,14 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
     }
     return { status: 'failed', message: 'Unsupported action', url: '' };
   }, []);
+
+  const handleDataStatus = useCallback((receiptId) => (
+    client.dataApprovalStatus(receiptId)
+  ), [client]);
+
+  const handleDataResolve = useCallback((receiptId, action, decision) => (
+    client.resolveDataAccess(receiptId, action, decision)
+  ), [client]);
 
   const handleFeedback = useCallback(async (runId, rating) => {
     try { await client.feedback(runId, rating); }
@@ -685,7 +789,7 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
               {messages.map((message, index) => message.role === 'user'
                 ? <UserMessage key={message.id || index} message={message} />
-                : <AssistantMessage key={message.id || index} message={message} isLast={index === messages.length - 1} onAction={handleAction} onFeedback={handleFeedback} onSuggestion={(question) => { setDraft(question); requestAnimationFrame(() => textareaRef.current?.focus()); }} actionsReady={actionsReady} />)}
+                : <AssistantMessage key={message.id || index} message={message} isLast={index === messages.length - 1} onAction={handleAction} onDataStatus={handleDataStatus} onDataResolve={handleDataResolve} onFeedback={handleFeedback} onSuggestion={(question) => { setDraft(question); requestAnimationFrame(() => textareaRef.current?.focus()); }} actionsReady={actionsReady} />)}
               {active && <ThinkingMessage status={active.status} />}
               {(state.notice && !active) && <div style={{ alignSelf: 'center', padding: '4px 8px', borderRadius: 999, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', color: 'var(--gb-text-muted)', fontSize: 9.5, fontWeight: 650 }}>{state.notice}</div>}
               {state.lastError && !active && (

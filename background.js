@@ -1,5 +1,5 @@
 // background.js
-importScripts('security-policy.js', 'calendar-form-state.js', 'installation-auth.js', 'help-chat-state.js', 'help-assistant.js', 'settings-registry.js', 'remote-settings-policy.js', 'crm-index-store.js', 'defaults.js');
+importScripts('security-policy.js', 'calendar-form-state.js', 'installation-auth.js', 'help-chat-state.js', 'help-data-access.js', 'help-assistant.js', 'settings-registry.js', 'remote-settings-policy.js', 'crm-index-store.js', 'defaults.js');
 /* @admin:start */
 importScripts('notifications-store.js', 'email-relay-poll.js');
 /* @admin:end */
@@ -918,6 +918,25 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       sendResponse,
       'Unable to save help feedback.',
     );
+    return true;
+  }
+  if (msg.action === 'helpAssistantDataApprovalStatus') {
+    GB_HELP_ASSISTANT.dataApprovalStatus(msg.receiptId)
+      .then((approval) => sendResponse({ ok: true, approval }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: GB_HELP_ASSISTANT.friendlyError(error, 'Unable to read data approval status.'),
+      }));
+    return true;
+  }
+  if (msg.action === 'helpAssistantResolveDataAccess') {
+    GB_HELP_ASSISTANT.resolveDataAccess(
+      msg.receiptId, msg.request, msg.context, msg.decision,
+    ).then(({ state, approval }) => sendResponse({ ok: true, state, approval }))
+      .catch((error) => sendResponse({
+        ok: false,
+        error: GB_HELP_ASSISTANT.friendlyError(error, 'Unable to resolve the data request.'),
+      }));
     return true;
   }
   if (msg.action === 'helpAssistantStatus') {
