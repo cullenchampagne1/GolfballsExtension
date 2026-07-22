@@ -35,10 +35,10 @@ const allDefault = (overrides = {}) => ({ ...DEFAULT_SCALES, ...overrides });
 beforeEach(() => { delete store.uiScales; });
 
 describe('SCALE_CATEGORIES / DEFAULT_SCALES', () => {
-  it('lists the seven UI surfaces in settings order', () => {
+  it('lists the six UI surfaces in settings order', () => {
     assert.deepEqual(
       SCALE_CATEGORIES.map((c) => c.id),
-      ['modals', 'popovers', 'toasts', 'shelf', 'popup', 'editor', 'playground'],
+      ['modals', 'popovers', 'toasts', 'shelf', 'popup', 'editor'],
     );
   });
 
@@ -52,7 +52,7 @@ describe('SCALE_CATEGORIES / DEFAULT_SCALES', () => {
 
   it('defaults every category to 1 (100%)', () => {
     assert.deepEqual(DEFAULT_SCALES, {
-      modals: 1, popovers: 1, toasts: 1, shelf: 1, popup: 1, editor: 1, playground: 1,
+      modals: 1, popovers: 1, toasts: 1, shelf: 1, popup: 1, editor: 1,
     });
   });
 });
@@ -71,7 +71,6 @@ describe('loadScales', () => {
       shelf: 1,       // < 0.5 → default
       popup: 0.5,     // boundary is inclusive
       editor: 1.5,    // boundary is inclusive
-      playground: 1,  // missing → default
     });
   });
 

@@ -34,3 +34,4 @@ __pycache__/
 # — managed by ./golfballs, never versioned.
 .golfballs-extension-production/
 dist/store-stage/
+dist/store/

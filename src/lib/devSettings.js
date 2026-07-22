@@ -505,38 +505,6 @@ export const DEV_SETTINGS = [
     type:    'bool',
     default: false,
   },
-  {
-    key:     'playground.open',
-    label:   'Modal playground',
-    desc:    'Blank in-extension surface for previewing modals.',
-    type:    'action',
-    buttonLabel: 'Open',
-    buttonIcon:  'bolt',
-    runner: ({ notify } = {}) => {
-      try {
-        const url = chrome.runtime.getURL('playground.html');
-        chrome.tabs.create({ url, active: true });
-      } catch (e) {
-        notify?.notify?.('Failed to open playground: ' + e.message, { tone: 'warning' });
-      }
-    },
-  },
-  {
-    key:     'customPages.sandbox',
-    label:   'Custom Pages sandbox',
-    desc:    'Offline dev harness for the Contact / Account Details takeovers — mock data, or load a saved CRM HTML to run it through the real schema engine.',
-    type:    'action',
-    buttonLabel: 'Open',
-    buttonIcon:  'bolt',
-    runner: ({ notify } = {}) => {
-      try {
-        const url = chrome.runtime.getURL('custom-pages-sandbox.html');
-        chrome.tabs.create({ url, active: true });
-      } catch (e) {
-        notify?.notify?.('Failed to open sandbox: ' + e.message, { tone: 'warning' });
-      }
-    },
-  },
 
   /* ── Per-button context-ignore knobs ──────────────────────────
      Each one bypasses the disabled state of a specific popup button

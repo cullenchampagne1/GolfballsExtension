@@ -10,7 +10,9 @@
 (function installAnonymousApiClient(root) {
   'use strict';
 
-  const API_ORIGIN = 'https://api.cullenchampagne.com';
+  // Origin comes from config.js (globalThis.GB_BACKEND_ORIGIN), loaded first by
+  // the service worker; the literal is only a fallback for non-SW contexts.
+  const API_ORIGIN = root.GB_BACKEND_ORIGIN || 'https://api.cullenchampagne.com';
   const ENROLLMENT_URL = `${API_ORIGIN}/auth/extension-installation`;
   const STORAGE_KEY = 'gbApiInstallation';
   const IDENTITY_CACHE_KEY = 'gbInstallationIdentity';

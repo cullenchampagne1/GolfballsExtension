@@ -5,7 +5,7 @@ import { createChrome, createContext, loadScript } from '../integration/helpers/
 function loadPolicy() {
   const { chrome } = createChrome();
   const context = createContext({ chrome, fetchImpl: async () => new Response('{}') });
-  loadScript(context, 'help-data-access.js');
+  loadScript(context, 'help/help-data-access.js');
   return context.GBHelpDataAccess;
 }
 

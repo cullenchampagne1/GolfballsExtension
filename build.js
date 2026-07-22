@@ -36,7 +36,6 @@ const OUT_BASE = process.env.GB_OUT_BASE || 'react-dist';
 const surfaces = [
   { srcDir: 'src/content',       outDir: 'react-dist/content',    suffix: '.jsx',      stripSuffix: '.jsx' },
   { srcDir: 'src/popup',         outDir: 'react-dist/popup',      suffix: '.jsx',      stripSuffix: '.jsx' },
-  { srcDir: 'src/playground',    outDir: 'react-dist/playground', suffix: '.jsx',      stripSuffix: '.jsx' },
   { srcDir: 'src/guide',         outDir: 'react-dist/guide',      suffix: '.jsx',      stripSuffix: '.jsx' },
   { srcDir: 'src/vanilla-build', outDir: 'react-dist/vanilla',    suffix: '.entry.js', stripSuffix: '.entry.js' },
   { srcDir: 'src/sandbox',       outDir: 'react-dist/sandbox',    suffix: '.entry.js', stripSuffix: '.entry.js' },

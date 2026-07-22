@@ -37,9 +37,9 @@ function makeFlow() {
   const parts = createChrome({ stored });
   const context = createContext({ chrome: parts.chrome, fetchImpl: fetchMock });
   loadScript(context, 'installation-auth.js');
-  loadScript(context, 'help-chat-state.js');
-  loadScript(context, 'help-data-access.js');
-  loadScript(context, 'help-assistant.js');
+  loadScript(context, 'help/help-chat-state.js');
+  loadScript(context, 'help/help-data-access.js');
+  loadScript(context, 'help/help-assistant.js');
   const controllerOptions = { setTimer: () => 1, clearTimer: () => {} };
   return {
     ...parts, context, requests, stored,
@@ -111,9 +111,9 @@ describe('Help Companion background flow', () => {
     const { chrome } = createChrome({ stored });
     const context = createContext({ chrome, fetchImpl: fetchMock });
     loadScript(context, 'installation-auth.js');
-    loadScript(context, 'help-chat-state.js');
-    loadScript(context, 'help-data-access.js');
-    loadScript(context, 'help-assistant.js');
+    loadScript(context, 'help/help-chat-state.js');
+    loadScript(context, 'help/help-data-access.js');
+    loadScript(context, 'help/help-assistant.js');
     const controller = context.GBHelpAssistant.createController({ setTimer: () => 1, clearTimer: () => {} });
 
     const failed = await controller.send('Where is the export setting?', {});
@@ -140,9 +140,9 @@ describe('Help Companion background flow', () => {
     const { chrome } = createChrome({ stored });
     const context = createContext({ chrome, fetchImpl: fetchMock });
     loadScript(context, 'installation-auth.js');
-    loadScript(context, 'help-chat-state.js');
-    loadScript(context, 'help-data-access.js');
-    loadScript(context, 'help-assistant.js');
+    loadScript(context, 'help/help-chat-state.js');
+    loadScript(context, 'help/help-data-access.js');
+    loadScript(context, 'help/help-assistant.js');
     const controller = context.GBHelpAssistant.createController({
       setTimer: () => 1, clearTimer: () => {},
     });
@@ -177,9 +177,9 @@ describe('Help Companion background flow', () => {
     const { chrome } = createChrome({ stored });
     const context = createContext({ chrome, fetchImpl: fetchMock });
     loadScript(context, 'installation-auth.js');
-    loadScript(context, 'help-chat-state.js');
-    loadScript(context, 'help-data-access.js');
-    loadScript(context, 'help-assistant.js');
+    loadScript(context, 'help/help-chat-state.js');
+    loadScript(context, 'help/help-data-access.js');
+    loadScript(context, 'help/help-assistant.js');
     const controller = context.GBHelpAssistant.createController({
       setTimer: () => 1, clearTimer: () => {},
     });
@@ -225,9 +225,9 @@ describe('Help Companion background flow', () => {
     const { chrome } = createChrome({ stored });
     const context = createContext({ chrome, fetchImpl: fetchMock });
     loadScript(context, 'installation-auth.js');
-    loadScript(context, 'help-chat-state.js');
-    loadScript(context, 'help-data-access.js');
-    loadScript(context, 'help-assistant.js');
+    loadScript(context, 'help/help-chat-state.js');
+    loadScript(context, 'help/help-data-access.js');
+    loadScript(context, 'help/help-assistant.js');
     const controller = context.GBHelpAssistant.createController({
       setTimer: () => 1, clearTimer: () => {},
     });

@@ -5904,47 +5904,11 @@ export const HELP_CONTENT = {
                 "Off",
                 "",
                 "One switch: every data source returns canned data and email sends become a dry-run (nothing is actually sent). Replaces the old per-modal mock flags. The extension also auto-mocks when running outside an extension context (e.g. the playground tab), so this is mainly for previewing mock data on a live page."
-              ],
-              [
-                "Modal playground",
-                "action",
-                "—",
-                "",
-                "Blank in-extension surface for previewing modals."
               ]
             ],
             "meta": {
               "settingKeys": [
-                "playground.forceMock",
-                "playground.open"
-              ]
-            }
-          },
-          {
-            "type": "heading",
-            "text": "customPages"
-          },
-          {
-            "type": "table",
-            "headers": [
-              "Setting",
-              "Type",
-              "Default",
-              "Range",
-              "What it does"
-            ],
-            "rows": [
-              [
-                "Custom Pages sandbox",
-                "action",
-                "—",
-                "",
-                "Offline dev harness for the Contact / Account Details takeovers — mock data, or load a saved CRM HTML to run it through the real schema engine."
-              ]
-            ],
-            "meta": {
-              "settingKeys": [
-                "customPages.sandbox"
+                "playground.forceMock"
               ]
             }
           },
@@ -9847,26 +9811,6 @@ export const HELP_CONTENT = {
         "playground.forceMock"
       ],
       "description": "One switch: every data source returns canned data and email sends become a dry-run (nothing is actually sent). Replaces the old per-modal mock flags. The extension also auto-mocks when running outside an extension context (e.g. the playground tab), so this is mainly for previewing mock data on a live page.",
-      "article": "developer-settings"
-    },
-    {
-      "id": "devSetting:playground.open",
-      "category": "Settings",
-      "title": "Modal playground",
-      "keywords": [
-        "playground.open"
-      ],
-      "description": "Blank in-extension surface for previewing modals.",
-      "article": "developer-settings"
-    },
-    {
-      "id": "devSetting:customPages.sandbox",
-      "category": "Settings",
-      "title": "Custom Pages sandbox",
-      "keywords": [
-        "customPages.sandbox"
-      ],
-      "description": "Offline dev harness for the Contact / Account Details takeovers — mock data, or load a saved CRM HTML to run it through the real schema engine.",
       "article": "developer-settings"
     },
     {

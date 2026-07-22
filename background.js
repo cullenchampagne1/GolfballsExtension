@@ -1,5 +1,5 @@
 // background.js
-importScripts('security-policy.js', 'calendar-form-state.js', 'installation-auth.js', 'help-chat-state.js', 'help-data-access.js', 'help-assistant.js', 'settings-registry.js', 'remote-settings-policy.js', 'crm-index-store.js', 'defaults.js');
+importScripts('config.js', 'security-policy.js', 'calendar-form-state.js', 'installation-auth.js', 'help/help-chat-state.js', 'help/help-data-access.js', 'help/help-assistant.js', 'settings-registry.js', 'remote-settings-policy.js', 'crm-index-store.js', 'defaults.js');
 /* @admin:start */
 importScripts('notifications-store.js', 'email-relay-poll.js');
 /* @admin:end */
@@ -800,7 +800,7 @@ function gbSettingsShareId(value) {
   if (GB_SETTINGS_SHARE_ID_RE.test(raw)) return raw;
   try {
     const url = new URL(raw);
-    if (url.origin !== 'https://api.cullenchampagne.com' || url.search || url.hash) return '';
+    if (url.origin !== globalThis.GB_BACKEND_ORIGIN || url.search || url.hash) return '';
     const match = url.pathname.match(/^\/extension\/settings-shares\/([A-Za-z0-9_-]{32})\/?$/);
     return match ? match[1] : '';
   } catch { return ''; }
@@ -811,7 +811,7 @@ function gbEmailTemplateShareId(value) {
   if (GB_SETTINGS_SHARE_ID_RE.test(raw)) return raw;
   try {
     const url = new URL(raw);
-    if (url.origin !== 'https://api.cullenchampagne.com' || url.search || url.hash) return '';
+    if (url.origin !== globalThis.GB_BACKEND_ORIGIN || url.search || url.hash) return '';
     const match = url.pathname.match(/^\/extension\/email-template-shares\/([A-Za-z0-9_-]{32})\/?$/);
     return match ? match[1] : '';
   } catch { return ''; }
@@ -822,7 +822,7 @@ function gbProductStoreId(value) {
   if (GB_SETTINGS_SHARE_ID_RE.test(raw)) return raw;
   try {
     const url = new URL(raw);
-    if (url.origin !== 'https://api.cullenchampagne.com' || url.search || url.hash) return '';
+    if (url.origin !== globalThis.GB_BACKEND_ORIGIN || url.search || url.hash) return '';
     const match = url.pathname.match(/^\/extension\/product-stores\/([A-Za-z0-9_-]{32})\/?$/);
     return match ? match[1] : '';
   } catch { return ''; }

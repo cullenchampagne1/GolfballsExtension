@@ -26,18 +26,15 @@ const DEFAULT_ROOT = resolve(SCRIPT_DIR, '..');
 // opt-in instead of silently shipping them to every extension user.
 export const RUNTIME_ROOT_FILES = Object.freeze([
   'background.js',
+  'config.js',
   'calendar-form-state.js',
   'crm-index-store.js',
-  'custom-pages-sandbox.html',
   'defaults.js',
   'editor.html',
   'email-relay-poll.js',
   'guide.html',
-  'help-assistant.js',
-  'help-chat-state.js',
   'installation-auth.js',
   'notifications-store.js',
-  'playground.html',
   'popup.html',
   'remote-settings-policy.js',
   'sandbox.html',
@@ -50,6 +47,7 @@ export const RUNTIME_ROOT_FILES = Object.freeze([
 
 export const RUNTIME_DIRECTORIES = Object.freeze([
   'assets',
+  'help',
   'icons',
   'iframe',
   'react-dist',

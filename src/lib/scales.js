@@ -37,7 +37,6 @@ export const SCALE_CATEGORIES = [
   { id: 'shelf',      label: 'Smart Actions Shelf',   hint: 'Floating quick-action pill in the bottom corner' },
   { id: 'popup',      label: 'Toolbar Popup',         hint: 'The Chrome toolbar popup window' },
   { id: 'editor',     label: 'Templates Editor',      hint: 'The full-page template & note editor' },
-  { id: 'playground', label: 'Design Playground',     hint: 'The design-system playground (mostly internal)' },
 ];
 
 export const DEFAULT_SCALES = Object.fromEntries(

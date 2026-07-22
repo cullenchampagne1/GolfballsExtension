@@ -5,7 +5,7 @@ import { createChrome, createContext, loadScript } from '../integration/helpers/
 function loadState() {
   const { chrome } = createChrome();
   const context = createContext({ chrome, fetchImpl: async () => new Response('{}') });
-  loadScript(context, 'help-chat-state.js');
+  loadScript(context, 'help/help-chat-state.js');
   return context.GBHelpChatState;
 }
 
