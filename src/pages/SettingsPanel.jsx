@@ -30,6 +30,7 @@ import { EMPTY_CREDENTIALS, loadCredentials, saveCredentials } from '../lib/cred
 import { isPowerAutomateUrl } from '../lib/security.js';
 import { sendBackgroundMessage } from '../lib/backgroundMessage.js';
 import { listProductStores, revokeProductStore } from '../lib/customItems.js';
+import { shouldShowManagedSection } from '../lib/manageSections.js';
 import {
   IDENTITY_NOTICE_KEY, identityNoticeSignature, shouldShowIdentityConfirmation,
 } from '../lib/installationIdentityNotice.js';
@@ -1066,29 +1067,34 @@ function ProductStoresSection() {
   };
 
   return (
-    <section>
-      <SectionLabel action={<Btn variant="ghost" size="xs" onClick={load} disabled={loading}>Refresh</Btn>}>Product Stores</SectionLabel>
-      {loading ? (
-        <Card><div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', padding: '4px 2px' }}>Loading…</div></Card>
-      ) : stores.length === 0 ? (
-        <Card><div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', padding: '4px 2px' }}>No shared stores. Select custom items in the Gift Catalog to create a shareable store link.</div></Card>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {stores.map((store) => (
-            <Card key={store.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{store.name || 'Product store'}</div>
-                <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>
-                  {store.item_count || 0} item{(store.item_count || 0) === 1 ? '' : 's'} · opened {store.access_count || 0}×
+    <AnimatePresence initial={false}>
+      {shouldShowManagedSection(stores, loading) && (
+        <motion.section
+          key="active-product-stores"
+          initial={{ opacity: 0, height: 0, y: -6 }}
+          animate={{ opacity: 1, height: 'auto', y: 0 }}
+          exit={{ opacity: 0, height: 0, y: -6 }}
+          transition={T.base}
+          style={{ overflow: 'hidden' }}
+        >
+          <SectionLabel action={<Btn variant="ghost" size="xs" onClick={load} disabled={loading}>Refresh</Btn>}>Product Stores</SectionLabel>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {stores.map((store) => (
+              <Card key={store.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{store.name || 'Product store'}</div>
+                  <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>
+                    {store.item_count || 0} item{(store.item_count || 0) === 1 ? '' : 's'} · opened {store.access_count || 0}×
+                  </div>
                 </div>
-              </div>
-              <IconBtn size="md" icon={<I.copy />} onClick={() => copyLink(store.url)} title="Copy store link" />
-              <IconBtn size="md" icon={<I.trash />} danger onClick={() => revoke(store.id)} disabled={busyId === store.id} title="Revoke this store" />
-            </Card>
-          ))}
-        </div>
+                <IconBtn size="md" icon={<I.copy />} onClick={() => copyLink(store.url)} title="Copy store link" />
+                <IconBtn size="md" icon={<I.trash />} danger onClick={() => revoke(store.id)} disabled={busyId === store.id} title="Revoke this store" />
+              </Card>
+            ))}
+          </div>
+        </motion.section>
       )}
-    </section>
+    </AnimatePresence>
   );
 }
 

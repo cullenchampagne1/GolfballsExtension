@@ -170,9 +170,17 @@ class HelpAgentCorpusTests(unittest.TestCase):
             "POST /assistant/admin/reindex",
             "POST /assistant/admin/grants",
             "POST /keys/assistant-access",
+            "GET /shares/products",
+            "POST /shares/products/revoke",
         }
         self.assertTrue(expected_docs <= set(manifest["api_docs"]["routes"]))
         compile((ROOT / ".revstack" / "routes.py").read_text(), "routes.py", "exec")
+        blocks = (ROOT / ".revstack" / "blocks.py").read_text()
+        compile(blocks, "blocks.py", "exec")
+        self.assertIn(
+            '_table("product-stores", "Product stores", "shopping-bag", "shares/products"',
+            blocks,
+        )
 
 
 if __name__ == "__main__":
