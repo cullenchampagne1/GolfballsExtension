@@ -6,9 +6,11 @@ import {
 import { PRESET_SCOPES, gatherScopes } from './presetScopes.js';
 import {
   createSerialHelpActionRunner, MUTATION_ACTION_TYPES, planHelpAction, sanitizePageRoute,
+  seedHistoricalHelpActionReceipts,
 } from './helpActionCore.js';
 
 const RECEIPTS_KEY = 'gbHelpActionReceiptsV1';
+const RECEIPTS_LEDGER_KEY = 'gbHelpActionReceiptLedgerV2';
 const COLOR_KEYS = ['--gb-brand-label', '--gb-brand', '--gb-brand-dark', '--gb-brand-border'];
 
 function storageGet(keys) {
@@ -56,6 +58,17 @@ async function environment() {
 
 export function isExecutableHelpAction(action) {
   return MUTATION_ACTION_TYPES.has(String(action?.type || ''));
+}
+
+export async function prepareHelpActionReceipts(receiptIds) {
+  const stored = await storageGet([RECEIPTS_KEY, RECEIPTS_LEDGER_KEY]);
+  if (stored[RECEIPTS_LEDGER_KEY] === true) return;
+  await storageSet({
+    [RECEIPTS_KEY]: seedHistoricalHelpActionReceipts(
+      stored[RECEIPTS_KEY], receiptIds, Date.now(),
+    ),
+    [RECEIPTS_LEDGER_KEY]: true,
+  });
 }
 
 export async function helpActionContext() {
@@ -137,7 +150,7 @@ async function executeHelpActionOnceNow(receiptId, action) {
       url: String(result.url || '').slice(0, 2_000), at: Date.now(),
     };
     const next = { ...receipts, [safeReceipt]: receipt };
-    const trimmed = Object.fromEntries(Object.entries(next).sort((a, b) => (b[1]?.at || 0) - (a[1]?.at || 0)).slice(0, 100));
+    const trimmed = Object.fromEntries(Object.entries(next).sort((a, b) => (b[1]?.at || 0) - (a[1]?.at || 0)).slice(0, 400));
     await storageSet({ [RECEIPTS_KEY]: trimmed });
     return receipt;
   } catch (error) {

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { I, Icon } from '../icons.jsx';
 import {
-  executeHelpActionOnce, helpActionContext, isExecutableHelpAction,
+  executeHelpActionOnce, helpActionContext, isExecutableHelpAction, prepareHelpActionReceipts,
 } from '../../lib/helpActions.js';
 import {
   createSerialHelpActionRunner, orderHelpActions,
@@ -329,17 +329,18 @@ async function copyText(text) {
   }
 }
 
-function ExecutableActionCard({ action, receiptId, onAction }) {
-  const [receipt, setReceipt] = useState({ status: 'running', message: 'Validating this action…', url: '' });
+function ExecutableActionCard({ action, receiptId, onAction, ready }) {
+  const [receipt, setReceipt] = useState({ status: 'running', message: 'Checking action history…', url: '' });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    if (!ready) return undefined;
     let alive = true;
     setReceipt({ status: 'running', message: 'Validating this action…', url: '' });
     onAction(action, receiptId).then((result) => {
       if (alive) setReceipt(result || { status: 'failed', message: 'The action did not return a receipt.', url: '' });
     });
     return () => { alive = false; };
-  }, [receiptId, attempt]);
+  }, [ready, receiptId, attempt]);
 
   const succeeded = receipt.status === 'succeeded';
   const failed = receipt.status === 'failed';
@@ -378,7 +379,7 @@ function ExecutableActionCard({ action, receiptId, onAction }) {
   );
 }
 
-function AssistantMessage({ message, onAction, onFeedback, isLast, onSuggestion }) {
+function AssistantMessage({ message, onAction, onFeedback, isLast, onSuggestion, actionsReady }) {
   const queuedAction = useMemo(() => createSerialHelpActionRunner(onAction), [onAction]);
   const orderedActions = useMemo(() => orderHelpActions(message.actions), [message.actions]);
   return (
@@ -418,7 +419,7 @@ function AssistantMessage({ message, onAction, onFeedback, isLast, onSuggestion 
               const originalIndex = message.actions.indexOf(action);
               const receiptIndex = originalIndex >= 0 ? originalIndex : index;
               return isExecutableHelpAction(action) ? (
-                <ExecutableActionCard key={`${action.type}-${receiptIndex}`} action={action} receiptId={`${message.runId || message.id || 'answer'}:${receiptIndex}`} onAction={queuedAction} />
+                <ExecutableActionCard key={`${action.type}-${receiptIndex}`} action={action} receiptId={`${message.runId || message.id || 'answer'}:${receiptIndex}`} onAction={queuedAction} ready={actionsReady} />
               ) : (
                 <button key={`${action.type}-${receiptIndex}`} type="button" onClick={() => onAction(action)} style={{
                   height: 27, padding: '0 9px', display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -536,12 +537,29 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
   const [focus, setFocus] = useState(false);
   const [clearArmed, setClearArmed] = useState(false);
   const [localBusy, setLocalBusy] = useState(false);
+  const [actionsReady, setActionsReady] = useState(false);
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
   const stickToBottom = useRef(true);
   const state = client.state || EMPTY_STATE;
   const messages = state.messages || [];
   const active = state.active;
+
+  useEffect(() => {
+    if (client.loading) return undefined;
+    let alive = true;
+    const receiptIds = messages.flatMap((message) => (
+      message.role !== 'assistant' ? [] : (message.actions || []).flatMap((action, index) => (
+        isExecutableHelpAction(action)
+          ? [`${message.runId || message.id || 'answer'}:${index}`]
+          : []
+      ))
+    ));
+    prepareHelpActionReceipts(receiptIds)
+      .catch(() => {})
+      .finally(() => { if (alive) setActionsReady(true); });
+    return () => { alive = false; };
+  }, [client.loading, messages]);
 
   useEffect(() => {
     client.checkStatus();
@@ -660,7 +678,7 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
               {messages.map((message, index) => message.role === 'user'
                 ? <UserMessage key={message.id || index} message={message} />
-                : <AssistantMessage key={message.id || index} message={message} isLast={index === messages.length - 1} onAction={handleAction} onFeedback={handleFeedback} onSuggestion={(question) => { setDraft(question); requestAnimationFrame(() => textareaRef.current?.focus()); }} />)}
+                : <AssistantMessage key={message.id || index} message={message} isLast={index === messages.length - 1} onAction={handleAction} onFeedback={handleFeedback} onSuggestion={(question) => { setDraft(question); requestAnimationFrame(() => textareaRef.current?.focus()); }} actionsReady={actionsReady} />)}
               {active && <ThinkingMessage status={active.status} />}
               {(state.notice && !active) && <div style={{ alignSelf: 'center', padding: '4px 8px', borderRadius: 999, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)', color: 'var(--gb-text-muted)', fontSize: 9.5, fontWeight: 650 }}>{state.notice}</div>}
               {state.lastError && !active && (

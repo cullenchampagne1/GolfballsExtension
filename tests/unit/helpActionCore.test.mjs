@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createSerialHelpActionRunner, orderHelpActions, planHelpAction, sanitizePageRoute,
+  seedHistoricalHelpActionReceipts,
 } from '../../src/lib/helpActionCore.js';
 
 const registry = {
@@ -60,6 +61,17 @@ describe('Help Companion action policy', () => {
     assert.deepEqual(events, [
       'start:preset', 'finish:preset', 'start:palette', 'finish:palette',
     ]);
+  });
+
+  it('seeds missing historical receipts without replaying or replacing known results', () => {
+    const receipts = seedHistoricalHelpActionReceipts(
+      { 'run-old:0': { status: 'succeeded', message: 'Already applied', at: 10 } },
+      ['run-old:0', 'run-old:1', 'not a valid receipt'],
+      20,
+    );
+    assert.equal(receipts['run-old:0'].message, 'Already applied');
+    assert.equal(receipts['run-old:1'].message, 'Historical action was not replayed.');
+    assert.equal(Object.hasOwn(receipts, 'not a valid receipt'), false);
   });
 
   it('rejects invented, hidden, out-of-range, and malformed model operations', () => {

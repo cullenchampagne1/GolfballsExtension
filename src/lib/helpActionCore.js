@@ -141,6 +141,23 @@ export function createSerialHelpActionRunner(run) {
   };
 }
 
+export function seedHistoricalHelpActionReceipts(receipts, receiptIds, now = Date.now()) {
+  const next = receipts && typeof receipts === 'object' ? { ...receipts } : {};
+  for (const rawId of Array.isArray(receiptIds) ? receiptIds : []) {
+    const id = String(rawId || '');
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,179}$/.test(id) || next[id]) continue;
+    next[id] = {
+      status: 'succeeded',
+      message: 'Historical action was not replayed.',
+      url: '',
+      at: Number(now) || Date.now(),
+    };
+  }
+  return Object.fromEntries(
+    Object.entries(next).sort((a, b) => (b[1]?.at || 0) - (a[1]?.at || 0)).slice(0, 400),
+  );
+}
+
 /** Keep route shape useful to retrieval without sending record identifiers. */
 export function sanitizePageRoute(value) {
   try {
