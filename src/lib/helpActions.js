@@ -1,7 +1,7 @@
 import { FEATURE_DEFAULTS, FEATURE_FLAGS, loadFlags, saveFlags } from './flags.js';
 import { DEV_SETTINGS, loadDevSettings, saveDevSettings } from './devSettings.js';
 import {
-  THEME_VARIANTS, loadTheme, saveTheme, applyTheme,
+  THEME_VARIANTS, loadTheme, applyTheme,
 } from './theme.js';
 import { PRESET_SCOPES, gatherScopes } from './presetScopes.js';
 import { MUTATION_ACTION_TYPES, planHelpAction, sanitizePageRoute } from './helpActionCore.js';
@@ -32,7 +32,12 @@ const featureRules = Object.fromEntries(FEATURE_FLAGS.map((item) => [item.key, {
 const settingRules = Object.fromEntries(
   DEV_SETTINGS.filter((item) => item.type !== 'action').map((item) => [item.key, item]),
 );
-const themeVariants = THEME_VARIANTS.map((item) => item.id);
+const themeVariants = Object.fromEntries(THEME_VARIANTS.flatMap((item) => {
+  const id = String(item.id || '');
+  const label = String(item.name || '').trim().normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return [[id.toLowerCase(), id], [label, id]];
+}));
 const shareScopes = PRESET_SCOPES.map((item) => item.id);
 
 async function environment() {
@@ -89,16 +94,17 @@ async function execute(action) {
   if (operation.type === 'set_theme_preset') {
     const current = await loadTheme();
     const theme = { ...current, variant: operation.value, colors: {} };
-    saveTheme(theme);
+    await storageSet({ gbTheme: theme });
     applyTheme(theme);
-    return { message: `Applied ${operation.value} theme` };
+    const label = THEME_VARIANTS.find((item) => item.id === operation.value)?.name || operation.value;
+    return { message: `Applied ${label} theme` };
   }
   if (operation.type === 'set_theme_palette') {
     const current = await loadTheme();
     const colors = { ...(current.colors || {}) };
     COLOR_KEYS.forEach((key, index) => { colors[key] = operation.colors[index]; });
     const theme = { ...current, colors };
-    saveTheme(theme);
+    await storageSet({ gbTheme: theme });
     applyTheme(theme);
     return { message: `Applied ${operation.value || 'custom'} palette` };
   }

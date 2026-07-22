@@ -88,6 +88,8 @@ class HelpAgentCorpusTests(unittest.TestCase):
             targets[("set_setting", "marginCalc.minAllowedMargin")]["maximum"], 100
         )
         self.assertIn("nord", targets[("set_theme_preset", "theme")]["allowed_values"])
+        self.assertIn("midnight", targets[("set_theme_preset", "theme")]["allowed_values"])
+        self.assertIn("slate", targets[("set_theme_preset", "theme")]["allowed_values"])
         self.assertIn(
             "settings-appearance", targets[("share_settings", "settings")]["option_values"]
         )

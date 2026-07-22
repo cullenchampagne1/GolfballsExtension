@@ -1,6 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { planHelpAction, sanitizePageRoute } from '../../src/lib/helpActionCore.js';
+import {
+  createSerialHelpActionRunner, orderHelpActions, planHelpAction, sanitizePageRoute,
+} from '../../src/lib/helpActionCore.js';
 
 const registry = {
   featureRules: { actionsShelfEnabled: { type: 'bool' } },
@@ -8,7 +10,7 @@ const registry = {
     'marginCalc.minAllowedMargin': { type: 'number', min: 0, max: 100 },
     'giftCatalog.density': { type: 'select', options: ['comfortable', 'compact'] },
   },
-  themeVariants: ['dark', 'nord'],
+  themeVariants: { dark: 'dark', nord: 'nord', slate: 'midnight', midnight: 'midnight' },
   shareScopes: ['settings-preferences', 'settings-appearance'],
   templates: [{ id: 'tpl-follow-up', name: 'Follow up', subject: 'Checking in' }],
   policy: { hiddenFeatures: {}, hiddenDeveloperSettings: {}, adminBypass: false },
@@ -22,6 +24,7 @@ describe('Help Companion action policy', () => {
     );
     assert.equal(planHelpAction({ type: 'set_setting', target: 'marginCalc.minAllowedMargin', value: '42' }, registry).value, 42);
     assert.equal(planHelpAction({ type: 'set_theme_preset', target: 'theme', value: 'nord' }, registry).value, 'nord');
+    assert.equal(planHelpAction({ type: 'set_theme_preset', target: 'theme', value: 'Slate' }, registry).value, 'midnight');
     assert.deepEqual(
       planHelpAction({ type: 'set_theme_palette', target: 'brand', value: 'Pine', options: ['#AADD66', '#779933', '#557722', '#335511'] }, registry).colors,
       ['#aadd66', '#779933', '#557722', '#335511'],
@@ -31,6 +34,32 @@ describe('Help Companion action policy', () => {
       ['settings-appearance'],
     );
     assert.equal(planHelpAction({ type: 'share_email_template', target: 'tpl-follow-up' }, registry).template.name, 'Follow up');
+  });
+
+  it('orders and serializes a theme shell before its palette override', async () => {
+    const actions = orderHelpActions([
+      { type: 'set_theme_palette', value: 'Blue tones' },
+      { type: 'set_feature', target: 'actionsShelfEnabled' },
+      { type: 'set_theme_preset', value: 'midnight' },
+    ]);
+    assert.deepEqual(actions.map(({ type }) => type), [
+      'set_theme_preset', 'set_feature', 'set_theme_palette',
+    ]);
+
+    const events = [];
+    const run = createSerialHelpActionRunner(async (name) => {
+      events.push(`start:${name}`);
+      await Promise.resolve();
+      events.push(`finish:${name}`);
+      return name;
+    });
+    const first = run('preset');
+    const second = run('palette');
+    assert.deepEqual(events, []);
+    assert.deepEqual(await Promise.all([first, second]), ['preset', 'palette']);
+    assert.deepEqual(events, [
+      'start:preset', 'finish:preset', 'start:palette', 'finish:palette',
+    ]);
   });
 
   it('rejects invented, hidden, out-of-range, and malformed model operations', () => {

@@ -4,6 +4,9 @@ import { I, Icon } from '../icons.jsx';
 import {
   executeHelpActionOnce, helpActionContext, isExecutableHelpAction,
 } from '../../lib/helpActions.js';
+import {
+  createSerialHelpActionRunner, orderHelpActions,
+} from '../../lib/helpActionCore.js';
 
 const STORAGE_KEY = 'gbHelpChatStateV1';
 
@@ -376,6 +379,8 @@ function ExecutableActionCard({ action, receiptId, onAction }) {
 }
 
 function AssistantMessage({ message, onAction, onFeedback, isLast, onSuggestion }) {
+  const queuedAction = useMemo(() => createSerialHelpActionRunner(onAction), [onAction]);
+  const orderedActions = useMemo(() => orderHelpActions(message.actions), [message.actions]);
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
@@ -407,21 +412,25 @@ function AssistantMessage({ message, onAction, onFeedback, isLast, onSuggestion 
           )}
         </div>
 
-        {message.actions?.length > 0 && (
+        {orderedActions.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 7 }}>
-            {message.actions.map((action, index) => isExecutableHelpAction(action) ? (
-              <ExecutableActionCard key={`${action.type}-${index}`} action={action} receiptId={`${message.runId || message.id || 'answer'}:${index}`} onAction={onAction} />
-            ) : (
-              <button key={`${action.type}-${index}`} type="button" onClick={() => onAction(action)} style={{
-                height: 27, padding: '0 9px', display: 'inline-flex', alignItems: 'center', gap: 6,
-                borderRadius: 8, background: 'var(--gb-brand-tint-medium)', color: 'var(--gb-brand-label)',
-                border: '1px solid var(--gb-brand-tint-border)', fontFamily: 'var(--gb-font-sans)',
-                fontSize: 10.25, fontWeight: 700, cursor: 'pointer',
-              }}>
-                {action.type === 'open_guide' ? <BookIcon size={11} /> : action.type === 'open_settings' ? <I.cog size={11} /> : <I.copy size={11} />}
-                {action.label}
-              </button>
-            ))}
+            {orderedActions.map((action, index) => {
+              const originalIndex = message.actions.indexOf(action);
+              const receiptIndex = originalIndex >= 0 ? originalIndex : index;
+              return isExecutableHelpAction(action) ? (
+                <ExecutableActionCard key={`${action.type}-${receiptIndex}`} action={action} receiptId={`${message.runId || message.id || 'answer'}:${receiptIndex}`} onAction={queuedAction} />
+              ) : (
+                <button key={`${action.type}-${receiptIndex}`} type="button" onClick={() => onAction(action)} style={{
+                  height: 27, padding: '0 9px', display: 'inline-flex', alignItems: 'center', gap: 6,
+                  borderRadius: 8, background: 'var(--gb-brand-tint-medium)', color: 'var(--gb-brand-label)',
+                  border: '1px solid var(--gb-brand-tint-border)', fontFamily: 'var(--gb-font-sans)',
+                  fontSize: 10.25, fontWeight: 700, cursor: 'pointer',
+                }}>
+                  {action.type === 'open_guide' ? <BookIcon size={11} /> : action.type === 'open_settings' ? <I.cog size={11} /> : <I.copy size={11} />}
+                  {action.label}
+                </button>
+              );
+            })}
           </div>
         )}
 

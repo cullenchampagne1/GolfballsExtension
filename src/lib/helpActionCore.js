@@ -12,6 +12,12 @@ export const MUTATION_ACTION_TYPES = Object.freeze(new Set([
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 const HEX = /^#[0-9a-f]{6}$/i;
 
+const choiceKey = (value) => String(value || '')
+  .trim()
+  .normalize('NFKD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase();
+
 function fail(message) {
   throw new Error(message);
 }
@@ -80,9 +86,12 @@ export function planHelpAction(action, registry = {}) {
   }
 
   if (type === 'set_theme_preset') {
-    const value = String(action.value || '');
-    if (!themeVariants.includes(value)) fail('That theme preset is not registered in this build');
-    return { type, target: 'theme', value };
+    const requested = choiceKey(action.value);
+    const value = Array.isArray(themeVariants)
+      ? themeVariants.find((variant) => choiceKey(variant) === requested)
+      : themeVariants?.[requested];
+    if (!value) fail('That theme preset is not registered in this build');
+    return { type, target: 'theme', value: String(value) };
   }
 
   if (type === 'set_theme_palette') {
@@ -105,6 +114,31 @@ export function planHelpAction(action, registry = {}) {
   const template = templates.find((item) => item && String(item.id) === target);
   if (!template) fail('That email template is not available in this installation');
   return { type, target, template };
+}
+
+/** Theme shell must commit before its optional palette override. All other
+ * actions retain their relative order and are independent of that pair. */
+export function orderHelpActions(actions) {
+  const priority = (action) => {
+    if (action?.type === 'set_theme_preset') return 0;
+    if (action?.type === 'set_theme_palette') return 2;
+    return 1;
+  };
+  return Array.isArray(actions)
+    ? actions.map((action, index) => ({ action, index }))
+      .sort((left, right) => priority(left.action) - priority(right.action) || left.index - right.index)
+      .map(({ action }) => action)
+    : [];
+}
+
+/** Keep auto-executing receipt cards from racing over shared storage. */
+export function createSerialHelpActionRunner(run) {
+  let queue = Promise.resolve();
+  return (...args) => {
+    const result = queue.then(() => run(...args));
+    queue = result.then(() => undefined, () => undefined);
+    return result;
+  };
 }
 
 /** Keep route shape useful to retrieval without sending record identifiers. */
