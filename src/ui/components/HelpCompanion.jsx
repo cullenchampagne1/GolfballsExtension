@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { I, Icon } from '../icons.jsx';
 import {
@@ -11,6 +11,7 @@ import {
   createSerialHelpActionRunner, orderHelpActions, shouldNotifyHelpActionReceipt,
 } from '../../lib/helpActionCore.js';
 import { FEATURE_DEFAULTS } from '../../lib/flags.js';
+import { syncHelpComposerHeight } from '../../lib/helpComposer.js';
 
 const STORAGE_KEY = 'gbHelpChatStateV1';
 
@@ -51,8 +52,10 @@ function useHelpStyles() {
       .gb-help-scroll::-webkit-scrollbar-track { background: transparent; }
       .gb-help-scroll::-webkit-scrollbar-thumb { background: var(--gb-border-default); border-radius: 999px !important; }
       .gb-help-scroll::-webkit-scrollbar-thumb:hover { background: var(--gb-border-strong); }
-      .gb-help-composer::placeholder { color: var(--gb-text-muted); opacity: 1; }
-      .gb-help-composer { display: block; box-sizing: border-box; margin: 0; vertical-align: middle; }
+      .gb-help-composer::placeholder { color: var(--gb-text-muted); -webkit-text-fill-color: var(--gb-text-muted); opacity: 1; }
+      .gb-help-composer { display: block; box-sizing: border-box; margin: 0; vertical-align: middle; transition: height 170ms cubic-bezier(.22,1,.36,1); }
+      .gb-help-composer:read-only { color: var(--gb-text-primary); -webkit-text-fill-color: var(--gb-text-primary); opacity: 1; cursor: default; }
+      .gb-help-composer:read-only::placeholder { color: var(--gb-text-muted); -webkit-text-fill-color: var(--gb-text-muted); opacity: 1; }
       .gb-help-composer::-webkit-scrollbar { width: 5px; }
       .gb-help-composer::-webkit-scrollbar-thumb { background: var(--gb-border-default); border-radius: 999px; }
       @media (prefers-reduced-motion: reduce) {
@@ -731,6 +734,10 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
     requestAnimationFrame(() => el.scrollTo({ top: el.scrollHeight, behavior: reduceMotion ? 'auto' : 'smooth' }));
   }, [messages.length, active?.status, state.lastError?.message]);
 
+  useLayoutEffect(() => {
+    syncHelpComposerHeight(textareaRef.current, draft.length > 0);
+  }, [draft]);
+
   const submit = useCallback(async (value = draft) => {
     const message = String(value || '').trim();
     if (!message || active || localBusy) return;
@@ -791,12 +798,6 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
     : client.service.phase === 'checking' ? 'Checking'
       : client.service.phase === 'ready' ? 'Ready'
         : client.service.phase === 'unavailable' ? 'Unavailable' : 'Help assistant';
-
-  const resizeComposer = (event) => {
-    const el = event.currentTarget;
-    el.style.height = '0px';
-    el.style.height = `${Math.min(104, Math.max(20, el.scrollHeight))}px`;
-  };
 
   return (
     <div className="gb-help-motion" style={{ width: '100%', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: 'linear-gradient(155deg, var(--gb-surface-modal), var(--gb-surface-1))' }}>
@@ -868,18 +869,19 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
             value={draft}
             rows={1}
             maxLength={4000}
-            disabled={!!active || localBusy}
+            readOnly={!!active || localBusy}
+            aria-busy={!!active || localBusy}
             placeholder={active ? 'Waiting for the current answer…' : 'Ask about the Golfballs Toolkit…'}
             onFocus={() => setFocus(true)}
             onBlur={() => setFocus(false)}
-            onChange={(event) => { setDraft(event.target.value); resizeComposer(event); }}
+            onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                 event.preventDefault();
                 submit();
               }
             }}
-            style={{ flex: 1, alignSelf: 'center', minWidth: 0, height: 20, maxHeight: 104, resize: 'none', overflowY: 'auto', overflowX: 'hidden', padding: '1px 0', background: 'transparent', color: 'var(--gb-text-primary)', border: 0, outline: 0, fontFamily: 'var(--gb-font-sans)', fontSize: 11.5, fontWeight: 520, lineHeight: '18px', opacity: active ? .62 : 1 }}
+            style={{ flex: 1, alignSelf: 'center', minWidth: 0, height: 20, maxHeight: 104, resize: 'none', overflowY: 'auto', overflowX: 'hidden', padding: '1px 0', background: 'transparent', color: 'var(--gb-text-primary)', WebkitTextFillColor: 'var(--gb-text-primary)', border: 0, outline: 0, fontFamily: 'var(--gb-font-sans)', fontSize: 11.5, fontWeight: 520, lineHeight: '18px', opacity: 1 }}
           />
           <motion.button
             type="button"

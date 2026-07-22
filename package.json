@@ -64,6 +64,7 @@
     { "name": "ui · display scales clamp & persist", "file": "tests/unit/scales.test.mjs" },
     { "name": "ui · Actions Shelf panel motion", "file": "tests/unit/shelfMotion.test.mjs" },
     { "name": "ui · Help Companion conversation state", "file": "tests/unit/helpChatState.test.mjs" },
+    { "name": "ui · Help Companion composer sizing", "file": "tests/unit/helpComposer.test.mjs" },
     { "name": "ui · Help Companion guarded actions", "file": "tests/unit/helpActionCore.test.mjs" },
     { "name": "ui · Help Companion automatic settings context", "file": "tests/unit/helpActions.test.mjs" },
     { "name": "guard · Help Companion approved local data", "file": "tests/unit/helpDataAccess.test.mjs" },
