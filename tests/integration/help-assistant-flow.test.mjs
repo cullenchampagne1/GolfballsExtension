@@ -129,6 +129,54 @@ describe('Help Companion background flow', () => {
     assert.equal(recovered.messages.filter(({ role }) => role === 'user').length, 1);
   });
 
+  it('retries a stale server schema without automatic state and keeps the request id', async () => {
+    let submissions = 0;
+    const { fetchMock, requests } = createFetchMock((url) => {
+      if (!new URL(url).pathname.endsWith('/assistant/messages')) return undefined;
+      submissions += 1;
+      if (submissions === 1) {
+        return jsonResponse({
+          detail: [{
+            type: 'extra_forbidden',
+            loc: ['body', 'context', 'automatic_state'],
+            msg: 'Extra inputs are not permitted',
+          }],
+        }, 422);
+      }
+      return jsonResponse({
+        run_id: 'run_compat-12345678', status: 'queued', poll_after_ms: 3000,
+      }, 202);
+    });
+    const stored = { gbApiInstallation: validInstallation() };
+    const { chrome } = createChrome({ stored });
+    const context = createContext({ chrome, fetchImpl: fetchMock });
+    loadScript(context, 'installation-auth.js');
+    loadScript(context, 'help-chat-state.js');
+    loadScript(context, 'help-data-access.js');
+    loadScript(context, 'help-assistant.js');
+    const controller = context.GBHelpAssistant.createController({
+      setTimer: () => 1, clearTimer: () => {},
+    });
+
+    const queued = await controller.send('Why is the margin setting wrong?', {
+      feature_states: { marginCalcEnabled: true },
+      automatic_state: {
+        features: { marginCalcEnabled: true },
+        developer_settings: { 'marginCalc.minAllowedMargin': 28 },
+      },
+    });
+
+    assert.equal(queued.active.runId, 'run_compat-12345678');
+    const bodies = requests
+      .filter(({ url }) => new URL(url).pathname.endsWith('/assistant/messages'))
+      .map(({ options }) => JSON.parse(options.body));
+    assert.equal(bodies.length, 2);
+    assert.equal(bodies[1].request_id, bodies[0].request_id);
+    assert.equal(bodies[0].context.automatic_state.developer_settings['marginCalc.minAllowedMargin'], 28);
+    assert.equal(Object.hasOwn(bodies[1].context, 'automatic_state'), false);
+    assert.equal(bodies[1].context.feature_states.marginCalcEnabled, true);
+  });
+
   it('asks once, filters local templates, and submits only the approved projection', async () => {
     const flow = makeFlow();
     flow.stored.templates = [
