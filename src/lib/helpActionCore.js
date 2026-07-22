@@ -230,6 +230,12 @@ export function helpActionReceiptDecision(receipts, receiptId, { retry = false }
   };
 }
 
+export function shouldNotifyHelpActionReceipt(receipt) {
+  return !!receipt
+    && receipt.replayed !== true
+    && (receipt.status === 'succeeded' || receipt.status === 'failed');
+}
+
 /** Keep route shape useful to retrieval without sending record identifiers. */
 export function sanitizePageRoute(value) {
   try {

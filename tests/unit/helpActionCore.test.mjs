@@ -4,7 +4,7 @@ import {
   createSerialHelpActionRunner, hasIssuedHelpActionReceipt, helpActionReceiptDecision,
   helpActionConfirmationTypes, helpActionReceiptId, helpActionRequiresConfirmation,
   orderHelpActions, planHelpAction, sanitizePageRoute,
-  seedHistoricalHelpActionReceipts,
+  seedHistoricalHelpActionReceipts, shouldNotifyHelpActionReceipt,
 } from '../../src/lib/helpActionCore.js';
 
 const registry = {
@@ -114,6 +114,9 @@ describe('Help Companion action policy', () => {
     assert.equal(helpActionReceiptDecision(receipts, 'failed', { retry: true }).execute, true);
     assert.equal(helpActionReceiptDecision(receipts, 'done', { retry: true }).execute, false);
     assert.equal(helpActionReceiptDecision(receipts, 'new').execute, true);
+    assert.equal(shouldNotifyHelpActionReceipt({ status: 'succeeded' }), true);
+    assert.equal(shouldNotifyHelpActionReceipt({ status: 'failed' }), true);
+    assert.equal(shouldNotifyHelpActionReceipt({ status: 'succeeded', replayed: true }), false);
   });
 
   it('advertises ticket confirmation and keeps declined tickets inert until a user retries', () => {

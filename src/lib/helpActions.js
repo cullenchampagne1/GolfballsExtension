@@ -169,7 +169,7 @@ async function executeHelpActionOnceNow(receiptId, action, { retry = false } = {
     ? stored[RECEIPTS_KEY]
     : {};
   const decision = helpActionReceiptDecision(receipts, safeReceipt, { retry });
-  if (!decision.execute) return decision.existing;
+  if (!decision.execute) return { ...decision.existing, replayed: true };
   try {
     const result = await execute(action, safeReceipt);
     const receipt = {

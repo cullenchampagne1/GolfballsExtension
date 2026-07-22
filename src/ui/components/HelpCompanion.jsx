@@ -8,7 +8,7 @@ import {
   isExecutableHelpAction, prepareHelpActionReceipts, readHelpActionReceipt,
 } from '../../lib/helpActions.js';
 import {
-  createSerialHelpActionRunner, orderHelpActions,
+  createSerialHelpActionRunner, orderHelpActions, shouldNotifyHelpActionReceipt,
 } from '../../lib/helpActionCore.js';
 import { FEATURE_DEFAULTS } from '../../lib/flags.js';
 
@@ -729,7 +729,9 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
     const target = String(action?.target || '');
     if (isExecutableHelpAction(action)) {
       const receipt = await executeHelpActionOnce(receiptId, action, options);
-      window.__gbToast?.[receipt.status === 'succeeded' ? 'success' : 'error']?.(receipt.message, { duration: 2300 });
+      if (shouldNotifyHelpActionReceipt(receipt)) {
+        window.__gbToast?.[receipt.status === 'succeeded' ? 'success' : 'error']?.(receipt.message, { duration: 2300 });
+      }
       return receipt;
     }
     if (type === 'open_guide') {
