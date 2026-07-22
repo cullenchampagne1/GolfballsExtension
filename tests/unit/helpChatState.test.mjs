@@ -115,4 +115,16 @@ describe('Help Companion state', () => {
     assert.equal(answer.actions[1].value, 'false');
     assert.equal(JSON.stringify(answer.citations.map((item) => item.id)), JSON.stringify(['safe-id']));
   });
+
+  it('never stringifies structured fragments or internal citation ids into chat prose', () => {
+    const State = loadState();
+    assert.equal(State.normalizeAnswer({ text: { accidental: true } }).text, '');
+    const answer = State.normalizeAnswer({
+      text: 'Applied the theme.\n\n[object Object]\n[guide:article:theme-appearance:beginner]',
+      warning: { code: 'review_before_write', text: 'Review the charge before confirming.' },
+    });
+    assert.equal(answer.text, 'Applied the theme.');
+    assert.equal(answer.warning, 'Review the charge before confirming.');
+    assert.equal(State.normalizeAnswer({ text: 'Okay.', warning: '[object Object]' }).warning, '');
+  });
 });

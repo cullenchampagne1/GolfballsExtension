@@ -20,6 +20,16 @@
   ]);
 
   const bounded = (value, max) => String(value == null ? '' : value).trim().slice(0, max);
+  const cleanAssistantText = (value, max) => {
+    if (typeof value !== 'string') return '';
+    return value
+      .replace(/\[object Object\]/gi, '')
+      .replace(/\[(?:guide|tutorial|registry|inventory|source|code|assistant):[A-Za-z0-9._:/-]+\]/g, '')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+      .slice(0, max);
+  };
   const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
   const safeId = (value, fallback = '') => {
     const id = bounded(value, 100);
@@ -85,7 +95,7 @@
     const citationIds = new Set(citations.map((item) => item.id));
     const steps = Array.isArray(raw.steps) ? raw.steps.slice(0, 16).map((step) => {
       if (!step || typeof step !== 'object') return null;
-      const text = bounded(step.text, 1_500);
+      const text = cleanAssistantText(step.text, 1_500);
       if (!text) return null;
       const ids = Array.isArray(step.citation_ids ?? step.citationIds)
         ? (step.citation_ids ?? step.citationIds).map((id) => safeId(id)).filter((id) => citationIds.has(id)).slice(0, 8)
@@ -93,14 +103,17 @@
       return { text, citationIds: ids };
     }).filter(Boolean) : [];
     return {
-      text: bounded(raw.text, 24_000),
+      text: cleanAssistantText(raw.text, 24_000),
       steps,
       citations,
       actions: Array.isArray(raw.actions) ? raw.actions.slice(0, 8).map(normalizeAction).filter(Boolean) : [],
       suggestedQuestions: Array.isArray(raw.suggested_questions ?? raw.suggestedQuestions)
         ? (raw.suggested_questions ?? raw.suggestedQuestions).map((item) => bounded(item, 240)).filter(Boolean).slice(0, 6)
         : [],
-      warning: bounded(raw.warning, 500),
+      warning: cleanAssistantText(
+        raw.warning && typeof raw.warning === 'object' ? raw.warning.text : raw.warning,
+        500,
+      ),
       confidence: Math.max(0, Math.min(1, finite(raw.confidence, 0))),
       needsMoreEvidence: raw.needs_more_evidence === true || raw.needsMoreEvidence === true,
       provider: bounded(raw.provider, 60),
@@ -112,7 +125,9 @@
     if (!value || typeof value !== 'object') return null;
     const role = value.role === 'assistant' ? 'assistant' : value.role === 'user' ? 'user' : '';
     if (!role) return null;
-    const text = bounded(value.text ?? value.content, role === 'assistant' ? 24_000 : 4_000);
+    const text = role === 'assistant'
+      ? cleanAssistantText(value.text ?? value.content, 24_000)
+      : bounded(value.text ?? value.content, 4_000);
     if (!text) return null;
     const createdAt = Math.max(0, finite(value.createdAt ?? value.created_at));
     if (role === 'user') {

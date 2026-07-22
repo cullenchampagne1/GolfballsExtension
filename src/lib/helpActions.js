@@ -1,10 +1,12 @@
-import { FEATURE_DEFAULTS, FEATURE_FLAGS, loadFlags, saveFlags } from './flags.js';
+import { FEATURE_DEFAULTS, FEATURE_FLAGS, loadFlags } from './flags.js';
 import { DEV_SETTINGS, loadDevSettings, saveDevSettings } from './devSettings.js';
 import {
   THEME_VARIANTS, loadTheme, applyTheme,
 } from './theme.js';
 import { PRESET_SCOPES, gatherScopes } from './presetScopes.js';
-import { MUTATION_ACTION_TYPES, planHelpAction, sanitizePageRoute } from './helpActionCore.js';
+import {
+  createSerialHelpActionRunner, MUTATION_ACTION_TYPES, planHelpAction, sanitizePageRoute,
+} from './helpActionCore.js';
 
 const RECEIPTS_KEY = 'gbHelpActionReceiptsV1';
 const COLOR_KEYS = ['--gb-brand-label', '--gb-brand', '--gb-brand-dark', '--gb-brand-border'];
@@ -83,7 +85,10 @@ async function execute(action) {
   const operation = planHelpAction(action, env);
   if (operation.type === 'set_feature') {
     const flags = { ...FEATURE_DEFAULTS, ...await loadFlags(), [operation.target]: operation.value };
-    saveFlags(flags);
+    await storageSet({ featureFlags: flags });
+    if (typeof window !== 'undefined') {
+      window.__gbFeatureFlags = { ...(window.__gbFeatureFlags || {}), ...flags };
+    }
     return { message: `${operation.value ? 'Enabled' : 'Disabled'} ${operation.target}` };
   }
   if (operation.type === 'set_setting') {
@@ -117,7 +122,7 @@ async function execute(action) {
   return { message: `Created a link for “${operation.template.name || 'email template'}”`, url: response.share?.url || '' };
 }
 
-export async function executeHelpActionOnce(receiptId, action) {
+async function executeHelpActionOnceNow(receiptId, action) {
   const safeReceipt = String(receiptId || '').slice(0, 180);
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,179}$/.test(safeReceipt)) throw new Error('The action receipt is invalid');
   const stored = await storageGet(RECEIPTS_KEY);
@@ -138,4 +143,13 @@ export async function executeHelpActionOnce(receiptId, action) {
   } catch (error) {
     return { status: 'failed', message: String(error?.message || 'Action failed').slice(0, 240), url: '', at: Date.now() };
   }
+}
+
+// One queue for the whole content-script runtime. When a restored conversation
+// mounts several historical receipt cards, every read/execute/write transaction
+// observes the receipt written before it instead of overwriting a stale snapshot.
+const executeHelpActionSerial = createSerialHelpActionRunner(executeHelpActionOnceNow);
+
+export function executeHelpActionOnce(receiptId, action) {
+  return executeHelpActionSerial(receiptId, action);
 }

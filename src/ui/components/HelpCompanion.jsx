@@ -7,6 +7,7 @@ import {
 import {
   createSerialHelpActionRunner, orderHelpActions,
 } from '../../lib/helpActionCore.js';
+import { FEATURE_DEFAULTS } from '../../lib/flags.js';
 
 const STORAGE_KEY = 'gbHelpChatStateV1';
 
@@ -83,8 +84,7 @@ function runtimeMessage(payload) {
 
 function safeFeatureStates() {
   const out = {};
-  const flags = window.__gbFeatureFlags;
-  if (!flags || typeof flags !== 'object') return out;
+  const flags = { ...FEATURE_DEFAULTS, ...(window.__gbFeatureFlags || {}) };
   for (const [key, value] of Object.entries(flags).slice(0, 80)) {
     if (typeof value === 'boolean') out[String(key).slice(0, 100)] = value;
   }
