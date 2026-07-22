@@ -5,7 +5,7 @@
 
 export const HELP_CONTENT = {
   "version": "3.3",
-  "generatedAt": "2026-07-21",
+  "generatedAt": "2026-07-22",
   "tree": [
     {
       "title": "Getting Started",
@@ -2707,7 +2707,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "Press Enter to send or Shift+Enter for a new line. Using it focuses on visible controls and operator workflows; Under the hood focuses on architecture, source, storage, and data flow. A response runs in the extension service worker, so Back, outside-click, Escape, page navigation, and MV3 worker suspension do not discard it. Use the stop button to cancel deliberately."
+            "text": "Press Enter to send or Shift+Enter for a new line. There is one continuous conversation: the companion answers workflow questions from the operator guide and automatically uses indexed source evidence when a question needs technical detail. A response runs in the extension service worker, so Back, outside-click, Escape, page navigation, and MV3 worker suspension do not discard it. Use the stop button to cancel deliberately."
           },
           {
             "type": "callout",
@@ -2717,7 +2717,7 @@ export const HELP_CONTENT = {
           },
           {
             "type": "p",
-            "text": "The companion receives page type, a sanitized route with record identifiers replaced by *, extension version, answer mode, boolean feature state, hidden-setting keys, and ids/names of locally available email templates. It never receives DOM text, customer fields, email bodies, credentials, or arbitrary storage values. Executable actions appear as one-time live receipts; share receipts expose their generated link."
+            "text": "The companion receives page type, a sanitized route with record identifiers replaced by *, extension version, boolean feature state, hidden-setting keys, and ids/names of locally available email templates. It never receives DOM text, customer fields, email bodies, credentials, or arbitrary storage values. Executable actions appear as one-time live receipts; share receipts expose their generated link."
           },
           {
             "type": "p",

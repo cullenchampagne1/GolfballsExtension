@@ -58,6 +58,27 @@ describe('extension API guard', () => {
     assert.equal(requests[0].options.credentials, 'omit');
   });
 
+  it('surfaces structured FastAPI validation details instead of a generic HTTP 422', async () => {
+    const { fetchMock } = createFetchMock(() => jsonResponse({
+      detail: [{
+        type: 'extra_forbidden',
+        loc: ['body', 'context', 'page_url'],
+        msg: 'Extra inputs are not permitted',
+      }],
+    }, 422));
+    const { client } = loadInstallationAuth({
+      stored: { gbApiInstallation: validInstallation() },
+      fetchImpl: fetchMock,
+    });
+
+    await assert.rejects(
+      client.apiJson('/projects/golfballs-extension/assistant/messages', {
+        method: 'POST', body: '{"context":{"page_url":"https://example.test"}}',
+      }),
+      /context\.page_url: Extra inputs are not permitted/,
+    );
+  });
+
   it('overrides any caller-supplied Authorization header with the installation key', async () => {
     const { client, requests } = makeSandbox();
     await client.apiFetch('/extension/ping', {

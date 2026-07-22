@@ -1,6 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useActionRegistry, actionRegistry } from '../../lib/actionRegistry.js';
+import {
+  measureShelfSections,
+  resolveShelfPanelHeight,
+  shelfPanelTransition,
+  shouldConstrainShelfActions,
+} from '../../lib/shelfMotion.js';
 import { HelpCompanionEntry, HelpCompanionPanel, useHelpAssistant } from './HelpCompanion.jsx';
 
 /* ───────────────────────────────────────────────────────────────
@@ -567,17 +573,20 @@ export function ActionsShelf({
   const availableWidth = Math.max(240, viewport.width - (variant === 'tab' ? 12 : rightOffset + 12));
   const panelWidth = Math.min(view === 'chat' ? 540 : 320, availableWidth);
   const panelHeight = Math.min(660, Math.max(220, viewport.height - bottomOffset - 80));
-  const resolvedHeight = view === 'chat'
-    ? panelHeight
-    : (actionsHeight ? Math.min(actionsHeight, panelHeight) : 'auto');
+  const resolvedHeight = resolveShelfPanelHeight(view, actionsHeight, panelHeight);
+  const constrainActions = shouldConstrainShelfActions(actionsHeight, panelHeight);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open || view !== 'actions' || !actionsViewRef.current) return undefined;
     const node = actionsViewRef.current;
-    const measure = () => setActionsHeight(Math.ceil(node.scrollHeight));
+    const measure = () => {
+      const nextHeight = measureShelfSections(node);
+      if (nextHeight > 0) setActionsHeight((current) => current === nextHeight ? current : nextHeight);
+    };
     measure();
     const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
     observer?.observe(node);
+    Array.from(node.children || []).forEach((child) => observer?.observe(child));
     return () => observer?.disconnect();
   }, [open, view, rows.length, showContextHeader, help.state?.unread]);
 
@@ -607,11 +616,7 @@ export function ActionsShelf({
           initial={{ opacity: 0, y: 10, scale: 0.96, width: Math.min(320, availableWidth) }}
           animate={{ opacity: 1, y: 0, scale: 1, width: panelWidth, height: resolvedHeight }}
           exit={{    opacity: 0, y: 6, scale: 0.96, transition: { duration: 0.14, ease: [0.4, 0, 0.2, 1] } }}
-          transition={{
-            opacity: { duration: .18 }, y: { duration: .22, ease: [0.34, 1.4, 0.64, 1] }, scale: { duration: .2 },
-            width: { type: 'spring', stiffness: 360, damping: 34, mass: .9 },
-            height: { type: 'spring', stiffness: 340, damping: 35, mass: .95 },
-          }}
+          transition={shelfPanelTransition(view)}
           style={{
             position: 'absolute',
             bottom: 'calc(100% + 10px)',
@@ -642,7 +647,10 @@ export function ActionsShelf({
                 ref={actionsViewRef}
                 initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -12 }}
                 transition={{ duration: .15, ease: [0.4, 0, .2, 1] }}
-                style={{ width: '100%', height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}
+                style={{
+                  width: '100%', height: constrainActions ? '100%' : 'auto', minHeight: 0,
+                  display: 'flex', flexDirection: 'column',
+                }}
               >
                 {showContextHeader && (
                   <div style={{
@@ -696,36 +704,38 @@ export function ActionsShelf({
                   </div>
                 )}
 
-                <div className="gb-thin-scroll" style={{ padding: '6px 6px 8px', flex: 1, minHeight: 0, overflowY: 'auto' }}>
-                  <HelpCompanionEntry state={help.state} loading={help.loading} onOpen={() => setView('chat')} />
-                  {rows.length === 0 && (
-                    <div style={{ padding: '12px 16px 18px', fontSize: 10.5, color: 'var(--gb-text-muted)', textAlign: 'center' }}>
-                      No other actions are registered for this page.
-                    </div>
-                  )}
-                  {rows.map((r) => {
-                    if (r.kind === 'header-smart') return <SmartHeader key={r.key} count={r.count} />;
-                    if (r.kind === 'header')       return <GroupHeader  key={r.key} label={r.label} />;
-                    if (r.kind === 'divider')      return <div key={r.key} style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '6px 10px' }} />;
-                    const num = shortcutFor.get(r.key);
-                    const action = !showShortcuts
-                      ? { ...r.action, kbd: undefined }
-                      : num
-                        ? { ...r.action, kbd: num }
-                        : { ...r.action, kbd: undefined };
-                    return (
-                      <ActionRow
-                        key={r.key}
-                        action={action}
-                        index={r.index}
-                        smart={r.smart}
-                        onPick={(a) => {
-                          try { a.handler && a.handler(); } catch (err) { /* Keep the shelf responsive. */ }
-                          if (!a.keepOpen) closeShelf();
-                        }}
-                      />
-                    );
-                  })}
+                <div className="gb-thin-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                  <div data-shelf-measure-content style={{ padding: '6px 6px 8px' }}>
+                    <HelpCompanionEntry state={help.state} loading={help.loading} onOpen={() => setView('chat')} />
+                    {rows.length === 0 && (
+                      <div style={{ padding: '12px 16px 18px', fontSize: 10.5, color: 'var(--gb-text-muted)', textAlign: 'center' }}>
+                        No other actions are registered for this page.
+                      </div>
+                    )}
+                    {rows.map((r) => {
+                      if (r.kind === 'header-smart') return <SmartHeader key={r.key} count={r.count} />;
+                      if (r.kind === 'header')       return <GroupHeader  key={r.key} label={r.label} />;
+                      if (r.kind === 'divider')      return <div key={r.key} style={{ height: 1, background: 'var(--gb-border-subtle)', margin: '6px 10px' }} />;
+                      const num = shortcutFor.get(r.key);
+                      const action = !showShortcuts
+                        ? { ...r.action, kbd: undefined }
+                        : num
+                          ? { ...r.action, kbd: num }
+                          : { ...r.action, kbd: undefined };
+                      return (
+                        <ActionRow
+                          key={r.key}
+                          action={action}
+                          index={r.index}
+                          smart={r.smart}
+                          onPick={(a) => {
+                            try { a.handler && a.handler(); } catch (err) { /* Keep the shelf responsive. */ }
+                            if (!a.keepOpen) closeShelf();
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div style={{

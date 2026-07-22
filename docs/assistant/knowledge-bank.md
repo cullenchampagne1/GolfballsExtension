@@ -18,6 +18,6 @@ An answer may carry typed JSON for a registered feature or developer-setting val
 
 The companion cannot see page contents, customer records, network traffic, private messages, API-key secrets, arbitrary browser-storage values, or files changed after the last assistant index was built. It does not browse the internet. It knows only the bounded page/action context listed above. If a question is not supported by the indexed guide, knowledge bank, inventory, or source, it should explain the gap instead of inventing an answer.
 
-## Response modes and references
+## Response depth and references
 
-“Using it” favors visible controls and operator workflows. “Under the hood” favors code structure, request flow, storage, and architecture. Both modes use the same evidence and safety rules. A reference button opens a known guide page when the cited evidence has a guide route; source and knowledge-bank citations may be shown without an open-page action.
+The companion uses one continuous conversation and infers the useful answer depth from each question. Workflow questions favor visible controls and expected results; technical questions can use indexed source evidence for code structure, request flow, storage, and architecture. A reference button opens a known guide page when the cited evidence has a guide route; source and knowledge-bank citations may be shown without an open-page action.

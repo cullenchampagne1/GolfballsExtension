@@ -263,12 +263,26 @@
       throw error;
     }
     if (!response.ok) {
-      const detail = typeof payload?.detail === 'string' ? payload.detail.slice(0, 240) : '';
+      const detail = formatApiErrorDetail(payload);
       const error = new Error(detail || `Extension API request failed with HTTP ${response.status}`);
       error.status = response.status;
       throw error;
     }
     return payload;
+  }
+
+  function formatApiErrorDetail(payload) {
+    if (typeof payload?.detail === 'string') return payload.detail.trim().slice(0, 240);
+    if (!Array.isArray(payload?.detail)) return '';
+    return payload.detail.slice(0, 4).map((item) => {
+      if (!item || typeof item !== 'object') return '';
+      const location = Array.isArray(item.loc)
+        ? item.loc.filter((part) => part !== 'body').map(String).join('.')
+        : '';
+      const message = String(item.msg || item.message || '').trim();
+      if (!message) return '';
+      return location ? `${location}: ${message}` : message;
+    }).filter(Boolean).join('; ').slice(0, 240);
   }
 
   function normalizeLocalPart(value) {

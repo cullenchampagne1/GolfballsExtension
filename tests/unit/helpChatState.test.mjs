@@ -26,7 +26,6 @@ describe('Help Companion state', () => {
         edition: 'admin',
         surface: 'actions-shelf',
         page_type: 'contact',
-        answer_mode: 'technical',
         feature_states: { actionsShelfEnabled: true, invalid: 'yes' },
         page_url: 'https://www.golfballs.com/admin/Page.aspx?Page=240&customerID=*',
         available_resources: [{ kind: 'email_template', id: 'tpl-follow-up', label: 'Follow up' }],
@@ -40,7 +39,7 @@ describe('Help Companion state', () => {
     assert.equal(request.history.at(-1).role, 'user');
     assert.equal(request.history.at(-1).content, 'turn 14');
     assert.equal(request.context.page_type, 'contact');
-    assert.equal(request.context.answer_mode, 'technical');
+    assert.equal(Object.hasOwn(request.context, 'answer_mode'), false);
     assert.equal(request.context.page_url, 'https://www.golfballs.com/admin/Page.aspx?Page=240&customerID=*');
     assert.equal(request.context.available_resources[0].id, 'tpl-follow-up');
     assert.equal(JSON.stringify(request.context.feature_states), JSON.stringify({ actionsShelfEnabled: true }));

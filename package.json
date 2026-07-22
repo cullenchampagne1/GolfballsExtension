@@ -62,6 +62,7 @@
     { "name": "money · margin math & cost basis", "file": "tests/unit/marginReport.test.mjs" },
     { "name": "money · cart & preview URL serialization", "file": "tests/unit/cartSerializer.test.mjs" },
     { "name": "ui · display scales clamp & persist", "file": "tests/unit/scales.test.mjs" },
+    { "name": "ui · Actions Shelf panel motion", "file": "tests/unit/shelfMotion.test.mjs" },
     { "name": "ui · Help Companion conversation state", "file": "tests/unit/helpChatState.test.mjs" },
     { "name": "ui · Help Companion guarded actions", "file": "tests/unit/helpActionCore.test.mjs" },
     { "name": "ui · ASP date offsets & calendar cells", "file": "tests/unit/dateUtils.test.mjs" },

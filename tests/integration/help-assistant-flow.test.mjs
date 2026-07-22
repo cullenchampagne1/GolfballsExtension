@@ -53,7 +53,9 @@ describe('Help Companion background flow', () => {
     const flow = makeFlow();
     const queued = await flow.controller.send('Where are feature settings?', {
       extension_version: '3.3.0', edition: 'admin', surface: 'actions-shelf',
-      page_type: 'contact', answer_mode: 'operator', feature_states: {}, hidden_settings: [],
+      page_type: 'contact', page_url: 'https://www.golfballs.com/admin/Page.aspx?Page=240&customerID=*',
+      feature_states: {}, hidden_settings: [],
+      available_resources: [{ kind: 'email_template', id: 'follow-up', label: 'Follow up' }],
     });
 
     assert.equal(queued.active.status, 'queued');
@@ -80,6 +82,10 @@ describe('Help Companion background flow', () => {
     assert.deepEqual(assistantRequests.map(({ method }) => method), ['POST', 'GET', 'POST']);
     assert.ok(assistantRequests.every(({ options }) => options.credentials === 'omit'));
     assert.ok(assistantRequests.every(({ options }) => /^Bearer rsk_/.test(options.headers.get('Authorization'))));
+    const submitted = JSON.parse(assistantRequests[0].options.body);
+    assert.equal(submitted.context.page_url, 'https://www.golfballs.com/admin/Page.aspx?Page=240&customerID=*');
+    assert.equal(submitted.context.available_resources[0].id, 'follow-up');
+    assert.equal(Object.hasOwn(submitted.context, 'answer_mode'), false);
   });
 
   it('cancels an active run and leaves the conversation usable', async () => {

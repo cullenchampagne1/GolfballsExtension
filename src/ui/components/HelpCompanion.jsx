@@ -88,7 +88,7 @@ function safeFeatureStates() {
   return out;
 }
 
-async function helpContext(page, answerMode) {
+async function helpContext(page) {
   let extensionVersion = '';
   try { extensionVersion = chrome.runtime.getManifest()?.version || ''; } catch { /* */ }
   let actionContext = {};
@@ -98,7 +98,6 @@ async function helpContext(page, answerMode) {
     edition: (typeof __ADMIN__ !== 'undefined' && __ADMIN__) ? 'admin' : 'consumer',
     surface: 'actions-shelf',
     page_type: String(page || 'unknown').slice(0, 60),
-    answer_mode: answerMode === 'technical' ? 'technical' : 'operator',
     feature_states: safeFeatureStates(),
     hidden_settings: actionContext.hidden_settings || [],
     available_resources: actionContext.available_resources || [],
@@ -176,8 +175,8 @@ export function useHelpAssistant(page) {
     service,
     refresh,
     checkStatus,
-    send: async (message, answerMode) => call({ action: 'helpAssistantSend', message, context: await helpContext(page, answerMode) }),
-    retry: async (answerMode) => call({ action: 'helpAssistantRetry', context: await helpContext(page, answerMode) }),
+    send: async (message) => call({ action: 'helpAssistantSend', message, context: await helpContext(page) }),
+    retry: async () => call({ action: 'helpAssistantRetry', context: await helpContext(page) }),
     cancel: () => call({ action: 'helpAssistantCancel' }),
     markRead: () => call({ action: 'helpAssistantMarkRead' }),
     clear: () => call({ action: 'helpAssistantClear' }),
@@ -521,28 +520,10 @@ function EmptyConversation({ loading, pageLabel, onQuestion, compact }) {
   );
 }
 
-function ModeSwitch({ value, onChange }) {
-  const modes = [
-    { id: 'operator', label: 'Using it', title: 'Using it: focus on where controls live, what to do, and what to expect.' },
-    { id: 'technical', label: 'Under the hood', title: 'Under the hood: focus on architecture, code, storage, and data flow.' },
-  ];
-  return (
-    <div role="radiogroup" aria-label="Answer perspective" style={{ position: 'relative', height: 24, padding: 2, display: 'inline-grid', gridTemplateColumns: '1fr 1fr', gap: 1, borderRadius: 8, background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-subtle)' }}>
-      {modes.map((mode) => (
-        <button key={mode.id} type="button" role="radio" aria-checked={value === mode.id} aria-label={mode.title} title={mode.title} onClick={() => onChange(mode.id)} style={{ position: 'relative', zIndex: 1, height: 18, padding: '0 7px', border: 0, background: 'transparent', color: value === mode.id ? 'var(--gb-text-primary)' : 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-sans)', fontSize: 8.75, fontWeight: 750, cursor: 'pointer', transition: 'color var(--gb-anim-fast)', whiteSpace: 'nowrap' }}>
-          {value === mode.id && <motion.span layoutId="gb-help-mode" transition={{ type: 'spring', stiffness: 440, damping: 34 }} style={{ position: 'absolute', inset: 0, zIndex: -1, borderRadius: 5.5, background: 'var(--gb-fill-medium)', border: '1px solid var(--gb-border-default)', boxShadow: '0 1px 4px rgba(0,0,0,.15)' }} />}
-          {mode.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false }) {
   useHelpStyles();
   const reduceMotion = useReducedMotion();
   const [draft, setDraft] = useState('');
-  const [answerMode, setAnswerMode] = useState('operator');
   const [focus, setFocus] = useState(false);
   const [clearArmed, setClearArmed] = useState(false);
   const [localBusy, setLocalBusy] = useState(false);
@@ -573,13 +554,13 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
     setDraft('');
     setLocalBusy(true);
     stickToBottom.current = true;
-    try { await client.send(message, answerMode); }
+    try { await client.send(message); }
     catch { setDraft(message); }
     finally {
       setLocalBusy(false);
       requestAnimationFrame(() => textareaRef.current?.focus());
     }
-  }, [draft, active, localBusy, answerMode, client]);
+  }, [draft, active, localBusy, client]);
 
   const handleAction = useCallback(async (action, receiptId = '') => {
     const type = action?.type;
@@ -639,7 +620,6 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {!compact && <ModeSwitch value={answerMode} onChange={setAnswerMode} />}
           <button type="button" disabled={!!active || messages.length === 0} onClick={() => setClearArmed((value) => !value)} title="Clear conversation" aria-label="Clear conversation" style={{ width: 28, height: 28, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: clearArmed ? 'var(--gb-error-tint-soft)' : 'var(--gb-fill-subtle)', color: clearArmed ? 'var(--gb-error-fg)' : 'var(--gb-text-muted)', border: `1px solid ${clearArmed ? 'var(--gb-error-tint-border)' : 'var(--gb-border-subtle)'}`, cursor: active || messages.length === 0 ? 'not-allowed' : 'pointer', opacity: active || messages.length === 0 ? .45 : 1 }}><I.trash size={11} /></button>
         </div>
       </header>
@@ -678,7 +658,7 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
                 <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} style={{ marginLeft: 37, padding: '9px 10px', borderRadius: 10, background: 'var(--gb-error-tint-soft)', border: '1px solid var(--gb-error-tint-border)', color: 'var(--gb-error-fg)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                   <I.alert size={13} style={{ marginTop: 1 }} />
                   <div style={{ flex: 1, minWidth: 0, fontSize: 10.5, lineHeight: 1.45, fontWeight: 600 }}>{state.lastError.message}</div>
-                  {state.lastError.retryMessage && <button type="button" onClick={async () => { setLocalBusy(true); try { await client.retry(answerMode); } finally { setLocalBusy(false); } }} disabled={localBusy} style={{ height: 25, padding: '0 8px', borderRadius: 7, background: 'var(--gb-error-fg)', color: 'var(--gb-text-on-brand)', border: 0, fontSize: 9.5, fontWeight: 750, cursor: localBusy ? 'wait' : 'pointer' }}>Retry</button>}
+                  {state.lastError.retryMessage && <button type="button" onClick={async () => { setLocalBusy(true); try { await client.retry(); } finally { setLocalBusy(false); } }} disabled={localBusy} style={{ height: 25, padding: '0 8px', borderRadius: 7, background: 'var(--gb-error-fg)', color: 'var(--gb-text-on-brand)', border: 0, fontSize: 9.5, fontWeight: 750, cursor: localBusy ? 'wait' : 'pointer' }}>Retry</button>}
                 </motion.div>
               )}
               {client.transportError && <div style={{ marginLeft: 37, color: 'var(--gb-error-fg)', fontSize: 10, fontWeight: 600 }}>{client.transportError}</div>}
@@ -687,7 +667,6 @@ export function HelpCompanionPanel({ client, onBack, pageLabel, compact = false 
       </main>
 
       <footer style={{ padding: '8px 9px 9px', flexShrink: 0, borderTop: '1px solid var(--gb-border-subtle)', background: 'color-mix(in srgb, var(--gb-surface-modal) 92%, transparent)', backdropFilter: 'var(--gb-blur-medium)', WebkitBackdropFilter: 'var(--gb-blur-medium)' }}>
-        {compact && <div style={{ display: 'flex', justifyContent: 'flex-end', margin: '0 2px 6px' }}><ModeSwitch value={answerMode} onChange={setAnswerMode} /></div>}
         {active && <div style={{ margin: '0 3px 6px', display: 'flex', alignItems: 'center', gap: 6, color: 'var(--gb-text-muted)', fontSize: 9.25, fontWeight: 600 }}><I.sparkle size={9} style={{ color: 'var(--gb-brand-label)' }} />You can return to Actions — the reply will keep running and show as unread.</div>}
         <div style={{ minHeight: 42, padding: '7px 7px 7px 10px', display: 'flex', alignItems: 'flex-end', gap: 7, borderRadius: 12, background: 'var(--gb-fill-subtle)', border: `1px solid ${focus ? 'var(--gb-brand-tint-border)' : 'var(--gb-border-default)'}`, boxShadow: focus ? '0 0 0 3px var(--gb-brand-tint-soft), inset 0 1px 0 var(--gb-fill-faint)' : 'inset 0 1px 0 var(--gb-fill-faint)', transition: 'border-color var(--gb-anim-fast), box-shadow var(--gb-anim-fast)' }}>
           <textarea

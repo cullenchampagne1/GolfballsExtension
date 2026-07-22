@@ -208,7 +208,6 @@
       page_url: /^https?:\/\//.test(String(raw.page_url || ''))
         ? bounded(raw.page_url, 500) || undefined
         : undefined,
-      answer_mode: raw.answer_mode === 'technical' ? 'technical' : 'operator',
       feature_states: featureStates,
       hidden_settings: Array.isArray(raw.hidden_settings)
         ? raw.hidden_settings.map((item) => bounded(item, 160)).filter(Boolean).slice(0, 160)
