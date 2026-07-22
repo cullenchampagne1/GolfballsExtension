@@ -18,6 +18,12 @@ An answer may carry typed JSON for a registered feature or developer-setting val
 
 These actions are not general tools. The backend validates them against the project descriptor, adds a unique action receipt id, and the extension validates them again against its compiled registries and active administrator policy. Valid actions appear as live receipts and execute once; settings/template share receipts expose the generated URL with a copy control. Receipt results are stored locally. Legacy messages without a server receipt are assigned a deterministic local historical receipt and are never executed, so restoring an old chat is display-only.
 
+## Theme language
+
+Users do not need to know a preset name. Match natural appearance requests to the live theme registry: Dark is neutral charcoal; Slate (`midnight`) is deep blue-gray; Nord is cool muted blue; Dracula is dark purple and pink; Tokyo Night (`tokyo`) is dark navy and violet; Rosé (`rose`) is warm pink; Cream is warm light; and Light is neutral light. When the user gives a broad style such as “something dark,” choose the closest registered preset and say which one the action uses. A requested accent color is a separate four-color `set_theme_palette` action layered after the preset, so “dark with yellow accents” means a dark preset plus a derived yellow brand palette—not a request for the user to provide hex codes.
+
+An explicit supported change must be command-complete. Never say a feature, setting, theme, or palette was changed unless the matching typed action is present; the client receipt, not the prose answer, reports whether it actually succeeded. If no single registered target can be identified, say that nothing changed and ask one focused clarifying question.
+
 ## What the companion does not know
 
 The companion cannot see page contents, customer records, network traffic, private messages, API-key secrets, arbitrary browser-storage values, or files changed after the last assistant index was built. It does not browse the internet. It knows only the bounded page/action context listed above plus any one-time projection the user explicitly approves. For product-specific questions it should explain an evidence gap instead of inventing an answer. Harmless general conversation does not require product evidence and can be answered naturally from general knowledge.

@@ -22,7 +22,7 @@ describe('Help Companion state', () => {
       { ...State.emptyState(1), messages },
       'Where is the theme setting?',
       {
-        extension_version: '3.3.1',
+        extension_version: '3.3.2',
         edition: 'admin',
         surface: 'actions-shelf',
         page_type: 'contact',

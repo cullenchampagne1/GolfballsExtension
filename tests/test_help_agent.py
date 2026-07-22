@@ -37,7 +37,7 @@ class HelpAgentCorpusTests(unittest.TestCase):
     def test_corpus_is_versioned_deterministic_and_has_unique_stable_ids(self):
         rebuilt = HELPER.build_descriptor(ROOT)
         self.assertEqual(self.descriptor["id"], "golfballs-extension-help")
-        self.assertEqual(self.descriptor["version"], "3.3.1")
+        self.assertEqual(self.descriptor["version"], "3.3.2")
         self.assertRegex(self.descriptor["revision"], r"^[a-f0-9]{64}$")
         self.assertEqual(rebuilt["revision"], self.descriptor["revision"])
         self.assertEqual(len(self.by_id), len(self.chunks))
@@ -105,6 +105,10 @@ class HelpAgentCorpusTests(unittest.TestCase):
         personality = self.by_id["assistant:personality:1"]["text"]
         self.assertIn("dry, playful sarcasm", personality)
         self.assertIn("not a reason to reject small talk", personality)
+        knowledge = self.by_id["assistant:knowledge:1"]["text"]
+        self.assertIn("Users do not need to know a preset name", knowledge)
+        self.assertIn("dark with yellow accents", knowledge)
+        self.assertIn("must be command-complete", knowledge)
 
     def test_generic_backend_retrieval_resolves_real_guide_and_setting_queries(self):
         manager = ASSISTANT.AssistantManager(_StatusOnlyRunner())
