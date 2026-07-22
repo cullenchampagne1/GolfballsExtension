@@ -107,7 +107,10 @@ async function helpContext(page) {
     edition: (typeof __ADMIN__ !== 'undefined' && __ADMIN__) ? 'admin' : 'consumer',
     surface: 'actions-shelf',
     page_type: pageType,
-    feature_states: safeFeatureStates(),
+    feature_states: actionContext.automatic_state?.features || safeFeatureStates(),
+    automatic_state: actionContext.automatic_state || {
+      features: safeFeatureStates(), developer_settings: {},
+    },
     hidden_settings: actionContext.hidden_settings || [],
     action_confirmations: helpActionConfirmationTypes(),
     available_resources: actionContext.available_resources || [],
@@ -411,7 +414,18 @@ function ExecutableActionCard({ action, receiptId, historical = false, onAction,
             <span style={{ color: 'var(--gb-text-muted)', fontSize: 8.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{receipt.reference.title}</span>
           </span>
         ) : !failed && action.type === 'submit_ticket' ? (
-          <span style={{ display: 'block', marginTop: 4, color: 'var(--gb-text-tertiary)', fontSize: 9, lineHeight: 1.4, overflowWrap: 'anywhere' }}>{action.value}</span>
+          <span style={{ display: 'block', marginTop: 4, color: 'var(--gb-text-tertiary)', fontSize: 9, lineHeight: 1.4, overflowWrap: 'anywhere' }}>
+            {action.value}
+            {action.references?.length > 0 && (
+              <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+                {action.references.map((reference) => (
+                  <code key={`${reference.path}:${reference.lineStart}`} style={{ padding: '2px 5px', borderRadius: 5, color: 'var(--gb-brand-label)', background: 'var(--gb-brand-tint-medium)', border: '1px solid var(--gb-brand-tint-border)', fontFamily: 'var(--gb-font-mono)', fontSize: 7.75 }}>
+                    {reference.path}:{reference.lineStart}{reference.lineEnd !== reference.lineStart ? `-${reference.lineEnd}` : ''}
+                  </code>
+                ))}
+              </span>
+            )}
+          </span>
         ) : !failed && summary && <span style={{ display: 'block', marginTop: 2, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', fontSize: 8.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{action.target} → {summary}</span>}
         {action.type === 'set_theme_palette' && action.options?.length === 4 && (
           <span style={{ display: 'flex', gap: 3, marginTop: 5 }}>{action.options.map((color) => <span key={color} title={color} style={{ width: 15, height: 5, borderRadius: 999, background: color, border: '1px solid color-mix(in srgb, currentColor 18%, transparent)' }} />)}</span>
@@ -468,8 +482,10 @@ function DataAccessActionCard({ action, receiptId, historical = false, onStatus,
   };
 
   const option = (prefix, fallback) => action.options?.find((value) => value.startsWith(prefix))?.slice(prefix.length) || fallback;
-  const filter = action.value === '*' ? 'All saved templates' : `Matches “${action.value || 'all'}”`;
-  const type = option('type:', 'any');
+  const notes = action.target === 'note_templates';
+  const sourceLabel = notes ? 'saved notes and tasks' : 'saved email templates';
+  const filter = action.value === '*' ? `All ${sourceLabel}` : `Matches “${action.value || 'all'}”`;
+  const dimension = notes ? option('subtype:', 'any') : option('type:', 'any');
   const fields = option('fields:', 'metadata');
   const limit = option('limit:', '10');
   const terminal = approval?.status === 'submitted' || approval?.status === 'denied';
@@ -487,7 +503,12 @@ function DataAccessActionCard({ action, receiptId, historical = false, onStatus,
         </span>
       </div>
       <div style={{ marginTop: 8, padding: '7px 8px', display: 'flex', flexWrap: 'wrap', gap: 5, borderRadius: 8, background: 'var(--gb-surface-1)', border: '1px solid var(--gb-border-subtle)' }}>
-        {[filter, type === 'any' ? 'Any email type' : `${type} templates`, fields === 'content' ? 'Names + subjects + body' : 'Names + types + subjects', `Up to ${limit}`].map((text) => (
+        {[
+          filter,
+          dimension === 'any' ? (notes ? 'Any note subtype' : 'Any email type') : `${dimension.replace('_', ' ')} templates`,
+          fields === 'content' ? 'Metadata + content' : 'Metadata only',
+          `Up to ${limit}`,
+        ].map((text) => (
           <span key={text} style={{ padding: '2px 6px', borderRadius: 999, color: 'var(--gb-text-tertiary)', background: 'var(--gb-fill-subtle)', border: '1px solid var(--gb-border-default)', fontSize: 8.75, fontWeight: 650 }}>{text}</span>
         ))}
       </div>
@@ -579,7 +600,7 @@ function AssistantMessage({ message, onAction, onDataStatus, onDataResolve, onFe
                 border: '1px solid var(--gb-border-subtle)', fontFamily: 'var(--gb-font-sans)', fontSize: 9.5, fontWeight: 650,
                 cursor: citation.guideRoute ? 'pointer' : 'default', opacity: citation.guideRoute ? 1 : .75,
               }}>
-                <BookIcon size={10} /><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{citation.title}</span>
+                <BookIcon size={10} /><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{citation.kind === 'source' && citation.lineStart ? `${citation.source}:${citation.lineStart}${citation.lineEnd && citation.lineEnd !== citation.lineStart ? `-${citation.lineEnd}` : ''}` : citation.title}</span>
               </button>
             ))}
           </div>

@@ -4,6 +4,7 @@ import {
   THEME_VARIANTS, loadTheme, applyTheme,
 } from './theme.js';
 import { PRESET_SCOPES, gatherScopes } from './presetScopes.js';
+import { buildAutomaticHelpState } from './helpAutomaticState.js';
 import {
   createSerialHelpActionRunner, helpActionReceiptDecision, helpActionReceiptId,
   hasIssuedHelpActionReceipt, helpActionConfirmationTypes,
@@ -82,8 +83,12 @@ export async function helpActionContext() {
     ...Object.keys(env.policy?.hiddenDeveloperSettings || {}),
     ...(env.policy?.developerSectionHidden ? Object.keys(settingRules) : []),
   ];
+  const [flags, settings] = await Promise.all([loadFlags(), loadDevSettings()]);
   return {
     hidden_settings: [...new Set(hidden)].slice(0, 160),
+    automatic_state: buildAutomaticHelpState(
+      flags, settings, hidden, Object.keys(featureRules), Object.keys(settingRules),
+    ),
     // Local resources are disclosed only by the explicit one-time approval
     // flow. Keeping this empty prevents a normal help turn from leaking even
     // template names to the backend.
@@ -144,6 +149,7 @@ async function execute(action, receiptId) {
         surface: 'actions-shelf',
         page_type: String(globalThis.__gbHelpPageType || 'unknown').slice(0, 60),
         page_url: sanitizePageRoute(globalThis.location?.href),
+        ...(operation.references?.length ? { source_references: operation.references } : {}),
       },
     });
     const ticket = response.ticket || {};

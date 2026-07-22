@@ -172,4 +172,31 @@ describe('Help Companion background flow', () => {
       'an approval receipt must not submit approved data twice',
     );
   });
+
+  it('applies the same one-time approval contract to saved note templates', async () => {
+    const flow = makeFlow();
+    flow.stored.noteTemplates = [
+      {
+        id: 'note-order-delay', name: 'Order delay', subType: 'note',
+        subject: 'Delay update', body: 'Customer-specific wording stays local.', enabled: true,
+      },
+    ];
+    const action = {
+      type: 'request_data_access', target: 'note_templates', value: 'order delay',
+      options: ['subtype:note', 'state:enabled', 'fields:metadata', 'limit:5'],
+      label: 'Check my saved order-delay notes',
+    };
+    const result = await flow.controller.resolveDataAccess(
+      'act_noteaccess123456', action, { edition: 'admin' }, 'allow',
+    );
+    assert.equal(result.approval.target, 'note_templates');
+    assert.equal(result.approval.resultCount, 1);
+    const post = flow.requests.find(({ url, method }) => (
+      new URL(url).pathname.endsWith('/assistant/messages') && method === 'POST'
+    ));
+    const submitted = JSON.parse(post.options.body);
+    assert.equal(submitted.context.resource_access.target, 'note_templates');
+    assert.equal(submitted.context.available_resources[0].kind, 'note_template');
+    assert.doesNotMatch(JSON.stringify(submitted), /Customer-specific wording/);
+  });
 });

@@ -64,6 +64,8 @@
     const id = safeId(value.id);
     const title = bounded(value.title, 180);
     if (!id || !title) return null;
+    const lineStart = Math.max(0, Math.floor(finite(value.line_start ?? value.lineStart)));
+    const lineEnd = Math.max(lineStart, Math.floor(finite(value.line_end ?? value.lineEnd)));
     return {
       id,
       title,
@@ -71,6 +73,21 @@
       source: bounded(value.source, 240),
       guideRoute: bounded(value.guide_route ?? value.guideRoute, 240),
       excerpt: bounded(value.excerpt, 500),
+      lineStart: lineStart || undefined,
+      lineEnd: lineEnd || undefined,
+    };
+  }
+
+  function normalizeSourceReference(value) {
+    if (!value || typeof value !== 'object') return null;
+    const path = bounded(value.path, 300);
+    const lineStart = Math.max(1, Math.floor(finite(value.line_start ?? value.lineStart)));
+    const lineEnd = Math.max(lineStart, Math.floor(finite(value.line_end ?? value.lineEnd)));
+    if (!path || path.startsWith('/') || path.split('/').includes('..')
+        || !/^[A-Za-z0-9_./-]+$/.test(path) || lineEnd > 10_000_000) return null;
+    return {
+      path, lineStart, lineEnd,
+      citationId: safeId(value.citation_id ?? value.citationId),
     };
   }
 
@@ -89,6 +106,9 @@
       label: bounded(value.label, 100) || 'Open',
       citationId: safeId(value.citation_id ?? value.citationId),
       receiptId: safeReceiptId(value.receipt_id ?? value.receiptId),
+      references: Array.isArray(value.references)
+        ? value.references.slice(0, 6).map(normalizeSourceReference).filter(Boolean)
+        : [],
     };
   }
 
@@ -222,6 +242,27 @@
         };
       }).filter(Boolean)
       : [];
+    const automaticRaw = raw.automatic_state && typeof raw.automatic_state === 'object'
+      && !Array.isArray(raw.automatic_state) ? raw.automatic_state : {};
+    const automaticFeatures = {};
+    if (automaticRaw.features && typeof automaticRaw.features === 'object'
+        && !Array.isArray(automaticRaw.features)) {
+      for (const [key, enabled] of Object.entries(automaticRaw.features).slice(0, 80)) {
+        const safeKey = safeId(key);
+        if (safeKey && typeof enabled === 'boolean') automaticFeatures[safeKey] = enabled;
+      }
+    }
+    const developerSettings = {};
+    if (automaticRaw.developer_settings && typeof automaticRaw.developer_settings === 'object'
+        && !Array.isArray(automaticRaw.developer_settings)) {
+      for (const [key, value] of Object.entries(automaticRaw.developer_settings).slice(0, 240)) {
+        const safeKey = safeId(key);
+        if (!safeKey) continue;
+        if (value == null || typeof value === 'boolean') developerSettings[safeKey] = value;
+        else if (typeof value === 'number' && Number.isFinite(value)) developerSettings[safeKey] = value;
+        else if (typeof value === 'string') developerSettings[safeKey] = bounded(value, 500);
+      }
+    }
     let resourceAccess;
     if (raw.resource_access && typeof raw.resource_access === 'object' && !Array.isArray(raw.resource_access)) {
       const requestId = safeId(raw.resource_access.request_id);
@@ -255,6 +296,10 @@
       action_confirmations: Array.isArray(raw.action_confirmations)
         ? [...new Set(raw.action_confirmations.map((item) => safeId(item)).filter(Boolean))].slice(0, 20)
         : [],
+      automatic_state: {
+        features: automaticFeatures,
+        developer_settings: developerSettings,
+      },
       available_resources: resources,
       resource_access: resourceAccess,
     };

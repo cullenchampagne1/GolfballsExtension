@@ -27,6 +27,7 @@ export function helpActionConfirmationTypes() {
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
 const HEX = /^#[0-9a-f]{6}$/i;
+const SOURCE_PATH = /^[A-Za-z0-9_./-]{1,300}$/;
 
 const choiceKey = (value) => String(value || '')
   .trim()
@@ -134,7 +135,19 @@ export function planHelpAction(action, registry = {}) {
     const title = String(action.label || '').trim().slice(0, 120);
     const description = String(action.value || '').trim().slice(0, 500);
     if (!title || !description) fail('The assistant ticket is missing its summary');
-    return { type, target, kind: target, title, description };
+    const references = [];
+    for (const raw of Array.isArray(action.references) ? action.references.slice(0, 6) : []) {
+      const path = String(raw?.path || '').trim();
+      const lineStart = Math.max(1, Math.floor(Number(raw?.lineStart ?? raw?.line_start) || 0));
+      const lineEnd = Math.max(lineStart, Math.floor(Number(raw?.lineEnd ?? raw?.line_end) || 0));
+      if (!SOURCE_PATH.test(path) || path.startsWith('/') || path.split('/').includes('..')
+          || lineEnd > 10_000_000) continue;
+      references.push({ path, line_start: lineStart, line_end: lineEnd });
+    }
+    return {
+      type, target, kind: target, title, description,
+      ...(references.length ? { references } : {}),
+    };
   }
 
   const template = templates.find((item) => item && String(item.id) === target);

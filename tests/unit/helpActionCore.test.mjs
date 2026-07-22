@@ -41,11 +41,13 @@ describe('Help Companion action policy', () => {
       planHelpAction({
         type: 'submit_ticket', target: 'bug', label: 'Charge button is inert',
         value: 'Clicking Charge Card does not open the payment modal.', options: [],
+        references: [{ path: 'src/modals/ChargeModal.jsx', lineStart: 20, lineEnd: 42 }],
       }, registry),
       {
         type: 'submit_ticket', target: 'bug', kind: 'bug',
         title: 'Charge button is inert',
         description: 'Clicking Charge Card does not open the payment modal.',
+        references: [{ path: 'src/modals/ChargeModal.jsx', line_start: 20, line_end: 42 }],
       },
     );
   });

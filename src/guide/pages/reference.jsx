@@ -556,7 +556,7 @@ const RELEASES = [
     ],
   },
   {
-    version: '3.3.3',
+    version: '3.4.0',
     date: 'May 31 – Jun 1',
     summary: 'A live-config product customizer and cross-platform 3D.',
     highlights: [

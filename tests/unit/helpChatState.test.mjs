@@ -27,6 +27,14 @@ describe('Help Companion state', () => {
         surface: 'actions-shelf',
         page_type: 'contact',
         feature_states: { actionsShelfEnabled: true, invalid: 'yes' },
+        automatic_state: {
+          features: { actionsShelfEnabled: false, chargeEnabled: true, bad: 'yes' },
+          developer_settings: {
+            'marginCalc.minAllowedMargin': 42,
+            'giftCatalog.density': 'compact',
+            unsafe: { nested: true },
+          },
+        },
         page_url: 'https://www.golfballs.com/admin/Page.aspx?Page=240&customerID=*',
         action_confirmations: ['submit_ticket', 'submit_ticket', '../unsafe'],
         available_resources: [{ kind: 'email_template', id: 'tpl-follow-up', label: 'Follow up' }],
@@ -44,6 +52,12 @@ describe('Help Companion state', () => {
     assert.equal(request.context.page_url, 'https://www.golfballs.com/admin/Page.aspx?Page=240&customerID=*');
     assert.equal(request.context.available_resources[0].id, 'tpl-follow-up');
     assert.equal(JSON.stringify(request.context.feature_states), JSON.stringify({ actionsShelfEnabled: true }));
+    assert.equal(JSON.stringify(request.context.automatic_state), JSON.stringify({
+      features: { actionsShelfEnabled: false, chargeEnabled: true },
+      developer_settings: {
+        'marginCalc.minAllowedMargin': 42, 'giftCatalog.density': 'compact',
+      },
+    }));
     assert.equal(JSON.stringify(request.context.action_confirmations), JSON.stringify(['submit_ticket']));
     assert.equal(Object.hasOwn(request.context, 'unexpected'), false);
   });
@@ -112,7 +126,13 @@ describe('Help Companion state', () => {
       actions: [
         { type: 'open_guide', target: '#manual/actions-shelf', label: 'Open guide' },
         { type: 'set_feature', target: 'actionsShelfEnabled', value: 'false', options: [], label: 'Disable shelf' },
-        { type: 'submit_ticket', target: 'bug', value: 'The shelf does not open.', options: [], label: 'Shelf does not open' },
+        {
+          type: 'submit_ticket', target: 'bug', value: 'The shelf does not open.', options: [],
+          label: 'Shelf does not open', references: [
+            { path: 'src/ui/components/ActionsShelf.jsx', line_start: 600, line_end: 640 },
+            { path: '../outside.py', line_start: 1, line_end: 2 },
+          ],
+        },
         { type: 'request_data_access', target: 'email_templates', value: 'order', options: ['fields:metadata'], label: 'Allow templates', receipt_id: 'act_access1234' },
         { type: 'run_javascript', target: 'alert(1)', label: 'Run' },
       ],
@@ -122,6 +142,10 @@ describe('Help Companion state', () => {
     assert.equal(JSON.stringify(answer.actions.map((item) => item.type)), JSON.stringify(['open_guide', 'set_feature', 'submit_ticket', 'request_data_access']));
     assert.equal(answer.actions[1].value, 'false');
     assert.equal(answer.actions[2].target, 'bug');
+    assert.equal(JSON.stringify(answer.actions[2].references), JSON.stringify([{
+      path: 'src/ui/components/ActionsShelf.jsx', lineStart: 600, lineEnd: 640,
+      citationId: '',
+    }]));
     assert.equal(answer.actions[3].receiptId, 'act_access1234');
     assert.equal(JSON.stringify(answer.citations.map((item) => item.id)), JSON.stringify(['safe-id']));
   });

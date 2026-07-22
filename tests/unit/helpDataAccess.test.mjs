@@ -46,4 +46,31 @@ describe('Help Companion approved local data', () => {
       options: ['fields:everything'],
     }), /unsupported filter/);
   });
+
+  it('filters saved notes by subtype and exposes content only after content approval', () => {
+    const Data = loadPolicy();
+    const storage = {
+      noteTemplates: [
+        {
+          id: 'note-proof-requested', name: 'Proof requested', subType: 'note',
+          subject: 'Art update', body: 'Customer approved the revised proof.', enabled: true,
+        },
+        { id: 'task-proof-follow-up', name: 'Proof follow up', subType: 'task', body: 'Check tomorrow.' },
+      ],
+    };
+    const metadata = Data.filterResources(storage, {
+      type: 'request_data_access', target: 'note_templates', value: 'proof requested',
+      options: ['subtype:note', 'state:enabled', 'fields:metadata', 'limit:5'],
+    });
+    assert.equal(metadata.resources.length, 1);
+    assert.equal(metadata.resources[0].kind, 'note_template');
+    assert.doesNotMatch(metadata.resources[0].summary, /Customer approved/);
+
+    const content = Data.filterResources(storage, {
+      type: 'request_data_access', target: 'note_templates', value: 'proof requested',
+      options: ['subtype:note', 'state:enabled', 'fields:content', 'limit:5'],
+    });
+    assert.match(content.resources[0].summary, /Customer approved the revised proof/);
+    assert.equal(JSON.stringify(Data.storageKeys(content.plan)), JSON.stringify(['noteTemplates']));
+  });
 });

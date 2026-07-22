@@ -95,6 +95,7 @@
       return {
         status: ['pending', 'submitted', 'denied', 'failed'].includes(value.status) ? value.status : 'failed',
         requestId: String(value.requestId || '').slice(0, 80),
+        target: String(value.target || '').slice(0, 100),
         query: String(value.query || '').slice(0, 120),
         fields: value.fields === 'content' ? 'content' : 'metadata',
         resultCount: Math.max(0, Math.min(20, Number(value.resultCount) || 0)),
@@ -215,6 +216,7 @@
         if (decision === 'deny') {
           const approval = await saveApproval(id, {
             status: 'denied', requestId: existing?.requestId || '',
+            target: plan.target,
             query: plan.query, fields: plan.fields, resultCount: 0,
             totalMatches: 0, truncated: false,
             message: 'Access was not shared.', at: now(),
@@ -225,11 +227,12 @@
         const currentState = await getState();
         if (currentState.active) throw new Error('Wait for the current Help Companion response to finish');
 
-        const stored = await rawStorageGet('templates');
-        const result = DataAccess.filterEmailTemplates(stored.templates, action);
+        const stored = await rawStorageGet(DataAccess.storageKeys(plan));
+        const result = DataAccess.filterResources(stored, action);
         const requestId = existing?.requestId || State.makeRequestId(now());
         await saveApproval(id, {
-          status: 'pending', requestId, query: plan.query, fields: plan.fields,
+          status: 'pending', requestId, target: plan.target,
+          query: plan.query, fields: plan.fields,
           resultCount: result.resources.length, totalMatches: result.resultCount,
           truncated: result.truncated, message: 'Sending approved results once…', at: now(),
         });
@@ -253,13 +256,13 @@
         });
         const failed = state.lastError?.requestId === requestId;
         const approval = await saveApproval(id, {
-          status: failed ? 'failed' : 'submitted', requestId,
+          status: failed ? 'failed' : 'submitted', requestId, target: plan.target,
           query: plan.query, fields: plan.fields,
           resultCount: result.resources.length, totalMatches: result.resultCount,
           truncated: result.truncated,
           message: failed
             ? (state.lastError?.message || 'Approved results could not be sent.')
-            : `${result.resources.length} matching template${result.resources.length === 1 ? '' : 's'} shared once.`,
+            : `${result.resources.length} matching ${plan.source.itemLabel}${result.resources.length === 1 ? '' : 's'} shared once.`,
           at: now(),
         });
         return { state, approval };

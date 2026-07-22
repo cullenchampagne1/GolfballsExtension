@@ -37,7 +37,8 @@ class HelpAgentCorpusTests(unittest.TestCase):
     def test_corpus_is_versioned_deterministic_and_has_unique_stable_ids(self):
         rebuilt = HELPER.build_descriptor(ROOT)
         self.assertEqual(self.descriptor["id"], "golfballs-extension-help")
-        self.assertEqual(self.descriptor["version"], "3.3.3")
+        package_version = json.loads((ROOT / "package.json").read_text())["version"]
+        self.assertEqual(self.descriptor["version"], package_version)
         self.assertRegex(self.descriptor["revision"], r"^[a-f0-9]{64}$")
         self.assertEqual(rebuilt["revision"], self.descriptor["revision"])
         self.assertEqual(len(self.by_id), len(self.chunks))
@@ -97,6 +98,13 @@ class HelpAgentCorpusTests(unittest.TestCase):
             "fields:metadata",
             targets[("request_data_access", "email_templates")]["option_values"],
         )
+        self.assertIn(
+            "subtype:call_log",
+            targets[("request_data_access", "note_templates")]["option_values"],
+        )
+        source = next(chunk for chunk in self.chunks if chunk["kind"] == "source")
+        self.assertIsInstance(source.get("line_start"), int)
+        self.assertGreaterEqual(source.get("line_end"), source.get("line_start"))
 
     def test_personality_names_creator_and_allows_harmless_general_chat(self):
         prompt = self.descriptor["system_prompt"]
@@ -184,6 +192,7 @@ class HelpAgentCorpusTests(unittest.TestCase):
         ]["content"]["application/json"]["schema"]
         context_properties = message_schema["properties"]["context"]["properties"]
         self.assertIn("action_confirmations", context_properties)
+        self.assertIn("automatic_state", context_properties)
         routes_source = (ROOT / ".revstack" / "routes.py").read_text()
         compile(routes_source, "routes.py", "exec")
         self.assertIn("action_confirmations: List[str]", routes_source)
