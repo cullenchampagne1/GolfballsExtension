@@ -74,6 +74,7 @@
     { "name": "ui · one-time installation identity confirmation", "file": "tests/unit/installationIdentityNotice.test.mjs" },
     { "name": "flow · api fetch guard & bearer auth", "file": "tests/integration/api-guard-flow.test.mjs" },
     { "name": "flow · Help Companion background recovery", "file": "tests/integration/help-assistant-flow.test.mjs" },
+    { "name": "flow · assistant support ticket lifecycle", "file": "tests/integration/support-ticket-lifecycle.test.mjs" },
     { "name": "flow · settings share create→import→revoke", "file": "tests/integration/settings-share-lifecycle.test.mjs" },
     { "name": "flow · email template share links", "file": "tests/integration/template-share-import.test.mjs" },
     { "name": "flow · remote settings policy sync", "file": "tests/integration/remote-policy-sync.test.mjs" },

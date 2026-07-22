@@ -96,11 +96,13 @@ async function helpContext(page) {
   try { extensionVersion = chrome.runtime.getManifest()?.version || ''; } catch { /* */ }
   let actionContext = {};
   try { actionContext = await helpActionContext(); } catch { /* context is optional */ }
+  const pageType = String(page || 'unknown').slice(0, 60);
+  globalThis.__gbHelpPageType = pageType;
   return {
     extension_version: String(extensionVersion).slice(0, 40),
     edition: (typeof __ADMIN__ !== 'undefined' && __ADMIN__) ? 'admin' : 'consumer',
     surface: 'actions-shelf',
-    page_type: String(page || 'unknown').slice(0, 60),
+    page_type: pageType,
     feature_states: safeFeatureStates(),
     hidden_settings: actionContext.hidden_settings || [],
     available_resources: actionContext.available_resources || [],
@@ -355,7 +357,7 @@ function ExecutableActionCard({ action, receiptId, onAction, ready }) {
       style={{ width: '100%', padding: '9px 10px', display: 'grid', gridTemplateColumns: '28px minmax(0,1fr) auto', gap: 8, alignItems: 'center', borderRadius: 10, background: succeeded ? 'var(--gb-success-tint-soft)' : failed ? 'var(--gb-error-tint-soft)' : 'var(--gb-brand-tint-soft)', border: `1px solid ${succeeded ? 'var(--gb-success-tint-border)' : failed ? 'var(--gb-error-tint-border)' : 'var(--gb-brand-tint-border)'}` }}
     >
       <span style={{ width: 28, height: 28, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: succeeded ? 'var(--gb-success-tint-medium)' : failed ? 'var(--gb-error-tint-medium)' : 'var(--gb-brand-tint-medium)', color: succeeded ? 'var(--gb-success-fg)' : failed ? 'var(--gb-error-fg)' : 'var(--gb-brand-label)' }}>
-        {action.type.startsWith('share_') ? <I.link size={12} /> : action.type.startsWith('set_theme') ? <I.sparkle size={12} /> : <I.cog size={12} />}
+        {action.type === 'submit_ticket' ? (action.target === 'feature' ? <I.sparkle size={12} /> : <I.alert size={12} />) : action.type.startsWith('share_') ? <I.link size={12} /> : action.type.startsWith('set_theme') ? <I.sparkle size={12} /> : <I.cog size={12} />}
       </span>
       <span style={{ minWidth: 0 }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
@@ -363,7 +365,12 @@ function ExecutableActionCard({ action, receiptId, onAction, ready }) {
           <code style={{ padding: '1px 4px', borderRadius: 4, color: 'var(--gb-text-muted)', background: 'var(--gb-fill-subtle)', fontFamily: 'var(--gb-font-mono)', fontSize: 7.75, whiteSpace: 'nowrap' }}>{action.type}</code>
         </span>
         <span style={{ display: 'block', marginTop: 3, color: failed ? 'var(--gb-error-fg)' : succeeded ? 'var(--gb-success-fg)' : 'var(--gb-text-muted)', fontSize: 9.25, lineHeight: 1.35, fontWeight: 620, overflowWrap: 'anywhere' }}>{receipt.message}</span>
-        {!failed && summary && <span style={{ display: 'block', marginTop: 2, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', fontSize: 8.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{action.target} → {summary}</span>}
+        {!failed && receipt.reference ? (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4, minWidth: 0 }}>
+            <strong style={{ padding: '2px 5px', borderRadius: 5, color: 'var(--gb-success-fg)', background: 'var(--gb-success-tint-medium)', fontFamily: 'var(--gb-font-mono)', fontSize: 8.5, letterSpacing: '.25px' }}>{receipt.reference.id}</strong>
+            <span style={{ color: 'var(--gb-text-muted)', fontSize: 8.75, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{receipt.reference.title}</span>
+          </span>
+        ) : !failed && summary && <span style={{ display: 'block', marginTop: 2, color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', fontSize: 8.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{action.target} → {summary}</span>}
         {action.type === 'set_theme_palette' && action.options?.length === 4 && (
           <span style={{ display: 'flex', gap: 3, marginTop: 5 }}>{action.options.map((color) => <span key={color} title={color} style={{ width: 15, height: 5, borderRadius: 999, background: color, border: '1px solid color-mix(in srgb, currentColor 18%, transparent)' }} />)}</span>
         )}

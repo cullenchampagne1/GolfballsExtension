@@ -7,6 +7,7 @@ export const MUTATION_ACTION_TYPES = Object.freeze(new Set([
   'set_theme_palette',
   'share_settings',
   'share_email_template',
+  'submit_ticket',
 ]));
 
 const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/;
@@ -109,6 +110,16 @@ export function planHelpAction(action, registry = {}) {
     const name = String(action.value || 'Help Companion settings').trim().slice(0, 120);
     if (!name) fail('The settings share needs a name');
     return { type, target, name, scopes: unique };
+  }
+
+  if (type === 'submit_ticket') {
+    if (!['bug', 'feature'].includes(target) || options.length) {
+      fail('The assistant ticket type is invalid');
+    }
+    const title = String(action.label || '').trim().slice(0, 120);
+    const description = String(action.value || '').trim().slice(0, 500);
+    if (!title || !description) fail('The assistant ticket is missing its summary');
+    return { type, target, kind: target, title, description };
   }
 
   const template = templates.find((item) => item && String(item.id) === target);

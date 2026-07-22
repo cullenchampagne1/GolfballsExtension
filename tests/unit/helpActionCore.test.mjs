@@ -35,6 +35,17 @@ describe('Help Companion action policy', () => {
       ['settings-appearance'],
     );
     assert.equal(planHelpAction({ type: 'share_email_template', target: 'tpl-follow-up' }, registry).template.name, 'Follow up');
+    assert.deepEqual(
+      planHelpAction({
+        type: 'submit_ticket', target: 'bug', label: 'Charge button is inert',
+        value: 'Clicking Charge Card does not open the payment modal.', options: [],
+      }, registry),
+      {
+        type: 'submit_ticket', target: 'bug', kind: 'bug',
+        title: 'Charge button is inert',
+        description: 'Clicking Charge Card does not open the payment modal.',
+      },
+    );
   });
 
   it('orders and serializes a theme shell before its palette override', async () => {
@@ -85,6 +96,7 @@ describe('Help Companion action policy', () => {
     assert.throws(() => planHelpAction({ type: 'set_theme_palette', target: 'brand', options: ['red'] }, registry), /four valid colors/);
     assert.throws(() => planHelpAction({ type: 'share_settings', target: 'settings', value: 'Bad', options: ['secret-scope'] }, registry), /unregistered scope/);
     assert.throws(() => planHelpAction({ type: 'share_email_template', target: 'tpl-missing' }, registry), /not available/);
+    assert.throws(() => planHelpAction({ type: 'submit_ticket', target: 'incident', label: 'Bad', value: 'Bad' }, registry), /type is invalid/);
   });
 
   it('keeps route structure while removing record identifiers and fragments', () => {

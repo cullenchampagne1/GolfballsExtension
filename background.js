@@ -931,6 +931,38 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // ── Installation-owned support tickets ────────────────────────────────
+  if (msg.action === 'supportTicketList') {
+    GBInstallationAuth.apiJson('/extension/tickets', { responseLimit: 2 * 1024 * 1024 })
+      .then((payload) => sendResponse({
+        ok: true,
+        tickets: Array.isArray(payload?.tickets) ? payload.tickets : [],
+      }))
+      .catch((error) => sendResponse({
+        ok: false, error: error?.message || 'Unable to list support tickets',
+      }));
+    return true;
+  }
+  if (msg.action === 'supportTicketCreate') {
+    const requestId = String(msg.requestId || '').trim();
+    const kind = msg.kind === 'feature' ? 'feature' : msg.kind === 'bug' ? 'bug' : '';
+    const title = String(msg.title || '').trim().replace(/\s+/g, ' ').slice(0, 120);
+    const description = String(msg.description || '').trim().slice(0, 2_000);
+    const context = msg.context && typeof msg.context === 'object' && !Array.isArray(msg.context)
+      ? msg.context : {};
+    if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{7,179}$/.test(requestId)
+        || !kind || !title || !description) {
+      sendResponse({ ok: false, error: 'Invalid support ticket' });
+      return true;
+    }
+    GBInstallationAuth.apiJson('/extension/tickets', {
+      method: 'POST',
+      body: JSON.stringify({ request_id: requestId, kind, title, description, context }),
+    }).then((payload) => sendResponse({ ok: true, ticket: payload?.ticket, created: payload?.created === true }))
+      .catch((error) => sendResponse({ ok: false, error: error?.message || 'Unable to submit support ticket' }));
+    return true;
+  }
+
   // ── Managed-key encrypted CRM index ─────────────────────────────────────
   if (msg.action === 'crmIndexSearch') {
     GBCrmIndex.search({ query: msg.query, limit: msg.limit, employeeId: msg.employeeId })

@@ -106,13 +106,15 @@ describe('Help Companion state', () => {
       actions: [
         { type: 'open_guide', target: '#manual/actions-shelf', label: 'Open guide' },
         { type: 'set_feature', target: 'actionsShelfEnabled', value: 'false', options: [], label: 'Disable shelf' },
+        { type: 'submit_ticket', target: 'bug', value: 'The shelf does not open.', options: [], label: 'Shelf does not open' },
         { type: 'run_javascript', target: 'alert(1)', label: 'Run' },
       ],
       citations: [{ id: '../bad', title: 'Bad id' }, { id: 'safe-id', title: 'Safe citation' }],
     });
     assert.equal(answer.text.length, 24_000);
-    assert.equal(JSON.stringify(answer.actions.map((item) => item.type)), JSON.stringify(['open_guide', 'set_feature']));
+    assert.equal(JSON.stringify(answer.actions.map((item) => item.type)), JSON.stringify(['open_guide', 'set_feature', 'submit_ticket']));
     assert.equal(answer.actions[1].value, 'false');
+    assert.equal(answer.actions[2].target, 'bug');
     assert.equal(JSON.stringify(answer.citations.map((item) => item.id)), JSON.stringify(['safe-id']));
   });
 

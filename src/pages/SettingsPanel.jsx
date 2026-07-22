@@ -740,50 +740,63 @@ function SettingsLinksManager({ onPresetLoad }) {
       </AnimatePresence>
       {/* The server list contains links created by this installation and links
           it has successfully imported. */}
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        <Dropdown size="md" value={selectedId} placeholder={hasShares ? 'Saved settings links…' : 'No settings links yet'} options={dropdownOptions} onChange={selectOwnedShare} disabled={!hasShares || busy} style={{ flex: 1, minWidth: 0 }} />
-        <IconBtn size="md" icon={<I.trash />} danger onClick={handleDelete} disabled={busy || selectedShare?.relationship !== 'owned'} title="Revoke selected settings URL" />
-      </div>
-      {/* Compact link result: creation/list selection never offers scope import.
-          Scope choices exist only inside the explicit Import-link flow. */}
-      <AnimatePresence>
-      {selectedShare?.url && (
-        <motion.div
-          key={selectedShare.id}
-          initial={{ opacity: 0, height: 0, y: -5 }}
-          animate={{ opacity: 1, height: 'auto', y: 0 }}
-          exit={{ opacity: 0, height: 0, y: -5 }}
-          transition={T.base}
-          style={{
-          marginTop: 9,
-          padding: '8px 9px',
-          border: '1px solid var(--gb-brand-tint-border)',
-          borderRadius: 'var(--gb-r-md)',
-          background: 'var(--gb-brand-tint-soft)',
-          display: 'flex', alignItems: 'center', gap: 8,
-          overflow: 'hidden',
-        }}>
-          <I.link size={13} style={{ color: 'var(--gb-brand-label)', flexShrink: 0 }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 10.5, fontWeight: 750, color: 'var(--gb-text-primary)', marginBottom: 2 }}>
-              {selectedShare.name}
+      <AnimatePresence initial={false}>
+        {hasShares && (
+          <motion.div
+            key="active-settings-links"
+            initial={{ opacity: 0, height: 0, y: -5 }}
+            animate={{ opacity: 1, height: 'auto', y: 0 }}
+            exit={{ opacity: 0, height: 0, y: -5 }}
+            transition={T.base}
+            style={{ overflow: 'hidden' }}
+          >
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <Dropdown size="md" value={selectedId} placeholder="Saved settings links…" options={dropdownOptions} onChange={selectOwnedShare} disabled={busy} style={{ flex: 1, minWidth: 0 }} />
+              <IconBtn size="md" icon={<I.trash />} danger onClick={handleDelete} disabled={busy || selectedShare?.relationship !== 'owned'} title="Revoke selected settings URL" />
             </div>
-            <div title={selectedShare.url} style={{
-              fontSize: 9.5, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)',
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
-              {selectedShare.url}
-            </div>
-          </div>
-          <IconBtn size="sm" icon={<I.copy />} onClick={copySelectedUrl} title="Copy settings URL" />
-          <IconBtn
-            size="sm"
-            icon={<I.close />}
-            onClick={() => { setSelectedId(null); setSelectedShare(null); }}
-            title="Dismiss link"
-          />
-        </motion.div>
-      )}
+            {/* Compact link result: creation/list selection never offers scope import.
+                Scope choices exist only inside the explicit Import-link flow. */}
+            <AnimatePresence>
+            {selectedShare?.url && (
+              <motion.div
+                key={selectedShare.id}
+                initial={{ opacity: 0, height: 0, y: -5 }}
+                animate={{ opacity: 1, height: 'auto', y: 0 }}
+                exit={{ opacity: 0, height: 0, y: -5 }}
+                transition={T.base}
+                style={{
+                marginTop: 9,
+                padding: '8px 9px',
+                border: '1px solid var(--gb-brand-tint-border)',
+                borderRadius: 'var(--gb-r-md)',
+                background: 'var(--gb-brand-tint-soft)',
+                display: 'flex', alignItems: 'center', gap: 8,
+                overflow: 'hidden',
+              }}>
+                <I.link size={13} style={{ color: 'var(--gb-brand-label)', flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 750, color: 'var(--gb-text-primary)', marginBottom: 2 }}>
+                    {selectedShare.name}
+                  </div>
+                  <div title={selectedShare.url} style={{
+                    fontSize: 9.5, fontFamily: 'var(--gb-font-mono)', color: 'var(--gb-text-muted)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {selectedShare.url}
+                  </div>
+                </div>
+                <IconBtn size="sm" icon={<I.copy />} onClick={copySelectedUrl} title="Copy settings URL" />
+                <IconBtn
+                  size="sm"
+                  icon={<I.close />}
+                  onClick={() => { setSelectedId(null); setSelectedShare(null); }}
+                  title="Dismiss link"
+                />
+              </motion.div>
+            )}
+            </AnimatePresence>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );
@@ -991,28 +1004,33 @@ function EmailLinksSection() {
   };
 
   return (
-    <section>
-      <SectionLabel action={<Btn variant="ghost" size="xs" onClick={load} disabled={loading}>Refresh</Btn>}>Email Links</SectionLabel>
-      {loading ? (
-        <Card><div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', padding: '4px 2px' }}>Loading…</div></Card>
-      ) : links.length === 0 ? (
-        <Card><div style={{ fontSize: 11.5, color: 'var(--gb-text-muted)', padding: '4px 2px' }}>No active email links. Links you share expire after 24 hours.</div></Card>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {links.map((link) => (
-            <Card key={link.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link.name || 'Email link'}</div>
-                <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>
-                  {expiryLabel(link.expires_at)} · opened {link.access_count || 0}×
+    <AnimatePresence initial={false}>
+      {!loading && links.length > 0 && (
+        <motion.section
+          key="active-email-links"
+          initial={{ opacity: 0, height: 0, y: -6 }}
+          animate={{ opacity: 1, height: 'auto', y: 0 }}
+          exit={{ opacity: 0, height: 0, y: -6 }}
+          transition={T.base}
+          style={{ overflow: 'hidden' }}
+        >
+          <SectionLabel action={<Btn variant="ghost" size="xs" onClick={load} disabled={loading}>Refresh</Btn>}>Email Links</SectionLabel>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {links.map((link) => (
+              <Card key={link.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--gb-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{link.name || 'Email link'}</div>
+                  <div style={{ fontSize: 10.5, color: 'var(--gb-text-muted)', marginTop: 1 }}>
+                    {expiryLabel(link.expires_at)} · opened {link.access_count || 0}×
+                  </div>
                 </div>
-              </div>
-              <IconBtn size="md" icon={<I.trash />} danger onClick={() => revoke(link.id)} disabled={busyId === link.id} title="Revoke this email link" />
-            </Card>
-          ))}
-        </div>
+                <IconBtn size="md" icon={<I.trash />} danger onClick={() => revoke(link.id)} disabled={busyId === link.id} title="Revoke this email link" />
+              </Card>
+            ))}
+          </div>
+        </motion.section>
       )}
-    </section>
+    </AnimatePresence>
   );
 }
 
@@ -1071,6 +1089,95 @@ function ProductStoresSection() {
         </div>
       )}
     </section>
+  );
+}
+
+/* ── Support tickets: only materializes when this installation owns at least
+      one ticket. Administrator replies and status changes arrive through the
+      installation-authenticated ticket API; a quiet poll keeps an open
+      settings page current without flashing the section away. */
+function SupportTicketsSection() {
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async ({ quiet = false } = {}) => {
+    if (!quiet) setLoading(true);
+    try {
+      const response = await sendBackgroundMessage('supportTicketList');
+      setTickets(Array.isArray(response?.tickets) ? response.tickets : []);
+    } catch {
+      if (!quiet) setTickets([]);
+    } finally {
+      if (!quiet) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    const timer = setInterval(() => load({ quiet: true }), 30_000);
+    return () => clearInterval(timer);
+  }, [load]);
+
+  const tone = (status) => ({
+    open: ['var(--gb-warning-fg)', 'var(--gb-warning-tint-soft)', 'var(--gb-warning-tint-border)'],
+    triaged: ['var(--gb-brand-label)', 'var(--gb-brand-tint-soft)', 'var(--gb-brand-tint-border)'],
+    in_progress: ['var(--gb-brand-label)', 'var(--gb-brand-tint-soft)', 'var(--gb-brand-tint-border)'],
+    planned: ['var(--gb-brand-label)', 'var(--gb-brand-tint-medium)', 'var(--gb-brand-tint-border)'],
+    resolved: ['var(--gb-success-fg)', 'var(--gb-success-tint-soft)', 'var(--gb-success-tint-border)'],
+    closed: ['var(--gb-text-muted)', 'var(--gb-fill-subtle)', 'var(--gb-border-default)'],
+  }[status] || ['var(--gb-text-muted)', 'var(--gb-fill-subtle)', 'var(--gb-border-default)']);
+
+  return (
+    <AnimatePresence initial={false}>
+      {!loading && tickets.length > 0 && (
+        <motion.section
+          key="support-tickets"
+          initial={{ opacity: 0, height: 0, y: -7 }}
+          animate={{ opacity: 1, height: 'auto', y: 0 }}
+          exit={{ opacity: 0, height: 0, y: -7 }}
+          transition={T.base}
+          style={{ overflow: 'hidden' }}
+        >
+          <SectionLabel action={<Btn variant="ghost" size="xs" onClick={() => load()} disabled={loading}>Refresh</Btn>}>Support Tickets</SectionLabel>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {tickets.map((ticket) => {
+              const status = String(ticket.status || 'open');
+              const [fg, bg, border] = tone(status);
+              const replies = Array.isArray(ticket.replies) ? ticket.replies : [];
+              const latest = replies.at(-1);
+              return (
+                <motion.div key={ticket.id} layout initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={T.base}>
+                  <Card style={{ padding: 0, overflow: 'hidden' }}>
+                    <div style={{ padding: '11px 12px', display: 'grid', gridTemplateColumns: '30px minmax(0,1fr) auto', gap: 9, alignItems: 'start' }}>
+                      <span style={{ width: 30, height: 30, borderRadius: 9, display: 'grid', placeItems: 'center', color: ticket.kind === 'feature' ? 'var(--gb-brand-label)' : 'var(--gb-error-fg)', background: ticket.kind === 'feature' ? 'var(--gb-brand-tint-soft)' : 'var(--gb-error-tint-soft)', border: `1px solid ${ticket.kind === 'feature' ? 'var(--gb-brand-tint-border)' : 'var(--gb-error-tint-border)'}` }}>
+                        {ticket.kind === 'feature' ? <I.sparkle size={13} /> : <I.alert size={13} />}
+                      </span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                          <strong style={{ color: 'var(--gb-text-primary)', fontSize: 12, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ticket.title}</strong>
+                          <code style={{ flex: 'none', color: 'var(--gb-text-muted)', fontFamily: 'var(--gb-font-mono)', fontSize: 8.5 }}>{ticket.id}</code>
+                        </div>
+                        <div style={{ marginTop: 4, color: 'var(--gb-text-muted)', fontSize: 10.5, lineHeight: 1.45 }}>{ticket.description}</div>
+                      </div>
+                      <span style={{ padding: '3px 7px', borderRadius: 'var(--gb-r-pill)', color: fg, background: bg, border: `1px solid ${border}`, fontSize: 8.5, lineHeight: 1.2, fontWeight: 750, textTransform: 'uppercase', letterSpacing: '.35px', whiteSpace: 'nowrap' }}>{status.replace('_', ' ')}</span>
+                    </div>
+                    {latest && (
+                      <div style={{ padding: '9px 12px', display: 'flex', gap: 8, borderTop: '1px solid var(--gb-border-subtle)', background: 'var(--gb-fill-subtle)' }}>
+                        <I.mail size={12} style={{ marginTop: 1, flex: 'none', color: 'var(--gb-brand-label)' }} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ color: 'var(--gb-text-secondary)', fontSize: 10.5, lineHeight: 1.45 }}>{latest.message}</div>
+                          <div style={{ marginTop: 3, color: 'var(--gb-text-muted)', fontSize: 8.75 }}>{latest.author || 'RevStack'} · {latest.created_at ? new Date(latest.created_at).toLocaleString() : 'recently'}</div>
+                        </div>
+                      </div>
+                    )}
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </div>
+        </motion.section>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -1543,7 +1650,7 @@ export function SettingsPanel({ remotePolicy }) {
 
       {/* Developer Settings — registry-driven key/value table for
           low-priority knobs that don't deserve a feature flag.
-          Always at the bottom. Adding a new row is one entry in
+          Adding a new row is one entry in
           src/lib/devSettings.js → DEV_SETTINGS. The body caps at 340px
           and scrolls internally (native scrollbar hidden via the
           CollapsibleSection's `hideScrollbar` flag) so the page doesn't
@@ -1612,6 +1719,10 @@ export function SettingsPanel({ remotePolicy }) {
         </CollapsibleSection>
       </section>
       )}
+
+      {/* Intentionally last and absent when empty. New tickets appear after
+          Help Companion submits them; revstack replies update in place. */}
+      <SupportTicketsSection />
     </div>
   );
 }

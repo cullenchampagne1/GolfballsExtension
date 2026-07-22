@@ -16,7 +16,7 @@
   const ACTION_TYPES = new Set([
     'open_guide', 'open_settings', 'show_shortcut', 'copy_text',
     'set_feature', 'set_setting', 'set_theme_preset', 'set_theme_palette',
-    'share_settings', 'share_email_template',
+    'share_settings', 'share_email_template', 'submit_ticket',
   ]);
 
   const bounded = (value, max) => String(value == null ? '' : value).trim().slice(0, max);

@@ -93,7 +93,7 @@ export async function helpActionContext() {
   };
 }
 
-async function execute(action) {
+async function execute(action, receiptId) {
   const env = await environment();
   const operation = planHelpAction(action, env);
   if (operation.type === 'set_feature') {
@@ -131,6 +131,33 @@ async function execute(action) {
     const response = await runtimeMessage({ action: 'settingsShareCreate', name: operation.name, scopes });
     return { message: `Created “${response.share?.name || operation.name}”`, url: response.share?.url || '' };
   }
+  if (operation.type === 'submit_ticket') {
+    let extensionVersion = '';
+    try { extensionVersion = chrome.runtime.getManifest()?.version || ''; } catch { /* */ }
+    const response = await runtimeMessage({
+      action: 'supportTicketCreate',
+      requestId: receiptId,
+      kind: operation.kind,
+      title: operation.title,
+      description: operation.description,
+      context: {
+        extension_version: String(extensionVersion).slice(0, 40),
+        surface: 'actions-shelf',
+        page_type: String(globalThis.__gbHelpPageType || 'unknown').slice(0, 60),
+        page_url: sanitizePageRoute(globalThis.location?.href),
+      },
+    });
+    const ticket = response.ticket || {};
+    return {
+      message: `${operation.kind === 'bug' ? 'Bug report' : 'Feature request'} ${ticket.id || ''} submitted`.trim(),
+      reference: {
+        id: String(ticket.id || '').slice(0, 20),
+        kind: operation.kind,
+        status: String(ticket.status || 'open').slice(0, 32),
+        title: operation.title,
+      },
+    };
+  }
   const response = await runtimeMessage({ action: 'emailTemplateShareCreate', template: operation.template });
   return { message: `Created a link for “${operation.template.name || 'email template'}”`, url: response.share?.url || '' };
 }
@@ -144,11 +171,22 @@ async function executeHelpActionOnceNow(receiptId, action) {
     : {};
   if (receipts[safeReceipt]?.status === 'succeeded') return receipts[safeReceipt];
   try {
-    const result = await execute(action);
+    const result = await execute(action, safeReceipt);
     const receipt = {
       status: 'succeeded', message: String(result.message || 'Action applied').slice(0, 200),
       url: String(result.url || '').slice(0, 2_000), at: Date.now(),
     };
+    if (result.reference && typeof result.reference === 'object') {
+      const id = String(result.reference.id || '').slice(0, 20);
+      if (/^GBT-[A-Z0-9]{8}$/.test(id)) {
+        receipt.reference = {
+          id,
+          kind: result.reference.kind === 'feature' ? 'feature' : 'bug',
+          status: String(result.reference.status || 'open').slice(0, 32),
+          title: String(result.reference.title || '').slice(0, 120),
+        };
+      }
+    }
     const next = { ...receipts, [safeReceipt]: receipt };
     const trimmed = Object.fromEntries(Object.entries(next).sort((a, b) => (b[1]?.at || 0) - (a[1]?.at || 0)).slice(0, 400));
     await storageSet({ [RECEIPTS_KEY]: trimmed });

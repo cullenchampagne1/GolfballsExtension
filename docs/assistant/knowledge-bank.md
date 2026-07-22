@@ -12,7 +12,9 @@ The extension also sends the detected page type, a route-shaped URL with record 
 
 ## Supported actions
 
-An answer may carry typed JSON for a registered feature or developer-setting value, a theme preset, a four-color brand palette, a settings-share scope bundle, or one locally available email template. These actions are not general tools. The backend validates them against the project descriptor, and the extension validates them again against its compiled registries and active administrator policy. Valid actions appear as live receipts and execute once; settings/template share receipts expose the generated URL with a copy control.
+An answer may carry typed JSON for a registered feature or developer-setting value, a theme preset, a four-color brand palette, a settings-share scope bundle, one locally available email template, or a support ticket. A concrete report that something is broken can become a `bug` ticket; an explicit request for a new capability can become a `feature` ticket. The receipt returns a public `GBT-…` id, and Settings shows the ticket's status plus administrator replies. Ticket submission is idempotent, so retrying a lost response cannot create a duplicate.
+
+These actions are not general tools. The backend validates them against the project descriptor, and the extension validates them again against its compiled registries and active administrator policy. Valid actions appear as live receipts and execute once; settings/template share receipts expose the generated URL with a copy control.
 
 ## What the companion does not know
 
